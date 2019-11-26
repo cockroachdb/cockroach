@@ -254,6 +254,11 @@ func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
+	if !r.updateRangefeedFilterLocked() {
+		// This can't happen. We just set the processor and haven't released the
+		// exclusive lock, so no other goroutine could have stopped it.
+		panic("rangefeed processor unexpectedly stopped")
+	}
 	r.store.addReplicaWithRangefeed(r.RangeID)
 }
 
@@ -273,8 +278,12 @@ func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
 	r.unsetRangefeedProcessorLocked(p)
 }
 
-func (r *Replica) updateRangefeedFilterLocked() {
+func (r *Replica) updateRangefeedFilterLocked() bool {
 	r.rangefeedMu.opFilter = r.rangefeedMu.proc.Filter()
+	// Return whether the update to the filter was successful or not. If
+	// the processor was already stopped then we can't update the filter.
+	stopped := r.rangefeedMu.opFilter == nil
+	return !stopped
 }
 
 // The size of an event is 112 bytes, so this will result in an allocation on
@@ -306,11 +315,10 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 	if p != nil {
 		reg := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
-		if reg {
+		if reg && r.updateRangefeedFilterLocked() {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
 			// that this new registration might be interested in.
-			r.updateRangefeedFilterLocked()
 			r.rangefeedMu.Unlock()
 			return p
 		}
@@ -371,9 +379,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// requires raftMu to be exclusively locked.
 	r.setRangefeedProcessor(p)
 
-	// Set the rangefeed filter now that the processor is set.
-	r.updateRangefeedFilterLocked()
-
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
 	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
@@ -390,13 +395,11 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
 		// The processor has already been removed or replaced.
 		return
 	}
-	if p.Len() == 0 {
-		// Stop the rangefeed processor.
+	if p.Len() == 0 || !r.updateRangefeedFilterLocked() {
+		// Stop the rangefeed processor if it has no registrations or if we are
+		// unable to update the operation filter.
 		p.Stop()
 		r.unsetRangefeedProcessorLocked(p)
-	} else {
-		// Update the rangefeed filter to filter more aggressively.
-		r.updateRangefeedFilterLocked()
 	}
 }
 
