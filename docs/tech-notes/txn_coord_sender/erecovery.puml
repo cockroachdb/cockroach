@@ -1,0 +1,22 @@
+@startuml
+participant "client.Txn" as Txn
+participant TxnCoordSender
+participant interceptors
+
+Txn -> TxnCoordSender : (first instantiation)
+TxnCoordSender -> TxnCoordSender : init txn object (epoch = 1)
+activate TxnCoordSender
+...
+Txn -> TxnCoordSender : Send(BatchRequest)
+TxnCoordSender -> interceptors : Send(BatchRequest)
+...
+interceptors -[#red]-> TxnCoordSender : recoverable error!
+deactivate TxnCoordSender
+TxnCoordSender -> TxnCoordSender : new txn object (epoch++)
+activate TxnCoordSender
+TxnCoordSender -> Txn : retry error
+...
+Txn -> TxnCoordSender : Send(BatchRequest)
+TxnCoordSender -> interceptors : Send(BatchRequest)
+...
+@enduml
