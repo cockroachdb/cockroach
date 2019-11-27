@@ -297,3 +297,28 @@ export type NodesSummary = typeof nodesSummaryType;
 export function selectNodesSummaryValid(state: AdminUIState) {
   return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
 }
+
+/**
+ * partitionedStatuses divides the list of node statuses into "live" and "dead".
+ */
+export const partitionedStatuses = createSelector(
+  nodesSummarySelector,
+  (summary) => {
+    return _.groupBy(
+      summary.nodeStatuses,
+      (ns) => {
+        switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
+          case LivenessStatus.LIVE:
+          case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.DECOMMISSIONING:
+            return "live";
+          case LivenessStatus.DECOMMISSIONED:
+            return "decommissioned";
+          case LivenessStatus.DEAD:
+          default:
+            return "dead";
+        }
+      },
+    );
+  },
+);

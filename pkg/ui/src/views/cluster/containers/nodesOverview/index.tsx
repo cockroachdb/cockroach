@@ -12,7 +12,6 @@ import React from "react";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 import moment from "moment";
-import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
@@ -20,6 +19,7 @@ import {
   nodeCapacityStats,
   NodesSummary,
   nodesSummarySelector,
+  partitionedStatuses,
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -284,31 +284,6 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     );
   }
 }
-
-/**
- * partitionedStatuses divides the list of node statuses into "live" and "dead".
- */
-const partitionedStatuses = createSelector(
-  nodesSummarySelector,
-  (summary) => {
-    return _.groupBy(
-      summary.nodeStatuses,
-      (ns) => {
-        switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
-          case LivenessStatus.LIVE:
-          case LivenessStatus.UNAVAILABLE:
-          case LivenessStatus.DECOMMISSIONING:
-            return "live";
-          case LivenessStatus.DECOMMISSIONED:
-            return "decommissioned";
-          case LivenessStatus.DEAD:
-          default:
-            return "dead";
-        }
-      },
-    );
-  },
-);
 
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
