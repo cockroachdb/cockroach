@@ -618,6 +618,7 @@ FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred
+144368028   32        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         2          NULL      NULL
 543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
@@ -635,6 +636,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
 2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
 2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477               0 0       2 2        NULL      NULL
 3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
@@ -653,6 +655,7 @@ FROM pg_index
 ORDER BY indexrelid, operator_argument_position
 ----
 indexrelid  operator_argument_type_oid  operator_argument_position
+144368028   0                           1
 543291288   0                           1
 543291289   0                           1
 543291291   0                           1
@@ -681,6 +684,7 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2621181440  0                           1
 2621181440  0                           2
 2621181443  0                           1
+2667577107  0                           1
 2927313374  0                           1
 2927313374  0                           2
 3446785912  0                           1

@@ -255,6 +255,22 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 			return nil
 		},
 	},
+	{
+		// Introduced in v20.1.
+		// TODO(ajwerner): Bake this migration into v20.2.
+		name:                "create system.protected_ts_meta table",
+		workFn:              createProtectedTimestampsMetaTable,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionProtectedTimestamps),
+		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsMetaTableID),
+	},
+	{
+		// Introduced in v20.1.
+		// TODO(ajwerner): Bake this migration into v20.2.
+		name:                "create system.protected_ts_records table",
+		workFn:              createProtectedTimestampsRecordsTable,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionProtectedTimestamps),
+		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -621,6 +637,16 @@ func createReplicationStatsTable(ctx context.Context, r runner) error {
 		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
 			sqlbase.ReplicationStatsTable.Name, int(sqlbase.ReplicationStatsTableTTL.Seconds())))
 	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationStatsTable.Name)
+}
+
+func createProtectedTimestampsMetaTable(ctx context.Context, r runner) error {
+	return errors.Wrap(createSystemTable(ctx, r, sqlbase.ProtectedTimestampsMetaTable),
+		"failed to create system.protected_ts_meta")
+}
+
+func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error {
+	return errors.Wrap(createSystemTable(ctx, r, sqlbase.ProtectedTimestampsRecordsTable),
+		"failed to create system.protected_ts_records")
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {

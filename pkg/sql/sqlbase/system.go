@@ -226,6 +226,31 @@ CREATE TABLE system.comments (
    comment   STRING NOT NULL, -- the comment
    PRIMARY KEY (type, object_id, sub_id)
 );`
+
+	// protected_ts_meta stores a single row of metadata for the protectedts
+	// subsystem.
+	ProtectedTimestampsMetaTableSchema = `
+CREATE TABLE system.protected_ts_meta (
+   singleton   BOOL NOT NULL PRIMARY KEY DEFAULT (true),
+   version     INT8 NOT NULL,
+   num_records INT8 NOT NULL,
+   num_spans   INT8 NOT NULL,
+   total_bytes INT8 NOT NULL,
+   CONSTRAINT check_singleton  CHECK (singleton),
+   FAMILY "primary" (singleton, version, num_records, num_spans, total_bytes)
+);`
+
+	ProtectedTimestampsRecordsTableSchema = `
+CREATE TABLE system.protected_ts_records (
+   id        UUID NOT NULL PRIMARY KEY,
+   ts        DECIMAL NOT NULL,
+   meta_type STRING NOT NULL,
+   meta      BYTES,
+   num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
+   spans     BYTES NOT NULL,
+   verified  BOOL NOT NULL DEFAULT (false),
+   FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -272,6 +297,8 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ReplicationCriticalLocalitiesTableID: privilege.ReadWriteData,
 	keys.ReplicationStatsTableID:              privilege.ReadWriteData,
 	keys.ReportsMetaTableID:                   privilege.ReadWriteData,
+	keys.ProtectedTimestampsMetaTableID:       privilege.ReadData,
+	keys.ProtectedTimestampsRecordsTableID:    privilege.ReadData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -388,6 +415,7 @@ var (
 	}
 
 	falseBoolString = "false"
+	trueBoolString  = "true"
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = TableDescriptor{
@@ -1105,6 +1133,96 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	ProtectedTimestampsMetaTable = TableDescriptor{
+		Name:     "protected_ts_meta",
+		ID:       keys.ProtectedTimestampsMetaTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{
+				Name:        "singleton",
+				ID:          1,
+				Type:        *types.Bool,
+				DefaultExpr: &trueBoolString,
+			},
+			{Name: "version", ID: 2, Type: *types.Int},
+			{Name: "num_records", ID: 3, Type: *types.Int},
+			{Name: "num_spans", ID: 4, Type: *types.Int},
+			{Name: "total_bytes", ID: 5, Type: *types.Int},
+		},
+		Checks: []*TableDescriptor_CheckConstraint{
+			{
+				Name:      "check_singleton",
+				Expr:      "singleton",
+				ColumnIDs: []ColumnID{1},
+			},
+		},
+		NextColumnID: 6,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"singleton", "version", "num_records", "num_spans", "total_bytes"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Version:     1,
+			Unique:      true,
+			ColumnNames: []string{"singleton"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	ProtectedTimestampsRecordsTable = TableDescriptor{
+		Name:     "protected_ts_records",
+		ID:       keys.ProtectedTimestampsRecordsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: *types.Uuid},
+			{Name: "ts", ID: 2, Type: *types.Decimal},
+			{Name: "meta_type", ID: 3, Type: *types.String},
+			{Name: "meta", ID: 4, Type: *types.Bytes, Nullable: true},
+			{Name: "num_spans", ID: 5, Type: *types.Int},
+			{Name: "spans", ID: 6, Type: *types.Bytes},
+			{Name: "verified", ID: 7, Type: *types.Bool, DefaultExpr: &falseBoolString},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5, 6, 7},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:        "primary",
+			ID:          1,
+			Version:     1,
+			Unique:      true,
+			ColumnNames: []string{"id"},
+			ColumnIDs:   []ColumnID{1},
+			ColumnDirections: []IndexDescriptor_Direction{
+				IndexDescriptor_ASC,
+			},
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1155,6 +1273,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationConstraintStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationStatsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsRecordsTable)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the

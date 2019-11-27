@@ -5,34 +5,36 @@
 query IITI rowsort
 SELECT * FROM system.namespace
 ----
+0   0   defaultdb                        50
+0   0   postgres                         51
 0   0   system                           1
+0   0   test                             52
 1   0   public                           29
 1   29  comments                         24
+1   29  descriptor                       3
+1   29  eventlog                         12
 1   29  jobs                             15
 1   29  lease                            11
 1   29  locations                        21
 1   29  namespace                        30
 1   29  namespace_deprecated             2
+1   29  protected_ts_meta                31
+1   29  protected_ts_records             32
 1   29  rangelog                         13
 1   29  replication_constraint_stats     25
 1   29  replication_critical_localities  26
+1   29  replication_stats                27
+1   29  reports_meta                     28
+1   29  role_members                     23
 1   29  settings                         6
 1   29  table_statistics                 20
 1   29  ui                               14
+1   29  users                            4
+1   29  web_sessions                     19
 1   29  zones                            5
 50  0   public                           29
 51  0   public                           29
 52  0   public                           29
-0   0   defaultdb                        50
-0   0   test                             52
-1   29  users                            4
-1   29  web_sessions                     19
-0   0   postgres                         51
-1   29  descriptor                       3
-1   29  eventlog                         12
-1   29  replication_stats                27
-1   29  reports_meta                     28
-1   29  role_members                     23
 
 # Verify format of system tables.
 query TTBTTTB
