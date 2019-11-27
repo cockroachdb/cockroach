@@ -102,17 +102,16 @@ const (
 	canBackpressure                 // commands which deserve backpressure when a Range grows too large
 )
 
+// IsRead returns true iff the request reads data.
+func IsRead(args Request) bool {
+	flags := args.flags()
+	return (flags & isRead) != 0
+}
+
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
 	flags := args.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
-}
-
-// IsReadAndWrite returns true if the request both reads and writes
-// (such as conditional puts).
-func IsReadAndWrite(args Request) bool {
-	flags := args.flags()
-	return (flags&isRead) != 0 && (flags&isWrite) != 0
 }
 
 // IsTransactional returns true if the request may be part of a

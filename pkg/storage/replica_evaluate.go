@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
@@ -195,7 +195,7 @@ func evaluateBatch(
 		}
 	}
 
-	var result result.Result
+	var mergedResult result.Result
 
 	// WriteTooOldErrors are unique: When one is returned, we also lay
 	// down an intent at our new proposed timestamp. We have the option
@@ -238,12 +238,23 @@ func evaluateBatch(
 	// WriteTooOldError even if the SQL CanAutoRetry is false. As of
 	// this writing, nearly all writes issued by SQL are preceded by
 	// reads of the same key.
-	var writeTooOldErr *roachpb.Error
-	mustReturnWriteTooOldErr := false
+	var writeTooOldState struct {
+		err *roachpb.WriteTooOldError
+		// batchNeedsRefresh is set if any reads in the batch would become invalid
+		// were the batch's timestamp to be bumped at commit time. Any command with
+		// the needsRefresh flag sets this, and any read-write command that gets a
+		// WriteTooOldError.
+		batchNeedsRefresh bool
+	}
 
 	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
+
+		if roachpb.NeedsRefresh(args) {
+			writeTooOldState.batchNeedsRefresh = true
+		}
+
 		if baHeader.Txn != nil {
 			// Sequence numbers used to be set on each BatchRequest instead of
 			// on each individual Request. This meant that all Requests in a
@@ -258,18 +269,43 @@ func evaluateBatch(
 				baHeader.Txn.Sequence = seqNum
 			}
 		}
+
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := evaluateCommand(ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
 
-		if err := result.MergeAndDestroy(curResult); err != nil {
+		var curResult result.Result
+		var pErr *roachpb.Error
+		if args.Method() == roachpb.EndTxn {
+			// Update the NoRefreshSpans flag on EndTransactions if this batch had prior requests
+			// that prevent the batch from committing at a higher timestamp.
+			et := args.(*roachpb.EndTxnRequest)
+			if et.Commit && et.NoRefreshSpans && writeTooOldState.batchNeedsRefresh {
+				// Make a copy of the request so we don't modify the input batch.
+				// If the batch is re-evaluated, we don't want this change to persist.
+				etCpy := *et
+				etCpy.NoRefreshSpans = false
+				args = &etCpy
+			}
+		}
+		curResult, pErr = evaluateCommand(
+			ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
+
+		// If an EndTransaction wants to restart because of a write too old, we
+		// might have a better error to return to the client.
+		retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
+		if ok && retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
+			args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
+			pErr.SetDetail(writeTooOldState.err)
+		}
+
+		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
 			// Result up on error and if so, formalize that.
 			log.Fatalf(
 				ctx,
 				"unable to absorb Result: %s\ndiff(new, old): %s",
-				err, pretty.Diff(curResult, result),
+				err, pretty.Diff(curResult, mergedResult),
 			)
 		}
 
@@ -286,19 +322,17 @@ func evaluateBatch(
 				// other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch
 				// succeeding when it will be retried are increased.
-				if writeTooOldErr != nil {
-					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
+				if writeTooOldState.err != nil {
+					writeTooOldState.err.ActualTimestamp.Forward(
+						tErr.ActualTimestamp)
 				} else {
-					writeTooOldErr = pErr
+					writeTooOldState.err = tErr
 				}
 
-				// Requests which are both read and write are not currently
-				// accounted for in RefreshSpans, so they rely on eager
-				// returning of WriteTooOldErrors.
-				// TODO(bdarnell): add read+write requests to the read refresh spans
-				// in TxnCoordSender, and then I think this can go away.
-				if roachpb.IsReadAndWrite(args) {
-					mustReturnWriteTooOldErr = true
+				// If this write request also implies a read, it morally needs to be
+				// "refreshed" if we'll hit a WriteTooOldError.
+				if roachpb.IsRead(args) {
+					writeTooOldState.batchNeedsRefresh = true
 				}
 
 				if baHeader.Txn != nil {
@@ -314,7 +348,7 @@ func evaluateBatch(
 				// transaction.
 				pErr = nil
 			default:
-				return nil, result, pErr
+				return nil, mergedResult, pErr
 			}
 		}
 
@@ -342,18 +376,14 @@ func evaluateBatch(
 
 	// If there was an EndTxn in the batch that finalized the transaction,
 	// the WriteTooOld status has been fully processed and we can discard the error.
-	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalized() {
-		writeTooOldErr = nil
-	} else if baHeader.Txn == nil {
-		// Non-transactional requests are unable to defer WriteTooOldErrors
-		// because there is no where to defer them to.
-		mustReturnWriteTooOldErr = true
+	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalizedOrStaging() {
+		writeTooOldState.err = nil
 	}
 
 	// If there's a write too old error, return now that we've found
 	// the high water timestamp for retries.
-	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !baHeader.DeferWriteTooOldError) {
-		return nil, result, writeTooOldErr
+	if writeTooOldState.err != nil && (writeTooOldState.batchNeedsRefresh || !baHeader.DeferWriteTooOldError) {
+		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
 	if baHeader.Txn != nil {
@@ -363,14 +393,14 @@ func evaluateBatch(
 		// that this might be higher than baHeader.Timestamp if we had an
 		// EndTransaction that decided that it can essentially refresh to something
 		// higher than baHeader.Timestamp because there were no refresh spans.
-		br.Timestamp.Forward(baHeader.Txn.ReadTimestamp)
+		br.Timestamp.Forward(br.Txn.ReadTimestamp)
 	} else {
 		// Always update the batch response timestamp field to the timestamp at
 		// which the batch executed.
 		br.Timestamp.Forward(baHeader.Timestamp)
 	}
 
-	return br, result, nil
+	return br, mergedResult, nil
 }
 
 // evaluateCommand delegates to the eval method for the given
@@ -400,6 +430,9 @@ func evaluateCommand(
 			Hdr:   h,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
+			if pErr.GetTxn() == nil {
+				pErr.SetTxn(h.Txn)
+			}
 			log.Infof(ctx, "test injecting error: %s", pErr)
 			return result.Result{}, pErr
 		}
@@ -418,7 +451,7 @@ func evaluateCommand(
 		}
 		pd, err = cmd.Eval(ctx, readWriter, cArgs, reply)
 	} else {
-		err = errors.Errorf("unrecognized command %s", args.Method())
+		err = errors.AssertionFailedf("unrecognized command %s", args.Method())
 	}
 
 	if h.ReturnRangeInfo {

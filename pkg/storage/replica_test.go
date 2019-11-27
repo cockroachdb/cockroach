@@ -4437,9 +4437,8 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 	if pErr == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError; got %s", pErr)
-	}
+	require.Error(t, pErr.GetDetail(),
+		"TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)")
 }
 
 // TestReplicaLaziness verifies that Raft Groups are brought up lazily.
@@ -9821,7 +9820,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
 			},
-			expErr: "RETRY_WRITE_TOO_OLD",
+			expErr: "WriteTooOldError",
 		},
 		// 1PC serializable transaction will retry locally.
 		{
@@ -10029,7 +10028,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	txn.WriteTimestamp.Forward(ts3)
 
 	// Execute the write phase of the transaction as a single batch,
-	// which must return a WRITE_TOO_OLD TransactionRetryError.
+	// which must return a WriteTooOldError.
 	//
 	// TODO(bdarnell): When this test was written, in SNAPSHOT
 	// isolation we would attempt to execute the transaction on the
@@ -10048,10 +10047,8 @@ func TestReplicaPushed1PC(t *testing.T) {
 	assignSeqNumsForReqs(&txn, &put, &et)
 	if br, pErr := tc.Sender().Send(ctx, ba); pErr == nil {
 		t.Errorf("did not get expected error. resp=%s", br)
-	} else if trErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Errorf("expected TransactionRetryError, got %s", pErr)
-	} else if trErr.Reason != roachpb.RETRY_WRITE_TOO_OLD {
-		t.Errorf("expected RETRY_WRITE_TOO_OLD, got %s", trErr)
+	} else if wtoe, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Errorf("expected WriteTooOldError, got %s", wtoe)
 	}
 }
 
