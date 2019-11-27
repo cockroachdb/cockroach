@@ -10,6 +10,7 @@ package importccl
 
 import (
 	"context"
+	"io/ioutil"
 	"math"
 	"sort"
 	"strconv"
@@ -63,7 +64,20 @@ const (
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
 
-	pgMaxRowSize = "max_row_size"
+	optMaxRowSize = "max_row_size"
+
+	// Turn on strict validation when importing avro records.
+	avroStrict = "strict_validation"
+	// Default input format is assumed to be OCF (object container file).
+	// This default can be changed by specified either of these options.
+	avroBinRecords  = "data_as_binary_records"
+	avroJSONRecords = "data_as_json_records"
+	// Record separator; default "\n"
+	avroRecordsSeparatedBy = "records_terminated_by"
+	// If we are importing avro records (binary or JSON), we must specify schema
+	// as either an inline JSON schema, or an external schema URI.
+	avroSchema    = "schema"
+	avroSchemaURI = "schema_uri"
 )
 
 var importOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -86,7 +100,14 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	importOptionSkipFKs:          sql.KVStringOptRequireNoValue,
 	importOptionDisableGlobMatch: sql.KVStringOptRequireNoValue,
 
-	pgMaxRowSize: sql.KVStringOptRequireValue,
+	optMaxRowSize: sql.KVStringOptRequireValue,
+
+	avroStrict:             sql.KVStringOptRequireNoValue,
+	avroSchema:             sql.KVStringOptRequireValue,
+	avroSchemaURI:          sql.KVStringOptRequireValue,
+	avroRecordsSeparatedBy: sql.KVStringOptRequireValue,
+	avroBinRecords:         sql.KVStringOptRequireNoValue,
+	avroJSONRecords:        sql.KVStringOptRequireNoValue,
 }
 
 func importJobDescription(
@@ -351,13 +372,13 @@ func importPlanHook(
 				format.PgCopy.Null = override
 			}
 			maxRowSize := int32(defaultScanBuffer)
-			if override, ok := opts[pgMaxRowSize]; ok {
+			if override, ok := opts[optMaxRowSize]; ok {
 				sz, err := humanizeutil.ParseBytes(override)
 				if err != nil {
 					return err
 				}
 				if sz < 1 || sz > math.MaxInt32 {
-					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+					return errors.Errorf("%d out of range: %d", maxRowSize, sz)
 				}
 				maxRowSize = int32(sz)
 			}
@@ -366,17 +387,22 @@ func importPlanHook(
 			telemetry.Count("import.format.pgdump")
 			format.Format = roachpb.IOFileFormat_PgDump
 			maxRowSize := int32(defaultScanBuffer)
-			if override, ok := opts[pgMaxRowSize]; ok {
+			if override, ok := opts[optMaxRowSize]; ok {
 				sz, err := humanizeutil.ParseBytes(override)
 				if err != nil {
 					return err
 				}
 				if sz < 1 || sz > math.MaxInt32 {
-					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+					return errors.Errorf("%d out of range: %d", maxRowSize, sz)
 				}
 				maxRowSize = int32(sz)
 			}
 			format.PgDump.MaxRowSize = maxRowSize
+		case "AVRO":
+			err := parseAvroOptions(ctx, opts, p, &format)
+			if err != nil {
+				return err
+			}
 		default:
 			return unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
@@ -594,6 +620,85 @@ func importPlanHook(
 		return <-errCh
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
+}
+
+func parseAvroOptions(
+	ctx context.Context, opts map[string]string, p sql.PlanHookState, format *roachpb.IOFileFormat,
+) error {
+	telemetry.Count("import.format.avro")
+	format.Format = roachpb.IOFileFormat_Avro
+
+	// Default input format is OCF.
+	format.Avro.Format = roachpb.AvroOptions_OCF
+	_, format.Avro.StrictMode = opts[avroStrict]
+
+	_, haveBinRecs := opts[avroBinRecords]
+	_, haveJSONRecs := opts[avroJSONRecords]
+
+	if haveBinRecs && haveJSONRecs {
+		return errors.Errorf("only one of the %s or %s options can be set", avroBinRecords, avroJSONRecords)
+	}
+
+	if haveBinRecs || haveJSONRecs {
+		// Input is a "records" format.
+		if haveBinRecs {
+			format.Avro.Format = roachpb.AvroOptions_BIN_RECORDS
+		} else {
+			format.Avro.Format = roachpb.AvroOptions_JSON_RECORDS
+		}
+
+		// Set record separator.
+		format.Avro.RecordSeparator = '\n'
+		if override, ok := opts[avroRecordsSeparatedBy]; ok {
+			c, err := util.GetSingleRune(override)
+			if err != nil {
+				return pgerror.Wrapf(err, pgcode.Syntax,
+					"invalid %q value", avroRecordsSeparatedBy)
+			}
+			format.Avro.RecordSeparator = c
+		}
+
+		// See if inline schema is specified.
+		format.Avro.SchemaJSON = opts[avroSchema]
+
+		if len(format.Avro.SchemaJSON) == 0 {
+			// Inline schema not set; We must have external schema.
+			uri, ok := opts[avroSchemaURI]
+			if !ok {
+				return errors.Errorf(
+					"either %s or %s option must be set when importing avro record files", avroSchema, avroSchemaURI)
+			}
+
+			store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+
+			raw, err := store.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer raw.Close()
+			schemaBytes, err := ioutil.ReadAll(raw)
+			if err != nil {
+				return err
+			}
+			format.Avro.SchemaJSON = string(schemaBytes)
+		}
+
+		if override, ok := opts[optMaxRowSize]; ok {
+			sz, err := humanizeutil.ParseBytes(override)
+			if err != nil {
+				return err
+			}
+			if sz < 1 || sz > math.MaxInt32 {
+				return errors.Errorf("%s out of range: %d", override, sz)
+			}
+			format.Avro.MaxRecordSize = int32(sz)
+		}
+	}
+	return nil
 }
 
 type importResumer struct {
