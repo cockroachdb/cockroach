@@ -991,3 +991,18 @@ NULL  NULL  1
 NULL  1     1
 1     NULL  0
 1     1     2
+
+# Regression test for #42816 - top K sort when K is greated than
+# coldata.BatchSize().
+statement ok
+CREATE TABLE t_42816 (a int); INSERT INTO t_42816 SELECT * FROM generate_series(0, 1025)
+
+query I
+SELECT * FROM t_42816 ORDER BY a OFFSET 1020 LIMIT 10
+----
+1020
+1021
+1022
+1023
+1024
+1025
