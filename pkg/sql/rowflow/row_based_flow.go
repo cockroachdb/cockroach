@@ -13,6 +13,7 @@ package rowflow
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -31,9 +32,17 @@ type rowBasedFlow struct {
 
 var _ flowinfra.Flow = &rowBasedFlow{}
 
+var rowBasedFlowPool = sync.Pool{
+	New: func() interface{} {
+		return &rowBasedFlow{}
+	},
+}
+
 // NewRowBasedFlow returns a row based flow using base as its FlowBase.
 func NewRowBasedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
-	return &rowBasedFlow{FlowBase: base}
+	rbf := rowBasedFlowPool.Get().(*rowBasedFlow)
+	rbf.FlowBase = base
+	return rbf
 }
 
 // Setup if part of the flowinfra.Flow interface.
@@ -383,6 +392,18 @@ func (f *rowBasedFlow) setupRouter(spec *execinfrapb.OutputRouterSpec) (router, 
 		}
 	}
 	return makeRouter(spec, streams)
+}
+
+// Release releases this rowBasedFlow back to the pool.
+func (f *rowBasedFlow) Release() {
+	*f = rowBasedFlow{}
+	rowBasedFlowPool.Put(f)
+}
+
+// Cleanup is part of the Flow interface.
+func (f *rowBasedFlow) Cleanup(ctx context.Context) {
+	f.FlowBase.Cleanup(ctx)
+	f.Release()
 }
 
 type copyingRowReceiver struct {
