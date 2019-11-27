@@ -243,13 +243,23 @@ func TestRouterOutputNext(t *testing.T) {
 			blockThreshold = smallBatchSize / 2
 		)
 
+		// It is possible that coldata.BatchSize is smaller than our smallBatchSize
+		// which breaks the assumptions of this test. Also, interestingly, if we
+		// do something like 'if smallBatchSize < coldata.BatchSize()', apparently
+		// the compiler will produce such code that the 'if' condition will be only
+		// checked on the first run whereas the condition might not longer hold on
+		// consequent runs. That's why we have this "data dependency" on the slice.
+		if len(fullSelection) < blockThreshold {
+			return
+		}
+
 		// Use a smaller selection than the batch size; it increases test coverage.
 		selection := fullSelection[:blockThreshold]
 
-		expected := make(tuples, len(data)/(smallBatchSize/blockThreshold))
-		for i, j := 0, 0; i < len(data) && j < len(expected); i, j = i+smallBatchSize, j+blockThreshold {
+		expected := make(tuples, 0, len(data))
+		for i := 0; i < len(data); i += smallBatchSize {
 			for k := 0; k < blockThreshold; k++ {
-				expected[j+k] = data[i+k]
+				expected = append(expected, data[i+k])
 			}
 		}
 
@@ -437,26 +447,39 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	data := make(tuples, coldata.BatchSize())
+	batchSize := coldata.BatchSize()
+	data := make(tuples, batchSize)
 	valsYetToSee := make(map[int64]struct{})
 	for i := range data {
 		data[i] = tuple{i}
 		valsYetToSee[int64(i)] = struct{}{}
 	}
 
-	in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
+	in := newOpTestInput(batchSize, data, nil /* typs */)
 	in.Init()
 
 	var (
-		// expectedNumVals is the number of expected values the output at the
-		// corresponding index in outputs receives. This should not change between
-		// runs of tests unless the underlying hash algorithm changes. If it does,
-		// distributed hash routing will not produce correct results.
-		expectedNumVals = []int{273, 252, 287, 212}
-		valsPushed      = make([]int, len(expectedNumVals))
+		// expectedNumVals is the map from the batch size to the number of expected
+		// values the output at the corresponding index in outputs receives. This
+		// should not change between runs of tests unless the underlying hash
+		// algorithm changes. If it does, distributed hash routing will not produce
+		// correct results.
+		expectedNumVals map[uint16][]int
+		numOutputs      = 4
+		valsPushed      = make([]int, numOutputs)
 	)
+	expectedNumVals = make(map[uint16][]int)
+	expectedNumVals[3] = []int{1, 0, 1, 1}
+	expectedNumVals[1023] = []int{273, 251, 287, 212}
+	expectedNumVals[1024] = []int{273, 252, 287, 212}
 
-	outputs := make([]routerOutput, len(expectedNumVals))
+	if _, ok := expectedNumVals[batchSize]; !ok {
+		// We do not have a precomputed expectedNumVals for this batch size, so we
+		// will skip the test in such configuration.
+		return
+	}
+
+	outputs := make([]routerOutput, numOutputs)
 	for i := range outputs {
 		// Capture the index.
 		outputIdx := i
@@ -488,9 +511,11 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		t.Fatalf("hash router failed to push values: %v", valsYetToSee)
 	}
 
-	for i, expected := range expectedNumVals {
+	for i, expected := range expectedNumVals[batchSize] {
 		if valsPushed[i] != expected {
-			t.Fatalf("num val slices differ at output %d, expected: %v actual: %v", i, expectedNumVals, valsPushed)
+			t.Fatalf("num val slices differ at output %d, expected: %v actual: %v",
+				i, expectedNumVals[batchSize], valsPushed,
+			)
 		}
 	}
 }
