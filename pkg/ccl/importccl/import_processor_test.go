@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -87,6 +88,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
 		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
 		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
 	const endBatchSize = -1
@@ -263,6 +265,11 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 			[]int64{0},
 		},
+		{
+			"avro-one-invalid",
+			newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
+			[]int64{eofOffset, 0},
+		},
 	}
 
 	// Configures import spec to have appropriate input offsets set.
@@ -340,6 +347,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
 		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
 		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
 
 	resumes := []int64{0, 10, 64, eofOffset}
@@ -809,7 +817,8 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 		roachpb.IOFileFormat_Mysqldump,
 		roachpb.IOFileFormat_MysqlOutfile,
 		roachpb.IOFileFormat_PgDump,
-		roachpb.IOFileFormat_PgCopy:
+		roachpb.IOFileFormat_PgCopy,
+		roachpb.IOFileFormat_Avro:
 		descr = descForTable(t,
 			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 10, 20, NoFKs)
 	default:
@@ -879,5 +888,27 @@ func mysqlOutFormat() roachpb.IOFileFormat {
 func csvFormat() roachpb.IOFileFormat {
 	return roachpb.IOFileFormat{
 		Format: roachpb.IOFileFormat_CSV,
+	}
+}
+
+func avroFormat(t *testing.T, format roachpb.AvroOptions_Format) roachpb.IOFileFormat {
+	avro := roachpb.AvroOptions{
+		Format:     format,
+		StrictMode: false,
+	}
+
+	if format != roachpb.AvroOptions_OCF {
+		// Need to load schema for record specific inputs.
+		bytes, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		avro.SchemaJSON = string(bytes)
+		avro.RecordSeparator = '\n'
+	}
+
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_Avro,
+		Avro:   avro,
 	}
 }
