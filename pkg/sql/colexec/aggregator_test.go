@@ -222,7 +222,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				{7},
 				{8},
 			},
-			batchSize:       4,
+			batchSize:       3,
 			outputBatchSize: 1,
 			name:            "CarryBetweenInputAndOutputBatches",
 		},
@@ -476,6 +476,11 @@ func TestAggregatorRandom(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
+		if groupSize == 0 {
+			// We might be varying coldata.BatchSize() so that when it is divided by
+			// 4, groupSize is 0. We want to skip such configuration.
+			continue
+		}
 		for _, numInputBatches := range []int{1, 2, 64} {
 			for _, hasNulls := range []bool{true, false} {
 				for _, agg := range aggTypes {
@@ -495,7 +500,7 @@ func TestAggregatorRandom(t *testing.T) {
 							curGroup := -1
 							for i := range groups {
 								if i%groupSize == 0 {
-									expRowCounts = append(expRowCounts, int64(groupSize))
+									expRowCounts = append(expRowCounts, 0)
 									expCounts = append(expCounts, 0)
 									expSums = append(expSums, 0)
 									expMins = append(expMins, 2048)
@@ -508,8 +513,11 @@ func TestAggregatorRandom(t *testing.T) {
 								// slower.
 								aggCol[i] = 2048 * (rng.Float64() - 0.5)
 
+								// NULL values contribute to the row count, so we're updating
+								// the row counts outside of the if block.
+								expRowCounts[curGroup]++
 								if hasNulls && rng.Float64() < nullProbability {
-									aggColNulls.SetNull(uint16(i))
+									aggColNulls.SetNull64(uint64(i))
 								} else {
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
@@ -704,12 +712,7 @@ func BenchmarkAggregator(b *testing.B) {
 											a.(resetter).reset()
 											source.reset()
 											// Exhaust aggregator until all batches have been read.
-											foundTuples := 0
 											for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-												foundTuples += int(b.Length())
-											}
-											if foundTuples != nTuples/groupSize {
-												b.Fatalf("Found %d tuples, expected %d", foundTuples, nTuples/groupSize)
 											}
 										}
 									},

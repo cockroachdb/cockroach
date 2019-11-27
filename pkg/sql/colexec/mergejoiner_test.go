@@ -1814,10 +1814,25 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, groupSize := range []int{int(coldata.BatchSize()) / 8, int(coldata.BatchSize()) / 4, int(coldata.BatchSize()) / 2} {
+		if groupSize == 0 {
+			// We might be varying coldata.BatchSize() so that when it is divided by
+			// 4, groupSize is 0. We want to skip such configuration.
+			continue
+		}
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches
+					// There will be nTuples/groupSize "full" groups - i.e. groups of
+					// groupSize. Each of these "full" groups will produce groupSize^2
+					// tuples. The last group might be not full and will consist of
+					// nTuples % groupSize tuples. That group will produce
+					// lastGroupSize^2 tuples.
+					// Note that the math will still be correct in case when nTuples is
+					// divisible by groupSize - all the groups will be full and "last"
+					// group will be of size 0.
+					lastGroupSize := nTuples % groupSize
+					expCount := nTuples/groupSize*(groupSize*groupSize) + lastGroupSize*lastGroupSize
 					typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
 					cols := []coldata.Vec{
 						testAllocator.NewMemColumn(typs[0], nTuples),
@@ -1870,9 +1885,9 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						i++
 					}
 
-					if count != groupSize*int(coldata.BatchSize())*numInputBatches {
+					if count != expCount {
 						t.Fatalf("found count %d, expected count %d",
-							count, groupSize*int(coldata.BatchSize())*numInputBatches)
+							count, expCount)
 					}
 				})
 		}
