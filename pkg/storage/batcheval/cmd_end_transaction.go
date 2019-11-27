@@ -414,11 +414,6 @@ func IsEndTxnTriggeringRetryError(
 		}
 	}
 
-	// A transaction can still avoid a retry under certain conditions.
-	if retry && CanForwardCommitTimestampWithoutRefresh(txn, args) {
-		retry, reason = false, 0
-	}
-
 	// However, a transaction must obey its deadline, if set.
 	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args) {
 		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
@@ -437,6 +432,9 @@ func IsEndTxnTriggeringRetryError(
 // has encountered no spans which require refreshing at the forwarded
 // timestamp. If either of those conditions are true, a client-side
 // retry is required.
+//
+// Note that when deciding whether a transaction can be bumped to a particular
+// timestamp, the transaction's deadling must also be taken into account.
 func CanForwardCommitTimestampWithoutRefresh(
 	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
 ) bool {
