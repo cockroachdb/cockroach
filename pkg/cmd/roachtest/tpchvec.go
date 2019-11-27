@@ -37,6 +37,7 @@ func registerTPCHVec(r *testRegistry) {
 		// TODO(yuzefovich): remove this once we have disk spilling.
 		1:  "needs disk spilling",
 		3:  "needs disk spilling",
+		4:  "needs disk spilling",
 		8:  "needs disk spilling",
 		9:  "needs disk spilling",
 		19: "needs disk spilling",
@@ -47,6 +48,7 @@ func registerTPCHVec(r *testRegistry) {
 		// vec on.
 		1:  "skipped with vec on",
 		3:  "skipped with vec on",
+		4:  "skipped with vec on",
 		8:  "skipped with vec on",
 		9:  "skipped with vec on",
 		19: "skipped with vec on",
