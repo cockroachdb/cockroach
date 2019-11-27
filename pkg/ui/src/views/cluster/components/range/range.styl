@@ -10,6 +10,10 @@
 
 @require "~styl/base/palette.styl"
 
+.Range
+  width: 100%
+  display: flex
+
 .click-zone 
   position: absolute
   top 0
@@ -29,56 +33,62 @@
 
 .trigger-wrapper
   z-index 99
+  width 100%
 
 .range-selector
   position absolute
-  top: 50px
+  top: 45px
   background-color white
-  box-shadow 0px 0px 7px 1px rgba(0,0,0,0.10)
-  padding 20px
-  border-radius 2px
+  box-shadow 0 0 4px 0 rgba(154, 161, 171, 0.33)
+  border solid 0.5px #e7ecf3
+  border-radius 4px
   display flex
   flex-direction row
   align-items flex-start
   cursor default
-  min-width 530px
   z-index 99
+  &.__custom
+    width 555px
+    padding 22px 17px 40px
+    justify-content space-between
+  &.__options
+    width 423px
+    padding 12px 9px
   &>div
     display flex
     flex-direction column
-    &:not(:last-child)
-      border-right 1px solid #e5e5e5
   ._title
     color $body-color
     font-family Lato-Bold
     font-size 12px
-    margin-bottom 8px
-    line-height 2
+    margin-bottom 7.5px
     letter-spacing 0.1px
   ._time-button
     text-align left
     padding 0
     margin 0
-    span
+    &:hover
+      .__option-label
+        color #3a7ce1
+    .__option-label
       color $body-color
-      font-family Lato-Regular
+      font-family SourceSansPro-Regular
       font-size 14px
-      font-weight normal
-      font-style normal
-      font-stretch normal
-      line-height 1.57
+      line-height 22px
       letter-spacing 0.1px
       text-transform none
+      margin-left: 13px;
+      vertical-align: middle;
     &.active
-      span
-        font-family Lato-Bold
-        font-weight bold
+      .__option-label
+        font-family SourceSansPro-Bold
         line-height 1.71
         color $link-color
 
 .trigger
   &.Select
     display flex
+    justify-content space-between
   .Select-value-label
     margin-right 10px
     font-family Lato-Regular
@@ -91,14 +101,119 @@
 .ant-calendar-today-btn
   color $link-color
 ._quick-view
-  padding-right 20px
+  width 100%
 ._start
-  padding 0 20px
+  width 248px
 ._end
-  padding-left 20px
+  width 248px
 
 .ant-calendar-picker
-  margin-bottom 16px
+  margin-bottom 20px
 
 .ant-calendar-picker, .ant-time-picker
   width 100%
+
+.range-calendar
+  width 248px
+  border-radius 4px
+  border solid 1px #e5e5e5
+  margin-bottom 20px
+  .calendar-today-btn
+    width 100%
+    height 40px
+    border-top solid 1px #e5e5e5
+    display flex
+    justify-content center
+    align-items center
+  .calendar-month-picker
+    display flex
+    justify-content space-between
+    align-items center
+    height 40px
+    span
+      font-family Lato-Regular
+      color #5f6c87
+      font-size 14px
+      letter-spacing 0.1px
+      line-height 1.57
+    button
+      color #a3a5af
+      width: auto
+      padding 0 15px
+      margin 0 10px
+      &:hover
+        color #3a7ce1
+  table
+    height auto
+    display flex
+    flex-direction column
+    tr
+      display flex
+      justify-content space-between
+    th, td
+      width 32px
+      height 24px
+      display flex
+      justify-content center
+      align-items center
+  .ant-fullcalendar-calendar-body
+    padding 8px 16px
+    .ant-fullcalendar-column-header
+      font-family Lato-Bold
+      font-size 12px
+      line-height 2
+      letter-spacing 0.1px
+    .ant-fullcalendar-tbody
+      .ant-fullcalendar-cell
+        .ant-fullcalendar-value
+          width 24px
+          height 24px
+          display flex
+          justify-content center
+          align-items center
+          padding 1.5px 4.95px
+          font-family Lato-Regular
+          font-size 12px
+          line-height 1.83
+          letter-spacing 0.1px
+          padding 0
+          color #5f6c87
+          &:hover
+            background #f6f6f6
+        &.ant-fullcalendar-selected-day
+          .ant-fullcalendar-value
+            background #eff5fd
+            color #3a7ce1
+            &:hover
+              background #e0efff
+              color #2367cd
+        &.ant-fullcalendar-disabled-cell
+            background #f6f6f6
+            color #a3a5af
+        &.ant-fullcalendar-today
+          &:hover
+            background transparent
+          .ant-fullcalendar-value
+            width 24px
+            height 24px
+            box-shadow none
+            border 1px solid #2367cd
+            color #3a7ce1
+            &:hover
+              font-family Lato-Bold
+              background #eff5fd
+          &.ant-fullcalendar-selected-day
+            .ant-fullcalendar-value
+              background #eff5fd
+              &:hover
+                background #e0efff
+          &.ant-fullcalendar-disabled-cell
+            &:hover
+              background #f6f6f6
+            .ant-fullcalendar-value
+                font-family Lato-Bold
+                color #a3a5af
+                background #f6f6f6
+                border 1px solid #a3a5af
+                &:hover
+                  background #f6f6f6

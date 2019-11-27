@@ -76,7 +76,9 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
     } else {
       // Set a timeout to reset the window when the current window expires.
       const newTimeout = setTimeout(() => this.setWindow(props), expires.diff(now).valueOf());
-      this.setState({ timeout: newTimeout });
+      this.setState({
+        timeout: newTimeout,
+      });
     }
   }
 
