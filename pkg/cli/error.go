@@ -221,15 +221,20 @@ func maybeShoutError(
 }
 
 func checkAndMaybeShout(err error) error {
+	return checkAndMaybeShoutTo(err, log.Shout)
+}
+
+func checkAndMaybeShoutTo(err error, logger func(context.Context, log.Severity, error)) error {
 	if err == nil {
 		return nil
 	}
 	severity := log.Severity_ERROR
 	cause := err
-	if ec, ok := errors.Cause(err).(*cliError); ok {
+	var ec *cliError
+	if errors.As(err, &ec) {
 		severity = ec.severity
 		cause = ec.cause
 	}
-	log.Shout(context.Background(), severity, cause)
+	logger(context.Background(), severity, cause)
 	return err
 }
