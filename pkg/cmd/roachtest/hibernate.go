@@ -10,13 +10,11 @@
 
 package main
 
-import (
-	"context"
-	"fmt"
-	"regexp"
-)
+import "context"
 
-var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+// TODO(rafi): Once our fork is merged into the main repo, go back to using
+// latest release tag.
+//var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
@@ -44,14 +42,19 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		t.Status("cloning hibernate and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(
-			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		// TODO(rafi): Once our fork is merged into the main repo, go back to
+		// fetching the latest tag. For now, always use the
+		// `HHH-13724-cockroachdb-support` branch, where we are building the
+		// dialect.
+		latestTag := "HHH-13724-cockroachdb-support"
+		//t.Status("cloning hibernate and installing prerequisites")
+		//latestTag, err := repeatGetLatestTag(
+		//	ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+		//)
+		//if err != nil {
+		//	t.Fatal(err)
+		//}
+		//c.l.Printf("Latest Hibernate release is %s.", latestTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -75,29 +78,17 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// TODO(rafi): Switch back to using the main hibernate/hibernate-orm repo
+		// once the CockroachDB dialect is merged into it. For now, we are using
+		// a fork so we can make incremental progress on building the dialect.
 		if err := repeatGitCloneE(
 			ctx,
 			t.l,
 			c,
-			"https://github.com/hibernate/hibernate-orm.git",
+			"https://github.com/cockroachdb/hibernate-orm.git",
 			"/mnt/data1/hibernate",
 			latestTag,
 			node,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		// In order to get Hibernate's test suite to connect to cockroach, we have
-		// to create a dbBundle as it not possible to specify the individual
-		// properties. So here we just steamroll the file with our own config.
-		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"configuring tests for cockroach only",
-			fmt.Sprintf(
-				"echo \"%s\" > /mnt/data1/hibernate/gradle/databases.gradle", hibernateDatabaseGradle,
-			),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +103,7 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"building hibernate (without tests)",
-			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
+			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb `+
 				`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
 		); err != nil {
 			t.Fatal(err)
@@ -133,7 +124,7 @@ func registerHibernate(r *testRegistry) {
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
 			`cd /mnt/data1/hibernate/hibernate-core/ && `+
-				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroach`,
+				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb`,
 		)
 
 		t.Status("collecting the test results")
@@ -194,18 +185,3 @@ func registerHibernate(r *testRegistry) {
 		},
 	})
 }
-
-const hibernateDatabaseGradle = `
-ext {
-  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
-    dbBundle = [
-     cockroach : [
-       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
-       'jdbc.driver': 'org.postgresql.Driver',
-       'jdbc.user'  : 'root',
-       'jdbc.pass'  : '',
-       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
-     ],
-    ]
-}
-`
