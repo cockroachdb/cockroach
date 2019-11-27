@@ -203,7 +203,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * NotLiveNodeListProps are the properties of NotLiveNodeList.
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
-  status: LivenessStatus.DECOMMISSIONING | LivenessStatus.DEAD;
+  status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
 }
 
 /**
@@ -211,6 +211,16 @@ interface NotLiveNodeListProps extends NodeCategoryListProps {
  * nodes on the cluster.
  */
 class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
+  getHeaderInfo() {
+    const { status } = this.props;
+    if (status === LivenessStatus.DECOMMISSIONED) {
+      return (
+        <Link to={`reports/nodes/history`}>Decommissioned node history</Link>
+      );
+    }
+    return null;
+  }
+
   render() {
     const { status, statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
@@ -218,11 +228,13 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     }
 
     const statusName = _.capitalize(LivenessStatus[status]);
+    const headerInfo = this.getHeaderInfo();
 
     return (
       <div className="embedded-table">
-        <section className="section section--heading">
+        <section className="section section--heading section--heading__justify-end">
           <h2>{`${statusName} Nodes`}</h2>
+          { headerInfo }
         </section>
         <NodeSortedTable
           data={statuses}
