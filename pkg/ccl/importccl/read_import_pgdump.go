@@ -377,8 +377,8 @@ func readPostgresCreateTable(
 
 func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
-		return "", unimplemented.Newf(
-			"import non-public schema",
+		return "", unimplemented.NewWithIssuef(
+			26443,
 			"non-public schemas unsupported: %s", sc,
 		)
 	}
@@ -388,8 +388,8 @@ func getTableName(tn *tree.TableName) (string, error) {
 // getTableName variant for UnresolvedObjectName.
 func getTableName2(u *tree.UnresolvedObjectName) (string, error) {
 	if u.NumParts >= 2 && u.Parts[1] != "public" {
-		return "", unimplemented.Newf(
-			"import non-public schema",
+		return "", unimplemented.NewWithIssuef(
+			26443,
 			"non-public schemas unsupported: %s", u.Parts[1],
 		)
 	}
