@@ -13,7 +13,9 @@ CREATE TABLE users (
 statement ok
 CREATE TABLE othertable (
    x INT,
-   INDEX baw (x)
+   y INT,
+   INDEX baw (x),
+   INDEX yak (y, x)
 )
 
 statement error index name "baw" is ambiguous
@@ -21,6 +23,27 @@ DROP INDEX baw
 
 statement error index name "baw" is ambiguous
 DROP INDEX IF EXISTS baw
+
+statement error index "ark" does not exist
+DROP INDEX ark
+
+statement ok
+DROP INDEX IF EXISTS ark
+
+statement error index "ark" does not exist
+DROP INDEX users@ark
+
+statement ok
+DROP INDEX IF EXISTS users@ark
+
+statement ok
+DROP INDEX yak
+
+statement ok
+CREATE INDEX yak ON othertable (y, x)
+
+statement ok
+DROP INDEX IF EXISTS yak
 
 statement ok
 DROP TABLE othertable
