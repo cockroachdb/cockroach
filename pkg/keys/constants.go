@@ -343,6 +343,9 @@ const (
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID = 30
 
+	ProtectedTimestampsMetaTableID    = 31
+	ProtectedTimestampsRecordsTableID = 32
+
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
 	TableCommentType    = 1

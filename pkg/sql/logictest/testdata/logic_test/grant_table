@@ -349,6 +349,14 @@ system         public       namespace                        admin      GRANT
 system         public       namespace                        admin      SELECT
 system         public       namespace                        root       GRANT
 system         public       namespace                        root       SELECT
+system         public       protected_ts_meta                admin      GRANT
+system         public       protected_ts_meta                admin      SELECT
+system         public       protected_ts_meta                root       GRANT
+system         public       protected_ts_meta                root       SELECT
+system         public       protected_ts_records             admin      GRANT
+system         public       protected_ts_records             admin      SELECT
+system         public       protected_ts_records             root       GRANT
+system         public       protected_ts_records             root       SELECT
 a              public       NULL                             admin      ALL
 a              public       NULL                             readwrite  ALL
 a              public       NULL                             root       ALL
@@ -418,6 +426,10 @@ system         public              namespace                        root     GRA
 system         public              namespace                        root     SELECT
 system         public              namespace_deprecated             root     GRANT
 system         public              namespace_deprecated             root     SELECT
+system         public              protected_ts_meta                root     GRANT
+system         public              protected_ts_meta                root     SELECT
+system         public              protected_ts_records             root     GRANT
+system         public              protected_ts_records             root     SELECT
 system         public              rangelog                         root     DELETE
 system         public              rangelog                         root     GRANT
 system         public              rangelog                         root     INSERT
