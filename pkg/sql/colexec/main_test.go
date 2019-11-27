@@ -12,9 +12,11 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,6 +45,13 @@ func TestMain(m *testing.M) {
 		testMemAcc = &memAcc
 		testAllocator = NewAllocator(ctx, testMemAcc)
 		defer testMemAcc.Close(ctx)
+		rng, _ := randutil.NewPseudoRand()
+		// Pick a random batch size in [coldata.MinBatchSize, coldata.MaxBatchSize]
+		// range.
+		randomBatchSize := uint16(coldata.MinBatchSize +
+			rng.Intn(coldata.MaxBatchSize-coldata.MinBatchSize))
+		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
+		coldata.SetBatchSizeForTests(randomBatchSize)
 		return m.Run()
 	}())
 }

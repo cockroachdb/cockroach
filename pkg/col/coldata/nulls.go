@@ -10,13 +10,13 @@
 
 package coldata
 
-// zeroedNulls is a zeroed out slice representing a bitmap of size maxBatchSize.
+// zeroedNulls is a zeroed out slice representing a bitmap of size MaxBatchSize.
 // This is copied to efficiently set all nulls.
-var zeroedNulls [(maxBatchSize-1)/8 + 1]byte
+var zeroedNulls [(MaxBatchSize-1)/8 + 1]byte
 
-// filledNulls is a slice representing a bitmap of size maxBatchSize with every
+// filledNulls is a slice representing a bitmap of size MaxBatchSize with every
 // single bit set.
-var filledNulls [(maxBatchSize-1)/8 + 1]byte
+var filledNulls [(MaxBatchSize-1)/8 + 1]byte
 
 // bitMask[i] is a byte with a single bit set at i.
 var bitMask = [8]byte{0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80}

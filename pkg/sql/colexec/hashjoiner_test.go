@@ -912,6 +912,12 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	for _, outputBatchSize := range []uint16{1, 17, coldata.BatchSize()} {
+		if outputBatchSize > coldata.BatchSize() {
+			// It is possible for varied coldata.BatchSize() to be smaller than
+			// requested outputBatchSize. Such configuration is invalid, and we skip
+			// it.
+			continue
+		}
 		for _, tc := range tcs {
 			inputs := []tuples{tc.leftTuples, tc.rightTuples}
 			typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
