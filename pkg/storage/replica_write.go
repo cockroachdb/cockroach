@@ -25,9 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -251,130 +252,285 @@ and the following Raft status: %+v`,
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	ms := enginepb.MVCCStats{}
-	// If not transactional or there are indications that the batch's txn will
-	// require restart or retry, execute as normal.
+
+	// If the transaction has been pushed but it can commit at the higher
+	// timestamp, let's evaluate the batch at the bumped timestamp. This will
+	// allow it commit, and also it'll allow us to attempt the 1PC code path.
+	maybeBumpReadTimestampToWriteTimestamp(ctx, ba)
+
+	// Attempt 1PC execution, if applicable. If not transactional or there are
+	// indications that the batch's txn will require retry, execute as normal.
 	if isOnePhaseCommit(ba) {
-		arg, _ := ba.GetArg(roachpb.EndTxn)
-		etArg := arg.(*roachpb.EndTxnRequest)
-
-		// Try executing with transaction stripped. We use the transaction timestamp
-		// to write any values as it may have been advanced by the timestamp cache.
-		strippedBa := *ba
-		strippedBa.Timestamp = strippedBa.Txn.WriteTimestamp
-		strippedBa.Txn = nil
-		strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
-
-		// Is the transaction allowed to retry locally in the event of
-		// write too old errors? This is only allowed if it is able to
-		// forward its commit timestamp without a read refresh.
-		canForwardTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
-
-		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
-		rec := NewReplicaEvalContext(r, spans)
-		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
-			ctx, idKey, rec, &ms, &strippedBa, spans, canForwardTimestamp,
-		)
-		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(canForwardTimestamp && !batcheval.IsEndTxnExceedingDeadline(br.Timestamp, etArg))) {
-			clonedTxn := ba.Txn.Clone()
-			clonedTxn.Status = roachpb.COMMITTED
-			// Make sure the returned txn has the actual commit timestamp. This can be
-			// different from ba.Txn's if the stripped batch was evaluated at a bumped
-			// timestamp.
-			clonedTxn.ReadTimestamp = br.Timestamp
-			clonedTxn.WriteTimestamp = br.Timestamp
-
-			// If the end transaction is not committed, clear the batch and mark the status aborted.
-			if !etArg.Commit {
-				clonedTxn.Status = roachpb.ABORTED
-				batch.Close()
-				batch = r.store.Engine().NewBatch()
-				ms = enginepb.MVCCStats{}
-			} else {
-				// Run commit trigger manually.
-				innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, &ms, etArg, clonedTxn)
-				if err != nil {
-					return batch, ms, br, res, roachpb.NewErrorf("failed to run commit trigger: %s", err)
-				}
-				if err := res.MergeAndDestroy(innerResult); err != nil {
-					return batch, ms, br, res, roachpb.NewError(err)
-				}
-			}
-
-			// Add placeholder responses for end transaction requests.
-			br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})
-			br.Txn = clonedTxn
-			return batch, ms, br, res, nil
+		res := r.evaluate1PC(ctx, idKey, ba, spans)
+		if res.success == onePCSucceeded {
+			return res.batch, res.stats, res.br, res.res, nil
 		}
-
-		ms = enginepb.MVCCStats{}
-
-		// Handle the case of a required one phase commit transaction.
-		if etArg.Require1PC {
-			if pErr != nil {
-				return batch, ms, nil, result.Result{}, pErr
-			} else if ba.Timestamp != br.Timestamp {
-				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "Require1PC batch pushed")
-				return batch, ms, nil, result.Result{}, roachpb.NewError(err)
+		if res.success == onePCFailed {
+			if res.pErr == nil {
+				log.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
-			log.Fatal(ctx, "unreachable")
-		}
-
-		batch.Close()
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.VEventf(ctx, 2,
-				"1PC execution failed, reverting to regular execution for batch. pErr: %v", pErr.String())
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		}
 	}
 
+	ms := new(enginepb.MVCCStats)
 	rec := NewReplicaEvalContext(r, spans)
-	// We can retry locally if this is a non-transactional request.
-	canRetry := ba.Txn == nil
-	batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(ctx, idKey, rec, &ms, ba, spans, canRetry)
-	return batch, ms, br, res, pErr
+	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
+		ctx, idKey, rec, ms, ba, spans, nil /* deadline */)
+	return batch, *ms, br, res, pErr
 }
 
-// evaluateWriteBatchWithLocalRetries invokes evaluateBatch and
-// retries in the event of a WriteTooOldError at a higher timestamp if
-// canRetry is true.
-func (r *Replica) evaluateWriteBatchWithLocalRetries(
+type onePCSuccess int
+
+const (
+	// onePCSucceeded means that the 1PC evaluation succeeded and the results should be
+	// returned to the client.
+	onePCSucceeded onePCSuccess = iota
+	// onePCFailed means that the 1PC evaluation failed and the attached error should be
+	// returned to the client.
+	onePCFailed
+	// onePCFallbackToTransactionalExecution means that 1PC evaluation failed, but
+	// regulat transactional evaluation should be attempted.
+	onePCFallbackToTransactionalExecution
+)
+
+type onePCResult struct {
+	success onePCSuccess
+	// pErr is set if success == onePCFailed. This is the error that should be
+	// returned to the client for this request.
+	pErr *roachpb.Error
+
+	// The fields below are only set when success == onePCSucceeded.
+	stats enginepb.MVCCStats
+	br    *roachpb.BatchResponse
+	res   result.Result
+	batch engine.Batch
+}
+
+func (r *Replica) evaluate1PC(
+	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+) (_res onePCResult) {
+	log.VEventf(ctx, 2, "attempting 1PC execution")
+	if ba.Timestamp != ba.Txn.WriteTimestamp {
+		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
+			ba.Timestamp.String(), ba.Txn.WriteTimestamp.String())
+	}
+
+	var batch engine.Batch
+	defer func() {
+		// Close the batch unless it's passed to the caller (when the evaluation
+		// succeeds).
+		if _res.success != onePCSucceeded {
+			batch.Close()
+		}
+	}()
+
+	// Try executing with transaction stripped.
+	strippedBa := *ba
+	strippedBa.Txn = nil
+	// strippedBa is non-transactional, so DeferWriteTooOldError cannot be set.
+	strippedBa.DeferWriteTooOldError = false
+	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
+
+	rec := NewReplicaEvalContext(r, spans)
+	var br *roachpb.BatchResponse
+	var res result.Result
+	var pErr *roachpb.Error
+
+	arg, _ := ba.GetArg(roachpb.EndTxn)
+	etArg := arg.(*roachpb.EndTxnRequest)
+	canFwdTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
+
+	// Evaluate strippedBa. If the transaction allows, permit refreshes.
+	ms := new(enginepb.MVCCStats)
+	if canFwdTimestamp {
+		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
+			ctx, idKey, rec, ms, &strippedBa, spans, etArg.Deadline)
+	} else {
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
+			ctx, idKey, rec, ms, &strippedBa, spans)
+	}
+
+	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
+		if etArg.Require1PC {
+			if pErr == nil {
+				pErr = roachpb.NewError(roachpb.NewTransactionRetryError(
+					roachpb.RETRY_SERIALIZABLE, "Require1PC batch pushed"))
+			}
+			return onePCResult{
+				success: onePCFailed,
+				pErr:    pErr,
+			}
+		}
+
+		if pErr != nil {
+			log.VEventf(ctx, 2,
+				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
+		} else {
+			log.VEventf(ctx, 2,
+				"1PC execution failed, falling back to transactional execution; the batch was pushed")
+		}
+		return onePCResult{success: onePCFallbackToTransactionalExecution}
+	}
+
+	// 1PC execution was successful, let's synthesize an EndTxnResponse.
+
+	clonedTxn := ba.Txn.Clone()
+	clonedTxn.Status = roachpb.COMMITTED
+	// Make sure the returned txn has the actual commit timestamp. This can be
+	// different from ba.Txn's if the stripped batch was evaluated at a bumped
+	// timestamp.
+	clonedTxn.ReadTimestamp = br.Timestamp
+	clonedTxn.WriteTimestamp = br.Timestamp
+
+	// If the end transaction is not committed, clear the batch and mark the status aborted.
+	if !etArg.Commit {
+		clonedTxn.Status = roachpb.ABORTED
+		batch.Close()
+		batch = r.store.Engine().NewBatch()
+		ms = new(enginepb.MVCCStats)
+	} else {
+		// Run commit trigger manually.
+		innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, ms, etArg, clonedTxn)
+		if err != nil {
+			return onePCResult{
+				success: onePCFailed,
+				pErr:    roachpb.NewErrorf("failed to run commit trigger: %s", err),
+			}
+		}
+		if err := res.MergeAndDestroy(innerResult); err != nil {
+			return onePCResult{
+				success: onePCFailed,
+				pErr:    roachpb.NewError(err),
+			}
+		}
+	}
+
+	// Add placeholder responses for end transaction requests.
+	br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})
+	br.Txn = clonedTxn
+	return onePCResult{
+		success: onePCSucceeded,
+		stats:   *ms,
+		br:      br,
+		res:     res,
+		batch:   batch,
+	}
+}
+
+// evaluateWriteBatchWithServersideRefreshes invokes evaluateBatch and retries
+// at a higher timestamp in the event of some retriable errors if allowed by the
+// batch/txn.
+//
+// deadline, if not nil, specifies the highest timestamp (exclusive) at which
+// the request can be evaluated. If ba is a transactional request, then dealine
+// cannot be specified; a transaction's deadline comes from it's EndTxn request.
+func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
-	canRetry bool,
+	deadline *hlc.Timestamp,
 ) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
+		if retries > 0 {
+			log.VEventf(ctx, 2, "server-side retry of batch")
+		}
 		if batch != nil {
 			// Reset the stats.
 			*ms = goldenMS
 			batch.Close()
 		}
-		var opLogger *engine.OpLoggerBatch
-		batch, opLogger = r.newBatchedEngine(spans)
-		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
+
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, spans)
+
 		// If we can retry, set a higher batch timestamp and continue.
-		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
-			// Allow one retry only; a non-txn batch containing overlapping
-			// spans will always experience WriteTooOldError.
-			if retries == 1 {
-				break
-			}
-			ba.Timestamp = wtoErr.ActualTimestamp
-			continue
+		// Allow one retry only; a non-txn batch containing overlapping
+		// spans will always experience WriteTooOldError.
+		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, deadline) {
+			break
 		}
+	}
+	return batch, br, res, pErr
+}
+
+// evaluateWriteBatchWrapper is a wrapper on top of evaluateBatch() which deals
+// with filling out result.LogicalOpLog.
+func (r *Replica) evaluateWriteBatchWrapper(
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	rec batcheval.EvalContext,
+	ms *enginepb.MVCCStats,
+	ba *roachpb.BatchRequest,
+	spans *spanset.SpanSet,
+) (engine.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+	batch, opLogger := r.newBatchedEngine(spans)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
+	if pErr == nil {
 		if opLogger != nil {
 			res.LogicalOpLog = &storagepb.LogicalOpLog{
 				Ops: opLogger.LogicalOps(),
 			}
 		}
-		break
 	}
 	return batch, br, res, pErr
+}
+
+// canDoServersideRetry looks at the error produced by evaluating ba and decides
+// if it's possible to retry the batch evaluation at a higher timestamp.
+// Retrying is sometimes possible in case of some retriable errors which ask for
+// higher timestamps: for transactional requests, retrying is possible if the
+// transaction had not performed any prior reads that need refreshing.
+//
+// deadline, if not nil, specifies the highest timestamp (exclusive) at which
+// the request can be evaluated. If ba is a transactional request, then dealine
+// cannot be specified; a transaction's deadline comes from it's EndTxn request.
+//
+// If true is returned, ba and ba.Txn will have been updated with the new
+// timestamp.
+func canDoServersideRetry(
+	ctx context.Context, pErr *roachpb.Error, ba *roachpb.BatchRequest, deadline *hlc.Timestamp,
+) bool {
+	if ba.Txn != nil {
+		if deadline != nil {
+			log.Fatal(ctx, "deadline passed for transactional request")
+		}
+		// Transaction requests can only be retried if there's an EndTransaction
+		// telling us that there's been no prior reads in the transaction.
+		etArg, ok := ba.GetArg(roachpb.EndTxn)
+		if !ok {
+			return false
+		}
+		et := etArg.(*roachpb.EndTxnRequest)
+		if !batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, et) {
+			return false
+		}
+		deadline = et.Deadline
+	}
+	var newTimestamp hlc.Timestamp
+	switch tErr := pErr.GetDetail().(type) {
+	case *roachpb.WriteTooOldError:
+		newTimestamp = tErr.ActualTimestamp
+	case *roachpb.TransactionRetryError:
+		if ba.Txn == nil {
+			// TODO(andrei): I don't know if TransactionRetryError is possible for
+			// non-transactional batches, but some tests inject them for 1PC
+			// transactions. I'm not sure how to deal with them, so let's not retry.
+			return false
+		}
+		newTimestamp = pErr.GetTxn().WriteTimestamp
+	default:
+		// TODO(andrei): Handle other retriable errors too.
+		return false
+	}
+	if deadline != nil && deadline.LessEq(newTimestamp) {
+		return false
+	}
+	bumpBatchTimestamp(ctx, ba, newTimestamp)
+	return true
 }
 
 // newBatchedEngine creates an engine.Batch. Depending on whether rangefeeds
