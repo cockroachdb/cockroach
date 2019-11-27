@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOutputError(t *testing.T) {
@@ -97,5 +100,90 @@ func TestFormatLocation(t *testing.T) {
 	for _, tc := range testData {
 		r := formatLocation(tc.file, tc.line, tc.fn)
 		assert.Equal(t, tc.exp, r)
+	}
+}
+
+type logger struct {
+	TB       testing.TB
+	Severity log.Severity
+	Err      error
+}
+
+func (l *logger) Log(_ context.Context, sev log.Severity, args ...interface{}) {
+	require.Equal(l.TB, 1, len(args), "expected to log one item")
+	err, ok := args[0].(error)
+	require.True(l.TB, ok, "expected to log an error")
+	l.Severity = sev
+	l.Err = err
+}
+
+func TestErrorReporting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		desc         string
+		err          error
+		wantSeverity log.Severity
+		wantCLICause bool // should the cause be a *cliError?
+	}{
+		{
+			desc:         "plain",
+			err:          errors.New("boom"),
+			wantSeverity: log.Severity_ERROR,
+			wantCLICause: false,
+		},
+		{
+			desc: "single cliError",
+			err: &cliError{
+				exitCode: 1,
+				severity: log.Severity_INFO,
+				cause:    errors.New("routine"),
+			},
+			wantSeverity: log.Severity_INFO,
+			wantCLICause: false,
+		},
+		{
+			desc: "double cliError",
+			err: &cliError{
+				exitCode: 1,
+				severity: log.Severity_INFO,
+				cause: &cliError{
+					exitCode: 1,
+					severity: log.Severity_ERROR,
+					cause:    errors.New("serious"),
+				},
+			},
+			wantSeverity: log.Severity_INFO, // should only unwrap one layer
+			wantCLICause: true,
+		},
+		{
+			desc: "wrapped cliError",
+			err: fmt.Errorf("some context: %w", &cliError{
+				exitCode: 1,
+				severity: log.Severity_INFO,
+				cause:    errors.New("routine"),
+			}),
+			// TODO: In Go 1.13 and later, we should unwrap successfully and get
+			// log.Severity_INFO. With all compilers, wantCLICause is false - in Go
+			// 1.12 the cause is the top-level error, and in Go 1.13+ the cause is
+			// "routine".
+			wantSeverity: log.Severity_ERROR,
+			wantCLICause: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			got := &logger{TB: t}
+			checked := checkAndMaybeShoutTo(tt.err, got.Log)
+			assert.Equal(t, tt.err, checked, "should return error unchanged")
+			assert.Equal(t, tt.wantSeverity, got.Severity, "wrong severity log")
+			_, gotCLI := got.Err.(*cliError)
+			if tt.wantCLICause {
+				assert.True(t, gotCLI, "logged cause should be *cliError, got %T", got.Err)
+			} else {
+				assert.False(t, gotCLI, "logged cause shouldn't be *cliError, got %T", got.Err)
+			}
+		})
 	}
 }
