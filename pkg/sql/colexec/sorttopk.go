@@ -214,10 +214,11 @@ func (t *topKSorter) emit() coldata.Batch {
 			vec,
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   t.inputTypes[i],
-					Src:       t.topK.ColVec(i),
-					Sel:       t.sel,
-					SrcEndIdx: uint64(toEmit),
+					ColType:     t.inputTypes[i],
+					Src:         t.topK.ColVec(i),
+					Sel:         t.sel,
+					SrcStartIdx: uint64(t.emitted),
+					SrcEndIdx:   uint64(t.emitted + toEmit),
 				},
 			},
 		)
