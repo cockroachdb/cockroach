@@ -148,6 +148,11 @@ export default function Debug() {
             url="#/reports/nodes?locality=region=us-east"
             note="#/reports/nodes?locality=[regex]"
           />
+          <DebugTableLink
+            name="Decommissioned node history"
+            url="#/reports/nodes/history"
+            note="#/reports/nodes/history"
+          />
         </DebugTableRow>
         <DebugTableRow title="Stores">
           <DebugTableLink name="Stores on this node" url="#/reports/stores/local" />
