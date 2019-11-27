@@ -2597,20 +2597,20 @@ func (desc *MutableTableDescriptor) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
-		return unimplemented.New("drop-constraint-pk", "cannot drop primary key")
+		return unimplemented.NewWithIssueDetailf(19141, "drop-constraint-pk", "cannot drop primary key")
 
 	case ConstraintTypeUnique:
-		return unimplemented.Newf("drop-constraint-unique",
+		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
 			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
 			tree.ErrNameStringP(&detail.Index.Name))
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("drop-constraint-check-mutation",
+			return unimplemented.NewWithIssueDetailf(42844, "drop-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later", name)
 		}
 		if detail.CheckConstraint.Validity == ConstraintValidity_Dropping {
-			return unimplemented.Newf("drop-constraint-check-mutation",
+			return unimplemented.NewWithIssueDetailf(42844, "drop-constraint-check-mutation",
 				"constraint %q in the middle of being dropped", name)
 		}
 		for i, c := range desc.Checks {
@@ -2634,11 +2634,12 @@ func (desc *MutableTableDescriptor) DropConstraint(
 
 	case ConstraintTypeFK:
 		if detail.FK.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("drop-constraint-fk-mutation",
+			return unimplemented.NewWithIssueDetailf(42844,
 				"constraint %q in the middle of being added, try again later", name)
 		}
 		if detail.FK.Validity == ConstraintValidity_Dropping {
-			return unimplemented.Newf("drop-constraint-fk-mutation",
+			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-fk-mutation",
 				"constraint %q in the middle of being dropped", name)
 		}
 		// Search through the descriptor's foreign key constraints and delete the
@@ -2693,7 +2694,8 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 
 	case ConstraintTypeFK:
 		if detail.FK.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("rename-constraint-fk-mutation",
+			return unimplemented.NewWithIssueDetailf(42844,
+				"rename-constraint-fk-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.FK.Name))
 		}
@@ -2711,7 +2713,8 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return unimplemented.Newf("rename-constraint-check-mutation",
+			return unimplemented.NewWithIssueDetailf(42844,
+				"rename-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.CheckConstraint.Name))
 		}
