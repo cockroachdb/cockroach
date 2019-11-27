@@ -163,14 +163,8 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// To simplify tests, this function used to perform its own range routing if
-	// the request was missing its range or store IDs. It was too easy to rely on
-	// this in production code paths, though, so it's now a fatal error if either
-	// the range or store ID is missing.
-	if ba.RangeID == 0 {
-		log.Fatal(ctx, "batch request missing range ID")
-	} else if ba.Replica.StoreID == 0 {
-		log.Fatal(ctx, "batch request missing store ID")
+	if err := ba.ValidateForEvaluation(); err != nil {
+		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
