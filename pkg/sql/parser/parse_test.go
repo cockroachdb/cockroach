@@ -1045,6 +1045,15 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM t@[123]`},
 		{`SELECT * FROM [123 AS t]@[456]`},
 
+		{`INSERT INTO [123 AS t] VALUES (1)`},
+		{`INSERT INTO [123(1, 2) AS t] VALUES (1, 2)`},
+		{`INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)`},
+		{`UPSERT INTO [123 AS t] VALUES (1)`},
+		{`UPDATE [123 AS t] SET b = 3`},
+		{`UPDATE [123 AS t]@idx SET b = 3`},
+		{`DELETE FROM [123 AS t]`},
+		{`DELETE FROM [123 AS t]@idx`},
+
 		{`SELECT (1 + 2).*`},
 		{`SELECT (1 + 2).col`},
 		{`SELECT (abc.def).col`},

@@ -341,34 +341,16 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 func (b *Builder) buildScanFromTableRef(
 	tab cat.Table, ref *tree.TableRef, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
-	if ref.Columns != nil && len(ref.Columns) == 0 {
-		panic(pgerror.Newf(pgcode.Syntax,
-			"an explicit list of column IDs must include at least one column"))
-	}
-
-	// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
-	// (all columns). whereas an array of length 0 means 'zero columns'.
-	// Lists of zero columns are not supported and will throw an error."
-	// The error for lists of zero columns is thrown in the caller function
-	// for buildScanFromTableRef.
 	var ordinals []int
 	if ref.Columns != nil {
-		ordinals = make([]int, len(ref.Columns))
-		for i, c := range ref.Columns {
-			ord := 0
-			cnt := tab.ColumnCount()
-			for ord < cnt {
-				if tab.Column(ord).ColID() == cat.StableID(c) {
-					break
-				}
-				ord++
-			}
-			if ord >= cnt {
-				panic(pgerror.Newf(pgcode.UndefinedColumn,
-					"column [%d] does not exist", c))
-			}
-			ordinals[i] = ord
+		// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
+		// (all columns). whereas an array of length 0 means 'zero columns'.
+		// Lists of zero columns are not supported and will throw an error."
+		if len(ref.Columns) == 0 {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"an explicit list of column IDs must include at least one column"))
 		}
+		ordinals = cat.ConvertColumnIDsToOrdinals(tab, ref.Columns)
 	}
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
