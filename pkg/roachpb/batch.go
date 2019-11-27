@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -595,4 +595,18 @@ func (ba BatchRequest) String() string {
 		}
 	}
 	return strings.Join(str, ", ")
+}
+
+// ValidateForEvaluation performs sanity checks on the batch.
+func (ba BatchRequest) ValidateForEvaluation() error {
+	if ba.RangeID == 0 {
+		return errors.AssertionFailedf("batch request missing range ID")
+	} else if ba.Replica.StoreID == 0 {
+		return errors.AssertionFailedf("batch request missing store ID")
+	}
+	if ba.Header.DeferWriteTooOldError && ba.Txn == nil {
+		return errors.AssertionFailedf(
+			"DeferWriteTooOldError can't be set on non-transactional requests")
+	}
+	return nil
 }
