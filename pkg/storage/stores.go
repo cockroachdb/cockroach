@@ -172,6 +172,9 @@ func (ls *Stores) Send(
 	} else if ba.Replica.StoreID == 0 {
 		log.Fatal(ctx, "batch request missing store ID")
 	}
+	if ba.Header.DeferWriteTooOldError && ba.Txn == nil {
+		log.Fatalf(ctx, "DeferWriteTooOldError can't be set on non-transactional requests")
+	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {

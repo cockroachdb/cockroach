@@ -257,6 +257,7 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
+
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if isOnePhaseCommit(ba) {
@@ -268,6 +269,8 @@ func (r *Replica) evaluateWriteBatch(
 		strippedBa := *ba
 		strippedBa.Timestamp = strippedBa.Txn.WriteTimestamp
 		strippedBa.Txn = nil
+		// strippedBa is non-transactional, so DeferWriteTooOldError cannot be set.
+		strippedBa.DeferWriteTooOldError = false
 		strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
 		// Is the transaction allowed to retry locally in the event of
@@ -330,15 +333,21 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	rec := NewReplicaEvalContext(r, spans)
-	// We can retry locally if this is a non-transactional request.
-	canRetry := ba.Txn == nil
-	batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(ctx, idKey, rec, &ms, ba, spans, canRetry)
+	// We can only do server-side retries if this is a non-transactional request.
+	// TODO(andrei): We should be able to retry transactional requests too when
+	// CanForwardCommitTimestampWithoutRefresh() says that the timestamp can
+	// change. In order to do that, we have to lift the NoRefreshSpans from the
+	// EndTransaction to all batches, and to teach the txnSpanRefresher that the
+	// server can now "refresh" too.
+	canForwardTimestamp := ba.Txn == nil
+	batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
+		ctx, idKey, rec, &ms, ba, spans, canForwardTimestamp)
 	return batch, ms, br, res, pErr
 }
 
 // evaluateWriteBatchWithLocalRetries invokes evaluateBatch and
 // retries in the event of a WriteTooOldError at a higher timestamp if
-// canRetry is true.
+// canForwardTimestamp is true.
 func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -346,10 +355,21 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
-	canRetry bool,
+	canForwardTimestamp bool,
 ) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+	if canForwardTimestamp && ba.Txn != nil {
+		// For transactional requests, the batch's timestamp and the transaction's
+		// timestamps have to be kept in sync. However, for now, the code below is
+		// only equipped to deal with updating the batch, so we don't expect retries
+		// to be enabled for transactional requests.
+		log.Fatalf(ctx, "server-side retries for transactional batches are not supported: %s", ba)
+	}
+
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
+		if retries > 0 {
+			log.VEventf(ctx, 2, "server-side retry of batch")
+		}
 		if batch != nil {
 			*ms = goldenMS
 			batch.Close()
@@ -403,7 +423,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
-		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
+		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canForwardTimestamp {
 			// Allow one retry only; a non-txn batch containing overlapping
 			// spans will always experience WriteTooOldError.
 			if retries == 1 {
