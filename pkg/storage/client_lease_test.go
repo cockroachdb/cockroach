@@ -429,7 +429,7 @@ func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
 	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
 
 	// Start a txn and perform a write, so that a txn record has to be created by
-	// the EndTransaction.
+	// the EndTxn.
 	txn := tc.Servers[0].DB().NewTxn(ctx, "test")
 	require.NoError(t, txn.Put(ctx, "a", "val"))
 	// After starting the transaction, transfer the lease. This will wipe the
