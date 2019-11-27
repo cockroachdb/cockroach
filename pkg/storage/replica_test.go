@@ -439,6 +439,7 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	withSeq := func(req roachpb.Request, seq enginepb.TxnSeq) roachpb.Request {
 		h := req.Header()
 		h.Sequence = seq
@@ -517,27 +518,38 @@ func TestIsOnePhaseCommit(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
-		ba := roachpb.BatchRequest{Requests: c.ru}
-		if c.isTxn {
-			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
-			if c.isRestarted {
-				ba.Txn.Restart(-1, 0, clock.Now())
-			}
-			if c.isWTO {
-				ba.Txn.WriteTooOld = true
-				c.isTSOff = true
-			}
-			if c.isTSOff {
-				ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
-			}
-		} else {
-			require.False(t, c.isRestarted)
-			require.False(t, c.isWTO)
-			require.False(t, c.isTSOff)
-		}
-		if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
-			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
-		}
+		t.Run(
+			fmt.Sprintf("%d:isTxn:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
+				i, c.isTxn, c.isRestarted, c.isWTO, c.isTSOff),
+			func(t *testing.T) {
+				ba := roachpb.BatchRequest{Requests: c.ru}
+				if c.isTxn {
+					ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
+					if c.isRestarted {
+						ba.Txn.Restart(-1, 0, clock.Now())
+					}
+					if c.isWTO {
+						ba.Txn.WriteTooOld = true
+						c.isTSOff = true
+					}
+					if c.isTSOff {
+						ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
+					}
+				} else {
+					require.False(t, c.isRestarted)
+					require.False(t, c.isWTO)
+					require.False(t, c.isTSOff)
+				}
+
+				// Emulate what a server actually does and bump the write timestamp when
+				// possible. This makes some batches with diverged read and write
+				// timestamps to still pass isOnePhaseCommit().
+				maybeBumpReadTimestampToWriteTimestamp(ctx, &ba)
+
+				if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
+					t.Errorf("expected 1pc=%t; got %t", c.exp1PC, is1PC)
+				}
+			})
 	}
 }
 
@@ -4330,9 +4342,8 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 	if pErr == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Fatalf("expected TransactionAbortedError; got %s", pErr)
-	}
+	require.Error(t, pErr.GetDetail(),
+		"TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)")
 }
 
 // TestReplicaLaziness verifies that Raft Groups are brought up lazily.
@@ -9569,10 +9580,10 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	}
 }
 
-// TestReplicaLocalRetries verifies local retry logic for transactional
-// and non transactional batches. Verifies the timestamp cache is updated
-// to reflect the timestamp at which retried batches are executed.
-func TestReplicaLocalRetries(t *testing.T) {
+// TestReplicaServersideRefreshes verifies local retry logic for transactional
+// and non transactional batches. Verifies the timestamp cache is updated to
+// reflect the timestamp at which retried batches are executed.
+func TestReplicaServersideRefreshes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -9731,7 +9742,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
 			},
-			expErr: "RETRY_WRITE_TOO_OLD",
+			expErr: "WriteTooOldError",
 		},
 		// 1PC serializable transaction will retry locally.
 		{
@@ -9880,6 +9891,11 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 		},
+		// TODO(andrei): We should also have a test similar to the one above, but
+		// with the WriteTooOld flag set by a different batch than the one with the
+		// EndTransaction. This is hard to do at the moment, though, because we
+		// never defer the handling of the write too old conditions to the end of
+		// the transaction (but we might in the future).
 	}
 
 	for _, test := range testCases {
@@ -9939,7 +9955,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	txn.WriteTimestamp.Forward(ts3)
 
 	// Execute the write phase of the transaction as a single batch,
-	// which must return a WRITE_TOO_OLD TransactionRetryError.
+	// which must return a WriteTooOldError.
 	//
 	// TODO(bdarnell): When this test was written, in SNAPSHOT
 	// isolation we would attempt to execute the transaction on the
@@ -9958,10 +9974,8 @@ func TestReplicaPushed1PC(t *testing.T) {
 	assignSeqNumsForReqs(&txn, &put, &et)
 	if br, pErr := tc.Sender().Send(ctx, ba); pErr == nil {
 		t.Errorf("did not get expected error. resp=%s", br)
-	} else if trErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Errorf("expected TransactionRetryError, got %s", pErr)
-	} else if trErr.Reason != roachpb.RETRY_WRITE_TOO_OLD {
-		t.Errorf("expected RETRY_WRITE_TOO_OLD, got %s", trErr)
+	} else if wtoe, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); !ok {
+		t.Errorf("expected WriteTooOldError, got %s", wtoe)
 	}
 }
 

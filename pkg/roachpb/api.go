@@ -107,13 +107,6 @@ func IsReadOnly(args Request) bool {
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
 }
 
-// IsReadAndWrite returns true if the request both reads and writes
-// (such as conditional puts).
-func IsReadAndWrite(args Request) bool {
-	flags := args.flags()
-	return (flags&isRead) != 0 && (flags&isWrite) != 0
-}
-
 // IsTransactional returns true if the request may be part of a
 // transaction.
 func IsTransactional(args Request) bool {
