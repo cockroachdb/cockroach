@@ -59,6 +59,7 @@ type tableReader struct {
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
+var _ execinfra.Releasable = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
