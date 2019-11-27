@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, DatePicker, TimePicker, notification } from "antd";
+import { Button, TimePicker, notification, Calendar, Icon } from "antd";
 import moment, { Moment } from "moment";
 import { TimeWindow } from "oss/src/redux/timewindow";
 import React from "react";
@@ -22,6 +22,7 @@ export enum DateTypes {
 type RangeOption = {
   value: string;
   label: string;
+  timeLabel: string;
 };
 
 export type Selected = {
@@ -40,15 +41,24 @@ interface RangeSelectProps {
   selected: Selected;
   useTimeRange: boolean;
 }
+
+type Nullable<T> = T | null;
+
 interface RangeSelectState {
   opened: boolean;
   width: number;
+  custom: boolean;
+  selectMonthStart: Nullable<moment.Moment>;
+  selectMonthEnd: Nullable<moment.Moment>;
 }
 
 class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
   state = {
     opened: false,
     width: window.innerWidth,
+    custom: false,
+    selectMonthStart: null as moment.Moment,
+    selectMonthEnd: null as moment.Moment,
   };
 
   private rangeContainer = React.createRef<HTMLDivElement>();
@@ -85,6 +95,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   onChangeDate = (direction: DateTypes) => (date: Moment) => {
     const { changeDate, value } = this.props;
+    this.clearPanelValues();
     if (this.isValid(date, direction)) {
       changeDate(moment.utc(date), direction);
     } else {
@@ -100,34 +111,43 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     }
   }
 
-  renderTimePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="default" size="small">Now</Button>;
+  renderTimePickerAddon = (direction: DateTypes) => () => <Button type="default" onClick={() => this.onChangeDate(direction)(moment())} size="small">Now</Button>;
 
-  renderDatePickerAddon = (direction: DateTypes) => () => <Button onClick={() => this.onChangeDate(direction)(moment())} type="default" size="small">Today</Button>;
+  renderDatePickerAddon = (direction: DateTypes) => <div className="calendar-today-btn"><Button type="default" onClick={() => this.onChangeDate(direction)(moment())} size="small">Today</Button></div>;
+
+  clearPanelValues = () => this.setState({ selectMonthEnd: null, selectMonthStart: null });
 
   onChangeOption = (option: RangeOption) => () => {
     const { onChange } = this.props;
-    this.setState({ opened: false });
+    this.toggleDropDown();
     onChange(option);
   }
 
+  toggleCustomPicker = (custom: boolean) => () => this.setState({ custom }, this.clearPanelValues);
+
+  toggleDropDown = () => this.setState({ opened: !this.state.opened }, this.toggleCustomPicker(this.state.opened ));
+
+  optionButton = (option: RangeOption) => (
+    <Button
+      type="default"
+      className={`_time-button ${this.props.selected.title === option.value && "active" || ""}`}
+      onClick={option.value === "Custom" ? this.toggleCustomPicker(true) : this.onChangeOption(option)}
+      ghost
+    >
+      <span className="dropdown__range-title">{this.props.selected.title !== "Custom" && option.value === "Custom" ? "--" : option.timeLabel}</span>
+      <span className="__option-label">{option.value === "Custom" ? "Custom date range" : option.value}</span>
+    </Button>
+  )
+
   renderOptions = () => {
-    const { options, selected } = this.props;
-    return options.map(option => option.label !== "Custom" && (
-      <Button
-        className={`_time-button ${selected.title === option.value && "active" || ""}`}
-        onClick={this.onChangeOption(option)}
-        type="default"
-        ghost
-      >
-        {option.value}
-      </Button>
-    ));
+    const { options } = this.props;
+    return options.map(option => this.optionButton(option));
   }
 
   findSelectedValue = () => {
     const { options, selected } = this.props;
     const value = options.find(option => option.value === selected.title);
-    return value ? (
+    return value && value.label !== "Custom" ? (
       <span className="Select-value-label">{value.label}</span>
     ) : (
       <span className="Select-value-label">{selected.dateStart} <span className="_label-time">{selected.timeStart}</span> - {selected.dateEnd} <span className="_label-time">{selected.timeEnd}</span></span>
@@ -189,37 +209,55 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     return seconds;
   }
 
-  render() {
+  headerRender = (item: any) => (
+    <div className="calendar-month-picker">
+      <Button type="default" onClick={() => item.onChange(moment(item.value).subtract(1, "months"))}><Icon type="left" /></Button>
+      <span>{moment(item.value).format("MMM YYYY")}</span>
+      <Button type="default" onClick={() => item.onChange(moment(item.value).add(1, "months"))}><Icon type="right" /></Button>
+    </div>
+  )
+
+  onPanelChange = (direction: DateTypes) => (date: Moment) => {
+    const { selectMonthStart, selectMonthEnd } = this.state;
+
+    this.setState({
+      selectMonthStart: direction === DateTypes.DATE_FROM ? date : selectMonthStart,
+      selectMonthEnd: direction === DateTypes.DATE_TO ? date : selectMonthEnd,
+    });
+  }
+
+  renderContent = () => {
     const { value, useTimeRange } = this.props;
-    const { opened, width } = this.state;
+    const { custom , selectMonthStart, selectMonthEnd } = this.state;
     const start = useTimeRange ? moment.utc(value.start) : null;
     const end = useTimeRange ? moment.utc(value.end) : null;
-    const datePickerFormat = "M/DD/YYYY";
     const timePickerFormat = "h:mm:ss A";
-    const selectedValue = this.findSelectedValue();
     const isSameDate = useTimeRange && moment(start).isSame(end, "day");
-    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
-    const left = width >= (containerLeft + 500) ? 0 : width - (containerLeft + 500);
-    const content = (
-      <div className="range-selector" style={{ left }}>
-        <div className="_quick-view">
-          <span className="_title">Quick view</span>
-          {this.renderOptions()}
-        </div>
+    const calendarStartValue = selectMonthStart ? selectMonthStart : start ? start : moment();
+    const calendarEndValue = selectMonthEnd ? selectMonthEnd : end ? end : moment();
+
+    if (!custom) {
+      return <div className="_quick-view">{this.renderOptions()}</div>;
+    }
+
+    return (
+      <React.Fragment>
         <div className="_start">
-          <span className="_title">Start</span>
-          <DatePicker
-            dropdownClassName="disabled-year"
-            value={start}
-            disabledDate={(currentDate) => (currentDate > (end || moment()))}
-            allowClear={false}
-            format={`${datePickerFormat} ${moment(start).isSame(moment.utc(), "day") && "[- Today]" || ""}`}
-            onChange={this.onChangeDate(DateTypes.DATE_FROM)}
-            renderExtraFooter={this.renderDatePickerAddon(DateTypes.DATE_FROM)}
-            showToday={false}
-          />
+          <span className="_title">From</span>
+          <div className="range-calendar">
+            <Calendar
+              fullscreen={false}
+              value={calendarStartValue}
+              disabledDate={(currentDate) => (currentDate > (end || moment()))}
+              headerRender={this.headerRender}
+              onSelect={this.onChangeDate(DateTypes.DATE_FROM)}
+              onPanelChange={this.onPanelChange(DateTypes.DATE_FROM)}
+            />
+            {this.renderDatePickerAddon(DateTypes.DATE_FROM)}
+          </div>
           <TimePicker
             value={start}
+            allowClear={false}
             format={`${timePickerFormat} ${moment(start).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_FROM)}
@@ -230,19 +268,21 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
           />
         </div>
         <div className="_end">
-          <span className="_title">End</span>
-          <DatePicker
-            dropdownClassName="disabled-year"
-            value={end}
-            disabledDate={(currentDate) => (currentDate > moment() || currentDate < (start || moment()))}
-            allowClear={false}
-            format={`${datePickerFormat} ${moment(end).isSame(moment.utc(), "day") && "[- Today]" || ""}`}
-            onChange={this.onChangeDate(DateTypes.DATE_TO)}
-            renderExtraFooter={this.renderDatePickerAddon(DateTypes.DATE_TO)}
-            showToday={false}
-          />
+          <span className="_title">To</span>
+          <div className="range-calendar">
+            <Calendar
+              fullscreen={false}
+              value={calendarEndValue}
+              disabledDate={(currentDate) => (currentDate > moment() || currentDate < (start || moment()))}
+              headerRender={this.headerRender}
+              onSelect={this.onChangeDate(DateTypes.DATE_TO)}
+              onPanelChange={this.onPanelChange(DateTypes.DATE_TO)}
+            />
+            {this.renderDatePickerAddon(DateTypes.DATE_TO)}
+          </div>
           <TimePicker
             value={end}
+            allowClear={false}
             format={`${timePickerFormat} ${moment(end).isSame(moment.utc(), "minute") && "[- Now]" || ""}`}
             use12Hours
             addon={this.renderTimePickerAddon(DateTypes.DATE_TO)}
@@ -252,16 +292,23 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             disabledSeconds={isSameDate && this.getDisabledSeconds() || undefined}
           />
         </div>
-      </div>
+      </React.Fragment>
     );
+  }
+
+  render() {
+    const { opened, width, custom } = this.state;
+    const selectedValue = this.findSelectedValue();
+    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
+    const left = width >= (containerLeft + (custom ? 555 : 453)) ? 0 : width - (containerLeft + (custom ? 555 : 453));
 
     return (
       <div ref={this.rangeContainer} className="Range">
-        <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
-        {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
+        <div className="click-zone" onClick={this.toggleDropDown}/>
+        {opened && <div className="trigger-container" onClick={this.toggleDropDown} />}
         <div className="trigger-wrapper">
           <div
-            className={`trigger Select ${opened && "is-open" || ""}`}
+            className={`trigger Select ${opened ? "is-open" : ""}`}
           >
             <span className="Select-value-label">
               {selectedValue}
@@ -272,7 +319,11 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
               </div>
             </div>
           </div>
-          {opened && content}
+          {opened && (
+            <div className={`range-selector ${custom ? "__custom" : "__options"}`} style={{ left }}>
+              {this.renderContent()}
+            </div>
+          )}
         </div>
       </div>
     );
