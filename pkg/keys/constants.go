@@ -331,6 +331,10 @@ const (
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
 
+	// TODO(ajwerner): it'd be great to now give these well-known IDs
+	ProtectedTimestampsMetaTableID    = 29
+	ProtectedTimestampsRecordsTableID = 30
+
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
 	TableCommentType    = 1

@@ -48,6 +48,7 @@ const (
 	VersionStart20_1
 	VersionContainsEstimatesCounter
 	VersionChangeReplicasDemotion
+	VersionProtectedTimestamps
 
 	// Add new versions here (step one of two).
 
@@ -319,6 +320,16 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// when the leader instead crashes while removing the learner.
 		Key:     VersionChangeReplicasDemotion,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 3},
+	},
+	{
+		// VersionProtectedTimestamps introduces the system tables for the protected
+		// timestamps subsystem.
+		//
+		// In this version and later the system.protected_ts_meta and
+		// system.protected_ts_records tables are part of the system bootstap
+		// schema.
+		Key:     VersionProtectedTimestamps,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 4},
 	},
 	// Add new versions here (step two of two).
 

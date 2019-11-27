@@ -621,6 +621,8 @@ system         public              replication_constraint_stats       BASE TABLE
 system         public              replication_critical_localities    BASE TABLE   YES                 1
 system         public              replication_stats                  BASE TABLE   YES                 1
 system         public              reports_meta                       BASE TABLE   YES                 1
+system         public              protected_ts_meta                  BASE TABLE   YES                 1
+system         public              protected_ts_records               BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -682,6 +684,9 @@ system              public             primary          system         public   
 system              public             primary          system         public        lease                            PRIMARY KEY      NO             NO
 system              public             primary          system         public        locations                        PRIMARY KEY      NO             NO
 system              public             primary          system         public        namespace                        PRIMARY KEY      NO             NO
+system              public             check_singleton  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             primary          system         public        protected_ts_meta                PRIMARY KEY      NO             NO
+system              public             primary          system         public        protected_ts_records             PRIMARY KEY      NO             NO
 system              public             primary          system         public        rangelog                         PRIMARY KEY      NO             NO
 system              public             primary          system         public        replication_constraint_stats     PRIMARY KEY      NO             NO
 system              public             primary          system         public        replication_critical_localities  PRIMARY KEY      NO             NO
@@ -765,8 +770,19 @@ system              public             630200280_27_6_not_null  under_replicated
 system              public             630200280_27_7_not_null  over_replicated_ranges IS NOT NULL
 system              public             630200280_28_1_not_null  id IS NOT NULL
 system              public             630200280_28_2_not_null  generated IS NOT NULL
+system              public             630200280_29_1_not_null  singleton IS NOT NULL
+system              public             630200280_29_2_not_null  version IS NOT NULL
+system              public             630200280_29_3_not_null  num_records IS NOT NULL
+system              public             630200280_29_4_not_null  num_spans IS NOT NULL
+system              public             630200280_29_5_not_null  total_bytes IS NOT NULL
 system              public             630200280_2_1_not_null   parentID IS NOT NULL
 system              public             630200280_2_2_not_null   name IS NOT NULL
+system              public             630200280_30_1_not_null  id IS NOT NULL
+system              public             630200280_30_2_not_null  ts IS NOT NULL
+system              public             630200280_30_3_not_null  meta_type IS NOT NULL
+system              public             630200280_30_5_not_null  num_spans IS NOT NULL
+system              public             630200280_30_6_not_null  spans IS NOT NULL
+system              public             630200280_30_7_not_null  verified IS NOT NULL
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
@@ -774,6 +790,7 @@ system              public             630200280_5_1_not_null   id IS NOT NULL
 system              public             630200280_6_1_not_null   name IS NOT NULL
 system              public             630200280_6_2_not_null   value IS NOT NULL
 system              public             630200280_6_3_not_null   lastUpdated IS NOT NULL
+system              public             check_singleton          ((singleton))
 
 query TTTTTTT colnames
 SELECT *
@@ -796,6 +813,9 @@ system         public        locations                        localityKey    sys
 system         public        locations                        localityValue  system              public             primary
 system         public        namespace                        name           system              public             primary
 system         public        namespace                        parentID       system              public             primary
+system         public        protected_ts_meta                singleton      system              public             check_singleton
+system         public        protected_ts_meta                singleton      system              public             primary
+system         public        protected_ts_records             id             system              public             primary
 system         public        rangelog                         timestamp      system              public             primary
 system         public        rangelog                         uniqueID       system              public             primary
 system         public        replication_constraint_stats     config         system              public             primary
@@ -926,6 +946,18 @@ system         public        locations                        longitude         
 system         public        namespace                        id                       3
 system         public        namespace                        name                     2
 system         public        namespace                        parentID                 1
+system         public        protected_ts_meta                num_records              3
+system         public        protected_ts_meta                num_spans                4
+system         public        protected_ts_meta                singleton                1
+system         public        protected_ts_meta                total_bytes              5
+system         public        protected_ts_meta                version                  2
+system         public        protected_ts_records             id                       1
+system         public        protected_ts_records             meta                     4
+system         public        protected_ts_records             meta_type                3
+system         public        protected_ts_records             num_spans                5
+system         public        protected_ts_records             spans                    6
+system         public        protected_ts_records             ts                       2
+system         public        protected_ts_records             verified                 7
 system         public        rangelog                         eventType                4
 system         public        rangelog                         info                     6
 system         public        rangelog                         otherRangeID             5
@@ -1467,6 +1499,26 @@ NULL     admin    system         public              namespace                  
 NULL     admin    system         public              namespace                          SELECT          NULL          YES
 NULL     root     system         public              namespace                          GRANT           NULL          NO
 NULL     root     system         public              namespace                          SELECT          NULL          YES
+NULL     admin    system         public              protected_ts_meta                  DELETE          NULL          NO
+NULL     admin    system         public              protected_ts_meta                  GRANT           NULL          NO
+NULL     admin    system         public              protected_ts_meta                  INSERT          NULL          NO
+NULL     admin    system         public              protected_ts_meta                  SELECT          NULL          YES
+NULL     admin    system         public              protected_ts_meta                  UPDATE          NULL          NO
+NULL     root     system         public              protected_ts_meta                  DELETE          NULL          NO
+NULL     root     system         public              protected_ts_meta                  GRANT           NULL          NO
+NULL     root     system         public              protected_ts_meta                  INSERT          NULL          NO
+NULL     root     system         public              protected_ts_meta                  SELECT          NULL          YES
+NULL     root     system         public              protected_ts_meta                  UPDATE          NULL          NO
+NULL     admin    system         public              protected_ts_records               DELETE          NULL          NO
+NULL     admin    system         public              protected_ts_records               GRANT           NULL          NO
+NULL     admin    system         public              protected_ts_records               INSERT          NULL          NO
+NULL     admin    system         public              protected_ts_records               SELECT          NULL          YES
+NULL     admin    system         public              protected_ts_records               UPDATE          NULL          NO
+NULL     root     system         public              protected_ts_records               DELETE          NULL          NO
+NULL     root     system         public              protected_ts_records               GRANT           NULL          NO
+NULL     root     system         public              protected_ts_records               INSERT          NULL          NO
+NULL     root     system         public              protected_ts_records               SELECT          NULL          YES
+NULL     root     system         public              protected_ts_records               UPDATE          NULL          NO
 NULL     admin    system         public              rangelog                           DELETE          NULL          NO
 NULL     admin    system         public              rangelog                           GRANT           NULL          NO
 NULL     admin    system         public              rangelog                           INSERT          NULL          NO
@@ -1879,6 +1931,26 @@ NULL     root     system         public              reports_meta               
 NULL     root     system         public              reports_meta                       INSERT          NULL          NO
 NULL     root     system         public              reports_meta                       SELECT          NULL          YES
 NULL     root     system         public              reports_meta                       UPDATE          NULL          NO
+NULL     admin    system         public              protected_ts_meta                  DELETE          NULL          NO
+NULL     admin    system         public              protected_ts_meta                  GRANT           NULL          NO
+NULL     admin    system         public              protected_ts_meta                  INSERT          NULL          NO
+NULL     admin    system         public              protected_ts_meta                  SELECT          NULL          YES
+NULL     admin    system         public              protected_ts_meta                  UPDATE          NULL          NO
+NULL     root     system         public              protected_ts_meta                  DELETE          NULL          NO
+NULL     root     system         public              protected_ts_meta                  GRANT           NULL          NO
+NULL     root     system         public              protected_ts_meta                  INSERT          NULL          NO
+NULL     root     system         public              protected_ts_meta                  SELECT          NULL          YES
+NULL     root     system         public              protected_ts_meta                  UPDATE          NULL          NO
+NULL     admin    system         public              protected_ts_records               DELETE          NULL          NO
+NULL     admin    system         public              protected_ts_records               GRANT           NULL          NO
+NULL     admin    system         public              protected_ts_records               INSERT          NULL          NO
+NULL     admin    system         public              protected_ts_records               SELECT          NULL          YES
+NULL     admin    system         public              protected_ts_records               UPDATE          NULL          NO
+NULL     root     system         public              protected_ts_records               DELETE          NULL          NO
+NULL     root     system         public              protected_ts_records               GRANT           NULL          NO
+NULL     root     system         public              protected_ts_records               INSERT          NULL          NO
+NULL     root     system         public              protected_ts_records               SELECT          NULL          YES
+NULL     root     system         public              protected_ts_records               UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)
