@@ -39,13 +39,32 @@ type vectorizedFlow struct {
 	*flowinfra.FlowBase
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+
+	// streamingMemAccount is the memory account that is tracking the static
+	// memory usage of the whole vectorized flow as well as all dynamic memory of
+	// the streaming components.
+	streamingMemAccount *mon.BoundAccount
+
+	// bufferingMemMonitors are the memory monitors of the buffering components.
+	bufferingMemMonitors []*mon.BytesMonitor
+	// bufferingMemAccounts are the memory accounts that are tracking the dynamic
+	// memory usage of the buffering components.
+	bufferingMemAccounts []*mon.BoundAccount
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
 
+var vectorizedFlowPool = sync.Pool{
+	New: func() interface{} {
+		return &vectorizedFlow{}
+	},
+}
+
 // NewVectorizedFlow creates a new vectorized flow given the flow base.
 func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
-	return &vectorizedFlow{FlowBase: base}
+	vf := vectorizedFlowPool.Get().(*vectorizedFlow)
+	vf.FlowBase = base
+	return vf
 }
 
 // Setup is part of the flowinfra.Flow interface.
@@ -55,7 +74,7 @@ func (f *vectorizedFlow) Setup(
 	f.SetSpec(spec)
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 	streamingMemAccount := f.EvalCtx.Mon.MakeBoundAccount()
-	f.VectorizedStreamingMemAccount = &streamingMemAccount
+	f.streamingMemAccount = &streamingMemAccount
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -73,10 +92,20 @@ func (f *vectorizedFlow) Setup(
 	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &streamingMemAccount, opt)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
-		f.VectorizedBufferingMemMonitors = append(f.VectorizedBufferingMemMonitors, creator.bufferingMemMonitors...)
-		f.VectorizedBufferingMemAccounts = append(f.VectorizedBufferingMemAccounts, creator.bufferingMemAccounts...)
+		f.bufferingMemMonitors = append(f.bufferingMemMonitors, creator.bufferingMemMonitors...)
+		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
+	}
+	f.streamingMemAccount.Close(ctx)
+	// It is (theoretically) possible that some of the memory monitoring
+	// infrastructure was created even in case of an error, and we need to clean
+	// that up.
+	for _, memAcc := range creator.bufferingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitor := range creator.bufferingMemMonitors {
+		memMonitor.Stop(ctx)
 	}
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return err
@@ -85,6 +114,26 @@ func (f *vectorizedFlow) Setup(
 // ConcurrentExecution is part of the Flow interface.
 func (f *vectorizedFlow) ConcurrentExecution() bool {
 	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
+}
+
+// Release releases this vectorizedFlow back to the pool.
+func (f *vectorizedFlow) Release() {
+	*f = vectorizedFlow{}
+	vectorizedFlowPool.Put(f)
+}
+
+// Cleanup is part of the Flow interface.
+func (f *vectorizedFlow) Cleanup(ctx context.Context) {
+	// This cleans up all the memory monitoring of the vectorized flow.
+	f.streamingMemAccount.Close(ctx)
+	for _, memAcc := range f.bufferingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitor := range f.bufferingMemMonitors {
+		memMonitor.Stop(ctx)
+	}
+	f.FlowBase.Cleanup(ctx)
+	f.Release()
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector

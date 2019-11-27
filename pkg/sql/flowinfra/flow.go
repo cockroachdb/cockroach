@@ -419,20 +419,11 @@ type Releasable interface {
 }
 
 // Cleanup is part of the Flow interface.
+// NOTE: this implements only the shared clean up logic between row-based and
+// vectorized flows.
 func (f *FlowBase) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
-	}
-
-	// This cleans up all the memory monitoring of the vectorized flow.
-	if f.VectorizedStreamingMemAccount != nil {
-		f.VectorizedStreamingMemAccount.Close(ctx)
-	}
-	for _, memAcc := range f.VectorizedBufferingMemAccounts {
-		memAcc.Close(ctx)
-	}
-	for _, memMon := range f.VectorizedBufferingMemMonitors {
-		memMon.Stop(ctx)
 	}
 
 	// This closes the monitor opened in ServerImpl.setupFlow.
@@ -453,7 +444,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	f.status = FlowFinished
 	f.ctxCancel()
 	f.doneFn()
-	f.doneFn = nil
 	sp.Finish()
 }
 
