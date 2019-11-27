@@ -15,20 +15,20 @@ import { Link } from "react-router";
 import moment from "moment";
 import _ from "lodash";
 
-import { AdminUIState } from "oss/src/redux/state";
+import { AdminUIState } from "src/redux/state";
 import {
   LivenessStatus,
   NodesSummary,
   nodesSummarySelector,
   partitionedStatuses,
   selectNodesSummaryValid,
-} from "oss/src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "oss/src/redux/apiReducers";
-import { SortedTable } from "oss/src/views/shared/components/sortedtable";
-import { INodeStatus } from "oss/src/util/proto";
-import { LongToMoment } from "oss/src/util/convert";
-import { SortSetting } from "oss/src/views/shared/components/sortabletable";
-import { LocalSetting } from "oss/src/redux/localsettings";
+} from "src/redux/nodes";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { SortedTable } from "src/views/shared/components/sortedtable";
+import { INodeStatus } from "src/util/proto";
+import { LongToMoment } from "src/util/convert";
+import { SortSetting } from "src/views/shared/components/sortabletable";
+import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
 
