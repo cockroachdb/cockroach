@@ -108,7 +108,7 @@ func IsReadOnly(args Request) bool {
 }
 
 // IsReadAndWrite returns true if the request both reads and writes
-// (such as conditional puts).
+// (such as conditional puts and increments).
 func IsReadAndWrite(args Request) bool {
 	flags := args.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) != 0
