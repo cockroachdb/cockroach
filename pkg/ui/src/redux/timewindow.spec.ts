@@ -50,7 +50,7 @@ describe("time window reducer", function() {
       );
       assert.deepEqual(
         (new timewindow.TimeWindowState()).scale,
-        timewindow.availableTimeScales["10 min"],
+        timewindow.availableTimeScales["Past 10 Minutes"],
       );
     });
 

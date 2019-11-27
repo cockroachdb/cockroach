@@ -27,6 +27,10 @@ $dropdown-hover-color = darken($background-color, 2.5%)
 
   &:hover
     background-color $dropdown-hover-color
+  
+  &._range
+    width 423px
+    padding 7px 9px
 
   &__title
     vertical-align middle
@@ -38,7 +42,17 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     text-transform uppercase
     letter-spacing 2px
     line-height 17px
-
+  
+  &__range-title
+    background #e5e5e5
+    width 34px
+    text-align center
+    border-radius 3px
+    color #5f6c87
+    font-size 12px
+    font-family Lato-Bold
+    padding 2px 0px
+    display inline-block
 
   &__select
     display inline-block
