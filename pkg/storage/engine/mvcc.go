@@ -3538,10 +3538,12 @@ func ComputeStatsGo(
 					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {
-					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d", MVCCVersionTimestampSize, meta.KeyBytes)
+					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
+						"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
 				}
 				if meta.ValBytes != int64(len(unsafeValue)) {
-					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(unsafeValue), meta.ValBytes)
+					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
+						"(meta: %s)", len(unsafeValue), meta.ValBytes, &meta)
 				}
 				accrueGCAgeNanos = meta.Timestamp.WallTime
 			} else {
