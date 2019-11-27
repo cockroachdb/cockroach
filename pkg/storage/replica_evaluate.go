@@ -236,8 +236,15 @@ func evaluateBatch(
 	// WriteTooOldError even if the SQL CanAutoRetry is false. As of
 	// this writing, nearly all writes issued by SQL are preceded by
 	// reads of the same key.
-	var writeTooOldErr *roachpb.Error
-	mustReturnWriteTooOldErr := false
+	var writeTooOldState struct {
+		err *roachpb.Error
+		// invalidRead is set if a WriteTooOldError was encountered by a read-write
+		// operation. Such a request failing means that we can't commit the
+		// transaction even if the batch as a whole can commit at any timestamp, so
+		// when this is set we need to be careful to not execute a subsequent
+		// EndTransaction.
+		invalidRead bool
+	}
 
 	for index, union := range baReqs {
 		// Execute the command.
@@ -256,6 +263,24 @@ func evaluateBatch(
 				baHeader.Txn.Sequence = seqNum
 			}
 		}
+
+		if args.Method() == roachpb.EndTransaction {
+			// Don't attempt to commit if invalidRead is set.
+			et := args.(*roachpb.EndTransactionRequest)
+			if et.Commit && (writeTooOldState.err != nil) {
+				canCommitDespiteWTOE := !writeTooOldState.invalidRead &&
+					// Also don't attempt to commit if a refresh is needed. We know
+					// attempting to commit will fail since the WriteTooOld flag is set.
+					// This check is performed by the evaluation of the EndTransaction
+					// too, but if we short-circuit here we'll return a better
+					// WriteTooOldError.
+					batcheval.CanForwardCommitTimestampWithoutRefresh(baHeader.Txn, et)
+				if !canCommitDespiteWTOE {
+					return nil, result, writeTooOldState.err
+				}
+			}
+		}
+
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
@@ -284,10 +309,11 @@ func evaluateBatch(
 				// other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch
 				// succeeding when it will be retried are increased.
-				if writeTooOldErr != nil {
-					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
+				if writeTooOldState.err != nil {
+					writeTooOldState.err.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(
+						tErr.ActualTimestamp)
 				} else {
-					writeTooOldErr = pErr
+					writeTooOldState.err = pErr
 				}
 
 				// Requests which are both read and write are not currently
@@ -296,7 +322,7 @@ func evaluateBatch(
 				// TODO(bdarnell): add read+write requests to the read refresh spans
 				// in TxnCoordSender, and then I think this can go away.
 				if roachpb.IsReadAndWrite(args) {
-					mustReturnWriteTooOldErr = true
+					writeTooOldState.invalidRead = true
 				}
 
 				if baHeader.Txn != nil {
@@ -340,18 +366,14 @@ func evaluateBatch(
 
 	// If there was an EndTransaction in the batch that finalized the transaction,
 	// the WriteTooOld status has been fully processed and we can discard the error.
-	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalized() {
-		writeTooOldErr = nil
-	} else if baHeader.Txn == nil {
-		// Non-transactional requests are unable to defer WriteTooOldErrors
-		// because there is no where to defer them to.
-		mustReturnWriteTooOldErr = true
+	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalizedOrStaging() {
+		writeTooOldState.err = nil
 	}
 
 	// If there's a write too old error, return now that we've found
 	// the high water timestamp for retries.
-	if writeTooOldErr != nil && (mustReturnWriteTooOldErr || !baHeader.DeferWriteTooOldError) {
-		return nil, result, writeTooOldErr
+	if writeTooOldState.err != nil && (writeTooOldState.invalidRead || !baHeader.DeferWriteTooOldError) {
+		return nil, result, writeTooOldState.err
 	}
 
 	if baHeader.Txn != nil {

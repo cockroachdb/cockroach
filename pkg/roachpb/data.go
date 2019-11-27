@@ -765,6 +765,12 @@ func (ts TransactionStatus) IsFinalized() bool {
 	return ts == COMMITTED || ts == ABORTED
 }
 
+// IsFinalizedOrStaging is like IsFinalized, but also considers the STAGING
+// state.
+func (ts TransactionStatus) IsFinalizedOrStaging() bool {
+	return ts.IsFinalized() || ts == STAGING
+}
+
 var _ log.SafeMessager = Transaction{}
 
 // MakeTransaction creates a new transaction. The transaction key is

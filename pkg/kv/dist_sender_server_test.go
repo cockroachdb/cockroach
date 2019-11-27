@@ -2451,7 +2451,28 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("a", "cput", strToValue("put"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
-			// No retries, 1pc commit.
+			// No client-side retries, 1PC commit. On the server-side, the batch is
+			// evaluated twice: once at the original timestamp, where it gets a
+			// WriteTooOldError, and then once at the pushed timestamp. The
+			// server-side retry is enabled by the fact that there have not been any
+			// previous reads and so the transaction can commit at a pushed timestamp.
+		},
+		{
+			// This test is like the previous one, except the 1PC batch cannot commit
+			// at the updated timestamp.
+			name: "write too old with failed cput in batch commit",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "orig")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.CPut("a", "cput", strToValue("orig"))
+				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
+			},
+			expFailure: "unexpected value", // The CPut cannot succeed.
 		},
 		{
 			name: "multi-range batch with forwarded timestamp",
@@ -2581,6 +2602,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
+			// Expect a TxnCoordSender retry, which should succeed.
 			txnCoordRetry: true,
 		},
 		{
@@ -2616,7 +2638,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Expect a transaction coord retry, which should succeed.
+			// Expect a TxnCoordSender retry, which should succeed.
 			txnCoordRetry: true,
 		},
 		{
