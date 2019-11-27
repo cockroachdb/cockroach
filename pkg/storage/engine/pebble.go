@@ -646,13 +646,10 @@ func (p *Pebble) PreIngestDelay(ctx context.Context) {
 
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
-	// TODO(itsbilal): Add functionality in Pebble to do this count internally,
-	// instead of iterating over the range.
-	count := uint64(0)
-	_ = p.Iterate(from, to, func(kv MVCCKeyValue) (bool, error) {
-		count += uint64(kv.Key.Len() + len(kv.Value))
-		return false, nil
-	})
+	count, err := p.db.EstimateDiskUsage(from, to)
+	if err != nil {
+		return 0, err
+	}
 	return count, nil
 }
 
