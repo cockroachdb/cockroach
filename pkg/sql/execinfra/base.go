@@ -188,6 +188,14 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 	}
 }
 
+// Releasable is an interface for objects than can be Released back into a
+// memory pool when finished.
+type Releasable interface {
+	// Release allows this object to be returned to a memory pool. Objects must
+	// not be used after Release is called.
+	Release()
+}
+
 // DrainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
 // draining metadata) and then forwards all the metadata to dst.
 //
