@@ -120,6 +120,29 @@ func ResolveTableIndex(
 	return found, foundTabName, nil
 }
 
+// ConvertColumnIDsToOrdinals converts a list of ColumnIDs (such as from a
+// tree.TableRef), to a list of ordinal positions of columns within the given
+// table. See tree.Table for more information on column ordinals.
+func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []int) {
+	ordinals = make([]int, len(columns))
+	for i, c := range columns {
+		ord := 0
+		cnt := tab.ColumnCount()
+		for ord < cnt {
+			if tab.Column(ord).ColID() == StableID(c) {
+				break
+			}
+			ord++
+		}
+		if ord >= cnt {
+			panic(pgerror.Newf(pgcode.UndefinedColumn,
+				"column [%d] does not exist", c))
+		}
+		ordinals[i] = ord
+	}
+	return ordinals
+}
+
 // FindTableColumnByName returns the ordinal of the non-mutation column having
 // the given name, if one exists in the given table. Otherwise, it returns -1.
 func FindTableColumnByName(tab Table, name tree.Name) int {
