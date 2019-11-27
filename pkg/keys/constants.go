@@ -330,6 +330,8 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
+	ProtectedTimestampsMetaTableID       = 29
+	ProtectedTimestampsRecordsTableID    = 30
 
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
