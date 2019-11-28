@@ -10,6 +10,7 @@
 
 import _ from "lodash";
 import { Action, Dispatch } from "redux";
+import { createSelector } from "reselect";
 import * as protobuf from "protobufjs/minimal";
 
 import * as protos from  "src/js/protos";
@@ -59,6 +60,11 @@ export const VERSION_DISMISSED_KEY = "version_dismissed";
 // INSTRUCTIONS_BOX_COLLAPSED_KEY is the uiData key on the server that tracks whether the
 // instructions box on the cluster viz has been collapsed or not.
 export const INSTRUCTIONS_BOX_COLLAPSED_KEY = "clusterviz_instructions_box_collapsed";
+
+// HIDE_DECOMMISSIONED_NODE_LIST key that contains list of all decommissioned nodes which have to be hidden from
+// Decommissioned nodes table on Node Overview page.
+// Values are the list of node ids which have to be filtered out.
+export const HIDE_DECOMMISSIONED_NODE_LIST = "node_overview_hide_decommissioned_node_list";
 
 export enum UIDataStatus {
   UNINITIALIZED, // Data has not been loaded yet.
@@ -318,3 +324,8 @@ export function loadUIData(...keys: string[]) {
     });
   };
 }
+
+export const hiddenDecommissionedNodes = createSelector(
+  (state: AdminUIState) => getData(state, HIDE_DECOMMISSIONED_NODE_LIST),
+  (hiddenNodes: Array<number>) => hiddenNodes,
+);
