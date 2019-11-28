@@ -94,10 +94,14 @@ func verifyColOperator(
 	if err != nil {
 		return err
 	}
-	if result.BufferingOpMemMonitor != nil {
-		defer result.BufferingOpMemMonitor.Stop(ctx)
-		defer result.BufferingOpMemAccount.Close(ctx)
-	}
+	defer func() {
+		for _, memAccount := range result.BufferingOpMemAccounts {
+			memAccount.Close(ctx)
+		}
+		for _, memMonitor := range result.BufferingOpMemMonitors {
+			memMonitor.Stop(ctx)
+		}
+	}()
 
 	outColOp, err := colexec.NewMaterializer(
 		flowCtx,

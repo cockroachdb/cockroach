@@ -714,10 +714,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// Even when err is non-nil, it is possible that the buffering memory
 		// monitor and account have been created, so we always want to accumulate
 		// them for a proper cleanup.
-		if result.BufferingOpMemMonitor != nil {
-			s.bufferingMemMonitors = append(s.bufferingMemMonitors, result.BufferingOpMemMonitor)
-			s.bufferingMemAccounts = append(s.bufferingMemAccounts, result.BufferingOpMemAccount)
-		}
+		s.bufferingMemMonitors = append(s.bufferingMemMonitors, result.BufferingOpMemMonitors...)
+		s.bufferingMemAccounts = append(s.bufferingMemAccounts, result.BufferingOpMemAccounts...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
