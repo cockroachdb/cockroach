@@ -87,13 +87,13 @@ func wrapRowSource(
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op                    Operator
-	ColumnTypes           []types.T
-	InternalMemUsage      int
-	MetadataSources       []execinfrapb.MetadataSource
-	IsStreaming           bool
-	BufferingOpMemMonitor *mon.BytesMonitor
-	BufferingOpMemAccount *mon.BoundAccount
+	Op                     Operator
+	ColumnTypes            []types.T
+	InternalMemUsage       int
+	MetadataSources        []execinfrapb.MetadataSource
+	IsStreaming            bool
+	BufferingOpMemMonitors []*mon.BytesMonitor
+	BufferingOpMemAccounts []*mon.BoundAccount
 }
 
 // joinerPlanningState is a helper struct used when creating a hash or merge
@@ -390,8 +390,9 @@ func NewColOperator(
 		if needHash {
 			hashAggregatorMemAccount := streamingMemAccount
 			if !useStreamingMemAccountForBuffering {
-				result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator-limited")
-				hashAggregatorMemAccount = result.BufferingOpMemAccount
+				hashAggregatorMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "hash-aggregator-limited",
+				)
 			}
 			result.Op, err = NewHashAggregator(
 				NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
@@ -467,8 +468,9 @@ func NewColOperator(
 
 			hashJoinerMemAccount := streamingMemAccount
 			if !useStreamingMemAccountForBuffering {
-				result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner-limited")
-				hashJoinerMemAccount = result.BufferingOpMemAccount
+				hashJoinerMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "hash-joiner-limited",
+				)
 			}
 			result.Op, err = NewEqHashJoinerOp(
 				NewAllocator(ctx, hashJoinerMemAccount),
@@ -551,8 +553,9 @@ func NewColOperator(
 			mergeJoinerMemAccount := streamingMemAccount
 			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
 				// Whether the merge joiner is streaming is already set above.
-				result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner-limited")
-				mergeJoinerMemAccount = result.BufferingOpMemAccount
+				mergeJoinerMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "merge-joiner-limited",
+				)
 			}
 			result.Op, err = NewMergeJoinOp(
 				NewAllocator(ctx, mergeJoinerMemAccount),
@@ -636,8 +639,9 @@ func NewColOperator(
 			if useStreamingMemAccountForBuffering {
 				sortChunksMemAccount = streamingMemAccount
 			} else {
-				result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks-limited")
-				sortChunksMemAccount = result.BufferingOpMemAccount
+				sortChunksMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "sort-chunks-limited",
+				)
 			}
 			result.Op, err = NewSortChunks(
 				NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
@@ -659,12 +663,31 @@ func NewColOperator(
 			if useStreamingMemAccountForBuffering {
 				sorterMemAccount = streamingMemAccount
 			} else {
-				result.createBufferingMemAccount(ctx, flowCtx, "sort-all-limited")
-				sorterMemAccount = result.BufferingOpMemAccount
+				sorterMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "sort-all-limited",
+				)
 			}
-			result.Op, err = NewSorter(
+			inMemorySorter, err := NewSorter(
 				NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
 			)
+			if err != nil {
+				return result, err
+			}
+			var diskSpillerMemAccount *mon.BoundAccount
+			if useStreamingMemAccountForBuffering {
+				diskSpillerMemAccount = streamingMemAccount
+			} else {
+				diskSpillerMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "disk-spiller-sort-all-limited",
+				)
+			}
+			diskSpillerAllocator := NewAllocator(ctx, diskSpillerMemAccount)
+			result.Op = newOneInputDiskSpiller(
+				diskSpillerAllocator,
+				input, inMemorySorter.(bufferingInMemoryOperator),
+				func(input Operator) Operator {
+					return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
+				})
 		}
 		result.ColumnTypes = spec.Input[0].ColumnTypes
 
@@ -699,8 +722,9 @@ func NewColOperator(
 			// which kind of partitioner to use should come from the optimizer.
 			windowSortingPartitionerMemAccount := streamingMemAccount
 			if !useStreamingMemAccountForBuffering {
-				result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner-limited")
-				windowSortingPartitionerMemAccount = result.BufferingOpMemAccount
+				windowSortingPartitionerMemAccount = result.createBufferingMemAccount(
+					ctx, flowCtx, "window-sorting-partitioner-limited",
+				)
 			}
 			input, err = NewWindowSortingPartitioner(
 				NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
@@ -711,8 +735,9 @@ func NewColOperator(
 			if len(wf.Ordering.Columns) > 0 {
 				windowSorterMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					result.createBufferingMemAccount(ctx, flowCtx, "window-sorter-limited")
-					windowSorterMemAccount = result.BufferingOpMemAccount
+					windowSorterMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, "window-sorter-limited",
+					)
 				}
 				input, err = NewSorter(
 					NewAllocator(ctx, windowSorterMemAccount), input, typs,
@@ -976,12 +1001,14 @@ func (p *filterPlanningState) projectOutExtraCols(result *NewColOperatorResult) 
 // references to both objects.
 func (r *NewColOperatorResult) createBufferingMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) {
-	r.BufferingOpMemMonitor = execinfra.NewLimitedMonitor(
+) *mon.BoundAccount {
+	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
 		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name,
 	)
-	bufferingMemAccount := r.BufferingOpMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccount = &bufferingMemAccount
+	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
+	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
+	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
+	return &bufferingMemAccount
 }
 
 // setProjectedByJoinerColumnTypes sets column types on r according to a

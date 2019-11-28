@@ -12,6 +12,8 @@ package execinfra
 
 // OpNode is an interface to operator-like structures with children.
 type OpNode interface {
+	// TODO(yuzefovich): modify the interface so that a boolean is passed in to
+	// distinguish between verbose and non-verbose outputs.
 	// ChildCount returns the number of children (inputs) of the operator.
 	ChildCount() int
 

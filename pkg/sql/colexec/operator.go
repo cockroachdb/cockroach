@@ -24,6 +24,13 @@ type Operator interface {
 	// Init initializes this operator. Will be called once at operator setup
 	// time. If an operator has an input operator, it's responsible for calling
 	// Init on that input operator as well.
+	// TODO(yuzefovich): we might need to clarify whether it is ok to call
+	// Init() multiple times before the first call to Next(). It is possible to
+	// hit the memory limit during Init(), and a disk-backed operator needs to
+	// make sure that the input has been initialized. We could also in case that
+	// Init() doesn't succeed for bufferingInMemoryOperator - which should only
+	// happen when 'workmem' setting is too low - just bail, even if we have
+	// disk spilling for that operator.
 	Init()
 
 	// Next returns the next Batch from this operator. Once the operator is
