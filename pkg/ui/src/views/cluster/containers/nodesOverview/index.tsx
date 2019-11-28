@@ -26,7 +26,7 @@ import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SortedTable } from "src/views/shared/components/sortedtable";
+import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
@@ -35,6 +35,12 @@ import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
 import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
 import { cockroach } from "src/js/protos";
+import {
+  hiddenDecommissionedNodes,
+  HIDE_DECOMMISSIONED_NODE_LIST,
+  loadUIData,
+  saveUIData,
+} from "src/redux/uiData";
 
 import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
@@ -203,7 +209,15 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * NotLiveNodeListProps are the properties of NotLiveNodeList.
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
-  status: LivenessStatus.DECOMMISSIONING | LivenessStatus.DEAD;
+  status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
+  appendColumns: ColumnDescriptor<INodeStatus>[];
+}
+
+interface DecommissionedNodeListProps extends NotLiveNodeListProps {
+  status: LivenessStatus.DECOMMISSIONED;
+  clearDecommissionedNodes?: (nodeIds: Array<number>) => void;
+  getClearedNodes?: () => void;
+  hiddenNodes: Array<number>;
 }
 
 /**
@@ -211,13 +225,73 @@ interface NotLiveNodeListProps extends NodeCategoryListProps {
  * nodes on the cluster.
  */
 class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
+  static defaultProps: Partial<NotLiveNodeListProps> = {
+    appendColumns: [],
+  };
+
   render() {
-    const { status, statuses, nodesSummary, sortSetting } = this.props;
+    const { status, statuses, nodesSummary, sortSetting, setSort, appendColumns } = this.props;
     if (!statuses || statuses.length === 0) {
       return null;
     }
 
     const statusName = _.capitalize(LivenessStatus[status]);
+
+    const columns: ColumnDescriptor<INodeStatus>[] = [
+      // Node ID column.
+      {
+        title: "ID",
+        cell: (ns) => `n${ns.desc.node_id}`,
+        sort: (ns) => ns.desc.node_id,
+      },
+      // Node address column - displays the node address, links to the
+      // node-specific page for this node.
+      {
+        title: "Address",
+        cell: (ns) => {
+          return (
+            <div>
+              <span className="node-status-icon"
+                    title={
+                      "This node has not reported as live for a significant period and is considered dead. " +
+                      "The cut-off period for dead nodes is configurable as cluster setting " +
+                      "'server.time_until_store_dead'"
+                    }
+                    dangerouslySetInnerHTML={ trustIcon(deadIcon) } />
+              <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+            </div>
+          );
+        },
+        sort: (ns) => ns.desc.node_id,
+        // TODO(mrtracy): Consider if there is a better way to use BEM
+        // style CSS in cases like this; it is a bit awkward to write out
+        // the entire modifier class here, but it might not be better to
+        // construct the full BEM class in the table component itself.
+        className: "sort-table__cell--link",
+      },
+      // Down/decommissioned since - displays how long the node has been
+      // considered dead.
+      {
+        title: `${statusName} Since`,
+        cell: (ns) => {
+          const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+          if (!liveness) {
+            return "no information";
+          }
+
+          const deadTime = liveness.expiration.wall_time;
+          const deadMoment = LongToMoment(deadTime);
+          return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
+        },
+        sort: (ns) => {
+          const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+          return liveness.expiration.wall_time;
+        },
+      },
+      // 'appendColumns' extends default set of columns so it is possible to customize it from
+      // outside of component;
+      ...appendColumns,
+    ];
 
     return (
       <div className="embedded-table">
@@ -227,61 +301,43 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
         <NodeSortedTable
           data={statuses}
           sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.props.setSort(setting)}
-          columns={[
-            // Node ID column.
-            {
-              title: "ID",
-              cell: (ns) => `n${ns.desc.node_id}`,
-              sort: (ns) => ns.desc.node_id,
-            },
-            // Node address column - displays the node address, links to the
-            // node-specific page for this node.
-            {
-              title: "Address",
-              cell: (ns) => {
-                return (
-                  <div>
-                    <span className="node-status-icon"
-                      title={
-                        "This node has not reported as live for a significant period and is considered dead. " +
-                        "The cut-off period for dead nodes is configurable as cluster setting " +
-                        "'server.time_until_store_dead'"
-                      }
-                      dangerouslySetInnerHTML={ trustIcon(deadIcon) } />
-                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                  </div>
-                );
-              },
-              sort: (ns) => ns.desc.node_id,
-              // TODO(mrtracy): Consider if there is a better way to use BEM
-              // style CSS in cases like this; it is a bit awkward to write out
-              // the entire modifier class here, but it might not be better to
-              // construct the full BEM class in the table component itself.
-              className: "sort-table__cell--link",
-            },
-            // Down/decommissioned since - displays how long the node has been
-            // considered dead.
-            {
-              title: `${statusName} Since`,
-              cell: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                if (!liveness) {
-                  return "no information";
-                }
-
-                const deadTime = liveness.expiration.wall_time;
-                const deadMoment = LongToMoment(deadTime);
-                return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
-              },
-              sort: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                return liveness.expiration.wall_time;
-              },
-            },
-          ]} />
+          onChangeSortSetting={setSort}
+          columns={columns} />
       </div>
     );
+  }
+}
+
+class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
+  static defaultProps: Partial<DecommissionedNodeListProps> = {
+    clearDecommissionedNodes: _.noop,
+    getClearedNodes: _.noop,
+    hiddenNodes: [],
+  };
+
+  columns: ColumnDescriptor<INodeStatus>[] = [
+    {
+      title: (<a
+        onClick={() => this.onClearNodesHandler(this.props.statuses)}>Clear All</a>),
+      cell: (ns) => {
+        return (
+          <a onClick={() => this.onClearNodesHandler([ns])}>Clear</a>
+        );
+      },
+    },
+  ];
+
+  onClearNodesHandler(nodeStatuses: INodeStatus[]) {
+    const { clearDecommissionedNodes, hiddenNodes } = this.props;
+    clearDecommissionedNodes(_.union(hiddenNodes, nodeStatuses.map(ns => ns.desc.node_id)));
+  }
+
+  componentWillMount() {
+    this.props.getClearedNodes();
+  }
+
+  render() {
+    return (<NotLiveNodeList appendColumns={this.columns} {...this.props} />);
   }
 }
 
@@ -308,6 +364,14 @@ const partitionedStatuses = createSelector(
       },
     );
   },
+);
+
+const decommissionedVisibleStatuses = createSelector(
+  partitionedStatuses,
+  hiddenDecommissionedNodes,
+  (statuses, hiddenNodes) =>
+    _.differenceWith(statuses.decommissioned, hiddenNodes,
+                     (status, hiddenNodeId) => status.desc.node_id === hiddenNodeId),
 );
 
 /**
@@ -353,18 +417,26 @@ const DeadNodesConnected = connect(
 // tslint:disable-next-line:variable-name
 const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
-    const statuses = partitionedStatuses(state);
+    const statuses = decommissionedVisibleStatuses(state);
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
       status: LivenessStatus.DECOMMISSIONED,
-      statuses: statuses.decommissioned,
+      statuses,
       nodesSummary: nodesSummarySelector(state),
+      hiddenNodes: hiddenDecommissionedNodes(state),
     };
   },
   {
     setSort: decommissionedNodesSortSetting.set,
+    clearDecommissionedNodes: (nodeIds: Array<number>) => {
+      return saveUIData({
+        key: HIDE_DECOMMISSIONED_NODE_LIST,
+        value: nodeIds,
+      });
+    },
+    getClearedNodes: () => loadUIData(HIDE_DECOMMISSIONED_NODE_LIST),
   },
-)(NotLiveNodeList);
+)(DecommissionedNodeList);
 
 /**
  * NodesMainProps is the type of the props object that must be passed to
