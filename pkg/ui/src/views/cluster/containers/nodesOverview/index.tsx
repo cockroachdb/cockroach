@@ -318,6 +318,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
   columns: ColumnDescriptor<INodeStatus>[] = [
     {
       title: (<a
+        className="sort-table__action-link"
         onClick={() => this.onClearNodesHandler(this.props.statuses)}>Clear All</a>),
       cell: (ns) => {
         return (
