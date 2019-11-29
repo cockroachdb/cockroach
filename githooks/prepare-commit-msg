@@ -38,7 +38,7 @@ sed_script=''
 # true, all the template recommendations will be commented out as
 # opposed to be filled in.
 tchar=''
-tdisable=$(git config --bool --default false --get cockroachdb.disable-commit-template)
+tdisable=$(git config --bool --get cockroachdb.disable-commit-template || echo false)
 if test x"$tdisable" != xfalse; then
 	tchar="$cchar "
 fi
