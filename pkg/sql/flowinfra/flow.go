@@ -124,8 +124,6 @@ type FlowBase struct {
 	execinfra.FlowCtx
 
 	flowRegistry *FlowRegistry
-	// isVectorized indicates whether it is a vectorized flow.
-	isVectorized bool
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
@@ -193,12 +191,10 @@ func NewFlowBase(
 	flowReg *FlowRegistry,
 	syncFlowConsumer execinfra.RowReceiver,
 	localProcessors []execinfra.LocalProcessor,
-	isVectorized bool,
 ) *FlowBase {
 	base := &FlowBase{
 		FlowCtx:          flowCtx,
 		flowRegistry:     flowReg,
-		isVectorized:     isVectorized,
 		syncFlowConsumer: syncFlowConsumer,
 		localProcessors:  localProcessors,
 	}
@@ -335,7 +331,7 @@ func (f *FlowBase) IsLocal() bool {
 
 // IsVectorized returns whether this flow will run with vectorized execution.
 func (f *FlowBase) IsVectorized() bool {
-	return f.isVectorized
+	panic("IsVectorized should not be called on FlowBase")
 }
 
 // Start is part of the Flow interface.
