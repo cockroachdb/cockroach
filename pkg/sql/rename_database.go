@@ -63,6 +63,11 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because RENAME DATABASE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *renameDatabaseNode) ReadingOwnWrites() {}
+
 func (n *renameDatabaseNode) startExec(params runParams) error {
 	p := params.p
 	ctx := params.ctx

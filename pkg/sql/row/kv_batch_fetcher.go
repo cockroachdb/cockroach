@@ -28,13 +28,6 @@ import (
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
-// SetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
-func SetKVBatchSize(val int64) func() {
-	oldVal := kvBatchSize
-	kvBatchSize = val
-	return func() { kvBatchSize = oldVal }
-}
-
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*client.Txn).Send.
 type sendFunc func(
@@ -351,4 +344,12 @@ func (f *txnKVFetcher) nextBatch(
 		return false, nil, nil, roachpb.Span{}, err
 	}
 	return f.nextBatch(ctx)
+}
+
+// TestingSetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
+// This is to be used only in tests - we have no test coverage for arbitrary kv batch sizes at this time.
+func TestingSetKVBatchSize(val int64) func() {
+	oldVal := kvBatchSize
+	kvBatchSize = val
+	return func() { kvBatchSize = oldVal }
 }

@@ -13,12 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -130,6 +132,19 @@ type planNodeFastPath interface {
 	FastPathResults() (int, bool)
 }
 
+// planNodeReadingOwnWrites can be implemented by planNodes which do
+// not use the standard SQL principle of reading at the snapshot
+// established at the start of the transaction. This is the case
+// e.g. for most DDL statements that perform multiple KV operations on
+// descriptors, expecting to read their own writes.
+//
+// This constraint is obeyed by (*planner).startExec().
+type planNodeReadingOwnWrites interface {
+	// ReadingOwnWrites can be implemented as no-op by nodes wishing
+	// to request the semantics described above.
+	ReadingOwnWrites()
+}
+
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
@@ -206,6 +221,16 @@ var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 var _ planNodeFastPath = &controlJobsNode{}
+
+var _ planNodeReadingOwnWrites = &alterIndexNode{}
+var _ planNodeReadingOwnWrites = &alterSequenceNode{}
+var _ planNodeReadingOwnWrites = &alterTableNode{}
+var _ planNodeReadingOwnWrites = &createIndexNode{}
+var _ planNodeReadingOwnWrites = &createSequenceNode{}
+var _ planNodeReadingOwnWrites = &createTableNode{}
+var _ planNodeReadingOwnWrites = &createViewNode{}
+var _ planNodeReadingOwnWrites = &changePrivilegesNode{}
+var _ planNodeReadingOwnWrites = &setZoneConfigNode{}
 
 // planNodeRequireSpool serves as marker for nodes whose parent must
 // ensure that the node is fully run to completion (and the results
@@ -318,6 +343,11 @@ func (p *planTop) close(ctx context.Context) {
 // startExec calls startExec() on each planNode using a depth-first, post-order
 // traversal.  The subqueries, if any, are also started.
 //
+// If the planNode also implements the nodeReadingOwnWrites interface,
+// the txn is temporarily reconfigured to use read-your-own-writes for
+// the duration of the call to startExec. This is used e.g. by
+// DDL statements.
+//
 // Reminder: walkPlan() ensures that subqueries and sub-plans are
 // started before startExec() is called.
 func startExec(params runParams, plan planNode) error {
@@ -333,7 +363,17 @@ func startExec(params runParams, plan planNode) error {
 			}
 			return true, nil
 		},
-		leaveNode: func(_ string, n planNode) error {
+		leaveNode: func(_ string, n planNode) (err error) {
+			if _, ok := n.(planNodeReadingOwnWrites); ok {
+				_, err = params.p.Txn().ConfigureStepping(client.SteppingDisabled)
+				if err != nil {
+					return err
+				}
+				defer func() {
+					_, thisErr := params.p.Txn().ConfigureStepping(client.SteppingEnabled)
+					err = errors.CombineErrors(err, thisErr)
+				}()
+			}
 			return n.startExec(params)
 		},
 	}

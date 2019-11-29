@@ -177,7 +177,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 // the insert operation (including secondary index updates, FK
 // cascading updates, etc), before the current KV batch is executed
 // and a new batch is started.
-const maxInsertBatchSize = 10000
+var maxInsertBatchSize = 10000
 
 func (n *insertNode) startExec(params runParams) error {
 	if err := params.p.maybeSetSystemConfig(n.run.ti.tableDesc().GetID()); err != nil {
@@ -293,4 +293,11 @@ func (n *insertNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+// TestingSetInsertBatchSize exports a constant for testing only.
+func TestingSetInsertBatchSize(val int) func() {
+	oldVal := maxInsertBatchSize
+	maxInsertBatchSize = val
+	return func() { maxInsertBatchSize = oldVal }
 }

@@ -1189,8 +1189,8 @@ func (txn *Txn) Active() bool {
 	return txn.mu.sender.Active()
 }
 
-// Step enables step-wise execution in the transaction, or
-// performs a step if step-wise execution is already enabled.
+// Step performs a sequencing step. Step-wise execution must be
+// already enabled.
 //
 // In step-wise execution, reads operate at a snapshot established at
 // the last step, instead of the latest write if not yet enabled.

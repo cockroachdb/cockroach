@@ -63,6 +63,11 @@ type changePrivilegesNode struct {
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string)
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because GRANT/REVOKE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *changePrivilegesNode) ReadingOwnWrites() {}
+
 func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p

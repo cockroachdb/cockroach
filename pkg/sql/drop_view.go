@@ -69,6 +69,11 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	return &dropViewNode{n: n, td: td}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because DROP VIEW performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *dropViewNode) ReadingOwnWrites() {}
+
 func (n *dropViewNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, toDel := range n.td {
