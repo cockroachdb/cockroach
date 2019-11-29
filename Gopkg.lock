@@ -406,14 +406,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:464bb25f4cf1e27fa11a260e9c8815793beb3495218139ddf8544ca8217b28ff"
+  digest = "1:7289f3868326160837a2295aecb038b9f6f2da1b10255ac4dec0bcd4baf410d8"
   name = "github.com/cockroachdb/datadriven"
   packages = ["."]
   pruneopts = "UT"
-  revision = "210cca0efc67c92e52d6d266c05045b151cc2680"
+  revision = "5d03e968fe71f0d365d31dc204ff3c51de68b814"
 
 [[projects]]
-  digest = "1:35ff61e02c035785971ac6ec04d54428307a986412e5d0aea86b8b7f45677d09"
+  digest = "1:7cfbe9c31d82a7044c86f36c24354363da85cc0a69ee7f2a20908a620d7e9b8a"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -436,8 +436,8 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "7ba395ace80575c71104187a222f77bf23c19326"
-  version = "v1.2.3"
+  revision = "9e21257b06ad938e53c24c52b393076a51b61540"
+  version = "v1.2.4"
 
 [[projects]]
   digest = "1:a44e537b3e080ff297315d166956dba9607f070644a89be78b59af6c54876b64"
