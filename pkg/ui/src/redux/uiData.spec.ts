@@ -323,8 +323,9 @@ describe("UIData reducer", function() {
     const uiKey2 = "another_key";
     const uiObj2 = 1234;
 
-    const saveUIData = function(...values: uidata.KeyValue[]): Promise<void> {
-      return uidata.saveUIData.apply(this, values)(dispatch, () => { return { uiData: state }; });
+    const saveUIData = function(values: uidata.KeyValue[] | uidata.KeyValue): Promise<void> {
+      console.log(values);
+      return uidata.saveUIData.call(this, values)(dispatch, () => { return { uiData: state }; });
     };
 
     const loadUIData = function(...keys: string[]): Promise<void> {
@@ -363,16 +364,16 @@ describe("UIData reducer", function() {
         },
       });
 
-      const p = saveUIData(
+      const p = saveUIData([
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
-      );
+      ]);
 
       // Second save should be ignored.
-      const p2 = saveUIData(
+      const p2 = saveUIData([
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
-      );
+      ]);
 
       return Promise.all([p, p2]).then(() => {
         assert.lengthOf(fetchMock.calls(`${api.API_PREFIX}/uidata`), 1);
@@ -396,10 +397,10 @@ describe("UIData reducer", function() {
         },
       });
 
-      const p = saveUIData(
+      const p = saveUIData([
         {key: uiKey1, value: uiObj1},
         {key: uiKey2, value: uiObj2},
-      );
+      ]);
 
       p.then(() => {
         assert.lengthOf(fetchMock.calls(`${api.API_PREFIX}/uidata`), 1);

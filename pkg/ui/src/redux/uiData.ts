@@ -16,6 +16,8 @@ import * as protobuf from "protobufjs/minimal";
 import * as protos from  "src/js/protos";
 import { PayloadAction } from "src/interfaces/action";
 import { getUIData, setUIData } from "src/util/api";
+import { JsonLike } from "src/util/types";
+
 import { AdminUIState } from "./state";
 
 export const SET = "cockroachui/uidata/SET_OPTIN";
@@ -157,7 +159,7 @@ export function uiDataReducer(state = new UIDataState(), action: Action): UIData
 /**
  * setUIDataKey sets the value of the given UIData key.
  */
-export function setUIDataKey(key: string, value: Object): PayloadAction<KeyValue> {
+export function setUIDataKey(key: string, value: JsonLike): PayloadAction<KeyValue> {
   return {
     type: SET,
     payload: { key, value },
@@ -211,7 +213,7 @@ export function beginSaveUIData(keys: string[]): PayloadAction<string[]> {
  */
 export interface KeyValue {
   key: string;
-  value: Object;
+  value: JsonLike;
 }
 
 /**
@@ -265,10 +267,15 @@ export function getLoadError(state: AdminUIState, key: string): Error {
  * saveUIData saves the value one (or more) UIData objects to the server. After
  * the values have been successfully persisted to the server, they are updated
  * in the local UIDataState store.
+ * 'mergeValues' flag indicates where to merge current value from state with new value for every key or not.
+ * - for values with Array type perform "union" operation;
+ * - for Object types perform "merge" operation.
+ * - for primitive types (like number, string, etc) the new value will be taken only
  */
-export function saveUIData(...values: KeyValue[]) {
+export function saveUIData(valuesList: KeyValue[] | KeyValue, mergeValues = false) {
   return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
     const state = getState();
+    let values = _.isArray(valuesList) ? valuesList : [valuesList];
     values = _.filter(values, (kv) => !isInFlight(state, kv.key));
     if (values.length === 0) {
       return;
@@ -278,6 +285,18 @@ export function saveUIData(...values: KeyValue[]) {
     // Encode data for each UIData key.
     const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
     _.each(values, (kv) => {
+      if (mergeValues) {
+        const currentValue = getData(state, kv.key);
+        let nextValue = kv.value;
+
+        if (_.isArray(currentValue) && _.isArray(nextValue)) {
+          nextValue = _.union(nextValue, currentValue);
+        } else if (_.isObject(currentValue) && _.isObject(nextValue)) {
+          nextValue = _.merge(nextValue, currentValue);
+        }
+
+        kv.value = nextValue;
+      }
       const stringifiedValue = JSON.stringify(kv.value);
       const buffer = new Uint8Array(protobuf.util.utf8.length(stringifiedValue));
       protobuf.util.utf8.write(stringifiedValue, buffer, 0);

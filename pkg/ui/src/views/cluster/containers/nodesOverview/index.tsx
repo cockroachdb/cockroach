@@ -14,6 +14,7 @@ import { connect } from "react-redux";
 import moment from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
+import { Dispatch } from "redux";
 
 import {
   LivenessStatus,
@@ -41,6 +42,7 @@ import {
   loadUIData,
   saveUIData,
 } from "src/redux/uiData";
+import { showDecommissionedNodesAlertAction } from "src/redux/alerts";
 
 import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
@@ -329,8 +331,8 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
   ];
 
   onClearNodesHandler(nodeStatuses: INodeStatus[]) {
-    const { clearDecommissionedNodes, hiddenNodes } = this.props;
-    clearDecommissionedNodes(_.union(hiddenNodes, nodeStatuses.map(ns => ns.desc.node_id)));
+    const { clearDecommissionedNodes } = this.props;
+    clearDecommissionedNodes(nodeStatuses.map(ns => ns.desc.node_id));
   }
 
   componentWillMount() {
@@ -430,10 +432,11 @@ const DecommissionedNodesConnected = connect(
   {
     setSort: decommissionedNodesSortSetting.set,
     clearDecommissionedNodes: (nodeIds: Array<number>) => {
-      return saveUIData({
-        key: HIDE_DECOMMISSIONED_NODE_LIST,
-        value: nodeIds,
-      });
+      return (dispatch: Dispatch<AdminUIState>) => {
+        const saveUiDataPayload = { key: HIDE_DECOMMISSIONED_NODE_LIST, value: nodeIds};
+        return dispatch(saveUIData(saveUiDataPayload, true))
+          .then(() => dispatch(showDecommissionedNodesAlertAction(nodeIds)));
+      };
     },
     getClearedNodes: () => loadUIData(HIDE_DECOMMISSIONED_NODE_LIST),
   },

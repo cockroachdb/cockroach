@@ -15,6 +15,7 @@ import { connect } from "react-redux";
 import "./alertbanner.styl";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
+import { AlertMessage } from "src/views/shared/components/alertMessage";
 import { Alert, bannerAlertsSelector } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";
 
@@ -45,9 +46,14 @@ class AlertBanner extends React.Component<AlertBannerProps, {}> {
     // Display only the first visible component.
     const { dismiss, ...alertProps } = alerts[0];
     const boundDismiss = bindActionCreators(() => dismiss, dispatch);
-    return  <div className="alert-banner">
-      <AlertBox dismiss={boundDismiss} {...alertProps} />
-    </div>;
+    // tslint:disable-next-line:variable-name
+    const AlertComponent = alertProps.showAsAlert ? AlertMessage : AlertBox;
+
+    return (
+      <div className="alert-banner">
+        <AlertComponent dismiss={boundDismiss} {...alertProps} />
+      </div>
+    );
   }
 }
 

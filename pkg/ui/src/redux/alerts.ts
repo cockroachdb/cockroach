@@ -33,6 +33,7 @@ export enum AlertLevel {
   NOTIFICATION,
   WARNING,
   CRITICAL,
+  SUCCESS,
 }
 
 export interface AlertInfo {
@@ -44,12 +45,19 @@ export interface AlertInfo {
   text?: string;
   // Optional hypertext link to be followed when clicking alert.
   link?: string;
+  // Indicates which substring in 'text' field has to wrapped with link.
+  // It allows to create link on arbitrary part of text instead of wrapping
+  // entire text as a link.
+  wrapTextWithLink?: string;
 }
 
 export interface Alert extends AlertInfo {
   // ThunkAction which will result in this alert being dismissed. This
   // function will be dispatched to the redux store when the alert is dismissed.
   dismiss: ThunkAction<Promise<void>, AdminUIState, void>;
+  // Makes alert to be positioned in the top right corner of the screen instead of
+  // stretching to full width.
+  showAsAlert?: boolean;
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
@@ -257,6 +265,43 @@ export const disconnectedAlertSelector = createSelector(
   },
 );
 
+export const clearedDecommissionedNodesLocalSetting = new LocalSetting(
+  // 'defaultValue' is a tuple where first value indicates if alert is dismissed or not
+  // and second value represents if multiple nodes were dismissed (for now it is necessary to pluralize
+  // text of warning message.
+  "cleared_decommissioned_nodes_dismissed", localSettingsSelector, [true, false],
+);
+
+/**
+ * Notification when decommissioned node(s) is cleared from Node Overview page.
+ */
+export const clearedDecommissionedNodesSelector = createSelector(
+  clearedDecommissionedNodesLocalSetting.selector,
+  ([isDismissed, isMultipleNodesCleared]): Alert => {
+    if (isDismissed) {
+      return undefined;
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: `Decommissioned ${isMultipleNodesCleared ? "nodes have" : "node has"} been hidden from this page`,
+      text: ("You can still access the decommissioned node history under Advanced Debugging"),
+      link: "reports/nodes/history",
+      wrapTextWithLink: "Advanced Debugging",
+      showAsAlert: true,
+      dismiss: (dispatch: Dispatch<AdminUIState>) => {
+        dispatch(clearedDecommissionedNodesLocalSetting.set([true, false]));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+export const showDecommissionedNodesAlertAction = (nodeIds: Array<number>) => {
+  return function (dispatch: Dispatch<AdminUIState>) {
+    dispatch(clearedDecommissionedNodesLocalSetting.set([false, nodeIds.length > 1]));
+  };
+};
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
@@ -278,6 +323,7 @@ export const panelAlertsSelector = createSelector(
  */
 export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
+  clearedDecommissionedNodesSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
