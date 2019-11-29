@@ -125,7 +125,7 @@ func TestScanBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// The test will screw around with KVBatchSize; make sure to restore it at the end.
-	restore := row.SetKVBatchSize(10)
+	restore := row.TestingSetKVBatchSize(10)
 	defer restore()
 
 	s, db, _ := serverutils.StartServer(
@@ -171,7 +171,7 @@ func TestScanBatches(t *testing.T) {
 	numSpanValues := []int{0, 1, 2, 3}
 
 	for _, batch := range batchSizes {
-		row.SetKVBatchSize(int64(batch))
+		row.TestingSetKVBatchSize(int64(batch))
 		for _, numSpans := range numSpanValues {
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, false)
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, true)

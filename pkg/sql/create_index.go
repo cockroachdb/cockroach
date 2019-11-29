@@ -91,6 +91,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
+	// All the intermediate schema update stages of a DDL statement will
+	// want to see their previous writes. Disable step-wise execution
+	// for that phase.
+	if err := params.p.Txn().DisableStepping(); err != nil {
+		return err
+	}
+
 	// Guard against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	if params.SessionData().SafeUpdates && n.n.PartitionBy == nil &&
@@ -150,6 +157,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+		return err
+	}
+
+	// The event logging wants to operate in step-wise execution. Mark a
+	// sequence point now that the descriptor exists.
+	if err := params.p.Txn().Step(); err != nil {
 		return err
 	}
 

@@ -359,8 +359,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		discardRows = s.DiscardRows
 	}
 
-	// For regular statements (the ones that get to this point), we don't return
-	// any event unless an an error happens.
+	// For regular statements (the ones that get to this point), we
+	// don't return any event unless an an error happens.
+
+	// The first order of business is to create a sequencing point. As
+	// per PostgreSQL's dialect specs, the "read" part of statements
+	// always see the data as per a snapshot of the database taken the
+	// instant the statement begins to run. In particular a mutation
+	// does not see its own writes. If a query contains multiple
+	// mutations using CTEs (WITH) or a read part following a mutation,
+	// all still operate on the same read snapshot.
+	//
+	// (To communicate data between CTEs and a main query, the result
+	// set / RETURNING can be used instead. However this is not relevant
+	// here.)
+	//
+	// This is not the only place where a sequencing point is placed. There
+	// are also sequencing point after every stage of constraint checks
+	// and cascading actions at the _end_ of a statement's execution.
+	//
+	// TODO(knz): At the time of this writing CockroachDB performs
+	// cascading actions and the corresponding FK existence checks
+	// interleaved with mutations. This is incorrect; the correct
+	// behavior, as described in issue
+	// https://github.com/cockroachdb/cockroach/issues/33475, is to
+	// execute cascading actions no earlier than after all the "main
+	// effects" of the current statement (including all its CTEs) have
+	// completed. There should be a sequence point between the end of
+	// the main execution and the start of the cascading actions, as
+	// well as in-between very stage of cascading actions.
+	// This TODO can be removed when the cascading code is reorganized
+	// accordingly and the missing call to Step() is introduced.
+	if err := ex.state.mu.txn.Step(); err != nil {
+		return makeErrEvent(err)
+	}
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -423,6 +455,16 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	txn := ex.state.mu.txn
+
+	// Define another sequence point after the execution has completed.
+	// Although this is not required for further SQL statements (these
+	// will define their own sequence point above), there may be
+	// additional non-SQL KV activity beyond this point which may want
+	// to observe the writes performed so far.
+	if err := txn.Step(); err != nil {
+		return makeErrEvent(err)
+	}
+
 	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {

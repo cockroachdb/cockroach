@@ -91,6 +91,13 @@ func (n *createTableNode) startExec(params runParams) error {
 		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table())
 	}
 
+	// All the intermediate schema update stages of a DDL statement will
+	// want to see their previous writes. Disable step-wise execution
+	// for that phase.
+	if err := params.p.Txn().DisableStepping(); err != nil {
+		return err
+	}
+
 	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, n.dbDesc.ID, schemaID, n.n.Table.Table())
 	if err == nil && exists {
 		if n.n.IfNotExists {
@@ -198,6 +205,13 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+		return err
+	}
+
+	// The event logging, as well as the processing of AS below, want to
+	// operate in step-wise execution. Mark a sequence point now that
+	// the descriptor exists.
+	if err := params.p.Txn().Step(); err != nil {
 		return err
 	}
 
@@ -1300,6 +1314,7 @@ func MakeTableDesc(
 			return desc, errors.Errorf("unsupported table def: %T", def)
 		}
 	}
+
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
 	for _, def := range n.Defs {

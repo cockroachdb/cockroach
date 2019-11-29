@@ -75,6 +75,13 @@ func doCreateSequence(
 	name *ObjectName,
 	opts tree.SequenceOptions,
 ) error {
+	// All the intermediate schema update stages of a DDL statement will
+	// want to see their previous writes. Disable step-wise execution
+	// for that phase.
+	if err := params.p.Txn().DisableStepping(); err != nil {
+		return err
+	}
+
 	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
 		return err
@@ -107,6 +114,12 @@ func doCreateSequence(
 	}
 
 	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+		return err
+	}
+
+	// The event logging wants to operate in step-wise execution. Mark a
+	// sequence point now that the descriptor exists.
+	if err := params.p.Txn().Step(); err != nil {
 		return err
 	}
 

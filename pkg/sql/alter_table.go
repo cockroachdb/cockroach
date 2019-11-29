@@ -98,6 +98,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var droppedViews []string
 	tn := params.p.ResolvedName(n.n.Table)
 
+	// All the intermediate schema update stages of a DDL statement will
+	// want to see their previous writes. Disable step-wise execution
+	// for that phase.
+	if err := params.p.Txn().DisableStepping(); err != nil {
+		return err
+	}
+
 	for i, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
@@ -716,6 +723,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 	}
 
 	if err := params.p.writeSchemaChange(params.ctx, n.tableDesc, mutationID); err != nil {
+		return err
+	}
+
+	// The event logging wants to operate in step-wise execution. Mark a
+	// sequence point now that the descriptor exists.
+	if err := params.p.Txn().Step(); err != nil {
 		return err
 	}
 

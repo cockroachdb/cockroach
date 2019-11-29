@@ -44,6 +44,13 @@ func (n *createViewNode) startExec(params runParams) error {
 			"temporary views are unsupported")
 	}
 
+	// All the intermediate schema update stages of a DDL statement will
+	// want to see their previous writes. Disable step-wise execution
+	// for that phase.
+	if err := params.p.Txn().DisableStepping(); err != nil {
+		return err
+	}
+
 	viewName := string(n.viewName)
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
@@ -112,6 +119,12 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+		return err
+	}
+
+	// The event logging wants to operate in step-wise execution. Mark a
+	// sequence point now that the descriptor exists.
+	if err := params.p.Txn().Step(); err != nil {
 		return err
 	}
 
