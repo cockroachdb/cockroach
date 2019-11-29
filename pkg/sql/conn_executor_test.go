@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -91,7 +92,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	{
 		pgURL, cleanup := sqlutils.PGUrl(
 			t, s.ServingSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(security.RootUser))
@@ -345,6 +346,75 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if atomic.LoadInt64(&injectedErr) == 0 {
 		t.Fatal("test didn't inject the error; it must have failed to find " +
 			"the EndTxn with the expected key")
+	}
+}
+
+func TestHalloweenProblemAvoidance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Populate a sufficiently large number of rows. We want at least as
+	// many rows as an insert can batch in its output buffer (to force a
+	// buffer flush), plus as many rows as a fetcher can fetch at once
+	// (to force a read buffer update), plus some more.
+	//
+	// Instead of customizing the working set size of the test up to the
+	// default settings for the SQL package, we scale down the config
+	// of the SQL package to the test. The reason for this is that
+	// race-enable builds are very slow and the default batch sizes
+	// would cause the test duration to exceed the timeout.
+	//
+	// We are also careful to override these defaults before starting
+	// the server, so as to not risk updating them concurrently with
+	// some background SQL activity.
+	const smallerKvBatchSize = 10
+	defer row.TestingSetKVBatchSize(smallerKvBatchSize)()
+	const smallerInsertBatchSize = 5
+	defer sql.TestingSetInsertBatchSize(smallerInsertBatchSize)()
+	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x FLOAT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
+		numRows); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now slightly modify the values in duplicate rows.
+	// We choose a float +0.1 to ensure that none of the derived
+	// values become duplicate of already-present values.
+	if _, err := db.Exec(`
+INSERT INTO t.test(x)
+    -- the if ensures that no row is processed two times.
+SELECT IF(x::INT::FLOAT = x,
+          x,
+          crdb_internal.force_error(
+             'NOOPE', 'insert saw its own writes: ' || x::STRING || ' (it is halloween today)')::FLOAT)
+       + 0.1
+  FROM t.test
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Finally verify that no rows has been operated on more than once.
+	row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
+	var cnt int
+	if err := row.Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+
+	if cnt != 2*numRows {
+		t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
 	}
 }
 

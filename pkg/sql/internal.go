@@ -481,6 +481,15 @@ func (ie *internalExecutorImpl) execInternal(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer sp.Finish()
 
+	// The client.Txn handed to this executor may currently have
+	// disabled stepping mode. However, any and all SQL expects
+	// stepping mode to be enabled. We'll enable it here and restore
+	// what we had upon exit.
+	if txn != nil {
+		prevStepping := txn.ConfigureStepping(client.SteppingEnabled)
+		defer func() { _ = txn.ConfigureStepping(prevStepping) }()
+	}
+
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)

@@ -252,9 +252,9 @@ type TxnSender interface {
 	// behavior opt-in and backward-compatible with existing code which
 	// does not need it.
 	//
-	// Calling ConfigureStepping(true) when the stepping mode is
-	// currently disabled implies calling Step(), for convenience.
-	ConfigureStepping(mode SteppingMode) (prevMode SteppingMode, err error)
+	// Calling ConfigureStepping(SteppingEnabled) when the stepping mode
+	// is currently disabled implies calling Step(), for convenience.
+	ConfigureStepping(mode SteppingMode) (prevMode SteppingMode)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

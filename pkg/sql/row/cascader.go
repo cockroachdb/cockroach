@@ -86,6 +86,27 @@ func makeDeleteCascader(
 	if !required {
 		return nil, nil
 	}
+
+	// TODO(knz,radu): FK cascading actions need to see the writes
+	// performed by the mutation.  Moreover, each stage of the cascading
+	// actions must observe the writes from the previous stages but not
+	// its own writes.
+	//
+	// In order to make this true, we need to split the cascading
+	// actions into separate sequencing steps, and have the first
+	// cascading action happen no early than the end of all the
+	// "main" part of the statement. Unfortunately, the organization
+	// of the code does not allow this today.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/33475
+	//
+	// In order to "make do" and preserve a modicum of FK semantics we
+	// thus need to disable step-wise execution here. The result is that
+	// it will also enable any interleaved read part to observe the
+	// mutation, and thus introduce the risk of a Halloween problem for
+	// any mutation that uses FK relationships.
+	_ = txn.ConfigureStepping(client.SteppingDisabled)
+
 	return &cascader{
 		txn:                txn,
 		fkTables:           tablesByID,
@@ -155,6 +176,27 @@ func makeUpdateCascader(
 	if !required {
 		return nil, nil
 	}
+
+	// TODO(knz,radu): FK cascading actions need to see the writes
+	// performed by the mutation.  Moreover, each stage of the cascading
+	// actions must observe the writes from the previous stages but not
+	// its own writes.
+	//
+	// In order to make this true, we need to split the cascading
+	// actions into separate sequencing steps, and have the first
+	// cascading action happen no early than the end of all the
+	// "main" part of the statement. Unfortunately, the organization
+	// of the code does not allow this today.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/33475
+	//
+	// In order to "make do" and preserve a modicum of FK semantics we
+	// thus need to disable step-wise execution here. The result is that
+	// it will also enable any interleaved read part to observe the
+	// mutation, and thus introduce the risk of a Halloween problem for
+	// any mutation that uses FK relationships.
+	_ = txn.ConfigureStepping(client.SteppingDisabled)
+
 	return &cascader{
 		txn:                txn,
 		fkTables:           tablesByID,

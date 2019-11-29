@@ -172,9 +172,9 @@ func (m *MockTransactionalSender) Step() error {
 }
 
 // ConfigureStepping is part of the TxnSender interface.
-func (m *MockTransactionalSender) ConfigureStepping(SteppingMode) (SteppingMode, error) {
+func (m *MockTransactionalSender) ConfigureStepping(SteppingMode) SteppingMode {
 	// See Step() above.
-	return SteppingDisabled, nil
+	return SteppingDisabled
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

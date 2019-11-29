@@ -97,6 +97,11 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	return &dropTableNode{n: n, td: td}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because DROP TABLE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *dropTableNode) ReadingOwnWrites() {}
+
 func (n *dropTableNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, toDel := range n.td {

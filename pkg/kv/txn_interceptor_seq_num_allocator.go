@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/errors"
@@ -141,14 +142,29 @@ func (s *txnSeqNumAllocator) stepLocked() error {
 }
 
 // configureSteppingLocked configures the stepping mode.
-// Used by the TxnCoordSender's ConfigureStepping() method.
-func (s *txnSeqNumAllocator) configureSteppingLocked(enabled bool) (prevEnabled bool) {
-	prevEnabled = s.steppingModeEnabled
+//
+// When enabling stepping from the non-enabled state, the read seqnum
+// is set to the current write seqnum, as if a snapshot was taken at
+// the point stepping was enabled.
+//
+// The read seqnum is otherwise not modified when trying to enable
+// stepping when it was previously enabled already. This is the
+// behavior needed to provide the documented API semantics of
+// sender.ConfigureStepping() (see client/sender.go).
+func (s *txnSeqNumAllocator) configureSteppingLocked(
+	newMode client.SteppingMode,
+) (prevMode client.SteppingMode) {
+	prevEnabled := s.steppingModeEnabled
+	enabled := newMode == client.SteppingEnabled
 	s.steppingModeEnabled = enabled
 	if !prevEnabled && enabled {
 		s.readSeq = s.writeSeq
 	}
-	return prevEnabled
+	prevMode = client.SteppingDisabled
+	if prevEnabled {
+		prevMode = client.SteppingEnabled
+	}
+	return prevMode
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.

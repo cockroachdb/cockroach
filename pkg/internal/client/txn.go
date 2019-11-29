@@ -113,8 +113,7 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
 func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
-	// ConfigureStepping is guaranteed to not return an error on root txns.
-	_, _ = txn.ConfigureStepping(SteppingEnabled)
+	_ = txn.ConfigureStepping(SteppingEnabled)
 	return txn
 }
 
@@ -1189,8 +1188,8 @@ func (txn *Txn) Active() bool {
 	return txn.mu.sender.Active()
 }
 
-// Step enables step-wise execution in the transaction, or
-// performs a step if step-wise execution is already enabled.
+// Step performs a sequencing step. Step-wise execution must be
+// already enabled.
 //
 // In step-wise execution, reads operate at a snapshot established at
 // the last step, instead of the latest write if not yet enabled.
@@ -1205,14 +1204,9 @@ func (txn *Txn) Step() error {
 
 // ConfigureStepping configures step-wise execution in the
 // transaction.
-//
-// This function is guaranteed to not return an error if it previously
-// succeeded once with some txn and mode, then provided its own return
-// value as input for a second call. This simplifies the implementation
-// of push/pop semantics.
-func (txn *Txn) ConfigureStepping(mode SteppingMode) (prevMode SteppingMode, err error) {
+func (txn *Txn) ConfigureStepping(mode SteppingMode) (prevMode SteppingMode) {
 	if txn.typ != RootTxn {
-		return false, errors.AssertionFailedf("txn.DisableStepping() only allowed in RootTxn")
+		panic(errors.AssertionFailedf("txn.ConfigureStepping() only allowed in RootTxn"))
 	}
 	txn.mu.Lock()
 	defer txn.mu.Unlock()

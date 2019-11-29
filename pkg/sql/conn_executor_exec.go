@@ -359,8 +359,40 @@ func (ex *connExecutor) execStmtInOpenState(
 		discardRows = s.DiscardRows
 	}
 
-	// For regular statements (the ones that get to this point), we don't return
-	// any event unless an an error happens.
+	// For regular statements (the ones that get to this point), we
+	// don't return any event unless an error happens.
+
+	// The first order of business is to create a sequencing point. As
+	// per PostgreSQL's dialect specs, the "read" part of statements
+	// always see the data as per a snapshot of the database taken the
+	// instant the statement begins to run. In particular a mutation
+	// does not see its own writes. If a query contains multiple
+	// mutations using CTEs (WITH) or a read part following a mutation,
+	// all still operate on the same read snapshot.
+	//
+	// (To communicate data between CTEs and a main query, the result
+	// set / RETURNING can be used instead. However this is not relevant
+	// here.)
+	//
+	// This is not the only place where a sequencing point is placed. There
+	// are also sequencing point after every stage of constraint checks
+	// and cascading actions at the _end_ of a statement's execution.
+	//
+	// TODO(knz): At the time of this writing CockroachDB performs
+	// cascading actions and the corresponding FK existence checks
+	// interleaved with mutations. This is incorrect; the correct
+	// behavior, as described in issue
+	// https://github.com/cockroachdb/cockroach/issues/33475, is to
+	// execute cascading actions no earlier than after all the "main
+	// effects" of the current statement (including all its CTEs) have
+	// completed. There should be a sequence point between the end of
+	// the main execution and the start of the cascading actions, as
+	// well as in-between very stage of cascading actions.
+	// This TODO can be removed when the cascading code is reorganized
+	// accordingly and the missing call to Step() is introduced.
+	if err := ex.state.mu.txn.Step(); err != nil {
+		return makeErrEvent(err)
+	}
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -423,6 +455,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	txn := ex.state.mu.txn
+
+	// Re-enable stepping mode after the execution has completed.
+	// This is necessary because until https://github.com/cockroachdb/cockroach/issues/33475 is fixed
+	// any mutation with FK work unconditionally disables
+	// stepping mode when it starts.
+	_ = txn.ConfigureStepping(client.SteppingEnabled)
+
 	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
@@ -553,7 +592,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
+	ex.state.mu.txn = client.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}

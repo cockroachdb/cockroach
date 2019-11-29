@@ -1086,19 +1086,14 @@ func (tc *TxnCoordSender) Step() error {
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked()
 }
 
-// DisableStepping is part of the TxnSender interface.
+// ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
 	mode client.SteppingMode,
-) (prevMode client.SteppingMode, err error) {
+) (prevMode client.SteppingMode) {
 	if tc.typ != client.RootTxn {
-		return client.SteppingDisabled, errors.AssertionFailedf("cannot call DisableStepping() in leaf txn")
+		panic(errors.AssertionFailedf("cannot call ConfigureStepping() in leaf txn"))
 	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	prevEnabled := tc.interceptorAlloc.txnSeqNumAllocator.configureSteppingLocked(mode == client.SteppingEnabled)
-	prevMode = client.SteppingDisabled
-	if prevEnabled {
-		prevMode = client.SteppingEnabled
-	}
-	return prevMode, nil
+	return tc.interceptorAlloc.txnSeqNumAllocator.configureSteppingLocked(mode)
 }

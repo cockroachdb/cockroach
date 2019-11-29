@@ -59,6 +59,11 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because DROP INDEX performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *dropIndexNode) ReadingOwnWrites() {}
+
 func (n *dropIndexNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, index := range n.idxNames {

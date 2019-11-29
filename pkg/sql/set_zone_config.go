@@ -222,6 +222,11 @@ type setZoneConfigRun struct {
 	numAffected int
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because CONFIGURE ZONE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *setZoneConfigNode) ReadingOwnWrites() {}
+
 func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig string
 	var setters []func(c *zonepb.ZoneConfig)
