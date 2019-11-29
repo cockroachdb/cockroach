@@ -324,7 +324,6 @@ describe("UIData reducer", function() {
     const uiObj2 = 1234;
 
     const saveUIData = function(values: uidata.KeyValue[] | uidata.KeyValue): Promise<void> {
-      console.log(values);
       return uidata.saveUIData.call(this, values)(dispatch, () => { return { uiData: state }; });
     };
 
