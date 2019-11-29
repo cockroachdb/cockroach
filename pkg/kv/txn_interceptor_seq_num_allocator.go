@@ -129,21 +129,26 @@ func (s *txnSeqNumAllocator) importLeafFinalState(tfs *roachpb.LeafTxnFinalState
 // stepLocked bumps the read seqnum to the current write seqnum.
 // Used by the TxnCoordSender's Step() method.
 func (s *txnSeqNumAllocator) stepLocked() error {
-	if s.steppingModeEnabled && s.readSeq > s.writeSeq {
+	if !s.steppingModeEnabled {
+		return errors.AssertionFailedf("stepping mode is not enabled")
+	}
+	if s.readSeq > s.writeSeq {
 		return errors.AssertionFailedf(
 			"cannot step() after mistaken initialization (%d,%d)", s.writeSeq, s.readSeq)
 	}
-	s.steppingModeEnabled = true
 	s.readSeq = s.writeSeq
 	return nil
 }
 
-// disableSteppingLocked cancels the stepping behavior and
-// restores read-latest-write behavior.
-// Used by the TxnCoordSender's DisableStepping() method.
-func (s *txnSeqNumAllocator) disableSteppingLocked() {
-	s.steppingModeEnabled = false
-	s.readSeq = 0
+// configureSteppingLocked configures the stepping mode.
+// Used by the TxnCoordSender's ConfigureStepping() method.
+func (s *txnSeqNumAllocator) configureSteppingLocked(enabled bool) (prevEnabled bool) {
+	prevEnabled = s.steppingModeEnabled
+	s.steppingModeEnabled = enabled
+	if !prevEnabled && enabled {
+		s.readSeq = s.writeSeq
+	}
+	return prevEnabled
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.

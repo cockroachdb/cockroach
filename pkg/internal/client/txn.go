@@ -76,6 +76,7 @@ type Txn struct {
 }
 
 // NewTxn returns a new RootTxn.
+// Note: for SQL usage, prefer NewTxnWithSteppingEnabled() below.
 //
 // If the transaction is used to send any operations, CommitOrCleanup() or
 // CleanupOnError() should eventually be called to commit/rollback the
@@ -107,6 +108,14 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	)
 
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
+}
+
+// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
+func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	txn := NewTxn(ctx, db, gatewayNodeID)
+	// ConfigureStepping is guaranteed to not return an error on root txns.
+	_, _ = txn.ConfigureStepping(SteppingEnabled)
+	return txn
 }
 
 // NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
@@ -766,7 +775,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			}
 		}
 
-		cause := errors.Cause(err)
+		cause := errors.UnwrapAll(err)
 
 		var retryable bool
 		switch t := cause.(type) {
@@ -1178,4 +1187,34 @@ func (txn *Txn) Active() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Active()
+}
+
+// Step enables step-wise execution in the transaction, or
+// performs a step if step-wise execution is already enabled.
+//
+// In step-wise execution, reads operate at a snapshot established at
+// the last step, instead of the latest write if not yet enabled.
+func (txn *Txn) Step() error {
+	if txn.typ != RootTxn {
+		return errors.AssertionFailedf("txn.Step() only allowed in RootTxn")
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.Step()
+}
+
+// ConfigureStepping configures step-wise execution in the
+// transaction.
+//
+// This function is guaranteed to not return an error if it previously
+// succeeded once with some txn and mode, then provided its own return
+// value as input for a second call. This simplifies the implementation
+// of push/pop semantics.
+func (txn *Txn) ConfigureStepping(mode SteppingMode) (prevMode SteppingMode, err error) {
+	if txn.typ != RootTxn {
+		return false, errors.AssertionFailedf("txn.DisableStepping() only allowed in RootTxn")
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ConfigureStepping(mode)
 }
