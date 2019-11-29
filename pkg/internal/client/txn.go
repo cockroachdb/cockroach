@@ -766,7 +766,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			}
 		}
 
-		cause := errors.Cause(err)
+		cause := errors.UnwrapAll(err)
 
 		var retryable bool
 		switch t := cause.(type) {
@@ -1178,4 +1178,29 @@ func (txn *Txn) Active() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Active()
+}
+
+// Step enables step-wise execution in the transaction, or
+// performs a step if step-wise execution is already enabled.
+//
+// In step-wise execution, reads operate at a snapshot established at
+// the last step, instead of the latest write if not yet enabled.
+func (txn *Txn) Step() error {
+	if txn.typ != RootTxn {
+		return errors.AssertionFailedf("txn.Step() only allowed in RootTxn")
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.Step()
+}
+
+// DisableStepping disables step-wise execution in the transaction
+// until the next call to Step().
+func (txn *Txn) DisableStepping() error {
+	if txn.typ != RootTxn {
+		return errors.AssertionFailedf("txn.DisableStepping() only allowed in RootTxn")
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.DisableStepping()
 }
