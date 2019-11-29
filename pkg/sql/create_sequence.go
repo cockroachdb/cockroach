@@ -44,6 +44,11 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because CREATE SEQUENCE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *createSequenceNode) ReadingOwnWrites() {}
+
 func (n *createSequenceNode) startExec(params runParams) error {
 	// TODO(arul): Allow temporary sequences once temp tables work for regular tables.
 	if n.n.Temporary {

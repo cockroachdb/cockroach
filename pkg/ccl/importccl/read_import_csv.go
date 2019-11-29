@@ -213,7 +213,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context, workerID int) 
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
-	conv, err := row.NewDatumRowConverter(c.tableDesc, c.targetCols, evalCtx, c.kvCh)
+	conv, err := row.NewDatumRowConverter(ctx, c.tableDesc, c.targetCols, evalCtx, c.kvCh)
 	if err != nil {
 		return err
 	}

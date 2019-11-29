@@ -543,6 +543,7 @@ func truncateTableInChunks(
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			rd, err := row.MakeDeleter(
+				ctx,
 				txn,
 				sqlbase.NewImmutableTableDescriptor(*tableDesc),
 				nil,

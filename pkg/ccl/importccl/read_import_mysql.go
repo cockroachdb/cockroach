@@ -53,6 +53,7 @@ type mysqldumpReader struct {
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
+	ctx context.Context,
 	kvCh chan row.KVBatch,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
 	evalCtx *tree.EvalContext,
@@ -65,7 +66,7 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(ctx, table.Desc, nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}

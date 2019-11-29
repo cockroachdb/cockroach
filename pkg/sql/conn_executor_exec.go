@@ -359,8 +359,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		discardRows = s.DiscardRows
 	}
 
-	// For regular statements (the ones that get to this point), we don't return
-	// any event unless an an error happens.
+	// For regular statements (the ones that get to this point), we
+	// don't return any event unless an error happens.
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -397,6 +397,58 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
+	// The first order of business is to ensure proper sequencing
+	// semantics.  As per PostgreSQL's dialect specs, the "read" part of
+	// statements always see the data as per a snapshot of the database
+	// taken the instant the statement begins to run. In particular a
+	// mutation does not see its own writes. If a query contains
+	// multiple mutations using CTEs (WITH) or a read part following a
+	// mutation, all still operate on the same read snapshot.
+	//
+	// (To communicate data between CTEs and a main query, the result
+	// set / RETURNING can be used instead. However this is not relevant
+	// here.)
+
+	// We first ensure stepping mode is enabled.
+	//
+	// This ought to be done just once when a txn gets initialized;
+	// unfortunately, there are too many places where the txn object
+	// is re-configured, re-set etc without using NewTxnWithSteppingEnabled().
+	//
+	// Manually hunting them down and calling ConfigureStepping() each
+	// time would be error prone (and increase the change that a future
+	// change would forget to add the call).
+	//
+	// TODO(andrei): really the code should be re-architectued to ensure
+	// that all uses of SQL execution initialize the client.Txn using a
+	// single/common function. That would be where the stepping mode
+	// gets enabled once for all SQL statements executed "underneath".
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, client.SteppingEnabled)
+	defer func() { _ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode) }()
+
+	// Then we create a sequencing point.
+	//
+	// This is not the only place where a sequencing point is
+	// placed. There are also sequencing point after every stage of
+	// constraint checks and cascading actions at the _end_ of a
+	// statement's execution.
+	//
+	// TODO(knz): At the time of this writing CockroachDB performs
+	// cascading actions and the corresponding FK existence checks
+	// interleaved with mutations. This is incorrect; the correct
+	// behavior, as described in issue
+	// https://github.com/cockroachdb/cockroach/issues/33475, is to
+	// execute cascading actions no earlier than after all the "main
+	// effects" of the current statement (including all its CTEs) have
+	// completed. There should be a sequence point between the end of
+	// the main execution and the start of the cascading actions, as
+	// well as in-between very stage of cascading actions.
+	// This TODO can be removed when the cascading code is reorganized
+	// accordingly and the missing call to Step() is introduced.
+	if err := ex.state.mu.txn.Step(ctx); err != nil {
+		return makeErrEvent(err)
+	}
+
 	if err := p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders); err != nil {
 		return makeErrEvent(err)
 	}
@@ -423,6 +475,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	txn := ex.state.mu.txn
+
 	if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
@@ -553,7 +606,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
+	ex.state.mu.txn = client.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
