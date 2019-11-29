@@ -400,7 +400,7 @@ func newFlow(
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors, isVectorized)
+	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}

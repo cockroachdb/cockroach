@@ -111,7 +111,12 @@ func (f *vectorizedFlow) Setup(
 	return err
 }
 
-// ConcurrentExecution is part of the Flow interface.
+// IsVectorized is part of the flowinfra.Flow interface.
+func (f *vectorizedFlow) IsVectorized() bool {
+	return true
+}
+
+// ConcurrentExecution is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) ConcurrentExecution() bool {
 	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
 }
@@ -122,7 +127,7 @@ func (f *vectorizedFlow) Release() {
 	vectorizedFlowPool.Put(f)
 }
 
-// Cleanup is part of the Flow interface.
+// Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory monitoring of the vectorized flow.
 	f.streamingMemAccount.Close(ctx)
