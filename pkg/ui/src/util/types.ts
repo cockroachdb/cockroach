@@ -38,3 +38,13 @@
 export function nullOfReturnType<R> (_: (...args: any[]) => R): R {
     return null;
 }
+
+/**
+ * Json type represents the possible structure of arbitrary JSON structure.
+ */
+export type JsonValue = string | number | null | boolean;
+export type JsonObject = {
+  [key: string]: JsonValue | JsonArray | JsonObject,
+};
+export type JsonArray = Array<JsonValue | JsonObject | JsonArray>;
+export type JsonLike = JsonValue | JsonObject | JsonArray;
