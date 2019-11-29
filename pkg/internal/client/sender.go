@@ -239,23 +239,40 @@ type TxnSender interface {
 	// operations observe the data at the time the snapshot was
 	// established and ignore writes performed since.
 	//
-	// Before the first step is taken, the transaction operates as if
-	// there was a step after every write: each read to a key is able to
-	// see the latest write before it. This makes the step behavior
-	// opt-in and backward-compatible with existing code which does not
-	// need it.
+	// Step() can only be called after stepping mode has been enabled
+	// using ConfigureStepping(SteppingEnabled).
+	//
 	// The method is idempotent.
-	Step() error
+	Step(context.Context) error
 
-	// DisableStepping disables the sequencing point behavior and
-	// ensures that every read can read the latest write. The effect
-	// remains disabled until the next call to Step().  The method is
-	// idempotent.
+	// ConfigureStepping sets the sequencing point behavior.
 	//
 	// Note that a Sender is initially in the non-stepping mode,
-	// i.e. uses reads-own-writes by default.
-	DisableStepping() error
+	// i.e. uses reads-own-writes by default. This makes the step
+	// behavior opt-in and backward-compatible with existing code which
+	// does not need it.
+	//
+	// Calling ConfigureStepping(SteppingEnabled) when the stepping mode
+	// is currently disabled implies calling Step(), for convenience.
+	ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode)
+
+	// GetSteppingMode accompanies ConfigureStepping. It is provided
+	// for use in tests and assertion checks.
+	GetSteppingMode(ctx context.Context) (curMode SteppingMode)
 }
+
+// SteppingMode is the argument type to ConfigureStepping.
+type SteppingMode bool
+
+const (
+	// SteppingDisabled is the default mode, where each read can
+	// observe the latest write.
+	SteppingDisabled SteppingMode = false
+
+	// SteppingEnabled can be set to indicate that read operations
+	// operate on a snapshot taken at the latest Step() invocation.
+	SteppingEnabled SteppingMode = true
+)
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().
 type TxnStatusOpt int

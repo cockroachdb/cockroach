@@ -104,7 +104,10 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 }
 
 func makeInputConverter(
-	spec *execinfrapb.ReadImportDataSpec, evalCtx *tree.EvalContext, kvCh chan row.KVBatch,
+	ctx context.Context,
+	spec *execinfrapb.ReadImportDataSpec,
+	evalCtx *tree.EvalContext,
+	kvCh chan row.KVBatch,
 ) (inputConverter, error) {
 
 	var singleTable *sqlbase.TableDescriptor
@@ -139,15 +142,15 @@ func makeInputConverter(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
 			singleTable, singleTableTargetCols, evalCtx), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
-		return newMysqloutfileReader(kvCh, spec.Format.MysqlOut, singleTable, evalCtx)
+		return newMysqloutfileReader(ctx, kvCh, spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		return newMysqldumpReader(kvCh, spec.Tables, evalCtx)
+		return newMysqldumpReader(ctx, kvCh, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
-		return newPgCopyReader(kvCh, spec.Format.PgCopy, singleTable, evalCtx)
+		return newPgCopyReader(ctx, kvCh, spec.Format.PgCopy, singleTable, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
-		return newPgDumpReader(kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
+		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
-		return newAvroInputReader(kvCh, singleTable, spec.Format.Avro, evalCtx)
+		return newAvroInputReader(ctx, kvCh, singleTable, spec.Format.Avro, evalCtx)
 	default:
 		return nil, errors.Errorf("Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
 	}

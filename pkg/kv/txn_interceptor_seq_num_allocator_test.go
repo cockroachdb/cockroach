@@ -117,8 +117,10 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
+	s.configureSteppingLocked(true /* enabled */)
+
 	for i := 1; i <= 3; i++ {
-		if err := s.stepLocked(); err != nil {
+		if err := s.stepLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if s.writeSeq != s.readSeq {
@@ -195,8 +197,8 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 		})
 	}
 
-	// Check that step-wise execution is disabled by DisableStepping().
-	s.disableSteppingLocked()
+	// Check that step-wise execution is disabled by ConfigureStepping(SteppingDisabled).
+	s.configureSteppingLocked(false /* enabled */)
 	currentStepSeqNum := s.writeSeq
 
 	var ba roachpb.BatchRequest

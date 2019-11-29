@@ -92,6 +92,11 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER TABLE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterTableNode) ReadingOwnWrites() {}
+
 func (n *alterTableNode) startExec(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to

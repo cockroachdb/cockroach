@@ -76,6 +76,7 @@ type Txn struct {
 }
 
 // NewTxn returns a new RootTxn.
+// Note: for SQL usage, prefer NewTxnWithSteppingEnabled() below.
 //
 // If the transaction is used to send any operations, CommitOrCleanup() or
 // CleanupOnError() should eventually be called to commit/rollback the
@@ -107,6 +108,13 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	)
 
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
+}
+
+// NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL.
+func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	txn := NewTxn(ctx, db, gatewayNodeID)
+	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
+	return txn
 }
 
 // NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
@@ -766,7 +774,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			}
 		}
 
-		cause := errors.Cause(err)
+		cause := errors.UnwrapAll(err)
 
 		var retryable bool
 		switch t := cause.(type) {
@@ -1035,8 +1043,11 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 	// transaction, even once the proto is reset.
 	txn.recordPreviousTxnIDLocked(txn.mu.ID)
 	txn.mu.ID = newTxn.ID
-	// Create a new txn sender.
+	// Create a new txn sender. We need to preserve the stepping mode,
+	// if any.
+	// prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
 	txn.mu.sender = txn.db.factory.RootTransactionalSender(newTxn, txn.mu.userPriority)
+	// txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
@@ -1178,4 +1189,31 @@ func (txn *Txn) Active() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Active()
+}
+
+// Step performs a sequencing step. Step-wise execution must be
+// already enabled.
+//
+// In step-wise execution, reads operate at a snapshot established at
+// the last step, instead of the latest write if not yet enabled.
+func (txn *Txn) Step(ctx context.Context) error {
+	if txn.typ != RootTxn {
+		return errors.WithContextTags(
+			errors.AssertionFailedf("txn.Step() only allowed in RootTxn"), ctx)
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.Step(ctx)
+}
+
+// ConfigureStepping configures step-wise execution in the
+// transaction.
+func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
+	if txn.typ != RootTxn {
+		panic(errors.WithContextTags(
+			errors.AssertionFailedf("txn.ConfigureStepping() only allowed in RootTxn"), ctx))
+	}
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ConfigureStepping(ctx, mode)
 }

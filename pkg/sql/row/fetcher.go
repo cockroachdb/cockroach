@@ -503,7 +503,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			maxTimestampAge,
 		)
 	}
-	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+	txn := client.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
 	txn.SetFixedTimestamp(ctx, txnTimestamp)
 	if log.V(1) {
 		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
@@ -518,7 +518,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			// Advance the timestamp by the time that passed.
 			txnTimestamp = txnTimestamp.Add(now.Sub(txnStartTime).Nanoseconds(), 0 /* logical */)
 			txnStartTime = now
-			txn = client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
+			txn = client.NewTxnWithSteppingEnabled(ctx, db, 0 /* gatewayNodeID */)
 			txn.SetFixedTimestamp(ctx, txnTimestamp)
 
 			if log.V(1) {
