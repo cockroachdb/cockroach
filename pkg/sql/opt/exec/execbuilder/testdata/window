@@ -59,7 +59,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
 ----
 ·                    distributed  false                                                               ·                      ·
-·                    vectorized   false                                                               ·                      ·
+·                    vectorized   true                                                                ·                      ·
 render               ·            ·                                                                   (ntile)                ·
  │                   render 0     ntile                                                               ·                      ·
  └── window          ·            ·                                                                   (ntile_1_arg1, ntile)  ·
@@ -75,7 +75,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
 ----
 ·                    distributed  false                                                                       ·                                                ·
-·                    vectorized   false                                                                       ·                                                ·
+·                    vectorized   true                                                                        ·                                                ·
 render               ·            ·                                                                           (nth_value)                                      ·
  │                   render 0     nth_value                                                                   ·                                                ·
  └── window          ·            ·                                                                           (nth_value_1_arg1, nth_value_1_arg2, nth_value)  ·
@@ -250,7 +250,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
 ----
 ·                              distributed  false                                                                      ·                                                       ·
-·                              vectorized   false                                                                      ·                                                       ·
+·                              vectorized   true                                                                       ·                                                       ·
 render                         ·            ·                                                                          (lag, lead)                                             ·
  │                             render 0     lag                                                                        ·                                                       ·
  │                             render 1     lead                                                                       ·                                                       ·
@@ -296,7 +296,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER () FROM kv
 ----
 ·               distributed  false                                                             ·         ·
-·               vectorized   false                                                             ·         ·
+·               vectorized   true                                                              ·         ·
 render          ·            ·                                                                 (avg)     ·
  │              render 0     avg                                                               ·         ·
  └── window     ·            ·                                                                 (k, avg)  ·
@@ -310,7 +310,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
 ----
 ·               distributed  false                                                                     ·         ·
-·               vectorized   false                                                                     ·         ·
+·               vectorized   true                                                                      ·         ·
 render          ·            ·                                                                         (avg)     ·
  │              render 0     avg                                                                       ·         ·
  └── window     ·            ·                                                                         (k, avg)  ·
@@ -324,7 +324,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
 ----
 ·               distributed  false                                                             ·         ·
-·               vectorized   false                                                             ·         ·
+·               vectorized   true                                                              ·         ·
 render          ·            ·                                                                 (avg)     ·
  │              render 0     avg                                                               ·         ·
  └── window     ·            ·                                                                 (k, avg)  ·
@@ -353,7 +353,7 @@ EXPLAIN (VERBOSE)
         kv
 ----
 ·                    distributed  false                                                                                      ·                                                                ·
-·                    vectorized   false                                                                                      ·                                                                ·
+·                    vectorized   true                                                                                       ·                                                                ·
 render               ·            ·                                                                                          (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
  │                   render 0     avg                                                                                        ·                                                                ·
  │                   render 1     avg                                                                                        ·                                                                ·
@@ -442,7 +442,7 @@ EXPLAIN (VERBOSE)
         kv
 ----
 ·               distributed  false                                                                                 ·                        ·
-·               vectorized   false                                                                                 ·                        ·
+·               vectorized   true                                                                                  ·                        ·
 render          ·            ·                                                                                     (avg, avg, avg, avg)     ·
  │              render 0     avg                                                                                   ·                        ·
  │              render 1     avg                                                                                   ·                        ·

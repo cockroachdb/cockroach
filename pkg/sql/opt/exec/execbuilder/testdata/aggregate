@@ -12,7 +12,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 ·               distributed   false               ·                                                                                                                                                   ·
-·               vectorized    false               ·                                                                                                                                                   ·
+·               vectorized    true                ·                                                                                                                                                   ·
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
  │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
  │              aggregate 1   max(column5)        ·                                                                                                                                                   ·
@@ -181,7 +181,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
 ----
 ·          distributed  false       ·                                  ·
-·          vectorized   false       ·                                  ·
+·          vectorized   true        ·                                  ·
 group      ·            ·           (count int, sum decimal, max int)  ·
  │         aggregate 0  count(k)    ·                                  ·
  │         aggregate 1  sum(k)      ·                                  ·
@@ -195,7 +195,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
 ----
 ·          distributed  false              ·                                   ·
-·          vectorized   false              ·                                   ·
+·          vectorized   true               ·                                   ·
 group      ·            ·                  (count, count, sum, sum, min, min)  ·
  │         aggregate 0  count(v)           ·                                   ·
  │         aggregate 1  count(DISTINCT v)  ·                                   ·
@@ -658,7 +658,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
 ·                    distributed  false                                  ·                      ·
-·                    vectorized   false                                  ·                      ·
+·                    vectorized   true                                   ·                      ·
 render               ·            ·                                      (count, max)           ·
  │                   render 0     count                                  ·                      ·
  │                   render 1     max                                    ·                      ·
@@ -679,7 +679,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 ·                    distributed  false                                  ·                      ·
-·                    vectorized   false                                  ·                      ·
+·                    vectorized   true                                   ·                      ·
 render               ·            ·                                      (count)                ·
  │                   render 0     count                                  ·                      ·
  └── group           ·            ·                                      (v, count)             ·
@@ -951,7 +951,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
 ·                         distributed  false                                      ·                         ·
-·                         vectorized   false                                      ·                         ·
+·                         vectorized   true                                       ·                         ·
 render                    ·            ·                                          (a int)                   ·
  │                        render 0     (1)[int]                                   ·                         ·
  └── distinct             ·            ·                                          (column5 decimal, v int)  ·
@@ -1062,7 +1062,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ----
 ·               distributed  false          ·             ·
-·               vectorized   false          ·             ·
+·               vectorized   true           ·             ·
 group           ·            ·              (string_agg)  ·
  │              aggregate 0  string_agg(s)  ·             ·
  │              scalar       ·              ·             ·
@@ -1118,7 +1118,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ----
 ·               distributed  false          ·             ·
-·               vectorized   false          ·             ·
+·               vectorized   true           ·             ·
 group           ·            ·              (string_agg)  ·
  │              aggregate 0  string_agg(s)  ·             ·
  │              scalar       ·              ·             ·
