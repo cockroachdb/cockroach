@@ -563,7 +563,7 @@ SELECT *
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 filter          ·            ·
  │              filter       ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
  └── hash-join  ·            ·
@@ -588,7 +588,7 @@ SELECT *
 ]
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 filter          ·            ·
  │              filter       ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
  └── hash-join  ·            ·
@@ -1502,7 +1502,7 @@ query TTT
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 ·            distributed  false
-·            vectorized   false
+·            vectorized   true
 zigzag-join  ·            ·
  │           type         inner
  │           pred         (@2 = 5) AND (@3 = 6.0)
@@ -1519,7 +1519,7 @@ query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 ·                 distributed            false
-·                 vectorized             false
+·                 vectorized             true
 lookup-join       ·                      ·
  │                table                  zigzag@primary
  │                type                   inner
@@ -1541,7 +1541,7 @@ query TTT
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 ·                 distributed            false
-·                 vectorized             false
+·                 vectorized             true
 lookup-join       ·                      ·
  │                table                  zigzag@primary
  │                type                   inner
