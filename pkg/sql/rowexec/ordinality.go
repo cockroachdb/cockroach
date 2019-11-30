@@ -69,7 +69,7 @@ func newOrdinalityProcessor(
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		o.input = execinfra.NewInputStatCollector(o.input)
+		o.input = newInputStatCollector(o.input)
 		o.FinishTrace = o.outputStatsToTrace
 	}
 
@@ -130,7 +130,7 @@ func (os *OrdinalityStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (o *ordinalityProcessor) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(o.FlowCtx, o.input)
+	is, ok := getInputStats(o.FlowCtx, o.input)
 	if !ok {
 		return
 	}

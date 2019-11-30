@@ -57,10 +57,10 @@ func runProcessorTest(
 	}
 
 	switch pt := p.(type) {
-	case *execinfra.JoinReader:
+	case *joinReader:
 		// Reduce batch size to exercise batching logic.
 		pt.SetBatchSize(2 /* batchSize */)
-	case *execinfra.IndexJoiner:
+	case *indexJoiner:
 		//	Reduce batch size to exercise batching logic.
 		pt.SetBatchSize(2 /* batchSize */)
 	}

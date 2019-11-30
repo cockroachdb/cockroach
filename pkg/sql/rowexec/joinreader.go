@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package rowexec
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -55,13 +56,13 @@ const (
 	jrEmittingRows
 )
 
-// JoinReader performs a lookup join between `input` and the specified `index`.
+// joinReader performs a lookup join between `input` and the specified `index`.
 // `lookupCols` specifies the input columns which will be used for the index
 // lookup.
-type JoinReader struct {
-	JoinerBase
+type joinReader struct {
+	joinerBase
 
-	// runningState represents the state of the JoinReader. This is in addition to
+	// runningState represents the state of the joinReader. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
@@ -73,14 +74,14 @@ type JoinReader struct {
 	colIdxMap map[sqlbase.ColumnID]int
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
-	// JoinReader to wrap the fetcher with a stat collector when necessary.
-	fetcher            RowFetcher
+	// joinReader to wrap the fetcher with a stat collector when necessary.
+	fetcher            rowFetcher
 	indexKeyPrefix     []byte
 	alloc              sqlbase.DatumAlloc
 	rowAlloc           sqlbase.EncDatumRowAlloc
 	shouldLimitBatches bool
 
-	input      RowSource
+	input      execinfra.RowSource
 	inputTypes []types.T
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
@@ -128,23 +129,23 @@ type JoinReader struct {
 	indexKeyRow sqlbase.EncDatumRow
 }
 
-var _ Processor = &JoinReader{}
-var _ RowSource = &JoinReader{}
-var _ execinfrapb.MetadataSource = &JoinReader{}
-var _ OpNode = &JoinReader{}
+var _ execinfra.Processor = &joinReader{}
+var _ execinfra.RowSource = &joinReader{}
+var _ execinfrapb.MetadataSource = &joinReader{}
+var _ execinfra.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
-// NewJoinReader returns a new JoinReader.
-func NewJoinReader(
-	flowCtx *FlowCtx,
+// newJoinReader returns a new joinReader.
+func newJoinReader(
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.JoinReaderSpec,
-	input RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output RowReceiver,
-) (RowSourcedProcessor, error) {
-	jr := &JoinReader{
+	output execinfra.RowReceiver,
+) (execinfra.RowSourcedProcessor, error) {
+	jr := &joinReader{
 		desc:                 spec.Table,
 		input:                input,
 		inputTypes:           input.OutputTypes(),
@@ -176,7 +177,7 @@ func NewJoinReader(
 	// should parallelize the key lookups it performs.
 	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
 
-	if err := jr.JoinerBase.Init(
+	if err := jr.joinerBase.init(
 		jr,
 		flowCtx,
 		processorID,
@@ -189,8 +190,8 @@ func NewJoinReader(
 		0, /* numMergedColumns */
 		post,
 		output,
-		ProcStateOpts{
-			InputsToDrain: []RowSource{jr.input},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{jr.input},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				jr.close()
 				return jr.generateMeta(ctx)
@@ -211,7 +212,7 @@ func NewJoinReader(
 	}
 
 	var fetcher row.Fetcher
-	_, _, err = InitRowFetcher(
+	_, _, err = initRowFetcher(
 		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility,
 	)
@@ -219,8 +220,8 @@ func NewJoinReader(
 		return nil, err
 	}
 	if collectingStats {
-		jr.input = NewInputStatCollector(jr.input)
-		jr.fetcher = NewRowFetcherStatCollector(&fetcher)
+		jr.input = newInputStatCollector(jr.input)
+		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.FinishTrace = jr.outputStatsToTrace
 	} else {
 		jr.fetcher = &fetcher
@@ -237,15 +238,15 @@ func NewJoinReader(
 	// Initialize memory monitors and row container for looked up rows.
 	st := flowCtx.Cfg.Settings
 	ctx := flowCtx.EvalCtx.Ctx()
-	if SettingUseTempStorageJoins.Get(&st.SV) {
+	if execinfra.SettingUseTempStorageJoins.Get(&st.SV) {
 		// Limit the memory use by creating a child monitor with a hard limit.
-		// JoinReader will overflow to disk if this limit is not enough.
+		// joinReader will overflow to disk if this limit is not enough.
 		limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 		if limit <= 0 {
-			limit = SettingWorkMemBytes.Get(&st.SV)
+			limit = execinfra.SettingWorkMemBytes.Get(&st.SV)
 		}
-		jr.MemMonitor = NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
-		jr.diskMonitor = NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
+		jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
+		jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
 		drc := rowcontainer.NewDiskBackedIndexedRowContainer(
 			nil, /* ordering */
 			jr.desc.ColumnTypesWithMutations(returnMutations),
@@ -262,7 +263,7 @@ func NewJoinReader(
 		}
 		jr.lookedUpRows = drc
 	} else {
-		jr.MemMonitor = NewMonitor(ctx, flowCtx.EvalCtx.Mon, "joinreader-mem")
+		jr.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "joinreader-mem")
 		rc := rowcontainer.MemRowContainer{}
 		rc.InitWithMon(
 			nil, /* ordering */
@@ -296,18 +297,18 @@ func getIndexColSet(
 }
 
 // SetBatchSize sets the desired batch size. It should only be used in tests.
-func (jr *JoinReader) SetBatchSize(batchSize int) {
+func (jr *joinReader) SetBatchSize(batchSize int) {
 	jr.batchSize = batchSize
 }
 
-// Spilled returns whether the JoinReader spilled to disk.
-func (jr *JoinReader) Spilled() bool {
+// Spilled returns whether the joinReader spilled to disk.
+func (jr *joinReader) Spilled() bool {
 	return jr.lookedUpRows.(*rowcontainer.DiskBackedIndexedRowContainer).Spilled()
 }
 
 // neededRightCols returns the set of column indices which need to be fetched
 // from the right side of the join (jr.desc).
-func (jr *JoinReader) neededRightCols() util.FastIntSet {
+func (jr *joinReader) neededRightCols() util.FastIntSet {
 	neededCols := jr.Out.NeededColumns()
 
 	// Get the columns from the right side of the join and shift them over by
@@ -331,7 +332,7 @@ func (jr *JoinReader) neededRightCols() util.FastIntSet {
 // Generate a span for a given row.
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
-func (jr *JoinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
+func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
 	numKeyCols := len(jr.indexTypes)
 	numLookupCols := len(jr.lookupCols)
 
@@ -349,7 +350,7 @@ func (jr *JoinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 		jr.index, &jr.alloc)
 }
 
-func (jr *JoinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
+func (jr *joinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
 	// check the following:
 	// - we have more than one needed family
 	// - we are looking at the primary key
@@ -365,7 +366,7 @@ func (jr *JoinReader) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roac
 }
 
 // Next is part of the RowSource interface.
-func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// The lookup join is implemented as follows:
 	// - Read the input rows in batches.
 	// - For each batch, map the rows onto index keys and perform an index
@@ -374,7 +375,7 @@ func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 	//   return more rows than the input batch size.
 	// - Join the index rows with the corresponding input rows and buffer the
 	//   results in jr.toEmit.
-	for jr.State == StateRunning {
+	for jr.State == execinfra.StateRunning {
 		var row sqlbase.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch jr.runningState {
@@ -401,7 +402,7 @@ func (jr *JoinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 }
 
 // readInput reads the next batch of input rows and starts an index scan.
-func (jr *JoinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
+func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
 	for len(jr.inputRows) < jr.batchSize {
 		row, meta := jr.input.Next()
@@ -482,10 +483,10 @@ func (jr *JoinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to
 // jr.inputRowIdxToLookedUpRowIdx.
-func (jr *JoinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
+func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	nCols := len(jr.lookupCols)
 
-	isJoinTypePartialJoin := jr.JoinType == sqlbase.LeftSemiJoin || jr.JoinType == sqlbase.LeftAntiJoin
+	isJoinTypePartialJoin := jr.joinType == sqlbase.LeftSemiJoin || jr.joinType == sqlbase.LeftAntiJoin
 	log.VEventf(jr.Ctx, 1, "joining rows")
 	// Read the entire set of rows looked up for the last input batch.
 	lookedUpRowIdx := 0
@@ -530,7 +531,7 @@ func (jr *JoinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				// anything to output a Semi or Anti join match, we can evaluate our
 				// on condition now and only buffer if we pass it.
 				if len(jr.inputRowIdxToLookedUpRowIdx[inputRowIdx]) == 0 {
-					renderedRow, err := jr.Render(jr.inputRows[inputRowIdx], lookedUpRow)
+					renderedRow, err := jr.render(jr.inputRows[inputRowIdx], lookedUpRow)
 					if err != nil {
 						jr.MoveToDraining(err)
 						return jrStateUnknown, jr.DrainHelper()
@@ -554,7 +555,7 @@ func (jr *JoinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
-func (jr *JoinReader) emitRow() (
+func (jr *joinReader) emitRow() (
 	joinReaderState,
 	sqlbase.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
@@ -584,11 +585,11 @@ func (jr *JoinReader) emitRow() (
 		seenMatch := jr.emitCursor.seenMatch
 		jr.emitCursor.seenMatch = false
 		if !seenMatch {
-			switch jr.JoinType {
+			switch jr.joinType {
 			case sqlbase.LeftOuterJoin:
 				// An outer-join non-match means we emit the input row with NULLs for
 				// the right side (if it passes the ON-condition).
-				if renderedRow := jr.RenderUnmatchedRow(inputRow, LeftSide); renderedRow != nil {
+				if renderedRow := jr.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
 					return jrEmittingRows, renderedRow, nil
 				}
 			case sqlbase.LeftAntiJoin:
@@ -601,7 +602,7 @@ func (jr *JoinReader) emitRow() (
 
 	lookedUpRowIdx := lookedUpRows[jr.emitCursor.outputRowIdx]
 	jr.emitCursor.outputRowIdx++
-	switch jr.JoinType {
+	switch jr.joinType {
 	case sqlbase.LeftSemiJoin:
 		// A semi-join match means we emit our input row.
 		jr.emitCursor.seenMatch = true
@@ -617,7 +618,7 @@ func (jr *JoinReader) emitRow() (
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
-	outputRow, err := jr.Render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
+	outputRow, err := jr.render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -628,7 +629,7 @@ func (jr *JoinReader) emitRow() (
 	return jrEmittingRows, outputRow, nil
 }
 
-func (jr *JoinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
+func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 	for _, colIdx := range jr.lookupCols {
 		if row[colIdx].IsNull() {
 			return true
@@ -638,7 +639,7 @@ func (jr *JoinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
 }
 
 // Start is part of the RowSource interface.
-func (jr *JoinReader) Start(ctx context.Context) context.Context {
+func (jr *joinReader) Start(ctx context.Context) context.Context {
 	jr.input.Start(ctx)
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.runningState = jrReadingInput
@@ -646,12 +647,12 @@ func (jr *JoinReader) Start(ctx context.Context) context.Context {
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (jr *JoinReader) ConsumerClosed() {
+func (jr *joinReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	jr.close()
 }
 
-func (jr *JoinReader) close() {
+func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.lookedUpRows != nil {
 			jr.lookedUpRows.Close(jr.Ctx)
@@ -686,14 +687,14 @@ func (jrs *JoinReaderStats) StatsForQueryPlan() []string {
 	return is
 }
 
-// outputStatsToTrace outputs the collected JoinReader stats to the trace. Will
-// fail silently if the JoinReader is not collecting stats.
-func (jr *JoinReader) outputStatsToTrace() {
-	is, ok := GetInputStats(jr.FlowCtx, jr.input)
+// outputStatsToTrace outputs the collected joinReader stats to the trace. Will
+// fail silently if the joinReader is not collecting stats.
+func (jr *joinReader) outputStatsToTrace() {
+	is, ok := getInputStats(jr.FlowCtx, jr.input)
 	if !ok {
 		return
 	}
-	ils, ok := GetFetcherInputStats(jr.FlowCtx, jr.fetcher)
+	ils, ok := getFetcherInputStats(jr.FlowCtx, jr.fetcher)
 	if !ok {
 		return
 	}
@@ -707,30 +708,30 @@ func (jr *JoinReader) outputStatsToTrace() {
 	}
 }
 
-func (jr *JoinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, jr.FlowCtx.Txn); meta != nil {
+func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	if meta := execinfra.GetTxnCoordMeta(ctx, jr.FlowCtx.Txn); meta != nil {
 		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (jr *JoinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (jr *joinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return jr.generateMeta(ctx)
 }
 
-// ChildCount is part of the OpNode interface.
-func (jr *JoinReader) ChildCount(verbose bool) int {
+// ChildCount is part of the execinfra.OpNode interface.
+func (jr *joinReader) ChildCount(verbose bool) int {
 	return 1
 }
 
-// Child is part of the OpNode interface.
-func (jr *JoinReader) Child(nth int, verbose bool) OpNode {
+// Child is part of the execinfra.OpNode interface.
+func (jr *joinReader) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
-		if n, ok := jr.input.(OpNode); ok {
+		if n, ok := jr.input.(execinfra.OpNode); ok {
 			return n
 		}
-		panic("input to JoinReader is not an OpNode")
+		panic("input to joinReader is not an execinfra.OpNode")
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }
