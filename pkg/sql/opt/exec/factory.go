@@ -74,7 +74,7 @@ type Factory interface {
 	// ConstructVirtualScan returns a node that represents the scan of a virtual
 	// table. Virtual tables are system tables that are populated "on the fly"
 	// with rows synthesized from system metadata and other state.
-	ConstructVirtualScan(table cat.Table) (Node, error)
+	ConstructVirtualScan(table cat.Table, index cat.Index, indexConstraint *constraint.Constraint) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.

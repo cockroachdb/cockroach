@@ -669,20 +669,6 @@ func (l *internalLookupCtx) getParentAsTableName(
 	return parentName, nil
 }
 
-// getTableAsTableName returns a TableName object fot a given TableDescriptor.
-func (l *internalLookupCtx) getTableAsTableName(
-	table *sqlbase.TableDescriptor, dbPrefix string,
-) (tree.TableName, error) {
-	var tableName tree.TableName
-	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
-	if err != nil {
-		return tree.TableName{}, err
-	}
-	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
-	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
-	return tableName, nil
-}
-
 // The versions below are part of the work for #34240.
 // TODO(radu): clean these up when everything is switched over.
 
@@ -735,4 +721,9 @@ func (p *planner) ResolveExistingObjectEx(
 // ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.
 func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) *tree.TableName {
 	return u.Resolved(&p.semaCtx.Annotations)
+}
+
+type simpleSchemaResolver interface {
+	getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error)
+	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
 }

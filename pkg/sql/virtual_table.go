@@ -32,7 +32,7 @@ type virtualTableNode struct {
 	currentRow tree.Datums
 }
 
-func (p *planner) newContainerVirtualTableNode(
+func (p *planner) newVirtualTableNode(
 	columns sqlbase.ResultColumns, capacity int, next virtualTableGenerator,
 ) *virtualTableNode {
 	return &virtualTableNode{
@@ -59,4 +59,10 @@ func (n *virtualTableNode) Values() tree.Datums {
 }
 
 func (n *virtualTableNode) Close(ctx context.Context) {
+}
+
+type containerVirtualTableNode struct {
+	columns    sqlbase.ResultColumns
+	next       virtualTableGenerator
+	currentRow tree.Datums
 }

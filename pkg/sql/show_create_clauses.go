@@ -49,7 +49,7 @@ func showForeignKeyConstraint(
 	dbPrefix string,
 	originTable *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
-	lCtx *internalLookupCtx,
+	lCtx simpleSchemaResolver,
 ) error {
 	var refNames []string
 	var originNames []string

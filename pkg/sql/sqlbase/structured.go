@@ -1083,11 +1083,11 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	// Only physical tables can have / need indexes and column families.
+	if err := desc.allocateIndexIDs(columnNames); err != nil {
+		return err
+	}
+	// Only physical tables can have / need column families.
 	if desc.IsPhysicalTable() {
-		if err := desc.allocateIndexIDs(columnNames); err != nil {
-			return err
-		}
 		desc.allocateColumnFamilyIDs(columnNames)
 	}
 

@@ -130,13 +130,17 @@ func (ef *execFactory) ConstructScan(
 }
 
 // ConstructVirtualScan is part of the exec.Factory interface.
-func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
-	tn := &table.(*optVirtualTable).name
+func (ef *execFactory) ConstructVirtualScan(
+	table cat.Table, index cat.Index, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
+	t := table.(*optVirtualTable)
+	tn := &t.name
+	indexDesc := index.(*optVirtualIndex).desc
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}
-	columns, constructor := virtual.getPlanInfo()
+	columns, constructor := virtual.getPlanInfo(indexDesc, indexConstraint)
 
 	return &delayedNode{
 		columns: columns,

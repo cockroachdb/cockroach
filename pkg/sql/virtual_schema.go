@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -56,6 +57,10 @@ type virtualSchemaDef interface {
 	getComment() string
 }
 
+type virtualIndex struct {
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+}
+
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	// Exactly one of the populate and generator fields should be defined for
@@ -69,6 +74,12 @@ type virtualSchemaTable struct {
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
 	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+
+	// indexes, if non empty, is a slice of populate methods that also take a
+	// constraint, only generating rows that match the constraint. The order of
+	// indexes must match the order of the index definitions in the virtual table's
+	// schema.
+	indexes []virtualIndex
 
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
@@ -122,7 +133,31 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,   /* evalCtx */
 		false, /* temporary */
 	)
-	return mutDesc.TableDescriptor, err
+	if err != nil {
+		return mutDesc.TableDescriptor, err
+	}
+	for i := range mutDesc.Indexes {
+		idx := &mutDesc.Indexes[i]
+		// All indexes of virtual tables automatically STORE all other columns in
+		// the table.
+		idx.StoreColumnIDs = make([]sqlbase.ColumnID, len(mutDesc.Columns)-len(idx.ColumnIDs))
+		idx.StoreColumnNames = make([]string, len(mutDesc.Columns)-len(idx.ColumnIDs))
+		// Store all columns but the ones in the index.
+		outputIdx := 0
+	EACHCOLUMN:
+		for j := range mutDesc.Columns {
+			for _, id := range idx.ColumnIDs {
+				if mutDesc.Columns[j].ID == id {
+					// Skip columns in the index.
+					continue EACHCOLUMN
+				}
+			}
+			idx.StoreColumnIDs[outputIdx] = mutDesc.Columns[j].ID
+			idx.StoreColumnNames[outputIdx] = mutDesc.Columns[j].Name
+			outputIdx++
+		}
+	}
+	return mutDesc.TableDescriptor, nil
 }
 
 // getComment is part of the virtualSchemaDef interface.
@@ -226,7 +261,9 @@ func newInvalidVirtualDefEntryError() error {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
+func (e virtualDefEntry) getPlanInfo(
+	index *sqlbase.IndexDescriptor, constraint *constraint.Constraint,
+) (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for i := range e.desc.Columns {
 		col := &e.desc.Columns[i]
@@ -262,11 +299,11 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 				if err != nil {
 					return nil, err
 				}
-				return p.newContainerVirtualTableNode(columns, 0, next), nil
+				return p.newVirtualTableNode(columns, 0, next), nil
 			}
-			v := p.newContainerValuesNode(columns, 0)
 
-			if err := def.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
+			v := p.newContainerValuesNode(columns, 0)
+			addRow := func(datums ...tree.Datum) error {
 				if r, c := len(datums), len(v.columns); r != c {
 					log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
 				}
@@ -284,7 +321,33 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 				}
 				_, err := v.rows.AddRow(ctx, datums)
 				return err
-			}); err != nil {
+			}
+
+			if constraint != nil && !constraint.IsUnconstrained() {
+				if index.ID == 1 {
+					return nil, errors.AssertionFailedf(
+						"programming error: can't constrain scan on primary virtual index of table %s", e.desc.Name)
+				}
+				// We have a virtual index with a constraint. Run the constrained populate routine.
+				for i := 0; i < constraint.Spans.Count(); i++ {
+					span := constraint.Spans.Get(i)
+					if span.StartKey().Length() != 1 {
+						return nil, errors.AssertionFailedf(
+							"programming error: can't push down composite constraints into vtables")
+					}
+					// For each span, run populate.
+					// Subtract 2 from the index id to get the ordinal in def.indexes, since
+					// the index with ID 1 is the "primary" index defined by def.populate.
+					// TODO(jordan): how to ensure that the span contains just 1 value?
+					if err := def.indexes[index.ID-2].populate(ctx, span.StartKey().Value(0), p, dbDesc, addRow); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+				return v, nil
+			}
+
+			if err := def.populate(ctx, p, dbDesc, addRow); err != nil {
 				v.Close(ctx)
 				return nil, err
 			}

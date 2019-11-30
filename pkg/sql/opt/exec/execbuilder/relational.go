@@ -509,7 +509,7 @@ func (b *Builder) buildVirtualScan(scan *memo.VirtualScanExpr) (execPlan, error)
 	_, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
-	root, err := b.factory.ConstructVirtualScan(tab)
+	root, err := b.factory.ConstructVirtualScan(tab, tab.Index(scan.Index), scan.Constraint)
 	if err != nil {
 		return execPlan{}, err
 	}

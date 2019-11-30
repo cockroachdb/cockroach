@@ -94,6 +94,15 @@ define VirtualScanPrivate {
     # cat.Table metadata.
     Table TableID
 
+    # Index identifies the index to scan (whether primary or secondary). It
+    # can be passed to the cat.Table.Index() method in order to fetch the
+    # cat.Index metadata.
+    Index IndexOrdinal
+
+    # If set, the virtual scan is constrained; the constraint contains the
+    # logical spans that need to be scanned.
+    Constraint Constraint
+
     # Cols specifies the set of columns that the VirtualScan operator projects.
     # This is always every column in the virtual table (i.e. never a subset even
     # if all columns are not needed).

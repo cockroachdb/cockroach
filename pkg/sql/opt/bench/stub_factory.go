@@ -47,7 +47,9 @@ func (f *stubFactory) ConstructScan(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
+func (f *stubFactory) ConstructVirtualScan(
+	table cat.Table, index cat.Index, indexConstraint *constraint.Constraint,
+) (exec.Node, error) {
 	return struct{}{}, nil
 }
 

@@ -743,6 +743,162 @@ var (
 	}
 )
 
+func populateTableConstraints(
+	ctx context.Context,
+	h oidHasher,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	tableLookup simpleSchemaResolver,
+	addRow func(...tree.Datum) error,
+) error {
+	conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+	if err != nil {
+		return err
+	}
+	namespaceOid := h.NamespaceOid(db, scName)
+	tblOid := defaultOid(table.ID)
+	for conName, con := range conInfo {
+		oid := tree.DNull
+		contype := tree.DNull
+		conindid := oidZero
+		confrelid := oidZero
+		confupdtype := tree.DNull
+		confdeltype := tree.DNull
+		confmatchtype := tree.DNull
+		conkey := tree.DNull
+		confkey := tree.DNull
+		consrc := tree.DNull
+		conbin := tree.DNull
+		condef := tree.DNull
+
+		// Determine constraint kind-specific fields.
+		var err error
+		switch con.Kind {
+		case sqlbase.ConstraintTypePK:
+			oid = h.PrimaryKeyConstraintOid(db, scName, table, con.Index)
+			contype = conTypePKey
+			conindid = h.IndexOid(table.ID, con.Index.ID)
+
+			var err error
+			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+				return err
+			}
+			condef = tree.NewDString(table.PrimaryKeyString())
+
+		case sqlbase.ConstraintTypeFK:
+			oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
+			contype = conTypeFK
+			// Foreign keys don't have a single linked index. Pick the first one
+			// that matches on the referenced table.
+			referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
+			if err != nil {
+				return err
+			}
+			if idx, err := referencedTable.FindIndexByID(con.FK.LegacyReferencedIndex); err != nil {
+				// We couldn't find an index that matched. This shouldn't happen.
+				log.Warningf(ctx, "broken fk reference: %v", err)
+			} else {
+				conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
+			}
+			confrelid = defaultOid(con.ReferencedTable.ID)
+			if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
+				confupdtype = r
+			}
+			if r, ok := fkActionMap[con.FK.OnDelete]; ok {
+				confdeltype = r
+			}
+			if r, ok := fkMatchMap[con.FK.Match]; ok {
+				confmatchtype = r
+			}
+			if conkey, err = colIDArrayToDatum(con.FK.OriginColumnIDs); err != nil {
+				return err
+			}
+			if confkey, err = colIDArrayToDatum(con.FK.ReferencedColumnIDs); err != nil {
+				return err
+			}
+			var buf bytes.Buffer
+			if err := showForeignKeyConstraint(&buf, db.Name, table, con.FK, tableLookup); err != nil {
+				return err
+			}
+			condef = tree.NewDString(buf.String())
+
+		case sqlbase.ConstraintTypeUnique:
+			oid = h.UniqueConstraintOid(db, scName, table, con.Index)
+			contype = conTypeUnique
+			conindid = h.IndexOid(table.ID, con.Index.ID)
+			var err error
+			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+				return err
+			}
+			f := tree.NewFmtCtx(tree.FmtSimple)
+			f.WriteString("UNIQUE (")
+			con.Index.ColNamesFormat(f)
+			f.WriteByte(')')
+			condef = tree.NewDString(f.CloseAndGetString())
+
+		case sqlbase.ConstraintTypeCheck:
+			oid = h.CheckConstraintOid(db, scName, table, con.CheckConstraint)
+			contype = conTypeCheck
+			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
+				return err
+			}
+			consrc = tree.NewDString(fmt.Sprintf("(%s)", con.Details))
+			conbin = consrc
+			condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", con.Details))
+		}
+
+		if err := addRow(
+			oid,                  // oid
+			dNameOrNull(conName), // conname
+			namespaceOid,         // connamespace
+			contype,              // contype
+			tree.DBoolFalse,      // condeferrable
+			tree.DBoolFalse,      // condeferred
+			tree.MakeDBool(tree.DBool(!con.Unvalidated)), // convalidated
+			tblOid,         // conrelid
+			oidZero,        // contypid
+			conindid,       // conindid
+			confrelid,      // confrelid
+			confupdtype,    // confupdtype
+			confdeltype,    // confdeltype
+			confmatchtype,  // confmatchtype
+			tree.DBoolTrue, // conislocal
+			zeroVal,        // coninhcount
+			tree.DBoolTrue, // connoinherit
+			conkey,         // conkey
+			confkey,        // confkey
+			tree.DNull,     // conpfeqop
+			tree.DNull,     // conppeqop
+			tree.DNull,     // conffeqop
+			tree.DNull,     // conexclop
+			conbin,         // conbin
+			consrc,         // consrc
+			condef,         // condef
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type oneAtATimeSchemaResolver struct {
+	ctx context.Context
+	p   *planner
+}
+
+func (r oneAtATimeSchemaResolver) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
+	return r.p.Tables().databaseCache.getDatabaseDescByID(r.ctx, r.p.txn, id)
+}
+
+func (r oneAtATimeSchemaResolver) getTableByID(id sqlbase.ID) (*TableDescriptor, error) {
+	table, err := r.p.Tables().getTableVersionByID(r.ctx, r.p.txn, id, tree.ObjectLookupFlags{})
+	if err != nil {
+		return nil, err
+	}
+	return table.TableDesc(), nil
+}
+
 var pgCatalogConstraintTable = virtualSchemaTable{
 	comment: `table constraints (incomplete - see also information_schema.table_constraints)
 https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
@@ -775,145 +931,31 @@ CREATE TABLE pg_catalog.pg_constraint (
 	consrc STRING,
 	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
 	-- style string, for use by pg_get_constraintdef().
-	condef STRING
+	condef STRING,
+  INDEX (conrelid)
 )`,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor,
+				addRow func(...tree.Datum) error) error {
+				oid := tree.MustBeDOid(constraint)
+				table, err := p.LookupTableByID(ctx, sqlbase.ID(oid.DInt))
+				if err != nil {
+					// No such table.
+					return nil
+				}
+				h := makeOidHasher()
+				resolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
+				return populateTableConstraints(ctx, h, db, tree.PublicSchema, table.Desc.TableDesc(), resolver, addRow)
+			},
+		},
+	},
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
-			db *sqlbase.DatabaseDescriptor,
-			scName string,
-			table *sqlbase.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			namespaceOid := h.NamespaceOid(db, scName)
-			tblOid := defaultOid(table.ID)
-			for conName, con := range conInfo {
-				oid := tree.DNull
-				contype := tree.DNull
-				conindid := oidZero
-				confrelid := oidZero
-				confupdtype := tree.DNull
-				confdeltype := tree.DNull
-				confmatchtype := tree.DNull
-				conkey := tree.DNull
-				confkey := tree.DNull
-				consrc := tree.DNull
-				conbin := tree.DNull
-				condef := tree.DNull
-
-				// Determine constraint kind-specific fields.
-				var err error
-				switch con.Kind {
-				case sqlbase.ConstraintTypePK:
-					oid = h.PrimaryKeyConstraintOid(db, scName, table, con.Index)
-					contype = conTypePKey
-					conindid = h.IndexOid(table.ID, con.Index.ID)
-
-					var err error
-					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
-						return err
-					}
-					condef = tree.NewDString(table.PrimaryKeyString())
-
-				case sqlbase.ConstraintTypeFK:
-					oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
-					contype = conTypeFK
-					// Foreign keys don't have a single linked index. Pick the first one
-					// that matches on the referenced table.
-					referencedTable, err := tableLookup.getTableByID(con.FK.ReferencedTableID)
-					if err != nil {
-						return err
-					}
-					if idx, err := referencedTable.FindIndexByID(con.FK.LegacyReferencedIndex); err != nil {
-						// We couldn't find an index that matched. This shouldn't happen.
-						log.Warningf(ctx, "broken fk reference: %v", err)
-					} else {
-						conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
-					}
-					confrelid = defaultOid(con.ReferencedTable.ID)
-					if r, ok := fkActionMap[con.FK.OnUpdate]; ok {
-						confupdtype = r
-					}
-					if r, ok := fkActionMap[con.FK.OnDelete]; ok {
-						confdeltype = r
-					}
-					if r, ok := fkMatchMap[con.FK.Match]; ok {
-						confmatchtype = r
-					}
-					if conkey, err = colIDArrayToDatum(con.FK.OriginColumnIDs); err != nil {
-						return err
-					}
-					if confkey, err = colIDArrayToDatum(con.FK.ReferencedColumnIDs); err != nil {
-						return err
-					}
-					var buf bytes.Buffer
-					if err := showForeignKeyConstraint(&buf, db.Name, table, con.FK, tableLookup); err != nil {
-						return err
-					}
-					condef = tree.NewDString(buf.String())
-
-				case sqlbase.ConstraintTypeUnique:
-					oid = h.UniqueConstraintOid(db, scName, table, con.Index)
-					contype = conTypeUnique
-					conindid = h.IndexOid(table.ID, con.Index.ID)
-					var err error
-					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
-						return err
-					}
-					f := tree.NewFmtCtx(tree.FmtSimple)
-					f.WriteString("UNIQUE (")
-					con.Index.ColNamesFormat(f)
-					f.WriteByte(')')
-					condef = tree.NewDString(f.CloseAndGetString())
-
-				case sqlbase.ConstraintTypeCheck:
-					oid = h.CheckConstraintOid(db, scName, table, con.CheckConstraint)
-					contype = conTypeCheck
-					if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
-						return err
-					}
-					consrc = tree.NewDString(fmt.Sprintf("(%s)", con.Details))
-					conbin = consrc
-					condef = tree.NewDString(fmt.Sprintf("CHECK ((%s))", con.Details))
-				}
-
-				if err := addRow(
-					oid,                  // oid
-					dNameOrNull(conName), // conname
-					namespaceOid,         // connamespace
-					contype,              // contype
-					tree.DBoolFalse,      // condeferrable
-					tree.DBoolFalse,      // condeferred
-					tree.MakeDBool(tree.DBool(!con.Unvalidated)), // convalidated
-					tblOid,         // conrelid
-					oidZero,        // contypid
-					conindid,       // conindid
-					confrelid,      // confrelid
-					confupdtype,    // confupdtype
-					confdeltype,    // confdeltype
-					confmatchtype,  // confmatchtype
-					tree.DBoolTrue, // conislocal
-					zeroVal,        // coninhcount
-					tree.DBoolTrue, // connoinherit
-					conkey,         // conkey
-					confkey,        // confkey
-					tree.DNull,     // conpfeqop
-					tree.DNull,     // conppeqop
-					tree.DNull,     // conffeqop
-					tree.DNull,     // conexclop
-					conbin,         // conbin
-					consrc,         // consrc
-					condef,         // condef
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /*virtual tables have no constraints*/
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, lookup tableLookupFn) error {
+				return populateTableConstraints(ctx, h, db, scName, table, lookup, addRow)
+			})
 	},
 }
 
@@ -1414,29 +1456,45 @@ CREATE TABLE pg_catalog.pg_index (
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
 					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
+					var isPrimary bool
+					if index.ID == table.PrimaryIndex.ID && table.IsPhysicalTable() {
+						isPrimary = true
+						// We don't want to report that this is a primary index if it was auto-created,
+						// because this confuses some ORMs.
+						if len(index.ColumnIDs) == 1 {
+							col, err := table.FindColumnByID(index.ColumnIDs[0])
+							if err != nil {
+								return err
+							}
+							if col.Hidden && col.Name == "rowid" {
+								// Autogenerated pk.
+								isPrimary = false
+							}
+						}
+					}
 					if err != nil {
 						return err
 					}
 					return addRow(
 						h.IndexOid(table.ID, index.ID), // indexrelid
 						tableOid,                       // indrelid
-						tree.NewDInt(tree.DInt(len(index.ColumnNames))),                                          // indnatts
-						tree.MakeDBool(tree.DBool(index.Unique)),                                                 // indisunique
-						tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
-						tree.DBoolFalse,                          // indisexclusion
-						tree.MakeDBool(tree.DBool(index.Unique)), // indimmediate
-						tree.DBoolFalse,                          // indisclustered
-						tree.MakeDBool(tree.DBool(!isMutation)),  // indisvalid
-						tree.DBoolFalse,                          // indcheckxmin
-						tree.MakeDBool(tree.DBool(isReady)),      // indisready
-						tree.DBoolTrue,                           // indislive
-						tree.DBoolFalse,                          // indisreplident
-						indkey,                                   // indkey
-						collationOidVector,                       // indcollation
-						indclass,                                 // indclass
-						indoptionIntVector,                       // indoption
-						tree.DNull,                               // indexprs
-						tree.DNull,                               // indpred
+						tree.NewDInt(tree.DInt(len(index.ColumnNames))), // indnatts
+						tree.MakeDBool(tree.DBool(index.Unique)),        // indisunique
+						tree.MakeDBool(tree.DBool(isPrimary)),           // indisprimary
+						tree.DBoolFalse,                                 // indisexclusion
+						tree.MakeDBool(tree.DBool(index.Unique)),        // indimmediate
+						tree.DBoolFalse,                                 // indisclustered
+						tree.MakeDBool(tree.DBool(!isMutation)),         // indisvalid
+						tree.DBoolFalse,                                 // indcheckxmin
+						tree.MakeDBool(tree.DBool(isReady)),             // indisready
+						tree.DBoolTrue,                                  // indislive
+						tree.DBoolFalse,                                 // indisreplident
+						indkey,                                          // indkey
+						collationOidVector,                              // indcollation
+						indclass,                                        // indclass
+						indoptionIntVector,                              // indoption
+						tree.DNull,                                      // indexprs
+						tree.DNull,                                      // indpred
 					)
 				})
 			})

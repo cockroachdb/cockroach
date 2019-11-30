@@ -1378,10 +1378,12 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = lCtx.getTableAsTableName(table, contextName)
+				tableDbDesc, err := lCtx.getDatabaseByID(table.ParentID)
 				if err != nil {
 					return err
 				}
+				tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
+				tableName.ExplicitSchema = tableDbDesc.Name != contextName
 			} else {
 				tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.ID)))
 				tableName.ExplicitCatalog = false
