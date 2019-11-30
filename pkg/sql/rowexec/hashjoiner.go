@@ -124,6 +124,7 @@ type hashJoiner struct {
 
 var _ execinfra.Processor = &hashJoiner{}
 var _ execinfra.RowSource = &hashJoiner{}
+var _ execinfra.OpNode = &hashJoiner{}
 
 const hashJoinerProcName = "hash joiner"
 
@@ -841,5 +842,28 @@ func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (h *hashJoiner) ChildCount(verbose bool) int {
+	return 2
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (h *hashJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := h.leftSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("left input to hashJoiner is not an execinfra.OpNode")
+	case 1:
+		if n, ok := h.rightSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("right input to hashJoiner is not an execinfra.OpNode")
+	default:
+		panic(fmt.Sprintf("invalid index %d", nth))
 	}
 }

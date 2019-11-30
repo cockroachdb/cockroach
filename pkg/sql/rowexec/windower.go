@@ -149,6 +149,7 @@ type windower struct {
 
 var _ execinfra.Processor = &windower{}
 var _ execinfra.RowSource = &windower{}
+var _ execinfra.OpNode = &windower{}
 
 const windowerProcName = "windower"
 
@@ -927,4 +928,20 @@ func (w *windower) outputStatsToTrace() {
 			},
 		)
 	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (w *windower) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (w *windower) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := w.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to windower is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
