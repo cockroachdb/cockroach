@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -269,7 +270,9 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ execinfra.Processor = &interleavedReaderJoiner{}
+var _ execinfra.RowSource = &interleavedReaderJoiner{}
 var _ execinfrapb.MetadataSource = &interleavedReaderJoiner{}
+var _ execinfra.OpNode = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
@@ -467,4 +470,14 @@ func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow
 		return irj.ProcessRowHelper(rendered)
 	}
 	return nil
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (irj *interleavedReaderJoiner) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (irj *interleavedReaderJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

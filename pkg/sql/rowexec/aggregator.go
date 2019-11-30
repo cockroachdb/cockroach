@@ -211,6 +211,22 @@ func (ag *aggregatorBase) outputStatsToTrace() {
 	}
 }
 
+// ChildCount is part of the execinfra.OpNode interface.
+func (ag *aggregatorBase) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (ag *aggregatorBase) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := ag.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to aggregatorBase is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
+}
+
 // hashAggregator is a specialization of aggregatorBase that must keep track of
 // multiple grouping buckets at a time.
 type hashAggregator struct {
@@ -234,11 +250,13 @@ type orderedAggregator struct {
 
 var _ execinfra.Processor = &hashAggregator{}
 var _ execinfra.RowSource = &hashAggregator{}
+var _ execinfra.OpNode = &hashAggregator{}
 
 const hashAggregatorProcName = "hash aggregator"
 
 var _ execinfra.Processor = &orderedAggregator{}
 var _ execinfra.RowSource = &orderedAggregator{}
+var _ execinfra.OpNode = &orderedAggregator{}
 
 const orderedAggregatorProcName = "ordered aggregator"
 

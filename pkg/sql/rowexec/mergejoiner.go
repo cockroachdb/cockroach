@@ -45,6 +45,7 @@ type mergeJoiner struct {
 
 var _ execinfra.Processor = &mergeJoiner{}
 var _ execinfra.RowSource = &mergeJoiner{}
+var _ execinfra.OpNode = &mergeJoiner{}
 
 const mergeJoinerProcName = "merge joiner"
 
@@ -297,5 +298,28 @@ func (m *mergeJoiner) outputStatsToTrace() {
 				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
 			},
 		)
+	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (m *mergeJoiner) ChildCount(verbose bool) int {
+	return 2
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (m *mergeJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := m.leftSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("left input to mergeJoiner is not an execinfra.OpNode")
+	case 1:
+		if n, ok := m.rightSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("right input to mergeJoiner is not an execinfra.OpNode")
+	default:
+		panic(fmt.Sprintf("invalid index %d", nth))
 	}
 }
