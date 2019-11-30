@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -64,7 +65,7 @@ type Overload struct {
 
 	AggregateFunc func([]*types.T, *EvalContext, Datums) AggregateFunc
 	WindowFunc    func([]*types.T, *EvalContext) WindowFunc
-	Fn            func(*EvalContext, Datums) (Datum, error)
+	Fn            func(*EvalContext, Datums, *client.Txn) (Datum, error)
 	Generator     GeneratorFactory
 
 	// counter, if non-nil, should be incremented upon successful

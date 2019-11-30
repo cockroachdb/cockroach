@@ -82,7 +82,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 				if hasNulls && !b.funcExpr.CanHandleNulls() {
 					res = tree.DNull
 				} else {
-					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
+					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row, b.evalCtx.Txn)
 					if err != nil {
 						execerror.NonVectorizedPanic(err)
 					}

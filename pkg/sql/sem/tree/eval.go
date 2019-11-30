@@ -3879,7 +3879,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return DNull, err
 	}
 
-	res, err := expr.fn.Fn(ctx, args)
+	res, err := expr.fn.Fn(ctx, args, ctx.Txn)
 	if err != nil {
 		// If we are facing an explicit error, propagate it unchanged.
 		fName := expr.Func.String()

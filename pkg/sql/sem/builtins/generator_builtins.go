@@ -266,7 +266,7 @@ func makeGeneratorOverloadWithReturnType(
 		Types:      in,
 		ReturnType: retType,
 		Generator:  g,
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums, txn *client.Txn) (tree.Datum, error) {
 			return nil, newUnsuitableUseOfGeneratorError()
 		},
 		Info: info,
