@@ -52,11 +52,13 @@ type sortedDistinct struct {
 
 var _ execinfra.Processor = &distinct{}
 var _ execinfra.RowSource = &distinct{}
+var _ execinfra.OpNode = &distinct{}
 
 const distinctProcName = "distinct"
 
 var _ execinfra.Processor = &sortedDistinct{}
 var _ execinfra.RowSource = &sortedDistinct{}
+var _ execinfra.OpNode = &sortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
@@ -333,4 +335,20 @@ func (d *distinct) outputStatsToTrace() {
 			sp, &DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
 		)
 	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (d *distinct) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (d *distinct) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := d.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to distinct is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
