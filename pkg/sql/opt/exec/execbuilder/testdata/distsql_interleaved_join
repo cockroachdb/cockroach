@@ -255,7 +255,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pa1 > 0
 ----
 ·                distributed         true
-·                vectorized          false
+·                vectorized          true
 render           ·                   ·
  └── merge-join  ·                   ·
       │          type                inner
@@ -299,7 +299,7 @@ EXPLAIN
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
 ·           distributed        true
-·           vectorized         false
+·           vectorized         true
 merge-join  ·                  ·
  │          type               inner
  │          equality           (pid1, cid2, cid3) = (pid1, cid2, cid3)

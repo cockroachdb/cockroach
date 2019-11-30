@@ -266,7 +266,7 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 statement ok
@@ -434,21 +434,21 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 # Make sure that mixed type comparison operations are not used

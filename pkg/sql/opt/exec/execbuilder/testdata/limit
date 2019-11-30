@@ -92,7 +92,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 ·                         distributed  false            ·                       ·
-·                         vectorized   false            ·                       ·
+·                         vectorized   true             ·                       ·
 render                    ·            ·                (sum)                   ·
  │                        render 0     sum              ·                       ·
  └── limit                ·            ·                (k, sum, any_not_null)  -any_not_null
