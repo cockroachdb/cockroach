@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -38,6 +39,7 @@ type valuesProcessor struct {
 
 var _ execinfra.Processor = &valuesProcessor{}
 var _ execinfra.RowSource = &valuesProcessor{}
+var _ execinfra.OpNode = &valuesProcessor{}
 
 const valuesProcName = "values"
 
@@ -134,4 +136,14 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 func (v *valuesProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	v.InternalClose()
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (v *valuesProcessor) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (v *valuesProcessor) Child(nth int, verbose bool) execinfra.OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

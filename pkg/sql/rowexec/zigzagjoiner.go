@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -258,6 +259,7 @@ const zigzagJoinerBatchSize = 5
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
 var _ execinfrapb.MetadataSource = &zigzagJoiner{}
+var _ execinfra.OpNode = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -965,4 +967,14 @@ func (z *zigzagJoiner) ConsumerClosed() {
 // DrainMeta is part of the MetadataSource interface.
 func (z *zigzagJoiner) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
 	return z.returnedMeta
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (z *zigzagJoiner) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (z *zigzagJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

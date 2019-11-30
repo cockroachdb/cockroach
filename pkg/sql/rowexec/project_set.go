@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -62,6 +63,7 @@ type projectSetProcessor struct {
 
 var _ execinfra.Processor = &projectSetProcessor{}
 var _ execinfra.RowSource = &projectSetProcessor{}
+var _ execinfra.OpNode = &projectSetProcessor{}
 
 const projectSetProcName = "projectSet"
 
@@ -284,4 +286,21 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncD
 func (ps *projectSetProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ps.InternalClose()
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (ps *projectSetProcessor) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (ps *projectSetProcessor) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := ps.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to projectSetProcessor is not an execinfra.OpNode")
+
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
