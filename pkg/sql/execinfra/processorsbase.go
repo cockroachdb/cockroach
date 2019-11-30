@@ -868,39 +868,6 @@ func NewLimitedMonitor(
 	return &limitedMon
 }
 
-// GetInputStats is a utility function to check whether the given input is
-// collecting stats, returning true and the stats if so. If false is returned,
-// the input is not collecting stats.
-func GetInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
-	isc, ok := input.(*InputStatCollector)
-	if !ok {
-		return InputStats{}, false
-	}
-	return getStatsInner(flowCtx, isc.InputStats), true
-}
-
-func getStatsInner(flowCtx *FlowCtx, stats InputStats) InputStats {
-	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		stats.StallTime = 0
-	}
-	return stats
-}
-
-// GetFetcherInputStats is a utility function to check whether the given input
-// is collecting row fetcher stats, returning true and the stats if so. If
-// false is returned, the input is not collecting row fetcher stats.
-func GetFetcherInputStats(flowCtx *FlowCtx, f RowFetcher) (InputStats, bool) {
-	rfsc, ok := f.(*RowFetcherStatCollector)
-	if !ok {
-		return InputStats{}, false
-	}
-	// Add row fetcher start scan stall time to Next() stall time.
-	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		rfsc.stats.StallTime += rfsc.startScanStallTime
-	}
-	return getStatsInner(flowCtx, rfsc.stats), true
-}
-
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with
 // its post processing spec and output row receiver. Most processors can accept
 // these objects at creation time.

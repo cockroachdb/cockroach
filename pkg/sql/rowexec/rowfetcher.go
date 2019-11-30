@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package rowexec
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// RowFetcher is an interface used to abstract a row fetcher so that a stat
+// rowFetcher is an interface used to abstract a row fetcher so that a stat
 // collector wrapper can be plugged in.
-type RowFetcher interface {
+type rowFetcher interface {
 	StartScan(
 		_ context.Context, _ *client.Txn, _ roachpb.Spans, limitBatches bool, limitHint int64, traceKV bool,
 	) error
@@ -51,8 +51,8 @@ type RowFetcher interface {
 	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
 }
 
-// InitRowFetcher initializes the fetcher.
-func InitRowFetcher(
+// initRowFetcher initializes the fetcher.
+func initRowFetcher(
 	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,

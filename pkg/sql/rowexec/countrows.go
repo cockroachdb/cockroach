@@ -49,7 +49,7 @@ func newCountAggregator(
 	ag.input = input
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		ag.input = execinfra.NewInputStatCollector(input)
+		ag.input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
 
@@ -110,7 +110,7 @@ func (ag *countAggregator) ConsumerClosed() {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (ag *countAggregator) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(ag.FlowCtx, ag.input)
+	is, ok := getInputStats(ag.FlowCtx, ag.input)
 	if !ok {
 		return
 	}

@@ -6,7 +6,10 @@ package rowexec
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import execinfra "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+
+import time "time"
+
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -14,6 +17,7 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -21,17 +25,54 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// InputStats represents the stats collected from an input.
+type InputStats struct {
+	// num_rows is the number of rows received from the input.
+	NumRows int64 `protobuf:"varint,1,opt,name=num_rows,json=numRows,proto3" json:"num_rows,omitempty"`
+	// Duration in nanoseconds of the cumulative time spent stalled.
+	StallTime time.Duration `protobuf:"bytes,8,opt,name=stall_time,json=stallTime,proto3,stdduration" json:"stall_time"`
+}
+
+func (m *InputStats) Reset()         { *m = InputStats{} }
+func (m *InputStats) String() string { return proto.CompactTextString(m) }
+func (*InputStats) ProtoMessage()    {}
+func (*InputStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_stats_c3711054cff6db54, []int{0}
+}
+func (m *InputStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InputStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *InputStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InputStats.Merge(dst, src)
+}
+func (m *InputStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *InputStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_InputStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InputStats proto.InternalMessageInfo
+
 // TableReaderStats are the stats collected during a tableReader run.
 type TableReaderStats struct {
-	InputStats execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
-	BytesRead  int64                `protobuf:"varint,2,opt,name=bytes_read,json=bytesRead,proto3" json:"bytes_read,omitempty"`
+	InputStats InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	BytesRead  int64      `protobuf:"varint,2,opt,name=bytes_read,json=bytesRead,proto3" json:"bytes_read,omitempty"`
 }
 
 func (m *TableReaderStats) Reset()         { *m = TableReaderStats{} }
 func (m *TableReaderStats) String() string { return proto.CompactTextString(m) }
 func (*TableReaderStats) ProtoMessage()    {}
 func (*TableReaderStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{0}
+	return fileDescriptor_stats_c3711054cff6db54, []int{1}
 }
 func (m *TableReaderStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -56,20 +97,55 @@ func (m *TableReaderStats) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TableReaderStats proto.InternalMessageInfo
 
+// JoinReaderStats are the stats collected during a JoinReader run.
+type JoinReaderStats struct {
+	InputStats       InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	IndexLookupStats InputStats `protobuf:"bytes,2,opt,name=index_lookup_stats,json=indexLookupStats,proto3" json:"index_lookup_stats"`
+}
+
+func (m *JoinReaderStats) Reset()         { *m = JoinReaderStats{} }
+func (m *JoinReaderStats) String() string { return proto.CompactTextString(m) }
+func (*JoinReaderStats) ProtoMessage()    {}
+func (*JoinReaderStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_stats_c3711054cff6db54, []int{2}
+}
+func (m *JoinReaderStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *JoinReaderStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *JoinReaderStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_JoinReaderStats.Merge(dst, src)
+}
+func (m *JoinReaderStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *JoinReaderStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_JoinReaderStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_JoinReaderStats proto.InternalMessageInfo
+
 // HashJoinerStats are the stats collected during a hashJoiner run.
 type HashJoinerStats struct {
-	LeftInputStats   execinfra.InputStats `protobuf:"bytes,1,opt,name=left_input_stats,json=leftInputStats,proto3" json:"left_input_stats"`
-	RightInputStats  execinfra.InputStats `protobuf:"bytes,2,opt,name=right_input_stats,json=rightInputStats,proto3" json:"right_input_stats"`
-	StoredSide       string               `protobuf:"bytes,3,opt,name=stored_side,json=storedSide,proto3" json:"stored_side,omitempty"`
-	MaxAllocatedMem  int64                `protobuf:"varint,4,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
-	MaxAllocatedDisk int64                `protobuf:"varint,5,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
+	LeftInputStats   InputStats `protobuf:"bytes,1,opt,name=left_input_stats,json=leftInputStats,proto3" json:"left_input_stats"`
+	RightInputStats  InputStats `protobuf:"bytes,2,opt,name=right_input_stats,json=rightInputStats,proto3" json:"right_input_stats"`
+	StoredSide       string     `protobuf:"bytes,3,opt,name=stored_side,json=storedSide,proto3" json:"stored_side,omitempty"`
+	MaxAllocatedMem  int64      `protobuf:"varint,4,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	MaxAllocatedDisk int64      `protobuf:"varint,5,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
 }
 
 func (m *HashJoinerStats) Reset()         { *m = HashJoinerStats{} }
 func (m *HashJoinerStats) String() string { return proto.CompactTextString(m) }
 func (*HashJoinerStats) ProtoMessage()    {}
 func (*HashJoinerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{1}
+	return fileDescriptor_stats_c3711054cff6db54, []int{3}
 }
 func (m *HashJoinerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -96,15 +172,15 @@ var xxx_messageInfo_HashJoinerStats proto.InternalMessageInfo
 
 // AggregatorStats are the stats collected during an aggregator run.
 type AggregatorStats struct {
-	InputStats      execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
-	MaxAllocatedMem int64                `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	InputStats      InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	MaxAllocatedMem int64      `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
 }
 
 func (m *AggregatorStats) Reset()         { *m = AggregatorStats{} }
 func (m *AggregatorStats) String() string { return proto.CompactTextString(m) }
 func (*AggregatorStats) ProtoMessage()    {}
 func (*AggregatorStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{2}
+	return fileDescriptor_stats_c3711054cff6db54, []int{4}
 }
 func (m *AggregatorStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -131,15 +207,15 @@ var xxx_messageInfo_AggregatorStats proto.InternalMessageInfo
 
 // DistinctStats are the stats collected during a distinct run.
 type DistinctStats struct {
-	InputStats      execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
-	MaxAllocatedMem int64                `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	InputStats      InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	MaxAllocatedMem int64      `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
 }
 
 func (m *DistinctStats) Reset()         { *m = DistinctStats{} }
 func (m *DistinctStats) String() string { return proto.CompactTextString(m) }
 func (*DistinctStats) ProtoMessage()    {}
 func (*DistinctStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{3}
+	return fileDescriptor_stats_c3711054cff6db54, []int{5}
 }
 func (m *DistinctStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -166,14 +242,14 @@ var xxx_messageInfo_DistinctStats proto.InternalMessageInfo
 
 // OrdinalityStats are the stats collected during a WITH ORDINALITY run.
 type OrdinalityStats struct {
-	InputStats execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	InputStats InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
 }
 
 func (m *OrdinalityStats) Reset()         { *m = OrdinalityStats{} }
 func (m *OrdinalityStats) String() string { return proto.CompactTextString(m) }
 func (*OrdinalityStats) ProtoMessage()    {}
 func (*OrdinalityStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{4}
+	return fileDescriptor_stats_c3711054cff6db54, []int{6}
 }
 func (m *OrdinalityStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -200,16 +276,16 @@ var xxx_messageInfo_OrdinalityStats proto.InternalMessageInfo
 
 // MergeJoinerStats are the stats collected during a mergeJoiner run.
 type MergeJoinerStats struct {
-	LeftInputStats  execinfra.InputStats `protobuf:"bytes,1,opt,name=left_input_stats,json=leftInputStats,proto3" json:"left_input_stats"`
-	RightInputStats execinfra.InputStats `protobuf:"bytes,2,opt,name=right_input_stats,json=rightInputStats,proto3" json:"right_input_stats"`
-	MaxAllocatedMem int64                `protobuf:"varint,3,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	LeftInputStats  InputStats `protobuf:"bytes,1,opt,name=left_input_stats,json=leftInputStats,proto3" json:"left_input_stats"`
+	RightInputStats InputStats `protobuf:"bytes,2,opt,name=right_input_stats,json=rightInputStats,proto3" json:"right_input_stats"`
+	MaxAllocatedMem int64      `protobuf:"varint,3,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
 }
 
 func (m *MergeJoinerStats) Reset()         { *m = MergeJoinerStats{} }
 func (m *MergeJoinerStats) String() string { return proto.CompactTextString(m) }
 func (*MergeJoinerStats) ProtoMessage()    {}
 func (*MergeJoinerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{5}
+	return fileDescriptor_stats_c3711054cff6db54, []int{7}
 }
 func (m *MergeJoinerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -236,16 +312,16 @@ var xxx_messageInfo_MergeJoinerStats proto.InternalMessageInfo
 
 // SorterStats are the stats collected during a sorter run.
 type SorterStats struct {
-	InputStats       execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
-	MaxAllocatedMem  int64                `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
-	MaxAllocatedDisk int64                `protobuf:"varint,3,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
+	InputStats       InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	MaxAllocatedMem  int64      `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	MaxAllocatedDisk int64      `protobuf:"varint,3,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
 }
 
 func (m *SorterStats) Reset()         { *m = SorterStats{} }
 func (m *SorterStats) String() string { return proto.CompactTextString(m) }
 func (*SorterStats) ProtoMessage()    {}
 func (*SorterStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{6}
+	return fileDescriptor_stats_c3711054cff6db54, []int{8}
 }
 func (m *SorterStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -272,16 +348,16 @@ var xxx_messageInfo_SorterStats proto.InternalMessageInfo
 
 // WindowerStats are the stats collected during a windower run.
 type WindowerStats struct {
-	InputStats       execinfra.InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
-	MaxAllocatedMem  int64                `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
-	MaxAllocatedDisk int64                `protobuf:"varint,3,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
+	InputStats       InputStats `protobuf:"bytes,1,opt,name=input_stats,json=inputStats,proto3" json:"input_stats"`
+	MaxAllocatedMem  int64      `protobuf:"varint,2,opt,name=max_allocated_mem,json=maxAllocatedMem,proto3" json:"max_allocated_mem,omitempty"`
+	MaxAllocatedDisk int64      `protobuf:"varint,3,opt,name=max_allocated_disk,json=maxAllocatedDisk,proto3" json:"max_allocated_disk,omitempty"`
 }
 
 func (m *WindowerStats) Reset()         { *m = WindowerStats{} }
 func (m *WindowerStats) String() string { return proto.CompactTextString(m) }
 func (*WindowerStats) ProtoMessage()    {}
 func (*WindowerStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_c352c1b84bfe4802, []int{7}
+	return fileDescriptor_stats_c3711054cff6db54, []int{9}
 }
 func (m *WindowerStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -307,7 +383,9 @@ func (m *WindowerStats) XXX_DiscardUnknown() {
 var xxx_messageInfo_WindowerStats proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*InputStats)(nil), "cockroach.sql.distsqlrun.InputStats")
 	proto.RegisterType((*TableReaderStats)(nil), "cockroach.sql.distsqlrun.TableReaderStats")
+	proto.RegisterType((*JoinReaderStats)(nil), "cockroach.sql.distsqlrun.JoinReaderStats")
 	proto.RegisterType((*HashJoinerStats)(nil), "cockroach.sql.distsqlrun.HashJoinerStats")
 	proto.RegisterType((*AggregatorStats)(nil), "cockroach.sql.distsqlrun.AggregatorStats")
 	proto.RegisterType((*DistinctStats)(nil), "cockroach.sql.distsqlrun.DistinctStats")
@@ -316,6 +394,37 @@ func init() {
 	proto.RegisterType((*SorterStats)(nil), "cockroach.sql.distsqlrun.SorterStats")
 	proto.RegisterType((*WindowerStats)(nil), "cockroach.sql.distsqlrun.WindowerStats")
 }
+func (m *InputStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InputStats) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.NumRows != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintStats(dAtA, i, uint64(m.NumRows))
+	}
+	dAtA[i] = 0x42
+	i++
+	i = encodeVarintStats(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.StallTime)))
+	n1, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.StallTime, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	return i, nil
+}
+
 func (m *TableReaderStats) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -334,16 +443,50 @@ func (m *TableReaderStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n1, err := m.InputStats.MarshalTo(dAtA[i:])
+	n2, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n1
+	i += n2
 	if m.BytesRead != 0 {
 		dAtA[i] = 0x10
 		i++
 		i = encodeVarintStats(dAtA, i, uint64(m.BytesRead))
 	}
+	return i, nil
+}
+
+func (m *JoinReaderStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *JoinReaderStats) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
+	n3, err := m.InputStats.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintStats(dAtA, i, uint64(m.IndexLookupStats.Size()))
+	n4, err := m.IndexLookupStats.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
 	return i, nil
 }
 
@@ -365,19 +508,19 @@ func (m *HashJoinerStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.LeftInputStats.Size()))
-	n2, err := m.LeftInputStats.MarshalTo(dAtA[i:])
+	n5, err := m.LeftInputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n5
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.RightInputStats.Size()))
-	n3, err := m.RightInputStats.MarshalTo(dAtA[i:])
+	n6, err := m.RightInputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n6
 	if len(m.StoredSide) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -415,11 +558,11 @@ func (m *AggregatorStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n4, err := m.InputStats.MarshalTo(dAtA[i:])
+	n7, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n7
 	if m.MaxAllocatedMem != 0 {
 		dAtA[i] = 0x10
 		i++
@@ -446,11 +589,11 @@ func (m *DistinctStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n5, err := m.InputStats.MarshalTo(dAtA[i:])
+	n8, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n8
 	if m.MaxAllocatedMem != 0 {
 		dAtA[i] = 0x10
 		i++
@@ -477,11 +620,11 @@ func (m *OrdinalityStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n6, err := m.InputStats.MarshalTo(dAtA[i:])
+	n9, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n9
 	return i, nil
 }
 
@@ -503,19 +646,19 @@ func (m *MergeJoinerStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.LeftInputStats.Size()))
-	n7, err := m.LeftInputStats.MarshalTo(dAtA[i:])
+	n10, err := m.LeftInputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n7
+	i += n10
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.RightInputStats.Size()))
-	n8, err := m.RightInputStats.MarshalTo(dAtA[i:])
+	n11, err := m.RightInputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n8
+	i += n11
 	if m.MaxAllocatedMem != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -542,11 +685,11 @@ func (m *SorterStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n9, err := m.InputStats.MarshalTo(dAtA[i:])
+	n12, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n12
 	if m.MaxAllocatedMem != 0 {
 		dAtA[i] = 0x10
 		i++
@@ -578,11 +721,11 @@ func (m *WindowerStats) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintStats(dAtA, i, uint64(m.InputStats.Size()))
-	n10, err := m.InputStats.MarshalTo(dAtA[i:])
+	n13, err := m.InputStats.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n13
 	if m.MaxAllocatedMem != 0 {
 		dAtA[i] = 0x10
 		i++
@@ -605,6 +748,20 @@ func encodeVarintStats(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *InputStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NumRows != 0 {
+		n += 1 + sovStats(uint64(m.NumRows))
+	}
+	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.StallTime)
+	n += 1 + l + sovStats(uint64(l))
+	return n
+}
+
 func (m *TableReaderStats) Size() (n int) {
 	if m == nil {
 		return 0
@@ -616,6 +773,19 @@ func (m *TableReaderStats) Size() (n int) {
 	if m.BytesRead != 0 {
 		n += 1 + sovStats(uint64(m.BytesRead))
 	}
+	return n
+}
+
+func (m *JoinReaderStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.InputStats.Size()
+	n += 1 + l + sovStats(uint64(l))
+	l = m.IndexLookupStats.Size()
+	n += 1 + l + sovStats(uint64(l))
 	return n
 }
 
@@ -744,6 +914,105 @@ func sovStats(x uint64) (n int) {
 func sozStats(x uint64) (n int) {
 	return sovStats(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+func (m *InputStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InputStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InputStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumRows", wireType)
+			}
+			m.NumRows = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NumRows |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StallTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.StallTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *TableReaderStats) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -822,6 +1091,116 @@ func (m *TableReaderStats) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *JoinReaderStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: JoinReaderStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: JoinReaderStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InputStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.InputStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexLookupStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.IndexLookupStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipStats(dAtA[iNdEx:])
@@ -1768,37 +2147,44 @@ var (
 	ErrIntOverflowStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/rowexec/stats.proto", fileDescriptor_stats_c352c1b84bfe4802) }
+func init() { proto.RegisterFile("sql/rowexec/stats.proto", fileDescriptor_stats_c3711054cff6db54) }
 
-var fileDescriptor_stats_c352c1b84bfe4802 = []byte{
-	// 462 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x95, 0x4f, 0x6b, 0x13, 0x41,
-	0x18, 0xc6, 0x77, 0x92, 0xaa, 0xf4, 0x0d, 0x75, 0xd3, 0x45, 0x70, 0x2d, 0x38, 0x0d, 0x8b, 0x87,
-	0x28, 0xb2, 0x01, 0xfd, 0x04, 0x2d, 0x3d, 0xf8, 0x87, 0x22, 0x24, 0x45, 0xc1, 0x83, 0xcb, 0x64,
-	0xe7, 0xed, 0x66, 0xc8, 0xec, 0x4e, 0x33, 0x33, 0xa5, 0xe9, 0xc5, 0xb3, 0x78, 0xf2, 0xc3, 0x88,
-	0x07, 0x3f, 0x41, 0x8e, 0x3d, 0xf6, 0x24, 0xba, 0xb9, 0xfa, 0x21, 0x64, 0xa7, 0x56, 0x53, 0xd8,
-	0x1c, 0x44, 0xa5, 0xf4, 0xb6, 0x3c, 0xfb, 0xec, 0xef, 0x7d, 0x78, 0xf7, 0x7d, 0x67, 0xe0, 0xb6,
-	0x99, 0xc8, 0x9e, 0x56, 0x47, 0x38, 0xc5, 0xb4, 0x67, 0x2c, 0xb3, 0x26, 0x3e, 0xd0, 0xca, 0xaa,
-	0x20, 0x4c, 0x55, 0x3a, 0xd6, 0x8a, 0xa5, 0xa3, 0xd8, 0x4c, 0x64, 0xcc, 0x85, 0xb1, 0x66, 0x22,
-	0xf5, 0x61, 0xb1, 0x71, 0x2b, 0x53, 0x99, 0x72, 0xa6, 0x5e, 0xf5, 0x74, 0xe6, 0xdf, 0xb8, 0x53,
-	0x81, 0x2a, 0x8a, 0x28, 0xf6, 0x35, 0x5b, 0x44, 0x45, 0x6f, 0xa1, 0xbd, 0xc7, 0x86, 0x12, 0xfb,
-	0xc8, 0x38, 0xea, 0x41, 0xf5, 0x26, 0x78, 0x0e, 0x2d, 0x51, 0x1c, 0x1c, 0xda, 0xc4, 0x19, 0x43,
-	0xd2, 0x21, 0xdd, 0xd6, 0xa3, 0x7b, 0xf1, 0xb2, 0xa2, 0xf1, 0xd3, 0xca, 0xec, 0x3e, 0xdd, 0x5e,
-	0x99, 0x7d, 0xd9, 0xf4, 0xfa, 0x20, 0x7e, 0x29, 0xc1, 0x5d, 0x80, 0xe1, 0xb1, 0x45, 0x93, 0x68,
-	0x64, 0x3c, 0x6c, 0x74, 0x48, 0xb7, 0xd9, 0x5f, 0x75, 0x4a, 0x55, 0x32, 0xfa, 0xdc, 0x00, 0xff,
-	0x09, 0x33, 0xa3, 0x67, 0x4a, 0x14, 0xe7, 0xf5, 0xf7, 0xa0, 0x2d, 0x71, 0xdf, 0x26, 0x7f, 0x17,
-	0xe2, 0x66, 0xc5, 0xf8, 0xad, 0x06, 0x2f, 0x61, 0x5d, 0x8b, 0x6c, 0x74, 0x11, 0xdb, 0xf8, 0x63,
-	0xac, 0xef, 0x20, 0x0b, 0xdc, 0x4d, 0x68, 0x19, 0xab, 0x34, 0xf2, 0xc4, 0x08, 0x8e, 0x61, 0xb3,
-	0x43, 0xba, 0xab, 0x7d, 0x38, 0x93, 0x06, 0x82, 0x63, 0xf0, 0x00, 0xd6, 0x73, 0x36, 0x4d, 0x98,
-	0x94, 0x2a, 0x65, 0x16, 0x79, 0x92, 0x63, 0x1e, 0xae, 0xb8, 0x46, 0xf8, 0x39, 0x9b, 0x6e, 0x9d,
-	0xeb, 0xbb, 0x98, 0x07, 0x0f, 0x21, 0xb8, 0xe8, 0xe5, 0xc2, 0x8c, 0xc3, 0x6b, 0xce, 0xdc, 0x5e,
-	0x34, 0xef, 0x08, 0x33, 0x8e, 0xde, 0x13, 0xf0, 0xb7, 0xb2, 0x4c, 0x63, 0xc6, 0xac, 0xfa, 0x1f,
-	0x3f, 0xaf, 0x36, 0x7a, 0xa3, 0x36, 0x7a, 0xf4, 0x8e, 0xc0, 0xda, 0x8e, 0x30, 0x56, 0x14, 0xa9,
-	0xbd, 0xe4, 0x28, 0x6f, 0xc0, 0x7f, 0xa1, 0xb9, 0x28, 0x98, 0x14, 0xf6, 0xf8, 0xdf, 0x67, 0x89,
-	0xbe, 0x13, 0x68, 0xef, 0xa2, 0xce, 0xf0, 0xea, 0x4e, 0x6d, 0x6d, 0x3b, 0x9b, 0xf5, 0xed, 0xfc,
-	0x48, 0xa0, 0x35, 0x50, 0xda, 0xe2, 0x25, 0x8f, 0xd8, 0x92, 0xed, 0x68, 0x2e, 0xd9, 0x8e, 0x4f,
-	0x04, 0xd6, 0x5e, 0x89, 0x82, 0xab, 0xa3, 0xab, 0x15, 0x7c, 0xfb, 0xfe, 0xec, 0x1b, 0xf5, 0x66,
-	0x25, 0x25, 0x27, 0x25, 0x25, 0xa7, 0x25, 0x25, 0x5f, 0x4b, 0x4a, 0x3e, 0xcc, 0xa9, 0x77, 0x32,
-	0xa7, 0xde, 0xe9, 0x9c, 0x7a, 0xaf, 0x6f, 0xfc, 0xbc, 0x15, 0x86, 0xd7, 0xdd, 0x29, 0xfe, 0xf8,
-	0x47, 0x00, 0x00, 0x00, 0xff, 0xff, 0xd6, 0xc0, 0xe8, 0x79, 0x2b, 0x06, 0x00, 0x00,
+var fileDescriptor_stats_c3711054cff6db54 = []byte{
+	// 569 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x95, 0x3f, 0x6f, 0xd3, 0x40,
+	0x18, 0xc6, 0x73, 0x49, 0xa0, 0xe9, 0x1b, 0x15, 0xbb, 0x16, 0x12, 0x6e, 0x25, 0xdc, 0xca, 0x62,
+	0x28, 0x08, 0x39, 0x52, 0xf9, 0x04, 0x8d, 0x3a, 0x40, 0xa1, 0x42, 0x72, 0x2b, 0x40, 0x0c, 0x58,
+	0x17, 0xdf, 0xd5, 0x3d, 0xe5, 0xec, 0x4b, 0xee, 0xce, 0x4a, 0xba, 0x30, 0x23, 0x26, 0x46, 0x3e,
+	0x08, 0x62, 0x60, 0x60, 0xce, 0xd8, 0xb1, 0x13, 0x7f, 0x92, 0x95, 0x0f, 0x81, 0x7c, 0x49, 0xd4,
+	0x54, 0x4a, 0x86, 0x0a, 0xaa, 0xaa, 0x9b, 0xfd, 0xfa, 0xf5, 0xef, 0x79, 0x9e, 0xbb, 0xf7, 0x74,
+	0x70, 0x4f, 0x75, 0x79, 0x43, 0x8a, 0x1e, 0xed, 0xd3, 0xb8, 0xa1, 0x34, 0xd6, 0x2a, 0xe8, 0x48,
+	0xa1, 0x85, 0xe3, 0xc6, 0x22, 0x6e, 0x4b, 0x81, 0xe3, 0xe3, 0x40, 0x75, 0x79, 0x40, 0x98, 0xd2,
+	0xaa, 0xcb, 0x65, 0x9e, 0xad, 0xdf, 0x4d, 0x44, 0x22, 0x4c, 0x53, 0xa3, 0x78, 0x1a, 0xf7, 0xaf,
+	0x7b, 0x89, 0x10, 0x09, 0xa7, 0x0d, 0xf3, 0xd6, 0xca, 0x8f, 0x1a, 0x24, 0x97, 0x58, 0x33, 0x91,
+	0x8d, 0xbf, 0xfb, 0x6d, 0x80, 0x67, 0x59, 0x27, 0xd7, 0x07, 0x85, 0x86, 0xb3, 0x06, 0xb5, 0x2c,
+	0x4f, 0x23, 0x29, 0x7a, 0xca, 0x45, 0x9b, 0x68, 0xab, 0x12, 0x2e, 0x65, 0x79, 0x1a, 0x8a, 0x9e,
+	0x72, 0x9a, 0x00, 0x4a, 0x63, 0xce, 0x23, 0xcd, 0x52, 0xea, 0xd6, 0x36, 0xd1, 0x56, 0x7d, 0x7b,
+	0x2d, 0x18, 0xd3, 0x83, 0x29, 0x3d, 0xd8, 0x9d, 0xd0, 0x9b, 0xb5, 0xc1, 0x8f, 0x8d, 0xd2, 0xe7,
+	0x9f, 0x1b, 0x28, 0x5c, 0x36, 0xbf, 0x1d, 0xb2, 0x94, 0xfa, 0xef, 0xc1, 0x3e, 0xc4, 0x2d, 0x4e,
+	0x43, 0x8a, 0x09, 0x95, 0x63, 0xc9, 0xe7, 0x50, 0x67, 0x85, 0x81, 0xc8, 0xa4, 0x34, 0xaa, 0xf5,
+	0xed, 0x07, 0xc1, 0xa2, 0x98, 0xc1, 0xb9, 0xdb, 0x66, 0xb5, 0xd0, 0x08, 0x81, 0x9d, 0xfb, 0xbf,
+	0x0f, 0xd0, 0x3a, 0xd1, 0x54, 0x45, 0x92, 0x62, 0xe2, 0x96, 0x4d, 0x82, 0x65, 0x53, 0x29, 0x24,
+	0xfd, 0xef, 0x08, 0xac, 0x3d, 0xc1, 0xb2, 0x2b, 0xd3, 0x7f, 0x03, 0x0e, 0xcb, 0x08, 0xed, 0x47,
+	0x5c, 0x88, 0x76, 0xde, 0x99, 0x30, 0xcb, 0x97, 0x66, 0xda, 0x86, 0xf2, 0xc2, 0x40, 0x4c, 0x7d,
+	0xaf, 0x5a, 0xab, 0xd8, 0x55, 0xff, 0x5b, 0x19, 0xac, 0xa7, 0x58, 0x1d, 0x17, 0x21, 0xa6, 0x01,
+	0x0e, 0xc1, 0xe6, 0xf4, 0x48, 0x47, 0xff, 0x96, 0xe2, 0x4e, 0xc1, 0x98, 0x99, 0x84, 0x57, 0xb0,
+	0x2a, 0x59, 0x72, 0x7c, 0x11, 0x7b, 0xf9, 0x20, 0x96, 0x81, 0xcc, 0x70, 0x37, 0xa0, 0xae, 0xb4,
+	0x90, 0x94, 0x44, 0x8a, 0x11, 0xea, 0x56, 0x36, 0xd1, 0xd6, 0x72, 0x08, 0xe3, 0xd2, 0x01, 0x23,
+	0xd4, 0x79, 0x04, 0xab, 0x29, 0xee, 0x47, 0x98, 0x73, 0x11, 0x63, 0x4d, 0x49, 0x94, 0xd2, 0xd4,
+	0xad, 0x9a, 0x9d, 0xb4, 0x52, 0xdc, 0xdf, 0x99, 0xd6, 0xf7, 0x69, 0xea, 0x3c, 0x06, 0xe7, 0x62,
+	0x2f, 0x61, 0xaa, 0xed, 0xde, 0x32, 0xcd, 0xf6, 0x6c, 0xf3, 0x2e, 0x53, 0x6d, 0xff, 0x23, 0x02,
+	0x6b, 0x27, 0x49, 0x24, 0x4d, 0xb0, 0x16, 0x57, 0xb1, 0xfb, 0x73, 0xad, 0x97, 0xe7, 0x5a, 0xf7,
+	0x3f, 0x20, 0x58, 0xd9, 0x65, 0x4a, 0xb3, 0x2c, 0xd6, 0xd7, 0x6c, 0xe5, 0x1d, 0x58, 0x2f, 0x25,
+	0x61, 0x19, 0xe6, 0x4c, 0x9f, 0xfc, 0x7f, 0x2f, 0xfe, 0x1f, 0x04, 0xf6, 0x3e, 0x95, 0x09, 0xbd,
+	0xb9, 0x53, 0x3b, 0x77, 0x39, 0x2b, 0xf3, 0x97, 0xf3, 0x0b, 0x82, 0xfa, 0x81, 0x90, 0x9a, 0x5e,
+	0xf3, 0x88, 0x2d, 0x38, 0x1d, 0x95, 0x05, 0xa7, 0xe3, 0x2b, 0x82, 0x95, 0xd7, 0x2c, 0x23, 0xa2,
+	0x77, 0xb3, 0x8c, 0x37, 0x1f, 0x0e, 0x7e, 0x7b, 0xa5, 0xc1, 0xd0, 0x43, 0xa7, 0x43, 0x0f, 0x9d,
+	0x0d, 0x3d, 0xf4, 0x6b, 0xe8, 0xa1, 0x4f, 0x23, 0xaf, 0x74, 0x3a, 0xf2, 0x4a, 0x67, 0x23, 0xaf,
+	0xf4, 0x76, 0x69, 0x72, 0x91, 0xb6, 0x6e, 0x9b, 0x7b, 0xea, 0xc9, 0xdf, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x2a, 0x07, 0x70, 0xc5, 0x5e, 0x07, 0x00, 0x00,
 }

@@ -261,7 +261,7 @@ func newWindower(
 	w.acc = w.MemMonitor.MakeBoundAccount()
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		w.input = execinfra.NewInputStatCollector(w.input)
+		w.input = newInputStatCollector(w.input)
 		w.FinishTrace = w.outputStatsToTrace
 	}
 
@@ -899,8 +899,8 @@ const windowerTagPrefix = "windower."
 // Stats implements the SpanStats interface.
 func (ws *WindowerStats) Stats() map[string]string {
 	inputStatsMap := ws.InputStats.Stats(windowerTagPrefix)
-	inputStatsMap[windowerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
-	inputStatsMap[windowerTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedDisk)
+	inputStatsMap[windowerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
+	inputStatsMap[windowerTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedDisk)
 	return inputStatsMap
 }
 
@@ -908,12 +908,12 @@ func (ws *WindowerStats) Stats() map[string]string {
 func (ws *WindowerStats) StatsForQueryPlan() []string {
 	return append(
 		ws.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
 	)
 }
 func (w *windower) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(w.FlowCtx, w.input)
+	is, ok := getInputStats(w.FlowCtx, w.input)
 	if !ok {
 		return
 	}

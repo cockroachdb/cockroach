@@ -78,7 +78,7 @@ func TestHashJoiner(t *testing.T) {
 		// optionally be provided to modify the hashJoiner after instantiation but
 		// before Run().
 		testFunc := func(t *testing.T, flowCtxSetup func(f *execinfra.FlowCtx), hjSetup func(h *hashJoiner)) error {
-			side := execinfra.RightSide
+			side := rightSide
 			for i := 0; i < 2; i++ {
 				leftInput := distsqlutils.NewRowBuffer(c.leftTypes, c.leftInput, distsqlutils.RowBufferArgs{})
 				rightInput := distsqlutils.NewRowBuffer(c.rightTypes, c.rightInput, distsqlutils.RowBufferArgs{})
@@ -114,7 +114,7 @@ func TestHashJoiner(t *testing.T) {
 					h.forcedStoredSide = &side
 				}
 				h.Run(context.Background())
-				side = execinfra.OtherSide(h.storedSide)
+				side = otherSide(h.storedSide)
 
 				if !out.ProducerClosed() {
 					return errors.New("output RowReceiver not closed")
