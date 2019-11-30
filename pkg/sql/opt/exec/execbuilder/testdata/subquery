@@ -220,7 +220,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
 ·               distributed        false            ·          ·
-·               vectorized         false            ·          ·
+·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
  │              equality           (x) = (column5)  ·          ·
