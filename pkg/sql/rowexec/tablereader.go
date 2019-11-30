@@ -49,7 +49,7 @@ type tableReader struct {
 
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
-	fetcher execinfra.RowFetcher
+	fetcher rowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	// rowsRead is the number of rows read and is tracked unconditionally.
@@ -114,7 +114,7 @@ func newTableReader(
 
 	var fetcher row.Fetcher
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
-	if _, _, err := execinfra.InitRowFetcher(
+	if _, _, err := initRowFetcher(
 		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
@@ -132,7 +132,7 @@ func newTableReader(
 	}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		tr.fetcher = execinfra.NewRowFetcherStatCollector(&fetcher)
+		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.FinishTrace = tr.outputStatsToTrace
 	} else {
 		tr.fetcher = &fetcher
@@ -225,7 +225,7 @@ const tableReaderTagPrefix = "tablereader."
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {
 	inputStatsMap := trs.InputStats.Stats(tableReaderTagPrefix)
-	inputStatsMap[tableReaderTagPrefix+execinfra.BytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
+	inputStatsMap[tableReaderTagPrefix+bytesReadTagSuffix] = humanizeutil.IBytes(trs.BytesRead)
 	return inputStatsMap
 }
 
@@ -233,14 +233,14 @@ func (trs *TableReaderStats) Stats() map[string]string {
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
 	return append(
 		trs.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", execinfra.BytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
+		fmt.Sprintf("%s: %s", bytesReadQueryPlanSuffix, humanizeutil.IBytes(trs.BytesRead)),
 	)
 }
 
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	is, ok := execinfra.GetFetcherInputStats(tr.FlowCtx, tr.fetcher)
+	is, ok := getFetcherInputStats(tr.FlowCtx, tr.fetcher)
 	if !ok {
 		return
 	}

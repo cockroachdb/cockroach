@@ -220,7 +220,7 @@ import (
 // - Implicit columns (a)
 // - Index columns: (d, b, a)
 type zigzagJoiner struct {
-	execinfra.JoinerBase
+	joinerBase
 
 	evalCtx       *tree.EvalContext
 	cancelChecker *sqlbase.CancelChecker
@@ -277,7 +277,7 @@ func newZigzagJoiner(
 	rightColumnTypes := spec.Tables[1].ColumnTypes()
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
-	err := z.JoinerBase.Init(
+	err := z.joinerBase.init(
 		z, /* self */
 		flowCtx,
 		processorID,
@@ -434,7 +434,7 @@ func (z *zigzagJoiner) setupInfo(
 	info.container.Reset()
 
 	// Setup the Fetcher.
-	_, _, err := execinfra.InitRowFetcher(
+	_, _, err := initRowFetcher(
 		&(info.fetcher),
 		info.table,
 		int(indexOrdinal),
@@ -698,10 +698,10 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 		rightRow := z.infos[right].container.Peek()
 
 		// TODO(pbardea): Extend this logic to support multi-way joins.
-		if left == int(execinfra.RightSide) {
+		if left == int(rightSide) {
 			leftRow, rightRow = rightRow, leftRow
 		}
-		renderedRow, err := z.Render(leftRow, rightRow)
+		renderedRow, err := z.render(leftRow, rightRow)
 		if err != nil {
 			return nil, err
 		}

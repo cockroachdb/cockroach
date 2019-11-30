@@ -13,18 +13,34 @@ package cockroach.sql.distsqlrun;
 option go_package = "rowexec";
 
 import "gogoproto/gogo.proto";
-import "sql/execinfra/stats.proto";
+import "google/protobuf/duration.proto";
+
+// InputStats represents the stats collected from an input.
+message InputStats {
+  // num_rows is the number of rows received from the input.
+  int64 num_rows = 1;
+  // Duration in nanoseconds of the cumulative time spent stalled.
+  google.protobuf.Duration stall_time = 8 [(gogoproto.nullable) = false,
+                                        (gogoproto.stdduration) = true];
+}
 
 // TableReaderStats are the stats collected during a tableReader run.
 message TableReaderStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 bytes_read = 2;
+}
+
+// JoinReaderStats are the stats collected during a JoinReader run.
+message JoinReaderStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_lookup_stats = 2 [(gogoproto.nullable) = false];
+  reserved 3;
 }
 
 // HashJoinerStats are the stats collected during a hashJoiner run.
 message HashJoinerStats {
-  cockroach.sql.distsqlrun.InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
-  cockroach.sql.distsqlrun.InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
   string stored_side = 3;
   int64 max_allocated_mem = 4;
   int64 max_allocated_disk = 5;
@@ -32,38 +48,38 @@ message HashJoinerStats {
 
 // AggregatorStats are the stats collected during an aggregator run.
 message AggregatorStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
 }
 
 // DistinctStats are the stats collected during a distinct run.
 message DistinctStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
 }
 
 // OrdinalityStats are the stats collected during a WITH ORDINALITY run.
 message OrdinalityStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
 }
 
 // MergeJoinerStats are the stats collected during a mergeJoiner run.
 message MergeJoinerStats {
-  cockroach.sql.distsqlrun.InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
-  cockroach.sql.distsqlrun.InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 3;
 }
 
 // SorterStats are the stats collected during a sorter run.
 message SorterStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }
 
 // WindowerStats are the stats collected during a windower run.
 message WindowerStats {
-  cockroach.sql.distsqlrun.InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }

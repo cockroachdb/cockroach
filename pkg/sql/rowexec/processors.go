@@ -142,10 +142,10 @@ func NewProcessor(
 			return nil, err
 		}
 		if len(core.JoinReader.LookupColumns) == 0 {
-			return execinfra.NewIndexJoiner(
+			return newIndexJoiner(
 				flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 		}
-		return execinfra.NewJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
+		return newJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -157,7 +157,7 @@ func NewProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return NewDistinct(flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
+		return newDistinct(flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
 	}
 	if core.Ordinality != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -314,21 +314,6 @@ func NewProcessor(
 		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
-}
-
-// VectorizeAlwaysException is an object that returns whether or not execution
-// should continue if vectorize=experimental_always and an error occurred when
-// setting up the vectorized flow. Consider the case in which
-// vectorize=experimental_always. The user must be able to unset this session
-// variable without getting an error.
-type VectorizeAlwaysException interface {
-	// IsException returns whether this object should be an exception to the rule
-	// that an inability to run this node in a vectorized flow should produce an
-	// error.
-	// TODO(asubiotto): This is the cleanest way I can think of to not error out
-	// on SET statements when running with vectorize = experimental_always. If
-	// there is a better way, we should get rid of this interface.
-	IsException() bool
 }
 
 // NewReadImportDataProcessor is externally implemented and registered by
