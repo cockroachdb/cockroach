@@ -333,23 +333,54 @@ SELECT json_agg((3808362714,))
 
 ## json_array_elements and jsonb_array_elements
 
-query T
+query T colnames
 SELECT json_array_elements('[1, 2, 3]'::JSON)
 ----
+json_array_elements
 1
 2
 3
 
-query T
+query T colnames
+SELECT * FROM json_array_elements('[1, 2, 3]'::JSON)
+----
+value
+1
+2
+3
+
+query T colnames
 SELECT jsonb_array_elements('[1, 2, 3]'::JSON)
 ----
+jsonb_array_elements
 1
 2
 3
 
-query T
+query T colnames
+SELECT * FROM jsonb_array_elements('[1, 2, 3]'::JSON)
+----
+value
+1
+2
+3
+
+query T colnames
 SELECT json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
 ----
+json_array_elements
+1
+true
+null
+"text"
+-1.234
+{"2": 3, "4": "5"}
+[1, 2, 3]
+
+query T colnames
+SELECT * FROM json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+value
 1
 true
 null
@@ -372,16 +403,34 @@ SELECT jsonb_array_elements('{"1": 2}'::JSON)
 
 ## json_array_elements_text and jsonb_array_elements_text
 
-query T
+query T colnames
 SELECT json_array_elements_text('[1, 2, 3]'::JSON)
 ----
+json_array_elements_text
 1
 2
 3
 
-query T
+query T colnames
+SELECT * FROM json_array_elements_text('[1, 2, 3]'::JSON)
+----
+value
+1
+2
+3
+
+query T colnames
 SELECT json_array_elements_text('[1, 2, 3]'::JSON)
 ----
+json_array_elements_text
+1
+2
+3
+
+query T colnames
+SELECT * FROM json_array_elements_text('[1, 2, 3]'::JSON)
+----
+value
 1
 2
 3
@@ -726,8 +775,18 @@ query TT
 SELECT * from json_each('{}') q
 ----
 
+query T colnames
+SELECT json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
+----
+json_each
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,null)
+(f5,99)
+(f6,"""stringy""")
+
 query TT colnames
-SELECT * from json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+SELECT * FROM json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
 f1   [1, 2, 3]
@@ -745,6 +804,16 @@ SELECT jsonb_each('null'::JSON)
 query TT
 SELECT * from jsonb_each('{}') q
 ----
+
+query T colnames
+SELECT jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
+----
+jsonb_each
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,null)
+(f5,99)
+(f6,"""stringy""")
 
 query TT colnames
 SELECT * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
@@ -770,6 +839,26 @@ query TT
 SELECT * from jsonb_each_text('{}') q
 ----
 
+query T colnames
+SELECT jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
+----
+jsonb_each_text
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,)
+(f5,99)
+(f6,stringy)
+
+query T colnames
+SELECT jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+q
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,)
+(f5,99)
+(f6,stringy)
+
 query TT colnames
 SELECT * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
@@ -793,6 +882,26 @@ SELECT * from json_each_text('{}') q
 query TT
 SELECT * from json_each_text('{}') q
 ----
+
+query T colnames
+SELECT json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
+----
+json_each_text
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,)
+(f5,99)
+(f6,stringy)
+
+query T colnames
+SELECT json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
+----
+q
+(f1,"[1, 2, 3]")
+(f2,"{""f3"": 1}")
+(f4,)
+(f5,99)
+(f6,stringy)
 
 query TT colnames
 SELECT * from json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
