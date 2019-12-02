@@ -359,7 +359,7 @@ func (rf *cFetcher) Init(
 		if table.isSecondaryIndex {
 			for i := range table.cols {
 				if neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
-					return fmt.Errorf("requested column %s not in index", table.cols[i].Name)
+					return errors.Errorf("requested column %s not in index", table.cols[i].Name)
 				}
 			}
 		}

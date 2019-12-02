@@ -364,7 +364,7 @@ func newInterleavedReaderJoiner(
 	}
 
 	if err := irj.initRowFetcher(
-		spec.Tables, spec.Reverse, &irj.alloc,
+		spec.Tables, tables, spec.Reverse, &irj.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -398,6 +398,7 @@ func newInterleavedReaderJoiner(
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
+	tableInfos []tableInfo,
 	reverseScan bool,
 	alloc *sqlbase.DatumAlloc,
 ) error {
@@ -411,10 +412,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 			return err
 		}
 
-		// We require all values from the tables being read
-		// since we do not expect any projections or rendering
-		// on a scan before a join.
-		args[i].ValNeededForCol.AddRange(0, len(desc.Columns)-1)
+		args[i].ValNeededForCol = tableInfos[i].post.NeededColumns()
 		args[i].ColIdxMap = desc.ColumnIdxMap()
 		args[i].Desc = desc
 		args[i].Cols = desc.Columns
