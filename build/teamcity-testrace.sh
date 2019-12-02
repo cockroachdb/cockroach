@@ -41,19 +41,17 @@ maybe_stress "race"
 # Expect the timeout to come from the TC environment.
 TESTTIMEOUT=${TESTTIMEOUT:-45m}
 
-tc_start_block "Run Go tests under race detector"
-true >artifacts/testrace.log
 for pkg in $pkgspec; do
-	run build/builder.sh env \
-		COCKROACH_LOGIC_TESTS_SKIP=true \
-		stdbuf -oL -eL \
-		make testrace \
-		PKG="$pkg" \
-		TESTTIMEOUT="${TESTTIMEOUT}" \
-		TESTFLAGS="-v $TESTFLAGS" \
-		ENABLE_ROCKSDB_ASSERTIONS=1 2>&1 \
-		ENABLE_LIBROACH_ASSERTIONS=1 2>&1 \
-		| tee -a artifacts/testrace.log \
-		| go-test-teamcity
+  tc_start_block "Run ${pkg} under race detector"
+  run_json_test build/builder.sh env \
+  	COCKROACH_LOGIC_TESTS_SKIP=true \
+  	stdbuf -oL -eL \
+  	make testrace \
+  	GOTESTFLAGS=-json \
+  	PKG="$pkg" \
+  	TESTTIMEOUT="${TESTTIMEOUT}" \
+  	TESTFLAGS="-v $TESTFLAGS" \
+  	ENABLE_ROCKSDB_ASSERTIONS=1 \
+  	ENABLE_LIBROACH_ASSERTIONS=1
+  tc_end_block "Run ${pkg} under race detector"
 done
-tc_end_block "Run Go tests under race detector"
