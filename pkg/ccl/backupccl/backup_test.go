@@ -1040,6 +1040,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 	t.Run("pause", func(t *testing.T) {
 		pauseDir := "nodelocal:///pause"
+		noOfflineDir := "nodelocal:///no-offline"
 		sqlDB.Exec(t, `CREATE DATABASE pause`)
 
 		for i, query := range []string{
@@ -1056,7 +1057,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 					`SELECT name FROM crdb_internal.tables WHERE database_name = 'pause' AND state = 'OFFLINE'`,
 					[][]string{{"bank"}},
 				)
+				// Ensure that OFFLINE tables can be accessed to set zone configs.
 				sqlDB.Exec(t, `ALTER TABLE pause.bank CONFIGURE ZONE USING constraints='[+dc=dc1]'`)
+				// Ensure that OFFLINE tables are not included in a BACKUP.
+				sqlDB.ExpectErr(t, `table "pause.public.bank" does not exist`, `BACKUP pause.bank TO $1`, noOfflineDir)
+				sqlDB.Exec(t, `BACKUP pause.* TO $1`, noOfflineDir)
+				sqlDB.CheckQueryResults(t, fmt.Sprintf("SHOW BACKUP '%s'", noOfflineDir), [][]string{})
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 			jobutils.WaitForJob(t, sqlDB, jobID)
