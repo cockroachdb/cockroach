@@ -11,7 +11,7 @@
 import * as React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link, withRouter, WithRouterProps } from "react-router";
 import moment from "moment";
 import _ from "lodash";
 
@@ -49,7 +49,7 @@ export interface DecommissionedNodeHistoryProps {
   nodesSummary: NodesSummary;
 }
 
-class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
+class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps & WithRouterProps> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
@@ -60,8 +60,23 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
     props.refreshLiveness();
   }
 
+  onPageChange = (page: number) => {
+    // Set 'page' search param with selected page so
+    // current page is preserved when page is reloaded.
+    this.props.router.push({
+      pathname: this.props.location.pathname,
+      query: {
+        ...this.props.location.query,
+        page,
+      },
+    });
+  }
+
   render() {
-    const { status, statuses, nodesSummary, sortSetting, setSort } = this.props;
+    const { status, statuses, nodesSummary, sortSetting, setSort, location } = this.props;
+    const query = location.query;
+    const page = query.page ? Number(query.page) : 1;
+
     if (!statuses || statuses.length === 0) {
       return null;
     }
@@ -78,7 +93,11 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
           <NodeSortedTable
             data={statuses}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => setSort(setting)}
+            onChangeSortSetting={setSort}
+            pagination
+            pageSize={15}
+            selectedPage={page}
+            onPageChange={this.onPageChange}
             columns={[
               {
                 title: "ID",
@@ -135,4 +154,4 @@ const mapDispatchToProps = {
   setSort: decommissionedNodesSortSetting.set,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory);
+export default connect(mapStateToProps, mapDispatchToProps)(withRouter(DecommissionedNodeHistory));
