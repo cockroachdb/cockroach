@@ -1851,11 +1851,7 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE targets FROM partitioned_backup_list opt_with_options
-  {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), Options: $5.kvOptions()}
-  }
-| RESTORE targets FROM partitioned_backup_list as_of_clause opt_with_options
+  RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options
   {
     $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }

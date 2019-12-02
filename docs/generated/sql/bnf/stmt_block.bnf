@@ -145,8 +145,7 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' targets 'FROM' partitioned_backup_list opt_with_options
-	| 'RESTORE' targets 'FROM' partitioned_backup_list as_of_clause opt_with_options
+	'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -431,9 +430,6 @@ reset_csetting_stmt ::=
 
 partitioned_backup_list ::=
 	( partitioned_backup ) ( ( ',' partitioned_backup ) )*
-
-as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -997,6 +993,9 @@ alter_partition_stmt ::=
 alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
+
+as_of_clause ::=
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*

@@ -100,14 +100,8 @@ message ForeignKeyConstraint {
   // LegacyReferencedIndex is the ID of the index used for the FK on the
   // referenced side. See the comment for LegacyOriginIndex.
   optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
-  // These fields are set when upgrading an old-style FK (stored on the index)
-  // into this kind. The purpose is to permit validation that downgrading this
-  // representation to the old representation (which happens when the cluster
-  // is in a mixed-version state containing VersionTopLevelForeignKeys) was done
-  // without creating any accidental changes to the foreign key references.
-  // They are only read and written in a mixed 19.1/19.2 cluster.
-  optional ForeignKeyReference legacy_upgraded_from_origin_reference = 12 [(gogoproto.nullable) = false, deprecated = true];
-  optional ForeignKeyReference legacy_upgraded_from_referenced_reference = 13 [(gogoproto.nullable) = false, deprecated = true];
+  // These fields were used for the 19.1 -> 19.2 foreign key migration.
+  reserved 12, 13;
 }
 
 message ColumnDescriptor {
