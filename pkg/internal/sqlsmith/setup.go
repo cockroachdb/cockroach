@@ -57,12 +57,18 @@ func stringSetup(s string) Setup {
 }
 
 func randTables(r *rand.Rand) string {
+	var sb strings.Builder
+	// Since we use the stats mutator, disable auto stats generation.
+	sb.WriteString(`
+		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
+	`)
+
 	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
 	)
 
-	var sb strings.Builder
 	for _, stmt := range stmts {
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
