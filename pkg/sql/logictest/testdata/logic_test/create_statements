@@ -39,3 +39,16 @@ CREATE TABLE v (
    INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
    FAMILY "primary" ("'", s, rowid)
 )  {"ALTER TABLE v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES t(rowid)","ALTER TABLE v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v(s)"}  {"ALTER TABLE v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE v VALIDATE CONSTRAINT fk_s_ref_v"}
+
+statement error invalid storage parameter "foo"
+CREATE TABLE a (b INT) WITH (foo=100);
+
+statement error argument of fillfactor must be type int, not type bool
+CREATE TABLE a (b INT) WITH (fillfactor=true);
+
+statement error unimplemented: storage parameter "toast_tuple_target"
+CREATE TABLE a (b INT) WITH (toast_tuple_target=100);
+
+statement ok
+CREATE TABLE a (b INT) WITH (fillfactor=100);
+

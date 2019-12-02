@@ -1425,6 +1425,8 @@ func TestParse2(t *testing.T) {
 			`CREATE DATABASE a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE a TEMPLATE = invalid`,
 			`CREATE DATABASE a TEMPLATE = 'invalid'`},
+		{`CREATE TABLE a (b INT) WITH (fillfactor=100)`,
+			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
 			`CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b))`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))`,
@@ -3103,7 +3105,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(LIKE b)`, 30840, ``},
 
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`},
-		{`CREATE TABLE a(b INT8) WITH foo = bar`, 0, `create table with foo`},
 
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`},
 
