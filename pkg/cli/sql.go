@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
-	"github.com/lib/pq"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -818,8 +817,8 @@ func (c *cliState) GetCompletions(_ string) []string {
 			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", helpText)
 		} else if err != nil {
 			// Some other error. Display it.
-			fmt.Fprintf(c.ins.Stdout(), "\n%v\n", err)
-			maybeShowErrorDetails(c.ins.Stdout(), err, false)
+			fmt.Fprintln(c.ins.Stdout())
+			cliOutputError(c.ins.Stdout(), err, true /*showSeverity*/, false /*verbose*/)
 		}
 	}
 
@@ -1186,8 +1185,8 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Println(helpText)
 		}
 
-		_ = c.invalidSyntax(0, "statement ignored: %v", err)
-		maybeShowErrorDetails(stderr, err, false)
+		_ = c.invalidSyntax(0, "statement ignored: %v",
+			&formattedError{err: err, showSeverity: false, verbose: false})
 
 		// Stop here if exiterr is set.
 		if c.errExit {
@@ -1239,8 +1238,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 		// with the specified options.
 		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.autoTrace, nil)
 		if c.exitErr != nil {
-			fmt.Fprintln(stderr, c.exitErr)
-			maybeShowErrorDetails(stderr, c.exitErr, false)
+			cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 			if c.errExit {
 				return cliStop
 			}
@@ -1251,8 +1249,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	// Now run the statement/query.
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
-		fmt.Fprintln(stderr, c.exitErr)
-		maybeShowErrorDetails(stderr, c.exitErr, false)
+		cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
@@ -1262,8 +1259,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
 			// Print the error for the SET tracing statement. This will
 			// appear below the error for the main query above, if any,
-			fmt.Fprintln(stderr, err)
-			maybeShowErrorDetails(stderr, err, false)
+			cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 			if c.exitErr == nil {
 				// The query had encountered no error above, but now we are
 				// encountering an error on SET tracing. Consider this to
@@ -1280,8 +1276,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 			}
 			if err := runQueryAndFormatResults(c.conn, os.Stdout,
 				makeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
-				fmt.Fprintln(stderr, err)
-				maybeShowErrorDetails(stderr, err, false)
+				cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
 					// above, but now we are encountering an error on SHOW TRACE
@@ -1300,33 +1295,6 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	}
 
 	return nextState
-}
-
-// maybeShowErrorDetails displays the pg "Detail" and "Hint" fields
-// embedded in the error, if any, to the user. If printNewline is set,
-// a newline character is printed before anything else.
-func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
-	var hint, detail string
-	if pqErr, ok := errors.UnwrapAll(err).(*pq.Error); ok {
-		hint, detail = pqErr.Hint, pqErr.Detail
-	} else {
-		// Extract the standard hint and details.
-		hint = errors.FlattenHints(err)
-		detail = errors.FlattenDetails(err)
-	}
-	if detail != "" {
-		if printNewline {
-			fmt.Fprintln(w)
-			printNewline = false
-		}
-		fmt.Fprintln(w, "DETAIL:", detail)
-	}
-	if hint != "" {
-		if printNewline {
-			fmt.Fprintln(w)
-		}
-		fmt.Fprintln(w, "HINT:", hint)
-	}
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -1463,8 +1431,7 @@ func (c *cliState) runStatements(stmts []string) error {
 			if c.exitErr != nil {
 				if !c.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.
-					fmt.Fprintln(stderr, c.exitErr)
-					maybeShowErrorDetails(stderr, c.exitErr, false)
+					cliOutputError(stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
 				}
 				if c.errExit {
 					break
@@ -1483,10 +1450,7 @@ func (c *cliState) runStatements(stmts []string) error {
 	if c.exitErr != nil {
 		// Don't write the error to stderr ourselves. Cobra will do this for
 		// us on the exit path. We do want the details though, so add them.
-		var buf bytes.Buffer
-		fmt.Fprintln(&buf, c.exitErr)
-		maybeShowErrorDetails(&buf, c.exitErr, false)
-		c.exitErr = errors.New(strings.TrimSuffix(buf.String(), "\n"))
+		c.exitErr = &formattedError{err: c.exitErr, showSeverity: true, verbose: false}
 	}
 	return c.exitErr
 }

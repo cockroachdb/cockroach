@@ -245,7 +245,7 @@ eexpect "statement ignored"
 eexpect ":/# "
 
 send "(echo '\\unset check_syntax'; echo 'select '; echo '\\help'; echo '1;') | $argv sql\r"
-eexpect "pq: at or near"
+eexpect "ERROR: at or near"
 eexpect "syntax error"
 eexpect ":/# "
 end_test
