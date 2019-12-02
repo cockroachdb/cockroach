@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
@@ -219,11 +219,33 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
+	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*client.Txn, error) {
+		meta := req.TxnCoordMeta
+		if meta == nil {
+			// This must be a flow running for some bulk-io operation that doesn't use
+			// a txn.
+			return nil, nil
+		}
+		if meta.Txn.Status != roachpb.PENDING {
+			return nil, errors.AssertionFailedf("cannot create flow in non-PENDING txn: %s",
+				meta.Txn)
+		}
+		// The flow will run in a LeafTxn because we do not want each distributed
+		// Txn to heartbeat the transaction.
+		return client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta), nil
+	}
+
 	var evalCtx *tree.EvalContext
+	var leafTxn *client.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
 		evalCtx.Mon = &monitor
 	} else {
+		if localState.IsLocal {
+			return nil, nil, errors.AssertionFailedf(
+				"EvalContext expected to be populated when IsLocal is set")
+		}
+
 		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 		if err != nil {
 			tracing.FinishSpan(sp)
@@ -266,6 +288,13 @@ func (ds *ServerImpl) setupFlow(
 			},
 		}
 
+		// It's important to populate evalCtx.Txn early. We'll write it again in the
+		// f.SetTxn() call below, but by then it will already have been captured by
+		// processors.
+		leafTxn, err = makeLeaf(req)
+		if err != nil {
+			return nil, nil, err
+		}
 		evalCtx = &tree.EvalContext{
 			Settings:    ds.ServerConfig.Settings,
 			SessionData: sd,
@@ -281,6 +310,7 @@ func (ds *ServerImpl) setupFlow(
 			SessionAccessor:  &sqlbase.DummySessionAccessor{},
 			Sequence:         &sqlbase.DummySequenceOperators{},
 			InternalExecutor: ie,
+			Txn:              leafTxn,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
@@ -341,16 +371,23 @@ func (ds *ServerImpl) setupFlow(
 	if localState.IsLocal && !f.ConcurrentExecution() {
 		txn = localState.Txn
 	} else {
-		if meta := req.TxnCoordMeta; meta != nil {
-			if meta.Txn.Status != roachpb.PENDING {
-				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
-					meta.Txn)
+		// If I haven't created the leaf already, do it now.
+		if leafTxn == nil {
+			var err error
+			leafTxn, err = makeLeaf(req)
+			if err != nil {
+				return nil, nil, err
 			}
-			// The flow will run in a LeafTxn because we do not want each distributed
-			// Txn to heartbeat the transaction.
-			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
 		}
+		txn = leafTxn
 	}
+	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
+	// field has already been captured by various processors and operators that
+	// have already made a copy of the EvalCtx. In case this is not the gateway,
+	// we had already set the LeafTxn on the EvalCtx above, so it's OK. In case
+	// this is the gateway, if we're running with the RootTxn, then again it was
+	// set above so it's fine. If we're using a LeafTxn on the gateway, though,
+	// then the processors have erroneously captured the Root. See #41992.
 	f.SetTxn(txn)
 
 	return ctx, f, nil
