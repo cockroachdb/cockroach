@@ -120,7 +120,7 @@
 [FoldNullComparisonLeft, Normalize]
 (Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
     NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | JsonExists | JsonSomeExists | JsonAllExists
+    Contains | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
     $left:(Null)
     *
 )
@@ -132,7 +132,7 @@
 [FoldNullComparisonRight, Normalize]
 (Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
     NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
-    Contains | JsonExists | JsonSomeExists | JsonAllExists
+    Contains | Overlaps | JsonExists | JsonSomeExists | JsonAllExists
     *
     $right:(Null)
 )
