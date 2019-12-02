@@ -43,12 +43,12 @@ type OrderedSynchronizer struct {
 var _ Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
-func (o *OrderedSynchronizer) ChildCount() int {
+func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 	return len(o.inputs)
 }
 
 // Child implements the execinfrapb.OpNode interface.
-func (o *OrderedSynchronizer) Child(nth int) execinfra.OpNode {
+func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 	return o.inputs[nth]
 }
 

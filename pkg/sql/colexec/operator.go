@@ -65,12 +65,12 @@ type OneInputNode struct {
 }
 
 // ChildCount implements the execinfra.OpNode interface.
-func (OneInputNode) ChildCount() int {
+func (OneInputNode) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child implements the execinfra.OpNode interface.
-func (n OneInputNode) Child(nth int) execinfra.OpNode {
+func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return n.input
 	}
@@ -88,12 +88,12 @@ func (n OneInputNode) Input() Operator {
 type ZeroInputNode struct{}
 
 // ChildCount implements the execinfra.OpNode interface.
-func (ZeroInputNode) ChildCount() int {
+func (ZeroInputNode) ChildCount(verbose bool) int {
 	return 0
 }
 
 // Child implements the execinfra.OpNode interface.
-func (ZeroInputNode) Child(nth int) execinfra.OpNode {
+func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
@@ -109,11 +109,11 @@ type twoInputNode struct {
 	inputTwo Operator
 }
 
-func (twoInputNode) ChildCount() int {
+func (twoInputNode) ChildCount(verbose bool) int {
 	return 2
 }
 
-func (n *twoInputNode) Child(nth int) execinfra.OpNode {
+func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	switch nth {
 	case 0:
 		return n.inputOne

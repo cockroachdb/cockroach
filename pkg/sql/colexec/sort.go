@@ -397,11 +397,11 @@ func (p *sortOp) reset() {
 	p.state = sortSpooling
 }
 
-func (p *sortOp) ChildCount() int {
+func (p *sortOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (p *sortOp) Child(nth int) execinfra.OpNode {
+func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}

@@ -34,12 +34,12 @@ var _ Operator = &SerialUnorderedSynchronizer{}
 var _ execinfra.OpNode = &SerialUnorderedSynchronizer{}
 
 // ChildCount implements the execinfra.OpNode interface.
-func (s *SerialUnorderedSynchronizer) ChildCount() int {
+func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
 	return len(s.inputs)
 }
 
 // Child implements the execinfra.OpNode interface.
-func (s *SerialUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
+func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 	return s.inputs[nth]
 }
 

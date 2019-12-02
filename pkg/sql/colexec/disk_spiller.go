@@ -148,23 +148,35 @@ func (d *oneInputDiskSpiller) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (d *oneInputDiskSpiller) ChildCount() int {
-	// TODO(yuzefovich): this should be 1 in non-verbose case.
-	return 3
+func (d *oneInputDiskSpiller) ChildCount(verbose bool) int {
+	if verbose {
+		return 3
+	}
+	return 1
 }
 
-func (d *oneInputDiskSpiller) Child(nth int) execinfra.OpNode {
-	switch nth {
+func (d *oneInputDiskSpiller) Child(nth int, verbose bool) execinfra.OpNode {
 	// Note: although the main chain is d.input -> diskSpiller -> output (and the
 	// main chain should be under nth == 0), in order to make the output of
 	// EXPLAIN (VEC) less confusing we return the in-memory operator as being on
 	// the main chain.
+	if verbose {
+		switch nth {
+		case 0:
+			return d.inMemoryOp
+		case 1:
+			return d.input
+		case 2:
+			return d.diskBackedOp
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+			// This code is unreachable, but the compiler cannot infer that.
+			return nil
+		}
+	}
+	switch nth {
 	case 0:
 		return d.inMemoryOp
-	case 1:
-		return d.input
-	case 2:
-		return d.diskBackedOp
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.

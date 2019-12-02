@@ -39,11 +39,11 @@ type caseOp struct {
 
 var _ InternalMemoryOperator = &caseOp{}
 
-func (c *caseOp) ChildCount() int {
+func (c *caseOp) ChildCount(verbose bool) int {
 	return 1 + len(c.caseOps) + 1
 }
 
-func (c *caseOp) Child(nth int) execinfra.OpNode {
+func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.buffer
 	} else if nth < len(c.caseOps)+1 {

@@ -68,11 +68,11 @@ type routerOutputOp struct {
 	outputBatchSize  int
 }
 
-func (o *routerOutputOp) ChildCount() int {
+func (o *routerOutputOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (o *routerOutputOp) Child(nth int) execinfra.OpNode {
+func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return o.input
 	}
