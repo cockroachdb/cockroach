@@ -182,9 +182,10 @@ func registerSQLSmith(r *testRegistry) {
 
 	register := func(setup, setting string) {
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			Cluster: makeClusterSpec(4),
-			Timeout: time.Minute * 20,
+			Name:       fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
+			Cluster:    makeClusterSpec(4),
+			MinVersion: "v19.2.0",
+			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
