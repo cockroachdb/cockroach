@@ -283,19 +283,23 @@ func TestOutboxInbox(t *testing.T) {
 			if cancellationScenario == noCancel {
 				// Accumulate batches to check for correctness.
 				// Copy batch since it's not safe to reuse after calling Next.
-				batchCopy := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
-				for i := range typs {
-					testAllocator.Append(
-						batchCopy.ColVec(i),
-						coldata.SliceArgs{
-							ColType:   typs[i],
-							Src:       outputBatch.ColVec(i),
-							SrcEndIdx: uint64(outputBatch.Length()),
-						},
-					)
+				if outputBatch == coldata.ZeroBatch {
+					outputBatches.Add(coldata.ZeroBatch)
+				} else {
+					batchCopy := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
+					for i := range typs {
+						testAllocator.Append(
+							batchCopy.ColVec(i),
+							coldata.SliceArgs{
+								ColType:   typs[i],
+								Src:       outputBatch.ColVec(i),
+								SrcEndIdx: uint64(outputBatch.Length()),
+							},
+						)
+					}
+					batchCopy.SetLength(outputBatch.Length())
+					outputBatches.Add(batchCopy)
 				}
-				batchCopy.SetLength(outputBatch.Length())
-				outputBatches.Add(batchCopy)
 			}
 			if outputBatch.Length() == 0 {
 				break
