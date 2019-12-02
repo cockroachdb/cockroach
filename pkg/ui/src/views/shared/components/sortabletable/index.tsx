@@ -197,7 +197,8 @@ export class SortableTable extends React.Component<TableProps> {
     let isEmptyTable = count === 0;
 
     if (!_.isUndefined(this.props.startIndex) &&
-      !_.isUndefined(this.props.renderItemsCount)) {
+      !_.isUndefined(this.props.renderItemsCount) &&
+        this.props.startIndex < count) {
       const { renderItemsCount } = this.props;
       startIndex = this.props.startIndex;
 
