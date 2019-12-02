@@ -874,18 +874,17 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			}
 			numCols := ref.SharedPrefixLen
 			outFK := ForeignKeyConstraint{
-				OriginTableID:                     desc.ID,
-				OriginColumnIDs:                   idx.ColumnIDs[:numCols],
-				ReferencedTableID:                 ref.Table,
-				ReferencedColumnIDs:               referencedIndex.ColumnIDs[:numCols],
-				Name:                              ref.Name,
-				Validity:                          ref.Validity,
-				OnDelete:                          ref.OnDelete,
-				OnUpdate:                          ref.OnUpdate,
-				Match:                             ref.Match,
-				LegacyOriginIndex:                 idx.ID,
-				LegacyReferencedIndex:             referencedIndex.ID,
-				LegacyUpgradedFromOriginReference: idx.ForeignKey,
+				OriginTableID:         desc.ID,
+				OriginColumnIDs:       idx.ColumnIDs[:numCols],
+				ReferencedTableID:     ref.Table,
+				ReferencedColumnIDs:   referencedIndex.ColumnIDs[:numCols],
+				Name:                  ref.Name,
+				Validity:              ref.Validity,
+				OnDelete:              ref.OnDelete,
+				OnUpdate:              ref.OnUpdate,
+				Match:                 ref.Match,
+				LegacyOriginIndex:     idx.ID,
+				LegacyReferencedIndex: referencedIndex.ID,
 			}
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
@@ -945,36 +944,34 @@ func maybeUpgradeForeignKeyRepOnIndex(
 						otherTable.ID, ref)
 				}
 				inFK = ForeignKeyConstraint{
-					OriginTableID:                         ref.Table,
-					OriginColumnIDs:                       forwardFK.OriginColumnIDs,
-					ReferencedTableID:                     desc.ID,
-					ReferencedColumnIDs:                   forwardFK.ReferencedColumnIDs,
-					Name:                                  forwardFK.Name,
-					Validity:                              forwardFK.Validity,
-					OnDelete:                              forwardFK.OnDelete,
-					OnUpdate:                              forwardFK.OnUpdate,
-					Match:                                 forwardFK.Match,
-					LegacyOriginIndex:                     originIndex.ID,
-					LegacyReferencedIndex:                 idx.ID,
-					LegacyUpgradedFromReferencedReference: *ref,
+					OriginTableID:         ref.Table,
+					OriginColumnIDs:       forwardFK.OriginColumnIDs,
+					ReferencedTableID:     desc.ID,
+					ReferencedColumnIDs:   forwardFK.ReferencedColumnIDs,
+					Name:                  forwardFK.Name,
+					Validity:              forwardFK.Validity,
+					OnDelete:              forwardFK.OnDelete,
+					OnUpdate:              forwardFK.OnUpdate,
+					Match:                 forwardFK.Match,
+					LegacyOriginIndex:     originIndex.ID,
+					LegacyReferencedIndex: idx.ID,
 				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
 				// foreign key.
 				numCols := originIndex.ForeignKey.SharedPrefixLen
 				inFK = ForeignKeyConstraint{
-					OriginTableID:                         ref.Table,
-					OriginColumnIDs:                       originIndex.ColumnIDs[:numCols],
-					ReferencedTableID:                     desc.ID,
-					ReferencedColumnIDs:                   idx.ColumnIDs[:numCols],
-					Name:                                  originIndex.ForeignKey.Name,
-					Validity:                              originIndex.ForeignKey.Validity,
-					OnDelete:                              originIndex.ForeignKey.OnDelete,
-					OnUpdate:                              originIndex.ForeignKey.OnUpdate,
-					Match:                                 originIndex.ForeignKey.Match,
-					LegacyOriginIndex:                     originIndex.ID,
-					LegacyReferencedIndex:                 idx.ID,
-					LegacyUpgradedFromReferencedReference: *ref,
+					OriginTableID:         ref.Table,
+					OriginColumnIDs:       originIndex.ColumnIDs[:numCols],
+					ReferencedTableID:     desc.ID,
+					ReferencedColumnIDs:   idx.ColumnIDs[:numCols],
+					Name:                  originIndex.ForeignKey.Name,
+					Validity:              originIndex.ForeignKey.Validity,
+					OnDelete:              originIndex.ForeignKey.OnDelete,
+					OnUpdate:              originIndex.ForeignKey.OnUpdate,
+					Match:                 originIndex.ForeignKey.Match,
+					LegacyOriginIndex:     originIndex.ID,
+					LegacyReferencedIndex: idx.ID,
 				}
 			}
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
@@ -983,108 +980,6 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	}
 	idx.ReferencedBy = nil
 	return changed, nil
-}
-
-// MaybeDowngradeForeignKeyRepresentation non-destructively downgrades the
-// receiver into the old foreign key representation (the ForeignKey
-// and ReferencedBy fields on IndexDescriptor if and only if the cluster version
-// has not yet been upgraded to VersionTopLevelForeignKeys. It returns true in
-// the first position if the downgrade occurred, along with a new
-// TableDescriptor object that is the downgraded descriptor. The receiver is not
-// modified in either case.
-func (desc *TableDescriptor) MaybeDowngradeForeignKeyRepresentation(
-	ctx context.Context, clusterSettings *cluster.Settings,
-) (bool, *TableDescriptor, error) {
-	downgradeUnnecessary := cluster.Version.IsActive(
-		ctx, clusterSettings, cluster.VersionTopLevelForeignKeys)
-	if downgradeUnnecessary {
-		return false, desc, nil
-	}
-	descCopy := protoutil.Clone(desc).(*TableDescriptor)
-	changed := false
-
-	// No need to process mutations, since only descriptors written on a 19.2
-	// cluster (after finalizing the upgrade) have foreign key mutations.
-	for _, fk := range descCopy.OutboundFKs {
-		// If this foreign key was just added to the descriptor (since the last time
-		// it was read from disk), the Legacy* fields should have been populated
-		// to ensure compatibility.
-		// TODO(lucy): Do this in a follow-up PR.
-		ref := ForeignKeyReference{
-			Table:           fk.ReferencedTableID,
-			Index:           fk.LegacyReferencedIndex,
-			Name:            fk.Name,
-			Validity:        fk.Validity,
-			SharedPrefixLen: int32(len(fk.OriginColumnIDs)),
-			OnDelete:        fk.OnDelete,
-			OnUpdate:        fk.OnUpdate,
-			Match:           fk.Match,
-		}
-		// Validate that the resultant downgraded foreign key reference is identical
-		// to the one that we expected. All fields should be the same, except for
-		// potentially the Name and Validity.
-		if err := validateDowngradedFKReference(ref, fk.LegacyUpgradedFromOriginReference); err != nil {
-			return false, nil, err
-		}
-
-		idx, err := descCopy.FindIndexByID(fk.LegacyOriginIndex)
-		if err != nil {
-			return false, nil, err
-		}
-		idx.ForeignKey = ref
-		changed = true
-	}
-	descCopy.OutboundFKs = nil
-
-	for i := range descCopy.InboundFKs {
-		// If this foreign key was just added to the descriptor (since the last time
-		// it was read from disk), the Legacy* fields should have been populated
-		// to ensure compatibility.
-		fk := &descCopy.InboundFKs[i]
-		backref := ForeignKeyReference{
-			Table: fk.OriginTableID,
-			Index: fk.LegacyOriginIndex,
-		}
-		if err := validateDowngradedFKReference(backref, fk.LegacyUpgradedFromReferencedReference); err != nil {
-			return false, nil, err
-		}
-		backrefIdx, err := descCopy.FindIndexByID(fk.LegacyReferencedIndex)
-		if err != nil {
-			return false, nil, err
-		}
-		backrefIdx.ReferencedBy = append(backrefIdx.ReferencedBy, backref)
-		changed = true
-	}
-	descCopy.InboundFKs = nil
-	return changed, descCopy, nil
-}
-
-func validateDowngradedFKReference(downgraded, original ForeignKeyReference) error {
-	if downgraded.Index != original.Index {
-		return errors.AssertionFailedf("downgraded.Index(%d) != original.Index (%d)",
-			downgraded.Index, original.Index)
-	}
-	if downgraded.Table != original.Table {
-		return errors.AssertionFailedf("downgraded.Table(%d) != original.Table (%d)",
-			downgraded.Table, original.Table)
-	}
-	if downgraded.SharedPrefixLen != original.SharedPrefixLen {
-		return errors.AssertionFailedf("downgraded.SharedPrefixLen(%d) != original.SharedPrefixLen (%d)",
-			downgraded.SharedPrefixLen, original.SharedPrefixLen)
-	}
-	if downgraded.OnDelete != original.OnDelete {
-		return errors.AssertionFailedf("downgraded.OnDelete(%d) != original.OnDelete (%d)",
-			downgraded.OnDelete, original.OnDelete)
-	}
-	if downgraded.OnUpdate != original.OnUpdate {
-		return errors.AssertionFailedf("downgraded.OnUpdate(%d) != original.OnUpdate (%d)",
-			downgraded.OnUpdate, original.OnUpdate)
-	}
-	if downgraded.Match != original.Match {
-		return errors.AssertionFailedf("downgraded.Match(%d) != original.Match (%d)",
-			downgraded.Match, original.Match)
-	}
-	return nil
 }
 
 // maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
@@ -2620,8 +2515,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				// We also drop the constraint immediately instead of queuing a mutation
 				// unless the cluster is fully upgraded to 19.2, for backward
 				// compatibility.
-				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated ||
-					!cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
+				if detail.CheckConstraint.Validity == ConstraintValidity_Unvalidated {
 					desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
 					return nil
 				}
@@ -2648,11 +2542,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 			if ref.Name == name {
 				// If the constraint is unvalidated, there's no assumption that it must
 				// hold for all rows, so it can be dropped immediately.
-				// We also drop the constraint immediately instead of queuing a mutation
-				// unless the cluster is fully upgraded to 19.2, for backward
-				// compatibility.
-				if detail.FK.Validity == ConstraintValidity_Unvalidated ||
-					!cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
+				if detail.FK.Validity == ConstraintValidity_Unvalidated {
 					// Remove the backreference.
 					if err := removeFK(desc, detail.FK); err != nil {
 						return err
