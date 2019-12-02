@@ -1834,6 +1834,10 @@ func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
 }
 
+func (m *sessionDataMutator) SetStrictDDLAtomicity(val bool) {
+	m.data.StrictDDLAtomicity = val
+}
+
 func (m *sessionDataMutator) SetSearchPath(val sessiondata.SearchPath) {
 	m.data.SearchPath = val
 }

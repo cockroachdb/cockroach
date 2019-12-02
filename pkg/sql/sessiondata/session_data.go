@@ -53,6 +53,18 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
+	// StrictDDLAtomicity causes errors when the client attempts DDL
+	// operations inside an explicit txn and CockroachDB cannot
+	// guarantee the DDL to be performed atomically.
+	//
+	// When this is not set, a transaction may commit its DML
+	// statements but fail its DDL statements, resulting
+	// in error XXA00 - TransactionCommittedWithSchemaChangeFailure.
+	//
+	// When this is set, that particular atomicity violation should
+	// not occur any more (at the expense of disabling certain
+	// forms of DDL inside explicit txns).
+	StrictDDLAtomicity bool
 	// RemoteAddr is used to generate logging events.
 	RemoteAddr net.Addr
 	// ZigzagJoinEnabled indicates whether the optimizer should try and plan a
