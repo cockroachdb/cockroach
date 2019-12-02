@@ -240,7 +240,8 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
       displayItemsCount = pageSize;
     }
 
-    if (data) {
+    // Display table only if data is available or 'emptyTableMessage' is provided by user.
+    if (totalRecordsCount > 0 || emptyTableMessage) {
       return (
         <div>
           <SortableTable
