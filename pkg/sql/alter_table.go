@@ -17,7 +17,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -904,15 +903,12 @@ func applyColumnMutation(
 			inuseNames[k] = struct{}{}
 		}
 		col.Nullable = true
-		// In 19.2 and above, add a check constraint equivalent to the non-null
-		// constraint and drop it in the schema changer.
-		if cluster.Version.IsActive(
-			params.ctx, params.ExecCfg().Settings, cluster.VersionTopLevelForeignKeys,
-		) {
-			check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Dropping)
-			tableDesc.Checks = append(tableDesc.Checks, check)
-			tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_DROP)
-		}
+
+		// Add a check constraint equivalent to the non-null constraint and drop
+		// it in the schema changer.
+		check := sqlbase.MakeNotNullCheckConstraint(col.Name, col.ID, inuseNames, sqlbase.ConstraintValidity_Dropping)
+		tableDesc.Checks = append(tableDesc.Checks, check)
+		tableDesc.AddNotNullMutation(check, sqlbase.DescriptorMutation_DROP)
 
 	case *tree.AlterTableDropStored:
 		if !col.IsComputed() {

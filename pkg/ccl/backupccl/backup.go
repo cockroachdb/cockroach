@@ -585,16 +585,7 @@ func writeBackupDescriptor(
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
 
-	// When writing a backup descriptor, make sure to downgrade any new-style FKs
-	// when we're in the 19.1/2 mixed state so that 19.1 clusters can still
-	// restore backups taken on a 19.1/2 mixed cluster.
-	// TODO(lucy, jordan): Remove in 20.1.
-	downgradedDesc, err := maybeDowngradeTableDescsInBackupDescriptor(ctx, settings, desc)
-	if err != nil {
-		return err
-	}
-
-	descBuf, err := protoutil.Marshal(downgradedDesc)
+	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
 	}
@@ -1254,15 +1245,7 @@ func backupPlanHook(
 			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
 		}
 
-		// When writing a backup descriptor, make sure to downgrade any new-style FKs
-		// when we're in the 19.1/2 mixed state so that 19.1 clusters can still
-		// restore backups taken on a 19.1/2 mixed cluster.
-		// TODO(lucy, jordan): Remove in 20.1.
-		downgradedBackupDesc, err := maybeDowngradeTableDescsInBackupDescriptor(ctx, p.ExecCfg().Settings, &backupDesc)
-		if err != nil {
-			return err
-		}
-		descBytes, err := protoutil.Marshal(downgradedBackupDesc)
+		descBytes, err := protoutil.Marshal(&backupDesc)
 		if err != nil {
 			return err
 		}
@@ -1556,33 +1539,6 @@ func getURIsByLocalityKV(to []string) (string, map[string]string, error) {
 		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
 	}
 	return defaultURI, urisByLocalityKV, nil
-}
-
-// maybeDowngradeTableDescsInBackupDescriptor returns the backup descriptor
-// with its table descriptors downgraded to the older 19.1-style foreign key
-// representation, if they are not already downgraded, and if the cluster is not
-// fully upgraded to 19.2. It returns a *shallow* copy to avoid mutating the
-// original backup descriptor. This function facilitates writing 19.1-compatible
-// backups when the cluster hasn't been fully upgraded.
-// TODO(lucy, jordan): Remove in 20.1.
-func maybeDowngradeTableDescsInBackupDescriptor(
-	ctx context.Context, settings *cluster.Settings, backupDesc *BackupDescriptor,
-) (*BackupDescriptor, error) {
-	backupDescCopy := &(*backupDesc)
-	// Copy Descriptors so we can return a shallow copy without mutating the slice.
-	copy(backupDescCopy.Descriptors, backupDesc.Descriptors)
-	for i := range backupDesc.Descriptors {
-		if tableDesc := backupDesc.Descriptors[i].Table(hlc.Timestamp{}); tableDesc != nil {
-			downgraded, newDesc, err := tableDesc.MaybeDowngradeForeignKeyRepresentation(ctx, settings)
-			if err != nil {
-				return nil, err
-			}
-			if downgraded {
-				backupDescCopy.Descriptors[i] = *sqlbase.WrapDescriptor(newDesc)
-			}
-		}
-	}
-	return backupDescCopy, nil
 }
 
 // maybeUpgradeTableDescsInBackupDescriptors updates the backup descriptors'

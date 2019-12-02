@@ -559,16 +559,10 @@ func ResolveFK(
 
 	var validity sqlbase.ConstraintValidity
 	if ts != NewTable {
-		if cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
-			if validationBehavior == tree.ValidationSkip {
-				validity = sqlbase.ConstraintValidity_Unvalidated
-			} else {
-				validity = sqlbase.ConstraintValidity_Validating
-			}
-		} else {
-			// This is for backward compatibility with 19.1, when all FKs were added
-			// immediately in the user transaction as unvalidated.
+		if validationBehavior == tree.ValidationSkip {
 			validity = sqlbase.ConstraintValidity_Unvalidated
+		} else {
+			validity = sqlbase.ConstraintValidity_Validating
 		}
 	}
 
@@ -586,28 +580,7 @@ func ResolveFK(
 		LegacyReferencedIndex: legacyReferencedIndexID,
 	}
 
-	if !cluster.Version.IsActive(ctx, settings, cluster.VersionTopLevelForeignKeys) {
-		legacyUpgradedFromOriginReference := sqlbase.ForeignKeyReference{
-			Table:           target.ID,
-			Index:           legacyReferencedIndexID,
-			Name:            constraintName,
-			Validity:        validity,
-			SharedPrefixLen: int32(len(originColumnIDs)),
-			OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
-			OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
-			Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
-		}
-		ref.LegacyUpgradedFromOriginReference = legacyUpgradedFromOriginReference
-		legacyUpgradedFromReferencedReference := sqlbase.ForeignKeyReference{
-			Table: tbl.ID,
-			Index: legacyOriginIndexID,
-		}
-		ref.LegacyUpgradedFromReferencedReference = legacyUpgradedFromReferencedReference
-	}
-
-	if ts == NewTable || !cluster.Version.IsActive(
-		ctx, settings, cluster.VersionTopLevelForeignKeys,
-	) {
+	if ts == NewTable {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 		target.InboundFKs = append(target.InboundFKs, ref)
 	} else {
