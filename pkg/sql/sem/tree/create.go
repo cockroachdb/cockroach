@@ -900,13 +900,38 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 	}
 }
 
+// StorageParam is a key-value parameter for table storage.
+type StorageParam struct {
+	Key   Name
+	Value Expr
+}
+
+// StorageParams is a list of StorageParams.
+type StorageParams []StorageParam
+
+// Format implements the NodeFormatter interface.
+func (o *StorageParams) Format(ctx *FmtCtx) {
+	for i := range *o {
+		n := &(*o)[i]
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(&n.Key)
+		if n.Value != nil {
+			ctx.WriteString(` = `)
+			ctx.FormatNode(n.Value)
+		}
+	}
+}
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists bool
-	Table       TableName
-	Interleave  *InterleaveDef
-	PartitionBy *PartitionBy
-	Temporary   bool
+	IfNotExists   bool
+	Table         TableName
+	Interleave    *InterleaveDef
+	PartitionBy   *PartitionBy
+	Temporary     bool
+	StorageParams StorageParams
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -970,6 +995,8 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		if node.PartitionBy != nil {
 			ctx.FormatNode(node.PartitionBy)
 		}
+		// No storage parameters are implemented, so we never list the storage
+		// parameters in the output format.
 	}
 }
 
