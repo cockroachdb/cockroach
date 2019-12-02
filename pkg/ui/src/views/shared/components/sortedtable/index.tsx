@@ -13,6 +13,7 @@ import _ from "lodash";
 import * as Long from "long";
 import { Moment } from "moment";
 import { createSelector } from "reselect";
+import { Pagination } from "antd";
 
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
 import { ExpandableConfig } from "src/views/shared/components/sortabletable";
@@ -72,6 +73,14 @@ interface SortedTableProps<T> {
     // purposes of tracking whether it's expanded or not.
     expansionKey: (obj: T) => string;
   };
+  // Indicates if pagination is enabled
+  pagination?: boolean;
+  // Callback which is invoked on navigation between pages.
+  onPageChange?: (page: number, pageSize: number) => void;
+  // How many rows should be displayed on a page
+  pageSize?: number;
+  // What page should be selected by default
+  selectedPage?: number;
 }
 
 interface SortedTableState {
@@ -92,6 +101,10 @@ interface SortedTableState {
 export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedTableState> {
   static defaultProps: Partial<SortedTableProps<any>> = {
     rowClass: (_obj: any) => "",
+    pagination: false,
+    onPageChange: _.noop,
+    pageSize: 15,
+    selectedPage: 1,
   };
 
   rollups = createSelector(
@@ -190,7 +203,15 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, sortSetting, onChangeSortSetting } = this.props;
+    const {
+      data,
+      sortSetting,
+      onChangeSortSetting,
+      onPageChange,
+      pagination,
+      selectedPage,
+      pageSize,
+    } = this.props;
 
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
@@ -201,17 +222,42 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
       };
     }
 
+    // As a fallback values, all data is displayed on a single
+    // page so basically there is no pagination if not specified.
+    const totalRecordsCount = data.length;
+    let startIndex = 0;
+    let displayItemsCount = data.length;
+
+    // if 'pagination' props is enabled, then calculate
+    // offset for rows to display
+    if (pagination && pageSize < totalRecordsCount) {
+      startIndex = (selectedPage - 1) * pageSize;
+      displayItemsCount = pageSize;
+    }
+
     if (data) {
       return (
-        <SortableTable
-          count={data.length}
-          sortSetting={sortSetting}
-          onChangeSortSetting={onChangeSortSetting}
-          columns={this.columns(this.props)}
-          rowClass={this.rowClass(this.props)}
-          className={this.props.className}
-          expandableConfig={expandableConfig}
-        />
+        <React.Fragment>
+          <SortableTable
+            count={data.length}
+            startIndex={startIndex}
+            renderItemsCount={displayItemsCount}
+            sortSetting={sortSetting}
+            onChangeSortSetting={onChangeSortSetting}
+            columns={this.columns(this.props)}
+            rowClass={this.rowClass(this.props)}
+            className={this.props.className}
+            expandableConfig={expandableConfig}
+          />
+          { pagination &&
+            <Pagination
+              hideOnSinglePage
+              defaultCurrent={ selectedPage }
+              total={ totalRecordsCount }
+              onChange={ onPageChange }
+              pageSize={ pageSize }/>
+          }
+        </React.Fragment>
       );
     }
     return <div>No results.</div>;

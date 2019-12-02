@@ -65,6 +65,10 @@ interface TableProps {
   // i.e. each row has an expand/collapse arrow on its left, and renders
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
+  // Render rows which start from 'startIndex' number
+  startIndex?: number;
+  // render particular number of rows instead of rendering entire dataset
+  renderItemsCount?: number;
 }
 
 export interface ExpandableConfig {
@@ -184,7 +188,23 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig } = this.props;
+    const { count, sortSetting, columns, expandableConfig } = this.props;
+    // Render all rows for entire dataset.
+    let startIndex = 0;
+    let endIndex = count;
+
+    if (!_.isUndefined(this.props.startIndex) &&
+      !_.isUndefined(this.props.renderItemsCount)) {
+      const { renderItemsCount } = this.props;
+      startIndex = this.props.startIndex;
+
+      // If endIndex is greater then total count of items in dataset (is possible for last page),
+      // then keep endIndex equal to total count of items to avoid IndexOutOfRange exception.
+      if (startIndex + renderItemsCount < count) {
+        endIndex = startIndex + renderItemsCount;
+      }
+    }
+
     return (
       <table className={classNames("sort-table", this.props.className)}>
         <thead>
@@ -216,7 +236,8 @@ export class SortableTable extends React.Component<TableProps> {
           </tr>
         </thead>
         <tbody>
-          {_.times(this.props.count, this.renderRow)}
+          {_.range(startIndex, endIndex)
+            .map(idx => this.renderRow(idx))}
         </tbody>
       </table>
     );
