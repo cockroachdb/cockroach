@@ -289,15 +289,14 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 	return &queryNotSupportedError{msg: fmt.Sprintf(format, args...)}
 }
 
-var mutationsNotSupportedError = newQueryNotSupportedError("mutations not supported")
-var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING should never distribute")
-
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
 // This must be kept in sync with createPlanForNode.
 // TODO(jordan): refactor these to use the observer pattern to avoid duplication.
 func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) bool {
 	switch n := node.(type) {
+	// Keep these cases alphabetized, please!
 	case *distinctNode:
+	case *exportNode:
 	case *filterNode:
 	case *groupNode:
 	case *indexJoinNode:
@@ -311,10 +310,6 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *sortNode:
 	case *unaryNode:
 	case *unionNode:
-	case *virtualTableNode:
-	case *windowNode:
-	case *zeroNode:
-	case *zigzagJoinNode:
 	case *valuesNode:
 		// This is unfortunately duplicated by createPlanForNode, and must be kept
 		// in sync with its implementation.
@@ -322,6 +317,9 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 			return true
 		}
 		return false
+	case *windowNode:
+	case *zeroNode:
+	case *zigzagJoinNode:
 	default:
 		return true
 	}
@@ -335,28 +333,34 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 // TODO(radu): add tests for this.
 func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
+	// Keep these cases alphabetized, please!
+	case *distinctNode:
+		return dsp.checkSupportForNode(n.plan)
+
+	case *exportNode:
+		return dsp.checkSupportForNode(n.source)
+
 	case *filterNode:
 		if err := dsp.checkExpr(n.filter); err != nil {
 			return cannotDistribute, err
 		}
 		return dsp.checkSupportForNode(n.source.plan)
 
-	case *renderNode:
-		for _, e := range n.render {
-			if err := dsp.checkExpr(e); err != nil {
-				return cannotDistribute, err
-			}
+	case *indexJoinNode:
+		// n.table doesn't have meaningful spans, but we need to check support (e.g.
+		// for any filtering expression).
+		if _, err := dsp.checkSupportForNode(n.table); err != nil {
+			return cannotDistribute, err
 		}
-		return dsp.checkSupportForNode(n.source.plan)
+		return dsp.checkSupportForNode(n.input)
 
-	case *sortNode:
+	case *groupNode:
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		// If we have to sort, distribute the query.
-		rec = rec.compose(shouldDistribute)
-		return rec, nil
+		// Distribute aggregations if possible.
+		return rec.compose(shouldDistribute), nil
 
 	case *joinNode:
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
@@ -378,6 +382,35 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			rec = rec.compose(shouldDistribute)
 		}
 		return rec, nil
+
+	case *limitNode:
+		if err := dsp.checkExpr(n.countExpr); err != nil {
+			return cannotDistribute, err
+		}
+		if err := dsp.checkExpr(n.offsetExpr); err != nil {
+			return cannotDistribute, err
+		}
+		return dsp.checkSupportForNode(n.plan)
+
+	case *lookupJoinNode:
+		if err := dsp.checkExpr(n.onCond); err != nil {
+			return cannotDistribute, err
+		}
+		if _, err := dsp.checkSupportForNode(n.input); err != nil {
+			return cannotDistribute, err
+		}
+		return shouldDistribute, nil
+
+	case *projectSetNode:
+		return dsp.checkSupportForNode(n.source)
+
+	case *renderNode:
+		for _, e := range n.render {
+			if err := dsp.checkExpr(e); err != nil {
+				return cannotDistribute, err
+			}
+		}
+		return dsp.checkSupportForNode(n.source.plan)
 
 	case *scanNode:
 		rec := canDistribute
@@ -401,48 +434,17 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return rec, nil
 
-	case *indexJoinNode:
-		// n.table doesn't have meaningful spans, but we need to check support (e.g.
-		// for any filtering expression).
-		if _, err := dsp.checkSupportForNode(n.table); err != nil {
-			return cannotDistribute, err
-		}
-		return dsp.checkSupportForNode(n.input)
-
-	case *lookupJoinNode:
-		if err := dsp.checkExpr(n.onCond); err != nil {
-			return cannotDistribute, err
-		}
-		if _, err := dsp.checkSupportForNode(n.input); err != nil {
-			return cannotDistribute, err
-		}
-		return shouldDistribute, nil
-
-	case *zigzagJoinNode:
-		if err := dsp.checkExpr(n.onCond); err != nil {
-			return cannotDistribute, err
-		}
-		return shouldDistribute, nil
-
-	case *groupNode:
+	case *sortNode:
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		// Distribute aggregations if possible.
-		return rec.compose(shouldDistribute), nil
+		// If we have to sort, distribute the query.
+		rec = rec.compose(shouldDistribute)
+		return rec, nil
 
-	case *limitNode:
-		if err := dsp.checkExpr(n.countExpr); err != nil {
-			return cannotDistribute, err
-		}
-		if err := dsp.checkExpr(n.offsetExpr); err != nil {
-			return cannotDistribute, err
-		}
-		return dsp.checkSupportForNode(n.plan)
-
-	case *distinctNode:
-		return dsp.checkSupportForNode(n.plan)
+	case *unaryNode:
+		return canDistribute, nil
 
 	case *unionNode:
 		recLeft, err := dsp.checkSupportForNode(n.left)
@@ -472,28 +474,17 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return canDistribute, nil
 
-	case *insertNode, *updateNode, *deleteNode, *upsertNode:
-		// This is a potential hot path.
-		return cannotDistribute, mutationsNotSupportedError
-
-	case *setVarNode, *setClusterSettingNode:
-		// SET statements are never distributed.
-		return cannotDistribute, setNotSupportedError
-
-	case *projectSetNode:
-		return dsp.checkSupportForNode(n.source)
-
-	case *unaryNode:
-		return canDistribute, nil
+	case *windowNode:
+		return dsp.checkSupportForNode(n.plan)
 
 	case *zeroNode:
 		return canDistribute, nil
 
-	case *windowNode:
-		return dsp.checkSupportForNode(n.plan)
-
-	case *exportNode:
-		return dsp.checkSupportForNode(n.source)
+	case *zigzagJoinNode:
+		if err := dsp.checkExpr(n.onCond); err != nil {
+			return cannotDistribute, err
+		}
+		return shouldDistribute, nil
 
 	default:
 		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node %T", node)
@@ -2272,28 +2263,20 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx.planDepth++
 
 	switch n := node.(type) {
-	case *scanNode:
-		plan, err = dsp.createTableReaders(planCtx, n, nil)
+	// Keep these cases alphabetized, please!
+	case *distinctNode:
+		plan, err = dsp.createPlanForDistinct(planCtx, n)
 
-	case *indexJoinNode:
-		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
+	case *exportNode:
+		plan, err = dsp.createPlanForExport(planCtx, n)
 
-	case *lookupJoinNode:
-		plan, err = dsp.createPlanForLookupJoin(planCtx, n)
-
-	case *zigzagJoinNode:
-		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
-
-	case *joinNode:
-		plan, err = dsp.createPlanForJoin(planCtx, n)
-
-	case *renderNode:
+	case *filterNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		err = dsp.selectRenders(&plan, n, planCtx)
-		if err != nil {
+
+		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
 			return PhysicalPlan{}, err
 		}
 
@@ -2307,23 +2290,11 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return PhysicalPlan{}, err
 		}
 
-	case *sortNode:
-		plan, err = dsp.createPlanForNode(planCtx, n.plan)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
+	case *indexJoinNode:
+		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
 
-		dsp.addSorters(&plan, n)
-
-	case *filterNode:
-		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
-		if err != nil {
-			return PhysicalPlan{}, err
-		}
-
-		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
-			return PhysicalPlan{}, err
-		}
+	case *joinNode:
+		plan, err = dsp.createPlanForJoin(planCtx, n)
 
 	case *limitNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
@@ -2337,11 +2308,38 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return PhysicalPlan{}, err
 		}
 
-	case *distinctNode:
-		plan, err = dsp.createPlanForDistinct(planCtx, n)
+	case *lookupJoinNode:
+		plan, err = dsp.createPlanForLookupJoin(planCtx, n)
 
 	case *ordinalityNode:
 		plan, err = dsp.createPlanForOrdinality(planCtx, n)
+
+	case *projectSetNode:
+		plan, err = dsp.createPlanForProjectSet(planCtx, n)
+
+	case *renderNode:
+		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+		err = dsp.selectRenders(&plan, n, planCtx)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+
+	case *scanNode:
+		plan, err = dsp.createTableReaders(planCtx, n, nil)
+
+	case *sortNode:
+		plan, err = dsp.createPlanForNode(planCtx, n.plan)
+		if err != nil {
+			return PhysicalPlan{}, err
+		}
+
+		dsp.addSorters(&plan, n)
+
+	case *unaryNode:
+		plan, err = dsp.createPlanForUnary(planCtx, n)
 
 	case *unionNode:
 		plan, err = dsp.createPlanForSetOp(planCtx, n)
@@ -2370,20 +2368,14 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			plan, err = dsp.createPlanForValues(planCtx, n)
 		}
 
-	case *projectSetNode:
-		plan, err = dsp.createPlanForProjectSet(planCtx, n)
-
-	case *unaryNode:
-		plan, err = dsp.createPlanForUnary(planCtx, n)
+	case *windowNode:
+		plan, err = dsp.createPlanForWindow(planCtx, n)
 
 	case *zeroNode:
 		plan, err = dsp.createPlanForZero(planCtx, n)
 
-	case *windowNode:
-		plan, err = dsp.createPlanForWindow(planCtx, n)
-
-	case *exportNode:
-		plan, err = dsp.createPlanForExport(planCtx, n)
+	case *zigzagJoinNode:
+		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
