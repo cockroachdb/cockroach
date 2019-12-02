@@ -160,8 +160,8 @@ func doFormatOpChain(
 	verbose bool,
 	seenOps map[reflect.Value]struct{},
 ) {
-	for i := 0; i < operator.ChildCount(); i++ {
-		child := operator.Child(i)
+	for i := 0; i < operator.ChildCount(verbose); i++ {
+		child := operator.Child(i, verbose)
 		childOpValue := reflect.ValueOf(child)
 		childOpName := reflect.TypeOf(child).String()
 		if _, seenOp := seenOps[childOpValue]; seenOp {

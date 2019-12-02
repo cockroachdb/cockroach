@@ -142,7 +142,7 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 }
 
 // ChildCount is part of the Operator interface.
-func (c *Columnarizer) ChildCount() int {
+func (c *Columnarizer) ChildCount(verbose bool) int {
 	if _, ok := c.input.(execinfra.OpNode); ok {
 		return 1
 	}
@@ -150,7 +150,7 @@ func (c *Columnarizer) ChildCount() int {
 }
 
 // Child is part of the Operator interface.
-func (c *Columnarizer) Child(nth int) execinfra.OpNode {
+func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		if n, ok := c.input.(execinfra.OpNode); ok {
 			return n

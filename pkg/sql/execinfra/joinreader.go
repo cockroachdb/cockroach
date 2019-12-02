@@ -720,12 +720,12 @@ func (jr *JoinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetad
 }
 
 // ChildCount is part of the OpNode interface.
-func (jr *JoinReader) ChildCount() int {
+func (jr *JoinReader) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child is part of the OpNode interface.
-func (jr *JoinReader) Child(nth int) OpNode {
+func (jr *JoinReader) Child(nth int, verbose bool) OpNode {
 	if nth == 0 {
 		if n, ok := jr.input.(OpNode); ok {
 			return n

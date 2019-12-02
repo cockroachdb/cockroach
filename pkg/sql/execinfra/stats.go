@@ -41,12 +41,12 @@ func NewInputStatCollector(input RowSource) *InputStatCollector {
 }
 
 // ChildCount is part of the OpNode interface.
-func (isc *InputStatCollector) ChildCount() int {
+func (isc *InputStatCollector) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child is part of the OpNode interface.
-func (isc *InputStatCollector) Child(nth int) OpNode {
+func (isc *InputStatCollector) Child(nth int, verbose bool) OpNode {
 	if nth == 0 {
 		return isc.RowSource.(OpNode)
 	}

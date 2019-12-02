@@ -198,11 +198,11 @@ type hashJoinEqOp struct {
 	}
 }
 
-func (hj *hashJoinEqOp) ChildCount() int {
+func (hj *hashJoinEqOp) ChildCount(verbose bool) int {
 	return 2
 }
 
-func (hj *hashJoinEqOp) Child(nth int) execinfra.OpNode {
+func (hj *hashJoinEqOp) Child(nth int, verbose bool) execinfra.OpNode {
 	switch nth {
 	case 0:
 		return hj.spec.left.source
