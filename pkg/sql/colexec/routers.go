@@ -45,10 +45,6 @@ type routerOutputOp struct {
 	input execinfra.OpNode
 
 	types []coltypes.T
-	// TODO(yuzefovich): remove this field and use global zeroBatch instead. This
-	// will require a minor refactor of merge joiner.
-	// zeroBatch is used to return a 0 length batch in some cases.
-	zeroBatch coldata.Batch
 
 	// unblockedEventsChan is signaled when a routerOutput changes state from
 	// blocked to unblocked.
@@ -108,7 +104,6 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	o := &routerOutputOp{
 		allocator:           allocator,
 		types:               types,
-		zeroBatch:           allocator.NewMemBatchWithSize(types, 0 /* size */),
 		unblockedEventsChan: unblockedEventsChan,
 		blockedThreshold:    blockedThreshold,
 		outputBatchSize:     outputBatchSize,
@@ -127,13 +122,13 @@ func (o *routerOutputOp) Next(context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.mu.done {
-		return o.zeroBatch
+		return coldata.ZeroBatch
 	}
 	for len(o.mu.data) == 0 && !o.mu.done {
 		o.mu.cond.Wait()
 	}
 	if o.mu.done {
-		return o.zeroBatch
+		return coldata.ZeroBatch
 	}
 	// Get the first batch and advance the start of the buffer.
 	b := o.mu.data[0]
@@ -181,7 +176,7 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	defer o.mu.Unlock()
 	if batch.Length() == 0 {
 		// End of data. o.mu.done will be set in Next.
-		o.mu.data = append(o.mu.data, o.zeroBatch)
+		o.mu.data = append(o.mu.data, coldata.ZeroBatch)
 		o.mu.cond.Signal()
 		return false
 	}

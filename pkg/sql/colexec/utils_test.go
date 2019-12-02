@@ -932,7 +932,7 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next(ctx)
 	}
-	return zeroBatch
+	return coldata.ZeroBatch
 }
 
 // finiteChunksSource is an Operator that returns a batch specified number of
@@ -987,7 +987,7 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	return zeroBatch
+	return coldata.ZeroBatch
 }
 
 func TestOpTestInputOutput(t *testing.T) {
