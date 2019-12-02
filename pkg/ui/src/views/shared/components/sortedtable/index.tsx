@@ -18,6 +18,8 @@ import { Pagination } from "antd";
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
 import { ExpandableConfig } from "src/views/shared/components/sortabletable";
 
+import "./sortedtabel.styl";
+
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
  * in a SortedTable.
@@ -237,7 +239,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
 
     if (data) {
       return (
-        <React.Fragment>
+        <div>
           <SortableTable
             count={data.length}
             startIndex={startIndex}
@@ -251,13 +253,14 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           />
           { pagination &&
             <Pagination
-              hideOnSinglePage
+              className="table-pagination"
               defaultCurrent={ selectedPage }
               total={ totalRecordsCount }
               onChange={ onPageChange }
-              pageSize={ pageSize }/>
+              pageSize={ pageSize }
+              size="small"/>
           }
-        </React.Fragment>
+        </div>
       );
     }
     return <div>No results.</div>;
