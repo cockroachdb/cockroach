@@ -479,8 +479,7 @@ func (b *Builder) buildFunction(
 	})
 
 	if isGenerator(def) {
-		columns := len(def.ReturnLabels)
-		return b.finishBuildGeneratorFunction(f, out, columns, inScope, outScope, outCol)
+		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
 	}
 
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)

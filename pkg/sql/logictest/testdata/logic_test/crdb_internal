@@ -606,4 +606,3 @@ query B
 SELECT crdb_internal.is_admin()
 ----
 false
-
