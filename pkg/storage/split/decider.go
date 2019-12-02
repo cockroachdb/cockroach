@@ -15,6 +15,7 @@ package split
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -139,7 +140,36 @@ func (d *Decider) MaybeSplitKey(now time.Time) roachpb.Key {
 	d.mu.Lock()
 	d.recordLocked(now, 0, nil)
 	if d.mu.splitFinder != nil && d.mu.splitFinder.Ready(now) {
-		key = d.mu.splitFinder.Key()
+		// We've found a key to split at. This key might be in the middle of a
+		// SQL row. If we fail to rectify that, we'll cause SQL crashes:
+		//
+		// https://github.com/cockroachdb/cockroach/pull/42056
+		//
+		// While the behavior at the SQL level is arguably bad and should be
+		// fixed, splitting between column families is also never a good idea
+		// for performance in general. So, if the split key is, say
+		//
+		//   /Table/51/52/53/54/55/9/1
+		//
+		// then we want to split instead at
+		//
+		//   /Table/51/52/53/54/55
+		//
+		// (see TestDeciderCallsEnsureSafeSplitKey).
+		//
+		// The key found here isn't guaranteed to be a valid SQL column family
+		// key. This is because the keys are sampled from StartKey of requests
+		// hitting this replica. Ranged operations may well wish to exclude the
+		// start point by calling .Next() or may span multiple ranges, and so
+		// such a key may end up being passed to EnsureSafeSplitKey here.
+		//
+		// We take the risk that the result may sometimes not be a good split
+		// point (or even in this range).
+		var err error
+		key, err = keys.EnsureSafeSplitKey(d.mu.splitFinder.Key())
+		if err != nil {
+			key = nil
+		}
 	}
 	d.mu.Unlock()
 
