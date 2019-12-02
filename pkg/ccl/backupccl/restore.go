@@ -556,13 +556,6 @@ func RewriteTableDescs(
 			if indexRewrite, ok := tableRewrites[to]; ok {
 				fk.ReferencedTableID = indexRewrite.TableID
 				fk.OriginTableID = tableRewrite.TableID
-				// Also update the table ID on the old FK proto that exists for
-				// validation, if applicable, so that the validation doesn't fail when
-				// we downgrade the table descriptors for 19.1 nodes.
-				// TODO(lucy, jordan): Remove this in 20.1.
-				if fk.LegacyUpgradedFromOriginReference.Table != 0 {
-					fk.LegacyUpgradedFromOriginReference.Table = indexRewrite.TableID
-				}
 			} else {
 				// If indexRewrite doesn't exist, the user has specified
 				// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
@@ -583,13 +576,6 @@ func RewriteTableDescs(
 			if refRewrite, ok := tableRewrites[ref.OriginTableID]; ok {
 				ref.ReferencedTableID = tableRewrite.TableID
 				ref.OriginTableID = refRewrite.TableID
-				// Also update the table ID on the old FK proto that exists for
-				// validation, if applicable, so that the validation doesn't fail when
-				// we downgrade the table descriptors for 19.1 nodes.
-				// TODO(lucy, jordan): Remove this in 20.1.
-				if ref.LegacyUpgradedFromReferencedReference.Table != 0 {
-					ref.LegacyUpgradedFromReferencedReference.Table = refRewrite.TableID
-				}
 				table.InboundFKs = append(table.InboundFKs, *ref)
 			}
 		}
@@ -1194,17 +1180,7 @@ func restore(
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
 	for i := range tables {
-		// Downgrade all tables that we're writing to the cluster, if we're in a
-		// mixed 19.1/19.2 state.
-		// TODO(lucy, jordan): Remove in 20.1.
-		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(restoreCtx, settings)
-		if err != nil {
-			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err, "downgrading table %d", tables[i].ID)
-		}
 		tableToSerialize := tables[i]
-		if downgraded {
-			tableToSerialize = newDesc
-		}
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tableToSerialize))
 		if err != nil {
 			return mu.res, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -1534,19 +1510,6 @@ func doRestorePlan(
 	}
 	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
-	}
-
-	// Before marshaling table descriptors in RestoreDetails, possibly downgrade
-	// them to the old 19.1 representation.
-	// TODO(lucy, jordan): Remove in 20.1.
-	for i := range tables {
-		downgraded, newDesc, err := tables[i].MaybeDowngradeForeignKeyRepresentation(ctx, p.ExecCfg().Settings)
-		if err != nil {
-			return err
-		}
-		if downgraded {
-			tables[i] = newDesc
-		}
 	}
 
 	_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
