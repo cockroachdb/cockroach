@@ -158,4 +158,7 @@ const (
 	Subsume
 	// RangeStats returns the MVCC statistics for a range.
 	RangeStats
+	// Migrate proactively forces a range to transition out of any legacy
+	// modes of operation.
+	Migrate
 )

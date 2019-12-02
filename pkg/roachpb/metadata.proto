@@ -372,6 +372,7 @@ message Tier {
 
 message Version {
   option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
 
   // The names "major" and "minor" are reserved in C in
   // some platforms (e.g. FreeBSD).

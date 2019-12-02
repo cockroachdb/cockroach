@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -226,6 +227,10 @@ type StoreTestingKnobs struct {
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
 	MaxApplicationBatchSize int
+
+	// If set, use the following truncated state type when bootstrapping ranges.
+	// This is used for testing the Migrate command.
+	TruncatedStateTypeOverride *stateloader.TruncatedStateType
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

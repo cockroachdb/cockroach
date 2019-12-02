@@ -216,6 +216,7 @@ func bootstrapCluster(
 	bootstrapVersion cluster.ClusterVersion,
 	defaultZoneConfig *config.ZoneConfig,
 	defaultSystemZoneConfig *config.ZoneConfig,
+	knobs base.TestingKnobs,
 ) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
@@ -244,10 +245,14 @@ func bootstrapCluster(
 				return splits[i].Less(splits[j])
 			})
 
+			var storeKnobs storage.StoreTestingKnobs
+			if kn, ok := knobs.Store.(*storage.StoreTestingKnobs); ok {
+				storeKnobs = *kn
+			}
 			if err := storage.WriteInitialClusterData(
 				ctx, eng, initialValues,
 				bootstrapVersion.Version, len(engines), splits,
-				hlc.UnixNano(),
+				hlc.UnixNano(), storeKnobs,
 			); err != nil {
 				return uuid.UUID{}, err
 			}
@@ -319,12 +324,13 @@ func (n *Node) bootstrapCluster(
 	bootstrapVersion cluster.ClusterVersion,
 	defaultZoneConfig *config.ZoneConfig,
 	defaultSystemZoneConfig *config.ZoneConfig,
+	knobs base.TestingKnobs,
 ) error {
 	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
 		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
 	}
 	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, defaultZoneConfig, defaultSystemZoneConfig)
+	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, defaultZoneConfig, defaultSystemZoneConfig, knobs)
 	if err != nil {
 		return err
 	}

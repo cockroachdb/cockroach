@@ -1474,6 +1474,23 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
+// MigrateRequest forces all ranges overlapping it to proactively move out of
+// any legacy modes that they are currently in. When this command returns, the
+// ranges are ready to run with the most up to date cluster version supported
+// by this binary.
+message MigrateRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The new version that will become active next.
+  Version NewVersion = 2 [(gogoproto.nullable) = false];
+}
+
+// MigrateResponse is the response to an Migrate operation.
+message MigrateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // AddSSTableRequest is arguments to the AddSSTable() method, to link a file
 // into the RocksDB log-structured merge-tree.
 message AddSSTableRequest {
@@ -1684,6 +1701,7 @@ message RequestUnion {
     RefreshRangeRequest refresh_range = 41;
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
+    MigrateRequest migrate = 49;
   }
   reserved 15, 23, 25, 27;
 }
@@ -1735,6 +1753,7 @@ message ResponseUnion {
     RefreshRangeResponse refresh_range = 41;
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
+    MigrateResponse migrate = 49;
   }
   reserved 15, 23, 25, 27, 28;
 }

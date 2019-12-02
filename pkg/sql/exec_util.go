@@ -530,6 +530,12 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
+
+	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
+	// version` but before executing it. It can carry out certain kinds of
+	// short-running migrations that allow us to eventually remove legacy
+	// code.
+	VersionUpgradeHook func(ctx context.Context, newV roachpb.Version) error
 }
 
 // Organization returns the value of cluster.organization.
