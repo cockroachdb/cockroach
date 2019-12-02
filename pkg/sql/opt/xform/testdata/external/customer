@@ -545,21 +545,21 @@ project
  ├── columns: secondary_id:6(string) "?column?":7(jsonb)
  ├── side-effects
  ├── inner-join (lookup idtable)
- │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null) json_array_elements:4(jsonb) column5:5(uuid!null)
+ │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null) value:4(jsonb) column5:5(uuid!null)
  │    ├── key columns: [1] = [1]
  │    ├── side-effects
  │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)
- │    │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) json_array_elements:4(jsonb) column5:5(uuid!null)
+ │    │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) value:4(jsonb) column5:5(uuid!null)
  │    │    ├── key columns: [5] = [2]
  │    │    ├── side-effects
  │    │    ├── fd: (4)-->(5), (1)-->(2), (2)==(5), (5)==(2)
  │    │    ├── project
- │    │    │    ├── columns: column5:5(uuid) json_array_elements:4(jsonb)
+ │    │    │    ├── columns: column5:5(uuid) value:4(jsonb)
  │    │    │    ├── side-effects
  │    │    │    ├── fd: (4)-->(5)
  │    │    │    ├── project-set
- │    │    │    │    ├── columns: json_array_elements:4(jsonb)
+ │    │    │    │    ├── columns: value:4(jsonb)
  │    │    │    │    ├── side-effects
  │    │    │    │    ├── values
  │    │    │    │    │    ├── cardinality: [1 - 1]
@@ -569,9 +569,9 @@ project
  │    │    │    │         └── function: json_array_elements [type=jsonb, side-effects]
  │    │    │    │              └── const: '[{"person_id": "8e5dc104-9f38-4255-9283-fd080be16c57", "product_id": "a739c2d3-edec-413b-88d8-9c31d0414b1e"}, {"person_id": "308686c4-7415-4c2d-92d5-25b39a1c84e2", "product_id": "3f12802d-5b0f-43d7-a0d0-12ac8e88cb18"}]' [type=jsonb]
  │    │    │    └── projections
- │    │    │         └── (json_array_elements->>'secondary_id')::UUID [type=uuid, outer=(4)]
+ │    │    │         └── (value->>'secondary_id')::UUID [type=uuid, outer=(4)]
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
-      ├── json_array_elements->>'secondary_id' [type=string, outer=(4)]
+      ├── value->>'secondary_id' [type=string, outer=(4)]
       └── data || jsonb_build_object('primary_id', primary_id) [type=jsonb, outer=(1,3)]
