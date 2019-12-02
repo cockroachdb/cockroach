@@ -73,13 +73,9 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
   }
 
   render() {
-    const { status, statuses, nodesSummary, sortSetting, setSort, location } = this.props;
+    const { status, statuses = [], nodesSummary, sortSetting, setSort, location } = this.props;
     const query = location.query;
     const page = query.page ? Number(query.page) : 1;
-
-    if (!statuses || statuses.length === 0) {
-      return null;
-    }
 
     const statusName = _.capitalize(LivenessStatus[status]);
 
@@ -133,7 +129,8 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
                   return liveness.expiration.wall_time;
                 },
               },
-            ]} />
+            ]}
+            emptyTableMessage="There are no decommissioned nodes in this cluster."/>
         </div>
       </section>
     );

@@ -69,6 +69,8 @@ interface TableProps {
   startIndex?: number;
   // render particular number of rows instead of rendering entire dataset
   renderItemsCount?: number;
+  // Message to display in case of empty table
+  emptyTableMessage?: string;
 }
 
 export interface ExpandableConfig {
@@ -188,10 +190,11 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { count, sortSetting, columns, expandableConfig } = this.props;
+    const { count, sortSetting, columns, expandableConfig, emptyTableMessage } = this.props;
     // Render all rows for entire dataset.
     let startIndex = 0;
     let endIndex = count;
+    let isEmptyTable = count === 0;
 
     if (!_.isUndefined(this.props.startIndex) &&
       !_.isUndefined(this.props.renderItemsCount)) {
@@ -203,6 +206,7 @@ export class SortableTable extends React.Component<TableProps> {
       if (startIndex + renderItemsCount < count) {
         endIndex = startIndex + renderItemsCount;
       }
+      isEmptyTable = endIndex - startIndex === 0;
     }
 
     return (
@@ -236,8 +240,11 @@ export class SortableTable extends React.Component<TableProps> {
           </tr>
         </thead>
         <tbody>
-          {_.range(startIndex, endIndex)
-            .map(idx => this.renderRow(idx))}
+          {
+            isEmptyTable ?
+              <div className="sort-table__empty-table-message">{emptyTableMessage}</div> :
+              _.range(startIndex, endIndex).map(idx => this.renderRow(idx))
+          }
         </tbody>
       </table>
     );

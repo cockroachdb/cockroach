@@ -83,6 +83,8 @@ interface SortedTableProps<T> {
   pageSize?: number;
   // What page should be selected by default
   selectedPage?: number;
+  // No items message
+  emptyTableMessage?: string;
 }
 
 interface SortedTableState {
@@ -213,6 +215,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
       pagination,
       selectedPage,
       pageSize,
+      emptyTableMessage,
     } = this.props;
 
     let expandableConfig: ExpandableConfig = null;
@@ -228,7 +231,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     // page so basically there is no pagination if not specified.
     const totalRecordsCount = data.length;
     let startIndex = 0;
-    let displayItemsCount = data.length;
+    let displayItemsCount = totalRecordsCount;
 
     // if 'pagination' props is enabled, then calculate
     // offset for rows to display
@@ -241,7 +244,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
       return (
         <div>
           <SortableTable
-            count={data.length}
+            count={totalRecordsCount}
             startIndex={startIndex}
             renderItemsCount={displayItemsCount}
             sortSetting={sortSetting}
@@ -250,8 +253,9 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
             rowClass={this.rowClass(this.props)}
             className={this.props.className}
             expandableConfig={expandableConfig}
+            emptyTableMessage={emptyTableMessage}
           />
-          { pagination &&
+          { pagination && totalRecordsCount > 0 &&
             <Pagination
               className="table-pagination"
               defaultCurrent={ selectedPage }
