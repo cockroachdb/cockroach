@@ -17,6 +17,7 @@ func registerTests(r *testRegistry) {
 
 	registerAcceptance(r)
 	registerAllocator(r)
+	registerAlterPK(r)
 	registerBackup(r)
 	registerCancel(r)
 	registerCDC(r)
