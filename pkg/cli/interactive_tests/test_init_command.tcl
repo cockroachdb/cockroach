@@ -20,7 +20,7 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 send "$argv sql\r"
-eexpect "Error: cannot dial server"
+eexpect "ERROR: cannot dial server"
 send "exit\r"
 eexpect eof
 end_test
@@ -48,7 +48,7 @@ system "$argv init --insecure --host=localhost"
 expect {
     "pg_class" {}
     # Hopefully this broad regex will match any errors we log
-    # (Currently, everything I've seen begins with "Error:")
+    # (Currently, everything I've seen begins with "ERROR:")
     -re "(?i)err" {
         set prefix $expect_out(buffer)
         # Read next line to finish the error message.
