@@ -42,7 +42,7 @@ func (o *filterFeedOperator) Next(context.Context) coldata.Batch {
 		o.nexted = true
 		return o.batch
 	}
-	return zeroBatch
+	return coldata.ZeroBatch
 }
 
 func (o *filterFeedOperator) reset() {

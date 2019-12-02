@@ -48,8 +48,6 @@ type Inbox struct {
 	colexec.ZeroInputNode
 	typs []coltypes.T
 
-	zeroBatch coldata.Batch
-
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
@@ -131,7 +129,6 @@ func NewInbox(
 	}
 	i := &Inbox{
 		typs:       typs,
-		zeroBatch:  allocator.NewMemBatchWithSize(typs, 0),
 		converter:  c,
 		serializer: s,
 		streamID:   streamID,
@@ -140,7 +137,6 @@ func NewInbox(
 		timeoutCh:  make(chan error, 1),
 		errCh:      make(chan error, 1),
 	}
-	i.zeroBatch.SetLength(0)
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = allocator.NewMemBatch(typs)
 	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
@@ -258,9 +254,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		i.stateMu.Unlock()
 	}()
 	if i.stateMu.done {
-		// TODO(yuzefovich): do we want to be on the safe side and explicitly set
-		// the length here (and below) to 0?
-		return i.zeroBatch
+		return coldata.ZeroBatch
 	}
 
 	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
@@ -293,7 +287,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		// DrainMeta goroutine indicated to us that we should exit. We do so
 		// without closing errCh since DrainMeta still needs the stream.
 		if i.stateMu.nextShouldExit {
-			return i.zeroBatch
+			return coldata.ZeroBatch
 		}
 
 		i.stateMu.Unlock()
@@ -307,7 +301,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			if err == io.EOF {
 				// Done.
 				i.closeLocked()
-				return i.zeroBatch
+				return coldata.ZeroBatch
 			}
 			i.errCh <- err
 			execerror.VectorizedInternalPanic(err)
