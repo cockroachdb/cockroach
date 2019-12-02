@@ -40,7 +40,6 @@ type routerOutput interface {
 var defaultRouterOutputBlockedThreshold = int(coldata.BatchSize() * 2)
 
 type routerOutputOp struct {
-	allocator *Allocator
 	// input is a reference to our router.
 	input execinfra.OpNode
 
@@ -52,8 +51,9 @@ type routerOutputOp struct {
 
 	mu struct {
 		syncutil.Mutex
-		cond *sync.Cond
-		done bool
+		allocator *Allocator
+		cond      *sync.Cond
+		done      bool
 		// TODO(asubiotto): Use a ring buffer once we have disk spilling.
 		data      []coldata.Batch
 		numUnread int
@@ -102,12 +102,12 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	outputBatchSize int,
 ) *routerOutputOp {
 	o := &routerOutputOp{
-		allocator:           allocator,
 		types:               types,
 		unblockedEventsChan: unblockedEventsChan,
 		blockedThreshold:    blockedThreshold,
 		outputBatchSize:     outputBatchSize,
 	}
+	o.mu.allocator = allocator
 	o.mu.cond = sync.NewCond(&o.mu)
 	o.mu.data = make([]coldata.Batch, 0, o.blockedThreshold/o.outputBatchSize)
 	return o
@@ -189,11 +189,11 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	writeIdx := 0
 	if len(o.mu.data) == 0 {
 		// New output batch.
-		o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
+		o.mu.data = append(o.mu.data, o.mu.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 	} else {
 		if int(o.mu.data[len(o.mu.data)-1].Length()) == o.outputBatchSize {
 			// No space in last batch, append new output batch.
-			o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			o.mu.data = append(o.mu.data, o.mu.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 		}
 		writeIdx = len(o.mu.data) - 1
 	}
@@ -214,11 +214,11 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 			numAppended = available
 			// Need to create a new batch to append to in the next o.mu.data slot.
 			// This will be used in the next iteration.
-			o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			o.mu.data = append(o.mu.data, o.mu.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 		}
 
 		for i, t := range o.types {
-			o.allocator.Append(
+			o.mu.allocator.Append(
 				dst.ColVec(i),
 				coldata.SliceArgs{
 					ColType:   t,
