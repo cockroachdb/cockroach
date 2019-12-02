@@ -18,18 +18,8 @@ tc_end_block "Compile C dependencies"
 maybe_stress stress
 
 tc_start_block "Run Go tests"
-run build/builder.sh \
-	stdbuf -oL -eL \
-	make test TESTFLAGS='-v' 2>&1 \
-	| tee artifacts/test.log \
-	| go-test-teamcity
+run_json_test build/builder.sh stdbuf -oL -eL make test GOTESTFLAGS=-json TESTFLAGS='-v'
 tc_end_block "Run Go tests"
-
-echo "Slow test packages:"
-grep "ok  " artifacts/test.log | sort -n -k3 | tail -n25
-
-echo "Slow individual tests:"
-grep "^--- PASS" artifacts/test.log | sed 's/(//; s/)//' | sort -n -k4 | tail -n25
 
 tc_start_block "Run C++ tests"
 # Buffer noisy output and only print it on failure.
