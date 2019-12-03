@@ -45,9 +45,9 @@ function run_json_test() {
   tc_start_block "run"
   set +e
   run "$@" 2>&1 \
-  	| tee "${tmpfile}" \
-  	| testfilter -mode=strip \
-  	| tee artifacts/stripped.txt
+    | tee "${tmpfile}" \
+    | testfilter -mode=strip \
+    | tee artifacts/stripped.txt
   status=$?
   set -e
   tc_end_block "run"
