@@ -24,6 +24,8 @@ run() {
   "$@"
 }
 
+run_counter=-1
+
 # Takes args that produce `go test -json` output. It filters stdout to contain
 # only test output related to failing tests and run/pass/skip events for the
 # other tests (no output). It writes artifacts/failures.log containing text
@@ -31,13 +33,16 @@ run() {
 # It's valid to call this multiple times; all output artifacts will be
 # preserved.
 function run_json_test() {
+  run_counter=$((run_counter+1))
+  tc_start_block "prep"
   # TODO(tbg): better to go through builder for all of this.
 	go install github.com/cockroachdb/cockroach/pkg/cmd/testfilter
 	go install github.com/cockroachdb/cockroach/pkg/cmd/github-post
-	tmpfile=$(mktemp artifacts/debug.XXX)
-	mv "${tmpfile}" "${tmpfile}.txt"
-	tmpfile="${tmpfile}.txt"
+	mkdir -p artifacts
+	tmpfile="artifacts/debug.${run_counter}.txt"
+  tc_end_block "prep"
 
+  tc_start_block "run"
 	set +e
 	run "$@" 2>&1 \
 		| tee "${tmpfile}" \
@@ -45,16 +50,23 @@ function run_json_test() {
 		| tee artifacts/stripped.txt
 	status=$?
 	set -e
+  tc_end_block "run"
 
 	# Post issues, if on a release branch. Note that we're feeding github-post all
 	# of the build output; it also does some slow test analysis.
-	#
-	# FIXME(tbg): disarm this again
-	# if tc_release_branch; then
-	if true; then
+	if tc_release_branch; then
+	  if [ -z "${GITHUB_API_TOKEN}" ]; then
+	    # GITHUB_API_TOKEN must be in the env or github-post will barf if it's
+	    # ever asked to post, so enforce that on all runs.
+	    echo "GITHUB_API_TOKEN must be set"
+	    exit 1
+	  fi
+	  tc_start_block "post issues"
 	  github-post < "${tmpfile}"
+	  tc_end_block "post issues"
 	fi
 
+  tc_start_block "artifacts"
 	# Create (or append to) failures.log artifact and delete stripped.txt.
 	testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.log
 	rm -f artifacts/stripped.txt
@@ -63,8 +75,14 @@ function run_json_test() {
 	# clogging the agents with stuff we'll hopefully rarely ever need to
 	# look at.
 	tar --strip-components 1 -czf "${tmpfile}.tgz" "${tmpfile}"
-	rm -f artifacts/debug.txt
+	rm -f "${tmpfile}"
+  tc_end_block "artifacts"
 
+  # Make it easier to figure out whether we're exiting because of a test failure
+  # or because of some auxiliary failure.
+  tc_start_block "exit status"
+  echo "test run finished with exit status $status"
+  tc_end_block "exit status"
 	return $status
 }
 
