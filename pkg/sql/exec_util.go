@@ -165,6 +165,12 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_hash_sharded_indexes.enabled",
+	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
+	false,
+)
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
@@ -1920,6 +1926,10 @@ func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 	m.data.TempTablesEnabled = val
+}
+
+func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
+	m.data.HashShardedIndexesEnabled = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

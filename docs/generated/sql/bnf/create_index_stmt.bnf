@@ -1,5 +1,5 @@
 create_index_stmt ::=
-	'CREATE' ( 'UNIQUE' |  ) 'INDEX' opt_index_name 'ON' table_name ( 'USING' name |  ) '(' ( ( ( column_name ( 'ASC' | 'DESC' |  )  ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  )  ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' name_list ')' |  ) opt_interleave opt_partition_by
-	| 'CREATE' ( 'UNIQUE' |  ) 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name ( 'USING' name |  ) '(' ( ( ( column_name ( 'ASC' | 'DESC' |  )  ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  )  ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' name_list ')' |  ) opt_interleave opt_partition_by
+	'CREATE' ( 'UNIQUE' |  ) 'INDEX' opt_index_name 'ON' table_name ( 'USING' name |  ) '(' ( ( ( column_name ( 'ASC' | 'DESC' |  )  ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  )  ) ) )* ) ')' opt_hash_sharded ( ( 'COVERING' | 'STORING' ) '(' name_list ')' |  ) opt_interleave opt_partition_by
+	| 'CREATE' ( 'UNIQUE' |  ) 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name ( 'USING' name |  ) '(' ( ( ( column_name ( 'ASC' | 'DESC' |  )  ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  )  ) ) )* ) ')' opt_hash_sharded ( ( 'COVERING' | 'STORING' ) '(' name_list ')' |  ) opt_interleave opt_partition_by
 
 

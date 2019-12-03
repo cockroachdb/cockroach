@@ -13,6 +13,8 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -149,7 +151,7 @@ func MakeColumnDefDescs(
 
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
 	}
 
 	// Validate and assign column type.
@@ -186,11 +188,30 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *IndexDescriptor
-	if d.PrimaryKey || d.Unique {
-		idx = &IndexDescriptor{
-			Unique:           true,
-			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+	if d.PrimaryKey.IsPrimaryKey || d.Unique {
+		if !d.PrimaryKey.Sharded {
+			idx = &IndexDescriptor{
+				Unique:           true,
+				ColumnNames:      []string{string(d.Name)},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			}
+		} else {
+			buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			shardColName := GetShardColumnName([]string{string(d.Name)}, buckets)
+			idx = &IndexDescriptor{
+				Unique:           true,
+				ColumnNames:      []string{shardColName, string(d.Name)},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				Sharded: ShardedDescriptor{
+					IsSharded:    true,
+					Name:         shardColName,
+					ShardBuckets: buckets,
+					ColumnNames:  []string{string(d.Name)},
+				},
+			}
 		}
 		if d.UniqueConstraintName != "" {
 			idx.Name = string(d.UniqueConstraintName)
@@ -198,6 +219,17 @@ func MakeColumnDefDescs(
 	}
 
 	return col, idx, typedExpr, nil
+}
+
+// GetShardColumnName generates a name for the hidden shard column to be used to create a
+// hash sharded index.
+func GetShardColumnName(colNames []string, buckets int32) string {
+	// We sort the `colNames` here because we want to avoid creating a duplicate shard
+	// column if one already exists for the set of columns in `colNames`.
+	sort.Strings(colNames)
+	return strings.Join(
+		append(append([]string{`crdb_internal`}, colNames...), fmt.Sprintf(`shard_%v`, buckets)), `_`,
+	)
 }
 
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
