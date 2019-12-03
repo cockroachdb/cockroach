@@ -8,8 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Icon, Pagination, Tooltip } from "antd";
 import _ from "lodash";
-import React, { Fragment } from "react";
+import moment from "moment";
+import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
@@ -28,9 +30,9 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { Search } from "../app/components/Search";
 import "./statements.styl";
-import { makeStatementsColumns, StatementsSortedTable, AggregateStatistics } from "./statementsTable";
+import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
@@ -43,9 +45,15 @@ interface StatementsPageProps {
   lastReset: string;
   refreshStatements: typeof refreshStatements;
 }
+type PaginationSettings = {
+  pageSize: number;
+  current: number;
+};
 
 interface StatementsPageState {
   sortSetting: SortSetting;
+  pagination: PaginationSettings;
+  search?: string;
 }
 
 class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
@@ -57,6 +65,11 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         sortKey: 6,  // Latency
         ascending: false,
       },
+      pagination: {
+        pageSize: 20,
+        current: 1,
+      },
+      search: "",
     };
   }
 
@@ -78,22 +91,92 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     this.props.refreshStatements();
   }
 
+  onChangePage = (current: number) => {
+    const { pagination } = this.state;
+    this.setState({ pagination: { ...pagination, current }});
+  }
+
+  getStatementsData = () => {
+    const { pagination: { current, pageSize } } = this.state;
+    const currentDefault = current - 1;
+    const start = (currentDefault * pageSize);
+    const end = (currentDefault * pageSize + pageSize);
+    const data = this.filteredStatementsData().slice(start, end);
+    return data;
+  }
+
+  onSubmitSearchField = (search: string) => this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
+
+  onClearSearchField = () => this.setState({ search: "" });
+
+  filteredStatementsData = () => {
+    const { search } = this.state;
+    const { statements } = this.props;
+    return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
+  }
+
+  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+    switch (type) {
+      case "jump-prev":
+        return (
+          <Tooltip placement="bottom" title="Previous 5 pages">
+            <div className="_pg-jump">
+              <Icon type="left" />
+              <span className="_jump-dots">•••</span>
+            </div>
+          </Tooltip>
+        );
+      case "jump-next":
+        return (
+          <Tooltip placement="bottom" title="Next 5 pages">
+            <div className="_pg-jump">
+              <Icon type="right" />
+              <span className="_jump-dots">•••</span>
+            </div>
+          </Tooltip>
+        );
+      default:
+        return originalElement;
+    }
+  }
+
+  renderCounts = () => {
+    const { pagination: { current, pageSize }, search } = this.state;
+    const selectedApp = this.props.params[appAttr] || null;
+    const total = this.filteredStatementsData().length;
+    const pageCount = current * pageSize > total ? total : current * pageSize;
+    const count = total > 10 ? pageCount : current * total;
+    if (search.length > 0) {
+      const text = `${total} ${total > 1 || total === 0 ? "results" : "result"} for`;
+      const filter = selectedApp ? <React.Fragment>in <span className="label">{selectedApp}</span></React.Fragment> : null;
+      return (
+        <React.Fragment>{text} <span className="label">{search}</span> {filter}</React.Fragment>
+      );
+    }
+    return `${count} of ${total} statements`;
+  }
+
+  renderLastCleared = () => {
+    const { lastReset } = this.props;
+    return `Last cleared ${moment.utc(lastReset).fromNow()}`;
+  }
+
   renderStatements = () => {
+    const { pagination, search } = this.state;
+    const { statements } = this.props;
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
-    const lastClearedHelpText = (
-      <Fragment>
-        Statement history is cleared once an hour by default, which can be
-        configured with the cluster setting{" "}
-        <code><pre style={{ display: "inline-block" }}>diagnostics.reporting.interval</pre></code>.
-      </Fragment>
-    );
-
     return (
-      <Fragment>
-        <PageConfig layout="spread">
+      <React.Fragment>
+        <PageConfig>
+          <PageConfigItem>
+            <Search
+              onSubmit={this.onSubmitSearchField as any}
+              onClear={this.onClearSearchField}
+            />
+          </PageConfigItem>
           <PageConfigItem>
             <Dropdown
               title="App"
@@ -102,43 +185,40 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               onChange={this.selectApp}
             />
           </PageConfigItem>
-          <PageConfigItem>
-            <h4 className="statement-count-title">
-              {this.props.statements.length}
-              {selectedApp ? ` of ${this.props.totalFingerprints} ` : " "}
-              statement fingerprints.
-            </h4>
-          </PageConfigItem>
-          <PageConfigItem>
-            <h4 className="last-cleared-title">
-              <div className="last-cleared-tooltip__tooltip">
-                <ToolTipWrapper text={lastClearedHelpText}>
-                  <div className="last-cleared-tooltip__tooltip-hover-area">
-                    <div className="last-cleared-tooltip__info-icon">i</div>
-                  </div>
-                </ToolTipWrapper>
-              </div>
-              Last cleared {this.props.lastReset}.
-            </h4>
-          </PageConfigItem>
         </PageConfig>
-
-        <section className="section">
+        <section className="statements-table-container">
+          <div className="statements-statistic">
+            <h4 className="statement-count-title">
+              {this.renderCounts()}
+            </h4>
+            <h4 className="last-cleared-title">
+              {this.renderLastCleared()}
+            </h4>
+          </div>
           <StatementsSortedTable
             className="statements-table"
-            data={this.props.statements}
-            columns={makeStatementsColumns(this.props.statements, selectedApp)}
+            data={this.getStatementsData()}
+            columns={makeStatementsColumns(statements, selectedApp, search)}
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
+            drawer
           />
         </section>
-      </Fragment>
+        <Pagination
+          size="small"
+          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          pageSize={pagination.pageSize}
+          current={pagination.current}
+          total={this.filteredStatementsData().length}
+          onChange={this.onChangePage}
+        />
+      </React.Fragment>
     );
   }
 
   render() {
     return (
-      <Fragment>
+      <React.Fragment>
         <Helmet>
           <title>
             { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
@@ -154,7 +234,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
           error={this.props.statementsError}
           render={this.renderStatements}
         />
-      </Fragment>
+      </React.Fragment>
     );
   }
 }
@@ -273,22 +353,18 @@ export const selectLastReset = createSelector(
   },
 );
 
-const mapStateToProps = (state: StatementsState, props: RouteProps) => ({
-  statements: selectStatements(state, props),
-  statementsError: state.cachedData.statements.lastError,
-  apps: selectApps(state),
-  totalFingerprints: selectTotalFingerprints(state),
-  lastReset: selectLastReset(state),
-});
-
-const mapDispatchToProps = {
-    refreshStatements,
-};
-
 // tslint:disable-next-line:variable-name
 const StatementsPageConnected = connect(
-  mapStateToProps,
-  mapDispatchToProps,
+  (state: StatementsState, props: RouteProps) => ({
+    statements: selectStatements(state, props),
+    statementsError: state.cachedData.statements.lastError,
+    apps: selectApps(state),
+    totalFingerprints: selectTotalFingerprints(state),
+    lastReset: selectLastReset(state),
+  }),
+  {
+    refreshStatements,
+  },
 )(StatementsPage);
 
 export default StatementsPageConnected;
