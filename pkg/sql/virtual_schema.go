@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -118,10 +119,11 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
-		nil,   /* affected */
-		nil,   /* semaCtx */
-		nil,   /* evalCtx */
-		false, /* temporary */
+		nil,                        /* affected */
+		nil,                        /* semaCtx */
+		nil,                        /* evalCtx */
+		&sessiondata.SessionData{}, /* sessionData */
+		false,                      /* temporary */
 	)
 	return mutDesc.TableDescriptor, err
 }
