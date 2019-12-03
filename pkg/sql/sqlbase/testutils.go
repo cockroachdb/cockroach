@@ -1187,7 +1187,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 			switch ast := def.(type) {
 			case *tree.ColumnTableDef:
 				columnNames = append(columnNames, ast.Name)
-				if ast.PrimaryKey {
+				if ast.PrimaryKey.IsPrimaryKey {
 					pkCols = []tree.Name{ast.Name}
 				}
 			case *tree.UniqueConstraintTableDef:

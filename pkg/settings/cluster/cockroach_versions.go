@@ -56,6 +56,7 @@ const (
 	VersionPrimaryKeyColumnsOutOfFamilyZero
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
+	VersionHashShardedIndexes
 
 	// Add new versions here (step one of two).
 )
@@ -396,6 +397,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// key constraints, and instead allows all places that need these IDs to select
 		// an appropriate index to uphold the foreign key relationship.
 		Key:     VersionNoExplicitForeignKeyIndexIDs,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
+	},
+	{
+		// VersionHashShardedIndexes is https://github.com/cockroachdb/cockroach/pull/42922
+		//
+		// It allows the creation of "hash sharded indexes", which construct a hidden
+		// shard column, computed from the set of index columns, and prefix the index's
+		// ranges with said shard column.
+		Key:     VersionHashShardedIndexes,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
 	},
 

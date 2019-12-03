@@ -557,8 +557,12 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Dire
 // ColNamesFormat writes a string describing the column names and directions
 // in this index to the given buffer.
 func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	for i := range desc.ColumnNames {
-		if i > 0 {
+	start := 0
+	if desc.IsSharded() {
+		start = 1
+	}
+	for i := start; i < len(desc.ColumnNames); i++ {
+		if i > start {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNameP(&desc.ColumnNames[i])
@@ -603,6 +607,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 	desc.ColNamesFormat(f)
 	f.WriteByte(')')
 
+	if desc.IsSharded() {
+		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT = %v",
+			desc.Sharded.ShardBuckets)
+	}
+
 	if len(desc.StoreColumnNames) > 0 {
 		f.WriteString(" STORING (")
 		for i := range desc.StoreColumnNames {
@@ -619,6 +628,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
 	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
+}
+
+// IsSharded returns whether the index is hash sharded or not.
+func (desc *IndexDescriptor) IsSharded() bool {
+	return desc.Sharded.IsSharded
 }
 
 // SetID implements the DescriptorProto interface.
@@ -775,6 +789,21 @@ func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_Che
 		}
 	}
 	return checks
+}
+
+// GetColumnFamilyForShard returns the column family that a newly added shard column
+// should be assigned to, given the set of columns it's computed from.
+//
+// This is currently the column family of the first column in the set of index columns.
+func GetColumnFamilyForShard(desc *MutableTableDescriptor, idxColumns []string) string {
+	for _, f := range desc.Families {
+		for _, fCol := range f.ColumnNames {
+			if fCol == idxColumns[0] {
+				return f.Name
+			}
+		}
+	}
+	return ""
 }
 
 // AllActiveAndInactiveForeignKeys returns all foreign keys, including both
@@ -1129,6 +1158,34 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	return true
 }
 
+func (desc *MutableTableDescriptor) initIDs() {
+	if desc.NextColumnID == 0 {
+		desc.NextColumnID = 1
+	}
+	if desc.Version == 0 {
+		desc.Version = 1
+	}
+	if desc.NextMutationID == InvalidMutationID {
+		desc.NextMutationID = 1
+	}
+}
+
+// MaybeFillColumnID assigns a column ID to the given column if the said column has an ID
+// of 0.
+func (desc *MutableTableDescriptor) MaybeFillColumnID(
+	c *ColumnDescriptor, columnNames map[string]ColumnID,
+) {
+	desc.initIDs()
+
+	columnID := c.ID
+	if columnID == 0 {
+		columnID = desc.NextColumnID
+		desc.NextColumnID++
+	}
+	columnNames[c.Name] = columnID
+	c.ID = columnID
+}
+
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *MutableTableDescriptor) AllocateIDs() error {
@@ -1139,32 +1196,14 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	if desc.NextColumnID == 0 {
-		desc.NextColumnID = 1
-	}
-	if desc.Version == 0 {
-		desc.Version = 1
-	}
-	if desc.NextMutationID == InvalidMutationID {
-		desc.NextMutationID = 1
-	}
-
+	desc.initIDs()
 	columnNames := map[string]ColumnID{}
-	fillColumnID := func(c *ColumnDescriptor) {
-		columnID := c.ID
-		if columnID == 0 {
-			columnID = desc.NextColumnID
-			desc.NextColumnID++
-		}
-		columnNames[c.Name] = columnID
-		c.ID = columnID
-	}
 	for i := range desc.Columns {
-		fillColumnID(&desc.Columns[i])
+		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			fillColumnID(c)
+			desc.MaybeFillColumnID(c, columnNames)
 		}
 	}
 
@@ -1935,15 +1974,44 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 			}
 			validateIndexDup[colID] = struct{}{}
 		}
+		if index.IsSharded() {
+			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
+				return err
+			}
+		}
 	}
 
+	return nil
+}
+
+// ensureShardedIndexNotComputed ensures that the sharded index is not based on a computed
+// column. This is because the sharded index is based on a hidden computed shard column
+// under the hood and we don't support transitively computed columns (computed column A
+// based on another computed column B).
+func (desc *TableDescriptor) ensureShardedIndexNotComputed(index *IndexDescriptor) error {
+	for _, colName := range index.Sharded.ColumnNames {
+		col, _, err := desc.FindColumnByName(tree.Name(colName))
+		if err != nil {
+			return err
+		}
+		if col.IsComputed() {
+			return pgerror.Newf(pgcode.InvalidTableDefinition,
+				"cannot create a sharded index on a computed column")
+		}
+	}
 	return nil
 }
 
 // PrimaryKeyString returns the pretty-printed primary key declaration for a
 // table descriptor.
 func (desc *TableDescriptor) PrimaryKeyString() string {
-	return fmt.Sprintf("PRIMARY KEY (%s)",
+	var primaryKeyString strings.Builder
+	primaryKeyString.WriteString("PRIMARY KEY (%s)")
+	if desc.PrimaryIndex.IsSharded() {
+		fmt.Fprintf(&primaryKeyString, " USING HASH WITH BUCKET_COUNT = %v",
+			desc.PrimaryIndex.Sharded.ShardBuckets)
+	}
+	return fmt.Sprintf(primaryKeyString.String(),
 		desc.PrimaryIndex.ColNamesString(),
 	)
 }
