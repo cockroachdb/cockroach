@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -70,7 +69,8 @@ const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
 
-// maxNodeInitTime is the maximum amount of time to wait for nodes to be connected.
+// maxNodeInitTime is the maximum amount of time to wait for a single demo node
+// to start up.
 const maxNodeInitTime = 30 * time.Second
 
 var defaultLocalities = demoLocalityList{
@@ -156,30 +156,52 @@ type transientCluster struct {
 	connURL string
 	stopper *stop.Stopper
 	s       *server.TestServer
-	servers []*server.TestServer
+	servers []transientServerCtx
 	cleanup func()
+}
+
+type transientServerCtx struct {
+	s       *server.TestServer
+	running bool
+	// rpcAddrReadyCh is closed when the RPC address is ready (but RPC
+	// is not being listened to yet).
+	rpcAddrReadyCh chan struct{}
+	// startCh is closed when Start() returns.
+	startCh chan error
+	// readyCh is closed when the server is ready to accept connections.
+	readyCh chan struct{}
+	// contextTestingKnobs is set when latency simulation is requested.
+	contextTestingKnobs *rpc.ContextTestingKnobs
+}
+
+func (c *transientCluster) findServer(nodeID roachpb.NodeID) (int, *server.TestServer, bool) {
+	for i, s := range c.servers {
+		if s.s.NodeID() == nodeID {
+			return i, s.s, true
+		}
+	}
+	return -1, nil, false
 }
 
 // DrainNode will gracefully attempt to drain a node in the cluster.
 func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+	nodeIndex, serv, ok := c.findServer(nodeID)
+	if !ok {
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
-	// This is possible if we re-assign c.s and make the other nodes to the new
-	// base node.
-	if nodeIndex == 0 {
-		return errors.Errorf("cannot shutdown node %d", nodeID)
+	if !c.servers[nodeIndex].running {
+		return errors.Errorf("node %d is not running", nodeID)
 	}
-	if c.servers[nodeIndex] == nil {
-		return errors.Errorf("node %d is already shut down", nodeID)
+	if nodeIndex == 0 {
+		// This is possible if we re-assign c.s and make the other nodes
+		// to the new base node.
+		return errors.Newf("cannot shutdown node %d", nodeID)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
+	adminClient, finish, err := getAdminClient(ctx, *(serv.Cfg))
 	if err != nil {
 		return err
 	}
@@ -193,15 +215,14 @@ func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
 	if err := doShutdown(ctx, adminClient, onModes); err != nil {
 		return err
 	}
-	c.servers[nodeIndex] = nil
+	c.servers[nodeIndex].running = false
 	return nil
 }
 
 // CallDecommission calls the Decommission RPC on a node.
 func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioning bool) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+	_, serv, ok := c.findServer(nodeID)
+	if !ok {
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
 
@@ -213,29 +234,25 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	adminClient, finish, err := getAdminClient(ctx, *(c.s.Cfg))
+	adminClient, finish, err := getAdminClient(ctx, *(serv.Cfg))
 	if err != nil {
 		return err
 	}
-
 	defer finish()
+
 	_, err = adminClient.Decommission(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, "while trying to mark as decommissioning")
-	}
-	return nil
+	return errors.Wrap(err, "while trying to mark as decommissioning")
 }
 
 // RestartNode will bring back a node in the cluster.
 // The node must have been shut down beforehand.
 // The node will restart, connecting to the same in memory node.
 func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+	nodeIndex, _, ok := c.findServer(nodeID)
+	if !ok {
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
-	if c.servers[nodeIndex] != nil {
+	if c.servers[nodeIndex].running {
 		return errors.Errorf("node %d is already running", nodeID)
 	}
 
@@ -245,13 +262,12 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
-	serv.Cfg.ReadyFn = func(_ bool) {
-		close(readyCh)
-	}
+	serv.Cfg.ReadyFn = func(_ bool) { close(readyCh) }
 
 	if err := serv.Start(args); err != nil {
 		return err
 	}
+	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 
 	// Wait until the server is ready to action.
 	select {
@@ -260,8 +276,8 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 		return errors.Newf("could not initialize node %d in time", nodeID)
 	}
 
-	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-	c.servers[nodeIndex] = serv
+	c.servers[nodeIndex].s = serv
+	c.servers[nodeIndex].running = true
 	return nil
 }
 
@@ -331,17 +347,19 @@ func setupTransientCluster(
 	}
 
 	serverFactory := server.TestServerFactory
-	var servers []*server.TestServer
+
+	// We'll stop startup if it takes too long.
+	timeoutDuration := time.Duration(demoCtx.nodes) * maxNodeInitTime
+	timeoutCh := time.After(timeoutDuration)
 
 	// latencyMapWaitCh is used to block test servers after RPC address computation until the artificial
 	// latency map has been constructed.
 	latencyMapWaitCh := make(chan struct{})
 
-	// errCh is used to catch all errors when initializing servers.
-	// Sending a nil on this channel indicates success.
-	errCh := make(chan error, demoCtx.nodes)
-
+	servers := make([]transientServerCtx, demoCtx.nodes)
 	for i := 0; i < demoCtx.nodes; i++ {
+		log.Infof(ctx, "starting demo node %d/%d...\n", i+1, demoCtx.nodes)
+
 		// All the nodes connect to the address of the first server created.
 		var joinAddr string
 		if c.s != nil {
@@ -349,59 +367,74 @@ func setupTransientCluster(
 		}
 		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
 
-		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
-		// successfully computed its RPC address.
-		servRPCReadyCh := make(chan struct{})
+		// We wait on this below before creating the next node.
+		servers[i].rpcAddrReadyCh = make(chan struct{})
+		serverKnobs := server.TestingKnobs{
+			SignalAfterGettingRPCAddress: servers[i].rpcAddrReadyCh,
+		}
+		args.Knobs = base.TestingKnobs{Server: &serverKnobs}
 
 		if demoCtx.simulateLatency {
-			args.Knobs = base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					PauseAfterGettingRPCAddress:  latencyMapWaitCh,
-					SignalAfterGettingRPCAddress: servRPCReadyCh,
-					ContextTestingKnobs: rpc.ContextTestingKnobs{
-						ArtificialLatencyMap: make(map[string]int),
-					},
-				},
+			// If artificial latencies are requested, we're going to want
+			// each server to pause bootstrapping.
+			serverKnobs.PauseAfterGettingRPCAddress = latencyMapWaitCh
+			// And we'll inject the latencies to other nodes in a node-specific map.
+			serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
+				ArtificialLatencyMap: make(map[string]int),
 			}
+			servers[i].contextTestingKnobs = &serverKnobs.ContextTestingKnobs
 		}
 
 		serv := serverFactory.New(args).(*server.TestServer)
-
+		servers[i].s = serv
 		if i == 0 {
+			// Remember the head node to connect the SQL shell to.
 			c.s = serv
 		}
-		servers = append(servers, serv)
 
-		// We force a wait for all servers until they are ready.
-		servReadyFnCh := make(chan struct{})
-		serv.Cfg.ReadyFn = func(_ bool) {
-			close(servReadyFnCh)
-		}
+		thisCtx := &servers[i]
 
-		// If latency simulation is requested, start the servers in a background thread. We do this because
-		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
-		if demoCtx.simulateLatency {
-			go func(i int) {
-				if err := serv.Start(args); err != nil {
-					errCh <- err
-				} else {
-					// Block until the ReadyFn has been called before continuing.
-					<-servReadyFnCh
-					errCh <- nil
-				}
-			}(i)
-			<-servRPCReadyCh
-		} else {
-			if err := serv.Start(args); err != nil {
+		// We'll want to know when the server is ready to accept connections.
+		servers[i].readyCh = make(chan struct{})
+		serv.Cfg.ReadyFn = func(_ bool) { close(thisCtx.readyCh) }
+
+		// Start the servers in a background thread. We do this to enable
+		// potentially faster startup, and specifically because we need to
+		// pause bootstrapping across all nodes to initialize the latency
+		// map if requested.
+		thisCtx.startCh = make(chan error, 1)
+		go func(i int) {
+			err := serv.Start(args)
+			log.Infof(ctx, "demo node at i = %d completed startup: %v", i, err)
+			thisCtx.startCh <- err
+			close(thisCtx.startCh)
+		}(i)
+
+		// Before we go on to create the next node (or proceed below) we
+		// must wait for the RPC listener to be ready. However, it's also
+		// possible for Start() to fail early instead, so we need to deal
+		// with that too.
+		log.Infof(ctx, "waiting for demo node at i = %d to have a RPC address", i)
+		select {
+		case <-timeoutCh:
+			return c, errors.Newf("demo cluster failed to initialize after %s", timeoutDuration)
+		case err := <-thisCtx.startCh:
+			// Start() completed early, with an error. CombineErrors()
+			// returns the existing error if the other argument is `nil`.
+			if err != nil {
+				log.Errorf(ctx, "demo node at i = %d failed: %v", i, err)
 				return c, err
 			}
-			// Block until the ReadyFn has been called before continuing.
-			<-servReadyFnCh
-			errCh <- nil
+		case <-thisCtx.rpcAddrReadyCh:
+			// Done waiting on RPC address for this server.
 		}
 
+		// Each node has its own stopper. However when the demo session
+		// stops we also want to shut down everything. Add this node
+		// to the cluster-wide stopper.
 		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-		// Ensure we close all sticky stores we've created.
+		// Ditto, ensure we close all sticky stores we've created when
+		// we shut down the entire cluster.
 		for _, store := range args.StoreSpecs {
 			if store.StickyInMemoryEngineID != "" {
 				engineID := store.StickyInMemoryEngineID
@@ -420,69 +453,87 @@ func setupTransientCluster(
 			}
 		}
 	}
-
 	c.servers = servers
 
+	// The next stage is to inject server latencies if requested.
 	if demoCtx.simulateLatency {
-		// Now, all servers have been started enough to know their own RPC serving
-		// addresses, but nothing else. Assemble the artificial latency map.
-		for i, src := range servers {
-			latencyMap := src.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
-			srcLocality, ok := src.Cfg.Locality.Find("region")
-			if !ok {
-				continue
-			}
-			srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
-			if !ok {
-				continue
-			}
-			for j, dst := range servers {
-				if i == j {
-					continue
+		// Assemble the artificial latency map.
+		for i := range servers {
+			latencyMap := servers[i].contextTestingKnobs.ArtificialLatencyMap
+			if srcLocality, ok := servers[i].s.Cfg.Locality.Find("region"); ok {
+				if srcLocalityMap, ok := regionToRegionToLatency[srcLocality]; ok {
+					for j := range servers {
+						if i != j { // No injected latency from a node to itself.
+							dst := servers[j].s
+							if dstLocality, ok := dst.Cfg.Locality.Find("region"); ok {
+								latency := srcLocalityMap[dstLocality]
+								latencyMap[dst.ServingRPCAddr()] = latency
+							}
+						}
+					}
 				}
-				dstLocality, ok := dst.Cfg.Locality.Find("region")
-				if !ok {
-					continue
-				}
-				latency := srcLocalityMap[dstLocality]
-				latencyMap[dst.ServingRPCAddr()] = latency
 			}
 		}
+		// We've assembled our latency maps and are ready for all servers to proceed
+		// through bootstrapping.
+		close(latencyMapWaitCh)
 	}
 
-	// We've assembled our latency maps and are ready for all servers to proceed
-	// through bootstrapping.
-	close(latencyMapWaitCh)
-
-	// Wait for all servers to respond.
-	{
-		timeRemaining := maxNodeInitTime
-		lastUpdateTime := timeutil.Now()
-		var err error
-		for i := 0; i < demoCtx.nodes; i++ {
-			select {
-			case e := <-errCh:
-				err = errors.CombineErrors(err, e)
-			case <-time.After(timeRemaining):
-				return c, errors.New("failed to setup transientCluster in time")
-			}
-			updateTime := timeutil.Now()
-			timeRemaining -= updateTime.Sub(lastUpdateTime)
-			lastUpdateTime = updateTime
-		}
-		if err != nil {
-			return c, err
+	// Wait until the Start() function returns.
+	err = nil
+	for i := range servers {
+		log.Infof(ctx, "waiting for demo node to start %d/%d...\n", i, demoCtx.nodes)
+		select {
+		case <-timeoutCh:
+			return c, errors.CombineErrors(
+				errors.Newf("demo cluster failed to initialize after %s", timeoutDuration), err)
+		case sErr := <-servers[i].startCh:
+			// Start() and an error occurred.
+			err = errors.CombineErrors(err,
+				errors.Wrapf(sErr, "demo node at i = %d failed"))
 		}
 	}
+	if err != nil {
+		return c, err
+	}
+	// Wait until servers are ready to accept RPC and SQL connections.
+	//
+	// This needs to happen *after* the `Start()` function has returned
+	// (i.e. we can't fuse with the `select` above) because they signal
+	// different conditions and we need both conditions to proceed:
+	// - Start signals the node is ready to accept RPC connections
+	// - readyCh signals the node has completed bootstrapping
+	for i := range servers {
+		log.Infof(ctx, "waiting for demo node readiness %d/%d...\n", i, demoCtx.nodes)
+		select {
+		case <-timeoutCh:
+			return c, errors.CombineErrors(
+				errors.Newf("demo cluster failed to become ready after %s", timeoutDuration), err)
+		case <-servers[i].readyCh:
+			// Done waiting for readiness.
+			log.Infof(ctx, "demo node at i = %d is ready", i)
+			servers[i].running = true
+		}
+	}
+	if err != nil {
+		return c, err
+	}
 
+	log.Infof(ctx, "demo cluster ready")
 	if demoCtx.nodes < 3 {
+		log.Infof(ctx, "disabling replication on demo cluster")
 		// Set up the default zone configuration. We are using an in-memory store
 		// so we really want to disable replication.
 		if err := cliDisableReplication(ctx, c.s.Server); err != nil {
-			return c, err
+			return c, errors.Wrap(err, "disabling replication")
 		}
 	}
 
+	c.setupSQL(ctx, gen)
+	return c, nil
+}
+
+func (c *transientCluster) setupSQL(ctx context.Context, gen workload.Generator) {
 	// Prepare the URL for use by the SQL shell.
 	// TODO (rohany): there should be a way that the user can request a specific node
 	//  to connect to to see the effects of the artificial latency.
@@ -500,6 +551,7 @@ func setupTransientCluster(
 	}
 
 	c.connURL = sqlURL.String()
+	log.Infof(ctx, "connecting demo SQL session to: %s", c.connURL)
 
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
@@ -507,7 +559,6 @@ func setupTransientCluster(
 	if !demoCtx.disableTelemetry {
 		c.s.PeriodicallyCheckForUpdates(ctx)
 	}
-	return c, nil
 }
 
 func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Generator) error {
