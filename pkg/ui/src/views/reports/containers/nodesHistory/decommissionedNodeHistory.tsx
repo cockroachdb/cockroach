@@ -50,6 +50,14 @@ export interface DecommissionedNodeHistoryProps {
 }
 
 class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps & WithRouterProps> {
+  static defaultProps: Partial<DecommissionedNodeHistoryProps> = {
+    statuses: [],
+  };
+
+  state = {
+    rowsOnPage: this.props.statuses.length,
+  };
+
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
@@ -72,12 +80,34 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
     });
   }
 
+  onPageRendered = (rowsOnPage: number) => {
+    if (rowsOnPage !== this.state.rowsOnPage) {
+      this.setState({
+        rowsOnPage,
+      });
+    }
+  }
+
+  getNodesCountMessage = () => {
+    const { rowsOnPage } = this.state;
+    const { statuses } = this.props;
+    const isEmptyTable = statuses.length === 0;
+
+    if (isEmptyTable) {
+      return `0 decommissioned nodes`;
+    } else {
+      return `${rowsOnPage} of ${statuses.length} decommissioned nodes`;
+    }
+  }
+
   render() {
-    const { status, statuses = [], nodesSummary, sortSetting, setSort, location } = this.props;
+    const { status, statuses, nodesSummary, sortSetting, setSort, location } = this.props;
+
+    const pageSize = 10;
     const query = location.query;
     const page = query.page ? Number(query.page) : 1;
-
     const statusName = _.capitalize(LivenessStatus[status]);
+    const totalNumberOfNodesMessage = this.getNodesCountMessage();
 
     return (
       <section className="section">
@@ -85,15 +115,17 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
           <title>Decommissioned Node History | Debug</title>
         </Helmet>
         <h1 className="title">Decommissioned Node History</h1>
+        <div className="info-message">{totalNumberOfNodesMessage}</div>
         <div>
           <NodeSortedTable
             data={statuses}
             sortSetting={sortSetting}
             onChangeSortSetting={setSort}
             pagination
-            pageSize={15}
+            pageSize={pageSize}
             selectedPage={page}
             onPageChange={this.onPageChange}
+            onPageRendered={this.onPageRendered}
             columns={[
               {
                 title: "ID",
