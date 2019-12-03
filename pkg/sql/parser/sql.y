@@ -7322,19 +7322,35 @@ const_datetime:
   }
 | TIME opt_timezone
   {
-    if $2.bool() { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
-    $$.val = types.Time
+    if $2.bool() {
+      $$.val = types.TimeTZ
+    } else {
+      $$.val = types.Time
+    }
   }
 | TIME '(' iconst32 ')' opt_timezone
   {
     prec := $3.int32()
-    if prec != 6 {
-         return unimplementedWithIssue(sqllex, 32565)
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
     }
-    $$.val = types.MakeTime(prec)
+    if $5.bool() {
+      $$.val = types.MakeTimeTZ(prec)
+    } else {
+      $$.val = types.MakeTime(prec)
+    }
   }
 | TIMETZ                             { $$.val = types.TimeTZ }
-| TIMETZ '(' ICONST ')'              { return unimplementedWithIssueDetail(sqllex, 26097, "type with precision") }
+| TIMETZ '(' iconst32 ')'
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
+    }
+    $$.val = types.MakeTimeTZ(prec)
+  }
 | TIMESTAMP opt_timezone
   {
     if $2.bool() {

@@ -120,6 +120,12 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		types.TimestampFamily:   classifierPrecision,
 		types.TimestampTZFamily: classifierPrecision,
 	},
+	types.TimeFamily: {
+		types.TimeFamily: classifierPrecision,
+	},
+	types.TimeTZFamily: {
+		types.TimeTZFamily: classifierPrecision,
+	},
 }
 
 // classifierHardestOf creates a composite classifier that returns the

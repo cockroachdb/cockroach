@@ -75,7 +75,7 @@ func Now() TimeTZ {
 
 // ParseTimeTZ parses and returns the TimeTZ represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseTimeTZ(now time.Time, s string) (TimeTZ, error) {
+func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, error) {
 	// Special case as we have to use `ParseTimestamp` to get the date.
 	// We cannot use `ParseTime` as it does not have timezone awareness.
 	if s == "" {
@@ -95,7 +95,7 @@ func ParseTimeTZ(now time.Time, s string) (TimeTZ, error) {
 			s,
 		)
 	}
-	retTime := timeofday.FromTime(t)
+	retTime := timeofday.FromTime(t.Round(precision))
 	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if timeTZMaxTimeRegex.MatchString(s) {
@@ -141,6 +141,11 @@ func (t *TimeTZ) String() string {
 func (t *TimeTZ) ToTime() time.Time {
 	loc := timeutil.FixedOffsetTimeZoneToLocation(-int(t.OffsetSecs), "TimeTZ")
 	return t.TimeOfDay.ToTime().Add(time.Duration(t.OffsetSecs) * time.Second).In(loc)
+}
+
+// Round rounds a DTimeTZ to the given duration.
+func (t *TimeTZ) Round(precision time.Duration) TimeTZ {
+	return MakeTimeTZ(t.TimeOfDay.Round(precision), t.OffsetSecs)
 }
 
 // Before returns whether the current is before the other TimeTZ.

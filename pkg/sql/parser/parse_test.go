@@ -112,6 +112,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b SERIAL8)`},
 		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b TIMETZ)`},
+		{`CREATE TABLE a (b TIME(3))`},
+		{`CREATE TABLE a (b TIMETZ(3))`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b "char")`},
@@ -1469,10 +1471,19 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`, `SELECT INT8 'foo', 'foo'::INT8`},
 
+		{`SELECT 'a'::TIMESTAMP(3)`, `SELECT 'a'::TIMESTAMP(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIMESTAMP(3)`},
+		{`SELECT 'a'::TIMESTAMPTZ(3)`, `SELECT 'a'::TIMESTAMPTZ(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITH TIME ZONE`, `SELECT 'a'::TIMESTAMPTZ(3)`},
 		{`SELECT TIMESTAMP(3) 'a'`, `SELECT TIMESTAMP(3) 'a'`},
 		{`SELECT TIMESTAMPTZ(3) 'a'`, `SELECT TIMESTAMPTZ(3) 'a'`},
+
+		{`SELECT 'a'::TIME(3)`, `SELECT 'a'::TIME(3)`},
+		{`SELECT 'a'::TIME(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIME(3)`},
+		{`SELECT 'a'::TIMETZ(3)`, `SELECT 'a'::TIMETZ(3)`},
+		{`SELECT 'a'::TIME(3) WITH TIME ZONE`, `SELECT 'a'::TIMETZ(3)`},
+		{`SELECT TIME(3) 'a'`, `SELECT TIME(3) 'a'`},
+		{`SELECT TIMETZ(3) 'a'`, `SELECT TIMETZ(3) 'a'`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}`, `SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},
@@ -3126,13 +3137,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
 		{`SELECT 'a'::INTERVAL SECOND(123)`, 32564, `interval second`},
 		{`SELECT INTERVAL(3) 'a'`, 32564, ``},
-
-		{`SELECT 'a'::TIME(123)`, 32565, ``},
-		{`SELECT 'a'::TIME(123) WITHOUT TIME ZONE`, 32565, ``},
-		{`SELECT 'a'::TIMETZ(123)`, 26097, `type with precision`},
-		{`SELECT 'a'::TIME(123) WITH TIME ZONE`, 32565, ``},
-		{`SELECT TIME(3) 'a'`, 32565, ``},
-		{`SELECT TIMETZ(3) 'a'`, 26097, `type with precision`},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
