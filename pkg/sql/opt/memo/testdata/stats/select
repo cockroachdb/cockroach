@@ -1554,3 +1554,72 @@ select
  │    └── fd: (1)-->(2-4)
  └── filters
       └── (n_name, neighbor) IN (('FRANCE', 'GERMANY'), ('GERMANY', 'FRANCE')) [type=bool, outer=(2,4), constraints=(/2/4: [/'FRANCE'/'GERMANY' - /'FRANCE'/'GERMANY'] [/'GERMANY'/'FRANCE' - /'GERMANY'/'FRANCE']; /4: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; tight)]
+
+# Make sure the that histogram and distinct counts don't interfere with each
+# other during selectivity calculation.
+exec-ddl
+CREATE TABLE hist_and_distinct (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX idx_a (a)
+)
+----
+
+exec-ddl
+ALTER TABLE hist_and_distinct INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 180, "distinct_range": 9, "upper_bound": "20"},
+      {"num_eq": 30, "num_range": 270, "distinct_range": 9, "upper_bound": "30"},
+      {"num_eq": 40, "num_range": 360, "distinct_range": 9, "upper_bound": "40"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 120
+  }
+]'
+----
+
+norm
+SELECT * FROM hist_and_distinct WHERE a = 10 AND b = 10 AND c = 10 AND d >= 10 AND d < 100
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── stats: [rows=0.3, distinct(1)=0.3, null(1)=0, distinct(2)=0.3, null(2)=0, distinct(3)=0.3, null(3)=0, distinct(4)=0.3, null(4)=0]
+ │   histogram(1)=  0 0.3
+ │                <--- 10
+ ├── fd: ()-->(1-3)
+ ├── scan hist_and_distinct
+ │    ├── columns: a:1(int) b:2(int) c:3(int) d:4(int)
+ │    └── stats: [rows=1000, distinct(1)=40, null(1)=0, distinct(2)=5, null(2)=0, distinct(3)=5, null(3)=0, distinct(4)=120, null(4)=0]
+ │        histogram(1)=  0  0  90  10  180  20  270  30  360  40
+ │                     <--- 0 ---- 10 ----- 20 ----- 30 ----- 40
+ └── filters
+      ├── (d >= 10) AND (d < 100) [type=bool, outer=(4), constraints=(/4: [/10 - /99]; tight)]
+      ├── a = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      ├── b = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
+      └── c = 10 [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
