@@ -1114,7 +1114,7 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 			for i := range testCases {
 				t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-					current, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i])
+					current, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i], time.Microsecond)
 					assert.NoError(t, err)
 
 					var b []byte

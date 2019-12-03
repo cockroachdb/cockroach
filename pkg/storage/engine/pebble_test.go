@@ -168,3 +168,99 @@ func TestPebbleIterReuse(t *testing.T) {
 	}
 	iter2.Close()
 }
+
+func makeMVCCKey(a string) MVCCKey {
+	return MVCCKey{Key: []byte(a)}
+}
+
+func TestPebbleSeparatorSuccessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sepCases := []struct {
+		a, b, want MVCCKey
+	}{
+		// Many cases here are adapted from a Pebble unit test.
+
+		// Non-empty b values.
+		{makeMVCCKey("black"), makeMVCCKey("blue"), makeMVCCKey("blb")},
+		{makeMVCCKey(""), makeMVCCKey("2"), makeMVCCKey("")},
+		{makeMVCCKey("1"), makeMVCCKey("2"), makeMVCCKey("1")},
+		{makeMVCCKey("1"), makeMVCCKey("29"), makeMVCCKey("2")},
+		{makeMVCCKey("13"), makeMVCCKey("19"), makeMVCCKey("14")},
+		{makeMVCCKey("13"), makeMVCCKey("99"), makeMVCCKey("2")},
+		{makeMVCCKey("135"), makeMVCCKey("19"), makeMVCCKey("14")},
+		{makeMVCCKey("1357"), makeMVCCKey("19"), makeMVCCKey("14")},
+		{makeMVCCKey("1357"), makeMVCCKey("2"), makeMVCCKey("14")},
+		{makeMVCCKey("13\xff"), makeMVCCKey("14"), makeMVCCKey("13\xff")},
+		{makeMVCCKey("13\xff"), makeMVCCKey("19"), makeMVCCKey("14")},
+		{makeMVCCKey("1\xff\xff"), makeMVCCKey("19"), makeMVCCKey("1\xff\xff")},
+		{makeMVCCKey("1\xff\xff"), makeMVCCKey("2"), makeMVCCKey("1\xff\xff")},
+		{makeMVCCKey("1\xff\xff"), makeMVCCKey("9"), makeMVCCKey("2")},
+		{makeMVCCKey("1\xfd\xff"), makeMVCCKey("1\xff"), makeMVCCKey("1\xfe")},
+		{MVCCKey{
+			Key:       []byte("1\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		}, makeMVCCKey("9"), makeMVCCKey("2")},
+		{MVCCKey{
+			Key:       []byte("1\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		}, makeMVCCKey("19"), MVCCKey{
+			Key:       []byte("1\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		},
+		},
+		// Empty b values.
+		{makeMVCCKey(""), makeMVCCKey(""), makeMVCCKey("")},
+		{makeMVCCKey("green"), makeMVCCKey(""), makeMVCCKey("green")},
+		{makeMVCCKey("1"), makeMVCCKey(""), makeMVCCKey("1")},
+		{makeMVCCKey("11\xff"), makeMVCCKey(""), makeMVCCKey("11\xff")},
+		{makeMVCCKey("1\xff"), makeMVCCKey(""), makeMVCCKey("1\xff")},
+		{makeMVCCKey("1\xff\xff"), makeMVCCKey(""), makeMVCCKey("1\xff\xff")},
+		{makeMVCCKey("\xff"), makeMVCCKey(""), makeMVCCKey("\xff")},
+		{makeMVCCKey("\xff\xff"), makeMVCCKey(""), makeMVCCKey("\xff\xff")},
+	}
+	for _, tc := range sepCases {
+		t.Run("", func(t *testing.T) {
+			got := string(MVCCComparer.Separator(nil, EncodeKey(tc.a), EncodeKey(tc.b)))
+			if got != string(EncodeKey(tc.want)) {
+				t.Errorf("a, b = %q, %q: got %q, want %q", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+
+	succCases := []struct {
+		a, want MVCCKey
+	}{
+		// Many cases adapted from Pebble test.
+		{makeMVCCKey("black"), makeMVCCKey("c")},
+		{makeMVCCKey("green"), makeMVCCKey("h")},
+		{makeMVCCKey(""), makeMVCCKey("")},
+		{makeMVCCKey("13"), makeMVCCKey("2")},
+		{makeMVCCKey("135"), makeMVCCKey("2")},
+		{makeMVCCKey("13\xff"), makeMVCCKey("2")},
+		{MVCCKey{
+			Key:       []byte("1\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		}, makeMVCCKey("2")},
+		{makeMVCCKey("\xff"), makeMVCCKey("\xff")},
+		{makeMVCCKey("\xff\xff"), makeMVCCKey("\xff\xff")},
+		{makeMVCCKey("\xff\xff\xff"), makeMVCCKey("\xff\xff\xff")},
+		{makeMVCCKey("\xfe\xff\xff"), makeMVCCKey("\xff")},
+		{MVCCKey{
+			Key:       []byte("\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		}, MVCCKey{
+			Key:       []byte("\xff\xff"),
+			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+		}},
+	}
+	for _, tc := range succCases {
+		t.Run("", func(t *testing.T) {
+			got := string(MVCCComparer.Successor(nil, EncodeKey(tc.a)))
+			if got != string(EncodeKey(tc.want)) {
+				t.Errorf("a = %q: got %q, want %q", tc.a, got, tc.want)
+			}
+		})
+	}
+
+}

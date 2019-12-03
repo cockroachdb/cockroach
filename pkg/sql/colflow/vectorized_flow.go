@@ -39,13 +39,32 @@ type vectorizedFlow struct {
 	*flowinfra.FlowBase
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+
+	// streamingMemAccounts are the memory accounts that are tracking the static
+	// memory usage of the whole vectorized flow as well as all dynamic memory of
+	// the streaming components.
+	streamingMemAccounts []*mon.BoundAccount
+
+	// bufferingMemMonitors are the memory monitors of the buffering components.
+	bufferingMemMonitors []*mon.BytesMonitor
+	// bufferingMemAccounts are the memory accounts that are tracking the dynamic
+	// memory usage of the buffering components.
+	bufferingMemAccounts []*mon.BoundAccount
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
 
+var vectorizedFlowPool = sync.Pool{
+	New: func() interface{} {
+		return &vectorizedFlow{}
+	},
+}
+
 // NewVectorizedFlow creates a new vectorized flow given the flow base.
 func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
-	return &vectorizedFlow{FlowBase: base}
+	vf := vectorizedFlowPool.Get().(*vectorizedFlow)
+	vf.FlowBase = base
+	return vf
 }
 
 // Setup is part of the flowinfra.Flow interface.
@@ -54,8 +73,6 @@ func (f *vectorizedFlow) Setup(
 ) error {
 	f.SetSpec(spec)
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
-	streamingMemAccount := f.EvalCtx.Mon.MakeBoundAccount()
-	f.VectorizedStreamingMemAccount = &streamingMemAccount
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
@@ -70,21 +87,61 @@ func (f *vectorizedFlow) Setup(
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &streamingMemAccount, opt)
+	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
-		f.VectorizedBufferingMemMonitors = append(f.VectorizedBufferingMemMonitors, creator.bufferingMemMonitors...)
-		f.VectorizedBufferingMemAccounts = append(f.VectorizedBufferingMemAccounts, creator.bufferingMemAccounts...)
+		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
+		f.bufferingMemMonitors = append(f.bufferingMemMonitors, creator.bufferingMemMonitors...)
+		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return nil
+	}
+	// It is (theoretically) possible that some of the memory monitoring
+	// infrastructure was created even in case of an error, and we need to clean
+	// that up.
+	for _, memAcc := range creator.streamingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memAcc := range creator.bufferingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitor := range creator.bufferingMemMonitors {
+		memMonitor.Stop(ctx)
 	}
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 	return err
 }
 
-// ConcurrentExecution is part of the Flow interface.
+// IsVectorized is part of the flowinfra.Flow interface.
+func (f *vectorizedFlow) IsVectorized() bool {
+	return true
+}
+
+// ConcurrentExecution is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) ConcurrentExecution() bool {
 	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
+}
+
+// Release releases this vectorizedFlow back to the pool.
+func (f *vectorizedFlow) Release() {
+	*f = vectorizedFlow{}
+	vectorizedFlowPool.Put(f)
+}
+
+// Cleanup is part of the flowinfra.Flow interface.
+func (f *vectorizedFlow) Cleanup(ctx context.Context) {
+	// This cleans up all the memory monitoring of the vectorized flow.
+	for _, memAcc := range f.streamingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memAcc := range f.bufferingMemAccounts {
+		memAcc.Close(ctx)
+	}
+	for _, memMonitor := range f.bufferingMemMonitors {
+		memMonitor.Stop(ctx)
+	}
+	f.FlowBase.Cleanup(ctx)
+	f.Release()
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
@@ -227,6 +284,9 @@ type vectorizedFlowCreator struct {
 	leaves []execinfra.OpNode
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+	// streamingMemAccounts contains all memory accounts of the non-buffering
+	// components in the vectorized flow.
+	streamingMemAccounts []*mon.BoundAccount
 	// bufferingMemMonitors contains all memory monitors of the buffering
 	// components in the vectorized flow.
 	bufferingMemMonitors []*mon.BytesMonitor
@@ -258,19 +318,29 @@ func newVectorizedFlowCreator(
 	}
 }
 
+// newStreamingMemAccount creates a new memory account bound to the monitor in
+// flowCtx and accumulates it into streamingMemAccounts slice.
+func (s *vectorizedFlowCreator) newStreamingMemAccount(
+	flowCtx *execinfra.FlowCtx,
+) *mon.BoundAccount {
+	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	s.streamingMemAccounts = append(s.streamingMemAccounts, &streamingMemAccount)
+	return &streamingMemAccount
+}
+
 // setupRemoteOutputStream sets up an Outbox that will operate according to
 // the given StreamEndpointSpec. It will also drain all MetadataSources in the
 // metadataSourcesQueue.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	op colexec.Operator,
 	outputTyps []coltypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	streamingMemAccount *mon.BoundAccount,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colexec.NewAllocator(ctx, streamingMemAccount),
+		colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
 		op, outputTyps, metadataSourcesQueue,
 	)
 	if err != nil {
@@ -311,7 +381,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 	outputTyps []coltypes.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	streamingMemAccount *mon.BoundAccount,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
@@ -348,7 +417,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(
-				ctx, op, outputTyps, stream, metadataSourcesQueue, streamingMemAccount,
+				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue,
 			); err != nil {
 				return err
 			}
@@ -389,9 +458,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 // calling DrainMeta.
 func (s *vectorizedFlowCreator) setupInput(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
-	streamingMemAccount *mon.BoundAccount,
 ) (op colexec.Operator, _ []execinfrapb.MetadataSource, _ error) {
 	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
@@ -411,7 +480,10 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err != nil {
 				return nil, nil, err
 			}
-			inbox, err := s.remoteComponentCreator.newInbox(colexec.NewAllocator(ctx, streamingMemAccount), typs, inputStream.StreamID)
+			inbox, err := s.remoteComponentCreator.newInbox(
+				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				typs, inputStream.StreamID,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -447,7 +519,8 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				colexec.NewAllocator(ctx, streamingMemAccount), inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 		} else {
 			if opt == flowinfra.FuseAggressively {
@@ -487,7 +560,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 	op colexec.Operator,
 	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	streamingMemAccount *mon.BoundAccount,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
@@ -500,7 +572,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// Pass in a copy of the queue to reset metadataSourcesQueue for
 			// further appends without overwriting.
 			metadataSourcesQueue,
-			streamingMemAccount,
 		)
 	}
 
@@ -534,7 +605,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		outbox, err := s.setupRemoteOutputStream(ctx, op, opOutputTypes, outputStream, metadataSourcesQueue, streamingMemAccount)
+		outbox, err := s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue)
 		if err != nil {
 			return err
 		}
@@ -587,7 +658,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
-	streamingMemAccount *mon.BoundAccount,
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
@@ -629,7 +699,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			input, metadataSources, err := s.setupInput(ctx, pspec.Input[i], opt, streamingMemAccount)
+			input, metadataSources, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt)
 			if err != nil {
 				return nil, err
 			}
@@ -638,7 +708,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		}
 
 		result, err := colexec.NewColOperator(
-			ctx, flowCtx, pspec, inputs, streamingMemAccount,
+			ctx, flowCtx, pspec, inputs, s.newStreamingMemAccount(flowCtx),
 			false, /* useStreamingMemAccountForBuffering */
 		)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -658,7 +728,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 			!result.IsStreaming {
 			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
 		}
-		if err = streamingMemAccount.Grow(ctx, int64(result.InternalMemUsage)); err != nil {
+		// We created a streaming memory account when calling NewColOperator above,
+		// so there is definitely at least one memory account, and it doesn't
+		// matter which one we grow.
+		if err = s.streamingMemAccounts[0].Grow(ctx, int64(result.InternalMemUsage)); err != nil {
 			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
@@ -686,7 +759,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, err
 		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue, streamingMemAccount,
+			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
 		); err != nil {
 			return nil, err
 		}
@@ -870,9 +943,10 @@ func SupportsVectorized(
 	)
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
-	acc := memoryMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
 	defer func() {
+		for _, memAcc := range creator.streamingMemAccounts {
+			memAcc.Close(ctx)
+		}
 		for _, memAcc := range creator.bufferingMemAccounts {
 			memAcc.Close(ctx)
 		}
@@ -881,7 +955,7 @@ func SupportsVectorized(
 		}
 	}()
 	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
-		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, &acc, fuseOpt)
+		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
 	}); vecErr != nil {
 		return leaves, vecErr
 	}

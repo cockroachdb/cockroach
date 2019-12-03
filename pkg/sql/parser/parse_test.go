@@ -112,6 +112,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b SERIAL8)`},
 		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b TIMETZ)`},
+		{`CREATE TABLE a (b TIME(3))`},
+		{`CREATE TABLE a (b TIMETZ(3))`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b "char")`},
@@ -1045,6 +1047,15 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM t@[123]`},
 		{`SELECT * FROM [123 AS t]@[456]`},
 
+		{`INSERT INTO [123 AS t] VALUES (1)`},
+		{`INSERT INTO [123(1, 2) AS t] VALUES (1, 2)`},
+		{`INSERT INTO [123 AS t](col1, col2) VALUES (1, 2)`},
+		{`UPSERT INTO [123 AS t] VALUES (1)`},
+		{`UPDATE [123 AS t] SET b = 3`},
+		{`UPDATE [123 AS t]@idx SET b = 3`},
+		{`DELETE FROM [123 AS t]`},
+		{`DELETE FROM [123 AS t]@idx`},
+
 		{`SELECT (1 + 2).*`},
 		{`SELECT (1 + 2).col`},
 		{`SELECT (abc.def).col`},
@@ -1100,6 +1111,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN ALTER INDEX b RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},
 		{`ALTER INDEX a@primary RENAME TO like`},
+		{`ALTER INDEX IF EXISTS b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
 
@@ -1459,10 +1471,19 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`, `SELECT INT8 'foo', 'foo'::INT8`},
 
+		{`SELECT 'a'::TIMESTAMP(3)`, `SELECT 'a'::TIMESTAMP(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIMESTAMP(3)`},
+		{`SELECT 'a'::TIMESTAMPTZ(3)`, `SELECT 'a'::TIMESTAMPTZ(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITH TIME ZONE`, `SELECT 'a'::TIMESTAMPTZ(3)`},
 		{`SELECT TIMESTAMP(3) 'a'`, `SELECT TIMESTAMP(3) 'a'`},
 		{`SELECT TIMESTAMPTZ(3) 'a'`, `SELECT TIMESTAMPTZ(3) 'a'`},
+
+		{`SELECT 'a'::TIME(3)`, `SELECT 'a'::TIME(3)`},
+		{`SELECT 'a'::TIME(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIME(3)`},
+		{`SELECT 'a'::TIMETZ(3)`, `SELECT 'a'::TIMETZ(3)`},
+		{`SELECT 'a'::TIME(3) WITH TIME ZONE`, `SELECT 'a'::TIMETZ(3)`},
+		{`SELECT TIME(3) 'a'`, `SELECT TIME(3) 'a'`},
+		{`SELECT TIMETZ(3) 'a'`, `SELECT TIMETZ(3) 'a'`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}`, `SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},
@@ -3116,13 +3137,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
 		{`SELECT 'a'::INTERVAL SECOND(123)`, 32564, `interval second`},
 		{`SELECT INTERVAL(3) 'a'`, 32564, ``},
-
-		{`SELECT 'a'::TIME(123)`, 32565, ``},
-		{`SELECT 'a'::TIME(123) WITHOUT TIME ZONE`, 32565, ``},
-		{`SELECT 'a'::TIMETZ(123)`, 26097, `type with precision`},
-		{`SELECT 'a'::TIME(123) WITH TIME ZONE`, 32565, ``},
-		{`SELECT TIME(3) 'a'`, 32565, ``},
-		{`SELECT TIMETZ(3) 'a'`, 26097, `type with precision`},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},

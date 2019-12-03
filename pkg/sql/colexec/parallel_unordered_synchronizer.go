@@ -199,7 +199,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 // Next is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if s.done {
-		return zeroBatch
+		return coldata.ZeroBatch
 	}
 	if !s.initialized {
 		s.init(ctx)
@@ -231,7 +231,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			default:
 			}
 			s.done = true
-			return zeroBatch
+			return coldata.ZeroBatch
 		}
 		s.lastReadInputIdx = msg.inputIdx
 		return msg.b

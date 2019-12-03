@@ -618,7 +618,10 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 	switch colType {
 	// {{ range $.Global.MJOverloads }}
 	case _TYPES_T:
-		srcCol := src._TemplateType()
+		var srcCol _GOTYPESLICE
+		if src != nil {
+			srcCol = src._TemplateType()
+		}
 		outCol := out._TemplateType()
 		var val _GOTYPE
 		var srcStartIdx int
@@ -748,17 +751,20 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 			for outColIdx, inColIdx := range input.outCols {
 				outStartIdx := int(destStartIdx)
 				out := o.output.ColVec(outColIdx)
-				src := batch.ColVec(int(inColIdx))
+				var src coldata.Vec
+				if batch.Width() > int(inColIdx) {
+					src = batch.ColVec(int(inColIdx))
+				}
 				colType := input.sourceTypes[inColIdx]
 
 				if sel != nil {
-					if src.MaybeHasNulls() {
+					if src != nil && src.MaybeHasNulls() {
 						_LEFT_SWITCH(_JOIN_TYPE, true, true)
 					} else {
 						_LEFT_SWITCH(_JOIN_TYPE, true, false)
 					}
 				} else {
-					if src.MaybeHasNulls() {
+					if src != nil && src.MaybeHasNulls() {
 						_LEFT_SWITCH(_JOIN_TYPE, false, true)
 					} else {
 						_LEFT_SWITCH(_JOIN_TYPE, false, false)
@@ -783,7 +789,10 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 	switch colType {
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
-		srcCol := src._TemplateType()
+		var srcCol _GOTYPESLICE
+		if src != nil {
+			srcCol = src._TemplateType()
+		}
 		outCol := out._TemplateType()
 
 		// Loop over every group.
@@ -944,17 +953,20 @@ RightColLoop:
 	for outColIdx, inColIdx := range input.outCols {
 		outStartIdx := int(destStartIdx)
 		out := o.output.ColVec(outColIdx + colOffset)
-		src := batch.ColVec(int(inColIdx))
+		var src coldata.Vec
+		if batch.Width() > int(inColIdx) {
+			src = batch.ColVec(int(inColIdx))
+		}
 		colType := input.sourceTypes[inColIdx]
 
 		if sel != nil {
-			if src.MaybeHasNulls() {
+			if src != nil && src.MaybeHasNulls() {
 				_RIGHT_SWITCH(_JOIN_TYPE, true, true)
 			} else {
 				_RIGHT_SWITCH(_JOIN_TYPE, true, false)
 			}
 		} else {
-			if src.MaybeHasNulls() {
+			if src != nil && src.MaybeHasNulls() {
 				_RIGHT_SWITCH(_JOIN_TYPE, false, true)
 			} else {
 				_RIGHT_SWITCH(_JOIN_TYPE, false, false)

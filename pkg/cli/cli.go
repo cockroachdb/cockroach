@@ -71,8 +71,7 @@ func exitWithError(cmdName string, err error) {
 	errCode := 0
 	if err != nil {
 		// Display the error and its details/hints.
-		fmt.Fprintln(stderr, "Error:", err.Error())
-		maybeShowErrorDetails(stderr, err, false /* printNewline */)
+		cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
 
 		// Remind the user of which command was being run.
 		fmt.Fprintf(stderr, "Failed running %q\n", cmdName)

@@ -40,7 +40,7 @@ send "begin;\r"
 eexpect BEGIN
 
 send "select 3+;\r"
-eexpect "pq: at or near"
+eexpect "ERROR: at or near"
 eexpect "syntax error"
 eexpect root@
 

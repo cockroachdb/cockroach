@@ -147,9 +147,9 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
-	nTups := 1025
-	k := uint16(4)
-	maxCols := 5
+	nTups := coldata.BatchSize()*2 + 1
+	k := uint16(rng.Intn(int(nTups))) + 1
+	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]coltypes.T, maxCols)
 	for i := range typs {

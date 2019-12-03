@@ -30,8 +30,15 @@ var (
 	// NOTE: postgres documentation mentions -14:59, but up to -15:59 is accepted.
 	MinTimeTZOffsetSecs = -1 * MaxTimeTZOffsetSecs
 
-	// TimeTZMaxTimeRegex is a compiled regex for parsing the 24:00 timetz value.
-	timeTZMaxTimeRegex = regexp.MustCompile(`^24:`)
+	// timeTZMaxTimeRegex is a compiled regex for parsing the 24:00 timetz value.
+	timeTZMaxTimeRegex = regexp.MustCompile(`^([0-9-]*T?)?\s*24:`)
+
+	// timeTZIncludesDateRegex is a regex to check whether there is a date
+	// associated with the given string when attempting to parse it.
+	timeTZIncludesDateRegex = regexp.MustCompile(`^\d{4}-`)
+	// timeTZHasTimeComponent determines whether there is a time component at all
+	// in a given string.
+	timeTZHasTimeComponent = regexp.MustCompile(`\d:`)
 )
 
 // TimeTZ is an implementation of postgres' TimeTZ.
@@ -75,27 +82,36 @@ func Now() TimeTZ {
 
 // ParseTimeTZ parses and returns the TimeTZ represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseTimeTZ(now time.Time, s string) (TimeTZ, error) {
+func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, error) {
 	// Special case as we have to use `ParseTimestamp` to get the date.
 	// We cannot use `ParseTime` as it does not have timezone awareness.
-	if s == "" {
+	if !timeTZHasTimeComponent.MatchString(s) {
 		return TimeTZ{}, pgerror.Newf(
 			pgcode.InvalidTextRepresentation,
-			"unable to parse %q as TimeTZ",
+			"could not parse %q as TimeTZ",
 			s,
 		)
 	}
-	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, "1970-01-01 "+s)
+
+	// ParseTimestamp requires a date field -- append date at the beginning
+	// if a date has not been included.
+	if !timeTZIncludesDateRegex.MatchString(s) {
+		s = "1970-01-01 " + s
+	} else {
+		s = timeutil.ReplaceLibPQTimePrefix(s)
+	}
+
+	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return TimeTZ{}, pgerror.Wrapf(
 			err,
 			pgcode.InvalidTextRepresentation,
-			"unable to parse %q as TimeTZ",
+			"could not parse %q as TimeTZ",
 			s,
 		)
 	}
-	retTime := timeofday.FromTime(t)
+	retTime := timeofday.FromTime(t.Round(precision))
 	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if timeTZMaxTimeRegex.MatchString(s) {
@@ -141,6 +157,11 @@ func (t *TimeTZ) String() string {
 func (t *TimeTZ) ToTime() time.Time {
 	loc := timeutil.FixedOffsetTimeZoneToLocation(-int(t.OffsetSecs), "TimeTZ")
 	return t.TimeOfDay.ToTime().Add(time.Duration(t.OffsetSecs) * time.Second).In(loc)
+}
+
+// Round rounds a DTimeTZ to the given duration.
+func (t *TimeTZ) Round(precision time.Duration) TimeTZ {
+	return MakeTimeTZ(t.TimeOfDay.Round(precision), t.OffsetSecs)
 }
 
 // Before returns whether the current is before the other TimeTZ.

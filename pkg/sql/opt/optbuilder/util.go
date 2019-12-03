@@ -215,6 +215,21 @@ func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	dst.id = src.id
 }
 
+// shouldCreateDefaultColumn decides if we need to create a default
+// column and default label for a function expression.
+// Returns true if the function's return type is not an empty tuple and
+// doesn't declare any tuple labels.
+func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
+	if texpr.ResolvedType() == types.EmptyTuple {
+		// This is only to support crdb_internal.unary_table().
+		return false
+	}
+
+	// We need to create a default column with a default name when
+	// the function return type doesn't declare any return labels.
+	return len(texpr.ResolvedType().TupleLabels()) == 0
+}
+
 // addColumn adds a column to scope with the given alias, type, and
 // expression. It returns a pointer to the new column. The column ID and group
 // are left empty so they can be filled in later.
@@ -445,9 +460,63 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	return sch, resName
 }
 
-// resolveTable returns the data source in the catalog with the given name. If
-// the name does not resolve to a table, or if the current user does not have
-// the given privilege, then resolveTable raises an error.
+// resolveTableForMutation is a helper method for building mutations. It returns
+// the table in the catalog that matches the given TableExpr, along with the
+// table's MDDepName and alias, and the IDs of any columns explicitly specified
+// by the TableExpr (see tree.TableRef).
+//
+// If the name does not resolve to a table, then resolveTableForMutation raises
+// an error. Privileges are checked when resolving the table, and an error is
+// raised if the current user does not have the given privilege.
+func (b *Builder) resolveTableForMutation(
+	n tree.TableExpr, priv privilege.Kind,
+) (tab cat.Table, depName opt.MDDepName, alias tree.TableName, columns []tree.ColumnID) {
+	// Strip off an outer AliasedTableExpr if there is one.
+	var outerAlias *tree.TableName
+	if ate, ok := n.(*tree.AliasedTableExpr); ok {
+		n = ate.Expr
+		// It's okay to ignore the As columns here, as they're not permitted in
+		// DML aliases where this function is used. The grammar does not allow
+		// them, so the parser would have reported an error if they were present.
+		if ate.As.Alias != "" {
+			outerAlias = tree.NewUnqualifiedTableName(ate.As.Alias)
+		}
+	}
+
+	switch t := n.(type) {
+	case *tree.TableName:
+		tab, alias = b.resolveTable(t, priv)
+		depName = opt.DepByName(t)
+
+	case *tree.TableRef:
+		tab = b.resolveTableRef(t, priv)
+		alias = tree.MakeUnqualifiedTableName(t.As.Alias)
+		depName = opt.DepByID(cat.StableID(t.TableID))
+
+		// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
+		// (all columns). whereas an array of length 0 means 'zero columns'.
+		// Lists of zero columns are not supported and will throw an error."
+		if t.Columns != nil && len(t.Columns) == 0 {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"an explicit list of column IDs must include at least one column"))
+		}
+		columns = t.Columns
+
+	default:
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%q does not resolve to a table", tree.ErrString(n)))
+	}
+
+	if outerAlias != nil {
+		alias = *outerAlias
+	}
+
+	return tab, depName, alias, columns
+}
+
+// resolveTable returns the table in the catalog with the given name. If the
+// name does not resolve to a table, or if the current user does not have the
+// given privilege, then resolveTable raises an error.
 func (b *Builder) resolveTable(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.Table, tree.TableName) {
@@ -457,6 +526,18 @@ func (b *Builder) resolveTable(
 		panic(sqlbase.NewWrongObjectTypeError(tn, "table"))
 	}
 	return tab, resName
+}
+
+// resolveTableRef returns the table in the catalog that matches the given
+// TableRef spec. If the name does not resolve to a table, or if the current
+// user does not have the given privilege, then resolveTableRef raises an error.
+func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
+	ds := b.resolveDataSourceRef(ref, priv)
+	tab, ok := ds.(cat.Table)
+	if !ok {
+		panic(sqlbase.NewWrongObjectTypeError(ref, "table"))
+	}
+	return tab
 }
 
 // resolveDataSource returns the data source in the catalog with the given name.

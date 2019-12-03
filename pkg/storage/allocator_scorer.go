@@ -640,8 +640,8 @@ func rebalanceCandidates(
 
 	// 3. Decide whether we should try to rebalance. Note that for each existing
 	// store, we only compare its fullness stats to the stats of "comparable"
-	// stores, i.e. those stores that at least as valid, necessary, and diverse
-	// as the existing store.
+	// stores, i.e. those stores that are at least as valid, necessary, and
+	// diverse as the existing store.
 	needRebalance := needRebalanceFrom || needRebalanceTo
 	var shouldRebalanceCheck bool
 	if !needRebalance {

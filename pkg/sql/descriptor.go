@@ -258,25 +258,6 @@ func writeDescToBatch(
 	descID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
-	var tableToDowngrade *TableDescriptor
-	switch d := desc.(type) {
-	case *TableDescriptor:
-		tableToDowngrade = d
-	case *MutableTableDescriptor:
-		tableToDowngrade = d.TableDesc()
-	case *DatabaseDescriptor:
-	default:
-		return errors.AssertionFailedf("unexpected proto type %T", desc)
-	}
-	if tableToDowngrade != nil {
-		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
-		if err != nil {
-			return err
-		}
-		if didDowngrade {
-			desc = downgraded
-		}
-	}
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {
@@ -298,25 +279,6 @@ func WriteNewDescToBatch(
 	tableID sqlbase.ID,
 	desc sqlbase.DescriptorProto,
 ) (err error) {
-	var tableToDowngrade *TableDescriptor
-	switch d := desc.(type) {
-	case *TableDescriptor:
-		tableToDowngrade = d
-	case *MutableTableDescriptor:
-		tableToDowngrade = d.TableDesc()
-	case *DatabaseDescriptor:
-	default:
-		return errors.AssertionFailedf("unexpected proto type %T", desc)
-	}
-	if tableToDowngrade != nil {
-		didDowngrade, downgraded, err := tableToDowngrade.MaybeDowngradeForeignKeyRepresentation(ctx, s)
-		if err != nil {
-			return err
-		}
-		if didDowngrade {
-			desc = downgraded
-		}
-	}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	descDesc := sqlbase.WrapDescriptor(desc)
 	if kvTrace {

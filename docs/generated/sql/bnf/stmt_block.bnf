@@ -109,7 +109,7 @@ create_stmt ::=
 	| create_stats_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -145,8 +145,7 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' targets 'FROM' partitioned_backup_list opt_with_options
-	| 'RESTORE' targets 'FROM' partitioned_backup_list as_of_clause opt_with_options
+	'RESTORE' targets 'FROM' partitioned_backup_list opt_as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
@@ -197,7 +196,7 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' table_expr_opt_alias_idx 'SET' set_clause_list opt_from_list opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
@@ -350,10 +349,10 @@ opt_with_clause ::=
 	with_clause
 	| 
 
-table_name_expr_opt_alias_idx ::=
-	table_name_expr_with_index
-	| table_name_expr_with_index table_alias_name
-	| table_name_expr_with_index 'AS' table_alias_name
+table_expr_opt_alias_idx ::=
+	table_name_opt_idx
+	| table_name_opt_idx table_alias_name
+	| table_name_opt_idx 'AS' table_alias_name
 
 opt_where_clause ::=
 	where_clause
@@ -431,9 +430,6 @@ reset_csetting_stmt ::=
 
 partitioned_backup_list ::=
 	( partitioned_backup ) ( ( ',' partitioned_backup ) )*
-
-as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
@@ -998,6 +994,9 @@ alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 
+as_of_clause ::=
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
+
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
@@ -1054,7 +1053,7 @@ with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
 
-table_name_expr_with_index ::=
+table_name_opt_idx ::=
 	table_name opt_index_flags
 
 where_clause ::=
@@ -2092,7 +2091,10 @@ character_without_length ::=
 
 const_datetime ::=
 	'DATE'
+	| 'TIME' opt_timezone
+	| 'TIME' '(' iconst32 ')' opt_timezone
 	| 'TIMETZ'
+	| 'TIMETZ' '(' iconst32 ')'
 	| 'TIMESTAMP' opt_timezone
 	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
 	| 'TIMESTAMPTZ'

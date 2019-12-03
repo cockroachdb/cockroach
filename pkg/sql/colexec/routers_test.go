@@ -152,7 +152,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
 			unblockEvent: func(_ Operator, o *routerOutputOp) {
-				o.addBatch(o.zeroBatch, nil /* selection */)
+				o.addBatch(coldata.ZeroBatch, nil /* selection */)
 			},
 			expected: tuples{},
 			name:     "ReaderWaitsForZeroBatch",
@@ -227,7 +227,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
 		o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
-		o.addBatch(o.zeroBatch, fullSelection)
+		o.addBatch(coldata.ZeroBatch, fullSelection)
 		o.Next(ctx)
 		o.Next(ctx)
 		select {

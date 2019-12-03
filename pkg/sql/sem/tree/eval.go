@@ -3438,36 +3438,38 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		}
 
 	case types.TimeFamily:
+		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTime(ctx, string(*d))
+			return ParseDTime(ctx, string(*d), roundTo)
 		case *DCollatedString:
-			return ParseDTime(ctx, d.Contents)
+			return ParseDTime(ctx, d.Contents, roundTo)
 		case *DTime:
-			return d, nil
+			return d.Round(roundTo), nil
 		case *DTimeTZ:
-			return MakeDTime(d.TimeOfDay), nil
+			return MakeDTime(d.TimeOfDay.Round(roundTo)), nil
 		case *DTimestamp:
-			return MakeDTime(timeofday.FromTime(d.Time)), nil
+			return MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time)), nil
+			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time).Round(roundTo)), nil
 		case *DInterval:
-			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
+			return MakeDTime(timeofday.Min.Add(d.Duration).Round(roundTo)), nil
 		}
 
 	case types.TimeTZFamily:
+		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimeTZ(ctx, string(*d))
+			return ParseDTimeTZ(ctx, string(*d), roundTo)
 		case *DCollatedString:
-			return ParseDTimeTZ(ctx, d.Contents)
+			return ParseDTimeTZ(ctx, d.Contents, roundTo)
 		case *DTime:
-			return NewDTimeTZFromLocation(timeofday.TimeOfDay(*d), ctx.GetLocation()), nil
+			return NewDTimeTZFromLocation(timeofday.TimeOfDay(*d).Round(roundTo), ctx.GetLocation()), nil
 		case *DTimeTZ:
-			return d, nil
+			return d.Round(roundTo), nil
 		case *DTimestampTZ:
-			return NewDTimeTZFromTime(d.Time), nil
+			return NewDTimeTZFromTime(d.Time.Round(roundTo)), nil
 		}
 
 	case types.TimestampFamily:
