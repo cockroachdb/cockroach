@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/errors"
 )
 
 func createTempSchema(params runParams, sKey sqlbase.DescriptorKey) (sqlbase.ID, error) {
@@ -60,6 +63,26 @@ func temporarySchemaName(sessionID ClusterWideID) string {
 	return fmt.Sprintf("pg_temp_%d_%d", sessionID.Hi, sessionID.Lo)
 }
 
+// temporarySchemaSessionID returns the sessionID of the given temporary schema.
+func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
+	if !strings.HasPrefix(scName, "pg_temp_") {
+		return false, ClusterWideID{}, nil
+	}
+	parts := strings.Split(scName, "_")
+	if len(parts) != 4 {
+		return false, ClusterWideID{}, errors.Errorf("malformed temp schema name %s", scName)
+	}
+	hi, err := strconv.ParseUint(parts[2], 10, 64)
+	if err != nil {
+		return false, ClusterWideID{}, err
+	}
+	lo, err := strconv.ParseUint(parts[3], 10, 64)
+	if err != nil {
+		return false, ClusterWideID{}, err
+	}
+	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
+}
+
 // getTemporaryObjectNames returns all the temporary objects under the
 // temporary schema of the given dbID.
 func getTemporaryObjectNames(
@@ -79,18 +102,29 @@ func getTemporaryObjectNames(
 	)
 }
 
-// cleanupSessionTempObjects removes all temporary objects (tables, sequences,
-// views, temporary schema) created by the session.
-func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID ClusterWideID) error {
+// sessionDataForCleanup returns SessionData that can be used to access the
+// temporary schema for the given SessionID. This is used for cleaning up
+// temporary data when the session no longer exists.
+func sessionDataForCleanup(sessionID ClusterWideID) *sessiondata.SessionData {
 	tempSchemaName := temporarySchemaName(sessionID)
-	sd := &sessiondata.SessionData{
+	return &sessiondata.SessionData{
 		SearchPath:    sqlbase.DefaultSearchPath.WithTemporarySchemaName(tempSchemaName),
 		User:          security.RootUser,
 		SequenceState: &sessiondata.SequenceState{},
 	}
-	ie := MakeInternalExecutor(ctx, server, MemoryMetrics{}, server.cfg.Settings)
-	ie.SetSessionData(sd)
-	return server.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+}
+
+// cleanupSessionTempObjects removes all temporary objects (tables, sequences,
+// views, temporary schema) created by the session.
+func cleanupSessionTempObjects(
+	ctx context.Context,
+	settings *cluster.Settings,
+	db *client.DB,
+	execQuery func(context.Context, string, *client.Txn, string, ...interface{}) (int, error),
+	sessionID ClusterWideID,
+) error {
+	tempSchemaName := temporarySchemaName(sessionID)
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		dbIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
@@ -98,7 +132,7 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 			return err
 		}
 		for _, id := range dbIDs {
-			if err := cleanupSchemaObjects(ctx, server.cfg.Settings, ie.Exec, txn, id, tempSchemaName); err != nil {
+			if err := cleanupSchemaObjects(ctx, settings, execQuery, txn, id, tempSchemaName); err != nil {
 				return err
 			}
 			// Even if no objects were found under the temporary schema, the schema

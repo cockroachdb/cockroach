@@ -89,16 +89,17 @@ type NodeLiveness interface {
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
-	ac         log.AmbientContext
-	stopper    *stop.Stopper
-	db         *client.DB
-	ex         sqlutil.InternalExecutor
-	clock      *hlc.Clock
-	nodeID     *base.NodeIDContainer
-	settings   *cluster.Settings
-	planFn     planHookMaker
-	metrics    Metrics
-	adoptionCh chan struct{}
+	ac                                  log.AmbientContext
+	stopper                             *stop.Stopper
+	db                                  *client.DB
+	ex                                  sqlutil.InternalExecutor
+	clock                               *hlc.Clock
+	nodeID                              *base.NodeIDContainer
+	settings                            *cluster.Settings
+	planFn                              planHookMaker
+	metrics                             Metrics
+	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	adoptionCh                          chan struct{}
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
@@ -172,6 +173,15 @@ func MakeRegistry(
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
+}
+
+// SetSessionBoundInternalExecutorFactory sets the
+// SessionBoundInternalExecutorFactory that will be used by the job registry
+// executor.
+func (r *Registry) SetSessionBoundInternalExecutorFactory(
+	factory sqlutil.SessionBoundInternalExecutorFactory,
+) {
+	r.sessionBoundInternalExecutorFactory = factory
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.
