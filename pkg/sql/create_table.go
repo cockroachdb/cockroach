@@ -34,6 +34,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+var invalidClusterForShardedIndex = pgerror.Newf(pgcode.FeatureNotSupported,
+	"hash sharded indexes can only be created on a cluster that has fully migrated to version 20.1")
+
 type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
@@ -1062,6 +1065,27 @@ func MakeTableDesc(
 					)
 				}
 			}
+			if d.PrimaryKey.Sharded {
+				buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+				if err != nil {
+					return desc, err
+				}
+				shardCol, _, err := maybeCreateAndAddShardCol(int(buckets), &desc,
+					[]string{string(d.Name)}, true /* isNewTable */)
+				if err != nil {
+					return desc, err
+				}
+				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+				if err != nil {
+					return desc, err
+				}
+				// Add the shard's check constraint to the list of TableDefs to treat it
+				// like it's been "hoisted" like the explicitly added check constraints.
+				// It'll then be added to this table's resulting table descriptor below in
+				// the constraint pass.
+				n.Defs = append(n.Defs, checkConstraint)
+				columnDefaultExprs = append(columnDefaultExprs, nil)
+			}
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
 			if err != nil {
 				return desc, err
@@ -1077,7 +1101,7 @@ func MakeTableDesc(
 
 			if idx != nil {
 				idx.Version = indexEncodingVersion
-				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey.IsPrimaryKey); err != nil {
 					return desc, err
 				}
 			}
@@ -1118,6 +1142,47 @@ func MakeTableDesc(
 	}
 
 	var primaryIndexColumnSet map[string]struct{}
+	setupShardedIndex := func(idx *sqlbase.IndexDescriptor, d *tree.IndexTableDef) error {
+		if !cluster.Version.IsActive(ctx, st, cluster.VersionHashShardedIndexes) {
+			return invalidClusterForShardedIndex
+		}
+		var colNames []string
+		for _, c := range d.Columns {
+			colNames = append(colNames, string(c.Column))
+		}
+		buckets, err := tree.EvalShardBucketCount(d.Sharded.ShardBuckets)
+		if err != nil {
+			return err
+		}
+		shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), &desc,
+			colNames, true /* isNewTable */)
+		if err != nil {
+			return err
+		}
+		idx.Sharded = sqlbase.ShardedDescriptor{
+			IsSharded:    true,
+			Name:         shardCol.Name,
+			ShardBuckets: buckets,
+			ColumnNames:  colNames,
+		}
+		// Prepend the shard column because we want the shard values, which we
+		// assume to be roughly uniformly distributed, to determine the underlying
+		// layout of this table's ranges.
+		d.Columns = append(tree.IndexElemList{
+			tree.IndexElem{
+				Column:    tree.Name(shardCol.Name),
+				Direction: tree.Ascending,
+			}}, d.Columns...)
+		if newColumn {
+			checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+			if err != nil {
+				return err
+			}
+			n.Defs = append(n.Defs, checkConstraint)
+			columnDefaultExprs = append(columnDefaultExprs, nil)
+		}
+		return nil
+	}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
@@ -1131,6 +1196,11 @@ func MakeTableDesc(
 			}
 			if d.Inverted {
 				idx.Type = sqlbase.IndexDescriptor_INVERTED
+			}
+			if d.Sharded != nil {
+				if err := setupShardedIndex(&idx, d); err != nil {
+					return desc, err
+				}
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -1155,6 +1225,11 @@ func MakeTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
+			}
+			if d.Sharded != nil {
+				if err := setupShardedIndex(&idx, &d.IndexTableDef); err != nil {
+					return desc, err
+				}
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -1198,13 +1273,33 @@ func MakeTableDesc(
 	// Now that all columns are in place, add any explicit families (this is done
 	// here, rather than in the constraint pass below since we want to pick up
 	// explicit allocations before AllocateIDs adds implicit ones).
+	columnsInExplicitFamilies := map[string]bool{}
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.FamilyTableDef); ok {
 			fam := sqlbase.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
 				ColumnNames: d.Columns.ToStrings(),
 			}
+			for _, c := range fam.ColumnNames {
+				columnsInExplicitFamilies[c] = true
+			}
 			desc.AddFamily(fam)
+		}
+	}
+
+	// Assign any implicitly added shard columns to the column family of the first column
+	// in their corresponding set of index columns.
+	for _, index := range desc.AllNonDropIndexes() {
+		if index.IsSharded() && !columnsInExplicitFamilies[index.Sharded.Name] {
+			// Ensure that the shard column wasn't explicitly assigned a column family
+			// during table creation (this will happen when a create statement is
+			// "roundtripped", for example).
+			family := sqlbase.GetColumnFamilyForShard(&desc, index.Sharded.ColumnNames)
+			if family != "" {
+				if err := desc.AddColumnToFamilyMaybeCreate(index.Sharded.Name, family, false, false); err != nil {
+					return desc, err
+				}
+			}
 		}
 	}
 
@@ -1406,8 +1501,40 @@ func (d *dummyColumnItem) ResolvedType() *types.T {
 	return d.typ
 }
 
-func generateNameForCheckConstraint(
-	desc *sqlbase.MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+// makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
+// based on all the `colNames`.
+func makeShardColumnDesc(
+	colNames []string, buckets int,
+) (*sqlbase.ColumnDescriptor, error) {
+	col := &sqlbase.ColumnDescriptor{
+		Hidden:   true,
+		Nullable: false,
+		Type:     *types.Int4,
+	}
+	computeExprBuilder := strings.Builder{}
+	computeExprBuilder.WriteString(`mod(`)
+	for i, c := range colNames {
+		if i != 0 {
+			computeExprBuilder.WriteString(" + ")
+		}
+		fmt.Fprintf(&computeExprBuilder, `fnv32(%s::STRING)`, c)
+	}
+	fmt.Fprintf(&computeExprBuilder, `, %d)`, buckets)
+	parsed, err := parser.ParseExpr(computeExprBuilder.String())
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "Invalid ComputeExpr for shard column")
+	}
+	col.Name = sqlbase.GetShardColumnName(colNames, int32(buckets))
+	serialized := tree.Serialize(parsed)
+	col.ComputeExpr = &serialized
+	return col, nil
+}
+
+// generateMaybeDuplicateNameForCheckConstraint generates a name, the given check
+// constraint expression, which may already be taken by another object in the table
+// descriptor.
+func generateMaybeDuplicateNameForCheckConstraint(
+	desc *MutableTableDescriptor, expr tree.Expr,
 ) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
@@ -1419,8 +1546,18 @@ func generateNameForCheckConstraint(
 	}); err != nil {
 		return "", err
 	}
-	name := nameBuf.String()
+	return nameBuf.String(), nil
+}
 
+// generateNameForCheckConstraint generates a unique name for the given check constraint.
+func generateNameForCheckConstraint(
+	desc *MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+) (string, error) {
+
+	name, err := generateMaybeDuplicateNameForCheckConstraint(desc, expr)
+	if err != nil {
+		return "", err
+	}
 	// If generated name isn't unique, attempt to add a number to the end to
 	// get a unique name.
 	if _, ok := inuseNames[name]; ok {
@@ -1439,6 +1576,29 @@ func generateNameForCheckConstraint(
 	}
 
 	return name, nil
+}
+
+func makeShardCheckConstraintDef(
+	desc *MutableTableDescriptor, buckets int, shardCol *sqlbase.ColumnDescriptor,
+) (*tree.CheckConstraintTableDef, error) {
+	var checkConstraintBuilder strings.Builder
+	fmt.Fprintf(&checkConstraintBuilder, `%s in (`, shardCol.Name)
+	for i := 0; i < buckets; i++ {
+		if i != 0 {
+			checkConstraintBuilder.WriteString(`, `)
+		}
+		fmt.Fprintf(&checkConstraintBuilder, `%d`, i)
+	}
+	checkConstraintBuilder.WriteString(`)`)
+	parsed, err := parser.ParseExpr(checkConstraintBuilder.String())
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "Invalid check constraint for shard column")
+	}
+	constraint := &tree.CheckConstraintTableDef{
+		Expr:   parsed,
+		Hidden: true,
+	}
+	return constraint, nil
 }
 
 func iterColDescriptorsInExpr(
@@ -1629,5 +1789,6 @@ func MakeCheckConstraint(
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
+		Hidden:    d.Hidden,
 	}, nil
 }
