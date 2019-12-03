@@ -38,7 +38,7 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/stop",
 			expIssues: []issue{{
 				testName: "TestStopperWithCancelConcurrent",
-				title:    "util/stop: TestStopperWithCancelConcurrent failed under stress",
+				title:    "util/stop: TestStopperWithCancelConcurrent failed",
 				message:  "this is just a testing issue",
 				author:   "nvanbenschoten@gmail.com",
 			}},
@@ -49,7 +49,7 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
 			expIssues: []issue{{
 				testName: "TestReplicateQueueRebalance",
-				title:    "storage: TestReplicateQueueRebalance failed under stress",
+				title:    "storage: TestReplicateQueueRebalance failed",
 				message:  "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
 				author:   "petermattis@gmail.com",
 			}},
@@ -60,7 +60,7 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
 			expIssues: []issue{{
 				testName: "TestGossipHandlesReplacedNode",
-				title:    "storage: TestGossipHandlesReplacedNode failed under stress",
+				title:    "storage: TestGossipHandlesReplacedNode failed",
 				message:  "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
 				author:   "alexdwanerobinson@gmail.com",
 			}},
@@ -71,7 +71,7 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
 			expIssues: []issue{{
 				testName: "(unknown)",
-				title:    "storage: package failed under stress",
+				title:    "storage: package failed",
 				message:  "make: *** [bin/.submodules-initialized] Error 1",
 				author:   "",
 			}},
@@ -82,7 +82,7 @@ func TestListFailures(t *testing.T) {
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/json",
 			expIssues: []issue{{
 				testName: "TestPretty",
-				title:    "util/json: TestPretty failed under stress",
+				title:    "util/json: TestPretty failed",
 				message: `=== RUN   TestPretty/["hello",_["world"]]
     --- FAIL: TestPretty/["hello",_["world"]] (0.00s)
     	json_test.go:1656: injected failure`,
@@ -99,13 +99,13 @@ func TestListFailures(t *testing.T) {
 			expIssues: []issue{
 				{
 					testName: "TestTxnCoordSenderPipelining",
-					title:    "kv: TestTxnCoordSenderPipelining failed under stress",
+					title:    "kv: TestTxnCoordSenderPipelining failed",
 					message:  `injected failure`,
 					author:   "nikhil.benesch@gmail.com",
 				},
 				{
 					testName: "TestAbortReadOnlyTransaction",
-					title:    "kv: TestAbortReadOnlyTransaction timed out under stress",
+					title:    "kv: TestAbortReadOnlyTransaction timed out",
 					message: `Slow failing tests:
 TestAbortReadOnlyTransaction - 3.99s
 TestTxnCoordSenderPipelining - 1.00s
@@ -127,7 +127,7 @@ TestAnchorKey - 1.01s
 			expIssues: []issue{
 				{
 					testName: "(unknown)",
-					title:    "kv: package timed out under stress",
+					title:    "kv: package timed out",
 					message: `Slow failing tests:
 TestXXX/sub3 - 0.50s
 
@@ -147,7 +147,7 @@ TestXXA - 1.00s
 			expIssues: []issue{
 				{
 					testName: "(unknown)",
-					title:    "kv: package timed out under stress",
+					title:    "kv: package timed out",
 					message: `Slow failing tests:
 TestXXX/sub1 - 0.49s
 
@@ -168,7 +168,7 @@ TestXXA - 1.00s
 			expIssues: []issue{
 				{
 					testName: "TestXXX/sub2",
-					title:    "kv: TestXXX/sub2 timed out under stress",
+					title:    "kv: TestXXX/sub2 timed out",
 					message: `Slow failing tests:
 TestXXX/sub2 - 2.99s
 
@@ -188,7 +188,7 @@ TestXXA - 1.00s
 			expIssues: []issue{
 				{
 					testName: "TestXXX",
-					title:    "kv: TestXXX failed under stress",
+					title:    "kv: TestXXX failed",
 					message:  `panic: induced panic`,
 					author:   "",
 				},
@@ -202,7 +202,7 @@ TestXXA - 1.00s
 			expIssues: []issue{
 				{
 					testName: "(unknown)",
-					title:    "kv: package failed under stress",
+					title:    "kv: package failed",
 					message:  `panic: induced panic`,
 					author:   "",
 				},
