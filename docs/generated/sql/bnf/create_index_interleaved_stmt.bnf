@@ -1,8 +1,8 @@
 create_index_stmt ::=
-	'CREATE' 'UNIQUE' 'INDEX' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE' 'UNIQUE' 'INDEX' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INDEX' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
-	| 'CREATE'  'INDEX' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
+	'CREATE' 'UNIQUE' 'INDEX' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
+	| 'CREATE' 'UNIQUE' 'INDEX' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
+	| 'CREATE'  'INDEX' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
+	| 'CREATE'  'INDEX' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
 	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
 	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
 	| 'CREATE'  'INVERTED' 'INDEX' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'
