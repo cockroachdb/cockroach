@@ -1451,6 +1451,18 @@ func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(title, pretty.Group(pretty.Stack(clauses...)))
 }
 
+func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
+	// Final layout:
+	//
+	// USING HASH WITH BUCKET_COUNT = bucket_count
+	//
+	parts := []pretty.Doc{
+		pretty.Keyword("USING HASH WITH BUCKET_COUNT = "),
+		p.Doc(node.ShardBuckets),
+	}
+	return pretty.Fold(pretty.ConcatSpace, parts...)
+}
+
 func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
@@ -1491,12 +1503,15 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		title = append(title, p.Doc(&node.Name))
 	}
 
-	clauses := make([]pretty.Doc, 0, 4)
+	clauses := make([]pretty.Doc, 0, 5)
 	clauses = append(clauses, pretty.Fold(pretty.ConcatSpace,
 		pretty.Keyword("ON"),
 		p.Doc(&node.Table),
 		p.bracket("(", p.Doc(&node.Columns), ")")))
 
+	if node.Sharded != nil {
+		clauses = append(clauses, p.Doc(node.Sharded))
+	}
 	if len(node.Storing) > 0 {
 		clauses = append(clauses, p.bracketKeyword(
 			"STORING", " (",
@@ -1564,7 +1579,10 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 
-	clauses := make([]pretty.Doc, 0, 3)
+	clauses := make([]pretty.Doc, 0, 4)
+	if node.Sharded != nil {
+		clauses = append(clauses, p.Doc(node.Sharded))
+	}
 	if node.Storing != nil {
 		clauses = append(clauses, p.bracketKeyword(
 			"STORING", "(",
@@ -1599,7 +1617,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//
-	clauses := make([]pretty.Doc, 0, 4)
+	clauses := make([]pretty.Doc, 0, 5)
 	var title pretty.Doc
 	if node.PrimaryKey {
 		title = pretty.Keyword("PRIMARY KEY")
@@ -1610,6 +1628,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Name != "" {
 		clauses = append(clauses, title)
 		title = pretty.ConcatSpace(pretty.Keyword("CONSTRAINT"), p.Doc(&node.Name))
+	}
+	if node.Sharded != nil {
+		clauses = append(clauses, p.Doc(node.Sharded))
 	}
 	if node.Storing != nil {
 		clauses = append(clauses, p.bracketKeyword(
@@ -1754,7 +1775,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 
 	// PRIMARY KEY / UNIQUE constraint.
 	pkConstraint := pretty.Nil
-	if node.PrimaryKey {
+	if node.PrimaryKey.IsPrimaryKey {
 		pkConstraint = pretty.Keyword("PRIMARY KEY")
 	} else if node.Unique {
 		pkConstraint = pretty.Keyword("UNIQUE")
@@ -1763,6 +1784,10 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.UniqueConstraintName, pkConstraint))
 	}
 
+	if node.PrimaryKey.Sharded {
+		clauses = append(clauses, pretty.Keyword("USING HASH WITH BUCKET_COUNT = "))
+		clauses = append(clauses, p.Doc(node.PrimaryKey.ShardBuckets))
+	}
 	// CHECK expressions/constraints.
 	for _, checkExpr := range node.CheckExprs {
 		clauses = append(clauses, p.maybePrependConstraintName(&checkExpr.ConstraintName,

@@ -340,6 +340,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot create table and change it's primary key in the same transaction")
 			}
+			if n.tableDesc.PrimaryIndex.IsSharded() {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"tables with hash sharded primary keys do not support primary key changes")
+			}
 
 			// Ensure that there is not another primary key change attempted within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID

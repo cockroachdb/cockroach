@@ -869,6 +869,25 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(temporaryTablesEnabledClusterMode.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`experimental_enable_hash_sharded_indexes`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetHashShardedIndexesEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.HashShardedIndexesEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(hashShardedIndexesEnabledClusterMode.Get(sv))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
