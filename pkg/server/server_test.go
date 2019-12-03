@@ -119,6 +119,31 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
+// TestEngineTelemetry tests that the server increments a telemetry counter on
+// start that denotes engine type.
+func TestEngineTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	rows, err := db.Query("SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'storage.engine.%' AND usage_count > 0;")
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	if count < 1 {
+		t.Fatal("expected engine type telemetry counter to be emiitted")
+	}
+}
+
 // TestServerStartClock tests that a server's clock is not pushed out of thin
 // air. This used to happen - the simple act of starting was causing a server's
 // clock to be pushed because we were introducing bogus future timestamps into
