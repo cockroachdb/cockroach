@@ -7,3 +7,8 @@
 # on the scanned table.
 [GenerateIndexScans, Explore]
 (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate)) => (GenerateIndexScans $scanPrivate)
+
+# GenerateVirtualTableIndexScans creates alternate VirtualScan expressions for
+# each virtual secondary index on the scanned virtual table.
+[GenerateVirtualTableIndexScans, Explore]
+(VirtualScan $scanPrivate:* & (IsCanonicalVirtualScan $scanPrivate)) => (GenerateVirtualTableIndexScans $scanPrivate)

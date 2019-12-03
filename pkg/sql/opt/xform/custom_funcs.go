@@ -113,6 +113,27 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 	}
 }
 
+// IsCanonicalVirtualScan returns true if the given VirtualScanPrivate is an original
+// unaltered primary index VirtualScan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsCanonicalVirtualScan(scan *memo.VirtualScanPrivate) bool {
+	return scan.Index == cat.PrimaryIndex &&
+		scan.Constraint == nil
+}
+
+// GenerateVirtualTableIndexScans enumerates all secondary indexes on the given VirtualScan
+// operator's table and generates an alternate VirtualScan operator for each index.
+func (c *CustomFuncs) GenerateVirtualTableIndexScans(
+	grp memo.RelExpr, virtualScanPrivate *memo.VirtualScanPrivate,
+) {
+	// Iterate over all secondary indexes.
+	tab := c.e.mem.Metadata().Table(virtualScanPrivate.Table)
+	for i := 1; i < tab.IndexCount(); i++ {
+		virtualScan := memo.VirtualScanExpr{VirtualScanPrivate: *virtualScanPrivate}
+		virtualScan.Index = i
+		c.e.mem.AddVirtualScanToGroup(&virtualScan, grp)
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
