@@ -751,7 +751,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
 	if ex.hasCreatedTemporarySchema {
-		err := cleanupSessionTempObjects(ctx, ex.server, ex.sessionID)
+		sd := sessionDataToAccessTempSchemaObjects(ex.sessionID)
+		ie := NewSessionBoundInternalExecutor(
+			ctx, &sd, ex.server, MemoryMetrics{}, ex.server.cfg.Settings,
+		)
+		err := cleanupSessionTempObjects(ctx, ex.server.cfg.DB, ie, ex.sessionID)
 		if err != nil {
 			log.Errorf(
 				ctx,

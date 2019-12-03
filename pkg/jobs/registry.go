@@ -88,15 +88,16 @@ type NodeLiveness interface {
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
-	ac       log.AmbientContext
-	stopper  *stop.Stopper
-	db       *client.DB
-	ex       sqlutil.InternalExecutor
-	clock    *hlc.Clock
-	nodeID   *base.NodeIDContainer
-	settings *cluster.Settings
-	planFn   planHookMaker
-	metrics  Metrics
+	ac        log.AmbientContext
+	stopper   *stop.Stopper
+	db        *client.DB
+	ex        sqlutil.InternalExecutor
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory
+	clock     *hlc.Clock
+	nodeID    *base.NodeIDContainer
+	settings  *cluster.Settings
+	planFn    planHookMaker
+	metrics   Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -160,6 +161,10 @@ func MakeRegistry(
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
+}
+
+func (r *Registry) AddIEFactory(ieFactory sqlutil.SessionBoundInternalExecutorFactory) {
+	r.ieFactory = ieFactory
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.

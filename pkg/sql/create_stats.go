@@ -112,7 +112,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		// (To handle race conditions we check this again after the job starts,
 		// but this check is used to prevent creating a large number of jobs that
 		// immediately fail).
-		if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
+		if err := checkRunningStatsJobs(ctx, nil /* job */, n.p); err != nil {
 			return err
 		}
 	} else {
@@ -351,7 +351,7 @@ func (r *createStatsResumer) Resume(
 	if details.Name == stats.AutoStatsName {
 		// We want to make sure there is only one automatic CREATE STATISTICS job
 		// running at a time.
-		if err := checkRunningJobs(ctx, r.job, p); err != nil {
+		if err := checkRunningStatsJobs(ctx, r.job, p); err != nil {
 			return err
 		}
 	}
@@ -410,11 +410,35 @@ func (r *createStatsResumer) Resume(
 	})
 }
 
-// checkRunningJobs checks whether there are any other CreateStats jobs in the
+// checkRunningStatsJobs checks whether there are any other CreateStats jobs in the
 // pending, running, or paused status that started earlier than this one. If
-// there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
+// there are, checkRunningStatsJobs returns an error. If job is nil, checkRunningStatsJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
+func checkRunningStatsJobs(ctx context.Context, job *jobs.Job, p *planner) error {
+	if err := checkRunningJobsImpl(ctx, job, p, jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats); err != nil {
+		if err == DuplicateJobError {
+			return stats.ConcurrentCreateStatsError
+		}
+		return err
+	}
+	return nil
+}
+
+type duplicateJobError struct{}
+
+var _ error = duplicateJobError{}
+
+func (duplicateJobError) Error() string {
+	return "another job is already running"
+}
+
+// ConcurrentDeleteTempTablesError is reported when two delete temp tables jobs
+// are issued concurrently. This is a sentinel error.
+var DuplicateJobError error = duplicateJobError{}
+
+func checkRunningJobsImpl(
+	ctx context.Context, job *jobs.Job, p *planner, jobTypes ...jobspb.Type,
+) error {
 	var jobID int64
 	if job != nil {
 		jobID = *job.ID()
@@ -440,15 +464,17 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 			return err
 		}
 
-		if payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats {
-			id := (*int64)(row[0].(*tree.DInt))
-			if *id == jobID {
-				break
-			}
+		for _, jobType := range jobTypes {
+			if payload.Type() == jobType {
+				id := (*int64)(row[0].(*tree.DInt))
+				if *id == jobID {
+					break
+				}
 
-			// This is not the first CreateStats job running. This job should fail
-			// so that the earlier job can succeed.
-			return stats.ConcurrentCreateStatsError
+				// This is not the first job of the given type running. This job should
+				// fail so that the earlier job can succeed.
+				return DuplicateJobError
+			}
 		}
 	}
 	return nil
