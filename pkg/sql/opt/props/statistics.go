@@ -96,17 +96,6 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 
 	s.RowCount *= selectivity
 	s.Selectivity *= selectivity
-
-	// Make sure none of the distinct / null counts are larger than the row count.
-	for i, n := 0, s.ColStats.Count(); i < n; i++ {
-		colStat := s.ColStats.Get(i)
-		if colStat.DistinctCount > s.RowCount {
-			colStat.DistinctCount = s.RowCount
-		}
-		if colStat.NullCount > s.RowCount {
-			colStat.NullCount = s.RowCount
-		}
-	}
 }
 
 func (s *Statistics) String() string {
