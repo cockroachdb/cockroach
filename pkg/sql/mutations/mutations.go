@@ -397,7 +397,7 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 			// Primary keys must be in the first
 			// column family, so don't add them to
 			// the list.
-			if def.PrimaryKey {
+			if def.PrimaryKey.PrimaryKey {
 				continue
 			}
 			columns = append(columns, def.Name)

@@ -13,6 +13,8 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -149,7 +151,7 @@ func MakeColumnDefDescs(
 
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.PrimaryKey,
 	}
 
 	// Validate and assign column type.
@@ -186,11 +188,28 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *IndexDescriptor
-	if d.PrimaryKey || d.Unique {
+	if d.PrimaryKey.PrimaryKey || d.Unique {
+		colNames := []string{string(d.Name)}
+		var shardColName string
+		if d.PrimaryKey.Sharded {
+			shardColName = GetShardColumnName(colNames)
+			colNames = append([]string{shardColName}, colNames...)
+		}
+		var colDirections []IndexDescriptor_Direction
+		for range colNames {
+			colDirections = append(colDirections, IndexDescriptor_ASC)
+		}
 		idx = &IndexDescriptor{
 			Unique:           true,
-			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnNames:      colNames,
+			ColumnDirections: colDirections,
+		}
+		if d.PrimaryKey.Sharded {
+			buckets, err := EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			AddShardToIndexDesc(idx, shardColName, colNames[1:], buckets)
 		}
 		if d.UniqueConstraintName != "" {
 			idx.Name = string(d.UniqueConstraintName)
@@ -198,6 +217,25 @@ func MakeColumnDefDescs(
 	}
 
 	return col, idx, typedExpr, nil
+}
+
+// AddShardToIndexDesc populates the given index descriptor with details pertaining to how
+// it's sharded.
+func AddShardToIndexDesc(
+	idx *IndexDescriptor, shardColName string, colNames []string, buckets int32,
+) {
+	idx.Sharded.Name = shardColName
+	idx.Sharded.ColumnNames = colNames
+	idx.Sharded.ShardBuckets = buckets
+}
+
+// GetShardColumnName generates a name for the hidden shard column to be used to create a
+// hash sharded index.
+func GetShardColumnName(colNames []string) string {
+	// We sort the `colNames` here because we want to avoid creating a dupicate shard
+	// column if one already exists for the set of columns in `colNames`.
+	sort.Strings(colNames)
+	return strings.Join(append(colNames, `shard__internal`), `_`)
 }
 
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and

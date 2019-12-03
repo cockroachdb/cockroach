@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -489,11 +490,31 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Dire
 	return columnIDs, dirs
 }
 
+// EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
+// BUCKET_COUNT` index creation query.
+func EvalShardBucketCount(shardBuckets tree.Expr) (int32, error) {
+	cst, ok := shardBuckets.(*tree.NumVal)
+	if !ok {
+		return 0, pgerror.New(pgcode.InvalidParameterValue,
+			`BUCKET_COUNT must be a strictly positive integer value.`)
+	}
+	buckets, err := cst.AsInt32()
+	if err != nil || buckets <= 0 {
+		return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue,
+			`BUCKET_COUNT must be a strictly positive integer value.`)
+	}
+	return buckets, nil
+}
+
 // ColNamesFormat writes a string describing the column names and directions
 // in this index to the given buffer.
 func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	for i := range desc.ColumnNames {
-		if i > 0 {
+	start := 0
+	if desc.IsSharded() {
+		start = 1
+	}
+	for i := start; i < len(desc.ColumnNames); i++ {
+		if i > start {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNameP(&desc.ColumnNames[i])
@@ -538,6 +559,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 	desc.ColNamesFormat(f)
 	f.WriteByte(')')
 
+	if desc.IsSharded() {
+		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT=%d",
+			desc.Sharded.ShardBuckets)
+	}
+
 	if len(desc.StoreColumnNames) > 0 {
 		f.WriteString(" STORING (")
 		for i := range desc.StoreColumnNames {
@@ -554,6 +580,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
 	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
+}
+
+// IsSharded returns whether the index is hash sharded or not.
+func (desc *IndexDescriptor) IsSharded() bool {
+	return !reflect.DeepEqual(desc.Sharded, ShardedDescriptor{})
 }
 
 // SetID implements the DescriptorProto interface.
@@ -1044,6 +1075,34 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	return true
 }
 
+func (desc *MutableTableDescriptor) initIDs() {
+	if desc.NextColumnID == 0 {
+		desc.NextColumnID = 1
+	}
+	if desc.Version == 0 {
+		desc.Version = 1
+	}
+	if desc.NextMutationID == InvalidMutationID {
+		desc.NextMutationID = 1
+	}
+}
+
+// MaybeFillColumnID assigns a column ID to the given column if the said column has an ID
+// of 0.
+func (desc *MutableTableDescriptor) MaybeFillColumnID(
+	c *ColumnDescriptor, columnNames map[string]ColumnID,
+) {
+	desc.initIDs()
+
+	columnID := c.ID
+	if columnID == 0 {
+		columnID = desc.NextColumnID
+		desc.NextColumnID++
+	}
+	columnNames[c.Name] = columnID
+	c.ID = columnID
+}
+
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *MutableTableDescriptor) AllocateIDs() error {
@@ -1054,32 +1113,14 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	if desc.NextColumnID == 0 {
-		desc.NextColumnID = 1
-	}
-	if desc.Version == 0 {
-		desc.Version = 1
-	}
-	if desc.NextMutationID == InvalidMutationID {
-		desc.NextMutationID = 1
-	}
-
+	desc.initIDs()
 	columnNames := map[string]ColumnID{}
-	fillColumnID := func(c *ColumnDescriptor) {
-		columnID := c.ID
-		if columnID == 0 {
-			columnID = desc.NextColumnID
-			desc.NextColumnID++
-		}
-		columnNames[c.Name] = columnID
-		c.ID = columnID
-	}
 	for i := range desc.Columns {
-		fillColumnID(&desc.Columns[i])
+		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			fillColumnID(c)
+			desc.MaybeFillColumnID(c, columnNames)
 		}
 	}
 
@@ -1864,7 +1905,13 @@ func (desc *TableDescriptor) validateTableIndexes(
 // PrimaryKeyString returns the pretty-printed primary key declaration for a
 // table descriptor.
 func (desc *TableDescriptor) PrimaryKeyString() string {
-	return fmt.Sprintf("PRIMARY KEY (%s)",
+	var primaryKeyString strings.Builder
+	primaryKeyString.WriteString("PRIMARY KEY (%s)")
+	if desc.PrimaryIndex.IsSharded() {
+		fmt.Fprintf(&primaryKeyString, " USING HASH WITH BUCKET_COUNT=%d",
+			desc.PrimaryIndex.Sharded.ShardBuckets)
+	}
+	return fmt.Sprintf(primaryKeyString.String(),
 		desc.PrimaryIndex.ColNamesString(),
 	)
 }
