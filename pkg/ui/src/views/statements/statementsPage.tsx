@@ -84,7 +84,6 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   }
 
   componentWillMount() {
-    console.log(this.props.refreshStatements);
     this.props.refreshStatements();
   }
 
