@@ -3,11 +3,11 @@ table_constraint ::=
 	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')'  opt_interleave opt_partition_by
-	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')'
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
 	| 'CONSTRAINT' constraint_name 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 	| 'CHECK' '(' a_expr ')'
 	| 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'UNIQUE' '(' index_params ')'  opt_interleave opt_partition_by
-	| 'PRIMARY' 'KEY' '(' index_params ')'
+	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
