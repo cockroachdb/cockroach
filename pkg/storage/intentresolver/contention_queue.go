@@ -131,8 +131,7 @@ func txnID(txn *roachpb.Transaction) string {
 
 // add adds the intent specified in the supplied wiErr to the
 // contention queue. This may block the current goroutine if the
-// pusher has no transaction or the transaction is not yet writing
-// (i.e. read-only or hasn't successfully executed BeginTxn).
+// pusher has no transaction or the transaction is not yet writing.
 //
 // Note that the supplied wiErr write intent error must have only a
 // single intent (len(wiErr.Intents) == 1).

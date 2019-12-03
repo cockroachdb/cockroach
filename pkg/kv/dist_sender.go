@@ -577,7 +577,7 @@ func (ds *DistSender) initAndVerifyBatch(
 			case *roachpb.QueryIntentRequest, *roachpb.ResolveIntentRangeRequest:
 				continue
 
-			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
+			case *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
 			case *roachpb.RevertRangeRequest:
@@ -594,7 +594,7 @@ func (ds *DistSender) initAndVerifyBatch(
 			switch req.GetInner().(type) {
 			case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
 				// Scans are supported.
-			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+			case *roachpb.EndTransactionRequest:
 				// These requests are ignored.
 			default:
 				return roachpb.NewErrorf("batch with scan option has non-scans: %s", ba)
