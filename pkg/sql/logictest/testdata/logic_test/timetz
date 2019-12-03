@@ -1,4 +1,7 @@
-# NOTE: we cast timetz to strings here to avoid confusion with lib/pq
+# Note that the odd '0000-01-01 hh:mi:ss +0000 +0000' result format is an
+# artifact of how pq displays TIMETZs.
+#
+# We sometimes cast timetz to strings here to avoid confusion with lib/pq
 # printing out timetz values with dates.
 
 statement ok
@@ -166,3 +169,315 @@ query T
 SELECT '2001-01-01 01:24:00+3'::timetz
 ----
 0000-01-01 01:24:00 +0300 +0300
+
+# Test various evals using different timezones.
+subtest eval_test
+
+statement ok
+SET TIME ZONE -3
+
+query B
+SELECT '11:00+5'::timetz = '11:00+5'::timetz
+----
+true
+
+query B
+SELECT '11:00-3'::timetz = '11:00'::time
+----
+true
+
+query B
+SELECT '11:00-2'::timetz < '11:00'::time
+----
+true
+
+statement ok
+SET TIME ZONE UTC
+
+# These are the old tests that were in the old iteration. Included for completeness.
+subtest windchan7_tests
+
+query T
+SELECT '12:00:00':::TIMETZ;
+----
+0000-01-01 12:00:00 +0000 UTC
+
+query T
+SELECT '12:00:00.456':::TIMETZ;
+----
+0000-01-01 12:00:00.456 +0000 UTC
+
+query T
+SELECT '12:00:00.456789':::TIMETZ;
+----
+0000-01-01 12:00:00.456789 +0000 UTC
+
+query T
+SELECT '12:00:00.456789+00':::TIMETZ;
+----
+0000-01-01 12:00:00.456789 +0000 UTC
+
+query T
+SELECT '12:00:00.456789-07':::TIMETZ;
+----
+0000-01-01 12:00:00.456789 -0700 -0700
+
+query T
+SELECT '23:59:59.999999-10':::TIMETZ;
+----
+0000-01-01 23:59:59.999999 -1000 -1000
+
+query T
+SELECT '24:00:00':::TIMETZ;
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT TIMETZ '12:00:00-07';
+----
+0000-01-01 12:00:00 -0700 -0700
+
+# Casting
+
+query T
+SELECT '12:00:00-07'::TIMETZ;
+----
+0000-01-01 12:00:00 -0700 -0700
+
+query T
+select '12:00:00-07':::STRING::TIMETZ;
+----
+0000-01-01 12:00:00 -0700 -0700
+
+query T
+select '22:00:00-07':::STRING::TIMETZ;
+----
+0000-01-01 22:00:00 -0700 -0700
+
+query T
+SELECT '09:00:00.456-07' COLLATE de::TIMETZ;
+----
+0000-01-01 09:00:00.456 -0700 -0700
+
+query T
+SELECT '2017-01-01 12:00:00-07':::TIMESTAMPTZ::TIMETZ;
+----
+0000-01-01 12:00:00 -0700 -0700
+
+query T
+SELECT '12:00:00-07':::TIME::TIMETZ;
+----
+0000-01-01 12:00:00 +0000 UTC
+
+query T
+select '12:00:00-07:00'::TIMETZ::STRING;
+----
+12:00:00-07:00:00
+
+query T
+select '11:00:00-07:00'::TIMETZ::TIME;
+----
+0000-01-01 11:00:00 +0000 UTC
+
+query T
+select '11:00:00-07:00'::TIMETZ::TIMETZ;
+----
+0000-01-01 11:00:00 -0700 -0700
+
+# Comparison
+
+query B
+select '12:00:00+00':::TIMETZ = '12:00:00+00':::TIMETZ
+----
+true
+
+query B
+select '12:00:00-06':::TIMETZ = '12:00:00-07':::TIMETZ
+----
+false
+
+query B
+select '12:00:00+00':::TIMETZ >= '12:00:00+00':::TIMETZ
+----
+true
+
+query B
+select '12:00:00+00':::TIMETZ <= '12:00:00+00':::TIMETZ
+----
+true
+
+query B
+SELECT '12:00:00+01:00':::TIMETZ < '11:59:59.999999+00':::TIMETZ
+----
+true
+
+query B
+SELECT '12:00:00+01:00':::TIMETZ < '11:59:59.999999+02':::TIMETZ
+----
+false
+
+query B
+SELECT '12:00:00+01:00':::TIMETZ > '11:59:59.999999+02':::TIMETZ
+----
+true
+
+query B
+SELECT '23:00:01-01:00':::TIMETZ > '00:00:01+00:00':::TIMETZ
+----
+true
+
+query B
+SELECT '23:00:01-06:00':::TIMETZ > '00:00:01-04:00':::TIMETZ
+----
+true
+
+query B
+SELECT '07:00:01-06:00':::TIMETZ > '23:00:01-04:00':::TIMETZ
+----
+false
+
+query B
+SELECT '12:00:00-05':::TIMETZ IN ('12:00:00');
+----
+false
+
+query B
+SELECT '12:00:00-05':::TIMETZ IN ('12:00:00-05');
+----
+true
+
+query B
+SELECT '12:00:00-05':::TIMETZ IN ('12:00:00-07');
+----
+false
+
+query B
+SELECT '12:00:00-05':::TIMETZ IN ('11:00:00-06');
+----
+false
+
+# Arithmetic
+
+query T
+SELECT '12:00:00-01':::TIMETZ + '1s':::INTERVAL
+----
+0000-01-01 12:00:01 -0100 -0100
+
+query T
+SELECT '23:59:59+00':::TIMETZ + '1s':::INTERVAL
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT '23:59:59+00':::TIMETZ + '4m':::INTERVAL
+----
+0000-01-01 00:03:59 +0000 UTC
+
+query T
+SELECT '12:00:00-07':::TIMETZ + '1d':::INTERVAL
+----
+0000-01-01 12:00:00 -0700 -0700
+
+query T
+SELECT '1s':::INTERVAL + '12:00:00+03':::TIMETZ
+----
+0000-01-01 12:00:01 +0300 +0300
+
+query T
+SELECT '12:00:00-07':::TIMETZ - '1s':::INTERVAL
+----
+0000-01-01 11:59:59 -0700 -0700
+
+query T
+SELECT '12:00:00-07':::TIMETZ - '1d':::INTERVAL
+----
+0000-01-01 12:00:00 -0700 -0700
+
+query T
+SELECT '01:00:00-07':::TIMETZ - '9h':::INTERVAL
+----
+0000-01-01 16:00:00 -0700 -0700
+
+query T
+SELECT '2017-01-01':::DATE + '12:00:00-03':::TIMETZ
+----
+2017-01-01 15:00:00 +0000 UTC
+
+query T
+SELECT '12:00:00+03':::TIMETZ + '2017-01-01':::DATE
+----
+2017-01-01 09:00:00 +0000 UTC
+
+# Storage
+
+statement ok
+CREATE TABLE timetzs (t timetz PRIMARY KEY)
+
+statement ok
+INSERT INTO timetzs VALUES
+  ('00:00:00-07'),
+  ('00:00:00.000001+06'),
+  ('11:59:59.999999+10'),
+  ('12:00:00-05'),
+  ('12:00:00.000001-05'),
+  ('23:59:59.999999+00')
+
+query T
+SELECT * FROM timetzs ORDER BY t
+----
+0000-01-01 00:00:00.000001 +0600 +0600
+0000-01-01 11:59:59.999999 +1000 +1000
+0000-01-01 00:00:00 -0700 -0700
+0000-01-01 12:00:00 -0500 -0500
+0000-01-01 12:00:00.000001 -0500 -0500
+0000-01-01 23:59:59.999999 +0000 UTC
+
+statement ok
+CREATE TABLE tzarrays (timetzs TIMETZ[])
+
+statement ok
+INSERT INTO tzarrays VALUES
+  (ARRAY[]),
+  (ARRAY['00:00:00-07']),
+  (ARRAY['00:00:00-07', '12:00:00.000001-07']),
+  ('{13:00:00-07}'::TIMETZ[])
+
+query T rowsort
+SELECT * FROM tzarrays
+----
+{}
+{00:00:00-07:00:00}
+{00:00:00-07:00:00,12:00:00.000001-07:00:00}
+{13:00:00-07:00:00}
+
+# Built-ins
+
+query R
+SELECT extract(hour from timetz '12:01:02.345678-07')
+----
+12
+
+query R
+SELECT extract(minute from timetz '12:01:02.345678+03')
+----
+1
+
+query R
+SELECT extract(second from timetz '12:01:02.345678-06')
+----
+2.345678
+
+query R
+SELECT extract(millisecond from timetz '12:01:02.345678+00')
+----
+2345.678
+
+query R
+SELECT extract(microsecond from timetz '12:01:02.345678-05')
+----
+2.345678e+06
+
+query R
+SELECT extract(epoch from timetz '12:00:00+04')
+----
+28800
