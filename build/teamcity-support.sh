@@ -31,7 +31,8 @@ run() {
 # It's valid to call this multiple times; all output artifacts will be
 # preserved.
 function run_json_test() {
-	go get github.com/cockroachdb/cockroach/pkg/cmd/testfilter
+	go install github.com/cockroachdb/cockroach/pkg/cmd/testfilter
+	go install github.com/cockroachdb/cockroach/pkg/cmd/github-post
 	tmpfile=$(mktemp artifacts/debug.txt.XXX)
 	set +e
 	run "$@" 2>&1 \
@@ -40,6 +41,15 @@ function run_json_test() {
 		| tee artifacts/stripped.txt
 	status=$?
 	set -e
+
+	# Post issues, if on a release branch. Note that we're feeding github-post all
+	# of the build output; it also does some slow test analysis.
+	#
+	# FIXME(tbg): disarm this again
+	# if tc_release_branch; then
+	if true; then
+	  github-post < "${tmpfile}"
+	fi
 
 	# Create (or append to) failures.log artifact and delete stripped.txt.
 	testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.log
