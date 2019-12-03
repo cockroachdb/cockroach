@@ -216,22 +216,56 @@ func TestTypes(t *testing.T) {
 		{Name, MakeScalar(StringFamily, oid.T_name, 0, 0, emptyLocale)},
 
 		// TIME
-		{MakeTime(0), Time},
+		{Time, &T{InternalType: InternalType{
+			Family: TimeFamily,
+			Oid:    oid.T_time,
+			Locale: &emptyLocale,
+			// Precision and PrecisionIsSet is not set.
+		}}},
+		{MakeTime(0), MakeScalar(TimeFamily, oid.T_time, 0, 0, emptyLocale)},
 		{MakeTime(0), &T{InternalType: InternalType{
-			Family: TimeFamily, Oid: oid.T_time, Locale: &emptyLocale}}},
+			Family:             TimeFamily,
+			Precision:          0,
+			TimePrecisionIsSet: true,
+			Oid:                oid.T_time,
+			Locale:             &emptyLocale,
+		}}},
+		{MakeTime(3), &T{InternalType: InternalType{
+			Family: TimeFamily, Oid: oid.T_time, Precision: 3, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
+		{MakeTime(3), MakeScalar(TimeFamily, oid.T_time, 3, 0, emptyLocale)},
 		{MakeTime(6), &T{InternalType: InternalType{
-			Family: TimeFamily, Oid: oid.T_time, Precision: 6, Locale: &emptyLocale}}},
+			Family: TimeFamily, Oid: oid.T_time, Precision: 6, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
 		{MakeTime(6), MakeScalar(TimeFamily, oid.T_time, 6, 0, emptyLocale)},
 
 		// TIMETZ
-		{MakeTimeTZ(0), TimeTZ},
+		{TimeTZ, &T{InternalType: InternalType{
+			Family: TimeTZFamily,
+			Oid:    oid.T_timetz,
+			Locale: &emptyLocale,
+			// Precision and PrecisionIsSet is not set.
+		}}},
+		{MakeTimeTZ(0), MakeScalar(TimeTZFamily, oid.T_timetz, 0, 0, emptyLocale)},
 		{MakeTimeTZ(0), &T{InternalType: InternalType{
-			Family: TimeTZFamily, Oid: oid.T_timetz, Locale: &emptyLocale}}},
+			Family:             TimeTZFamily,
+			Precision:          0,
+			TimePrecisionIsSet: true,
+			Oid:                oid.T_timetz,
+			Locale:             &emptyLocale,
+		}}},
+		{MakeTimeTZ(3), &T{InternalType: InternalType{
+			Family: TimeTZFamily, Oid: oid.T_timetz, Precision: 3, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
+		{MakeTimeTZ(3), MakeScalar(TimeTZFamily, oid.T_timetz, 3, 0, emptyLocale)},
 		{MakeTimeTZ(6), &T{InternalType: InternalType{
-			Family: TimeTZFamily, Oid: oid.T_timetz, Precision: 6, Locale: &emptyLocale}}},
+			Family: TimeTZFamily, Oid: oid.T_timetz, Precision: 6, TimePrecisionIsSet: true, Locale: &emptyLocale}}},
 		{MakeTimeTZ(6), MakeScalar(TimeTZFamily, oid.T_timetz, 6, 0, emptyLocale)},
 
 		// TIMESTAMP
+		{Timestamp, &T{InternalType: InternalType{
+			Family: TimestampFamily,
+			Oid:    oid.T_timestamp,
+			Locale: &emptyLocale,
+			// Precision and PrecisionIsSet is not set.
+		}}},
 		{MakeTimestamp(0), MakeScalar(TimestampFamily, oid.T_timestamp, 0, 0, emptyLocale)},
 		{MakeTimestamp(0), &T{InternalType: InternalType{
 			Family:             TimestampFamily,
@@ -248,6 +282,12 @@ func TestTypes(t *testing.T) {
 		{MakeTimestamp(6), MakeScalar(TimestampFamily, oid.T_timestamp, 6, 0, emptyLocale)},
 
 		// TIMESTAMPTZ
+		{TimestampTZ, &T{InternalType: InternalType{
+			Family: TimestampTZFamily,
+			Oid:    oid.T_timestamptz,
+			Locale: &emptyLocale,
+			// Precision and PrecisionIsSet is not set.
+		}}},
 		{MakeTimestampTZ(0), MakeScalar(TimestampTZFamily, oid.T_timestamptz, 0, 0, emptyLocale)},
 		{MakeTimestampTZ(0), &T{InternalType: InternalType{
 			Family:             TimestampTZFamily,

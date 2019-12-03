@@ -97,6 +97,15 @@ func TestColumnConversions(t *testing.T) {
 		"STRING(5)": {
 			"BYTES": ColumnConversionTrivial,
 		},
+
+		"TIME": {
+			"TIME":    ColumnConversionTrivial,
+			"TIME(5)": ColumnConversionValidate,
+		},
+		"TIMETZ": {
+			"TIMETZ":    ColumnConversionTrivial,
+			"TIMETZ(5)": ColumnConversionValidate,
+		},
 		"TIMESTAMP": {
 			"TIMESTAMPTZ":  ColumnConversionTrivial,
 			"TIMESTAMP":    ColumnConversionTrivial,
@@ -224,9 +233,11 @@ func TestColumnConversions(t *testing.T) {
 
 					case types.TimeFamily,
 						types.TimestampFamily,
-						types.TimestampTZFamily:
+						types.TimestampTZFamily,
+						types.TimeTZFamily:
 
 						const timeOnly = "15:04:05"
+						const timeOnlyWithZone = "15:04:05 -0700"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
 
@@ -238,6 +249,8 @@ func TestColumnConversions(t *testing.T) {
 							fromFmt = noZone
 						case types.TimestampTZFamily:
 							fromFmt = withZone
+						case types.TimeTZFamily:
+							fromFmt = timeOnlyWithZone
 						}
 
 						// Always use a non-UTC zone for this test
@@ -255,7 +268,8 @@ func TestColumnConversions(t *testing.T) {
 						case
 							types.TimeFamily,
 							types.TimestampFamily,
-							types.TimestampTZFamily:
+							types.TimestampTZFamily,
+							types.TimeTZFamily:
 							// We're going to re-parse the text as though we're in UTC
 							// so that we can drop the TZ info.
 							if parsed, err := time.ParseInLocation(fromFmt, now, time.UTC); err == nil {

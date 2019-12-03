@@ -90,3 +90,66 @@ SELECT '2001-01-01 11:00+04:00'::timestamptz::timetz
 
 statement ok
 SET TIME ZONE UTC
+
+subtest precision_tests
+
+query error precision 7 out of range
+select '1:00:00.001':::TIMETZ(7)
+
+statement ok
+CREATE TABLE timetz_precision_test (
+  id integer PRIMARY KEY,
+  t TIMETZ(5)
+)
+
+statement ok
+INSERT INTO timetz_precision_test VALUES
+  (1,'12:00:00.123456+03:00'),
+  (2,'12:00:00.12345+03:00'),
+  (3,'12:00:00.1234+03:00'),
+  (4,'12:00:00.123+03:00'),
+  (5,'12:00:00.12+03:00'),
+  (6,'12:00:00.1+03:00'),
+  (7,'12:00:00+03:00')
+
+query IT
+SELECT * FROM timetz_precision_test ORDER BY id ASC
+----
+1  0000-01-01 12:00:00.12346 +0300 +0300
+2  0000-01-01 12:00:00.12345 +0300 +0300
+3  0000-01-01 12:00:00.1234 +0300 +0300
+4  0000-01-01 12:00:00.123 +0300 +0300
+5  0000-01-01 12:00:00.12 +0300 +0300
+6  0000-01-01 12:00:00.1 +0300 +0300
+7  0000-01-01 12:00:00 +0300 +0300
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timetz_precision_test] ORDER BY column_name
+----
+id  INT8
+t   TIMETZ(5)
+
+statement ok
+ALTER TABLE timetz_precision_test ALTER COLUMN t TYPE timetz(6)
+
+statement ok
+INSERT INTO timetz_precision_test VALUES
+  (100,'12:00:00.123456+03:00')
+
+query IT
+SELECT * FROM timetz_precision_test ORDER BY id ASC
+----
+1    0000-01-01 12:00:00.12346 +0300 +0300
+2    0000-01-01 12:00:00.12345 +0300 +0300
+3    0000-01-01 12:00:00.1234 +0300 +0300
+4    0000-01-01 12:00:00.123 +0300 +0300
+5    0000-01-01 12:00:00.12 +0300 +0300
+6    0000-01-01 12:00:00.1 +0300 +0300
+7    0000-01-01 12:00:00 +0300 +0300
+100  0000-01-01 12:00:00.123456 +0300 +0300
+
+query TT
+select column_name, data_type FROM [SHOW COLUMNS FROM timetz_precision_test] ORDER BY column_name
+----
+id  INT8
+t   TIMETZ(6)

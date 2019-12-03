@@ -484,19 +484,21 @@ func TestParseDTime(t *testing.T) {
 	// Since ParseDTime mostly delegates parsing logic to ParseDTimestamp, we only test a subset of
 	// the timestamp test cases.
 	testData := []struct {
-		str      string
-		expected timeofday.TimeOfDay
+		str       string
+		precision time.Duration
+		expected  timeofday.TimeOfDay
 	}{
-		{"04:05:06", timeofday.New(4, 5, 6, 0)},
-		{"04:05:06.000001", timeofday.New(4, 5, 6, 1)},
-		{"04:05:06-07", timeofday.New(4, 5, 6, 0)},
-		{"4:5:6", timeofday.New(4, 5, 6, 0)},
-		{"24:00:00", timeofday.Time2400},
-		{"24:00:00.000", timeofday.Time2400},
-		{"24:00:00.000000", timeofday.Time2400},
+		{"04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
+		{"04:05:06.000001", time.Microsecond, timeofday.New(4, 5, 6, 1)},
+		{"04:05:06.000001", time.Second, timeofday.New(4, 5, 6, 0)},
+		{"04:05:06-07", time.Microsecond, timeofday.New(4, 5, 6, 0)},
+		{"4:5:6", time.Microsecond, timeofday.New(4, 5, 6, 0)},
+		{"24:00:00", time.Microsecond, timeofday.Time2400},
+		{"24:00:00.000", time.Microsecond, timeofday.Time2400},
+		{"24:00:00.000000", time.Microsecond, timeofday.Time2400},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTime(nil, td.str)
+		actual, err := tree.ParseDTime(nil, td.str, td.precision)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
 			continue
@@ -515,7 +517,7 @@ func TestParseDTimeError(t *testing.T) {
 		"01",
 	}
 	for _, s := range testData {
-		actual, _ := tree.ParseDTime(nil, s)
+		actual, _ := tree.ParseDTime(nil, s, time.Microsecond)
 		if actual != nil {
 			t.Errorf("TIME %s: got %s, expected error", s, actual)
 		}
@@ -592,15 +594,15 @@ func TestMakeDJSON(t *testing.T) {
 func TestDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	maxTime, err := tree.ParseDTimeTZ(nil, "24:00:00-1559")
+	maxTime, err := tree.ParseDTimeTZ(nil, "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
-	minTime, err := tree.ParseDTimeTZ(nil, "00:00:00+1559")
+	minTime, err := tree.ParseDTimeTZ(nil, "00:00:00+1559", time.Microsecond)
 	require.NoError(t, err)
 
 	// These are all the same UTC time equivalents.
-	utcTime, err := tree.ParseDTimeTZ(nil, "11:14:15+0")
+	utcTime, err := tree.ParseDTimeTZ(nil, "11:14:15+0", time.Microsecond)
 	require.NoError(t, err)
-	sydneyTime, err := tree.ParseDTimeTZ(nil, "21:14:15+10")
+	sydneyTime, err := tree.ParseDTimeTZ(nil, "21:14:15+10", time.Microsecond)
 	require.NoError(t, err)
 
 	// No daylight savings in Hawaii!
