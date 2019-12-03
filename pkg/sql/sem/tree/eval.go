@@ -600,6 +600,32 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
+			LeftType:   types.Date,
+			RightType:  types.TimeTZ,
+			ReturnType: types.TimestampTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				leftTime, err := left.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := leftTime.Add(right.(*DTimeTZ).ToDuration())
+				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.TimeTZ,
+			RightType:  types.Date,
+			ReturnType: types.TimestampTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				rightTime, err := right.(*DDate).ToTime()
+				if err != nil {
+					return nil, err
+				}
+				t := rightTime.Add(left.(*DTimeTZ).ToDuration())
+				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
+		&BinOp{
 			LeftType:   types.Time,
 			RightType:  types.Interval,
 			ReturnType: types.Time,
@@ -615,6 +641,26 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*right.(*DTime))
 				return MakeDTime(t.Add(left.(*DInterval).Duration)), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.TimeTZ,
+			RightType:  types.Interval,
+			ReturnType: types.TimeTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := left.(*DTimeTZ)
+				duration := right.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Interval,
+			RightType:  types.TimeTZ,
+			ReturnType: types.TimeTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := right.(*DTimeTZ)
+				duration := left.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration), t.OffsetSecs), nil
 			},
 		},
 		&BinOp{
@@ -869,6 +915,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := timeofday.TimeOfDay(*left.(*DTime))
 				return MakeDTime(t.Add(right.(*DInterval).Duration.Mul(-1))), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.TimeTZ,
+			RightType:  types.Interval,
+			ReturnType: types.TimeTZ,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := left.(*DTimeTZ)
+				duration := right.(*DInterval).Duration
+				return NewDTimeTZFromOffset(t.Add(duration.Mul(-1)), t.OffsetSecs), nil
 			},
 		},
 		&BinOp{
@@ -1795,6 +1851,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Timestamp, types.TimestampTZ),
 		makeEqFn(types.TimestampTZ, types.Date),
 		makeEqFn(types.TimestampTZ, types.Timestamp),
+		makeEqFn(types.Time, types.TimeTZ),
+		makeEqFn(types.TimeTZ, types.Time),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -1839,6 +1897,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Timestamp, types.TimestampTZ),
 		makeLtFn(types.TimestampTZ, types.Date),
 		makeLtFn(types.TimestampTZ, types.Timestamp),
+		makeLtFn(types.Time, types.TimeTZ),
+		makeLtFn(types.TimeTZ, types.Time),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -1883,6 +1943,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Timestamp, types.TimestampTZ),
 		makeLeFn(types.TimestampTZ, types.Date),
 		makeLeFn(types.TimestampTZ, types.Timestamp),
+		makeLeFn(types.Time, types.TimeTZ),
+		makeLeFn(types.TimeTZ, types.Time),
 
 		// Tuple comparison.
 		&CmpOp{
@@ -1936,6 +1998,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Timestamp, types.TimestampTZ),
 		makeIsFn(types.TimestampTZ, types.Date),
 		makeIsFn(types.TimestampTZ, types.Timestamp),
+		makeIsFn(types.Time, types.TimeTZ),
+		makeIsFn(types.TimeTZ, types.Time),
 
 		// Tuple comparison.
 		&CmpOp{

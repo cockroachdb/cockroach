@@ -182,6 +182,11 @@ eval
 true
 
 eval
+'12:00:00'::timetz IS OF (TIMETZ)
+----
+true
+
+eval
 '2010-09-28 12:00:00.1'::timestamp IS OF (TIMESTAMP)
 ----
 true

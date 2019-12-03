@@ -290,3 +290,28 @@ eval
 extract_duration(millisecond from '20s30ms40µs'::interval)
 ----
 20030
+
+eval
+extract(hour from '12:00:00+01'::timetz)
+----
+12.0
+
+eval
+extract(minute from '12:30:00+01'::timetz)
+----
+30.0
+
+eval
+extract(second from '12:00:30+01'::timetz)
+----
+30.0
+
+eval
+extract(millisecond from '12:00:00.123456+01'::timetz)
+----
+123.456
+
+eval
+extract(microsecond from '12:00:00.123456+01'::timetz)
+----
+123456.0

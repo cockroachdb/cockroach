@@ -164,6 +164,11 @@ func (t *TimeTZ) Round(precision time.Duration) TimeTZ {
 	return MakeTimeTZ(t.TimeOfDay.Round(precision), t.OffsetSecs)
 }
 
+// ToDuration returns the TimeTZ as an offset duration from UTC midnight.
+func (t *TimeTZ) ToDuration() time.Duration {
+	return t.ToTime().Sub(timeutil.Unix(0, 0))
+}
+
 // Before returns whether the current is before the other TimeTZ.
 func (t *TimeTZ) Before(other TimeTZ) bool {
 	return t.ToTime().Before(other.ToTime()) || (t.ToTime().Equal(other.ToTime()) && t.OffsetSecs < other.OffsetSecs)

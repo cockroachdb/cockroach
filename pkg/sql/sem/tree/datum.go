@@ -2137,7 +2137,9 @@ func (*DTimestamp) ResolvedType() *types.T {
 	return types.Timestamp
 }
 
-func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
+// timeFromDatumForComparison gets the time from a datum object to use
+// strictly for comparison usage.
+func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
 	d = UnwrapDatum(ctx, d)
 	switch t := d.(type) {
 	case *DDate:
@@ -2151,7 +2153,10 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 	case *DTimestamp:
 		return t.Time, true
 	case *DTime:
-		return timeofday.TimeOfDay(*t).ToTime(), true
+		// Normalize to the timezone of the context.
+		toTime := timeofday.TimeOfDay(*t).ToTime()
+		_, zoneOffsetSecs := ctx.GetRelativeParseTime().Zone()
+		return toTime.In(ctx.GetLocation()).Add(-time.Duration(zoneOffsetSecs) * time.Second), true
 	case *DTimeTZ:
 		return t.ToTime(), true
 	default:
@@ -2160,8 +2165,8 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 }
 
 func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
-	lTime, lOk := timeFromDatum(ctx, l)
-	rTime, rOk := timeFromDatum(ctx, r)
+	lTime, lOk := timeFromDatumForComparison(ctx, l)
+	rTime, rOk := timeFromDatumForComparison(ctx, r)
 	if !lOk || !rOk {
 		panic(makeUnsupportedComparisonMessage(l, r))
 	}
@@ -2171,17 +2176,33 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 	if rTime.Before(lTime) {
 		return 1
 	}
+
 	// If either side is a TimeTZ, then we must compare timezones before
-	// when comparing.
-	// This is a special quirk of TimeTZ and does not apply to TimestampTZ.
-	lOffset := int32(0)
-	rOffset := int32(0)
-	if _, ok := l.(*DTimeTZ); ok {
+	// when comparing. If comparing a non-TimeTZ value, and the times are
+	// equal, then we must compare relative to the current zone we are at.
+	//
+	// This is a special quirk of TimeTZ and does not apply to TimestampTZ,
+	// as TimestampTZ does not store a timezone offset and is based on
+	// the current zone.
+	_, leftIsTimeTZ := l.(*DTimeTZ)
+	_, rightIsTimeTZ := r.(*DTimeTZ)
+
+	// If neither side is TimeTZ, this is always equal at this point.
+	if !leftIsTimeTZ && !rightIsTimeTZ {
+		return 0
+	}
+
+	_, zoneOffset := ctx.GetRelativeParseTime().Zone()
+	lOffset := int32(-zoneOffset)
+	rOffset := int32(-zoneOffset)
+
+	if leftIsTimeTZ {
 		lOffset = l.(*DTimeTZ).OffsetSecs
 	}
-	if _, ok := r.(*DTimeTZ); ok {
+	if rightIsTimeTZ {
 		rOffset = r.(*DTimeTZ).OffsetSecs
 	}
+
 	if lOffset > rOffset {
 		return 1
 	}
