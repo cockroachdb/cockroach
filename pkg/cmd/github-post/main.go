@@ -305,7 +305,7 @@ func listFailures(
 			packageName = "unknown"
 		}
 		trimmedPkgName := trimPkg(packageName)
-		title := fmt.Sprintf("%s: package failed under stress", trimmedPkgName)
+		title := fmt.Sprintf("%s: package failed", trimmedPkgName)
 		if err := f(
 			ctx, title, packageName, unknown, packageOutput.String(), "", /* authorEmail */
 		); err != nil {
@@ -341,7 +341,7 @@ func listFailures(
 				outputs = append(outputs, testEvent.Output)
 			}
 			message := strings.Join(outputs, "")
-			title := fmt.Sprintf("%s: %s failed under stress", trimPkg(test.pkg), test.name)
+			title := fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name)
 			if err := f(ctx, title, test.pkg, test.name, message, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
@@ -379,7 +379,7 @@ func listFailures(
 			if err != nil {
 				log.Printf("unable to determine test author email: %s\n", err)
 			}
-			title := fmt.Sprintf("%s: %s timed out under stress", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name)
+			title := fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name)
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
 			if err := f(ctx, title, timedOutCulprit.pkg, timedOutCulprit.name, report, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
@@ -390,7 +390,7 @@ func listFailures(
 				packageName = "unknown"
 			}
 			trimmedPkgName := trimPkg(packageName)
-			title := fmt.Sprintf("%s: package timed out under stress", trimmedPkgName)
+			title := fmt.Sprintf("%s: package timed out", trimmedPkgName)
 			// Andrei gets these reports for now, but don't think I'll fix anything
 			// you fools.
 			// TODO(andrei): Figure out how to assign to the on-call engineer. Maybe
