@@ -17,9 +17,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -177,4 +182,77 @@ func TestEncryptedFS(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Minimal test that creates an encrypted Pebble that exercises creation and reading of encrypted
+// files, rereading data after reopening the engine, and stats code.
+func TestPebbleEncryption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	opts := engine.DefaultPebbleOptions()
+	opts.Cache = pebble.NewCache(1 << 20)
+	memFS := vfs.NewMem()
+	opts.FS = memFS
+	keyFile128 := "111111111111111111111111111111111234567890123456"
+	writeToFile(t, opts.FS, "16.key", []byte(keyFile128))
+	var encOptions baseccl.EncryptionOptions
+	encOptions.KeySource = baseccl.EncryptionKeySource_KeyFiles
+	encOptions.KeyFiles = &baseccl.EncryptionKeyFiles{
+		CurrentKey: "16.key",
+		OldKey:     "plain",
+	}
+	encOptions.DataKeyRotationPeriod = 1000 // arbitrary seconds
+	encOptionsBytes, err := protoutil.Marshal(&encOptions)
+	require.NoError(t, err)
+	db, err := engine.NewPebble(
+		context.Background(),
+		engine.PebbleConfig{
+			StorageConfig: base.StorageConfig{
+				Attrs:           roachpb.Attributes{},
+				MaxSize:         512 << 20,
+				UseFileRegistry: true,
+				ExtraOptions:    encOptionsBytes,
+			},
+			Opts: opts,
+		})
+	require.NoError(t, err)
+	// Only exercising the stats code paths and not checking the returned values.
+	// TODO(sbhola): Make this better once stats are complete. Also ensure that we are
+	// not returning the secret data keys by mistake.
+	r, err := db.GetEncryptionRegistries()
+	require.NoError(t, err)
+	t.Logf("FileRegistry:\n%s\n\n", r.FileRegistry)
+	t.Logf("KeyRegistry:\n%s\n\n", r.KeyRegistry)
+	stats, err := db.GetEnvStats()
+	require.NoError(t, err)
+	t.Logf("EnvStats:\n%+v\n\n", *stats)
+
+	batch := db.NewWriteOnlyBatch()
+	require.NoError(t, batch.Put(engine.MVCCKey{Key: roachpb.Key("a")}, []byte("a")))
+	require.NoError(t, batch.Commit(true))
+	require.NoError(t, db.Flush())
+	val, err := db.Get(engine.MVCCKey{Key: roachpb.Key("a")})
+	require.NoError(t, err)
+	require.Equal(t, "a", string(val))
+	db.Close()
+
+	opts2 := engine.DefaultPebbleOptions()
+	opts2.Cache = pebble.NewCache(1 << 20)
+	opts2.FS = memFS
+	db, err = engine.NewPebble(
+		context.Background(),
+		engine.PebbleConfig{
+			StorageConfig: base.StorageConfig{
+				Attrs:           roachpb.Attributes{},
+				MaxSize:         512 << 20,
+				UseFileRegistry: true,
+				ExtraOptions:    encOptionsBytes,
+			},
+			Opts: opts2,
+		})
+	require.NoError(t, err)
+	val, err = db.Get(engine.MVCCKey{Key: roachpb.Key("a")})
+	require.NoError(t, err)
+	require.Equal(t, "a", string(val))
+	db.Close()
 }

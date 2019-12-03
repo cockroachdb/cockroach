@@ -202,6 +202,57 @@ func (fs *encryptedFS) ReuseForWrite(oldname, newname string) (vfs.File, error) 
 	return fs.Create(newname)
 }
 
+type encryptionStatsHandler struct {
+	storeKM *StoreKeyManager
+	dataKM  *DataKeyManager
+}
+
+func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
+	var s enginepbccl.EncryptionStatus
+	if e.storeKM.activeKey != nil {
+		s.ActiveStoreKey = e.storeKM.activeKey.Info
+	}
+	k, err := e.dataKM.ActiveKey(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	if k != nil {
+		s.ActiveDataKey = k.Info
+	}
+	return []byte(s.String()), nil
+}
+
+func (e *encryptionStatsHandler) GetDataKeysRegistry() ([]byte, error) {
+	r := e.dataKM.getScrubbedRegistry()
+	return []byte(r.String()), nil
+}
+
+func (e *encryptionStatsHandler) GetActiveDataKeyID() (string, error) {
+	k, err := e.dataKM.ActiveKey(context.TODO())
+	if err != nil {
+		return "", err
+	}
+	if k != nil {
+		return k.Info.KeyId, nil
+	}
+	return "plain", nil
+}
+
+func (e *encryptionStatsHandler) GetActiveStoreKeyType() int32 {
+	if e.storeKM.activeKey != nil {
+		return int32(e.storeKM.activeKey.Info.EncryptionType)
+	}
+	return int32(enginepbccl.EncryptionType_Plaintext)
+}
+
+func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, error) {
+	var s enginepbccl.EncryptionSettings
+	if err := protoutil.Unmarshal(settings, &s); err != nil {
+		return "", err
+	}
+	return s.KeyId, nil
+}
+
 // Init initializes engine.NewEncryptedEncFunc.
 func init() {
 	engine.NewEncryptedEnvFunc = newEncryptedEnv
@@ -214,13 +265,13 @@ func init() {
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
 	fs vfs.FS, fr *engine.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (vfs.FS, error) {
+) (vfs.FS, engine.EncryptionStatsHandler, error) {
 	options := &baseccl.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
-		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
+		return nil, nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
 		fs:                fs,
@@ -228,7 +279,7 @@ func newEncryptedEnv(
 		oldKeyFilename:    options.KeyFiles.OldKey,
 	}
 	if err := storeKeyManager.Load(context.TODO()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	storeFS := &encryptedFS{
 		FS:           fs,
@@ -244,7 +295,7 @@ func newEncryptedEnv(
 		rotationPeriod: options.DataKeyRotationPeriod,
 	}
 	if err := dataKeyManager.Load(context.TODO()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	dataFS := &encryptedFS{
 		FS:           fs,
@@ -255,12 +306,14 @@ func newEncryptedEnv(
 		},
 	}
 
-	key, err := storeKeyManager.ActiveKey(context.TODO())
-	if err != nil {
-		return nil, err
+	if !readOnly {
+		key, err := storeKeyManager.ActiveKey(context.TODO())
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := dataKeyManager.SetActiveStoreKeyInfo(context.TODO(), key.Info); err != nil {
+			return nil, nil, err
+		}
 	}
-	if err := dataKeyManager.SetActiveStoreKeyInfo(context.TODO(), key.Info); err != nil {
-		return nil, err
-	}
-	return dataFS, nil
+	return dataFS, &encryptionStatsHandler{storeKM: storeKeyManager, dataKM: dataKeyManager}, nil
 }
