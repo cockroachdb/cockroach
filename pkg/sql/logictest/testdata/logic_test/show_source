@@ -39,6 +39,7 @@ default_transaction_read_only            off
 distsql                                  off
 enable_insert_fast_path                  on
 enable_zigzag_join                       on
+experimental_enable_hash_sharded_indexes off
 experimental_enable_primary_key_changes  off
 experimental_enable_temp_tables          off
 experimental_optimizer_foreign_keys      on
