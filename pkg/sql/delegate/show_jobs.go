@@ -27,12 +27,11 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	var typePredicate, whereClause, orderbyClause string
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
+		autoTypes := fmt.Sprintf("(%s, %s)", jobspb.TypeAutoCreateStats, jobspb.TypeDeleteTempObjects)
 		if n.Automatic {
-			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+			typePredicate = fmt.Sprintf("job_type IN %s", autoTypes)
 		} else {
-			typePredicate = fmt.Sprintf(
-				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
-			)
+			typePredicate = fmt.Sprintf("(job_type IS NULL OR job_type NOT IN %s)", autoTypes)
 		}
 		// The query intends to present:
 		// - first all the running jobs sorted in order of start time,

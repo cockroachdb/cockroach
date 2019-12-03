@@ -621,6 +621,14 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
+
+	// DisableTempTableCleanupOnSessionExit disables cleaning up temporary schemas
+	// and tables when a session is closed.
+	DisableTempTableCleanupOnSessionExit bool
+
+	// TempTableCleanupInterval sets how often the temporary data cleanup
+	// background job runs.
+	TempTableCleanupInterval time.Duration
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

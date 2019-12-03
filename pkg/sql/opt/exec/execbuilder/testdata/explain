@@ -128,7 +128,7 @@ render                             ·            ·
       │                            order        -column17,-started
       └── render                   ·            ·
            └── filter              ·            ·
-                │                  filter       ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
+                │                  filter       ((job_type IS NULL) OR ((job_type != 'AUTO CREATE STATS') AND (job_type != 'DELETE TEMP OBJECTS'))) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
                 └── virtual table  ·            ·
 ·                                  source       ·
 
