@@ -92,13 +92,13 @@ func MakeSimpleTableDescriptor(
 ) (*sqlbase.MutableTableDescriptor, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
-		return nil, unimplemented.New("import.if-no-exists", "unsupported IF NOT EXISTS")
+		return nil, unimplemented.NewWithIssueDetailf(42846, "import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
 	if create.Interleave != nil {
-		return nil, unimplemented.New("import.interleave", "interleaved not supported")
+		return nil, unimplemented.NewWithIssueDetailf(42846, "import.interleave", "interleaved not supported")
 	}
 	if create.AsSource != nil {
-		return nil, unimplemented.New("import.create-as", "CREATE AS not supported")
+		return nil, unimplemented.NewWithIssueDetailf(42846, "import.create-as", "CREATE AS not supported")
 	}
 
 	filteredDefs := create.Defs[:0]
@@ -111,7 +111,8 @@ func MakeSimpleTableDescriptor(
 			// ignore
 		case *tree.ColumnTableDef:
 			if def.Computed.Expr != nil {
-				return nil, unimplemented.Newf("import.computed", "computed columns not supported: %s", tree.AsString(def))
+				return nil, unimplemented.NewWithIssueDetailf(42846, "import.computed",
+					"computed columns not supported: %s", tree.AsString(def))
 			}
 
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
@@ -120,7 +121,8 @@ func MakeSimpleTableDescriptor(
 
 		case *tree.ForeignKeyConstraintTableDef:
 			if !fks.allowed {
-				return nil, unimplemented.New("import.fk", "this IMPORT format does not support foreign keys")
+				return nil, unimplemented.NewWithIssueDetailf(42846, "import.fk",
+					"this IMPORT format does not support foreign keys")
 			}
 			if fks.skip {
 				continue
