@@ -53,14 +53,20 @@ func (d *mysqloutfileReader) start(ctx ctxgroup.Group) {
 func (d *mysqloutfileReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, d.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage)
 }
 
 func (d *mysqloutfileReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	d.conv.KvBatch.Source = inputIdx
 	d.conv.FractionFn = input.ReadFraction

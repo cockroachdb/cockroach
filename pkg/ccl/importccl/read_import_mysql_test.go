@@ -60,7 +60,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	defer in.Close()
 	wrapped := &fileReader{Reader: in, counter: byteCounter{r: in}}
 
-	if err := converter.readFile(ctx, wrapped, 1, "", nil); err != nil {
+	if err := converter.readFile(ctx, wrapped, 1, "", 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	close(kvCh)

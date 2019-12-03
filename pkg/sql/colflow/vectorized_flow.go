@@ -172,22 +172,30 @@ type opDAGWithMetaSources struct {
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
-	newOutbox(input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInbox(typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newOutbox(
+		allocator *colexec.Allocator,
+		input colexec.Operator,
+		typs []coltypes.T,
+		metadataSources []execinfrapb.MetadataSource,
+	) (*colrpc.Outbox, error)
+	newInbox(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
-	input colexec.Operator, typs []coltypes.T, metadataSources []execinfrapb.MetadataSource,
+	allocator *colexec.Allocator,
+	input colexec.Operator,
+	typs []coltypes.T,
+	metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(input, typs, metadataSources)
+	return colrpc.NewOutbox(allocator, input, typs, metadataSources)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(typs, streamID)
+	return colrpc.NewInbox(allocator, typs, streamID)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -251,7 +259,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) (execinfra.OpNode, error) {
-	outbox, err := s.remoteComponentCreator.newOutbox(op, outputTyps, metadataSourcesQueue)
+	outbox, err := s.remoteComponentCreator.newOutbox(colexec.NewAllocator(), op, outputTyps, metadataSourcesQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +306,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i := range hashCols {
 		hashCols[i] = int(output.HashColumns[i])
 	}
-	router, outputs := colexec.NewHashRouter(input, outputTyps, hashCols, len(output.Streams))
+	router, outputs := colexec.NewHashRouter(colexec.NewAllocator(), input, outputTyps, hashCols, len(output.Streams))
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -373,7 +381,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
-			inbox, err := s.remoteComponentCreator.newInbox(typs, inputStream.StreamID)
+			inbox, err := s.remoteComponentCreator.newInbox(colexec.NewAllocator(), typs, inputStream.StreamID)
 			if err != nil {
 				return nil, nil, memUsed, err
 			}
@@ -410,14 +418,14 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				colexec.NewAllocator(), inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			memUsed += op.(colexec.StaticMemoryOperator).EstimateStaticMemoryUsage()
 		} else {
 			if opt == flowinfra.FuseAggressively {
-				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
+				op = colexec.NewSerialUnorderedSynchronizer(colexec.NewAllocator(), inputStreamOps, typs)
 			} else {
-				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+				op = colexec.NewParallelUnorderedSynchronizer(colexec.NewAllocator(), inputStreamOps, typs, s.waitGroup)
 				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection

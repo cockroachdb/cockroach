@@ -2003,21 +2003,21 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q7_sort_1
- ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(int) revenue:51(float)
+ ├── columns: supp_nation:42(char!null) cust_nation:46(char!null) l_year:49(float) revenue:51(float)
  ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
  ├── key: (42,46,49)
  ├── fd: (42,46,49)-->(51)
  ├── ordering: +42,+46,+49
  └── group-by
       ├── save-table-name: q7_group_by_2
-      ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(int) sum:51(float)
-      ├── grouping columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(int)
+      ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) sum:51(float)
+      ├── grouping columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float)
       ├── stats: [rows=974.320532, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(51)=974.320532, null(51)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       ├── key: (42,46,49)
       ├── fd: (42,46,49)-->(51)
       ├── project
       │    ├── save-table-name: q7_project_3
-      │    ├── columns: l_year:49(int) volume:50(float) n1.n_name:42(char!null) n2.n_name:46(char!null)
+      │    ├── columns: l_year:49(float) volume:50(float) n1.n_name:42(char!null) n2.n_name:46(char!null)
       │    ├── stats: [rows=7741.78379, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(50)=7579.92926, null(50)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4
@@ -2086,7 +2086,7 @@ sort
       │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    │         └── s_nationkey = n1.n_nationkey [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
       │    └── projections
-      │         ├── extract('year', l_shipdate) [type=int, outer=(18)]
+      │         ├── extract('year', l_shipdate) [type=float, outer=(18)]
       │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(13,14)]
       └── aggregations
            └── sum [type=float, outer=(50)]
@@ -2343,7 +2343,7 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q8_sort_1
- ├── columns: o_year:61(int) mkt_share:66(float)
+ ├── columns: o_year:61(float) mkt_share:66(float)
  ├── side-effects
  ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
  ├── key: (61)
@@ -2351,25 +2351,25 @@ sort
  ├── ordering: +61
  └── project
       ├── save-table-name: q8_project_2
-      ├── columns: mkt_share:66(float) o_year:61(int)
+      ├── columns: mkt_share:66(float) o_year:61(float)
       ├── side-effects
       ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(66)=717.329701, null(66)=0]
       ├── key: (61)
       ├── fd: (61)-->(66)
       ├── group-by
       │    ├── save-table-name: q8_group_by_3
-      │    ├── columns: o_year:61(int) sum:64(float) sum:65(float)
-      │    ├── grouping columns: o_year:61(int)
+      │    ├── columns: o_year:61(float) sum:64(float) sum:65(float)
+      │    ├── grouping columns: o_year:61(float)
       │    ├── stats: [rows=717.329701, distinct(61)=717.329701, null(61)=0, distinct(64)=717.329701, null(64)=0, distinct(65)=717.329701, null(65)=0, distinct(64,65)=717.329701, null(64,65)=0]
       │    ├── key: (61)
       │    ├── fd: (61)-->(64,65)
       │    ├── project
       │    │    ├── save-table-name: q8_project_4
-      │    │    ├── columns: column63:63(float) o_year:61(int) volume:62(float)
+      │    │    ├── columns: column63:63(float) o_year:61(float) volume:62(float)
       │    │    ├── stats: [rows=2908.77768, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(63)=2896.99622, null(63)=0]
       │    │    ├── project
       │    │    │    ├── save-table-name: q8_project_5
-      │    │    │    ├── columns: o_year:61(int) volume:62(float) n2.n_name:55(char!null)
+      │    │    │    ├── columns: o_year:61(float) volume:62(float) n2.n_name:55(char!null)
       │    │    │    ├── stats: [rows=2908.77768, distinct(55)=24.9055527, null(55)=0, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(55,62)=2896.99622, null(55,62)=0]
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q8_inner_join_6
@@ -2507,7 +2507,7 @@ sort
       │    │    │    │    └── filters
       │    │    │    │         └── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
       │    │    │    └── projections
-      │    │    │         ├── extract('year', o_orderdate) [type=int, outer=(37)]
+      │    │    │         ├── extract('year', o_orderdate) [type=float, outer=(37)]
       │    │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(22,23)]
       │    │    └── projections
       │    │         └── CASE WHEN n2.n_name = 'BRAZIL' THEN volume ELSE 0.0 END [type=float, outer=(55,62)]
@@ -2938,21 +2938,21 @@ ORDER BY
 ----
 sort
  ├── save-table-name: q9_sort_1
- ├── columns: nation:48(char!null) o_year:51(int) sum_profit:53(float)
+ ├── columns: nation:48(char!null) o_year:51(float) sum_profit:53(float)
  ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
  ├── key: (48,51)
  ├── fd: (48,51)-->(53)
  ├── ordering: +48,-51
  └── group-by
       ├── save-table-name: q9_group_by_2
-      ├── columns: n_name:48(char!null) o_year:51(int) sum:53(float)
-      ├── grouping columns: n_name:48(char!null) o_year:51(int)
+      ├── columns: n_name:48(char!null) o_year:51(float) sum:53(float)
+      ├── grouping columns: n_name:48(char!null) o_year:51(float)
       ├── stats: [rows=1500.68104, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(53)=1500.68104, null(53)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       ├── key: (48,51)
       ├── fd: (48,51)-->(53)
       ├── project
       │    ├── save-table-name: q9_project_3
-      │    ├── columns: o_year:51(int) amount:52(float) n_name:48(char!null)
+      │    ├── columns: o_year:51(float) amount:52(float) n_name:48(char!null)
       │    ├── stats: [rows=2406.66318, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(52)=1508.01915, null(52)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       │    ├── inner-join (lookup part)
       │    │    ├── save-table-name: q9_lookup_join_4
@@ -3027,7 +3027,7 @@ sort
       │    │    └── filters
       │    │         └── p_name LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
-      │         ├── extract('year', o_orderdate) [type=int, outer=(42)]
+      │         ├── extract('year', o_orderdate) [type=float, outer=(42)]
       │         └── (l_extendedprice * (1.0 - l_discount)) - (ps_supplycost * l_quantity) [type=float, outer=(21-23,36)]
       └── aggregations
            └── sum [type=float, outer=(52)]

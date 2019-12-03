@@ -41,6 +41,7 @@ type Iterator struct {
 }
 
 var _ engine.Iterator = &Iterator{}
+var _ engine.MVCCIterator = &Iterator{}
 
 // NewIterator constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet. Timestamps associated with the spans
@@ -55,11 +56,6 @@ func NewIteratorAt(iter engine.Iterator, spans *SpanSet, ts hlc.Timestamp) *Iter
 	return &Iterator{i: iter, spans: spans, ts: ts}
 }
 
-// Stats is part of the engine.Iterator interface.
-func (i *Iterator) Stats() engine.IteratorStats {
-	return i.i.Stats()
-}
-
 // Close is part of the engine.Iterator interface.
 func (i *Iterator) Close() {
 	i.i.Close()
@@ -70,8 +66,8 @@ func (i *Iterator) Iterator() engine.Iterator {
 	return i.i
 }
 
-// Seek is part of the engine.Iterator interface.
-func (i *Iterator) Seek(key engine.MVCCKey) {
+// SeekGE is part of the engine.Iterator interface.
+func (i *Iterator) SeekGE(key engine.MVCCKey) {
 	if i.spansOnly {
 		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	} else {
@@ -80,11 +76,14 @@ func (i *Iterator) Seek(key engine.MVCCKey) {
 	if i.err == nil {
 		i.invalid = false
 	}
-	i.i.Seek(key)
+	i.i.SeekGE(key)
 }
 
-// SeekReverse is part of the engine.Iterator interface.
-func (i *Iterator) SeekReverse(key engine.MVCCKey) {
+// SeekLT is part of the engine.Iterator interface.
+func (i *Iterator) SeekLT(key engine.MVCCKey) {
+	// NB: this isn't exactly right because the key provided to SeekLT is
+	// exclusive so requesting the first key in an allowed span should not
+	// be permitted, but it's close enough.
 	if i.spansOnly {
 		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	} else {
@@ -93,7 +92,7 @@ func (i *Iterator) SeekReverse(key engine.MVCCKey) {
 	if i.err == nil {
 		i.invalid = false
 	}
-	i.i.SeekReverse(key)
+	i.i.SeekLT(key)
 }
 
 // Valid is part of the engine.Iterator interface.
@@ -214,7 +213,25 @@ func (i *Iterator) CheckForKeyCollisions(
 	return i.i.CheckForKeyCollisions(sstData, start, end)
 }
 
-// MVCCGet is part of the engine.Iterator interface.
+// SetUpperBound is part of the engine.Iterator interface.
+func (i *Iterator) SetUpperBound(key roachpb.Key) {
+	i.i.SetUpperBound(key)
+}
+
+// Stats is part of the engine.Iterator interface.
+func (i *Iterator) Stats() engine.IteratorStats {
+	return i.i.Stats()
+}
+
+// MVCCOpsSpecialized is part of the engine.MVCCIterator interface.
+func (i *Iterator) MVCCOpsSpecialized() bool {
+	if mvccIt, ok := i.i.(engine.MVCCIterator); ok {
+		return mvccIt.MVCCOpsSpecialized()
+	}
+	return false
+}
+
+// MVCCGet is part of the engine.MVCCIterator interface.
 func (i *Iterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, opts engine.MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
@@ -227,10 +244,10 @@ func (i *Iterator) MVCCGet(
 			return nil, nil, err
 		}
 	}
-	return i.i.MVCCGet(key, timestamp, opts)
+	return i.i.(engine.MVCCIterator).MVCCGet(key, timestamp, opts)
 }
 
-// MVCCScan is part of the engine.Iterator interface.
+// MVCCScan is part of the engine.MVCCIterator interface.
 func (i *Iterator) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts engine.MVCCScanOptions,
 ) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
@@ -243,12 +260,7 @@ func (i *Iterator) MVCCScan(
 			return nil, 0, nil, nil, err
 		}
 	}
-	return i.i.MVCCScan(start, end, max, timestamp, opts)
-}
-
-// SetUpperBound is part of the engine.Iterator interface.
-func (i *Iterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
+	return i.i.(engine.MVCCIterator).MVCCScan(start, end, max, timestamp, opts)
 }
 
 type spanSetReader struct {
@@ -271,9 +283,12 @@ func (s spanSetReader) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (s spanSetReader) ExportToSst(
-	start, end engine.MVCCKey, exportAllRevisions bool, io engine.IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io engine.IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return s.r.ExportToSst(start, end, exportAllRevisions, io)
+	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {

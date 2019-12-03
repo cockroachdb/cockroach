@@ -571,7 +571,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // hand side range (the subsumed range). It also updates the range
 // addressing metadata. The handover of responsibility for the
 // reassigned key range is carried out seamlessly through a merge
-// trigger carried out as part of the commit of that transaction.  A
+// trigger carried out as part of the commit of that transaction. A
 // merge requires that the two ranges are collocated on the same set
 // of replicas.
 //
@@ -1996,6 +1996,16 @@ func (r *Replica) sendSnapshot(
 		r.store.Engine().NewBatch,
 		sent,
 	); err != nil {
+		if errors.Cause(err) == errMalformedSnapshot {
+			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
+			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
+				log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
+			} else {
+				log.Warningf(ctx, "created checkpoint %s", dir)
+			}
+
+			log.Fatal(ctx, "malformed snapshot generated")
+		}
 		return &snapshotError{err}
 	}
 	return nil

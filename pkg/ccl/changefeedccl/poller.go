@@ -532,7 +532,7 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.T
 		return err
 	}
 	defer it.Close()
-	for it.Seek(engine.NilKey); ; it.Next() {
+	for it.SeekGE(engine.NilKey); ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
 			return err
 		} else if !ok {

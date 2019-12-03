@@ -95,7 +95,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				[]coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
+				testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, tc.blockedThreshold, tc.outputBatchSize,
 			)
 			in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 			out := newOpTestOutput(o, data[:len(tc.selection)])
@@ -176,7 +176,7 @@ func TestRouterOutputNext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var wg sync.WaitGroup
 			batchChan := make(chan coldata.Batch)
-			o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
+			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
 			in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 			in.Init()
 			wg.Add(1)
@@ -226,7 +226,7 @@ func TestRouterOutputNext(t *testing.T) {
 	}
 
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
-		o := newRouterOutputOp([]coltypes.T{coltypes.Int64}, unblockedEventsChan)
+		o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan)
 		o.addBatch(o.zeroBatch, fullSelection)
 		o.Next(ctx)
 		o.Next(ctx)
@@ -255,7 +255,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		ch := make(chan struct{}, 2)
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-			[]coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
+			testAllocator, []coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
 		)
 		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 		out := newOpTestOutput(o, expected)
@@ -326,7 +326,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			var wg sync.WaitGroup
 			unblockedEventsChans := make(chan struct{}, 2)
 			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-				typs, unblockedEventsChans, blockedThreshold, outputSize,
+				testAllocator, typs, unblockedEventsChans, blockedThreshold, outputSize,
 			)
 			inputs[0].Init()
 
@@ -513,7 +513,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	}
 
 	// Never-ending input of 0s.
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
 	in := NewRepeatableBatchSource(batch)
 
@@ -609,7 +609,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	typs := []coltypes.T{coltypes.Int64}
 
 	r, routerOutputs := NewHashRouter(
-		newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
+		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
 	)
 
 	if len(routerOutputs) != 1 {
@@ -695,7 +695,7 @@ func TestHashRouterRandom(t *testing.T) {
 			outputsAsOps := make([]Operator, numOutputs)
 			for i := range outputs {
 				op := newRouterOutputOpWithBlockedThresholdAndBatchSize(
-					typs, unblockEventsChan, blockedThreshold, outputSize,
+					testAllocator, typs, unblockEventsChan, blockedThreshold, outputSize,
 				)
 				outputs[i] = op
 				outputsAsOps[i] = op
@@ -776,7 +776,7 @@ func BenchmarkHashRouter(b *testing.B) {
 
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.
-	batch := coldata.NewMemBatch(types)
+	batch := testAllocator.NewMemBatch(types)
 	batch.SetLength(coldata.BatchSize())
 	input := NewRepeatableBatchSource(batch)
 
@@ -784,7 +784,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := NewHashRouter(input, types, []int{0}, numOutputs)
+				r, outputs := NewHashRouter(testAllocator, input, types, []int{0}, numOutputs)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

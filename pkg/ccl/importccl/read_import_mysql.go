@@ -81,14 +81,20 @@ func (m *mysqldumpReader) start(ctx ctxgroup.Group) {
 func (m *mysqldumpReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, m.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage)
 }
 
 func (m *mysqldumpReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	var inserts, count int64
 	r := bufio.NewReaderSize(input, 1024*64)

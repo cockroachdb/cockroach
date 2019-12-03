@@ -178,6 +178,7 @@ func registerPgjdbc(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "pgjdbc",
 		Cluster: makeClusterSpec(1),
+		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPgjdbc(ctx, t, c)
 		},

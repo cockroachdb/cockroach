@@ -41,9 +41,9 @@ func init() {
 type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// Seek advances the iterator to the first key in the engine which
+	// SeekGE advances the iterator to the first key in the engine which
 	// is >= the provided key.
-	Seek(key MVCCKey)
+	SeekGE(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -81,9 +81,9 @@ type IteratorStats struct {
 type Iterator interface {
 	SimpleIterator
 
-	// SeekReverse advances the iterator to the first key in the engine which
-	// is <= the provided key.
-	SeekReverse(key MVCCKey)
+	// SeekLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekLT(key MVCCKey)
 	// Prev moves the iterator backward to the previous key/value
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
@@ -116,11 +116,23 @@ type Iterator interface {
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
 	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
+}
+
+// MVCCIterator is an interface that extends Iterator and provides concrete
+// implementations for MVCCGet and MVCCScan operations. It is used by instances
+// of the interface backed by RocksDB iterators to avoid cgo hops.
+type MVCCIterator interface {
+	Iterator
+	// MVCCOpsSpecialized returns whether the iterator has a specialized
+	// implementation of MVCCGet and MVCCScan. This is exposed as a method
+	// so that wrapper types can defer to their wrapped iterators.
+	MVCCOpsSpecialized() bool
 	// MVCCGet is the internal implementation of the family of package-level
 	// MVCCGet functions.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCGet, or one of its variants, instead.
 	MVCCGet(
 		key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 	) (*roachpb.Value, *roachpb.Intent, error)
@@ -129,20 +141,9 @@ type Iterator interface {
 	// returned raw, as a series of buffers of length-prefixed slices,
 	// alternating from key to value, where numKVs specifies the number of pairs
 	// in the buffer.
-	//
-	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
-	// package-level MVCCScan, or one of its variants, instead. For correct
-	// operation, the caller must set the lower and upper bounds on the iterator
-	// before calling this method.
-	//
-	// TODO(peter): unexport this method.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
 	) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
-	// SetUpperBound installs a new upper bound for this iterator.
-	SetUpperBound(roachpb.Key)
-
-	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
@@ -191,17 +192,14 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportToSst exports changes to the keyrange [start.Key, end.Key) over the
-	// interval (start.Timestamp, end.Timestamp]. Passing exportAllRevisions exports
+	// ExportToSst exports changes to the keyrange [startKey, endKey) over the
+	// interval (startTS, endTS]. Passing exportAllRevisions exports
 	// every revision of a key for the interval, otherwise only the latest value
 	// within the interval is exported. Deletions are included if all revisions are
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
-	//
-	// TODO(hueypark): Separate MVCCKey into roachpb.Key and hlc.Timestamp.
-	// (https://github.com/cockroachdb/cockroach/pull/42134#pullrequestreview-311850163)
 	ExportToSst(
-		start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp, exportAllRevisions bool, io IterOptions,
 	) ([]byte, roachpb.BulkOpSummary, error)
 	// Get returns the value for the given key, nil otherwise.
 	//
@@ -315,18 +313,6 @@ type Writer interface {
 type ReadWriter interface {
 	Reader
 	Writer
-}
-
-// SstFileWriter is the write interface to an engine's sst file data.
-type SstFileWriter interface {
-	// TODO(hueypark): Check necessity of Pebble SstFileWriter.
-	// Close finishes and frees memory and other resources. Close is idempotent.
-	Close()
-	// DataSize returns the total key and value bytes added so far.
-	DataSize() int64
-	// Finish finalizes the writer and returns the constructed file's contents. At
-	// least one kv entry must have been added.
-	Finish() ([]byte, error)
 }
 
 // Engine is the interface that wraps the core operations of a key/value store.
@@ -540,6 +526,7 @@ func NewEngine(
 			Opts:          DefaultPebbleOptions(),
 		}
 		pebbleConfig.Opts.Cache = pebble.NewCache(cacheSize)
+		pebbleConfig.Opts.ErrorIfNotExists = storageConfig.MustExist
 
 		return NewPebble(context.Background(), pebbleConfig)
 	case enginepb.EngineTypeRocksDB:
@@ -632,7 +619,7 @@ func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) 
 	// TODO(bdarnell): Move this into ClearIterRange so we don't have
 	// to do this scan twice.
 	count := 0
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for {
 		valid, err := iter.Valid()
 		if err != nil {
@@ -742,7 +729,7 @@ func iterateOnReader(
 	it := reader.NewIterator(IterOptions{UpperBound: end})
 	defer it.Close()
 
-	it.Seek(MakeMVCCMetadataKey(start))
+	it.SeekGE(MakeMVCCMetadataKey(start))
 	for ; ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {

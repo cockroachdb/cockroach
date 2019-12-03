@@ -141,13 +141,16 @@ func RandomVec(
 	}
 }
 
+// testAllocator is an Allocator with an unlimited budget for use in tests.
+var testAllocator = NewAllocator()
+
 // RandomBatch returns a batch with a capacity of capacity and a number of
 // random elements equal to length (capacity if length is 0). The values will be
 // null with a probability of nullProbability.
 func RandomBatch(
 	rng *rand.Rand, typs []coltypes.T, capacity int, length int, nullProbability float64,
 ) coldata.Batch {
-	batch := coldata.NewMemBatchWithSize(typs, capacity)
+	batch := testAllocator.NewMemBatchWithSize(typs, capacity)
 	if length == 0 {
 		length = capacity
 	}
@@ -294,7 +297,7 @@ func (o *RandomDataOp) Init() {}
 func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
-		b := coldata.NewMemBatchWithSize(o.typs, 0)
+		b := testAllocator.NewMemBatchWithSize(o.typs, 0)
 		b.SetLength(0)
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(b)

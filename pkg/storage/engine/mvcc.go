@@ -709,9 +709,7 @@ type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
-	IgnoreSequence bool
-	Txn            *roachpb.Transaction
+	Txn          *roachpb.Transaction
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -732,14 +730,78 @@ type MVCCGetOptions struct {
 func MVCCGet(
 	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
+	iter := eng.NewIterator(IterOptions{Prefix: true})
+	defer iter.Close()
+	return mvccGet(ctx, iter, key, timestamp, opts)
+}
+
+func mvccGet(
+	ctx context.Context, iter Iterator, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (value *roachpb.Value, intent *roachpb.Intent, err error) {
 	if timestamp.WallTime < 0 {
 		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
 	}
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
 
-	iter := eng.NewIterator(IterOptions{Prefix: true})
-	value, intent, err := iter.MVCCGet(key, timestamp, opts)
-	iter.Close()
-	return value, intent, err
+	// If the iterator has a specialized implementation, defer to that.
+	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
+		return mvccIter.MVCCGet(key, timestamp, opts)
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
+	// specify an empty key for the end key which will ensure we don't retrieve a
+	// key different than the start key. This is a bit of a hack.
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       iter,
+		start:        key,
+		ts:           timestamp,
+		maxKeys:      1,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+	}
+
+	mvccScanner.init(opts.Txn)
+	mvccScanner.get()
+
+	if mvccScanner.err != nil {
+		return nil, nil, mvccScanner.err
+	}
+	intents, err := buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	if len(intents) > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+	} else if len(intents) == 1 {
+		intent = &intents[0]
+	}
+
+	if len(mvccScanner.results.repr) == 0 {
+		return nil, intent, nil
+	}
+
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	value = &roachpb.Value{
+		RawBytes:  rawValue,
+		Timestamp: mvccKey.Timestamp,
+	}
+	return
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -785,7 +847,7 @@ func mvccGetMetadata(
 	if iter == nil {
 		return false, 0, 0, nil
 	}
-	iter.Seek(metaKey)
+	iter.SeekGE(metaKey)
 	if ok, err := iter.Valid(); !ok {
 		return false, 0, 0, err
 	}
@@ -961,7 +1023,7 @@ func mvccGetInternal(
 		return nil, ignoredIntent, safeValue, nil
 	}
 
-	iter.Seek(seekKey)
+	iter.SeekGE(seekKey)
 	if ok, err := iter.Valid(); err != nil {
 		return nil, nil, safeValue, err
 	} else if !ok {
@@ -2029,7 +2091,7 @@ func MVCCClearTimeRange(
 	var clearedMetaKey MVCCKey
 	var clearedMeta enginepb.MVCCMetadata
 	var restoredMeta enginepb.MVCCMetadata
-	for it.Seek(MVCCKey{Key: key}); ; it.Next() {
+	for it.SeekGE(MVCCKey{Key: key}); ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
 			return nil, err
@@ -2172,6 +2234,65 @@ func MVCCDeleteRange(
 	return keys, resumeSpan, int64(len(kvs)), err
 }
 
+func mvccScanToBytes(
+	ctx context.Context,
+	iter Iterator,
+	key, endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	opts MVCCScanOptions,
+) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+	if opts.Inconsistent && opts.Txn != nil {
+		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(endKey) == 0 {
+		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if max == 0 {
+		resumeSpan = &roachpb.Span{Key: key, EndKey: endKey}
+		return nil, 0, resumeSpan, nil, nil
+	}
+
+	// If the iterator has a specialized implementation, defer to that.
+	if mvccIter, ok := iter.(MVCCIterator); ok && mvccIter.MVCCOpsSpecialized() {
+		return mvccIter.MVCCScan(key, endKey, max, timestamp, opts)
+	}
+
+	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	defer pebbleMVCCScannerPool.Put(mvccScanner)
+
+	*mvccScanner = pebbleMVCCScanner{
+		parent:       iter,
+		reverse:      opts.Reverse,
+		start:        key,
+		end:          endKey,
+		ts:           timestamp,
+		maxKeys:      max,
+		inconsistent: opts.Inconsistent,
+		tombstones:   opts.Tombstones,
+	}
+
+	mvccScanner.init(opts.Txn)
+	resumeSpan, err = mvccScanner.scan()
+
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	kvData = mvccScanner.results.finish()
+	numKVs = mvccScanner.results.count
+
+	intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	if err != nil {
+		return nil, 0, nil, nil, err
+	}
+
+	if !opts.Inconsistent && len(intents) > 0 {
+		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	return
+}
+
 // mvccScanToKvs converts the raw key/value pairs returned by Iterator.MVCCScan
 // into a slice of roachpb.KeyValues.
 func mvccScanToKvs(
@@ -2182,7 +2303,7 @@ func mvccScanToKvs(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	kvData, numKVs, resumeSpan, intents, err := iter.MVCCScan(key, endKey, max, timestamp, opts)
+	kvData, numKVs, resumeSpan, intents, err := mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -2248,10 +2369,8 @@ type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent bool
 	Tombstones   bool
-	// TODO(nvanbenschoten): Remove all references to IgnoreSequence in 20.1.
-	IgnoreSequence bool
-	Reverse        bool
-	Txn            *roachpb.Transaction
+	Reverse      bool
+	Txn          *roachpb.Transaction
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided engine up to some
@@ -2309,7 +2428,7 @@ func MVCCScanToBytes(
 ) ([][]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
 	iter := engine.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
-	return iter.MVCCScan(key, endKey, max, timestamp, opts)
+	return mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
 }
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
@@ -2445,7 +2564,7 @@ func MVCCResolveWriteIntentUsingIter(
 func unsafeNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
 	// Compute the next possible mvcc value for this key.
 	nextKey := latestKey.Next()
-	iter.Seek(nextKey)
+	iter.SeekGE(nextKey)
 
 	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
 		return MVCCKey{}, nil, false /* never ok */, err
@@ -2804,7 +2923,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			return num, &roachpb.Span{Key: nextKey.Key, EndKey: encEndKey.Key}, nil
 		}
 
-		iterAndBuf.iter.Seek(nextKey)
+		iterAndBuf.iter.SeekGE(nextKey)
 		if ok, err := iterAndBuf.iter.Valid(); err != nil {
 			return 0, nil, err
 		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
@@ -3031,7 +3150,7 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.Seek(MakeMVCCMetadataKey(key.AsRawKey()))
+	it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey()))
 	if ok, err := it.Valid(); err != nil {
 		return nil, err
 	} else if !ok {
@@ -3120,7 +3239,7 @@ func ComputeStatsGo(
 	var accrueGCAgeNanos int64
 	mvccEndKey := MakeMVCCMetadataKey(end)
 
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 	for ; ; iter.Next() {
 		ok, err := iter.Valid()
 		if err != nil {
@@ -3358,7 +3477,7 @@ func checkForKeyCollisionsGo(
 	}
 
 	defer sstIter.Close()
-	sstIter.Seek(MakeMVCCMetadataKey(start))
+	sstIter.SeekGE(MakeMVCCMetadataKey(start))
 	if ok, err := sstIter.Valid(); err != nil || !ok {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "checking for key collisions")
 	}
@@ -3460,9 +3579,9 @@ func checkForKeyCollisionsGo(
 			err := &Error{msg: existingIter.Key().Key.String()}
 			return enginepb.MVCCStats{}, errors.Wrap(err, "ingested key collides with an existing one")
 		} else if bytesCompare < 0 {
-			existingIter.Seek(MVCCKey{Key: sstKey.Key})
+			existingIter.SeekGE(MVCCKey{Key: sstKey.Key})
 		} else {
-			sstIter.Seek(MVCCKey{Key: existingKey.Key})
+			sstIter.SeekGE(MVCCKey{Key: existingKey.Key})
 		}
 
 		ok, extErr = existingIter.Valid()

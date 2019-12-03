@@ -52,6 +52,8 @@ import "gogoproto/gogo.proto";
 // from the "last" column. Eliding those columns represents a significant memory
 // and on-disk savings for our highest resolution data.
 message InternalTimeSeriesData {
+  option (gogoproto.populate) = true;
+
   // Holds a wall time, expressed as a unix epoch time in nanoseconds. This
   // represents the earliest possible timestamp for a sample within the
   // collection.
@@ -114,6 +116,8 @@ message InternalTimeSeriesData {
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
 message InternalTimeSeriesSample {
+  option (gogoproto.populate) = true;
+
   // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
   // collection this data point is part in. The units of this value are
   // determined by the value of the "sample_duration_milliseconds" field of

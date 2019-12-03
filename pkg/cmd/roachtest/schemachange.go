@@ -424,10 +424,10 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 						}
 					} else {
 						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.1", []string{
-							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id));`,
+							`CREATE TABLE tpcc.orderpks (o_w_id INT, o_d_id INT, o_id INT, PRIMARY KEY(o_w_id, o_d_id, o_id));`,
 							// We can't populate the table with CREATE TABLE AS, so just
-							// insert the rows. AOST is used to reduce contention.
-							`INSERT INTO tpcc.orderpks SELECT o_w_id, o_d_id, o_id FROM tpcc.order AS OF SYSTEM TIME '-1s';`,
+							// insert the rows. The limit exists to reduce contention.
+							`INSERT INTO tpcc.orderpks SELECT o_w_id, o_d_id, o_id FROM tpcc.order LIMIT 10000;`,
 						}); err != nil {
 							return err
 						}

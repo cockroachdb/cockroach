@@ -57,7 +57,10 @@ func stringSetup(s string) Setup {
 }
 
 func randTables(r *rand.Rand) string {
-	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1, mutations.ForeignKeyMutator)
+	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
+		mutations.ForeignKeyMutator,
+		mutations.StatisticsMutator,
+	)
 
 	var sb strings.Builder
 	for _, stmt := range stmts {

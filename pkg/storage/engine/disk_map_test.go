@@ -53,7 +53,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 				iter := e.db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 				defer iter.Close()
 
-				for iter.Seek(NilKey); ; iter.Next() {
+				for iter.SeekGE(NilKey); ; iter.Next() {
 					valid, err := iter.Valid()
 					if valid && err == nil {
 						keyCount++
@@ -166,7 +166,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 					if len(parts) != 2 {
 						return fmt.Sprintf("seek <key>\n")
 					}
-					iter.Seek([]byte(strings.TrimSpace(parts[1])))
+					iter.SeekGE([]byte(strings.TrimSpace(parts[1])))
 				default:
 					return fmt.Sprintf("unknown op: %s", parts[0])
 				}

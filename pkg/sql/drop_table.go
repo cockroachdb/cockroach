@@ -600,3 +600,17 @@ func (p *planner) removeTableComment(
 
 	return err
 }
+
+// Drop a descriptor based its type.
+func (p *planner) dropAppropriateDesc(
+	ctx context.Context, desc *MutableTableDescriptor, behavior tree.DropBehavior,
+) ([]string, error) {
+	if desc.IsView() {
+		// TODO(knz): dependent dropped views should be qualified here.
+		return p.dropViewImpl(ctx, desc, behavior)
+	} else if desc.IsSequence() {
+		return nil, p.dropSequenceImpl(ctx, desc, behavior)
+	}
+	// TODO(knz): dependent dropped table names should be qualified here.
+	return p.dropTableImpl(ctx, desc)
+}

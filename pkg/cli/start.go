@@ -437,11 +437,17 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// First things first: if the user wants background processing,
 	// relinquish the terminal ASAP by forking and exiting.
 	//
-	// If executing in the backround, the function returns ok == true in
+	// If executing in the background, the function returns ok == true in
 	// the parent process (regardless of err) and the parent exits at
 	// this point.
 	if ok, err := maybeRerunBackground(); ok {
 		return err
+	}
+
+	if s, err := serverCfg.Stores.GetPreventedStartupMessage(); err != nil {
+		return err
+	} else if s != "" {
+		log.Fatal(context.Background(), s)
 	}
 
 	// Set up the signal handlers. This also ensures that any of these
@@ -1042,19 +1048,6 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		log.Warning(ctx, buf.String())
 	}
 
-	if !sqlSizeValue.IsSet() {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
-		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
-		if size, err := status.GetTotalMemory(context.Background()); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=.25 (%s).",
-				humanizeutil.IBytes(size/4))
-		} else {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
-		}
-		log.Warning(ctx, buf.String())
-	}
-
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
@@ -1145,6 +1138,7 @@ func setupAndInitializeLoggingAndProfiling(
 	if p := logOutputDirectory(); p != "" {
 		outputDirectory = p
 	}
+	startCtx.backtraceOutputDir = outputDirectory
 
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
@@ -1212,7 +1206,9 @@ func addrWithDefaultHost(addr string) (string, error) {
 
 // getClientGRPCConn returns a ClientConn, a Clock and a method that blocks
 // until the connection (and its associated goroutines) have terminated.
-func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(), error) {
+func getClientGRPCConn(
+	ctx context.Context, cfg server.Config,
+) (*grpc.ClientConn, *hlc.Clock, func(), error) {
 	if ctx.Done() == nil {
 		return nil, nil, nil, errors.New("context must be cancellable")
 	}
@@ -1222,13 +1218,13 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: serverCfg.Settings.Tracer},
-		serverCfg.Config,
+		log.AmbientContext{Tracer: cfg.Settings.Tracer},
+		cfg.Config,
 		clock,
 		stopper,
-		serverCfg.Settings,
+		cfg.Settings,
 	)
-	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
+	addr, err := addrWithDefaultHost(cfg.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop(ctx)
 		return nil, nil, nil, err
@@ -1253,8 +1249,8 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 
 // getAdminClient returns an AdminClient and a closure that must be invoked
 // to free associated resources.
-func getAdminClient(ctx context.Context) (serverpb.AdminClient, func(), error) {
-	conn, _, finish, err := getClientGRPCConn(ctx)
+func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
+	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Failed to connect to the node")
 	}
@@ -1365,7 +1361,7 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		onModes[i] = int32(m)
 	}
 
-	c, finish, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}

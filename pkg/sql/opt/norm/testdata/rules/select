@@ -142,7 +142,7 @@ select
       ├── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
       └── b = c [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
 
-opt expect=ConsolidateSelectFilters
+opt expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM a WHERE i IS NOT NULL AND i = 3
 AND f > 5 AND f < 15 AND s >= 'bar' AND s <= 'foo'
 ----
@@ -173,7 +173,7 @@ select
  └── filters
       └── (i IS NULL) AND (i IS DISTINCT FROM 5) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
 
-opt expect=ConsolidateSelectFilters
+opt expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM a WHERE s LIKE 'a%' AND s SIMILAR TO 'a_' AND s = 'aa'
 ----
 select
@@ -208,7 +208,7 @@ project
            └── d < '2018-07-08 00:00:01+00:00' [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
 
 # Ranges can be merged with other filters to create new ranges.
-norm expect=ConsolidateSelectFilters
+norm expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM (SELECT * FROM a WHERE k = 5) AS a, e WHERE a.k = e.k AND a.k > 1 AND e.k < 10
 ----
 inner-join (hash)
@@ -313,7 +313,7 @@ inner-join (hash)
  └── filters (true)
 
 # Regression test for #42035.
-opt expect=ConsolidateSelectFilters
+opt expect=ConsolidateSelectFilters disable=InlineConstVar
 SELECT * FROM
       (VALUES ('x', 'x'), ('y', 'y')) AS vab (a, b)
     JOIN
@@ -1383,3 +1383,114 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1)
+
+# --------------------------------------------------
+# InlineConstVar
+# --------------------------------------------------
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4, 5)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=8 AND 3 = mod(i, 5)
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan b
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i = 8 [type=bool, outer=(2), constraints=(/2: [/8 - /8]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT k FROM b WHERE i=5 AND i IN (1, 2, 3, 4)
+----
+values
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Case that requires multiple iterations to fully inline.
+opt expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x IN (1, 2, 3, 4)
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── constraint: /1: [/4 - /4]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters
+      └── y = 4 [type=bool, outer=(2), constraints=(/2: [/4 - /4]; tight), fd=()-->(2)]
+
+opt expect=InlineConstVar
+SELECT * FROM xy WHERE x=y AND y=4 AND x=3
+----
+values
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# Can't inline composite types.
+opt expect-not=InlineConstVar
+SELECT * FROM (VALUES (0.0), (0.00), (0.000)) AS v (x) WHERE x = 0 AND x::STRING = '0.00';
+----
+select
+ ├── columns: x:1(decimal!null)
+ ├── cardinality: [0 - 3]
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── columns: column1:1(decimal!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── (0.0,) [type=tuple{decimal}]
+ │    ├── (0.00,) [type=tuple{decimal}]
+ │    └── (0.000,) [type=tuple{decimal}]
+ └── filters
+      ├── column1 = 0 [type=bool, outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      └── column1::STRING = '0.00' [type=bool, outer=(1)]
+
+# The rule should trigger, but not inline the composite type.
+opt expect=InlineConstVar
+SELECT * FROM (VALUES (0.0, 'a'), (0.00, 'b'), (0.000, 'b')) AS v (x, y) WHERE x = 0 AND x::STRING = '0.00' AND y = 'b' AND y IN ('a', 'b');
+----
+select
+ ├── columns: x:1(decimal!null) y:2(string!null)
+ ├── cardinality: [0 - 3]
+ ├── fd: ()-->(1,2)
+ ├── values
+ │    ├── columns: column1:1(decimal!null) column2:2(string!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── (0.0, 'a') [type=tuple{decimal, string}]
+ │    ├── (0.00, 'b') [type=tuple{decimal, string}]
+ │    └── (0.000, 'b') [type=tuple{decimal, string}]
+ └── filters
+      ├── column1 = 0 [type=bool, outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
+      ├── column1::STRING = '0.00' [type=bool, outer=(1)]
+      └── column2 = 'b' [type=bool, outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]

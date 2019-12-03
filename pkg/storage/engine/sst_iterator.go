@@ -78,8 +78,8 @@ func (r *sstIterator) Close() {
 	}
 }
 
-// Seek implements the SimpleIterator interface.
-func (r *sstIterator) Seek(key MVCCKey) {
+// SeekGE implements the SimpleIterator interface.
+func (r *sstIterator) SeekGE(key MVCCKey) {
 	if r.err != nil {
 		return
 	}

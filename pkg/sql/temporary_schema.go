@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -67,12 +68,12 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
 }
 
-func TemporarySchemaName(sessionID ClusterWideID) string {
+func temporarySchemaName(sessionID ClusterWideID) string {
 	return fmt.Sprintf("pg_temp_%v_%v", sessionID.Hi, sessionID.Lo)
 }
 
 func cleanupSessionTempObjects(ctx context.Context, p *planner, sessionID ClusterWideID) error {
-	tempSchemaName := TemporarySchemaName(sessionID)
+	tempSchemaName := temporarySchemaName(sessionID)
 	if p.sessionDataMutator != nil && p.sessionDataMutator.data.SearchPath.GetTemporarySchemaName() != tempSchemaName {
 		return nil
 	}
@@ -85,14 +86,15 @@ func cleanupSessionTempObjects(ctx context.Context, p *planner, sessionID Cluste
 		if err != nil {
 			return err
 		}
+		// TODO(arul): This should probably go through a dropSchemaImpl function
+		// once we have user defined schemas/support for dropping schemas implemented.
 		tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tempSchemaName, true /*explicitPrefix*/)
 		for i := range tbNames {
 			tbDesc, err := p.ResolveMutableTableDescriptor(ctx, &tbNames[i], true /* true */, ResolveAnyDescType)
 			if err != nil {
 				return err
 			}
-			_, err = p.dropTableImpl(ctx, tbDesc)
-			if err != nil {
+			if _, err := p.dropAppropriateDesc(ctx, tbDesc, tree.DropCascade); err != nil {
 				return err
 			}
 		}

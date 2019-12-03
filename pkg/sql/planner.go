@@ -385,7 +385,7 @@ func (p *planner) User() string {
 }
 
 func (p *planner) TemporarySchemaName() string {
-	return TemporarySchemaName(p.ExtendedEvalContext().SessionID)
+	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
 func (p *planner) SetTemporarySchemaName(scName string) {

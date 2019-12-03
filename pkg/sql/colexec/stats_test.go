@@ -83,6 +83,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := NewMergeJoinOp(
+			testAllocator,
 			sqlbase.InnerJoin,
 			leftInput,
 			rightInput,
@@ -130,7 +131,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := coldata.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
+	batch := testAllocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)

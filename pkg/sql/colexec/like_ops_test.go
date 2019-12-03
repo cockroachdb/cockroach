@@ -101,7 +101,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Bytes})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes})
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < int(coldata.BatchSize()); i++ {

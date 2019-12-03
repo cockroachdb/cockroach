@@ -71,7 +71,7 @@ func (x *Ordering_Column_Direction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Ordering_Column_Direction) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{2, 0, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{2, 0, 0}
 }
 
 type StreamEndpointSpec_Type int32
@@ -116,7 +116,7 @@ func (x *StreamEndpointSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (StreamEndpointSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{3, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{3, 0}
 }
 
 type InputSyncSpec_Type int32
@@ -156,7 +156,7 @@ func (x *InputSyncSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (InputSyncSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{4, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{4, 0}
 }
 
 type OutputRouterSpec_Type int32
@@ -204,7 +204,7 @@ func (x *OutputRouterSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (OutputRouterSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{5, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{5, 0}
 }
 
 // Error is a generic representation including a string message.
@@ -233,7 +233,7 @@ type Error struct {
 func (m *Error) Reset()      { *m = Error{} }
 func (*Error) ProtoMessage() {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -372,7 +372,7 @@ func _Error_OneofSizer(msg proto.Message) (n int) {
 func (m *Expression) Reset()      { *m = Expression{} }
 func (*Expression) ProtoMessage() {}
 func (*Expression) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{1}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{1}
 }
 func (m *Expression) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -407,7 +407,7 @@ func (m *Ordering) Reset()         { *m = Ordering{} }
 func (m *Ordering) String() string { return proto.CompactTextString(m) }
 func (*Ordering) ProtoMessage()    {}
 func (*Ordering) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{2}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{2}
 }
 func (m *Ordering) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -441,7 +441,7 @@ func (m *Ordering_Column) Reset()         { *m = Ordering_Column{} }
 func (m *Ordering_Column) String() string { return proto.CompactTextString(m) }
 func (*Ordering_Column) ProtoMessage()    {}
 func (*Ordering_Column) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{2, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{2, 0}
 }
 func (m *Ordering_Column) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -488,7 +488,7 @@ func (m *StreamEndpointSpec) Reset()         { *m = StreamEndpointSpec{} }
 func (m *StreamEndpointSpec) String() string { return proto.CompactTextString(m) }
 func (*StreamEndpointSpec) ProtoMessage()    {}
 func (*StreamEndpointSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{3}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{3}
 }
 func (m *StreamEndpointSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -527,7 +527,7 @@ func (m *InputSyncSpec) Reset()         { *m = InputSyncSpec{} }
 func (m *InputSyncSpec) String() string { return proto.CompactTextString(m) }
 func (*InputSyncSpec) ProtoMessage()    {}
 func (*InputSyncSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{4}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{4}
 }
 func (m *InputSyncSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -571,7 +571,7 @@ func (m *OutputRouterSpec) Reset()         { *m = OutputRouterSpec{} }
 func (m *OutputRouterSpec) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec) ProtoMessage()    {}
 func (*OutputRouterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{5}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{5}
 }
 func (m *OutputRouterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -614,7 +614,7 @@ func (m *OutputRouterSpec_RangeRouterSpec) Reset()         { *m = OutputRouterSp
 func (m *OutputRouterSpec_RangeRouterSpec) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{5, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{5, 0}
 }
 func (m *OutputRouterSpec_RangeRouterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -656,7 +656,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) String() string {
 }
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) ProtoMessage() {}
 func (*OutputRouterSpec_RangeRouterSpec_ColumnEncoding) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{5, 0, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{5, 0, 0}
 }
 func (m *OutputRouterSpec_RangeRouterSpec_ColumnEncoding) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -693,7 +693,7 @@ func (m *OutputRouterSpec_RangeRouterSpec_Span) Reset()         { *m = OutputRou
 func (m *OutputRouterSpec_RangeRouterSpec_Span) String() string { return proto.CompactTextString(m) }
 func (*OutputRouterSpec_RangeRouterSpec_Span) ProtoMessage()    {}
 func (*OutputRouterSpec_RangeRouterSpec_Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{5, 0, 1}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{5, 0, 1}
 }
 func (m *OutputRouterSpec_RangeRouterSpec_Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -727,7 +727,7 @@ func (m *DatumInfo) Reset()         { *m = DatumInfo{} }
 func (m *DatumInfo) String() string { return proto.CompactTextString(m) }
 func (*DatumInfo) ProtoMessage()    {}
 func (*DatumInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{6}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{6}
 }
 func (m *DatumInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -762,7 +762,7 @@ func (m *ProducerHeader) Reset()         { *m = ProducerHeader{} }
 func (m *ProducerHeader) String() string { return proto.CompactTextString(m) }
 func (*ProducerHeader) ProtoMessage()    {}
 func (*ProducerHeader) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{7}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{7}
 }
 func (m *ProducerHeader) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -805,7 +805,7 @@ func (m *ProducerData) Reset()         { *m = ProducerData{} }
 func (m *ProducerData) String() string { return proto.CompactTextString(m) }
 func (*ProducerData) ProtoMessage()    {}
 func (*ProducerData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{8}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{8}
 }
 func (m *ProducerData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -847,7 +847,7 @@ func (m *ProducerMessage) Reset()         { *m = ProducerMessage{} }
 func (m *ProducerMessage) String() string { return proto.CompactTextString(m) }
 func (*ProducerMessage) ProtoMessage()    {}
 func (*ProducerMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{9}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{9}
 }
 func (m *ProducerMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -893,7 +893,7 @@ func (m *RemoteProducerMetadata) Reset()         { *m = RemoteProducerMetadata{}
 func (m *RemoteProducerMetadata) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata) ProtoMessage()    {}
 func (*RemoteProducerMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10}
 }
 func (m *RemoteProducerMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1217,7 +1217,7 @@ func (m *RemoteProducerMetadata_RangeInfos) Reset()         { *m = RemoteProduce
 func (m *RemoteProducerMetadata_RangeInfos) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RangeInfos) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RangeInfos) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 0}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 0}
 }
 func (m *RemoteProducerMetadata_RangeInfos) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1250,7 +1250,7 @@ func (m *RemoteProducerMetadata_TraceData) Reset()         { *m = RemoteProducer
 func (m *RemoteProducerMetadata_TraceData) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_TraceData) ProtoMessage()    {}
 func (*RemoteProducerMetadata_TraceData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 1}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 1}
 }
 func (m *RemoteProducerMetadata_TraceData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1291,7 +1291,7 @@ func (m *RemoteProducerMetadata_RowNum) Reset()         { *m = RemoteProducerMet
 func (m *RemoteProducerMetadata_RowNum) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_RowNum) ProtoMessage()    {}
 func (*RemoteProducerMetadata_RowNum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 2}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 2}
 }
 func (m *RemoteProducerMetadata_RowNum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1331,7 +1331,7 @@ func (m *RemoteProducerMetadata_SamplerProgress) Reset() {
 func (m *RemoteProducerMetadata_SamplerProgress) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_SamplerProgress) ProtoMessage()    {}
 func (*RemoteProducerMetadata_SamplerProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 3}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 3}
 }
 func (m *RemoteProducerMetadata_SamplerProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1359,7 +1359,7 @@ var xxx_messageInfo_RemoteProducerMetadata_SamplerProgress proto.InternalMessage
 type RemoteProducerMetadata_BulkProcessorProgress struct {
 	CompletedSpans    []roachpb.Span    `protobuf:"bytes,1,rep,name=completed_spans,json=completedSpans" json:"completed_spans"`
 	CompletedFraction map[int32]float32 `protobuf:"bytes,2,rep,name=completed_fraction,json=completedFraction" json:"completed_fraction,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"fixed32,2,opt,name=value"`
-	ResumePos         map[int32]uint64  `protobuf:"bytes,3,rep,name=resume_pos,json=resumePos" json:"resume_pos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	ResumePos         map[int32]int64   `protobuf:"bytes,3,rep,name=resume_pos,json=resumePos" json:"resume_pos,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 }
 
 func (m *RemoteProducerMetadata_BulkProcessorProgress) Reset() {
@@ -1370,7 +1370,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) String() string {
 }
 func (*RemoteProducerMetadata_BulkProcessorProgress) ProtoMessage() {}
 func (*RemoteProducerMetadata_BulkProcessorProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 4}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 4}
 }
 func (m *RemoteProducerMetadata_BulkProcessorProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1407,7 +1407,7 @@ func (m *RemoteProducerMetadata_Metrics) Reset()         { *m = RemoteProducerMe
 func (m *RemoteProducerMetadata_Metrics) String() string { return proto.CompactTextString(m) }
 func (*RemoteProducerMetadata_Metrics) ProtoMessage()    {}
 func (*RemoteProducerMetadata_Metrics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{10, 5}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{10, 5}
 }
 func (m *RemoteProducerMetadata_Metrics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1447,7 +1447,7 @@ func (m *DistSQLVersionGossipInfo) Reset()         { *m = DistSQLVersionGossipIn
 func (m *DistSQLVersionGossipInfo) String() string { return proto.CompactTextString(m) }
 func (*DistSQLVersionGossipInfo) ProtoMessage()    {}
 func (*DistSQLVersionGossipInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{11}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{11}
 }
 func (m *DistSQLVersionGossipInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1483,7 +1483,7 @@ func (m *DistSQLDrainingInfo) Reset()         { *m = DistSQLDrainingInfo{} }
 func (m *DistSQLDrainingInfo) String() string { return proto.CompactTextString(m) }
 func (*DistSQLDrainingInfo) ProtoMessage()    {}
 func (*DistSQLDrainingInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_c5a242c2da18c5df, []int{12}
+	return fileDescriptor_data_69e34e0deac4ae73, []int{12}
 }
 func (m *DistSQLDrainingInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1530,7 +1530,7 @@ func init() {
 	proto.RegisterType((*RemoteProducerMetadata_SamplerProgress)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.SamplerProgress")
 	proto.RegisterType((*RemoteProducerMetadata_BulkProcessorProgress)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.BulkProcessorProgress")
 	proto.RegisterMapType((map[int32]float32)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.BulkProcessorProgress.CompletedFractionEntry")
-	proto.RegisterMapType((map[int32]uint64)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.BulkProcessorProgress.ResumePosEntry")
+	proto.RegisterMapType((map[int32]int64)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.BulkProcessorProgress.ResumePosEntry")
 	proto.RegisterType((*RemoteProducerMetadata_Metrics)(nil), "cockroach.sql.distsqlrun.RemoteProducerMetadata.Metrics")
 	proto.RegisterType((*DistSQLVersionGossipInfo)(nil), "cockroach.sql.distsqlrun.DistSQLVersionGossipInfo")
 	proto.RegisterType((*DistSQLDrainingInfo)(nil), "cockroach.sql.distsqlrun.DistSQLDrainingInfo")
@@ -5622,10 +5622,10 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) Unmarshal(dAtA []byte) er
 				return io.ErrUnexpectedEOF
 			}
 			if m.ResumePos == nil {
-				m.ResumePos = make(map[int32]uint64)
+				m.ResumePos = make(map[int32]int64)
 			}
 			var mapkey int32
-			var mapvalue uint64
+			var mapvalue int64
 			for iNdEx < postIndex {
 				entryPreIndex := iNdEx
 				var wire uint64
@@ -5669,7 +5669,7 @@ func (m *RemoteProducerMetadata_BulkProcessorProgress) Unmarshal(dAtA []byte) er
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapvalue |= (uint64(b) & 0x7F) << shift
+						mapvalue |= (int64(b) & 0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -6063,9 +6063,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/execinfrapb/data.proto", fileDescriptor_data_c5a242c2da18c5df) }
+func init() { proto.RegisterFile("sql/execinfrapb/data.proto", fileDescriptor_data_69e34e0deac4ae73) }
 
-var fileDescriptor_data_c5a242c2da18c5df = []byte{
+var fileDescriptor_data_69e34e0deac4ae73 = []byte{
 	// 2028 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x58, 0xbd, 0x73, 0x1b, 0xc7,
 	0x15, 0xc7, 0x01, 0x20, 0x3e, 0x1e, 0x41, 0x10, 0xdc, 0x58, 0x32, 0x06, 0x51, 0x08, 0x1a, 0xce,
@@ -6181,7 +6181,7 @@ var fileDescriptor_data_c5a242c2da18c5df = []byte{
 	0x98, 0x26, 0x01, 0xb6, 0xe2, 0x48, 0xbf, 0xd4, 0x1e, 0x7e, 0x4b, 0x51, 0x98, 0x82, 0x78, 0x37,
 	0xa2, 0x72, 0xf6, 0x22, 0xd1, 0xfd, 0x5a, 0x07, 0xae, 0x9e, 0x1f, 0x22, 0x7f, 0x33, 0x3d, 0xc1,
 	0xc7, 0x62, 0x5f, 0xe7, 0x4c, 0xde, 0xe4, 0x6f, 0xab, 0x67, 0xb6, 0x9f, 0xc8, 0xf7, 0x47, 0xda,
-	0x94, 0x9d, 0xb5, 0xf4, 0x1d, 0xa3, 0xf6, 0x53, 0x28, 0xcf, 0x4e, 0xf1, 0x3a, 0x74, 0x76, 0x1a,
+	0x94, 0x9d, 0xb5, 0xf4, 0x1d, 0xa3, 0xf6, 0x53, 0x28, 0xcf, 0x4e, 0xf1, 0x3a, 0x74, 0x66, 0x1a,
 	0xfd, 0x31, 0xe4, 0x55, 0x91, 0x40, 0xef, 0x02, 0x88, 0xeb, 0xdf, 0x22, 0xd8, 0x96, 0x39, 0x95,
 	0xd1, 0x47, 0x4d, 0xd8, 0x4d, 0x6c, 0xbb, 0xe8, 0x1d, 0x28, 0x8a, 0xe4, 0x13, 0x3e, 0xe9, 0x29,
 	0x9f, 0x02, 0x37, 0x73, 0x97, 0x76, 0x5e, 0x4d, 0xf6, 0x61, 0xb6, 0x90, 0xab, 0xe4, 0x1b, 0x7f,
@@ -6193,5 +6193,5 @@ var fileDescriptor_data_c5a242c2da18c5df = []byte{
 	0x26, 0x7d, 0x4e, 0xc6, 0xd6, 0xf6, 0x07, 0xcf, 0xff, 0xb5, 0x9c, 0x7a, 0x7e, 0xb2, 0x6c, 0x7c,
 	0x7e, 0xb2, 0x6c, 0xbc, 0x38, 0x59, 0x36, 0xfe, 0x79, 0xb2, 0x6c, 0xfc, 0xe1, 0xd5, 0x72, 0xea,
 	0xf3, 0x57, 0xcb, 0xa9, 0x17, 0xaf, 0x96, 0x53, 0x9f, 0xcc, 0x4f, 0xfd, 0x82, 0xf8, 0xff, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0x96, 0xea, 0x00, 0x50, 0x53, 0x14, 0x00, 0x00,
+	0x00, 0x00, 0xff, 0xff, 0xb5, 0x37, 0x40, 0x0e, 0x53, 0x14, 0x00, 0x00,
 }

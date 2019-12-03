@@ -143,7 +143,7 @@ Maximum memory capacity available to store temporary data for SQL clients,
 including prepared queries and intermediate data rows during query execution.
 Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
 percentage of physical memory (e.g. .25).
-If left unspecified, defaults to 128MiB.
+If left unspecified, defaults to 25% of physical memory.
 `,
 	}
 

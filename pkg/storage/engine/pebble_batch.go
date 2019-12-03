@@ -90,7 +90,10 @@ func (p *pebbleBatch) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleBatch) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
 	panic("unimplemented")
 }
@@ -261,7 +264,7 @@ func (p *pebbleBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) erro
 	// Furthermore, the start and end keys are always metadata keys (i.e.
 	// have zero timestamps), so we can ignore the bounds' MVCC timestamps.
 	iter.SetUpperBound(end)
-	iter.Seek(MakeMVCCMetadataKey(start))
+	iter.SeekGE(MakeMVCCMetadataKey(start))
 
 	for ; ; iter.Next() {
 		valid, err := iter.Valid()

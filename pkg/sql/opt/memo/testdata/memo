@@ -230,11 +230,11 @@ memo (optimized, ~4KB, required=[presentation: a:3,b:4,c:5,d:6])
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
-memo (optimized, ~4KB, required=[presentation: x:1])
+memo (optimized, ~5KB, required=[presentation: x:1])
  ├── G1: (project G2 G3 x)
  │    └── [presentation: x:1]
  │         ├── best: (project G2 G3 x)
- │         └── cost: 1.08
+ │         └── cost: 1.09
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── []
  │         ├── best: (select G6 G7)
@@ -251,11 +251,11 @@ memo (optimized, ~4KB, required=[presentation: x:1])
  │         └── cost: 1.05
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
- ├── G9: (eq G12 G11)
+ ├── G9: (eq G12 G13)
  ├── G10: (variable x)
  ├── G11: (const 1)
- ├── G12: (plus G10 G13)
- └── G13: (variable y)
+ ├── G12: (variable y)
+ └── G13: (const 0)
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a

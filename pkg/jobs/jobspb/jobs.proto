@@ -130,7 +130,7 @@ message ImportProgress {
   // In direct-ingest import, once the KVs for i'th row of an input file have
   // been flushed, we can advance the count here and then on resume skip over
   // that many rows without needing to convert/process them at all.
-  repeated uint64 completed_row = 5; // Only set by direct import.
+  repeated int64 resume_pos = 5; // Only set by direct import.
 }
 
 message ResumeSpanList {

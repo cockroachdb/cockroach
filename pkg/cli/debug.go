@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
@@ -118,31 +120,48 @@ func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (engine
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
 // an empty engine might be initialized.
 func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (engine.Engine, error) {
-	// TODO(hueypark): This seems to support all engines like engine.NewTempEngine.
-	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
-	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
 	if err != nil {
 		return nil, err
 	}
 
-	cfg := engine.RocksDBConfig{
-		StorageConfig: base.StorageConfig{
-			Settings:  serverCfg.Settings,
-			Dir:       dir,
-			MustExist: opts.MustExist,
-		},
-		MaxOpenFiles: maxOpenFiles,
-		ReadOnly:     opts.ReadOnly,
+	storageConfig := base.StorageConfig{
+		Settings:  serverCfg.Settings,
+		Dir:       dir,
+		MustExist: opts.MustExist,
 	}
-
 	if PopulateRocksDBConfigHook != nil {
-		if err := PopulateRocksDBConfigHook(&cfg.StorageConfig); err != nil {
+		if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
 			return nil, err
 		}
 	}
 
-	db, err := engine.NewRocksDB(cfg, cache)
+	var db engine.Engine
+
+	switch engine.DefaultStorageEngine {
+	case enginepb.EngineTypePebble:
+		cfg := engine.PebbleConfig{
+			StorageConfig: storageConfig,
+			Opts:          engine.DefaultPebbleOptions(),
+		}
+		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
+		cfg.Opts.MaxOpenFiles = int(maxOpenFiles)
+
+		db, err = engine.NewPebble(context.Background(), cfg)
+
+	case enginepb.EngineTypeRocksDB:
+		cache := engine.NewRocksDBCache(server.DefaultCacheSize)
+		defer cache.Release()
+
+		cfg := engine.RocksDBConfig{
+			StorageConfig: storageConfig,
+			MaxOpenFiles:  maxOpenFiles,
+			ReadOnly:      opts.ReadOnly,
+		}
+
+		db, err = engine.NewRocksDB(cfg, cache)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -717,7 +736,7 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
 		}
 	} else {
-		conn, _, finish, err := getClientGRPCConn(ctx)
+		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
@@ -828,7 +847,7 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, _, finish, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}

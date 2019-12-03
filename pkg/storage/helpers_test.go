@@ -362,10 +362,8 @@ func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
 }
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyValue) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		panic(err)
-	}
+	sstFile := &engine.MemFile{}
+	sst := engine.MakeSSTWriter(sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))
@@ -382,11 +380,10 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, engine.MVCCKeyVal
 	if err := sst.Put(kv.Key, kv.Value); err != nil {
 		panic(errors.Wrap(err, "while finishing SSTable"))
 	}
-	b, err := sst.Finish()
-	if err != nil {
+	if err := sst.Finish(); err != nil {
 		panic(errors.Wrap(err, "while finishing SSTable"))
 	}
-	return b, kv
+	return sstFile.Data(), kv
 }
 
 func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, store *Store) error {

@@ -21,8 +21,9 @@ import (
 type limitOp struct {
 	OneInputNode
 
-	internalBatch coldata.Batch
-	limit         uint64
+	allocator *Allocator
+	zeroBatch coldata.Batch
+	limit     uint64
 
 	// seen is the number of tuples seen so far.
 	seen uint64
@@ -33,23 +34,24 @@ type limitOp struct {
 var _ Operator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
-func NewLimitOp(input Operator, limit uint64) Operator {
+func NewLimitOp(allocator *Allocator, input Operator, limit uint64) Operator {
 	c := &limitOp{
 		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
 		limit:        limit,
 	}
 	return c
 }
 
 func (c *limitOp) Init() {
-	c.internalBatch = coldata.NewMemBatch(nil)
+	c.zeroBatch = c.allocator.NewMemBatchWithSize(nil /* types */, 0 /* size */)
 	c.input.Init()
 }
 
 func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if c.done {
-		c.internalBatch.SetLength(0)
-		return c.internalBatch
+		c.zeroBatch.SetLength(0)
+		return c.zeroBatch
 	}
 	bat := c.input.Next(ctx)
 	length := bat.Length()

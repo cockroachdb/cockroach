@@ -248,19 +248,19 @@ func DistIngest(
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
-			prog.CompletedRow = make([]uint64, len(from))
+			prog.ResumePos = make([]int64, len(from))
 			return 0.0
 		},
 	); err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	rowProgress := make([]uint64, len(from))
+	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) {
 		if meta.BulkProcessorProgress != nil {
 			for i, v := range meta.BulkProcessorProgress.ResumePos {
-				atomic.StoreUint64(&rowProgress[i], v)
+				atomic.StoreInt64(&rowProgress[i], v)
 			}
 			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
 				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
@@ -312,7 +312,7 @@ func DistIngest(
 						var overall float32
 						prog := details.(*jobspb.Progress_Import).Import
 						for i := range rowProgress {
-							prog.CompletedRow[i] = atomic.LoadUint64(&rowProgress[i])
+							prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
 						}
 						for i := range fractionProgress {
 							fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))

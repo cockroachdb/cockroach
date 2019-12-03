@@ -12,7 +12,11 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -51,6 +55,25 @@ func (r *Replica) setCorruptRaftMuLocked(
 	log.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
 	cErr.Processed = true
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
+
+	auxDir := r.store.engine.GetAuxiliaryDir()
+	_ = os.MkdirAll(auxDir, 0755)
+	path := base.PreventedStartupFile(auxDir)
+
+	preventStartupMsg := fmt.Sprintf(`ATTENTION:
+
+this node is terminating because replica %s detected an inconsistent state.
+Please contact the CockroachDB support team. It is not necessarily safe
+to replace this node; cluster data may still be at risk of corruption.
+
+A file preventing this node from restarting was placed at:
+%s
+`, r, path)
+
+	if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+		log.Warning(ctx, err)
+	}
+
 	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
 	return roachpb.NewError(cErr)
 }

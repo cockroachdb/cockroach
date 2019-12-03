@@ -60,10 +60,11 @@ func (d *pgCopyReader) start(ctx ctxgroup.Group) {
 func (d *pgCopyReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, d.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage)
 }
 
 type postgreStreamCopy struct {
@@ -253,7 +254,12 @@ func (c copyData) String() string {
 }
 
 func (d *pgCopyReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	s := bufio.NewScanner(input)
 	s.Split(bufio.ScanLines)

@@ -225,6 +225,9 @@ void DBIterDestroy(DBIterator* iter);
 // Positions the iterator at the first key that is >= "key".
 DBIterState DBIterSeek(DBIterator* iter, DBKey key);
 
+// Positions the iterator at the first key that is <= "key".
+DBIterState DBIterSeekForPrev(DBIterator* iter, DBKey key);
+
 typedef struct {
   uint64_t internal_delete_skipped_count;
   // the number of SSTables touched (only for time bound iterators).
@@ -344,10 +347,10 @@ typedef struct {
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool inconsistent, bool tombstones, bool ignore_sequence);
+                      bool inconsistent, bool tombstones);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones, bool ignore_sequence);
+                       bool tombstones);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {

@@ -130,7 +130,7 @@ func (b *Backup) NextKeyValues(
 
 		it := sst.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer it.Close()
-		it.Seek(engine.MVCCKey{Key: file.Span.Key})
+		it.SeekGE(engine.MVCCKey{Key: file.Span.Key})
 
 		iterIdx := 0
 		for ; ; it.Next() {

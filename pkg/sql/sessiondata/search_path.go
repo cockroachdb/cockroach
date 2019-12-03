@@ -152,6 +152,10 @@ func (s SearchPath) GetTemporarySchemaName() string {
 	return s.tempSchemaName
 }
 
+func (s SearchPath) HasCreatedTemporarySchema(expectedTempSchemaName string) bool {
+	return s.GetTemporarySchemaName() != expectedTempSchemaName
+}
+
 // Equals returns true if two SearchPaths are the same.
 func (s SearchPath) Equals(other *SearchPath) bool {
 	if s.containsPgCatalog != other.containsPgCatalog {

@@ -570,7 +570,7 @@ mounts:
 				DiskSizeGB:   to.Int32Ptr(100),
 				Lun:          to.Int32Ptr(42),
 				ManagedDisk: &compute.ManagedDiskParameters{
-					StorageAccountType: compute.StorageAccountTypesStandardSSDLRS,
+					StorageAccountType: compute.StorageAccountTypesPremiumLRS,
 				},
 			},
 		}

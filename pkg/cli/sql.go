@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -49,6 +50,7 @@ const (
 # To exit, type: \q.
 #
 `
+	// TODO(#42242): document the \demo_node command.
 	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
   \? or "help"      print this help.
@@ -461,6 +463,58 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 
 func isEndOfStatement(lastTok int) bool {
 	return lastTok == ';' || lastTok == parser.HELPTOKEN
+}
+
+// handleDemoNode handles operations on \demo_node.
+// This can only be done from `cockroach demo`.
+func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	usageStr := `Usage: \demo_node <shutdown|restart|recommission|decommission> <node_id>` + "\n"
+	// A transient cluster signifies the presence of `cockroach demo`.
+	if demoCtx.transientCluster == nil {
+		return c.invalidSyntax(errState, `\demo_node can only be run with cockroach demo`)
+	}
+	if len(cmd) != 2 {
+		fmt.Fprint(stderr, usageStr)
+		c.exitErr = errInvalidSyntax
+		return errState
+	}
+	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
+	if err != nil {
+		return c.invalidSyntax(
+			errState,
+			"%s",
+			errors.Wrapf(err, "cannot convert %s to string", cmd[2]).Error(),
+		)
+	}
+	switch cmd[0] {
+	case "shutdown":
+		if err := demoCtx.transientCluster.DrainNode(roachpb.NodeID(nodeID)); err != nil {
+			return c.invalidSyntax(errState, "%s", err.Error())
+		}
+		fmt.Printf("node %d has been shutdown\n", nodeID)
+		return nextState
+	case "restart":
+		if err := demoCtx.transientCluster.RestartNode(roachpb.NodeID(nodeID)); err != nil {
+			return c.invalidSyntax(errState, "%s", err.Error())
+		}
+		fmt.Printf("node %d has been restarted\n", nodeID)
+		return nextState
+	case "recommission":
+		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), false /* decommissioning */); err != nil {
+			return c.invalidSyntax(errState, "%s", err.Error())
+		}
+		fmt.Printf("node %d has been recommissioned\n", nodeID)
+		return nextState
+	case "decommission":
+		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), true /* decommissioning */); err != nil {
+			return c.invalidSyntax(errState, "%s", err.Error())
+		}
+		fmt.Printf("node %d has been decommissioned\n", nodeID)
+		return nextState
+	}
+	fmt.Fprint(stderr, usageStr)
+	c.exitErr = errInvalidSyntax
+	return errState
 }
 
 // handleHelp prints SQL help.
@@ -1046,6 +1100,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			return cliRunStatement
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+
+	case `\demo_node`:
+		return c.handleDemoNode(cmd[1:], loopState, errState)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {

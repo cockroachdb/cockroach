@@ -40,6 +40,7 @@ type routerOutput interface {
 var defaultRouterOutputBlockedThreshold = int(coldata.BatchSize() * 2)
 
 type routerOutputOp struct {
+	allocator *Allocator
 	// input is a reference to our router.
 	input execinfra.OpNode
 
@@ -87,21 +88,25 @@ var _ Operator = &routerOutputOp{}
 // newRouterOutputOp creates a new router output. The caller must ensure that
 // unblockedEventsChan is a buffered channel, as the router output will write to
 // it.
-func newRouterOutputOp(types []coltypes.T, unblockedEventsChan chan<- struct{}) *routerOutputOp {
+func newRouterOutputOp(
+	allocator *Allocator, types []coltypes.T, unblockedEventsChan chan<- struct{},
+) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
-		types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, int(coldata.BatchSize()),
+		allocator, types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, int(coldata.BatchSize()),
 	)
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
+	allocator *Allocator,
 	types []coltypes.T,
 	unblockedEventsChan chan<- struct{},
 	blockedThreshold int,
 	outputBatchSize int,
 ) *routerOutputOp {
 	o := &routerOutputOp{
+		allocator:           allocator,
 		types:               types,
-		zeroBatch:           coldata.NewMemBatchWithSize(types, 0 /* size */),
+		zeroBatch:           allocator.NewMemBatchWithSize(types, 0 /* size */),
 		unblockedEventsChan: unblockedEventsChan,
 		blockedThreshold:    blockedThreshold,
 		outputBatchSize:     outputBatchSize,
@@ -188,11 +193,11 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	writeIdx := 0
 	if len(o.mu.data) == 0 {
 		// New output batch.
-		o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+		o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 	} else {
 		if int(o.mu.data[len(o.mu.data)-1].Length()) == o.outputBatchSize {
 			// No space in last batch, append new output batch.
-			o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 		}
 		writeIdx = len(o.mu.data) - 1
 	}
@@ -213,11 +218,12 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 			numAppended = available
 			// Need to create a new batch to append to in the next o.mu.data slot.
 			// This will be used in the next iteration.
-			o.mu.data = append(o.mu.data, coldata.NewMemBatchWithSize(o.types, o.outputBatchSize))
+			o.mu.data = append(o.mu.data, o.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 		}
 
 		for i, t := range o.types {
-			dst.ColVec(i).Append(
+			o.allocator.Append(
+				dst.ColVec(i),
 				coldata.SliceArgs{
 					ColType:   t,
 					Src:       batch.ColVec(i),
@@ -303,7 +309,7 @@ type HashRouter struct {
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
 func NewHashRouter(
-	input Operator, types []coltypes.T, hashCols []int, numOutputs int,
+	allocator *Allocator, input Operator, types []coltypes.T, hashCols []int, numOutputs int,
 ) (*HashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
 	outputsAsOps := make([]Operator, numOutputs)
@@ -316,7 +322,7 @@ func NewHashRouter(
 	// all unblock events preceding it since these *must* be on the channel.
 	unblockEventsChan := make(chan struct{}, 2*numOutputs)
 	for i := 0; i < numOutputs; i++ {
-		op := newRouterOutputOp(types, unblockEventsChan)
+		op := newRouterOutputOp(allocator, types, unblockEventsChan)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}

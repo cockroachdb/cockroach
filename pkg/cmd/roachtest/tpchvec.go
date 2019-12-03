@@ -78,11 +78,6 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, conn)
 		timeByQueryNum := make([]map[int][]float64, 2)
-		// Note that the order in which we run the configuration is important:
-		// there are some issues with dropping a view (created in query 15), so if
-		// we run vec off first, the vec on config run might error out.
-		// TODO(yuzefovich): figure out what is the root problem or create an issue
-		// about it.
 		for configIdx, vectorize := range []bool{true, false} {
 			// To reduce the variance on the first query we're interested in, we'll
 			// do an aggregation over all tables. This will make comparison on two
@@ -122,6 +117,8 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				queriesToRun, vectorizeSetting, nodeCount)
 			workloadOutput, err := repeatRunWithBuffer(ctx, c, t.l, firstNode, operation, cmd)
 			if err != nil {
+				// Note: if you see an error like "exit status 1", it is likely caused
+				// by the erroneous output of the query.
 				t.Fatal(err)
 			}
 			t.l.Printf(string(workloadOutput))

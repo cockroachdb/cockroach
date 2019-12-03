@@ -76,10 +76,10 @@ func NewEvalCheckHelper(
 	}
 
 	c := &CheckHelper{}
-	c.cols = tableDesc.Columns
+	c.cols = tableDesc.AllNonDropColumns()
 	c.sourceInfo = NewSourceInfoForSingleTable(
 		tree.MakeUnqualifiedTableName(tree.Name(tableDesc.Name)),
-		ResultColumnsFromColDescs(tableDesc.Columns),
+		ResultColumnsFromColDescs(c.cols),
 	)
 
 	c.Exprs = make([]tree.TypedExpr, len(tableDesc.ActiveChecks()))

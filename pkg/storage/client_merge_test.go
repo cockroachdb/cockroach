@@ -2890,10 +2890,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Range-id local range of subsumed replicas.
 		for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
-			sst, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return err
-			}
+			sstFile := &engine.MemFile{}
+			sst := engine.MakeSSTWriter(sstFile)
 			defer sst.Close()
 			r := rditer.MakeRangeIDLocalKeyRange(rangeID, false)
 			if err := sst.ClearRange(r.Start, r.End); err != nil {
@@ -2904,18 +2902,16 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			if err := engine.MVCCBlindPutProto(context.TODO(), &sst, nil, tombstoneKey, hlc.Timestamp{}, tombstoneValue, nil); err != nil {
 				return err
 			}
-			expectedSST, err := sst.Finish()
+			err := sst.Finish()
 			if err != nil {
 				return err
 			}
-			expectedSSTs = append(expectedSSTs, expectedSST)
+			expectedSSTs = append(expectedSSTs, sstFile.Data())
 		}
 
 		// User key range of subsumed replicas.
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
+		sstFile := &engine.MemFile{}
+		sst := engine.MakeSSTWriter(sstFile)
 		defer sst.Close()
 		desc := roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey("d"),
@@ -2925,11 +2921,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if err := engine.ClearRangeWithHeuristic(eng, &sst, r.Start.Key, r.End.Key); err != nil {
 			return err
 		}
-		expectedSST, err := sst.Finish()
+		err := sst.Finish()
 		if err != nil {
 			return err
 		}
-		expectedSSTs = append(expectedSSTs, expectedSST)
+		expectedSSTs = append(expectedSSTs, sstFile.Data())
 
 		for i := range sstNames {
 			actualSST, err := eng.ReadFile(sstNames[i])

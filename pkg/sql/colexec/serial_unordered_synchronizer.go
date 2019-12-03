@@ -46,12 +46,12 @@ func (s *SerialUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
-	inputs []Operator, typs []coltypes.T,
+	allocator *Allocator, inputs []Operator, typs []coltypes.T,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,
 		curSerialInputIdx: 0,
-		zeroBatch:         coldata.NewMemBatchWithSize(typs, 0),
+		zeroBatch:         allocator.NewMemBatchWithSize(typs, 0 /* size */),
 	}
 }
 
@@ -66,6 +66,7 @@ func (s *SerialUnorderedSynchronizer) Init() {
 func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
+			s.zeroBatch.SetLength(0)
 			return s.zeroBatch
 		}
 		b := s.inputs[s.curSerialInputIdx].Next(ctx)

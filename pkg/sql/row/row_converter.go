@@ -171,7 +171,7 @@ type KVBatch struct {
 	// Source is where the row data in the batch came from.
 	Source int32
 	// LastRow is the index of the last converted row in source in this batch.
-	LastRow uint64
+	LastRow int64
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
@@ -207,7 +207,7 @@ type DatumRowConverter struct {
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
-	CompletedRowFn func() uint64
+	CompletedRowFn func() int64
 	FractionFn     func() float32
 }
 

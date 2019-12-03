@@ -18,7 +18,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -2389,14 +2388,14 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 			queryTxnFn: func() (roachpb.TransactionStatus, error) {
 				return roachpb.PENDING, nil
 			},
-			expErr: "the batch experienced mixed success and failure: intent missing",
+			expErr: "intent missing",
 		},
 		{
 			name: "transaction record STAGING, real intent missing error",
 			queryTxnFn: func() (roachpb.TransactionStatus, error) {
 				return roachpb.STAGING, nil
 			},
-			expErr: "the batch experienced mixed success and failure: intent missing",
+			expErr: "intent missing",
 		},
 		{
 			name: "transaction record COMMITTED, intent missing error caused by intent resolution",
@@ -2703,17 +2702,17 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		{
 			err1:   retryErr,
 			err2:   nil,
-			expErr: "mixed success and failure: TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			err1:   abortErr,
 			err2:   nil,
-			expErr: "mixed success and failure: TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+			expErr: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 		},
 		{
 			err1:   conditionFailedErr,
 			err2:   nil,
-			expErr: "mixed success and failure: unexpected value",
+			expErr: "unexpected value",
 		},
 		{
 			err1:   retryErr,
@@ -2857,13 +2856,12 @@ func TestErrorIndexAlignment(t *testing.T) {
 	// partial batch.
 	testCases := []struct {
 		// The nth request to return an error.
-		nthPartialBatch      int
-		expectedFinalIdx     int32
-		expectedMixedSuccess bool
+		nthPartialBatch  int
+		expectedFinalIdx int32
 	}{
-		{0, 0, false},
-		{1, 1, true},
-		{2, 3, true},
+		{0, 0},
+		{1, 1},
+		{2, 3},
 	}
 
 	descDB := mockRangeDescriptorDBForDescs(
@@ -2928,173 +2926,10 @@ func TestErrorIndexAlignment(t *testing.T) {
 			if pErr == nil {
 				t.Fatalf("expected an error to be returned from distSender")
 			}
-			mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
-			if a, e := ok, tc.expectedMixedSuccess; a != e {
-				t.Fatalf("expected mixed success %t; got %t", e, a)
-			}
-			if ok {
-				pErr.SetDetail(mse.GetWrapped())
-			}
-
-			if pErr.Index == nil {
-				t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
-			}
-
 			if pErr.Index.Index != tc.expectedFinalIdx {
 				t.Errorf("expected error index to be %d, instead got %d", tc.expectedFinalIdx, pErr.Index.Index)
 			}
 		})
-	}
-}
-
-// TestMixedSuccessErrorWrapped tests that an internal MixedSuccessError
-// seen by a caller of Send() cannot wrap another MixedSuccessError.
-func TestMixedSuccessErrorWrapped(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-	g := makeGossip(t, stopper, rpcContext)
-
-	if err := g.SetNodeDescriptor(newNodeDesc(1)); err != nil {
-		t.Fatal(err)
-	}
-	nd := &roachpb.NodeDescriptor{
-		NodeID:  roachpb.NodeID(1),
-		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
-	}
-	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
-		t.Fatal(err)
-
-	}
-
-	// Fill MockRangeDescriptorDB with three descriptors.
-	var descriptor1 = roachpb.RangeDescriptor{
-		RangeID:  2,
-		StartKey: testMetaEndKey,
-		EndKey:   roachpb.RKey("b"),
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				NodeID:  1,
-				StoreID: 1,
-			},
-		},
-	}
-	var descriptor2 = roachpb.RangeDescriptor{
-		RangeID:  3,
-		StartKey: roachpb.RKey("b"),
-		EndKey:   roachpb.RKey("c"),
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				NodeID:  1,
-				StoreID: 1,
-			},
-		},
-	}
-	var descriptor3 = roachpb.RangeDescriptor{
-		RangeID:  4,
-		StartKey: roachpb.RKey("c"),
-		EndKey:   roachpb.RKeyMax,
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{
-				NodeID:  1,
-				StoreID: 1,
-			},
-		},
-	}
-
-	descDB := mockRangeDescriptorDBForDescs(
-		testMetaRangeDescriptor,
-		descriptor1,
-		descriptor2,
-		descriptor3,
-	)
-
-	reqNum := 0
-
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
-		reply := ba.CreateReply()
-		reqNum++
-		// Return an error on the third batch request.
-		if reqNum == 3 {
-			// The relative index is always 1 since we return
-			// an error for the second request of the 3rd batch.
-			index := &roachpb.ErrPosition{Index: 1}
-
-			// This will be the error that will be wrapped
-			// within a MixedSuccessError. Make this error itself a
-			// MixedSuccessError to test if it escapes the dist-sender.
-			// Set the wrapped index and the MixedSuccessError index to the
-			// same value because that's what the code does.
-			reply.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{})
-			reply.Error.Index = index
-			reply.Error.SetDetail(roachpb.WrapWithMixedSuccessError(reply.Error.GetDetail()))
-		}
-		return reply, nil
-	}
-
-	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Clock:      clock,
-		RPCContext: rpcContext,
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(testFn),
-		},
-		RangeDescriptorDB: descDB,
-	}
-	ds := NewDistSender(cfg, g)
-	ds.DisableParallelBatches()
-
-	// Create a batch request with 3 requests that will trigger a
-	// MixedSuccessError.
-	var ba roachpb.BatchRequest
-	ba.Txn = &roachpb.Transaction{Name: "test"}
-	// First batch has 1 request.
-	val := roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("a"), val))
-	// Second batch has 2 requests.
-	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("b"), val))
-	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("bb"), val))
-	// Third batch has 2 request.
-	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("c"), val))
-	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(roachpb.Key("cc"), val))
-
-	_, pErr := ds.Send(context.Background(), ba)
-	if pErr == nil {
-		t.Fatalf("expected an error to be returned from distSender")
-	}
-
-	// The error message is correctly set.
-	if !strings.Contains(pErr.Message, "lease holder unknown") {
-		t.Fatalf("err = %s", pErr.Message)
-	}
-	// The index is correctly set.
-	if pErr.Index == nil {
-		t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
-	}
-	if pErr.Index.Index != 4 {
-		t.Errorf("expected error index to be %d, instead got %d", 3, pErr.Index.Index)
-	}
-
-	// The error detail is a MixedSuccessError.
-	mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError)
-	if !ok {
-		t.Fatalf("expected mixed success error, got %v", pErr)
-	}
-	// The wrapped error is not a MixedSuccessError.
-	if wrapped, ok := mse.GetWrapped().(*roachpb.NotLeaseHolderError); !ok {
-		t.Fatalf("expected wrapped not leaseholder error, got %v", wrapped)
 	}
 }
 

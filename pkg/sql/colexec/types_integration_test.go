@@ -79,7 +79,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			typs := []types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)
 
-			columnarizer, err := NewColumnarizer(ctx, flowCtx, 0 /* processorID */, source)
+			columnarizer, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
 			require.NoError(t, err)
 
 			coltyps, err := typeconv.FromColumnTypes(typs)
@@ -164,7 +164,7 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	batchOut := coldata.NewMemBatchWithSize(nil, 0)
+	batchOut := testAllocator.NewMemBatchWithSize(nil, 0)
 	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}

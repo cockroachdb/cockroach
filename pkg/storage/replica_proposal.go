@@ -13,12 +13,14 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -210,19 +212,17 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.engine.NewSnapshot()
 	if cc.Checkpoint {
-		checkpointBase := filepath.Join(r.store.engine.GetAuxiliaryDir(), "checkpoints")
-		_ = os.MkdirAll(checkpointBase, 0700)
 		sl := stateloader.Make(r.RangeID)
 		rai, _, err := sl.LoadAppliedIndex(ctx, snap)
 		if err != nil {
 			log.Warningf(ctx, "unable to load applied index, continuing anyway")
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
-		checkpointDir := filepath.Join(checkpointBase, fmt.Sprintf("r%d_at_%d", r.RangeID, rai))
-		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
-			log.Warningf(ctx, "unable to create checkpoint %s: %+v", checkpointDir, err)
+		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, rai)
+		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
 		} else {
-			log.Infof(ctx, "created checkpoint %s", checkpointDir)
+			log.Warningf(ctx, "created checkpoint %s", dir)
 		}
 	}
 
@@ -256,14 +256,33 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 			// holder and thus won't be printed to the logs. Since we're already
 			// in a goroutine that's about to end, simply sleep for a few seconds
 			// and then terminate.
+			auxDir := r.store.engine.GetAuxiliaryDir()
+			_ = os.MkdirAll(auxDir, 0755)
+			path := base.PreventedStartupFile(auxDir)
+
+			preventStartupMsg := fmt.Sprintf(`ATTENTION:
+
+this node is terminating because a replica inconsistency was detected between %s
+and its other replicas. Please check your cluster-wide log files for more
+information and contact the CockroachDB support team. It is not necessarily safe
+to replace this node; cluster data may still be at risk of corruption.
+
+A checkpoints directory to aid (expert) debugging should be present in:
+%s
+
+A file preventing this node from restarting was placed at:
+%s
+`, r, auxDir, path)
+
+			if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
+				log.Warning(ctx, err)
+			}
+
 			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
 				p(*r.store.Ident)
 			} else {
 				time.Sleep(10 * time.Second)
-				log.Fatalf(r.AnnotateCtx(context.Background()),
-					"this node is terminating because a replica inconsistency was detected "+
-						"between %s and its other replicas. Please check your cluster-wide log files for "+
-						"more information and contact the CockroachDB support team.", r)
+				log.Fatalf(r.AnnotateCtx(context.Background()), preventStartupMsg)
 			}
 		}
 

@@ -325,62 +325,6 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	require.Equal(t, tsr.knobs.MaxTxnRefreshAttempts, refreshes)
 }
 
-// TestTxnSpanRefresherUnwrapsMixedSuccess tests that the txnSpanRefresher
-// ignores mixed success errors instead of trying to refresh when it sees
-// them, even if the errors are wrapping retryable errors.
-func TestTxnSpanRefresherUnwrapsMixedSuccess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	tsr, mockSender := makeMockTxnSpanRefresher()
-
-	txn := makeTxnProto()
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-
-	// Collect some refresh spans.
-	var ba roachpb.BatchRequest
-	ba.Header = roachpb.Header{Txn: &txn}
-	getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	delRangeArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
-	ba.Add(&getArgs, &delRangeArgs)
-
-	br, pErr := tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	require.Equal(t, []roachpb.Span{getArgs.Span()}, tsr.refreshReads)
-	require.Equal(t, []roachpb.Span{delRangeArgs.Span()}, tsr.refreshWrites)
-	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(3), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
-
-	// Return a retry error wrapped in a mixed success error.
-	ba.Requests = nil
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
-	ba.Add(&scanArgs)
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
-
-		return nil, roachpb.NewError(
-			roachpb.WrapWithMixedSuccessError(
-				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")))
-	})
-
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, br)
-	require.NotNil(t, pErr)
-	exp := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")
-	require.Equal(t, exp, pErr.GetDetail()) // unwrapped
-
-	// The refresh span does not get added.
-	require.Equal(t, []roachpb.Span{getArgs.Span()}, tsr.refreshReads)
-	require.Equal(t, []roachpb.Span{delRangeArgs.Span()}, tsr.refreshWrites)
-	require.False(t, tsr.refreshInvalid)
-	require.Equal(t, int64(3), tsr.refreshSpansBytes)
-	require.Equal(t, hlc.Timestamp{}, tsr.refreshedTimestamp)
-}
-
 // TestTxnSpanRefresherMaxTxnRefreshSpansBytes tests that the txnSpanRefresher
 // only collects up to kv.transaction.max_refresh_spans_bytes refresh bytes
 // before throwing away refresh spans and refusing to attempt to refresh

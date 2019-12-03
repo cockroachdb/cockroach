@@ -43,7 +43,7 @@ func iterateExpectErr(
 			EndTime:   endTime,
 		})
 		defer iter.Close()
-		for iter.Seek(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+		for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 			if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 				break
 			}
@@ -73,7 +73,7 @@ func assertEqualKVs(
 		})
 		defer iter.Close()
 		var kvs []MVCCKeyValue
-		for iter.Seek(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+		for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatalf("unexpected error: %+v", err)
 			} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
@@ -320,7 +320,7 @@ func slurpKVsInTimeRange(
 	})
 	defer iter.Close()
 	var kvs []MVCCKeyValue
-	for iter.Seek(MakeMVCCMetadataKey(prefix)); ; iter.Next() {
+	for iter.SeekGE(MakeMVCCMetadataKey(prefix)); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {

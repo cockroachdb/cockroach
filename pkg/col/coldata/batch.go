@@ -44,6 +44,10 @@ type Batch interface {
 	// with the given coltypes. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
 	// its Vecs. However, Reset does _not_ zero out the column data.
+	//
+	// NOTE: Reset can allocate a new Batch, so when calling from the vectorized
+	// engine consider either allocating a new Batch explicitly via
+	// colexec.Allocator or calling ResetInternalBatch.
 	Reset(types []coltypes.T, length int)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal

@@ -74,7 +74,7 @@ func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
 	// will always be the first version of a key if it exists, so its fine that
 	// we skip over all other versions of keys.
 	var meta enginepb.MVCCMetadata
-	for s.it.Seek(startKey); ; s.it.NextKey() {
+	for s.it.SeekGE(startKey); ; s.it.NextKey() {
 		if ok, err := s.it.Valid(); err != nil {
 			return err
 		} else if !ok || !s.it.UnsafeKey().Less(endKey) {

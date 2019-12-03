@@ -106,6 +106,7 @@ func registerLibPQ(r *testRegistry) {
 		Name:       "lib/pq",
 		MinVersion: "v19.2.0",
 		Cluster:    makeClusterSpec(1),
+		Tags:       []string{`default`, `driver`},
 		Run:        runLibPQ,
 	})
 }

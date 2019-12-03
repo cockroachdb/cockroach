@@ -309,7 +309,7 @@ func (c *Compactor) fetchSuggestions(
 			}
 
 			dataIter.SetUpperBound(sc.EndKey)
-			dataIter.Seek(engine.MakeMVCCMetadataKey(sc.StartKey))
+			dataIter.SeekGE(engine.MakeMVCCMetadataKey(sc.StartKey))
 			if ok, err := dataIter.Valid(); err != nil {
 				return false, err
 			} else if ok && dataIter.UnsafeKey().Less(engine.MakeMVCCMetadataKey(sc.EndKey)) {

@@ -86,7 +86,8 @@ type aggregateFunc interface {
 type orderedAggregator struct {
 	OneInputNode
 
-	done bool
+	allocator *Allocator
+	done      bool
 
 	aggCols  [][]uint32
 	aggTypes [][]coltypes.T
@@ -137,6 +138,7 @@ var _ StaticMemoryOperator = &orderedAggregator{}
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
 func NewOrderedAggregator(
+	allocator *Allocator,
 	input Operator,
 	colTypes []coltypes.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
@@ -184,10 +186,11 @@ func NewOrderedAggregator(
 	*a = orderedAggregator{
 		OneInputNode: NewOneInputNode(op),
 
-		aggCols:  aggCols,
-		aggTypes: aggTypes,
-		groupCol: groupCol,
-		isScalar: isScalar,
+		allocator: allocator,
+		aggCols:   aggCols,
+		aggTypes:  aggTypes,
+		groupCol:  groupCol,
+		isScalar:  isScalar,
 	}
 
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(aggTypes, aggFns)
@@ -260,12 +263,12 @@ func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSiz
 	// overflow when outputting.
 	a.scratch.inputSize = inputSize * 2
 	a.scratch.outputSize = outputSize
-	a.scratch.Batch = coldata.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
+	a.scratch.Batch = a.allocator.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
 	for i := 0; i < len(a.outputTypes); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
-	a.unsafeBatch = coldata.NewMemBatchWithSize(a.outputTypes, outputSize)
+	a.unsafeBatch = a.allocator.NewMemBatchWithSize(a.outputTypes, outputSize)
 }
 
 func (a *orderedAggregator) Init() {
@@ -294,7 +297,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			// "truncation" behavior, i.e. we want to copy over the remaining tuples
 			// such the "lengths" of the vectors are equal to the number of copied
 			// elements.
-			vec.Append(
+			a.allocator.Append(
+				vec,
 				coldata.SliceArgs{
 					Src:         vec,
 					ColType:     a.outputTypes[i],

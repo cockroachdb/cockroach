@@ -45,6 +45,8 @@ func TimeZoneStringToLocation(location string) (*time.Location, error) {
 //
 // The strings produced by FixedOffsetTimeZoneToLocation look like
 // "<fixedOffsetPrefix><offset> (<origRepr>)".
+// TODO(#42404): this is not the format given by the results in
+// pgwire/testdata/connection_params.
 func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, success bool) {
 	if !strings.HasPrefix(location, fixedOffsetPrefix) {
 		return 0, "", false

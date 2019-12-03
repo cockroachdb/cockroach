@@ -202,7 +202,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
 
-	for iter.Seek(startKeyMVCC); ; {
+	for iter.SeekGE(startKeyMVCC); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			return nil, err

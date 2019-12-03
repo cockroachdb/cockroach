@@ -28,7 +28,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
 		var kvs []MVCCKeyValue
-		for iter.Seek(expected[0].Key); ; iter.Next() {
+		for iter.SeekGE(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
 				t.Fatalf("%+v", err)
@@ -54,7 +54,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 		lastElemKey := expected[len(expected)-1].Key
 		seekTo := MVCCKey{Key: lastElemKey.Key.Next()}
 
-		iter.Seek(seekTo)
+		iter.SeekGE(seekTo)
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatalf("%+v", err)
 		} else if ok {
@@ -72,10 +72,8 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sst, err := MakeRocksDBSstFileWriter()
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
+	sstFile := &MemFile{}
+	sst := MakeSSTWriter(sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
 	for i := 0; i < 10; i++ {
@@ -92,8 +90,7 @@ func TestSSTIterator(t *testing.T) {
 		allKVs = append(allKVs, kv)
 	}
 
-	data, err := sst.Finish()
-	if err != nil {
+	if err := sst.Finish(); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
@@ -102,7 +99,7 @@ func TestSSTIterator(t *testing.T) {
 		defer cleanup()
 
 		path := filepath.Join(tempDir, "data.sst")
-		if err := ioutil.WriteFile(path, data, 0600); err != nil {
+		if err := ioutil.WriteFile(path, sstFile.Data(), 0600); err != nil {
 			t.Fatalf("%+v", err)
 		}
 
@@ -114,7 +111,7 @@ func TestSSTIterator(t *testing.T) {
 		runTestSSTIterator(t, iter, allKVs)
 	})
 	t.Run("Mem", func(t *testing.T) {
-		iter, err := NewMemSSTIterator(data, false)
+		iter, err := NewMemSSTIterator(sstFile.Data(), false)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}

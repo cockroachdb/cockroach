@@ -285,7 +285,7 @@ message RemoteProducerMetadata {
   message BulkProcessorProgress {
      repeated roachpb.Span completed_spans = 1 [(gogoproto.nullable) = false];
      map<int32, float> completed_fraction = 2;
-     map<int32, uint64> resume_pos = 3;
+     map<int32, int64> resume_pos = 3;
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {

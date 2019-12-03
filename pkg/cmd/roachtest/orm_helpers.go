@@ -147,6 +147,13 @@ func (r *ormTestsResults) summarizeFailed(
 	p("expected failed but skipped", r.unexpectedSkipCount)
 	p("expected failed but not run", notRunCount)
 
+	fmt.Fprintf(&bResults, "---\n")
+	for _, result := range r.results {
+		if strings.Contains(result, "unexpected") {
+			fmt.Fprintf(&bResults, "%s\n", result)
+		}
+	}
+
 	fmt.Fprintf(&bResults, "For a full summary look at the %s artifacts \n", ormName)
 	t.l.Printf("%s\n", bResults.String())
 	t.l.Printf("------------------------\n")

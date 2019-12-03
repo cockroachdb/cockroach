@@ -901,3 +901,33 @@ select * from generate_series(1,10000000) where generate_series = 0;
 # Clean up
 statement ok
 SET statement_timeout = 0
+
+# Test that multiple columns associated with the same sequence follow correct
+# dependency behavior. Regression test for #40852
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TABLE abc(a INT DEFAULT nextval('seq'), b INT default nextval('seq'), c int)
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN b;
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq;
+
+statement ok
+ALTER TABLE abc DROP COLUMN a;
+
+statement ok
+DROP SEQUENCE seq;
+
+statement ok
+SET sql_safe_updates = true

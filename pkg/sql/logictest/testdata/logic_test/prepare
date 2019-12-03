@@ -680,7 +680,7 @@ SET TIME ZONE 'EST';
 query T
 EXECUTE change_loc
 ----
-2000-01-01 18:05:10.123 -0500 -0500
+2000-01-01 18:05:10.123 -0500 EST
 
 statement ok
 SET TIME ZONE 'UTC';

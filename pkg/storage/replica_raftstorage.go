@@ -495,6 +495,10 @@ type IncomingSnapshot struct {
 	snapType                       SnapshotRequest_Type
 }
 
+func (s *IncomingSnapshot) String() string {
+	return fmt.Sprintf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+}
+
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the
 // given range. Note that snapshot() is called without Replica.raftMu held.
 func snapshot(
@@ -817,10 +821,8 @@ func (r *Replica) applySnapshot(
 			inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	}(timeutil.Now())
 
-	unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return err
-	}
+	unreplicatedSSTFile := &engine.MemFile{}
+	unreplicatedSST := engine.MakeSSTWriter(unreplicatedSSTFile)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -877,13 +879,40 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
-	if err := inSnap.SSSS.WriteSST(ctx, &unreplicatedSST); err != nil {
+	if err := unreplicatedSST.Finish(); err != nil {
 		return err
+	}
+	if unreplicatedSST.DataSize > 0 {
+		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
+		// buffering in a MemFile first.
+		if err := inSnap.SSSS.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+			return err
+		}
 	}
 
 	if s.RaftAppliedIndex != snap.Metadata.Index {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			s.RaftAppliedIndex, snap.Metadata.Index)
+	}
+
+	if expLen := s.RaftAppliedIndex - s.TruncatedState.Index; expLen != uint64(len(inSnap.LogEntries)) {
+		entriesRange, err := extractRangeFromEntries(inSnap.LogEntries)
+		if err != nil {
+			return err
+		}
+
+		tag := fmt.Sprintf("r%d_%s", r.RangeID, inSnap.SnapUUID.String())
+		dir, err := r.store.checkpoint(ctx, tag)
+		if err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
+		} else {
+			log.Warningf(ctx, "created checkpoint %s", dir)
+		}
+
+		log.Fatalf(ctx, "missing log entries in snapshot (%s): got %d entries, expected %d "+
+			"(TruncatedState.Index=%d, HardState=%s, LogEntries=%s)",
+			inSnap.String(), len(inSnap.LogEntries), expLen, s.TruncatedState.Index,
+			hs.String(), entriesRange)
 	}
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
@@ -999,10 +1028,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
+		subsumedReplSSTFile := &engine.MemFile{}
+		subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RaftTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
@@ -1017,8 +1045,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSST.Close()
 			return err
 		}
-		if err := ssss.WriteSST(ctx, &subsumedReplSST); err != nil {
+		if err := subsumedReplSST.Finish(); err != nil {
 			return err
+		}
+		if subsumedReplSST.DataSize > 0 {
+			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
+			// buffering in a MemFile first.
+			if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+				return err
+			}
 		}
 
 		srKeyRanges := getKeyRanges(sr.Desc())
@@ -1049,10 +1084,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// subsume both r1 and r2 in S1.
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Key.Compare(keyRanges[i].End.Key) > 0 {
-			subsumedReplSST, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return err
-			}
+			subsumedReplSSTFile := &engine.MemFile{}
+			subsumedReplSST := engine.MakeSSTWriter(subsumedReplSSTFile)
+			defer subsumedReplSST.Close()
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
@@ -1062,8 +1096,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 				subsumedReplSST.Close()
 				return err
 			}
-			if err := ssss.WriteSST(ctx, &subsumedReplSST); err != nil {
+			if err := subsumedReplSST.Finish(); err != nil {
 				return err
+			}
+			if subsumedReplSST.DataSize > 0 {
+				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
+				// buffering in a MemFile first.
+				if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+					return err
+				}
 			}
 		}
 		// The snapshot must never subsume a replica that extends the range of the
@@ -1106,6 +1147,29 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		}
 	}
 	return nil
+}
+
+// extractRangeFromEntries returns a string representation of the range of
+// marshaled list of raft log entries in the form of [first-index, last-index].
+// If the list is empty, "[n/a, n/a]" is returned instead.
+func extractRangeFromEntries(logEntries [][]byte) (string, error) {
+	var firstIndex, lastIndex string
+	if len(logEntries) == 0 {
+		firstIndex = "n/a"
+		lastIndex = "n/a"
+	} else {
+		firstAndLastLogEntries := make([]raftpb.Entry, 2)
+		if err := protoutil.Unmarshal(logEntries[0], &firstAndLastLogEntries[0]); err != nil {
+			return "", err
+		}
+		if err := protoutil.Unmarshal(logEntries[len(logEntries)-1], &firstAndLastLogEntries[1]); err != nil {
+			return "", err
+		}
+
+		firstIndex = string(firstAndLastLogEntries[0].Index)
+		lastIndex = string(firstAndLastLogEntries[1].Index)
+	}
+	return fmt.Sprintf("[%s, %s]", firstIndex, lastIndex), nil
 }
 
 type raftCommandEncodingVersion byte

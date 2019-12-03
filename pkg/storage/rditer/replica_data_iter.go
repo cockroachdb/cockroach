@@ -124,7 +124,7 @@ func NewReplicaDataIterator(
 		ranges: rangeFunc(d),
 		it:     it,
 	}
-	ri.it.Seek(ri.ranges[ri.curIndex].Start)
+	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
 	ri.advance()
 	return ri
 }
@@ -151,7 +151,7 @@ func (ri *ReplicaDataIterator) advance() {
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
-			ri.it.Seek(ri.ranges[ri.curIndex].Start)
+			ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
 		} else {
 			return
 		}

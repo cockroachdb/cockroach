@@ -212,28 +212,28 @@ func ingestKvs(
 	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
 	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
 	// `atomic` so the progress reporting go goroutine can read them.
-	writtenRow := make([]uint64, len(spec.Uri))
+	writtenRow := make([]int64, len(spec.Uri))
 	writtenFraction := make([]uint32, len(spec.Uri))
 
-	pkFlushedRow := make([]uint64, len(spec.Uri))
-	idxFlushedRow := make([]uint64, len(spec.Uri))
+	pkFlushedRow := make([]int64, len(spec.Uri))
+	idxFlushedRow := make([]int64, len(spec.Uri))
 
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
 	pkIndexAdder.SetOnFlush(func() {
 		for _, i := range writtenRow {
-			atomic.StoreUint64(&pkFlushedRow[i], writtenRow[i])
+			atomic.StoreInt64(&pkFlushedRow[i], writtenRow[i])
 		}
 		if indexAdder.IsEmpty() {
 			for _, i := range writtenRow {
-				atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+				atomic.StoreInt64(&idxFlushedRow[i], writtenRow[i])
 			}
 		}
 	})
 	indexAdder.SetOnFlush(func() {
 		for _, i := range writtenRow {
-			atomic.StoreUint64(&idxFlushedRow[i], writtenRow[i])
+			atomic.StoreInt64(&idxFlushedRow[i], writtenRow[i])
 		}
 	})
 
@@ -260,11 +260,11 @@ func ingestKvs(
 				return nil
 			case <-tick.C:
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-				prog.ResumePos = make(map[int32]uint64)
+				prog.ResumePos = make(map[int32]int64)
 				prog.CompletedFraction = make(map[int32]float32)
 				for file, offset := range offsets {
-					pk := atomic.LoadUint64(&pkFlushedRow[offset])
-					idx := atomic.LoadUint64(&idxFlushedRow[offset])
+					pk := atomic.LoadInt64(&pkFlushedRow[offset])
+					idx := atomic.LoadInt64(&idxFlushedRow[offset])
 					// On resume we'll be able to skip up the last row for which both the
 					// PK and index adders have flushed KVs.
 					if idx > pk {

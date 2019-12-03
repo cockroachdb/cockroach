@@ -30,9 +30,14 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, k uint16,
+	allocator *Allocator,
+	input Operator,
+	inputTypes []coltypes.T,
+	orderingCols []execinfrapb.Ordering_Column,
+	k uint16,
 ) Operator {
 	return &topKSorter{
+		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
 		inputTypes:   inputTypes,
 		orderingCols: orderingCols,
@@ -60,6 +65,8 @@ const (
 
 type topKSorter struct {
 	OneInputNode
+
+	allocator    *Allocator
 	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
@@ -81,13 +88,13 @@ type topKSorter struct {
 
 func (t *topKSorter) Init() {
 	t.input.Init()
-	t.topK = coldata.NewMemBatchWithSize(t.inputTypes, int(t.k))
+	t.topK = t.allocator.NewMemBatchWithSize(t.inputTypes, int(t.k))
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i := range t.inputTypes {
 		typ := t.inputTypes[i]
 		t.comparators[i] = GetVecComparator(typ, 2)
 	}
-	t.output = coldata.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
+	t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
@@ -130,7 +137,8 @@ func (t *topKSorter) spool(ctx context.Context) {
 			destVec := t.topK.ColVec(i)
 			vec := inputBatch.ColVec(i)
 			colType := t.inputTypes[i]
-			destVec.Append(
+			t.allocator.Append(
+				destVec,
 				coldata.SliceArgs{
 					ColType:   colType,
 					Src:       vec,

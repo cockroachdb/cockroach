@@ -54,10 +54,8 @@ func BenchmarkAddSSTable(b *testing.B) {
 			b.StopTimer()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sst, err := engine.MakeRocksDBSstFileWriter()
-				if err != nil {
-					b.Fatalf("%+v", err)
-				}
+				sstFile := &engine.MemFile{}
+				sst := engine.MakeSSTWriter(sstFile)
 
 				id++
 				backup.ResetKeyValueIteration()
@@ -70,11 +68,11 @@ func BenchmarkAddSSTable(b *testing.B) {
 						b.Fatalf("%+v", err)
 					}
 				}
-				data, err := sst.Finish()
-				if err != nil {
+				if err := sst.Finish(); err != nil {
 					b.Fatalf("%+v", err)
 				}
 				sst.Close()
+				data := sstFile.Data()
 				totalLen += int64(len(data))
 
 				b.StartTimer()

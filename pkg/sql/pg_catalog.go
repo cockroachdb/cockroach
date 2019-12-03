@@ -47,6 +47,17 @@ const (
 	defaultCollationTag    = "en-US"
 )
 
+// Bitmasks for pg_index.indoption. Each column in the index has a bitfield
+// indicating how the columns are indexed. The constants below are the same as
+// the ones in Postgres:
+// https://github.com/postgres/postgres/blob/b6423e92abfadaa1ed9642319872aa1654403cd6/src/include/catalog/pg_index.h#L70-L76
+const (
+	// indoptionDesc indicates that the values in the index are in reverse order.
+	indoptionDesc = 0x01
+	// indoptionNullsFirst indicates that NULLs appear first in the index.
+	indoptionNullsFirst = 0x02
+)
+
 var cockroachIndexEncodingOid *tree.DOid
 
 func init() {
@@ -1320,16 +1331,6 @@ func makeZeroedOidVector(size int) (tree.Datum, error) {
 	return tree.NewDOidVectorFromDArray(oidArray), nil
 }
 
-func makeZeroedIntVector(size int) (tree.Datum, error) {
-	intArray := tree.NewDArray(types.Int)
-	for i := 0; i < size; i++ {
-		if err := intArray.Append(zeroVal); err != nil {
-			return nil, err
-		}
-	}
-	return tree.NewDIntVectorFromDArray(intArray), nil
-}
-
 var pgCatalogIndexTable = virtualSchemaTable{
 	comment: `indexes (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
@@ -1370,8 +1371,11 @@ CREATE TABLE pg_catalog.pg_index (
 					}
 					// Get the collations for all of the columns. To do this we require
 					// the type of the column.
+					// Also fill in indoption for each column to indicate if the index
+					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
-					for _, columnID := range index.ColumnIDs {
+					indoption := tree.NewDArray(types.Int)
+					for i, columnID := range index.ColumnIDs {
 						col, err := table.FindColumnByID(columnID)
 						if err != nil {
 							return err
@@ -1379,15 +1383,23 @@ CREATE TABLE pg_catalog.pg_index (
 						if err := collationOids.Append(typColl(&col.Type, h)); err != nil {
 							return err
 						}
+						// Currently, nulls always appear first if the order is ascending,
+						// and always appear last if the order is descending.
+						var thisIndOption tree.DInt
+						if index.ColumnDirections[i] == sqlbase.IndexDescriptor_ASC {
+							thisIndOption = indoptionNullsFirst
+						} else {
+							thisIndOption = indoptionDesc
+						}
+						if err := indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
+							return err
+						}
 					}
 					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
+					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
 					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
-					if err != nil {
-						return err
-					}
-					indoption, err := makeZeroedIntVector(len(index.ColumnIDs))
 					if err != nil {
 						return err
 					}
@@ -1408,7 +1420,7 @@ CREATE TABLE pg_catalog.pg_index (
 						indkey,                                   // indkey
 						collationOidVector,                       // indcollation
 						indclass,                                 // indclass
-						indoption,                                // indoption
+						indoptionIntVector,                       // indoption
 						tree.DNull,                               // indexprs
 						tree.DNull,                               // indpred
 					)

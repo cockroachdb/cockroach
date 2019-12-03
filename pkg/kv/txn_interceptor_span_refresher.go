@@ -194,31 +194,10 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
 ) (_ *roachpb.BatchResponse, _ *roachpb.Error, largestRefreshTS hlc.Timestamp) {
 	br, pErr := sr.wrapped.SendLocked(ctx, ba)
-	if pErr != nil {
-		if unwrappedErr, ok := maybeUnwrapMixedSuccessErr(pErr); ok {
-			log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, unwrappedErr)
-			return nil, unwrappedErr, hlc.Timestamp{}
-		}
-		if maxRefreshAttempts > 0 {
-			br, pErr, largestRefreshTS = sr.maybeRetrySend(ctx, ba, br, pErr, maxRefreshAttempts)
-		}
+	if pErr != nil && maxRefreshAttempts > 0 {
+		br, pErr, largestRefreshTS = sr.maybeRetrySend(ctx, ba, br, pErr, maxRefreshAttempts)
 	}
 	return br, pErr, largestRefreshTS
-}
-
-// maybeUnwrapMixedSuccessErr attempts to unwrap a mixed success error, and
-// returns whether it was successful or not. With mixed success, we can't
-// attempt a retry without potentially succeeding at the same conditional put or
-// increment request twice; so we return the wrapped error instead. Because the
-// dist sender splits up batches to send to multiple ranges in parallel, and
-// then combines the results, partial success makes it very difficult to
-// determine what can be retried.
-func maybeUnwrapMixedSuccessErr(pErr *roachpb.Error) (*roachpb.Error, bool) {
-	if mse, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
-		pErr.SetDetail(mse.GetWrapped())
-		return pErr, true
-	}
-	return pErr, false
 }
 
 // maybeRetrySend attempts to catch serializable errors and avoid them by

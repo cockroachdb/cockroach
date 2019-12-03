@@ -194,7 +194,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, _, finish, err := getClientGRPCConn(baseCtx)
+	conn, _, finish, err := getClientGRPCConn(baseCtx, serverCfg)
 	if err != nil {
 		return err
 	}

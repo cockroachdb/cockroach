@@ -108,6 +108,10 @@ func initCLIDefaults() {
 	serverCfg.JoinList = nil
 	serverCfg.DefaultZoneConfig = config.DefaultZoneConfig()
 	serverCfg.DefaultSystemZoneConfig = config.DefaultSystemZoneConfig()
+	// Attempt to default serverCfg.SQLMemoryPoolSize to 25% if possible.
+	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
+		serverCfg.SQLMemoryPoolSize = bytes
+	}
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
@@ -117,6 +121,7 @@ func initCLIDefaults() {
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
+	startCtx.backtraceOutputDir = ""
 
 	quitCtx.serverDecommission = false
 
@@ -152,6 +157,7 @@ func initCLIDefaults() {
 	demoCtx.geoPartitionedReplicas = false
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
+	demoCtx.transientCluster = nil
 
 	initPreFlagsDefaults()
 
@@ -296,6 +302,9 @@ var startCtx struct {
 
 	// logging settings specific to file logging.
 	logDir log.DirName
+
+	// directory to use for logging backtrace outputs.
+	backtraceOutputDir string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
@@ -353,4 +362,5 @@ var demoCtx struct {
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
 	simulateLatency           bool
+	transientCluster          *transientCluster
 }

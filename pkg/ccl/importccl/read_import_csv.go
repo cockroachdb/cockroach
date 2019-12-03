@@ -76,10 +76,11 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 func (c *csvInputReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
 ) error {
-	return readInputFiles(ctx, dataFiles, format, c.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, makeExternalStorage)
 }
 
 func (c *csvInputReader) flushBatch(ctx context.Context, finished bool) error {
@@ -98,7 +99,12 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool) error {
 }
 
 func (c *csvInputReader) readFile(
-	ctx context.Context, input *fileReader, inputIdx int32, inputName string, rejected chan string,
+	ctx context.Context,
+	input *fileReader,
+	inputIdx int32,
+	inputName string,
+	resumePos int64,
+	rejected chan string,
 ) error {
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {

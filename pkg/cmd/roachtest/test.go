@@ -420,8 +420,14 @@ func teamCityNameEscape(name string) string {
 }
 
 // getAuthorEmail retrieves the author of a line of code. Returns the empty
-// string if the author cannot be determined.
-func getAuthorEmail(file string, line int) string {
+// string if the author cannot be determined. Some test tags override this
+// behavior and have a hardcoded author email.
+func getAuthorEmail(tags []string, file string, line int) string {
+	for _, tag := range tags {
+		if tag == `orm` || tag == `driver` {
+			return `rafi@cockroachlabs.com`
+		}
+	}
 	const repo = "github.com/cockroachdb/cockroach/"
 	i := strings.Index(file, repo)
 	if i == -1 {

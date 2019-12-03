@@ -200,9 +200,9 @@ var _ Operator = &singleTupleNoInputOperator{}
 // NewSingleTupleNoInputOp creates a new Operator which returns a batch of
 // length 1 with no actual columns on the first call to Next() and zero-length
 // batches on all consecutive calls.
-func NewSingleTupleNoInputOp() Operator {
+func NewSingleTupleNoInputOp(allocator *Allocator) Operator {
 	return &singleTupleNoInputOperator{
-		batch: coldata.NewMemBatchWithSize(nil, 1),
+		batch: allocator.NewMemBatchWithSize(nil /* types */, 1 /* size */),
 	}
 }
 

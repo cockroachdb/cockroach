@@ -62,7 +62,7 @@ func runImport(
 			inputs = make(map[int32]string)
 			for id, name := range spec.Uri {
 				// TODO(yevgeniy): Support offsets into the file, not just full file skipping.
-				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxUint64 {
+				if seek, ok := spec.ResumePos[id]; !ok || seek != math.MaxInt64 {
 					inputs[id] = name
 				}
 			}
@@ -70,7 +70,7 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.Format, flowCtx.Cfg.ExternalStorage)
+		return conv.readFiles(ctx, inputs, nil, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
 	// This group links together the producers (via producerGroup) and the KV ingester.
@@ -89,11 +89,11 @@ func runImport(
 			return err
 		}
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-		prog.ResumePos = make(map[int32]uint64)
+		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
 		for i := range spec.Uri {
 			prog.CompletedFraction[i] = 1.0
-			prog.ResumePos[i] = math.MaxUint64
+			prog.ResumePos[i] = math.MaxInt64
 		}
 		progCh <- prog
 		return nil
@@ -105,7 +105,7 @@ func runImport(
 	return summary, nil
 }
 
-type readFileFunc func(context.Context, *fileReader, int32, string, chan string) error
+type readFileFunc func(context.Context, *fileReader, int32, string, int64, chan string) error
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -118,6 +118,7 @@ type readFileFunc func(context.Context, *fileReader, int32, string, chan string)
 func readInputFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
@@ -125,6 +126,7 @@ func readInputFiles(
 	done := ctx.Done()
 
 	fileSizes := make(map[int32]int64, len(dataFiles))
+
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
 		conf, err := cloud.ExternalStorageConfFromURI(dataFile)
@@ -205,13 +207,11 @@ func readInputFiles(
 						// no rejected rows
 						return nil
 					}
-					rejectedFile := dataFile
-					parsedURI, err := url.Parse(rejectedFile)
+					rejFn, err := rejectedFilename(dataFile)
 					if err != nil {
 						return err
 					}
-					parsedURI.Path = parsedURI.Path + ".rejected"
-					conf, err := cloud.ExternalStorageConfFromURI(rejectedFile)
+					conf, err := cloud.ExternalStorageConfFromURI(rejFn)
 					if err != nil {
 						return err
 					}
@@ -228,7 +228,7 @@ func readInputFiles(
 
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
-					if err := fileFunc(ctx, src, dataFileIndex, dataFile, rejected); err != nil {
+					if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], rejected); err != nil {
 						return errors.Wrap(err, dataFile)
 					}
 					return nil
@@ -238,7 +238,7 @@ func readInputFiles(
 					return errors.Wrap(err, dataFile)
 				}
 			} else {
-				if err := fileFunc(ctx, src, dataFileIndex, dataFile, nil /* rejected */); err != nil {
+				if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], nil /* rejected */); err != nil {
 					return errors.Wrap(err, dataFile)
 				}
 			}
@@ -248,6 +248,15 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func rejectedFilename(datafile string) (string, error) {
+	parsedURI, err := url.Parse(datafile)
+	if err != nil {
+		return "", err
+	}
+	parsedURI.Path = parsedURI.Path + ".rejected"
+	return parsedURI.String(), nil
 }
 
 func decompressingReader(
@@ -311,6 +320,7 @@ type inputConverter interface {
 	readFiles(
 		ctx context.Context,
 		dataFiles map[int32]string,
+		resumePos map[int32]int64,
 		format roachpb.IOFileFormat,
 		makeExternalStorage cloud.ExternalStorageFactory,
 	) error

@@ -227,7 +227,7 @@ project
 # SimplifyRange
 # --------------------------------------------------
 
-opt expect=SimplifyRange
+opt expect=SimplifyRange disable=InlineConstVar
 SELECT * FROM a WHERE k = 1 AND k = 2-1
 ----
 scan a

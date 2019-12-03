@@ -15,6 +15,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -1135,7 +1137,7 @@ func IterateIDPrefixKeys(
 	for {
 		bumped := false
 		mvccKey := engine.MakeMVCCMetadataKey(keyFn(rangeID))
-		iter.Seek(mvccKey)
+		iter.SeekGE(mvccKey)
 
 		if ok, err := iter.Valid(); !ok {
 			return err
@@ -2299,6 +2301,21 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
+// provided tag used in the filepath. The filepath for the checkpoint directory
+// is returned.
+func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
+	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
+	_ = os.MkdirAll(checkpointBase, 0700)
+
+	checkpointDir := filepath.Join(checkpointBase, tag)
+	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
+		return "", err
+	}
+
+	return checkpointDir, nil
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which

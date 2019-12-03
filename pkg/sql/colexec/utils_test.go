@@ -469,7 +469,7 @@ func (s *opTestInput) Init() {
 			}
 		}
 	}
-	s.batch = coldata.NewMemBatch(s.typs)
+	s.batch = testAllocator.NewMemBatch(s.typs)
 
 	s.selection = make([]uint16, coldata.BatchSize())
 	for i := range s.selection {
@@ -633,7 +633,7 @@ func (s *opFixedSelTestInput) Init() {
 	}
 
 	s.typs = typs
-	s.batch = coldata.NewMemBatch(typs)
+	s.batch = testAllocator.NewMemBatch(s.typs)
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
@@ -908,19 +908,19 @@ type finiteBatchSource struct {
 	ZeroInputNode
 
 	repeatableBatch *RepeatableBatchSource
+	zeroBatch       coldata.Batch
 
 	usableCount int
 }
 
 var _ Operator = &finiteBatchSource{}
 
-var emptyBatch = coldata.NewMemBatchWithSize([]coltypes.T{}, 0)
-
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
+		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 	}
 }
@@ -934,34 +934,8 @@ func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next(ctx)
 	}
-	return emptyBatch
-}
-
-// randomLengthBatchSource is an Operator that forever returns the same batch at
-// a different length each time.
-type randomLengthBatchSource struct {
-	ZeroInputNode
-	internalBatch coldata.Batch
-	rng           *rand.Rand
-}
-
-var _ Operator = &randomLengthBatchSource{}
-
-// newRandomLengthBatchSource returns a new Operator initialized to return a
-// batch of random length between [1, col.BatchSize()) forever.
-func newRandomLengthBatchSource(batch coldata.Batch) *randomLengthBatchSource {
-	return &randomLengthBatchSource{
-		internalBatch: batch,
-	}
-}
-
-func (r *randomLengthBatchSource) Init() {
-	r.rng, _ = randutil.NewPseudoRand()
-}
-
-func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
-	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(coldata.BatchSize()))))
-	return r.internalBatch
+	f.zeroBatch.SetLength(0)
+	return f.zeroBatch
 }
 
 // finiteChunksSource is an Operator that returns a batch specified number of
@@ -971,6 +945,7 @@ func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 type finiteChunksSource struct {
 	ZeroInputNode
 	repeatableBatch *RepeatableBatchSource
+	zeroBatch       coldata.Batch
 
 	usableCount int
 	matchLen    int
@@ -982,6 +957,7 @@ var _ Operator = &finiteChunksSource{}
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
 		repeatableBatch: NewRepeatableBatchSource(batch),
+		zeroBatch:       testAllocator.NewMemBatchWithSize(nil /* types */, 0 /* size */),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -1016,7 +992,8 @@ func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 		}
 		return batch
 	}
-	return coldata.NewMemBatch([]coltypes.T{})
+	f.zeroBatch.SetLength(0)
+	return f.zeroBatch
 }
 
 func TestOpTestInputOutput(t *testing.T) {
@@ -1040,7 +1017,7 @@ func TestOpTestInputOutput(t *testing.T) {
 
 func TestRepeatableBatchSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
 	input := NewRepeatableBatchSource(batch)
@@ -1060,7 +1037,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	batch := coldata.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	rng, _ := randutil.NewPseudoRand()
 	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)
 	batchLen := uint16(len(sel))
@@ -1133,7 +1110,7 @@ func newChunkingBatchSource(
 }
 
 func (c *chunkingBatchSource) Init() {
-	c.batch = coldata.NewMemBatch(c.typs)
+	c.batch = testAllocator.NewMemBatch(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
 		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())

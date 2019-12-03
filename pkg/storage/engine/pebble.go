@@ -64,16 +64,18 @@ var MVCCComparer = &pebble.Comparer{
 	},
 
 	Split: func(k []byte) int {
-		if len(k) == 0 {
+		key, _, ok := enginepb.SplitMVCCKey(k)
+		if !ok {
 			return len(k)
 		}
-		// This is similar to what enginepb.SplitMVCCKey does.
-		tsLen := int(k[len(k)-1])
-		keyPartEnd := len(k) - 1 - tsLen
-		if keyPartEnd < 0 {
-			return len(k)
-		}
-		return keyPartEnd
+		// This matches the behavior of libroach/KeyPrefix. RocksDB requires that
+		// keys generated via a SliceTransform be comparable with normal encoded
+		// MVCC keys. Encoded MVCC keys have a suffix indicating the number of
+		// bytes of timestamp data. MVCC keys without a timestamp have a suffix of
+		// 0. We're careful in EncodeKey to make sure that the user-key always has
+		// a trailing 0. If there is no timestamp this falls out naturally. If
+		// there is a timestamp we prepend a 0 to the encoded timestamp data.
+		return len(key) + 1
 	},
 
 	Name: "cockroach_comparator",
@@ -194,7 +196,6 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	return &pebble.Options{
-		Cleaner:               pebble.ArchiveCleaner{},
 		Comparer:              MVCCComparer,
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
@@ -278,7 +279,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 			return nil, err
 		}
 	} else {
-		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, "auxiliary")
+		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
 		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
 			return nil, err
 		}
@@ -397,9 +398,12 @@ func (p *Pebble) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *Pebble) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 // Get implements the Engine interface.
@@ -642,8 +646,7 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
-	// TODO(hueypark): Implement this.
-	return nil
+	return p.db.Compact(nil, EncodeKey(MVCCKeyMax))
 }
 
 // CompactRange implements the Engine interface.
@@ -781,9 +784,12 @@ func (p *pebbleReadOnly) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleReadOnly) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -899,9 +905,12 @@ func (p *pebbleSnapshot) Closed() bool {
 
 // ExportToSst is part of the engine.Reader interface.
 func (p *pebbleSnapshot) ExportToSst(
-	start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, start, end, exportAllRevisions, io)
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
 }
 
 // Get implements the Reader interface.
@@ -949,9 +958,14 @@ func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
 }
 
 func pebbleExportToSst(
-	e Reader, start, end MVCCKey, exportAllRevisions bool, io IterOptions,
+	e Reader,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, error) {
-	sstWriter := MakeSSTWriter()
+	sstFile := &MemFile{}
+	sstWriter := MakeSSTWriter(sstFile)
 	defer sstWriter.Close()
 
 	var rows RowCounter
@@ -959,11 +973,11 @@ func pebbleExportToSst(
 		e,
 		MVCCIncrementalIterOptions{
 			IterOptions: io,
-			StartTime:   start.Timestamp,
-			EndTime:     end.Timestamp,
+			StartTime:   startTS,
+			EndTime:     endTS,
 		})
 	defer iter.Close()
-	for iter.Seek(MakeMVCCMetadataKey(start.Key)); ; {
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
@@ -974,20 +988,20 @@ func pebbleExportToSst(
 			break
 		}
 		unsafeKey := iter.UnsafeKey()
-		if unsafeKey.Key.Compare(end.Key) >= 0 {
+		if unsafeKey.Key.Compare(endKey) >= 0 {
 			break
 		}
 		unsafeValue := iter.UnsafeValue()
 
 		// Skip tombstone (len=0) records when start time is zero (non-incremental)
 		// and we are not exporting all versions.
-		skipTombstones := !exportAllRevisions && start.Timestamp.IsEmpty()
+		skipTombstones := !exportAllRevisions && startTS.IsEmpty()
 		if len(unsafeValue) > 0 || !skipTombstones {
 			if err := rows.Count(unsafeKey.Key); err != nil {
 				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			rows.BulkOpSummary.DataSize += int64(len(unsafeKey.Key) + len(unsafeValue))
-			if err := sstWriter.Add(MVCCKeyValue{Key: unsafeKey, Value: unsafeValue}); err != nil {
+			if err := sstWriter.Put(unsafeKey, unsafeValue); err != nil {
 				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 			}
 		}
@@ -999,10 +1013,9 @@ func pebbleExportToSst(
 		}
 	}
 
-	data, err := sstWriter.Finish()
-	if err != nil {
+	if err := sstWriter.Finish(); err != nil {
 		return nil, roachpb.BulkOpSummary{}, err
 	}
 
-	return data, rows.BulkOpSummary, nil
+	return sstFile.Data(), rows.BulkOpSummary, nil
 }

@@ -190,6 +190,7 @@ func registerDjango(r *testRegistry) {
 		MinVersion: "v19.2.0",
 		Name:       "django",
 		Cluster:    makeClusterSpec(1),
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runDjango(ctx, t, c)
 		},

@@ -606,8 +606,8 @@ FROM pg_catalog.pg_index
 WHERE indnatts = 2
 ----
 indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
-450499961   55        true       false           3 4     0 0           0 0       0 0        NULL      NULL
-969972502   57        true       false           1 2     0 0           0 0       0 0        NULL      NULL
+450499961   55        true       false           3 4     0 0           0 0       2 2        NULL      NULL
+969972502   57        true       false           1 2     0 0           0 0       2 1        NULL      NULL
 
 statement ok
 SET DATABASE = system
@@ -618,6 +618,7 @@ FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred
+<<<<<<< HEAD
 543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
 543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         0          NULL      NULL
 543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       0 0        NULL      NULL
@@ -643,6 +644,34 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         0          NULL      NULL
 4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     0 0 0      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       0 0        NULL      NULL
+=======
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         2          NULL      NULL
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
+1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3903121477 3903121477  0 0 0 0   2 2 2 2    NULL      NULL
+1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       2 2        NULL      NULL
+1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
+1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL
+1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
+2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3903121477 0               0 0       2 2        NULL      NULL
+2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3903121477               0 0       2 2        NULL      NULL
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
+3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL
+3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
+4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
+
+>>>>>>> temp-tables-session-deletion
 
 # From #26504
 query OOI colnames
@@ -1527,14 +1556,14 @@ statement ok
 SET DATABASE = test
 
 # We filter here because 'optimizer' will be different depending on which
-# configuration this logic test is running in.
+# configuration this logic test is running in, and session ID will vary.
 query TTTTTT colnames
 SELECT
   name, setting, category, short_desc, extra_desc, vartype
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
 ----
 name                                 setting             category  short_desc  extra_desc  vartype
 application_name                     ·                   NULL      NULL        NULL        string
@@ -1590,7 +1619,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version'
+  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
 ----
 name                                 setting             unit  context  enumvals  boot_val            reset_val
 application_name                     ·                   NULL  user     NULL      ·                   ·
@@ -1679,6 +1708,7 @@ search_path                          NULL    NULL     NULL     NULL        NULL
 server_encoding                      NULL    NULL     NULL     NULL        NULL
 server_version                       NULL    NULL     NULL     NULL        NULL
 server_version_num                   NULL    NULL     NULL     NULL        NULL
+session_id                           NULL    NULL     NULL     NULL        NULL
 session_user                         NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                     NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings          NULL    NULL     NULL     NULL        NULL

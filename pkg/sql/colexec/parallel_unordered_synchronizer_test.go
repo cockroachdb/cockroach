@@ -49,7 +49,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, typs, &wg)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	var cancel bool
@@ -117,7 +117,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, []coltypes.T{coltypes.Int64}, &wg)
 	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
@@ -130,13 +130,13 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	typs := []coltypes.T{coltypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
-		batch := coldata.NewMemBatchWithSize(typs, int(coldata.BatchSize()))
+		batch := testAllocator.NewMemBatchWithSize(typs, int(coldata.BatchSize()))
 		batch.SetLength(coldata.BatchSize())
 		inputs[i] = NewRepeatableBatchSource(batch)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(inputs, typs, &wg)
+	s := NewParallelUnorderedSynchronizer(testAllocator, inputs, typs, &wg)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
