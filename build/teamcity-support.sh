@@ -87,6 +87,8 @@ function maybe_stress() {
   if tc_release_branch; then
     return 0
   fi
+  # FIXME(tbg): remove this before merging
+  return 0
 
   typ=$1
   shift
