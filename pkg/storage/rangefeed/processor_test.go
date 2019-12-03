@@ -188,7 +188,7 @@ func TestProcessorBasic(t *testing.T) {
 	// Add a registration.
 	r1Stream := newTestStream()
 	r1ErrC := make(chan *roachpb.Error, 1)
-	r1OK := p.Register(
+	r1OK, r1Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
@@ -206,6 +206,14 @@ func TestProcessorBasic(t *testing.T) {
 		)},
 		r1Stream.Events(),
 	)
+
+	// Test the processor's operation filter.
+	require.True(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("a")}))
+	require.True(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("r")}))
+	require.False(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("z")}))
+	require.False(t, r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("a")}))
+	require.False(t, r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("r")}))
+	require.False(t, r1Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("z")}))
 
 	// Test checkpoint with one registration.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
@@ -301,14 +309,14 @@ func TestProcessorBasic(t *testing.T) {
 		r1Stream.Events(),
 	)
 
-	// Add another registration.
+	// Add another registration with withDiff = true.
 	r2Stream := newTestStream()
 	r2ErrC := make(chan *roachpb.Error, 1)
-	r2OK := p.Register(
+	r2OK, r1And2Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		nil,  /* catchUpIter */
+		true, /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -322,6 +330,16 @@ func TestProcessorBasic(t *testing.T) {
 		)},
 		r2Stream.Events(),
 	)
+
+	// Test the processor's new operation filter.
+	require.True(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("a")}))
+	require.True(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("y")}))
+	require.True(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("zzz")}))
+	require.False(t, r1And2Filter.NeedVal(roachpb.Span{Key: roachpb.Key("zzz")}))
+	require.False(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("a")}))
+	require.True(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("y")}))
+	require.True(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("zzz")}))
+	require.False(t, r1And2Filter.NeedPrevVal(roachpb.Span{Key: roachpb.Key("zzz")}))
 
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
@@ -375,7 +393,7 @@ func TestProcessorBasic(t *testing.T) {
 	// Adding another registration should fail.
 	r3Stream := newTestStream()
 	r3ErrC := make(chan *roachpb.Error, 1)
-	r3OK := p.Register(
+	r3OK, _ := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */

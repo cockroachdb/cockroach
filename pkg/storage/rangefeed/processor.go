@@ -210,6 +210,9 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIter engine.SimpleIterator) 
 				// Add the new registration to the registry.
 				p.reg.Register(&r)
 
+				// Publish an updated filter that includes the new registration.
+				p.filterResC <- p.reg.NewFilter()
+
 				// Immediately publish a checkpoint event to the registry. This will be
 				// the first event published to this registration after its initial
 				// catch-up scan completes.
@@ -346,7 +349,9 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // engine which occurred after the provided start timestamp.
 //
 // If the method returns false, the processor will have been stopped, so calling
-// Stop is not necessary.
+// Stop is not necessary. If the method returns true, it will also return an
+// updated operation filter that includes the operations required by the new
+// registration.
 //
 // NOT safe to call on nil Processor.
 func (p *Processor) Register(
@@ -356,7 +361,7 @@ func (p *Processor) Register(
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
-) bool {
+) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -368,9 +373,10 @@ func (p *Processor) Register(
 	)
 	select {
 	case p.regC <- r:
-		return true
+		// Wait for response.
+		return true, <-p.filterResC
 	case <-p.stoppedC:
-		return false
+		return false, nil
 	}
 }
 

@@ -254,11 +254,6 @@ func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
-	if !r.updateRangefeedFilterLocked() {
-		// This can't happen. We just set the processor and haven't released the
-		// exclusive lock, so no other goroutine could have stopped it.
-		panic("rangefeed processor unexpectedly stopped")
-	}
 	r.store.addReplicaWithRangefeed(r.RangeID)
 }
 
@@ -278,12 +273,22 @@ func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
 	r.unsetRangefeedProcessorLocked(p)
 }
 
+func (r *Replica) setRangefeedFilterLocked(f *rangefeed.Filter) {
+	if f == nil {
+		panic("filter nil")
+	}
+	r.rangefeedMu.opFilter = f
+}
+
 func (r *Replica) updateRangefeedFilterLocked() bool {
-	r.rangefeedMu.opFilter = r.rangefeedMu.proc.Filter()
+	f := r.rangefeedMu.proc.Filter()
 	// Return whether the update to the filter was successful or not. If
 	// the processor was already stopped then we can't update the filter.
-	stopped := r.rangefeedMu.opFilter == nil
-	return !stopped
+	if f != nil {
+		r.setRangefeedFilterLocked(f)
+		return true
+	}
+	return false
 }
 
 // The size of an event is 112 bytes, so this will result in an allocation on
@@ -314,11 +319,12 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
-		if reg && r.updateRangefeedFilterLocked() {
+		reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
 			// that this new registration might be interested in.
+			r.setRangefeedFilterLocked(filter)
 			r.rangefeedMu.Unlock()
 			return p
 		}
@@ -362,7 +368,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
 	if !reg {
 		catchupIter.Close() // clean up
 		select {
@@ -374,10 +380,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		}
 	}
 
-	// Set the rangefeed reference. We know that no other registration
-	// process could have raced with ours because calling this method
-	// requires raftMu to be exclusively locked.
+	// Set the rangefeed processor and filter reference. We know that no other
+	// registration process could have raced with ours because calling this
+	// method requires raftMu to be exclusively locked.
 	r.setRangefeedProcessor(p)
+	r.setRangefeedFilterLocked(filter)
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
