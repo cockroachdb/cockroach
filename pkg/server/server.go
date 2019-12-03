@@ -1601,6 +1601,9 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
+	if err := sql.SetupBackgroundDeletionJob(s.stopper, s.execCfg); err != nil {
+		log.Errorf(ctx, "Error while setting up the temp tables deletion job: %v", err)
+	}
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.

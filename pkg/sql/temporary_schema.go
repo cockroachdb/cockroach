@@ -13,11 +13,14 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 func createTempSchema(params runParams, sKey sqlbase.DescriptorKey) (sqlbase.ID, error) {
@@ -47,8 +50,25 @@ func (p *planner) createSchemaWithID(
 	return p.txn.Run(ctx, b)
 }
 
+func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
+	if !strings.HasPrefix(scName, "pg_temp_") {
+		return false, ClusterWideID{}, nil
+	}
+	loIdx := strings.LastIndex(scName, "_")
+	lo, err := strconv.ParseUint(scName[loIdx:], 10, 64)
+	if err != nil {
+		return false, ClusterWideID{}, err
+	}
+	hiIdx := strings.LastIndex(scName[:loIdx], "_")
+	hi, err := strconv.ParseUint(scName[hiIdx:loIdx], 10, 64)
+	if err != nil {
+		return false, ClusterWideID{}, err
+	}
+	return true, ClusterWideID{uint128.Uint128{Hi: hi, Lo: lo}}, nil
+}
+
 func TemporarySchemaName(sessionID ClusterWideID) string {
-	return fmt.Sprintf("pg_temp_%v%v", sessionID.Hi, sessionID.Lo)
+	return fmt.Sprintf("pg_temp_%v_%v", sessionID.Hi, sessionID.Lo)
 }
 
 func cleanupSessionTempObjects(ctx context.Context, p *planner, sessionID ClusterWideID) error {

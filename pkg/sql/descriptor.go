@@ -19,7 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -283,6 +286,70 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 		descIDs = append(descIDs, ID)
 	}
 	return descIDs, nil
+}
+
+// GetAllSchemaNames returns all the schemas that have been created under a
+// specific database.
+func (p *planner) GetAllSchemaNames(
+	ctx context.Context, dbID sqlbase.ID, txn *client.Txn,
+) ([]string, error) {
+	log.Eventf(ctx, "Fetching all schema names for %v dbID", dbID)
+	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key()
+	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	namespaceTableName := tree.MakeTableName(tree.Name(sqlbase.SystemDB.Name), tree.Name(sqlbase.NamespaceTable.Name))
+	namespaceTableDesc, err := p.Tables().getTableVersion(ctx, txn, &namespaceTableName, tree.ObjectLookupFlags{})
+	if err != nil {
+		return nil, err
+	}
+	spanKvs := make([]roachpb.KeyValue, 0, len(kvs))
+	for _, kv := range kvs {
+		if !kv.Exists() {
+			continue
+		}
+		spanKvs = append(spanKvs, roachpb.KeyValue{
+			Key:   kv.Key,
+			Value: *kv.Value,
+		})
+	}
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(namespaceTableDesc.Columns)-1)
+	kvFetcher := row.SpanKVFetcher{KVs: spanKvs}
+	var rowFetcher row.Fetcher
+	if err := rowFetcher.Init(
+		false, /* reverse */
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		&p.alloc,
+		row.FetcherTableArgs{
+			Desc:             namespaceTableDesc,
+			Index:            &sqlbase.NamespaceTable.PrimaryIndex,
+			ColIdxMap:        namespaceTableDesc.ColumnIdxMap(),
+			IsSecondaryIndex: false,
+			Cols:             namespaceTableDesc.Columns,
+			ValNeededForCol:  valNeededForCol,
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	if err := rowFetcher.StartScanFrom(ctx, &kvFetcher); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0)
+	for {
+		primaryKey, _, _, err := rowFetcher.NextRowDecoded(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if primaryKey == nil {
+			break
+		}
+		names = append(names, primaryKey[2].String())
+	}
+	return names, nil
 }
 
 // writeDescToBatch adds a Put command writing a descriptor proto to the

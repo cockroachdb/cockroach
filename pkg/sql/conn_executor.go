@@ -1199,9 +1199,7 @@ func (ex *connExecutor) run(
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
-	sessionID := ex.sessionID
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
-	log.Infof(ctx, "Registered %v session\n", sessionID)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
