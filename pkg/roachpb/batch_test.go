@@ -22,7 +22,6 @@ import (
 func TestBatchIsCompleteTransaction(t *testing.T) {
 	get := &GetRequest{}
 	put := &PutRequest{}
-	bt := &BeginTransactionRequest{}
 	etA := &EndTransactionRequest{Commit: false}
 	etC := &EndTransactionRequest{Commit: true}
 	withSeq := func(r Request, s enginepb.TxnSeq) Request {
@@ -37,16 +36,13 @@ func TestBatchIsCompleteTransaction(t *testing.T) {
 		isComplete bool
 	}{
 		{[]Request{get, put}, false},
-		{[]Request{bt}, false},
+		{[]Request{put, get}, false},
 		{[]Request{etA}, false},
 		{[]Request{etC}, false},
-		{[]Request{bt, put, get}, false},
+		{[]Request{get, etA}, false},
+		{[]Request{get, etC}, false},
 		{[]Request{put, get, etA}, false},
 		{[]Request{put, get, etC}, false},
-		{[]Request{bt, put, get, etA}, false},
-		{[]Request{bt, put, get, etC}, true},
-		{[]Request{bt, get, etA}, false},
-		{[]Request{bt, get, etC}, true},
 		{[]Request{withSeq(etA, 1)}, false},
 		{[]Request{withSeq(etC, 1)}, true},
 		{[]Request{put, withSeq(etC, 3)}, false},
@@ -62,13 +58,6 @@ func TestBatchIsCompleteTransaction(t *testing.T) {
 		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(get, 2), withSeq(etC, 3)}, true},
 		{[]Request{withSeq(put, 1), withSeq(get, 1), withSeq(put, 2), withSeq(etC, 4)}, false},
 		{[]Request{withSeq(get, 0), withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(get, 3), withSeq(etC, 4)}, true},
-		// These cases will be removed in 2.3 once we're sure that all nodes
-		// will properly set sequence numbers (i.e. on writes only).
-		{[]Request{bt, withSeq(put, 1), withSeq(etC, 3)}, true},
-		{[]Request{bt, withSeq(put, 2), withSeq(etC, 3)}, true},
-		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(etC, 3)}, true},
-		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(etC, 4)}, true},
-		{[]Request{bt, withSeq(put, 1), withSeq(put, 2), withSeq(put, 3), withSeq(etC, 4)}, true},
 	}
 	for i, test := range testCases {
 		ba := BatchRequest{}
@@ -88,7 +77,6 @@ func TestBatchSplit(t *testing.T) {
 	put := &PutRequest{}
 	spl := &AdminSplitRequest{}
 	dr := &DeleteRangeRequest{}
-	bt := &BeginTransactionRequest{}
 	et := &EndTransactionRequest{}
 	qi := &QueryIntentRequest{}
 	rv := &ReverseScanRequest{}
@@ -98,10 +86,10 @@ func TestBatchSplit(t *testing.T) {
 		canSplitET bool
 	}{
 		{[]Request{get, put}, []int{1, 1}, true},
+		{[]Request{put, et}, []int{1, 1}, true},
 		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}, true},
 		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}, true},
 		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}, true},
-		{[]Request{bt, put, et}, []int{2, 1}, true},
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}, true},
 		// Same one again, but this time don't allow EndTransaction to be split.
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 2}, false},

@@ -88,7 +88,7 @@ const (
 // Since it is stateful, the TxnCoordSender needs to understand when a
 // transaction is "finished" and the state can be destroyed. As such there's a
 // contract that the client.Txn needs obey. Read-only transactions don't matter
-// - they're stateless. For the others, once a BeginTransaction is sent by the
+// - they're stateless. For the others, once an intent write is sent by the
 // client, the TxnCoordSender considers the transactions completed in the
 // following situations:
 // - A batch containing an EndTransactions (commit or rollback) succeeds.
@@ -782,10 +782,6 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	startNs := tc.clock.PhysicalNow()
-
-	if _, ok := ba.GetArg(roachpb.BeginTransaction); ok {
-		return nil, roachpb.NewErrorf("BeginTransaction added before the TxnCoordSender")
-	}
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
 	defer sp.Finish()

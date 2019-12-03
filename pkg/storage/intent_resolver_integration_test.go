@@ -27,24 +27,20 @@ func beginTransaction(
 	t *testing.T, store *Store, pri roachpb.UserPriority, key roachpb.Key, putKey bool,
 ) *roachpb.Transaction {
 	txn := newTransaction("test", key, pri, store.Clock())
+	if !putKey {
+		return txn
+	}
 
 	var ba roachpb.BatchRequest
-	bt, header := beginTxnArgs(key, txn)
-	ba.Header = header
-	ba.Add(&bt)
-	assignSeqNumsForReqs(txn, &bt)
-	if putKey {
-		put := putArgs(key, []byte("value"))
-		ba.Add(&put)
-		assignSeqNumsForReqs(txn, &put)
-	}
+	ba.Header = roachpb.Header{Txn: txn}
+	put := putArgs(key, []byte("value"))
+	ba.Add(&put)
+	assignSeqNumsForReqs(txn, &put)
 	br, pErr := store.TestSender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	txn = br.Txn
-
-	return txn
+	return br.Txn
 }
 
 // TestContendedIntentWithDependencyCycle verifies that a queue of

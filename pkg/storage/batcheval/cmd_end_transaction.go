@@ -46,6 +46,19 @@ func init() {
 	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, EndTransaction)
 }
 
+// declareKeysWriteTransaction is the shared portion of
+// declareKeys{End,Heartbeat}Transaction.
+func declareKeysWriteTransaction(
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
+		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
+		})
+	}
+}
+
 func declareKeysEndTransaction(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
@@ -340,8 +353,8 @@ func EndTransaction(
 	// WriteTooOldError). However, the replayed intent cannot be resolved by a
 	// subsequent replay of this EndTransaction call because the txn timestamp
 	// will be too old. Replays of requests which attempt to create a new txn
-	// record (BeginTransaction, HeartbeatTxn, or EndTransaction) never succeed
-	// because EndTransaction inserts in the write timestamp cache in Replica's
+	// record (HeartbeatTxn or EndTransaction) never succeed because
+	// EndTransaction inserts in the write timestamp cache in Replica's
 	// updateTimestampCache method, forcing the call to CanCreateTxnRecord to
 	// return false, resulting in a transaction retry error. If the replay
 	// didn't attempt to create a txn record, any push will immediately succeed

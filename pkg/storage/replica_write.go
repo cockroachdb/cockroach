@@ -246,7 +246,7 @@ and the following Raft status: %+v`,
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC
-// commit (i.e. includes BeginTransaction & EndTransaction, and
+// commit (i.e. includes all intent writes & EndTransaction, and
 // there's nothing to suggest that the transaction will require retry
 // or restart), the batch's txn is stripped and it's executed as an
 // atomic batch write. If the writes cannot all be completed at the
@@ -260,7 +260,6 @@ func (r *Replica) evaluateWriteBatch(
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if isOnePhaseCommit(ba) {
-		_, hasBegin := ba.GetArg(roachpb.BeginTransaction)
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
 
@@ -269,11 +268,7 @@ func (r *Replica) evaluateWriteBatch(
 		strippedBa := *ba
 		strippedBa.Timestamp = strippedBa.Txn.WriteTimestamp
 		strippedBa.Txn = nil
-		if hasBegin {
-			strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
-		} else {
-			strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
-		}
+		strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
 		// Is the transaction allowed to retry locally in the event of
 		// write too old errors? This is only allowed if it is able to
@@ -311,18 +306,9 @@ func (r *Replica) evaluateWriteBatch(
 				}
 			}
 
+			// Add placeholder responses for end transaction requests.
+			br.Add(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
 			br.Txn = clonedTxn
-			// Add placeholder responses for begin & end transaction requests.
-			var resps []roachpb.ResponseUnion
-			if hasBegin {
-				resps = make([]roachpb.ResponseUnion, len(br.Responses)+2)
-				resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
-				copy(resps[1:], br.Responses)
-			} else {
-				resps = append(br.Responses, roachpb.ResponseUnion{})
-			}
-			resps[len(resps)-1].MustSetInner(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
-			br.Responses = resps
 			return batch, ms, br, res, nil
 		}
 
