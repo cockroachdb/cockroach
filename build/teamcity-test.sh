@@ -15,10 +15,7 @@ run build/builder.sh make -Otarget c-deps &> artifacts/c-build.log || (cat artif
 rm artifacts/c-build.log
 tc_end_block "Compile C dependencies"
 
-tc_start_block "Maybe stress pull request"
-run build/builder.sh go install ./pkg/cmd/github-pull-request-make
-run build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stress github-pull-request-make
-tc_end_block "Maybe stress pull request"
+maybe_stress stress
 
 tc_start_block "Run Go tests"
 run build/builder.sh \
