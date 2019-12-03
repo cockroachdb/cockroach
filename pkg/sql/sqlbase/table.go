@@ -13,6 +13,8 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -149,7 +151,7 @@ func MakeColumnDefDescs(
 
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey.IsPrimaryKey,
 	}
 
 	// Validate and assign column type.
@@ -186,11 +188,33 @@ func MakeColumnDefDescs(
 	}
 
 	var idx *IndexDescriptor
-	if d.PrimaryKey || d.Unique {
+	if d.PrimaryKey.IsPrimaryKey || d.Unique {
+		colNames := []string{string(d.Name)}
+		var shardColName string
+		var buckets int32
+		if d.PrimaryKey.Sharded {
+			buckets, err = tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			shardColName = GetShardColumnName(colNames, buckets)
+			colNames = append([]string{shardColName}, colNames...)
+		}
+		var colDirections []IndexDescriptor_Direction
+		for range colNames {
+			colDirections = append(colDirections, IndexDescriptor_ASC)
+		}
 		idx = &IndexDescriptor{
 			Unique:           true,
-			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnNames:      colNames,
+			ColumnDirections: colDirections,
+		}
+		if d.PrimaryKey.Sharded {
+			idx.Sharded = &ShardedDescriptor{
+				Name:         shardColName,
+				ShardBuckets: buckets,
+				ColumnNames:  colNames[1:],
+			}
 		}
 		if d.UniqueConstraintName != "" {
 			idx.Name = string(d.UniqueConstraintName)
@@ -198,6 +222,15 @@ func MakeColumnDefDescs(
 	}
 
 	return col, idx, typedExpr, nil
+}
+
+// GetShardColumnName generates a name for the hidden shard column to be used to create a
+// hash sharded index.
+func GetShardColumnName(colNames []string, buckets int32) string {
+	// We sort the `colNames` here because we want to avoid creating a dupicate shard
+	// column if one already exists for the set of columns in `colNames`.
+	sort.Strings(colNames)
+	return strings.Join(append(colNames, fmt.Sprintf(`shard_%v_internal`, buckets)), `_`)
 }
 
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and

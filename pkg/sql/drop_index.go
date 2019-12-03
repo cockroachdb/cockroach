@@ -76,10 +76,111 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				tree.ErrString(index.tn))
 		}
 
+		tmpDesc, _, err := tableDesc.FindIndexByName(string(index.idxName))
+		var idxDesc sqlbase.IndexDescriptor
+		if err == nil {
+			idxDesc = *tmpDesc
+		}
 		if err := params.p.dropIndexByName(
 			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
+			return err
+		}
+
+		// Drop the shard column if no other sharded index refers to it.
+		if idxDesc.IsSharded() {
+			if err := n.maybeDropShardColumn(params, tableDesc, &idxDesc); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// dropShardColumnAndConstraint drops the given shard column and its associated check
+// constraint.
+func (n *dropIndexNode) dropShardColumnAndConstraint(
+	params runParams,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	shardColDesc *sqlbase.ColumnDescriptor,
+) error {
+	validChecks := tableDesc.Checks[:0]
+	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
+		if used, err := check.UsesColumn(tableDesc.TableDesc(), shardColDesc.ID); err != nil {
+			return err
+		} else if used {
+			if check.Validity == sqlbase.ConstraintValidity_Validating {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"referencing constraint %q in the middle of being added, try again later", check.Name)
+			}
+		} else {
+			validChecks = append(validChecks, check)
+		}
+	}
+
+	if len(validChecks) != len(tableDesc.Checks) {
+		tableDesc.Checks = validChecks
+	}
+
+	tableDesc.AddColumnMutation(shardColDesc, sqlbase.DescriptorMutation_DROP)
+	for i := range tableDesc.Columns {
+		if tableDesc.Columns[i].ID == shardColDesc.ID {
+			tmp := tableDesc.Columns[:0]
+			for j, col := range tableDesc.Columns {
+				if i == j {
+					continue
+				}
+				tmp = append(tmp, col)
+			}
+			tableDesc.Columns = tmp
+			break
+		}
+	}
+
+	if err := tableDesc.AllocateIDs(); err != nil {
+		return err
+	}
+	mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc,
+		tree.AsStringWithFQNames(n.n, params.Ann()))
+	if err != nil {
+		return err
+	}
+	if err := params.p.writeSchemaChange(params.ctx, tableDesc, mutationID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// maybeDropShardColumn drops the shard column that `idxDesc` is based on, if there aren't
+// any other indexes referring to it.
+//
+// Assumes that the given index is sharded.
+func (n *dropIndexNode) maybeDropShardColumn(
+	params runParams, tableDesc *sqlbase.MutableTableDescriptor, idxDesc *sqlbase.IndexDescriptor,
+) error {
+	if !idxDesc.IsSharded() {
+		return errors.AssertionFailedf("maybeDropShardColumn expects a sharded index.")
+	}
+	shardColDesc, dropped, err := tableDesc.FindColumnByName(tree.Name(idxDesc.Sharded.Name))
+	shouldDropShardColumn := true
+	if err != nil {
+		return err
+	}
+	if dropped {
+		return nil
+	}
+	for _, otherIdx := range tableDesc.AllNonDropIndexes() {
+		if otherIdx.ID == idxDesc.ID {
+			continue
+		}
+		if otherIdx.ContainsColumnID(shardColDesc.ID) {
+			shouldDropShardColumn = false
+			break
+		}
+	}
+	if shouldDropShardColumn {
+		if err := n.dropShardColumnAndConstraint(params, tableDesc, shardColDesc); err != nil {
 			return err
 		}
 	}

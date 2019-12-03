@@ -1,0 +1,389 @@
+# Tests for creating a hash sharded primary key
+statement ok 
+CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10);
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                 a INT8 NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 FAMILY "primary" (a_shard_10_internal, a)
+)
+
+statement error pgcode 22023 BUCKET_COUNT must be a strictly positive integer value
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=-1)
+
+statement error pgcode 22003 BUCKET_COUNT must be a strictly positive integer value
+CREATE TABLE fractional_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=2.32)
+
+# Ensure that this is round-tripable
+statement ok
+DROP TABLE sharded_primary
+
+statement ok
+CREATE TABLE sharded_primary (
+                a INT8 NOT NULL,
+                CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                FAMILY "primary" (a_shard_10_internal, a)
+)
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                 a INT8 NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 FAMILY "primary" (a_shard_10_internal, a)
+)
+
+statement ok
+INSERT INTO sharded_primary values (1), (2), (3)
+
+query error pq: duplicate key value \(a_shard_10_internal,a\)=\(6,1\) violates unique constraint "primary"
+INSERT INTO sharded_primary values (1)
+
+# Ensure that the shard column is assigned into the column family of the first column in
+# the index column set.
+statement ok
+CREATE TABLE specific_family (
+    a INT,
+    b INT,
+    INDEX (b) USING HASH WITH BUCKET_COUNT=10,
+    FAMILY "a_family" (a),
+    FAMILY "b_family" (b) 
+)
+
+query TT
+SHOW CREATE TABLE specific_family 
+----
+specific_family  CREATE TABLE specific_family (
+                    a INT8 NULL,
+                    b INT8 NULL,
+                    INDEX specific_family_b_shard_10_internal_b_idx (b ASC) USING HASH WITH BUCKET_COUNT=10,
+                    FAMILY a_family (a, rowid),
+                    FAMILY b_family (b, b_shard_10_internal)
+)
+
+# Tests for secondary sharded indexes
+statement ok
+CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_a_shard_4_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                   FAMILY "primary" (a, a_shard_4_internal, rowid)
+)
+
+statement ok
+DROP TABLE sharded_secondary
+
+statement ok
+CREATE TABLE sharded_secondary (
+                        a INT8 NULL,
+                        INDEX sharded_secondary_a_shard_4_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                        FAMILY "primary" (a, a_shard_4_internal, rowid)
+)
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_a_shard_4_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                   FAMILY "primary" (a, a_shard_4_internal, rowid)
+)
+
+statement ok
+INSERT INTO sharded_secondary values (1), (2), (1)
+
+statement ok
+DROP TABLE sharded_secondary
+
+statement ok
+CREATE TABLE sharded_secondary (
+    a INT
+)
+
+statement ok
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 10
+
+statement ok
+INSERT INTO sharded_secondary values (1), (2), (1)
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_a_shard_10_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                   FAMILY "primary" (a, rowid, a_shard_10_internal)
+)
+
+statement ok
+INSERT INTO sharded_secondary values (3), (2), (1)
+
+# Test multiple indexes on the same column set
+statement ok
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 4
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_a_shard_10_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                   INDEX sharded_secondary_a_shard_4_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                   FAMILY "primary" (a, rowid, a_shard_10_internal, a_shard_4_internal)
+)
+
+# Drop a sharded index and ensure that the shard column is dropped with it.
+statement ok
+DROP INDEX sharded_secondary_a_shard_4_internal_a_idx
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   INDEX sharded_secondary_a_shard_10_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                   FAMILY "primary" (a, rowid, a_shard_10_internal)
+)
+
+statement ok
+DROP INDEX sharded_secondary_a_shard_10_internal_a_idx 
+
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                   a INT8 NULL,
+                   FAMILY "primary" (a, rowid)
+)
+
+# Ensure that multiple (> 2) identical indexes can be created.
+statement ok
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+
+statement ok 
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+
+statement ok
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                    a INT8 NULL,
+                    INDEX sharded_secondary_a_shard_10_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                    INDEX sharded_secondary_a_shard_10_internal_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                    INDEX sharded_secondary_a_shard_10_internal_a_idx2 (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                    FAMILY "primary" (a, rowid, a_shard_10_internal)
+)
+
+
+# Ensure that the table descriptor was left in a "valid" state
+query I 
+SELECT count(*) FROM sharded_secondary
+----
+6
+
+statement ok 
+CREATE INDEX ON sharded_primary (a) USING HASH WITH BUCKET_COUNT = 4;
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                 a INT8 NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 INDEX sharded_primary_a_shard_4_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                 FAMILY "primary" (a_shard_10_internal, a, a_shard_4_internal)
+)
+
+statement ok
+DROP INDEX sharded_primary_a_shard_4_internal_a_idx
+
+statement ok
+SELECT count(*) FROM sharded_primary
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                 a INT8 NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 FAMILY "primary" (a_shard_10_internal, a)
+)
+
+statement ok
+CREATE INDEX on sharded_primary (a) USING HASH WITH BUCKET_COUNT=10;
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                 a INT8 NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 INDEX sharded_primary_a_shard_10_internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                 FAMILY "primary" (a_shard_10_internal, a)
+)
+
+statement ok
+DROP INDEX sharded_primary_a_shard_10_internal_a_idx 
+
+# Ensure that the table descriptor was left in a "valid" state
+statement ok
+SELECT count(*) FROM sharded_primary
+
+statement ok
+DROP TABLE sharded_secondary
+
+statement ok
+CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
+
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
+----
+·                           distributed    false                                              ·                                    ·
+·                           vectorized     false                                              ·                                    ·
+count                       ·              ·                                                  ()                                   ·
+    └── insert                 ·              ·                                                  ()                                   ·
+        │                     into           sharded_secondary(a, a_shard_12_internal, rowid)   ·                                    ·
+        │                     strategy       inserter                                           ·                                    ·
+        │                     auto commit    ·                                                  ·                                    ·
+        └── render            ·              ·                                                  (column1, column6, column5, check1)  ·
+            │                render 0       column1                                            ·                                    ·
+            │                render 1       column6                                            ·                                    ·
+            │                render 2       column5                                            ·                                    ·
+            │                render 3       column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)  ·                                    ·
+            └── render       ·              ·                                                  (column6, column5, column1)          ·
+                │           render 0       mod(fnv32(column1::STRING), 12)                    ·                                    ·
+                │           render 1       unique_rowid()                                     ·                                    ·
+                │           render 2       column1                                            ·                                    ·
+                └── values  ·              ·                                                  (column1)                            ·
+·                           size           1 column, 2 rows                                   ·                                    ·
+·                           row 0, expr 0  1                                                  ·                                    ·
+·                           row 1, expr 0  2                                                  ·                                    ·
+
+# Ensure that hash sharded indexes can be created on columns that are added in the same
+# statement, just like non-sharded indexes.
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+ALTER TABLE sharded_secondary ADD COLUMN b INT
+
+statement ok
+CREATE INDEX ON sharded_secondary (a, b) USING HASH WITH BUCKET_COUNT=12
+
+statement ok
+COMMIT TRANSACTION
+
+# Ensure that sharded indexes cannot be created on computed columns
+statement ok
+ALTER TABLE sharded_secondary ADD COLUMN c INT AS (MOD(a, 100)) STORED
+
+statement error cannot create a sharded index on a computed column
+CREATE INDEX ON sharded_secondary (a, c) USING HASH WITH BUCKET_COUNT=12;
+
+# Ensure that sharded indexes cannot be created on computed columns 
+# in the same txn
+statement error cannot create a sharded index on a computed column
+CREATE TABLE shard_on_computed_column (
+    a INT,
+    b INT AS (a % 5) STORED,
+    INDEX (b) USING HASH WITH BUCKET_COUNT=10
+)
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+ALTER TABLE sharded_secondary ADD COLUMN d INT AS (MOD(a, 100)) STORED
+
+statement error cannot create a sharded index on a computed column
+CREATE INDEX ON sharded_secondary (a, d) USING HASH WITH BUCKET_COUNT=12;
+
+statement ok 
+ROLLBACK TRANSACTION
+
+# Ensure that the shard column isn't dropped even if its being used by a non-sharded index
+statement ok
+CREATE TABLE column_used_on_unsharded (
+    a INT,
+    INDEX foo (a) USING HASH WITH BUCKET_COUNT=10
+)
+
+statement ok
+CREATE INDEX on column_used_on_unsharded (a_shard_10_internal)
+
+statement ok
+DROP INDEX column_used_on_unsharded@foo
+
+query TT
+SHOW CREATE TABLE column_used_on_unsharded
+----
+column_used_on_unsharded  CREATE TABLE column_used_on_unsharded (
+                            a INT8 NULL,
+                            INDEX column_used_on_unsharded_a_shard_10_internal_idx (a_shard_10_internal ASC),
+                            FAMILY "primary" (a, a_shard_10_internal, rowid)
+)
+
+statement ok
+DROP INDEX column_used_on_unsharded_a_shard_10_internal_idx
+
+statement ok
+CREATE TABLE column_used_on_unsharded_create_table (
+    a INT,
+    INDEX foo (a) USING HASH WITH BUCKET_COUNT=10,
+    INDEX (a_shard_10_internal)
+)
+
+statement ok
+DROP INDEX column_used_on_unsharded_create_table@foo
+
+query TT
+SHOW CREATE TABLE column_used_on_unsharded_create_table
+----
+column_used_on_unsharded_create_table  CREATE TABLE column_used_on_unsharded_create_table (
+                                        a INT8 NULL,
+                                        INDEX column_used_on_unsharded_create_table_a_shard_10_internal_idx (a_shard_10_internal ASC),
+                                        FAMILY "primary" (a, a_shard_10_internal, rowid)
+)
+
+statement ok
+DROP INDEX column_used_on_unsharded_create_table_a_shard_10_internal_idx
+
+statement ok
+DROP TABLE sharded_primary
+
+statement ok
+CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=11)
+
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
+----
+·                           distributed    false                                          ·                           ·
+·                           vectorized     false                                          ·                           ·
+count                       ·              ·                                              ()                          ·
+    └── insert                 ·              ·                                              ()                          ·
+        │                     into           sharded_primary(a_shard_11_internal, a)        ·                           ·
+        │                     strategy       inserter                                       ·                           ·
+        │                     auto commit    ·                                              ·                           ·
+        └── render            ·              ·                                              (column4, column1, check1)  ·
+            │                render 0       column4                                        ·                           ·
+            │                render 1       column1                                        ·                           ·
+            │                render 2       column4 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
+            └── render       ·              ·                                              (column4, column1)          ·
+                │           render 0       mod(fnv32(column1::STRING), 11)                ·                           ·
+                │           render 1       column1                                        ·                           ·
+                └── values  ·              ·                                              (column1)                   ·
+·                           size           1 column, 2 rows                               ·                           ·
+·                           row 0, expr 0  1                                              ·                           ·
+·                           row 1, expr 0  2                                              ·                           ·

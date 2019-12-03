@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 type createIndexNode struct {
@@ -45,8 +46,66 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
-// MakeIndexDescriptor creates an index descriptor from a CreateIndex node.
-func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) {
+// setupFamilyAndConstraintForShard adds a newly-created shard column into its appropriate
+// family (see comment above GetColumnFamilyForShard) and adds a check constraint ensuring
+// that the shard column is within [0..ShardBuckets-1].
+func setupFamilyAndConstraintForShard(
+	params runParams,
+	tableDesc *MutableTableDescriptor,
+	shardCol *sqlbase.ColumnDescriptor,
+	idxColumns []string,
+	buckets int32,
+) error {
+	family := sqlbase.GetColumnFamilyForShard(tableDesc, idxColumns)
+	if family == "" {
+		return errors.Errorf("could not find column family for the first column in the index column set")
+	}
+	// Assign shard column to the family of the first column in its index set, and do it
+	// before `AllocateIDs()` assigns it to the primary column family.
+	tableDesc.AddColumnToFamilyMaybeCreate(shardCol.Name, family, false, false)
+	// Assign an ID to the newly-added shard column, which is needed for the creation
+	// of a valid check constraint.
+	if err := tableDesc.AllocateIDs(); err != nil {
+		return err
+	}
+
+	ckDef, err := makeShardCheckConstraintDef(tableDesc, int(buckets), shardCol)
+	if err != nil {
+		return err
+	}
+	info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	inuseNames := make(map[string]struct{}, len(info))
+	for k := range info {
+		inuseNames[k] = struct{}{}
+	}
+
+	ckName, err := generateMaybeDuplicateNameForCheckConstraint(tableDesc, ckDef.Expr)
+	if err != nil {
+		return err
+	}
+	// Avoid creating duplicate check constraints.
+	if _, ok := inuseNames[ckName]; !ok {
+		ck, err := MakeCheckConstraint(params.ctx, tableDesc, ckDef, inuseNames,
+			&params.p.semaCtx, params.p.tableName)
+		if err != nil {
+			return err
+		}
+		ck.Validity = sqlbase.ConstraintValidity_Validating
+		tableDesc.AddCheckMutation(ck, sqlbase.DescriptorMutation_ADD)
+	}
+	return nil
+}
+
+// MakeIndexDescMaybeCreateShard creates an index descriptor from a CreateIndex node and
+// optionally adds a hidden computed shard column (along with its check constraint) in
+// case the index is hash sharded.
+func MakeIndexDescMaybeCreateShard(
+	params runParams, n *tree.CreateIndex, tableDesc *sqlbase.MutableTableDescriptor,
+) (*sqlbase.IndexDescriptor, error) {
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -63,6 +122,10 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support partitioning")
 		}
 
+		if n.Sharded != nil {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
+		}
+
 		if len(indexDesc.StoreColumnNames) > 0 {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns")
 		}
@@ -73,10 +136,77 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
 	}
 
+	if n.Sharded != nil {
+		if n.PartitionBy != nil {
+			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "sharded indexes don't support partitioning")
+		}
+		shardCol, newColumn, err := setupShardedIndexMaybeCreateShard(n, tableDesc, &indexDesc)
+		if err != nil {
+			return nil, err
+		}
+		if newColumn {
+			if err := setupFamilyAndConstraintForShard(params, tableDesc, shardCol,
+				indexDesc.Sharded.ColumnNames, indexDesc.Sharded.ShardBuckets); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
 		return nil, err
 	}
 	return &indexDesc, nil
+}
+
+func setupShardedIndexMaybeCreateShard(
+	n *tree.CreateIndex,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+) (*sqlbase.ColumnDescriptor, bool, error) {
+	colNames := make([]string, 0, len(n.Columns))
+	for _, c := range n.Columns {
+		colNames = append(colNames, string(c.Column))
+	}
+	buckets, err := tree.EvalShardBucketCount(n.Sharded.ShardBuckets)
+	if err != nil {
+		return nil, false, err
+	}
+	shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
+		colNames, false /* isNewTable */)
+	if err != nil {
+		return nil, false, err
+	}
+	shardIdxElem := tree.IndexElem{
+		Column:    tree.Name(shardCol.Name),
+		Direction: tree.Ascending,
+	}
+	n.Columns = append(tree.IndexElemList{shardIdxElem}, n.Columns...)
+	indexDesc.Sharded = &sqlbase.ShardedDescriptor{
+		Name:         shardCol.Name,
+		ShardBuckets: buckets,
+		ColumnNames:  colNames,
+	}
+	return shardCol, newColumn, nil
+}
+
+// maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation)
+// to `desc`, if one doesn't already exist for the given index column set.
+func maybeCreateAndAddShardCol(
+	shardBuckets int, desc *sqlbase.MutableTableDescriptor, colNames []string, isNewTable bool,
+) (col *sqlbase.ColumnDescriptor, created bool, err error) {
+	shardCol, err := makeShardColumnDesc(colNames, shardBuckets, false /* primaryKey */)
+	if err != nil {
+		return nil, false, err
+	}
+	if !hasColumn(*desc, shardCol.Name) {
+		if isNewTable {
+			desc.AddColumn(shardCol)
+		} else {
+			desc.AddColumnMutation(shardCol, sqlbase.DescriptorMutation_ADD)
+		}
+		return shardCol, true, nil
+	}
+	return shardCol, false, nil
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
@@ -98,7 +228,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
 	}
 
-	indexDesc, err := MakeIndexDescriptor(n.n)
+	if n.n.Sharded != nil &&
+		!cluster.Version.IsActive(params.ctx, params.p.ExecCfg().Settings, cluster.VersionHashShardedIndexes) {
+		return invalidClusterForShardedIndex
+	}
+
+	indexDesc, err := MakeIndexDescMaybeCreateShard(params, n.n, n.tableDesc)
 	if err != nil {
 		return err
 	}
@@ -127,7 +262,6 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AllocateIDs(); err != nil {
 		return err
 	}
-
 	// The index name may have changed as a result of
 	// AllocateIDs(). Retrieve it for the event log below.
 	index := n.tableDesc.Mutations[mutationIdx].GetIndex()
