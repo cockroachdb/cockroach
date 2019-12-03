@@ -460,6 +460,8 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 			t.Errorf("should be canceled: %v", err)
 		}
 	}
+	t.Log("this is just a testing issue")
+	t.Error("please ignore")
 }
 
 func TestStopperShouldQuiesce(t *testing.T) {
