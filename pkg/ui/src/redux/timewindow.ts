@@ -61,43 +61,53 @@ export interface TimeScaleCollection {
  */
 export let availableTimeScales: TimeScaleCollection = _.mapValues(
   {
-    "10 min": {
+    "Past 10 Minutes": {
       windowSize: moment.duration(10, "minutes"),
       windowValid: moment.duration(10, "seconds"),
       sampleSize: moment.duration(10, "seconds"),
     },
-    "1 hour": {
+    "Past 1 Hour": {
       windowSize: moment.duration(1, "hour"),
       windowValid: moment.duration(1, "minute"),
       sampleSize: moment.duration(30, "seconds"),
     },
-    "6 hours": {
+    "Past 6 Hours": {
       windowSize: moment.duration(6, "hours"),
       windowValid: moment.duration(5, "minutes"),
       sampleSize: moment.duration(1, "minutes"),
     },
-    "12 hours": {
-      windowSize: moment.duration(12, "hours"),
-      windowValid: moment.duration(10, "minutes"),
-      sampleSize: moment.duration(2, "minutes"),
-    },
-    "1 day": {
+    "Past 1 Day": {
       windowSize: moment.duration(1, "day"),
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(5, "minutes"),
     },
-    "2 days": {
+    "Past 2 Days": {
       windowSize: moment.duration(2, "day"),
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(5, "minutes"),
     },
-    "1 week": {
+    "Past 3 Days": {
+      windowSize: moment.duration(3, "day"),
+      windowValid: moment.duration(10, "minutes"),
+      sampleSize: moment.duration(5, "minutes"),
+    },
+    "Past Week": {
       windowSize: moment.duration(7, "days"),
       windowValid: moment.duration(10, "minutes"),
       sampleSize: moment.duration(30, "minutes"),
     },
-    "1 month": {
-      windowSize: moment.duration(30, "days"),
+    "Past 2 Week": {
+      windowSize: moment.duration(14, "days"),
+      windowValid: moment.duration(10, "minutes"),
+      sampleSize: moment.duration(30, "minutes"),
+    },
+    "Past Month": {
+      windowSize: moment.duration(moment().daysInMonth(), "days"),
+      windowValid: moment.duration(20, "minutes"),
+      sampleSize: moment.duration(1, "hour"),
+    },
+    "Past 2 Month": {
+      windowSize: moment.duration(moment().daysInMonth() * 2, "days"),
       windowValid: moment.duration(20, "minutes"),
       sampleSize: moment.duration(1, "hour"),
     },
@@ -121,7 +131,7 @@ export class TimeWindowState {
   scaleChanged: boolean;
   useTimeRage: boolean;
   constructor() {
-    this.scale = availableTimeScales["10 min"];
+    this.scale = availableTimeScales["Past 10 Minutes"];
     this.useTimeRage = false;
     this.scaleChanged = false;
   }

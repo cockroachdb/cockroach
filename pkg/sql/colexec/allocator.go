@@ -177,6 +177,8 @@ func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
 			acc += sizeOfTime
+		case coltypes.Unhandled:
+			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
 		}

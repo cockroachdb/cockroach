@@ -658,7 +658,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT b FROM computed ORDER BY b
 ----
 ·     distributed  false                    ·           ·
-·     vectorized   false                    ·           ·
+·     vectorized   true                     ·           ·
 scan  ·            ·                        (b string)  +b
 ·     table        computed@computed_b_idx  ·           ·
 ·     spans        ALL                      ·           ·
@@ -899,7 +899,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT i FROM num WHERE i = -1:::INT
 ----
 ·     distributed  false          ·        ·
-·     vectorized   false          ·        ·
+·     vectorized   true           ·        ·
 scan  ·            ·              (i int)  ·
 ·     table        num@num_i_key  ·        ·
 ·     spans        /-1-/0         ·        ·
@@ -908,7 +908,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
 ----
 ·     distributed  false              ·          ·
-·     vectorized   false              ·          ·
+·     vectorized   true               ·          ·
 scan  ·            ·                  (f float)  ·
 ·     table        num@num_f_key      ·          ·
 ·     spans        /-1-/-1/PrefixEnd  ·          ·
@@ -917,7 +917,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
 ----
 ·     distributed  false              ·            ·
-·     vectorized   false              ·            ·
+·     vectorized   true               ·            ·
 scan  ·            ·                  (d decimal)  ·
 ·     table        num@num_d_key      ·            ·
 ·     spans        /-1-/-1/PrefixEnd  ·            ·

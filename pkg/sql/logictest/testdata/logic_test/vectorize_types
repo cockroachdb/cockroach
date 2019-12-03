@@ -54,3 +54,32 @@ SELECT * FROM all_types ORDER BY 1
 ----
 NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL
 false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000
+
+statement ok
+CREATE TABLE skip_unneeded_cols (
+  _id UUID,
+  _id2 INT8,
+  _float FLOAT8,
+  _unsupported1 INT ARRAY,
+  _bool BOOL,
+  _unsupported2 INT ARRAY,
+  _bool2 BOOL,
+  PRIMARY KEY(_id, _id2)
+)
+
+statement ok
+INSERT INTO skip_unneeded_cols VALUES ('63616665-6630-3064-6465-616462656562', 1, '1.2', NULL, true, NULL, false)
+
+statement ok
+SET vectorize=experimental_always
+
+statement error pq: unable to vectorize execution plan: unhandled type int\[\]
+SELECT _unsupported1 FROM skip_unneeded_cols
+
+query IBB
+SELECT _id2, _bool, _bool2 FROM skip_unneeded_cols
+----
+1 true false
+
+statement ok
+RESET vectorize
