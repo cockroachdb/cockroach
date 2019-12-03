@@ -39,9 +39,82 @@ int DBComparator::Compare(const rocksdb::Slice& a, const rocksdb::Slice& b) cons
 
 bool DBComparator::Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const { return a == b; }
 
-// The RocksDB docs say it is safe to leave these two methods unimplemented.
-void DBComparator::FindShortestSeparator(std::string* start, const rocksdb::Slice& limit) const {}
+namespace {
 
-void DBComparator::FindShortSuccessor(std::string* key) const {}
+void ShrinkSlice(rocksdb::Slice* a, size_t size) {
+  a->remove_suffix(a->size() - size);
+}
+
+int SharedPrefixLen(const rocksdb::Slice& a, const rocksdb::Slice& b) {
+  auto n = std::min(a.size(), b.size());
+  int i = 0;
+  for (; i < n && a[i] == b[i]; ++i) {}
+  return i;
+}
+
+bool FindSeparator(rocksdb::Slice* a, std::string* a_backing, const rocksdb::Slice& b) {
+  auto prefix = SharedPrefixLen(*a, b);
+  auto n = std::min(a->size(), b.size());
+  if (prefix >= n) {
+    // The > case is not actually possible.
+    assert(prefix == n);
+    // One slice is a prefix of another.
+    return false;
+  }
+  // prefix < n. So can look at the characters at prefix, where they differed.
+  if (static_cast<unsigned char>((*a)[prefix]) >= static_cast<unsigned char>(b[prefix])) {
+    // == is not possible since they differed.
+    assert((*a)[prefix] != b[prefix]);
+    // So b is smaller than a.
+    return false;
+  }
+  if ((prefix < b.size() - 1) || static_cast<unsigned char>((*a)[prefix]) + 1 < static_cast<unsigned char>(b[prefix])) {
+    // a and b do not have consecutive characters at prefix.
+    (*a_backing)[prefix]++;
+    ShrinkSlice(a, prefix + 1);
+    return true;
+  }
+  // They two slices have consecutive characters at prefix, so we leave the
+  // character at prefix unchanged for a. Now we are free to increment any
+  // subsequent character in a, to make the new a bigger than the old a.
+  ++prefix;
+  for (int i = prefix; i < a->size() - 1; ++i) {
+    if (static_cast<unsigned char>((*a)[i]) != 0xff) {
+      (*a_backing)[i]++;
+      ShrinkSlice(a, i + 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
+void DBComparator::FindShortestSeparator(std::string* start, const rocksdb::Slice& limit) const {
+  rocksdb::Slice key_s, key_l;
+  rocksdb::Slice ts_s, ts_l;
+  if (!SplitKey(*start, &key_s, &ts_s) || !SplitKey(limit, &key_l, &ts_l)) {
+    return;
+  }
+  auto found = FindSeparator(&key_s, start, key_l);
+  if (!found) return;
+  start->resize(key_s.size() + 1);
+  (*start)[key_s.size()] = 0x00;
+}
+
+void DBComparator::FindShortSuccessor(std::string* key) const {
+  rocksdb::Slice k, ts;
+  if (!SplitKey(*key, &k, &ts)) {
+    return;
+  }
+  for (int i = 0; i < k.size(); ++i) {
+    if (static_cast<unsigned char>(k[i]) != 0xff) {
+      (*key)[i]++;
+      key->resize(i + 2);
+      (*key)[i + 1] = 0;
+      return;
+    }
+  }
+}
 
 }  // namespace cockroach
