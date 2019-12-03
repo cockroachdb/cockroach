@@ -298,9 +298,6 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	// NOTE: The 1PC rate is arguably not accurate because it counts batches
-	// containing both BeginTransaction and EndTransaction without caring if the
-	// DistSender had to split it for touching multiple ranges.
 	metaCommits1PCRates = metric.Metadata{
 		Name:        "txn.commits1PC",
 		Help:        "Number of KV transaction on-phase commit attempts",
