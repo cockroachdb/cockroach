@@ -33,6 +33,17 @@ func TestListFailures(t *testing.T) {
 		expIssues []issue
 	}{
 		{
+			pkgEnv:   "",
+			fileName: "implicit-pkg.json",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/stop",
+			expIssues: []issue{{
+				testName: "TestStopperWithCancelConcurrent",
+				title:    "util/stop: TestStopperWithCancelConcurrent failed under stress",
+				message:  "this is just a testing issue",
+				author:   "nvanbenschoten@gmail.com",
+			}},
+		},
+		{
 			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/storage",
 			fileName: "stress-failure.json",
 			expPkg:   "github.com/cockroachdb/cockroach/pkg/storage",
@@ -212,23 +223,26 @@ TestXXA - 1.00s
 			curIssue := 0
 
 			f := func(_ context.Context, title, packageName, testName, testMessage, author string) error {
+				if t.Failed() {
+					return nil
+				}
 				if curIssue >= len(c.expIssues) {
-					t.Fatalf("unexpected issue filed. title: %s", title)
+					t.Errorf("unexpected issue filed. title: %s", title)
 				}
 				if exp := c.expPkg; exp != packageName {
-					t.Fatalf("expected package %s, but got %s", exp, packageName)
+					t.Errorf("expected package %s, but got %s", exp, packageName)
 				}
 				if exp := c.expIssues[curIssue].testName; exp != testName {
-					t.Fatalf("expected test name %s, but got %s", exp, testName)
+					t.Errorf("expected test name %s, but got %s", exp, testName)
 				}
 				if exp := c.expIssues[curIssue].author; exp != "" && exp != author {
-					t.Fatalf("expected author %s, but got %s", exp, author)
+					t.Errorf("expected author %s, but got %s", exp, author)
 				}
 				if exp := c.expIssues[curIssue].title; exp != title {
-					t.Fatalf("expected title %s, but got %s", exp, title)
+					t.Errorf("expected title %s, but got %s", exp, title)
 				}
 				if exp := c.expIssues[curIssue].message; !strings.Contains(testMessage, exp) {
-					t.Fatalf("expected message containing %s, but got:\n%s", exp, testMessage)
+					t.Errorf("expected message containing %s, but got:\n%s", exp, testMessage)
 				}
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
