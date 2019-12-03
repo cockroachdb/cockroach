@@ -180,15 +180,15 @@ func TestBlobClientReadFile(t *testing.T) {
 			}
 			reader, err := blobClient.ReadFile(ctx, tc.filename)
 			if err != nil {
+				if testutils.IsError(err, tc.err) {
+					// correct error was returned
+					return
+				}
 				t.Fatal(err)
 			}
 			// Check that fetched file content is correct
 			content, err := ioutil.ReadAll(reader)
 			if err != nil {
-				if testutils.IsError(err, tc.err) {
-					// correct error was returned
-					return
-				}
 				t.Fatal(err)
 			}
 			if !bytes.Equal(content, tc.fileContent) {
