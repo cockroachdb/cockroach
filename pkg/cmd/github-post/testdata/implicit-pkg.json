@@ -1,0 +1,19 @@
+some spurious output
+{"Time":"2019-12-03T09:35:35.513787779-05:00","Action":"run","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent"}
+{"Time":"2019-12-03T09:35:35.513794955-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"=== RUN   TestStopperWithCancelConcurrent\n"}
+{"Time":"2019-12-03T09:35:35.518206514-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518155 164 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518307217-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518290 167 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518392368-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518376 170 util/stop/stopper.go:539  quiescing\n"}
+some more spurious stuff
+{"Time":"2019-12-03T09:35:35.518483101-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518467 173 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518560792-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518547 176 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518639925-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518626 179 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518724429-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518703 182 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.51881202-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518797 185 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518892058-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518878 188 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.518969474-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"I191203 14:35:35.518936 191 util/stop/stopper.go:539  quiescing\n"}
+{"Time":"2019-12-03T09:35:35.519690943-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"--- FAIL: TestStopperWithCancelConcurrent (0.01s)\n"}
+{"Time":"2019-12-03T09:35:35.519743362-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"    stopper_test.go:463: this is just a testing issue\n"}
+{"Time":"2019-12-03T09:35:35.519761372-05:00","Action":"output","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Output":"    stopper_test.go:464: please ignore\n"}
+{"Time":"2019-12-03T09:35:35.519837905-05:00","Action":"fail","Package":"github.com/cockroachdb/cockroach/pkg/util/stop","Test":"TestStopperWithCancelConcurrent","Elapsed":0.01}
+spurious again
