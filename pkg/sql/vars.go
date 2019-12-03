@@ -156,7 +156,8 @@ var varGen = map[string]sessionVar{
 			case "utf8", "unicode", "cp65001":
 				return nil
 			default:
-				return unimplemented.Newf("client_encoding "+encoding,
+				return unimplemented.NewWithIssueDetailf(35882,
+					"client_encoding "+encoding,
 					"unimplemented client encoding: %q", encoding)
 			}
 		},
