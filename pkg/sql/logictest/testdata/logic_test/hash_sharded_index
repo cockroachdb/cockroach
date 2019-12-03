@@ -1,0 +1,66 @@
+# Tests for creating a hash sharded primary key
+statement ok 
+CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10);
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                    a INT8 NOT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                    FAMILY "primary" (a_shard__internal, a)
+)
+
+# Ensure that this is round-tripable
+statement ok
+DROP TABLE sharded_primary
+
+statement ok
+CREATE TABLE sharded_primary (
+                a INT8 NOT NULL,
+                CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                FAMILY "primary" (a_shard__internal, a)
+)
+
+query TT
+SHOW CREATE TABLE sharded_primary
+----
+sharded_primary  CREATE TABLE sharded_primary (
+                    a INT8 NOT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT=10,
+                    FAMILY "primary" (a_shard__internal, a)
+)
+
+# Tests for hash sharded secondary indexes
+statement ok
+CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                        a INT8 NULL,
+                        INDEX sharded_secondary_a_shard__internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                        FAMILY "primary" (a, a_shard__internal, rowid)
+)
+
+statement ok
+DROP TABLE sharded_secondary
+
+statement ok
+CREATE TABLE sharded_secondary (
+                        a INT8 NULL,
+                        INDEX sharded_secondary_a_shard__internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                        FAMILY "primary" (a, a_shard__internal, rowid)
+)
+
+query TT
+SHOW CREATE TABLE sharded_secondary
+----
+sharded_secondary  CREATE TABLE sharded_secondary (
+                        a INT8 NULL,
+                        INDEX sharded_secondary_a_shard__internal_a_idx (a ASC) USING HASH WITH BUCKET_COUNT=4,
+                        FAMILY "primary" (a, a_shard__internal, rowid)
+)
+
+# IN PROGRESS
