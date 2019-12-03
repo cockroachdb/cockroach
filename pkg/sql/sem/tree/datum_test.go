@@ -492,6 +492,8 @@ func TestParseDTime(t *testing.T) {
 		{"04:05:06.000001", time.Microsecond, timeofday.New(4, 5, 6, 1)},
 		{"04:05:06.000001", time.Second, timeofday.New(4, 5, 6, 0)},
 		{"04:05:06-07", time.Microsecond, timeofday.New(4, 5, 6, 0)},
+		{"0000-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
+		{"2001-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
 		{"4:5:6", time.Microsecond, timeofday.New(4, 5, 6, 0)},
 		{"24:00:00", time.Microsecond, timeofday.Time2400},
 		{"24:00:00.000", time.Microsecond, timeofday.Time2400},
