@@ -39,14 +39,14 @@ optimizer|orms|sequences_distsql|show_trace|subquery_correlated)"
 
 # Disable each rule with 50% probability.
 for file in $LOGICTESTS; do
-	  if [[ ! "$file" =~ (^|[[:space:]])${EXCLUDE}($|[[:space:]]) ]]; then
-	      run_json_test build/builder.sh \
-	        stdbuf -oL -eL \
-	        make testrace \
-		GOTESTFLAGS=-json \
-	        PKG=./pkg/sql/logictest \
-	        TESTS='^TestLogic/local/'${file}'$$' \
-	        TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
-	        ENABLE_ROCKSDB_ASSERTIONS=1 \
-	  fi
+    if [[ ! "$file" =~ (^|[[:space:]])${EXCLUDE}($|[[:space:]]) ]]; then
+        run_json_test build/builder.sh \
+          stdbuf -oL -eL \
+          make testrace \
+    GOTESTFLAGS=-json \
+          PKG=./pkg/sql/logictest \
+          TESTS='^TestLogic/local/'${file}'$$' \
+          TESTFLAGS='-disable-opt-rule-probability=0.5 -v' \
+          ENABLE_ROCKSDB_ASSERTIONS=1 \
+    fi
 done
