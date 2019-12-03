@@ -8,8 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Tooltip } from "antd";
 import * as docsURL from "oss/src/util/docs";
-import React, { Fragment } from "react";
+import getHighlightedText from "oss/src/util/highlightedText";
+import React from "react";
 import { Link } from "react-router";
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
@@ -27,28 +29,30 @@ export interface AggregateStatistics {
   label: string;
   implicitTxn: boolean;
   stats: StatementStatistics;
+  drawer?: boolean;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-function StatementLink(props: { statement: string, app: string, implicitTxn: boolean }) {
+function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
-
+  // const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    // <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
-        <ToolTipWrapper text={ <pre style={{ whiteSpace: "pre-wrap" }}>{ props.statement }</pre> }>
+        <Tooltip overlayClassName="preset-black" placement="bottom" title={
+          <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
+        }>
           <div className="statement__tooltip-hover-area">
-            { shortStatement(summary, props.statement) }
+            { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
-        </ToolTipWrapper>
+        </Tooltip>
       </div>
-    </Link>
+    // </Link>
   );
 }
 
-function shortStatement(summary: StatementSummary, original: string) {
+export function shortStatement(summary: StatementSummary, original: string) {
   switch (summary.statement) {
     case "update": return "UPDATE " + summary.table;
     case "insert": return "INSERT INTO " + summary.table;
@@ -67,7 +71,7 @@ function calculateCumulativeTime(stats: StatementStatistics) {
   return count * latency;
 }
 
-export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string)
+export function makeStatementsColumns(statements: AggregateStatistics[], selectedApp: string, search?: string)
     : ColumnDescriptor<AggregateStatistics>[] {
   const transactionTypeText = (
     <React.Fragment>
@@ -88,6 +92,7 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
         <StatementLink
           statement={ stmt.label }
           implicitTxn={ stmt.implicitTxn }
+          search={search}
           app={ selectedApp }
         />
       ),
@@ -134,7 +139,7 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: (
-        <Fragment>
+        <React.Fragment>
           Node
           <div className="numeric-stats-table__tooltip">
             <ToolTipWrapper text="Statement statistics grouped by which node received the request for the statement.">
@@ -143,7 +148,7 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
               </div>
             </ToolTipWrapper>
           </div>
-        </Fragment>
+        </React.Fragment>
       ),
       cell: (stmt) => <NodeLink nodeId={ stmt.label } nodeNames={ nodeNames } />,
       sort: (stmt) => stmt.label,

@@ -27,8 +27,14 @@
   color $link-color
 
 .statement-count-title, .last-cleared-title
-  padding 12px 24px
+  font-family Lato-Regular
+  font-size 14px
+  padding 0px
+  margin 0px
   color $body-color
+  .label
+    font-family Lato-Bold
+    color #394455
 
 .last-cleared-tooltip, .numeric-stats-table, .plan-view-table
   &__tooltip
@@ -285,3 +291,51 @@ $plan-node-attribute-key-color = #5cc123                        // light green
             position absolute
             top -10px
             left -23px
+
+.statements-table-container
+  padding 18px 24px
+
+.statements-statistic
+  display flex
+  justify-content space-between
+  align-items center
+  margin-bottom 7px
+
+._pg-jump
+  width 32px
+  height 24px
+  position relative
+  justify-content center
+  align-items center
+  ._jump-dots
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    color #b8bbbc
+    font-size 14px
+    letter-spacing 1.5px
+  .anticon
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    display none
+    font-size 10px
+    color #3a7ce1
+  &:hover
+    ._jump-dots
+      display none
+    .anticon
+      display block
+
+.statements-table__col-query-text
+  font-family RobotoMono-Regular
+  font-size 12px
+  color #3e80de
+  line-height 2
+  text-decoration underline
+  text-overflow ellipsis
+  overflow: hidden
+  ._text-bold
+    font-family RobotoMono-Bold
