@@ -28,10 +28,15 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
 		if n.Automatic {
-			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+			typePredicate = fmt.Sprintf("job_type = '%s' OR job_type = '%s'",
+				jobspb.TypeAutoCreateStats,
+				jobspb.TypeDeleteTempObjects,
+			)
 		} else {
 			typePredicate = fmt.Sprintf(
-				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
+				"(job_type IS NULL OR (job_type != '%s' AND job_type != '%s'))",
+				jobspb.TypeAutoCreateStats,
+				jobspb.TypeDeleteTempObjects,
 			)
 		}
 		// The query intends to present:

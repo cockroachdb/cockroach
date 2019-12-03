@@ -257,6 +257,14 @@ message CreateStatsProgress {
 
 }
 
+message DeleteTempObjectsDetails {
+
+}
+
+message DeleteTempObjectsProgress {
+
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -286,6 +294,7 @@ message Payload {
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
     CreateStatsDetails createStats = 15;
+    DeleteTempObjectsDetails deleteTempObjects = 19;
   }
 }
 
@@ -304,6 +313,7 @@ message Progress {
     ImportProgress import = 13;
     ChangefeedProgress changefeed = 14;
     CreateStatsProgress createStats = 15;
+    DeleteTempObjectsProgress deleteTempObjects = 16;
   }
 }
 
@@ -319,6 +329,7 @@ enum Type {
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
+  DELETE_TEMP_OBJECTS = 8 [(gogoproto.enumvalue_customname) = "TypeDeleteTempObjects"];
 }
 
 message Job {
