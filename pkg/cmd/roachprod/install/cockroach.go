@@ -141,6 +141,25 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 	}
 
+	env := func() string {
+		var buf strings.Builder
+		for _, v := range os.Environ() {
+			if strings.HasPrefix(v, "COCKROACH_") {
+				if buf.Len() > 0 {
+					buf.WriteString(" ")
+				}
+				buf.WriteString(v)
+			}
+		}
+		if len(c.Env) > 0 {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(c.Env)
+		}
+		return buf.String()
+	}()
+
 	p := 0
 	if StartOpts.Sequential {
 		p = 1
@@ -261,7 +280,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			// https://github.com/cockroachdb/cockroach/issues/37815#issuecomment-545650087
 			//
 			// "COCKROACH_ENFORCE_CONSISTENT_STATS=true " +
-			c.Env + " " + binary + " start " + strings.Join(args, " ") +
+			env + " " + binary + " start " + strings.Join(args, " ") +
 			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
 			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
 		if out, err := sess.CombinedOutput(cmd); err != nil {
