@@ -76,11 +76,82 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				tree.ErrString(index.tn))
 		}
 
+		idxDesc, _, err := tableDesc.FindIndexByName(string(index.idxName))
+		if err != nil {
+			return err
+		}
 		if err := params.p.dropIndexByName(
 			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
 			return err
+		}
+
+		shouldDropShardColumn := true
+		// Drop the shard column if no other sharded index refers to it.
+		if idxDesc.IsSharded() {
+			shardColDesc, dropped, err := tableDesc.FindColumnByName(tree.Name(idxDesc.Sharded.Name))
+			if err != nil {
+				return err
+			}
+			if dropped {
+				continue
+			}
+			for _, otherIdx := range tableDesc.AllNonDropIndexes() {
+				if otherIdx.ID == idxDesc.ID {
+					continue
+				}
+				if otherIdx.IsSharded() && otherIdx.ContainsColumnID(shardColDesc.ID) {
+					shouldDropShardColumn = false
+					break
+				}
+			}
+			if shouldDropShardColumn {
+				validChecks := tableDesc.Checks[:0]
+				for _, check := range tableDesc.AllActiveAndInactiveChecks() {
+					if used, err := check.UsesColumn(tableDesc.TableDesc(), shardColDesc.ID); err != nil {
+						return err
+					} else if used {
+						if check.Validity == sqlbase.ConstraintValidity_Validating {
+							return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+								"referencing constraint %q in the middle of being added, try again later", check.Name)
+						}
+					} else {
+						validChecks = append(validChecks, check)
+					}
+				}
+
+				if len(validChecks) != len(tableDesc.Checks) {
+					tableDesc.Checks = validChecks
+				}
+
+				tableDesc.AddColumnMutation(shardColDesc, sqlbase.DescriptorMutation_DROP)
+				for i := range tableDesc.Columns {
+					if tableDesc.Columns[i].ID == shardColDesc.ID {
+						tmp := tableDesc.Columns[:0]
+						for j, col := range tableDesc.Columns {
+							if i == j {
+								continue
+							}
+							tmp = append(tmp, col)
+						}
+						tableDesc.Columns = tmp
+						break
+					}
+				}
+
+				if err := tableDesc.AllocateIDs(); err != nil {
+					return err
+				}
+				mutationID, err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc,
+					tree.AsStringWithFQNames(n.n, params.Ann()))
+				if err != nil {
+					return err
+				}
+				if err := params.p.writeSchemaChange(params.ctx, tableDesc, mutationID); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil

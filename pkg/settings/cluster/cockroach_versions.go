@@ -51,6 +51,7 @@ const (
 	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
 	VersionProtectedTimestamps
+	VersionHashShardedIndexes
 
 	// Add new versions here (step one of two).
 
@@ -349,6 +350,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// schema.
 		Key:     VersionProtectedTimestamps,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
+	},
+	{
+		Key:     VersionHashShardedIndexes,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).

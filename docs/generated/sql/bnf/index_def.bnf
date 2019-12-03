@@ -1,9 +1,9 @@
 index_def ::=
-	'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave opt_partition_by
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
-	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave opt_partition_by
+	'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
+	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded 'STORING' '(' name_list ')' opt_interleave opt_partition_by
+	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded  opt_interleave opt_partition_by
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded 'STORING' '(' name_list ')' opt_interleave opt_partition_by
+	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' opt_hash_sharded  opt_interleave opt_partition_by
 	| 'INVERTED' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'
 	| 'INVERTED' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')'

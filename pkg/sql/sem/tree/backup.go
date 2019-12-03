@@ -78,6 +78,13 @@ type KVOption struct {
 	Value Expr
 }
 
+// Format implements the NodeFormatter interface.
+func (o KVOption) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&o.Key)
+	ctx.WriteString(` = `)
+	ctx.FormatNode(&o.Key)
+}
+
 // KVOptions is a list of KVOptions.
 type KVOptions []KVOption
 

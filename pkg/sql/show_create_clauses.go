@@ -284,6 +284,9 @@ func ShowCreatePartitioning(
 // writing them to tree.FmtCtx f
 func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
+		if e.Hidden {
+			continue
+		}
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")
