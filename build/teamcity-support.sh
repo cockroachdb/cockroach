@@ -31,9 +31,13 @@ run() {
 # It's valid to call this multiple times; all output artifacts will be
 # preserved.
 function run_json_test() {
+  # TODO(tbg): better to go through builder for all of this.
 	go install github.com/cockroachdb/cockroach/pkg/cmd/testfilter
 	go install github.com/cockroachdb/cockroach/pkg/cmd/github-post
-	tmpfile=$(mktemp artifacts/debug.txt.XXX)
+	tmpfile=$(mktemp artifacts/debug.XXX)
+	mv "${tmpfile}" "${tmpfile}.txt"
+	tmpfile="${tmpfile}.txt"
+
 	set +e
 	run "$@" 2>&1 \
 		| tee "${tmpfile}" \
