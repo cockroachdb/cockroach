@@ -180,41 +180,42 @@
 .ant-calendar-picker:hover .ant-calendar-picker-input:not(.ant-input-disabled)
   border-color $link-color
 
-.ant-calendar
+.ant-fullcalendar-header
+  padding: 10px 4px
+  text-align: center
+
+.ant-fullcalendar
   font-size 12px
   font-family Lato-Regular
 
-.ant-calendar-input
-  font-family: Lato-Regular
-
-.ant-calendar-selected-day
-  .ant-calendar-date
-    background $grey2
-    color $link-color
+.ant-fullcalendar-selected-day
+  .ant-fullcalendar-date
+    background #eff5fe
+    color #3a7ce1
     &:hover
       background #e0efff
       color $blue-color
 
-.ant-calendar-today 
-  &.ant-calendar-date
-    color $link-color
-    border-color $link-color
+.ant-fullcalendar-today 
+  &.ant-fullcalendar-date
+    color #3a7ce1
+    border-color #3a7ce1
     &:hover
-      background $grey3
-  &.ant-calendar-selected-day
-    .ant-calendar-date
-      background $grey3
+      background #eff5fd
+  &.ant-fullcalendar-selected-day
+    .ant-fullcalendar-date
+      background #eff5fd
       &:hover
         background $grey4
         font-weight bold
-  &.ant-calendar-disabled-cell
-    .ant-calendar-date
+  &.ant-fullcalendar-disabled-cell
+    .ant-fullcalendar-date
       background #f5f5f5
       &:hover
         background #f5f5f5
 
-.ant-calendar-date, .ant-time-picker-panel li
-  color $body-color
+.ant-fullcalendar-date, .ant-time-picker-panel li
+  color #5F6C87
   font-family Lato-Regular
   font-size 12px
   &.ant-time-picker-panel-addon-option-disabled
@@ -228,31 +229,17 @@
   display flex
   align-items center
 
-.ant-calendar-disabled-cell .ant-calendar-date
+.ant-fullcalendar-disabled-cell .ant-fullcalendar-date
   background #f5f5f5
 
-.ant-calendar-disabled-cell.ant-calendar-today .ant-calendar-date
+.ant-fullcalendar-disabled-cell.ant-fullcalendar-today .ant-fullcalendar-date
   color #a3a5af
   font-weight bold
   border-color transparent
   &:before
     border 1px solid #a3a5af
 
-.disabled-year
-  .ant-calendar-header
-    .ant-calendar-next-month-btn
-      right 15px
-    .ant-calendar-prev-month-btn
-      left 15px
-    .ant-calendar-month-select, .ant-calendar-year-select
-      font-size 14px
-      color $body-color
-      &:hover
-        color $link-color
-  .ant-calendar-prev-year-btn, .ant-calendar-next-year-btn
-    display none
-
-.ant-btn-defult, .ant-calendar-today-btn 
+.ant-btn-default, .ant-calendar-today-btn 
   width 100%
   font-family Lato-Bold
   color $link-color
@@ -261,123 +248,16 @@
   margin 0
   padding 0
   text-transform none
+  border: 0;
   span
     line-height 1.71
     letter-spacing 0.1px
 
-.ant-calendar-footer-extra, .ant-time-picker-panel-addon
-  text-align center
+.ant-btn:focus
+  color: $link-color
 
-.ant-divider, .ant-divider-vertical
-  height auto
+.ant-btn:after
+  display: none !important;
 
-.ant-btn
-  &-default, .active, &:focus, &:hover
-    border none
-
-.ant-form-item
-  margin 0
-
-.ant-pagination
-  display flex
-  justify-content center
-  align-items flex-end
-  height 100%
-  margin 40px 0
-  &.mini
-    .ant-pagination-item, .ant-pagination-prev, .ant-pagination-next
-      margin 0 5px
-  .ant-pagination-item
-    a
-      color $body-color
-      font-size 14px
-      font-family Lato-Medium
-      &:hover
-        color $link-color
-  .ant-pagination-item-active
-    background transparent
-    border-radius 2px
-    border 1px solid $link-color
-    a
-      color $link-color
-  .ant-pagination-next, .ant-pagination-prev
-    .ant-pagination-item-link
-      font-size 12px
-      color $body-color
-    &:hover
-      .ant-pagination-item-link
-        color $link-color
-    &.ant-pagination-disabled
-      .ant-pagination-item-link
-        color #b8bbbc
-      &:hover
-        .ant-pagination-item-link
-          color #b8bbbc
-
-.drawer--preset-black
-  display flex
-  align-items center
-  /* width */
-  ::-webkit-scrollbar {
-    width 7px
-  }
-
-  /* Track */
-  ::-webkit-scrollbar-track {
-    background transparent
-    border-radius 10px
-  }
-
-  /* Handle */
-  ::-webkit-scrollbar-thumb {
-    background #5f6c87
-    border-radius 10px
-  }
-
-  /* Handle on hover */
-  ::-webkit-scrollbar-thumb:hover {
-    background #5f6c87ad
-  }
-  .ant-divider
-    width 1px
-    background #5f6c87
-    margin: 0 15px
-    height 14px
-  .__actions
-    button, a
-      width auto
-      color #f6f6f6
-      font-size 12px
-      font-family Lato-Bold
-      line-height 2
-      letter-spacing 0.1px
-      &:hover
-        color #5f6c87
-  .ant-drawer-content
-    overflow auto
-  .ant-drawer-mask
-    background-color transparent
-  .ant-drawer-content-wrapper
-    padding-left 80px
-    box-shadow none !important
-  .ant-drawer-content
-    background #242a35
-  .ant-drawer-header
-    padding 15px 0
-    margin 0 24px
-    background transparent
-    border-bottom: 1px solid #5f6c87;
-  .ant-drawer-body
-    padding 15px 20px
-    margin 0 4px
-    height 190px
-    overflow-x hidde
-    overflow-y auto
-  .drawer__content
-    color #f6f6f6
-    font-family RobotoMono-Regular
-    font-size 12px
-    line-height 24px
-    ._text-bold
-      color #87beff
-      font-family RobotoMono-Bold
+.ant-btn-background-ghost
+  box-shadow: none

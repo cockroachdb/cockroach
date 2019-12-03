@@ -48,6 +48,28 @@ interface TimeScaleDropdownProps {
   useTimeRange: boolean;
 }
 
+export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?: moment.Duration) => {
+  const time = windowSize ? windowSize : moment.duration(moment(currentWindow.end).diff(currentWindow.start));
+  const seconds = time.asSeconds();
+  const minutes = 60;
+  const hour = minutes * 60;
+  const day = hour * 24;
+  const week = day * 7;
+  const month = day * moment().daysInMonth();
+  switch (true) {
+    case seconds < hour:
+      return time.asMinutes().toFixed() + "m";
+    case (seconds >= hour && seconds < day):
+      return time.asHours().toFixed() + "h";
+    case seconds < week:
+      return time.asDays().toFixed() + "d";
+    case seconds < month:
+      return time.asWeeks().toFixed() + "w";
+    default:
+      return time.asMonths().toFixed() + "m";
+  }
+};
+
 // TimeScaleDropdown is the dropdown that allows users to select the time range
 // for graphs.
 class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRouterProps, {}> {
@@ -100,19 +122,19 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
   }
 
   getTimescaleOptions = () => {
+    const { currentWindow } = this.props;
     const timescaleOptions = _.map(timewindow.availableTimeScales, (_ts, k) => {
-      return { value: k, label: "Last " + k };
+      return { value: k, label: k, timeLabel: getTimeLabel(null, _ts.windowSize) };
     });
 
     // This just ensures that if the key is "Custom" it will show up in the
     // dropdown options. If a custom value isn't currently selected, "Custom"
     // won't show up in the list of options.
-    if (!_.has(timewindow.availableTimeScales, this.props.currentScale.key)) {
-      timescaleOptions.push({
-        value: this.props.currentScale.key,
-        label: this.props.currentScale.key,
-      });
-    }
+    timescaleOptions.push({
+      value: "Custom",
+      label: "Custom",
+      timeLabel: getTimeLabel(currentWindow),
+    });
     return timescaleOptions;
   }
 
@@ -125,9 +147,9 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
       const clusterDurationHrs = moment.utc().diff(clusterStarted, "hours");
       if (clusterDurationHrs > 1) {
         if (clusterDurationHrs < 6) {
-          props.setTimeScale(props.availableScales["1 hour"]);
+          props.setTimeScale(props.availableScales["Past 1 Hour"]);
         } else if (clusterDurationHrs < 12) {
-          props.setTimeScale(props.availableScales["6 hours"]);
+          props.setTimeScale(props.availableScales["Past 6 Hours"]);
         }
       }
       props.setDefaultSet(true);
@@ -222,14 +244,17 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
 
   getTimeRangeTitle = () => {
     const { currentWindow, currentScale } = this.props;
-    const dateFormat = "M/D/YYYY";
-    const timeFormat = "h:mm:ss A";
+    const dateFormat = "MMM DD,";
+    const timeFormat = "h:mmA";
+    const isSameStartDay = moment(currentWindow.start).isSame(moment(), "day");
+    const isSameEndDay = moment(currentWindow.end).isSame(moment(), "day");
     if (currentScale.key === "Custom") {
       return {
-        dateStart: moment.utc(currentWindow.start).format(dateFormat),
-        dateEnd: moment.utc(currentWindow.end).format(dateFormat),
+        dateStart: isSameStartDay ? "" : moment.utc(currentWindow.start).format(dateFormat),
+        dateEnd: isSameEndDay ? "" : moment.utc(currentWindow.end).format(dateFormat),
         timeStart: moment.utc(currentWindow.start).format(timeFormat),
         timeEnd: moment.utc(currentWindow.end).format(timeFormat),
+        title: "Custom",
       };
     } else {
       return {
@@ -257,12 +282,12 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
     return (
       <div className="timescale">
         <Divider type="vertical" />
-        <TimeFrameControls disabledArrows={this.generateDisabledArrows()} onArrowClick={this.arrowClick} />
         <Dropdown
-          title="TIME"
+          title={getTimeLabel(currentWindow)}
           options={[]}
           selected={currentScale.key}
           onChange={this.changeSettings}
+          isTimeRange
           content={
             <RangeSelect
               value={currentWindow}
@@ -274,6 +299,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
             />
           }
         />
+        <TimeFrameControls disabledArrows={this.generateDisabledArrows()} onArrowClick={this.arrowClick} />
       </div>
     );
   }
