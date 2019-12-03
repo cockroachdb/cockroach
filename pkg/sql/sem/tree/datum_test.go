@@ -489,6 +489,7 @@ func TestParseDTime(t *testing.T) {
 		precision time.Duration
 		expected  timeofday.TimeOfDay
 	}{
+		{" 04:05:06 ", time.Microsecond, timeofday.New(4, 5, 6, 0)},
 		{"04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
 		{"04:05:06.000001", time.Microsecond, timeofday.New(4, 5, 6, 1)},
 		{"04:05:06.000001", time.Second, timeofday.New(4, 5, 6, 0)},
@@ -499,6 +500,12 @@ func TestParseDTime(t *testing.T) {
 		{"24:00:00", time.Microsecond, timeofday.Time2400},
 		{"24:00:00.000", time.Microsecond, timeofday.Time2400},
 		{"24:00:00.000000", time.Microsecond, timeofday.Time2400},
+		{"0000-01-01T24:00:00", time.Microsecond, timeofday.Time2400},
+		{"0000-01-01T24:00:00.0", time.Microsecond, timeofday.Time2400},
+		{"0000-01-01 24:00:00", time.Microsecond, timeofday.Time2400},
+		{"0000-01-01 24:00:00.0", time.Microsecond, timeofday.Time2400},
+		{" 24:00:00.0", time.Microsecond, timeofday.Time2400},
+		{" 24:00:00.0  ", time.Microsecond, timeofday.Time2400},
 	}
 	for _, td := range testData {
 		actual, err := tree.ParseDTime(nil, td.str, td.precision)

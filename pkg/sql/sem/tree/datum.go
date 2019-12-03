@@ -65,7 +65,7 @@ var (
 	DZero = NewDInt(0)
 
 	// DTimeMaxTimeRegex is a compiled regex for parsing the 24:00 time value.
-	DTimeMaxTimeRegex = regexp.MustCompile(`^([0-9-]*(\s+T)?\s+)?24:00($|(:00$)|(:00.0+$))`)
+	DTimeMaxTimeRegex = regexp.MustCompile(`^([0-9-]*(\s|T))?\s*24:00(:00(.0+)?)?\s*$`)
 )
 
 // Datum represents a SQL value.
