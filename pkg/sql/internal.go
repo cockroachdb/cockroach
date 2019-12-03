@@ -90,10 +90,7 @@ func MakeInternalExecutor(
 	}
 }
 
-// SetSessionData binds the session variables that will be used by queries
-// performed through this executor from now on.
-//
-// SetSessionData cannot be called concurently with query execution.
+// SetSessionData implements the sqlutil.InternalExecutor interface.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionData = sessionData

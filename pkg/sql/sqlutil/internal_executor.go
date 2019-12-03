@@ -104,6 +104,12 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (tree.Datums, error)
+
+	// SetSessionData binds the session variables that will be used by queries
+	// performed through this executor from now on.
+	//
+	// SetSessionData cannot be called concurently with query execution.
+	SetSessionData(*sessiondata.SessionData)
 }
 
 // SessionBoundInternalExecutorFactory is a function that produces a "session

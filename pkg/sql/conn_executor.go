@@ -849,8 +849,11 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
-	if ex.hasCreatedTemporarySchema {
-		err := cleanupSessionTempObjects(ctx, ex.server, ex.sessionID)
+	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
+		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		ie.SetSessionData(sessionDataForCleanup(ex.sessionID))
+		err := cleanupSessionTempObjects(
+			ctx, ex.server.cfg.Settings, ex.server.cfg.DB, ie.Exec, ex.sessionID)
 		if err != nil {
 			log.Errorf(
 				ctx,

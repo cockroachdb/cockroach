@@ -844,6 +844,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return &ie
 		}
 
+	// We use the SessionBoundInternalExecutor from the distSQLServer.
+	s.jobRegistry.SetSessionBoundInternalExecutorFactory(
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory)
+
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
 	}
@@ -1637,6 +1641,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start the background thread for periodically refreshing table statistics.
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
+	}
+	if err := sql.SetupBackgroundTempObjectsDeletionJob(s.stopper, s.execCfg); err != nil {
+		log.Errorf(ctx, "Error while setting up the temp tables deletion job: %v", err)
 	}
 
 	// Start the protected timestamp subsystem.
