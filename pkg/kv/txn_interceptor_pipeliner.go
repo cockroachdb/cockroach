@@ -308,9 +308,6 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	// batch synchronously and avoid all of the overhead of pipelining.
 	if maxBatch := pipelinedWritesMaxBatchSize.Get(&tp.st.SV); maxBatch > 0 {
 		batchSize := int64(len(ba.Requests))
-		if _, hasBT := ba.GetArg(roachpb.BeginTransaction); hasBT {
-			batchSize--
-		}
 		if batchSize > maxBatch {
 			asyncConsensus = false
 		}
@@ -329,14 +326,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 			// short-circuit immediately.
 			break
 		}
-
 		req := ru.GetInner()
-		if req.Method() == roachpb.BeginTransaction {
-			// Ignore BeginTransaction requests. They'll always be the first
-			// request in a batch and will never need to chain on any existing
-			// writes.
-			continue
-		}
 
 		if asyncConsensus {
 			// If we're currently planning on performing the batch with

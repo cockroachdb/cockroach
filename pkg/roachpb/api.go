@@ -505,9 +505,6 @@ func (*ReverseScanRequest) Method() Method { return ReverseScan }
 func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
 
 // Method implements the Request interface.
-func (*BeginTransactionRequest) Method() Method { return BeginTransaction }
-
-// Method implements the Request interface.
 func (*EndTransactionRequest) Method() Method { return EndTransaction }
 
 // Method implements the Request interface.
@@ -669,12 +666,6 @@ func (rsr *ReverseScanRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ccr *CheckConsistencyRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (btr *BeginTransactionRequest) ShallowCopy() Request {
-	shallowCopy := *btr
 	return &shallowCopy
 }
 
@@ -1066,7 +1057,6 @@ func (*ScanRequest) flags() int { return isRead | isRange | isTxn | updatesReadT
 func (*ReverseScanRequest) flags() int {
 	return isRead | isRange | isReverse | isTxn | updatesReadTSCache | needsRefresh
 }
-func (*BeginTransactionRequest) flags() int { return isWrite | isTxn }
 
 // EndTransaction updates the write timestamp cache to prevent
 // replays. Replays for the same transaction key and timestamp will
