@@ -141,6 +141,9 @@ func (u *sqlSymUnion) tableIndexName() tree.TableIndexName {
 func (u *sqlSymUnion) newTableIndexNames() tree.TableIndexNames {
     return u.val.(tree.TableIndexNames)
 }
+func (u *sqlSymUnion) shardedIndexDef() *tree.ShardedIndexDef {
+  return u.val.(*tree.ShardedIndexDef)
+}
 func (u *sqlSymUnion) nameList() tree.NameList {
     return u.val.(tree.NameList)
 }
@@ -501,6 +504,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BUCKET_COUNT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
@@ -904,6 +908,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> begin_transaction
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
 
+%type <*tree.ShardedIndexDef> opt_hash_sharded
 %type <tree.NameList> opt_storing
 %type <*tree.ColumnTableDef> column_def
 %type <tree.TableDef> table_elem
@@ -4197,12 +4202,12 @@ pause_stmt:
 // Table elements:
 //    <name> <type> [<qualifiers...>]
 //    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
-//                            [STORING ( <colnames...> )] [<interleave>]
+//                            [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )] [<interleave>]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
 //
 // Table constraints:
-//    PRIMARY KEY ( <colnames...> )
+//    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //    UNIQUE ( <colnames... ) [STORING ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
@@ -4536,6 +4541,13 @@ col_qualification_elem:
   {
     $$.val = tree.PrimaryKeyConstraint{}
   }
+| PRIMARY KEY USING HASH WITH BUCKET_COUNT '=' a_expr
+{
+  $$.val = tree.ShardedPrimaryKeyConstraint{
+    Sharded: true,
+    ShardBuckets: $8.expr(),
+  }
+}
 | CHECK '(' a_expr ')'
   {
     $$.val = &tree.ColumnCheckConstraint{Expr: $3.expr()}
@@ -4569,25 +4581,27 @@ col_qualification_elem:
  }
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
       Columns: $4.idxElems(),
-      Storing: $6.nameList(),
-      Interleave: $7.interleave(),
-      PartitionBy: $8.partitionBy(),
+      Sharded: $6.shardedIndexDef(),
+      Storing: $7.nameList(),
+      Interleave: $8.interleave(),
+      PartitionBy: $9.partitionBy(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
         Name:    tree.Name($3),
         Columns: $5.idxElems(),
-        Storing: $7.nameList(),
-        Interleave: $8.interleave(),
-        PartitionBy: $9.partitionBy(),
+        Sharded: $7.shardedIndexDef(),
+        Storing: $8.nameList(),
+        Interleave: $9.interleave(),
+        PartitionBy: $10.partitionBy(),
       },
     }
   }
@@ -4641,11 +4655,12 @@ constraint_elem:
       },
     }
   }
-| PRIMARY KEY '(' index_params ')'
+| PRIMARY KEY '(' index_params ')' opt_hash_sharded
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
+        Sharded: $6.shardedIndexDef(),
       },
       PrimaryKey:    true,
     }
@@ -4794,6 +4809,18 @@ opt_storing:
 | /* EMPTY */
   {
     $$.val = tree.NameList(nil)
+  }
+
+opt_hash_sharded:
+  USING HASH WITH BUCKET_COUNT '=' a_expr
+  {
+    $$.val = &tree.ShardedIndexDef{
+      ShardBuckets: $6.expr(),
+    }
+  }
+  | /* EMPTY */
+  {
+    $$.val = (*tree.ShardedIndexDef)(nil)
   }
 
 opt_column_list:
@@ -5092,15 +5119,15 @@ create_type_stmt:
 // %Text:
 // CREATE [UNIQUE | INVERTED] INDEX [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [STORING ( <colnames...> )] [<interleave>]
+//        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )] [<interleave>]
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
-//
+// 
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_idx_where
   {
     table := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5108,13 +5135,14 @@ create_index_stmt:
       Table:   table,
       Unique:  $2.bool(),
       Columns: $9.idxElems(),
-      Storing: $11.nameList(),
-      Interleave: $12.interleave(),
-      PartitionBy: $13.partitionBy(),
+      Sharded: $11.shardedIndexDef(),
+      Storing: $12.nameList(),
+      Interleave: $13.interleave(),
+      PartitionBy: $14.partitionBy(),
       Inverted: $7.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_idx_where
   {
     table := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
@@ -5123,9 +5151,10 @@ create_index_stmt:
       Unique:      $2.bool(),
       IfNotExists: true,
       Columns:     $12.idxElems(),
-      Storing:     $14.nameList(),
-      Interleave:  $15.interleave(),
-      PartitionBy: $16.partitionBy(),
+      Sharded:     $14.shardedIndexDef(),
+      Storing:     $15.nameList(),
+      Interleave:  $16.interleave(),
+      PartitionBy: $17.partitionBy(),
       Inverted:    $10.bool(),
     }
   }
@@ -9486,6 +9515,7 @@ unreserved_keyword:
 | BIGSERIAL
 | BLOB
 | BOOL
+| BUCKET_COUNT
 | BY
 | BYTEA
 | BYTES

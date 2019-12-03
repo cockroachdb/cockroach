@@ -942,7 +942,7 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 			// Primary keys must be in the first
 			// column family, so don't add them to
 			// the list.
-			if def.PrimaryKey {
+			if def.PrimaryKey.IsPrimaryKey {
 				continue
 			}
 			columns = append(columns, def.Name)
@@ -1019,7 +1019,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 			switch ast := def.(type) {
 			case *tree.ColumnTableDef:
 				columnNames = append(columnNames, ast.Name)
-				if ast.PrimaryKey {
+				if ast.PrimaryKey.IsPrimaryKey {
 					pkCols = []tree.Name{ast.Name}
 				}
 			case *tree.UniqueConstraintTableDef:

@@ -197,6 +197,35 @@ message InterleaveDescriptor {
   repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
 }
 
+// ShardedDescriptor represents an index (either primary or secondary) that is hash
+// sharded into a user-specified number of buckets.
+//
+// As as example, sample field values for the following table:
+//
+// CREATE TABLE abc (
+//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1 
+//   b BYTES
+// );
+//
+// Sharded descriptor:
+//   name:          "a_shard"
+//   shard_buckets: 10
+//   column_names:  ["a"]
+message ShardedDescriptor {
+  option (gogoproto.equal) = true;
+  
+  // Name is the name of the shard column.
+  optional string name = 1 [(gogoproto.nullable) = false];
+
+  // ShardBuckets indicates the number of shards this index is divided into.
+  optional int32 shard_buckets = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ShardBuckets"];
+
+  // ColumnNames lists the names of the columns used to compute the shard column's
+  // values.
+  repeated string column_names = 3;
+}
+
 // PartitioningDescriptor represents the partitioning of an index into spans
 // of keys addressable by a zone config. The key encoding is unchanged. Each
 // partition may optionally be itself divided into further partitions, called
@@ -385,6 +414,9 @@ message IndexDescriptor {
   // CreatedExplicitly specifies whether this index was created explicitly
   // (i.e. via 'CREATE INDEX' statement).
   optional bool created_explicitly = 17 [(gogoproto.nullable) = false];
+
+  // Sharded, if it's not the zero value, describes how this index is sharded.
+  optional ShardedDescriptor sharded = 19; 
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -616,6 +648,9 @@ message TableDescriptor {
     repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
     optional bool is_non_null_constraint = 6 [(gogoproto.nullable) = false];
+    // Whether the check constraint should show up in the result of a `SHOW CREATE
+    // TABLE..` statement.
+    optional bool hidden = 7 [(gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;

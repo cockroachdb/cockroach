@@ -107,6 +107,7 @@ type CreateIndex struct {
 	Inverted    bool
 	IfNotExists bool
 	Columns     IndexElemList
+	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
 	Storing     NameList
@@ -144,6 +145,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	ctx.WriteString(" (")
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+	if node.Sharded != nil {
+		ctx.FormatNode(node.Sharded)
+	}
 	if len(node.Storing) > 0 {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
@@ -209,7 +213,11 @@ type ColumnTableDef struct {
 		Nullability    Nullability
 		ConstraintName Name
 	}
-	PrimaryKey           bool
+	PrimaryKey struct {
+		IsPrimaryKey bool
+		Sharded      bool
+		ShardBuckets Expr
+	}
 	Unique               bool
 	UniqueConstraintName Name
 	DefaultExpr          struct {
@@ -305,7 +313,13 @@ func NewColumnTableDef(
 			d.Nullable.Nullability = Null
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
-			d.PrimaryKey = true
+			d.PrimaryKey.IsPrimaryKey = true
+			d.UniqueConstraintName = c.Name
+		case ShardedPrimaryKeyConstraint:
+			d.PrimaryKey.IsPrimaryKey = true
+			constraint := c.Qualification.(ShardedPrimaryKeyConstraint)
+			d.PrimaryKey.Sharded = true
+			d.PrimaryKey.ShardBuckets = constraint.ShardBuckets
 			d.UniqueConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique = true
@@ -389,13 +403,17 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey || node.Unique {
+	if node.PrimaryKey.IsPrimaryKey || node.Unique {
 		if node.UniqueConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
 			ctx.FormatNode(&node.UniqueConstraintName)
 		}
-		if node.PrimaryKey {
+		if node.PrimaryKey.IsPrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
+			if node.PrimaryKey.Sharded {
+				ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
+				ctx.FormatNode(node.PrimaryKey.ShardBuckets)
+			}
 		} else if node.Unique {
 			ctx.WriteString(" UNIQUE")
 		}
@@ -483,16 +501,17 @@ type ColumnQualification interface {
 	columnQualification()
 }
 
-func (ColumnCollation) columnQualification()         {}
-func (*ColumnDefault) columnQualification()          {}
-func (NotNullConstraint) columnQualification()       {}
-func (NullConstraint) columnQualification()          {}
-func (PrimaryKeyConstraint) columnQualification()    {}
-func (UniqueConstraint) columnQualification()        {}
-func (*ColumnCheckConstraint) columnQualification()  {}
-func (*ColumnComputedDef) columnQualification()      {}
-func (*ColumnFKConstraint) columnQualification()     {}
-func (*ColumnFamilyConstraint) columnQualification() {}
+func (ColumnCollation) columnQualification()             {}
+func (*ColumnDefault) columnQualification()              {}
+func (NotNullConstraint) columnQualification()           {}
+func (NullConstraint) columnQualification()              {}
+func (PrimaryKeyConstraint) columnQualification()        {}
+func (ShardedPrimaryKeyConstraint) columnQualification() {}
+func (UniqueConstraint) columnQualification()            {}
+func (*ColumnCheckConstraint) columnQualification()      {}
+func (*ColumnComputedDef) columnQualification()          {}
+func (*ColumnFKConstraint) columnQualification()         {}
+func (*ColumnFamilyConstraint) columnQualification()     {}
 
 // ColumnCollation represents a COLLATE clause for a column.
 type ColumnCollation string
@@ -510,6 +529,13 @@ type NullConstraint struct{}
 
 // PrimaryKeyConstraint represents PRIMARY KEY on a column.
 type PrimaryKeyConstraint struct{}
+
+// ShardedPrimaryKeyConstraint represents `PRIMARY KEY .. USING HASH..`
+// on a column.
+type ShardedPrimaryKeyConstraint struct {
+	Sharded      bool
+	ShardBuckets Expr
+}
 
 // UniqueConstraint represents UNIQUE on a column.
 type UniqueConstraint struct{}
@@ -544,6 +570,7 @@ type ColumnFamilyConstraint struct {
 type IndexTableDef struct {
 	Name        Name
 	Columns     IndexElemList
+	Sharded     *ShardedIndexDef
 	Storing     NameList
 	Interleave  *InterleaveDef
 	Inverted    bool
@@ -568,6 +595,9 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+	if node.Sharded != nil {
+		ctx.FormatNode(node.Sharded)
+	}
 	if node.Storing != nil {
 		ctx.WriteString(" STORING (")
 		ctx.FormatNode(&node.Storing)
@@ -741,8 +771,9 @@ func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.
 type CheckConstraintTableDef struct {
-	Name Name
-	Expr Expr
+	Name   Name
+	Expr   Expr
+	Hidden bool
 }
 
 // SetName implements the TableDef interface.
@@ -784,6 +815,36 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
+}
+
+// ShardedIndexDef represents a hash sharded secondary index definition within a CREATE
+// TABLE or CREATE INDEX statement.
+type ShardedIndexDef struct {
+	ShardBuckets Expr
+}
+
+// EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
+// BUCKET_COUNT` index creation query.
+func EvalShardBucketCount(shardBuckets Expr) (int32, error) {
+	const invalidBucketCountMsg = `BUCKET_COUNT must be a strictly positive integer value`
+	cst, ok := shardBuckets.(*NumVal)
+	if !ok {
+		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
+	}
+	buckets, err := cst.AsInt32()
+	if err != nil || buckets <= 0 {
+		if err != nil {
+			return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue, invalidBucketCountMsg)
+		}
+		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
+	}
+	return buckets, nil
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShardedIndexDef) Format(ctx *FmtCtx) {
+	ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
+	ctx.FormatNode(node.ShardBuckets)
 }
 
 // InterleaveDef represents an interleave definition within a CREATE TABLE
@@ -927,7 +988,7 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 		for _, def := range node.Defs {
 			if d, ok := def.(*ColumnTableDef); !ok {
 				return false
-			} else if d.PrimaryKey {
+			} else if d.PrimaryKey.IsPrimaryKey {
 				return true
 			}
 		}
