@@ -28,24 +28,27 @@ run() {
 # only test output related to failing tests and run/pass/skip events for the
 # other tests (no output). It writes artifacts/failures.log containing text
 # output for the failing tests.
+# It's valid to call this multiple times; all output artifacts will be
+# preserved.
 function run_json_test() {
 	go get github.com/cockroachdb/cockroach/pkg/cmd/testfilter
+	tmpfile=$(mktemp artifacts/debug.txt.XXX)
 	set +e
 	run "$@" 2>&1 \
-		| tee -a artifacts/debug.txt \
+		| tee "${tmpfile}" \
 		| testfilter -mode=strip \
 		| tee artifacts/stripped.txt
 	status=$?
 	set -e
 
-	# Create failures.log artifact and delete stripped.txt.
+	# Create (or append to) failures.log artifact and delete stripped.txt.
 	testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.log
 	rm -f artifacts/stripped.txt
 
 	# Keep the debug file around for failed builds. Compress it to avoid
 	# clogging the agents with stuff we'll hopefully rarely ever need to
 	# look at.
-	tar --strip-components 1 -czf artifacts/debug.tgz artifacts/debug.txt
+	tar --strip-components 1 -czf "${tmpfile}.tgz" "${tmpfile}"
 	rm -f artifacts/debug.txt
 
 	return $status
