@@ -61,6 +61,11 @@ func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
 }
 
 func (c *remoteClient) ReadFile(ctx context.Context, file string) (io.ReadCloser, error) {
+	// Check that file exists before reading from it
+	_, err := c.Stat(ctx, file)
+	if err != nil {
+		return nil, err
+	}
 	stream, err := c.blobClient.GetStream(ctx, &blobspb.GetRequest{
 		Filename: file,
 	})
