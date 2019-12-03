@@ -74,6 +74,26 @@ function run_text_test() {
 	"$@" 2>&1 | go tool test2json -t -p "${pkg}" | run_json_test cat
 }
 
+function maybe_stress() {
+  # Don't stressrace on the release branches; we only want that to happen on the
+  # PRs. There's no need in making master flakier than it needs to be; nightly
+  # stress will weed out the flaky tests.
+  # NB: as a consequence of the above, this code doesn't know about posting
+  # Github issues.
+  if tc_release_branch; then
+    return 0
+  fi
+
+  typ=$1
+  shift
+
+  block="Maybe ${target} pull request"
+  tc_start_block "${block}"
+  run build/builder.sh go install ./pkg/cmd/github-pull-request-make
+  run build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET="${target}" github-pull-request-make
+  tc_end_block "${block}"
+}
+
 # Returns the list of release branches from origin (origin/release-*), ordered
 # by version (higher version numbers first).
 get_release_branches() {
