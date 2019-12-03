@@ -100,6 +100,7 @@ enable_testing()
 set(tests
   chunked_buffer_test.cc
   db_test.cc
+  comparator_test.cc
   encoding_test.cc
   file_registry_test.cc
   merge_test.cc
