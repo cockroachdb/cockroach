@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -69,6 +69,9 @@ const demoOrg = "Cockroach Demo"
 const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
+
+// maxNodeInitTime is the maximum amount of time to wait for nodes to be connected.
+const maxNodeInitTime = 30 * time.Second
 
 var defaultLocalities = demoLocalityList{
 	// Default localities for a 3 node cluster
@@ -239,9 +242,24 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	// TODO(#42243): re-compute the latency mapping.
 	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr())
 	serv := server.TestServerFactory.New(args).(*server.TestServer)
+
+	// We want to only return after the server is ready.
+	readyCh := make(chan struct{})
+	serv.Cfg.ReadyFn = func(_ bool) {
+		close(readyCh)
+	}
+
 	if err := serv.Start(args); err != nil {
 		return err
 	}
+
+	// Wait until the server is ready to action.
+	select {
+	case <-readyCh:
+	case <-time.After(maxNodeInitTime):
+		return errors.Newf("could not initialize node %d in time", nodeID)
+	}
+
 	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 	c.servers[nodeIndex] = serv
 	return nil
@@ -314,11 +332,15 @@ func setupTransientCluster(
 
 	serverFactory := server.TestServerFactory
 	var servers []*server.TestServer
-	wg := new(sync.WaitGroup)
-	// waitCh is used to block test servers after RPC address computation until the artificial
+
+	// latencyMapWaitCh is used to block test servers after RPC address computation until the artificial
 	// latency map has been constructed.
-	waitCh := make(chan struct{})
-	errChs := make([]chan error, demoCtx.nodes)
+	latencyMapWaitCh := make(chan struct{})
+
+	// errCh is used to catch all errors when initializing servers.
+	// Sending a nil on this channel indicates success.
+	errCh := make(chan error, demoCtx.nodes)
+
 	for i := 0; i < demoCtx.nodes; i++ {
 		// All the nodes connect to the address of the first server created.
 		var joinAddr string
@@ -327,16 +349,15 @@ func setupTransientCluster(
 		}
 		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
 
-		// readyCh is used if latency simulation is requested to notify that a test server has
+		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.
-		readyCh := make(chan struct{})
-		errChs[i] = make(chan error, 1)
+		servRPCReadyCh := make(chan struct{})
 
 		if demoCtx.simulateLatency {
 			args.Knobs = base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					PauseAfterGettingRPCAddress:  waitCh,
-					SignalAfterGettingRPCAddress: readyCh,
+					PauseAfterGettingRPCAddress:  latencyMapWaitCh,
+					SignalAfterGettingRPCAddress: servRPCReadyCh,
 					ContextTestingKnobs: rpc.ContextTestingKnobs{
 						ArtificialLatencyMap: make(map[string]int),
 					},
@@ -351,21 +372,32 @@ func setupTransientCluster(
 		}
 		servers = append(servers, serv)
 
+		// We force a wait for all servers until they are ready.
+		servReadyFnCh := make(chan struct{})
+		serv.Cfg.ReadyFn = func(_ bool) {
+			close(servReadyFnCh)
+		}
+
 		// If latency simulation is requested, start the servers in a background thread. We do this because
 		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
 		if demoCtx.simulateLatency {
-			wg.Add(1)
 			go func(i int) {
 				if err := serv.Start(args); err != nil {
-					errChs[i] <- err
+					errCh <- err
+				} else {
+					// Block until the ReadyFn has been called before continuing.
+					<-servReadyFnCh
+					errCh <- nil
 				}
-				wg.Done()
 			}(i)
-			<-readyCh
+			<-servRPCReadyCh
 		} else {
 			if err := serv.Start(args); err != nil {
 				return c, err
 			}
+			// Block until the ReadyFn has been called before continuing.
+			<-servReadyFnCh
+			errCh <- nil
 		}
 
 		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
@@ -420,18 +452,23 @@ func setupTransientCluster(
 
 	// We've assembled our latency maps and are ready for all servers to proceed
 	// through bootstrapping.
-	close(waitCh)
-	wg.Wait()
+	close(latencyMapWaitCh)
 
-	// Finally, check for errors.
+	// Wait for all servers to respond.
 	{
+		timeRemaining := maxNodeInitTime
+		lastUpdateTime := timeutil.Now()
 		var err error
-		for i := 0; i < len(errChs); i++ {
+		for i := 0; i < demoCtx.nodes; i++ {
 			select {
-			case e := <-errChs[i]:
+			case e := <-errCh:
 				err = errors.CombineErrors(err, e)
-			default:
+			case <-time.After(timeRemaining):
+				return c, errors.New("failed to setup transientCluster in time")
 			}
+			updateTime := timeutil.Now()
+			timeRemaining -= updateTime.Sub(lastUpdateTime)
+			lastUpdateTime = updateTime
 		}
 		if err != nil {
 			return c, err
