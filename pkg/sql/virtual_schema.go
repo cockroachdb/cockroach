@@ -108,13 +108,34 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	}
 
 	create := stmt.AST.(*tree.CreateTable)
+	var firstColDef *tree.ColumnTableDef
 	for _, def := range create.Defs {
-		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
+		if d, ok := def.(*tree.ColumnTableDef); ok {
+			if d.HasDefaultExpr() {
+				return sqlbase.TableDescriptor{},
+					errors.Errorf("virtual tables are not allowed to use default exprs "+
+						"because bootstrapping: %s:%s", &create.Table, d.Name)
+			}
+			if firstColDef == nil {
+				firstColDef = d
+			}
+		}
+		if _, ok := def.(*tree.UniqueConstraintTableDef); ok {
 			return sqlbase.TableDescriptor{},
-				errors.Errorf("virtual tables are not allowed to use default exprs "+
-					"because bootstrapping: %s:%s", &create.Table, d.Name)
+				errors.Errorf("virtual tables are not allowed to have unique constraints")
 		}
 	}
+	if firstColDef == nil {
+		return sqlbase.TableDescriptor{},
+			errors.Errorf("can't have empty virtual tables")
+	}
+	create.Defs = append(create.Defs, &tree.UniqueConstraintTableDef{
+		PrimaryKey: true,
+		IndexTableDef: tree.IndexTableDef{
+			Name:    "primary",
+			Columns: tree.IndexElemList{tree.IndexElem{Column: firstColDef.Name}},
+		},
+	})
 
 	// Virtual tables never use SERIAL so we need not process SERIAL
 	// types here.
@@ -136,6 +157,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	if err != nil {
 		return mutDesc.TableDescriptor, err
 	}
+	// Add a fake Primary Key. We'll just make it the first column for now.
 	for i := range mutDesc.Indexes {
 		idx := &mutDesc.Indexes[i]
 		// All indexes of virtual tables automatically STORE all other columns in
