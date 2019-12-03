@@ -513,8 +513,8 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusRunning {
-			return errors.Errorf("job %d no longer running", *j.id)
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return errors.Errorf("job %d has status %v which is not elligible for adopting", *j.id, md.Status)
 		}
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
