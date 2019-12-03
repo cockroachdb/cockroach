@@ -78,7 +78,9 @@ interface SortedTableProps<T> {
   // Indicates if pagination is enabled
   pagination?: boolean;
   // Callback which is invoked on navigation between pages.
-  onPageChange?: (page: number, pageSize: number) => void;
+  onPageChange?: (page: number) => void;
+  // Callback that called after subset of rows is calculated and rendered.
+  onPageRendered?: (rowsOnPage: number) => void;
   // How many rows should be displayed on a page
   pageSize?: number;
   // What page should be selected by default
@@ -109,6 +111,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     onPageChange: _.noop,
     pageSize: 15,
     selectedPage: 1,
+    onPageRendered: _.noop,
   };
 
   rollups = createSelector(
@@ -215,6 +218,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
       pagination,
       selectedPage,
       pageSize,
+      onPageRendered,
       emptyTableMessage,
     } = this.props;
 
@@ -231,13 +235,26 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     // page so basically there is no pagination if not specified.
     const totalRecordsCount = data.length;
     let startIndex = 0;
-    let displayItemsCount = totalRecordsCount;
+    let endIndex = totalRecordsCount;
 
-    // if 'pagination' props is enabled, then calculate
-    // offset for rows to display
+    // If 'pagination' is enabled and total number of rows greater than page size,
+    // then calculate offset for rows to display.
     if (pagination && pageSize < totalRecordsCount) {
       startIndex = (selectedPage - 1) * pageSize;
-      displayItemsCount = pageSize;
+
+      // Validate that start index does not exceed index of last row.
+      // In start index is greater than assign to 0.
+      if (startIndex >= totalRecordsCount) {
+        startIndex = 0;
+      }
+
+      // Validate that end index is not greater than index of last row.
+      // It its greater then assign it to the index of last row.
+      if (startIndex + pageSize < totalRecordsCount) {
+        endIndex = startIndex + pageSize;
+      }
+
+      onPageRendered(endIndex - startIndex);
     }
 
     // Display table only if data is available or 'emptyTableMessage' is provided by user.
@@ -247,7 +264,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           <SortableTable
             count={totalRecordsCount}
             startIndex={startIndex}
-            renderItemsCount={displayItemsCount}
+            endIndex={endIndex}
             sortSetting={sortSetting}
             onChangeSortSetting={onChangeSortSetting}
             columns={this.columns(this.props)}

@@ -65,10 +65,11 @@ interface TableProps {
   // i.e. each row has an expand/collapse arrow on its left, and renders
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
-  // Render rows which start from 'startIndex' number
+  // Index of first row to render. If not specified renders rows starting from
+  // first row.
   startIndex?: number;
-  // render particular number of rows instead of rendering entire dataset
-  renderItemsCount?: number;
+  // Index of last row to render. If not specified renders up to last row in dataset.
+  endIndex?: number;
   // Message to display in case of empty table
   emptyTableMessage?: string;
 }
@@ -191,24 +192,11 @@ export class SortableTable extends React.Component<TableProps> {
 
   render() {
     const { count, sortSetting, columns, expandableConfig, emptyTableMessage } = this.props;
-    // Render all rows for entire dataset.
-    let startIndex = 0;
-    let endIndex = count;
-    let isEmptyTable = count === 0;
-
-    if (!_.isUndefined(this.props.startIndex) &&
-      !_.isUndefined(this.props.renderItemsCount) &&
-        this.props.startIndex < count) {
-      const { renderItemsCount } = this.props;
-      startIndex = this.props.startIndex;
-
-      // If endIndex is greater then total count of items in dataset (is possible for last page),
-      // then keep endIndex equal to total count of items to avoid IndexOutOfRange exception.
-      if (startIndex + renderItemsCount < count) {
-        endIndex = startIndex + renderItemsCount;
-      }
-      isEmptyTable = endIndex - startIndex === 0;
-    }
+    // If startIndex and endIndex are specified - render custom subset of row,
+    // otherwise render all rows.
+    const startIndex = this.props.startIndex || 0;
+    const endIndex = this.props.endIndex || count;
+    const isEmptyTable = endIndex - startIndex === 0;
 
     return (
       <table className={classNames("sort-table", this.props.className)}>
