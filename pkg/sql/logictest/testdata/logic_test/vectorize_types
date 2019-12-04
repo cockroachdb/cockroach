@@ -54,3 +54,8 @@ SELECT * FROM all_types ORDER BY 1
 ----
 NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL
 false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000
+
+# This query uses a builtin that returns currently unsupported type
+# (TimestampTZ). We're only interested in not getting an error. See #42871.
+statement ok
+SELECT experimental_strptime(_string, _string) IS NULL FROM all_types
