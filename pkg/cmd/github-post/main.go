@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -64,10 +65,43 @@ func main() {
 // https://golang.org/cmd/test2json/
 type testEvent struct {
 	Action  string
+	Package string
 	Test    string
 	Output  string
 	Time    time.Time // encodes as an RFC3339-format string
 	Elapsed float64   // seconds
+}
+
+type scopedTest struct {
+	pkg  string
+	name string
+}
+
+func scoped(te testEvent) scopedTest {
+	if te.Package == "" {
+		return scopedTest{pkg: mustPkgFromEnv(), name: te.Test}
+	}
+	return scopedTest{pkg: te.Package, name: te.Test}
+}
+
+func mustPkgFromEnv() string {
+	packageName := maybePkgFromEnv()
+	if packageName == "" {
+		panic(errors.Errorf("package name environment variable %s is not set", pkgEnv))
+	}
+	return packageName
+}
+
+func maybePkgFromEnv() string {
+	packageName, ok := os.LookupEnv(pkgEnv)
+	if !ok {
+		return ""
+	}
+	return packageName
+}
+
+func trimPkg(pkg string) string {
+	return strings.TrimPrefix(pkg, issues.CockroachPkgPrefix)
 }
 
 func listFailures(
@@ -81,27 +115,19 @@ func listFailures(
 	const shortTestFilterSecs float64 = 0.5
 	var timeoutMsg = "panic: test timed out after"
 
-	dec := json.NewDecoder(input)
-
-	packageName, ok := os.LookupEnv(pkgEnv)
-	if !ok {
-		return errors.Errorf("package name environment variable %s is not set", pkgEnv)
-	}
-	trimmedPkgName := strings.TrimPrefix(packageName, issues.CockroachPkgPrefix)
-
 	var packageOutput bytes.Buffer
 
 	// map  from test name to list of events (each log line is an event, plus
 	// start and pass/fail events).
 	// Tests/events are "outstanding" until we see a final pass/fail event.
-	// Because of the way the go tet runner prints output, in case a subtest times
-	// out or panics, we don't get a  pass/fail event for sibling and ancestor
+	// Because of the way the go test runner prints output, in case a subtest times
+	// out or panics, we don't get a pass/fail event for sibling and ancestor
 	// tests. Those tests will remain "outstanding" and will be ignored for the
 	// purpose of issue reporting.
-	outstandingOutput := make(map[string][]testEvent)
-	failures := make(map[string][]testEvent)
-	var slowPassingTests []testEvent
-	var slowFailingTests []testEvent
+	outstandingOutput := make(map[scopedTest][]testEvent)
+	failures := make(map[scopedTest][]testEvent)
+	var slowPassEvents []testEvent
+	var slowFailEvents []testEvent
 
 	// init is true for the preamble of the input before the first "run" test
 	// event.
@@ -116,17 +142,25 @@ func listFailures(
 	// deduce the duration of a timed out test.
 	var elapsedTotalSec float64
 	// Will be set if the last test timed out.
-	var timedOutTestName string
+	var timedOutCulprit scopedTest
 	var timedOutEvent testEvent
 	var curTestStart time.Time
-	var lastTestName string
+	var last scopedTest
 	var lastEvent testEvent
-	for {
+	scanner := bufio.NewScanner(input)
+	for scanner.Scan() {
 		var te testEvent
-		if err := dec.Decode(&te); err == io.EOF {
-			break
-		} else if err != nil {
-			return err
+		{
+			line := scanner.Text() // has no EOL marker
+			if len(line) <= 2 || line[0] != '{' || line[len(line)-1] != '}' {
+				// This line is not test2json output, skip it. This can happen if
+				// whatever feeds our input has some extra non-JSON lines such as
+				// would happen with `make` invocations.
+				continue
+			}
+			if err := json.Unmarshal([]byte(line), &te); err != nil {
+				return errors.Wrap(err, line)
+			}
 		}
 		lastEvent = te
 
@@ -136,14 +170,14 @@ func listFailures(
 		if init && strings.Contains(te.Output, "-exec 'stress '") {
 			trustTimestamps = false
 		}
-		if timedOutTestName == "" && te.Elapsed > 0 {
+		if timedOutCulprit.name == "" && te.Elapsed > 0 {
 			// We don't count subtests as those are counted in the parent.
 			if split := strings.SplitN(te.Test, "/", 2); len(split) == 1 {
 				elapsedTotalSec += te.Elapsed
 			}
 		}
 
-		if timedOutTestName == te.Test && te.Elapsed != 0 {
+		if timedOutCulprit.name == te.Test && te.Elapsed != 0 {
 			te.Elapsed = timedOutEvent.Elapsed
 		}
 
@@ -151,14 +185,15 @@ func listFailures(
 		if len(te.Test) > 0 {
 			switch te.Action {
 			case "run":
-				lastTestName = te.Test
+				last = scoped(te)
 				if trustTimestamps {
 					curTestStart = te.Time
 				}
 			case "output":
-				outstandingOutput[te.Test] = append(outstandingOutput[te.Test], te)
+				key := scoped(te)
+				outstandingOutput[key] = append(outstandingOutput[key], te)
 				if strings.Contains(te.Output, timeoutMsg) {
-					timedOutTestName = te.Test
+					timedOutCulprit = key
 
 					// Fill in the Elapsed field for a timeout event.
 					// As of go1.11, the Elapsed field is bogus for fail events for timed
@@ -202,30 +237,31 @@ func listFailures(
 					timedOutEvent = te
 				}
 			case "pass", "skip":
-				if timedOutTestName != "" {
+				if timedOutCulprit.name != "" {
 					panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
 				}
-				delete(outstandingOutput, te.Test)
+				delete(outstandingOutput, scoped(te))
 				if te.Elapsed > shortTestFilterSecs {
 					// We ignore subtests; their time contributes to the parent's.
 					if !strings.Contains(te.Test, "/") {
-						slowPassingTests = append(slowPassingTests, te)
+						slowPassEvents = append(slowPassEvents, te)
 					}
 				}
 			case "fail":
+				key := scoped(te)
 				// Record slow tests. We ignore subtests; their time contributes to the
 				// parent's. Except the timed out (sub)test, for which the parent (if
 				// any) is not going to appear in the report because there's not going
 				// to be a pass/fail event for it.
-				if !strings.Contains(te.Test, "/") || timedOutTestName == te.Test {
-					slowFailingTests = append(slowFailingTests, te)
+				if !strings.Contains(te.Test, "/") || timedOutCulprit == key {
+					slowFailEvents = append(slowFailEvents, te)
 				}
 				// Move the test to the failures collection unless the test timed out.
 				// We have special reporting for timeouts below.
-				if timedOutTestName != te.Test {
-					failures[te.Test] = outstandingOutput[te.Test]
+				if timedOutCulprit != key {
+					failures[key] = outstandingOutput[key]
 				}
-				delete(outstandingOutput, te.Test)
+				delete(outstandingOutput, key)
 			}
 		} else if te.Action == "output" {
 			// Output was outside the context of a test. This consists mostly of the
@@ -239,32 +275,37 @@ func listFailures(
 	// out test (we seem to get one when processing output from a test binary run,
 	// but not when processing the output of `stress`, which adds some lines at
 	// the end). If we haven't gotten a fail event, the test's output is still
-	// outstanding and the test is not registered in the slowFailingTests
-	// collection. The timeout handling code below relies on slowFailingTests not
+	// outstanding and the test is not registered in the slowFailEvents
+	// collection. The timeout handling code below relies on slowFailEvents not
 	// being empty though, so we'll process the test here.
-	if timedOutTestName != "" {
-		if _, ok := outstandingOutput[timedOutTestName]; ok {
-			slowFailingTests = append(slowFailingTests, timedOutEvent)
-			delete(outstandingOutput, timedOutTestName)
+	if timedOutCulprit.name != "" {
+		if _, ok := outstandingOutput[timedOutCulprit]; ok {
+			slowFailEvents = append(slowFailEvents, timedOutEvent)
+			delete(outstandingOutput, timedOutCulprit)
 		}
 	} else {
 		// If we haven't received a final event for the last test, then a
 		// panic/log.Fatal must have happened. Consider it failed.
 		// Note that because of https://github.com/golang/go/issues/27582 there
 		// might be other outstanding tests; we ignore those.
-		if _, ok := outstandingOutput[lastTestName]; ok {
-			log.Printf("found outstanding output. Considering last test failed: %s", lastTestName)
-			failures[lastTestName] = outstandingOutput[lastTestName]
+		if _, ok := outstandingOutput[last]; ok {
+			log.Printf("found outstanding output. Considering last test failed: %s", last)
+			failures[last] = outstandingOutput[last]
 		}
 	}
 
 	// test2json always puts a fail event last unless it sees a big pass message
 	// from the test output.
-	if lastEvent.Action == "fail" && len(failures) == 0 && timedOutTestName == "" {
+	if lastEvent.Action == "fail" && len(failures) == 0 && timedOutCulprit.name == "" {
 		// If we couldn't find a failing Go test, assume that a failure occurred
 		// before running Go and post an issue about that.
 		const unknown = "(unknown)"
-		title := fmt.Sprintf("%s: package failed under stress", trimmedPkgName)
+		packageName := maybePkgFromEnv()
+		if packageName == "" {
+			packageName = "unknown"
+		}
+		trimmedPkgName := trimPkg(packageName)
+		title := fmt.Sprintf("%s: package failed", trimmedPkgName)
 		if err := f(
 			ctx, title, packageName, unknown, packageOutput.String(), "", /* authorEmail */
 		); err != nil {
@@ -272,9 +313,9 @@ func listFailures(
 		}
 	} else {
 		for test, testEvents := range failures {
-			if split := strings.SplitN(test, "/", 2); len(split) == 2 {
-				parentTest, subTest := split[0], split[1]
-				log.Printf("consolidating failed subtest %q into parent test %q", subTest, parentTest)
+			if split := strings.SplitN(test.name, "/", 2); len(split) == 2 {
+				parentTest, subTest := scopedTest{pkg: test.pkg, name: split[0]}, scopedTest{pkg: test.pkg, name: split[1]}
+				log.Printf("consolidating failed subtest %q into parent test %q", subTest.name, parentTest.name)
 				failures[parentTest] = append(failures[parentTest], testEvents...)
 				delete(failures, test)
 			} else {
@@ -282,14 +323,16 @@ func listFailures(
 			}
 		}
 		// Sort the failed tests to make the unit tests for this script deterministic.
-		var failedTestNames []string
+		var failedTestNames []scopedTest
 		for name := range failures {
 			failedTestNames = append(failedTestNames, name)
 		}
-		sort.Strings(failedTestNames)
+		sort.Slice(failedTestNames, func(i, j int) bool {
+			return fmt.Sprint(failedTestNames[i]) < fmt.Sprint(failedTestNames[j])
+		})
 		for _, test := range failedTestNames {
 			testEvents := failures[test]
-			authorEmail, err := getAuthorEmail(ctx, packageName, test)
+			authorEmail, err := getAuthorEmail(ctx, test.pkg, test.name)
 			if err != nil {
 				log.Printf("unable to determine test author email: %s\n", err)
 			}
@@ -298,22 +341,22 @@ func listFailures(
 				outputs = append(outputs, testEvent.Output)
 			}
 			message := strings.Join(outputs, "")
-			title := fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, test)
-			if err := f(ctx, title, packageName, test, message, authorEmail); err != nil {
+			title := fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name)
+			if err := f(ctx, title, test.pkg, test.name, message, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		}
 	}
 
 	// Sort slow tests descendingly by duration.
-	sort.Slice(slowPassingTests, func(i, j int) bool {
-		return slowPassingTests[i].Elapsed > slowPassingTests[j].Elapsed
+	sort.Slice(slowPassEvents, func(i, j int) bool {
+		return slowPassEvents[i].Elapsed > slowPassEvents[j].Elapsed
 	})
-	sort.Slice(slowFailingTests, func(i, j int) bool {
-		return slowFailingTests[i].Elapsed > slowFailingTests[j].Elapsed
+	sort.Slice(slowFailEvents, func(i, j int) bool {
+		return slowFailEvents[i].Elapsed > slowFailEvents[j].Elapsed
 	})
 
-	report := genSlowTestsReport(slowPassingTests, slowFailingTests)
+	report := genSlowTestsReport(slowPassEvents, slowFailEvents)
 	if err := writeSlowTestsReport(report); err != nil {
 		log.Printf("failed to create slow tests report: %s", err)
 	}
@@ -324,25 +367,30 @@ func listFailures(
 	// have run forever.
 	// 2) Otherwise, we don't blame anybody in particular. We file a generic issue
 	// listing the package name containing the report of long-running tests.
-	if timedOutTestName != "" {
-		slowest := slowFailingTests[0]
-		if len(slowPassingTests) > 0 && slowPassingTests[0].Elapsed > slowest.Elapsed {
-			slowest = slowPassingTests[0]
+	if timedOutCulprit.name != "" {
+		slowest := slowFailEvents[0]
+		if len(slowPassEvents) > 0 && slowPassEvents[0].Elapsed > slowest.Elapsed {
+			slowest = slowPassEvents[0]
 		}
-		if timedOutTestName == slowest.Test {
+		if timedOutCulprit == scoped(slowest) {
 			// The test that was running when the timeout hit is the one that ran for
 			// the longest time.
-			authorEmail, err := getAuthorEmail(ctx, packageName, timedOutTestName)
+			authorEmail, err := getAuthorEmail(ctx, timedOutCulprit.pkg, timedOutCulprit.name)
 			if err != nil {
 				log.Printf("unable to determine test author email: %s\n", err)
 			}
-			title := fmt.Sprintf("%s: %s timed out under stress", trimmedPkgName, timedOutTestName)
-			log.Printf("timeout culprit found: %s\n", timedOutTestName)
-			if err := f(ctx, title, packageName, timedOutTestName, report, authorEmail); err != nil {
+			title := fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name)
+			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
+			if err := f(ctx, title, timedOutCulprit.pkg, timedOutCulprit.name, report, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		} else {
-			title := fmt.Sprintf("%s: package timed out under stress", trimmedPkgName)
+			packageName := maybePkgFromEnv()
+			if packageName == "" {
+				packageName = "unknown"
+			}
+			trimmedPkgName := trimPkg(packageName)
+			title := fmt.Sprintf("%s: package timed out", trimmedPkgName)
 			// Andrei gets these reports for now, but don't think I'll fix anything
 			// you fools.
 			// TODO(andrei): Figure out how to assign to the on-call engineer. Maybe
