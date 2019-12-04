@@ -211,11 +211,13 @@ interface NotLiveNodeListProps extends NodeCategoryListProps {
  * nodes on the cluster.
  */
 class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
-  getHeaderInfo() {
+  getFooter() {
     const { status } = this.props;
     if (status === LivenessStatus.DECOMMISSIONED) {
       return (
-        <Link to={`reports/nodes/history`}>Decommissioned node history</Link>
+        <div className="embedded-table__footer">
+          <Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>
+        </div>
       );
     }
     return null;
@@ -226,15 +228,13 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     if (!statuses || statuses.length === 0) {
       return null;
     }
-
+    const footer = this.getFooter();
     const statusName = _.capitalize(LivenessStatus[status]);
-    const headerInfo = this.getHeaderInfo();
 
     return (
       <div className="embedded-table">
-        <section className="section section--heading section--heading__justify-end">
+        <section className="section section--heading">
           <h2>{`${statusName} Nodes`}</h2>
-          { headerInfo }
         </section>
         <NodeSortedTable
           data={statuses}
@@ -292,6 +292,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               },
             },
           ]} />
+        {footer}
       </div>
     );
   }
@@ -340,12 +341,21 @@ const DeadNodesConnected = connect(
 // tslint:disable-next-line:variable-name
 const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
+    // Limit the number of nodes to display for 5 items
+    const recentNodesLimit = 5;
+    const nodesSummary = nodesSummarySelector(state);
     const statuses = partitionedStatuses(state);
+    const decommissionedStatuses = statuses.decommissioned;
+    const recentDecommissionedNodes = _.chain(decommissionedStatuses)
+      .orderBy([ns => nodesSummary.livenessByNodeID[ns.desc.node_id].expiration.wall_time], ["desc"])
+      .take(recentNodesLimit)
+      .value();
+
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
       status: LivenessStatus.DECOMMISSIONED,
-      statuses: statuses.decommissioned,
-      nodesSummary: nodesSummarySelector(state),
+      statuses: recentDecommissionedNodes,
+      nodesSummary,
     };
   },
   {
