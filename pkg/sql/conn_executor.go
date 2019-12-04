@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -1869,7 +1870,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:    ex,
 		SchemaChangers:    &ex.extraTxnState.schemaChangers,
-		ScheduledJobs:     &ex.extraTxnState.jobs.scheduled,
+		Jobs:              &ex.extraTxnState.jobs,
 		schemaAccessors:   scInterface,
 		sqlStatsCollector: ex.statsCollector,
 	}
@@ -2006,7 +2007,45 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		jobs := &ex.extraTxnState.jobs.scheduled
 		if len(*jobs) != 0 {
 			log.Infof(ex.ctxHolder.connCtx, "scheduled jobs %+v", *jobs)
-			//ex.execStmtInNoTxnState(ctx, "SHOW JOBS WHEN COMPLETE ...")
+			buf := bytes.Buffer{}
+			for i, j := range *jobs {
+				if i > 0 {
+					buf.WriteString(",")
+				}
+				buf.WriteString(fmt.Sprintf(" (%d)", j))
+			}
+			if _, err = ex.server.cfg.InternalExecutor.Exec(
+				ex.Ctx(),
+				"wait-for-jobs",
+				nil,
+				fmt.Sprintf("SHOW JOBS WHEN COMPLETE VALUES %s", buf.String()),
+			); err != nil {
+				// Some of the jobs scheduled in transaction failed but
+				// everything else in the transaction was actually committed already.
+				// At this point, it is too late to cancel the transaction.
+				// In effect, we have violated the "A" of ACID.
+				//
+				// This situation is sufficiently serious that we cannot let
+				// the error that caused the schema change to fail flow back
+				// to the client as-is. We replace it by a custom code
+				// dedicated to this situation. Replacement occurs
+				// because this error code is a "serious error" and the code
+				// computation logic will give it a higher priority.
+				//
+				// We also print out the original error code as prefix of
+				// the error message, in case it was a serious error.
+				newErr := pgerror.Wrapf(err,
+					pgcode.TransactionCommittedWithSchemaChangeFailure,
+					"transaction committed but schema change aborted with error: (%s)",
+					pgerror.GetPGCode(err))
+				newErr = errors.WithHint(newErr,
+					"Some of the non-job statements may have committed successfully, but some of the job statement(s) failed.\n"+
+						"Manual inspection may be required to determine the actual state of the database.")
+				newErr = errors.WithIssueLink(newErr,
+					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/42061"})
+				res.SetError(newErr)
+				//log.Fatalf(ex.ctxHolder.connCtx, fmt.Sprintf("waiting for jobs failed: %v", err))
+			}
 		}
 		scc := &ex.extraTxnState.schemaChangers
 		if len(scc.schemaChangers) != 0 {

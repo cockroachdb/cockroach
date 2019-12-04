@@ -1627,9 +1627,6 @@ func TestJobInTxn(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	registry := s.JobRegistry().(*jobs.Registry)
-	mockJob := jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}}
-	var job *jobs.Job
 	var hasRun bool
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
@@ -1639,13 +1636,7 @@ func TestJobInTxn(t *testing.T) {
 				return nil, nil, nil, false, nil
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
-				var err error
-				job, err = registry.CreateJobWithTxn(ctx, mockJob, phs.ExtendedEvalContext().Txn)
-				if err != nil {
-					return err
-				}
-				*phs.ExtendedEvalContext().ScheduledJobs = append(*phs.ExtendedEvalContext().ScheduledJobs, *job.ID())
-				return nil
+				return phs.ScheduleJob(jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}})
 			}
 			return fn, nil, nil, false, nil
 		})
@@ -1666,8 +1657,7 @@ func TestJobInTxn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
-		if err != nil {
+		if _, err = txn.Exec("BACKUP doesnot.matter TO doesnotmattter"); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(time.Second)
@@ -1676,12 +1666,9 @@ func TestJobInTxn(t *testing.T) {
 			t.Fatalf("job has run in transaction before txn commit")
 		}
 		lock.Unlock()
-		err = txn.Commit()
-		if err != nil {
+		if err = txn.Commit(); err != nil {
 			t.Fatal(err)
 		}
-		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
 		lock.Lock()
 		if !hasRun {
 			t.Fatalf("job scheduled in transaction did not run")
