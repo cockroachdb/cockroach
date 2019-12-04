@@ -436,6 +436,10 @@ func (cq *CommandQueue) getPrereqs(
 			restart = cq.expand(c, true /* isInserted */) || restart
 		}
 		if restart {
+			// Clear all *cmd references in overlaps, per the getOverlaps contract.
+			for j := range overlaps {
+				overlaps[j] = nil
+			}
 			i--
 			continue
 		}
@@ -614,7 +618,9 @@ func (cq *CommandQueue) getPrereqs(
 }
 
 // getOverlaps returns a slice of values which overlap the specified
-// interval. The slice is only valid until the next call to getOverlaps.
+// interval. The slice is only valid until the next call to getOverlaps
+// and all elements should be nil-ed out to avoid holding references to
+// *cmd objects and preventing GC.
 func (cq *CommandQueue) getOverlaps(
 	readOnly bool, timestamp hlc.Timestamp, rng interval.Range,
 ) []*cmd {
@@ -680,6 +686,7 @@ func (o *overlapHeap) Push(x interface{}) {
 func (o *overlapHeap) Pop() interface{} {
 	n := len(*o) - 1
 	x := (*o)[n]
+	(*o)[n] = nil // for gc
 	*o = (*o)[:n]
 	return x
 }
