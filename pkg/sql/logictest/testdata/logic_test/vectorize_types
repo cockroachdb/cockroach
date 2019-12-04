@@ -83,3 +83,8 @@ SELECT _id2, _bool, _bool2 FROM skip_unneeded_cols
 
 statement ok
 RESET vectorize
+
+# This query uses a builtin that returns currently unsupported type
+# (TimestampTZ). We're only interested in not getting an error. See #42871.
+statement ok
+SELECT experimental_strptime(_string, _string) IS NULL FROM all_types
