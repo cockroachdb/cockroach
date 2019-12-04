@@ -629,7 +629,13 @@ func (cq *CommandQueue) getOverlaps(
 	// Both reads and writes must wait on other writes, depending on timestamps.
 	cq.writes.DoMatching(cq.collectOverlappingWritesRef, rng)
 	overlaps := cq.overlaps
-	cq.overlaps = cq.overlaps[:0]
+	if cap(cq.overlaps) > 1024 {
+		// Limit the maximum size that the overlaps buffer can grow to. We don't
+		// want to hold on to a potentially unbounded size slice.
+		cq.overlaps = nil
+	} else {
+		cq.overlaps = cq.overlaps[:0]
+	}
 	return overlaps
 }
 
