@@ -358,6 +358,7 @@ project
  └── inner-join (lookup xysd)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
       ├── key columns: [5] = [1]
+      ├── lookup columns are key
       ├── key: (5)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
       ├── distinct-on
