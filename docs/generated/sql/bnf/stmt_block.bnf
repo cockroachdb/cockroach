@@ -42,7 +42,7 @@ preparable_stmt ::=
 	| upsert_stmt
 
 copy_from_stmt ::=
-	'COPY' table_name opt_column_list 'FROM' 'STDIN'
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_options
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
@@ -208,6 +208,11 @@ opt_column_list ::=
 	'(' name_list ')'
 	| 
 
+opt_with_options ::=
+	'WITH' kv_option_list
+	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 
+
 database_name ::=
 	name
 
@@ -302,11 +307,6 @@ opt_as_of_clause ::=
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
-	| 
-
-opt_with_options ::=
-	'WITH' kv_option_list
-	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
 cancel_jobs_stmt ::=
@@ -588,6 +588,9 @@ opt_from_list ::=
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
+
+kv_option_list ::=
+	( kv_option ) ( ( ',' kv_option ) )*
 
 prefixed_column_path ::=
 	db_object_name_component '.' unrestricted_name
@@ -997,9 +1000,6 @@ alter_user_password_stmt ::=
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
-kv_option_list ::=
-	( kv_option ) ( ( ',' kv_option ) )*
-
 opt_password ::=
 	opt_with 'PASSWORD' string_or_placeholder
 	| 
@@ -1245,6 +1245,12 @@ complex_db_object_name ::=
 	db_object_name_component '.' unrestricted_name
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 
+kv_option ::=
+	name '=' string_or_placeholder
+	| name
+	| 'SCONST' '=' string_or_placeholder
+	| 'SCONST'
+
 db_object_name_component ::=
 	name
 	| cockroachdb_extra_type_func_name_keyword
@@ -1337,12 +1343,6 @@ alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
-
-kv_option ::=
-	name '=' string_or_placeholder
-	| name
-	| 'SCONST' '=' string_or_placeholder
-	| 'SCONST'
 
 opt_with ::=
 	'WITH'

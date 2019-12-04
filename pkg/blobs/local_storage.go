@@ -21,23 +21,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-// localStorage wraps all operations with the local file system
+// LocalStorage wraps all operations with the local file system
 // that the blob service makes.
-type localStorage struct {
+type LocalStorage struct {
 	externalIODir string
 }
 
-// newLocalStorage creates a new localStorage object and returns
+// NewLocalStorage creates a new LocalStorage object and returns
 // an error when we cannot take the absolute path of `externalIODir`.
-func newLocalStorage(externalIODir string) (*localStorage, error) {
+func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
 	absPath, err := filepath.Abs(externalIODir)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating localStorage object")
+		return nil, errors.Wrap(err, "creating LocalStorage object")
 	}
-	return &localStorage{externalIODir: absPath}, nil
+	return &LocalStorage{externalIODir: absPath}, nil
 }
 
-func (l *localStorage) prependExternalIODir(path string) (string, error) {
+func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 	localBase := filepath.Join(l.externalIODir, path)
 	// Make sure we didn't ../ our way back out.
 	if !strings.HasPrefix(localBase, l.externalIODir) {
@@ -47,7 +47,7 @@ func (l *localStorage) prependExternalIODir(path string) (string, error) {
 }
 
 // WriteFile prepends IO dir to filename and writes the content to that local file.
-func (l *localStorage) WriteFile(filename string, content io.Reader) error {
+func (l *LocalStorage) WriteFile(filename string, content io.Reader) error {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (l *localStorage) WriteFile(filename string, content io.Reader) error {
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.
-func (l *localStorage) ReadFile(filename string) (io.ReadCloser, error) {
+func (l *LocalStorage) ReadFile(filename string) (io.ReadCloser, error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (l *localStorage) ReadFile(filename string) (io.ReadCloser, error) {
 }
 
 // List prepends IO dir to pattern and glob matches all local files against that pattern.
-func (l *localStorage) List(pattern string) ([]string, error) {
+func (l *LocalStorage) List(pattern string) ([]string, error) {
 	if pattern == "" {
 		return nil, errors.New("pattern cannot be empty")
 	}
@@ -102,7 +102,7 @@ func (l *localStorage) List(pattern string) ([]string, error) {
 }
 
 // Delete prepends IO dir to filename and deletes that local file.
-func (l *localStorage) Delete(filename string) error {
+func (l *LocalStorage) Delete(filename string) error {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return errors.Wrap(err, "deleting file")
@@ -111,7 +111,7 @@ func (l *localStorage) Delete(filename string) error {
 }
 
 // Stat prepends IO dir to filename and gets the Stat() of that local file.
-func (l *localStorage) Stat(filename string) (*blobspb.BlobStat, error) {
+func (l *LocalStorage) Stat(filename string) (*blobspb.BlobStat, error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting stat of file")
