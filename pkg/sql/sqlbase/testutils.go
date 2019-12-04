@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -819,9 +818,16 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	return roachpb.Key(key), nil
 }
 
+// Mutator defines a method that can mutate or add SQL statements. See the
+// sql/mutations package. This interface is defined here to avoid cyclic
+// dependencies.
+type Mutator interface {
+	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
-	rng *rand.Rand, prefix string, num int, mutators ...mutations.MultiStatementMutation,
+	rng *rand.Rand, prefix string, num int, mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -829,16 +835,13 @@ func RandCreateTables(
 
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
-	byName := map[tree.TableName]*tree.CreateTable{}
 	for i := 1; i <= num; i++ {
 		t := RandCreateTable(rng, prefix, i)
 		tables[i-1] = t
-		byName[t.Table] = t
 	}
 
 	for _, m := range mutators {
-		muts := m(rng, tables)
-		tables = append(tables, muts...)
+		tables, _ = m.Mutate(rng, tables)
 	}
 
 	return tables
@@ -909,10 +912,91 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 
 	// Create some random column families.
 	if rng.Intn(2) == 0 {
-		mutations.ColumnFamilyMutator(rng, ret)
+		ColumnFamilyMutator(rng, ret)
 	}
 
 	return ret
+}
+
+// ColumnFamilyMutator is mutations.StatementMutator, but lives here to prevent
+// dependency cycles with RandCreateTable.
+func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+	ast, ok := stmt.(*tree.CreateTable)
+	if !ok {
+		return false
+	}
+
+	var columns []tree.Name
+	isPKCol := map[tree.Name]bool{}
+	for _, def := range ast.Defs {
+		switch def := def.(type) {
+		case *tree.FamilyTableDef:
+			return false
+		case *tree.ColumnTableDef:
+			if def.HasColumnFamily() {
+				return false
+			}
+			// Primary keys must be in the first
+			// column family, so don't add them to
+			// the list.
+			if def.PrimaryKey {
+				continue
+			}
+			columns = append(columns, def.Name)
+		case *tree.UniqueConstraintTableDef:
+			// If there's an explicit PK index
+			// definition, save the columns from it
+			// and remove them later.
+			if def.PrimaryKey {
+				for _, col := range def.Columns {
+					isPKCol[col.Column] = true
+				}
+			}
+		}
+	}
+
+	if len(columns) <= 1 {
+		return false
+	}
+
+	// Any columns not specified in column families
+	// are auto assigned to the first family, so
+	// there's no requirement to exhaust columns here.
+
+	// Remove columns specified in PK index
+	// definitions. We need to do this here because
+	// index defs and columns can appear in any
+	// order in the CREATE TABLE.
+	{
+		n := 0
+		for _, x := range columns {
+			if !isPKCol[x] {
+				columns[n] = x
+				n++
+			}
+		}
+		columns = columns[:n]
+	}
+	rng.Shuffle(len(columns), func(i, j int) {
+		columns[i], columns[j] = columns[j], columns[i]
+	})
+	fd := &tree.FamilyTableDef{}
+	for {
+		if len(columns) == 0 {
+			if len(fd.Columns) > 0 {
+				ast.Defs = append(ast.Defs, fd)
+			}
+			break
+		}
+		fd.Columns = append(fd.Columns, columns[0])
+		columns = columns[1:]
+		// 50% chance to make a new column family.
+		if rng.Intn(2) != 0 {
+			ast.Defs = append(ast.Defs, fd)
+			fd = &tree.FamilyTableDef{}
+		}
+	}
+	return true
 }
 
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
