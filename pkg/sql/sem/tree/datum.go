@@ -2436,70 +2436,58 @@ type DInterval struct {
 	duration.Duration
 }
 
-// DurationField is the type of a postgres duration field.
-// https://www.postgresql.org/docs/9.6/static/datatype-datetime.html
-type DurationField int
-
-// These constants designate the various time parts of an interval.
-const (
-	_ DurationField = iota
-	Year
-	Month
-	Day
-	Hour
-	Minute
-	Second
-
-	// While not technically part of the SQL standard for intervals, we provide
-	// Millisecond as a field to allow code to parse intervals with a default unit
-	// of milliseconds, which is useful for some internal use cases like
-	// statement_timeout.
-	Millisecond
-)
+// NewDInterval creates a new DInterval.
+func NewDInterval(d duration.Duration, itm types.IntervalTypeMetadata) *DInterval {
+	ret := &DInterval{Duration: d}
+	truncateDInterval(ret, itm)
+	return ret
+}
 
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
-	return ParseDIntervalWithField(s, Second)
+	return ParseDIntervalWithTypeMetadata(s, types.DefaultIntervalTypeMetadata)
 }
 
 // truncateDInterval truncates the input DInterval downward to the nearest
 // interval quantity specified by the DurationField input.
-func truncateDInterval(d *DInterval, field DurationField) {
-	switch field {
-	case Year:
+// If precision is set for seconds, this will instead round at the second layer.
+func truncateDInterval(d *DInterval, itm types.IntervalTypeMetadata) {
+	switch itm.DurationField.DurationType {
+	case types.IntervalDurationType_YEAR:
 		d.Duration.Months = d.Duration.Months - d.Duration.Months%12
 		d.Duration.Days = 0
 		d.Duration.SetNanos(0)
-	case Month:
+	case types.IntervalDurationType_MONTH:
 		d.Duration.Days = 0
 		d.Duration.SetNanos(0)
-	case Day:
+	case types.IntervalDurationType_DAY:
 		d.Duration.SetNanos(0)
-	case Hour:
+	case types.IntervalDurationType_HOUR:
 		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Hour.Nanoseconds())
-	case Minute:
+	case types.IntervalDurationType_MINUTE:
 		d.Duration.SetNanos(d.Duration.Nanos() - d.Duration.Nanos()%time.Minute.Nanoseconds())
-	case Second:
-		// Postgres doesn't truncate to whole seconds.
+	case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
+		if itm.PrecisionIsSet || itm.Precision > 0 {
+			prec := TimeFamilyPrecisionToRoundDuration(itm.Precision)
+			d.Duration.SetNanos(time.Duration(d.Duration.Nanos()).Round(prec).Nanoseconds())
+		}
 	}
 }
 
-// ParseDIntervalWithField is like ParseDInterval, but it also takes a
-// DurationField that both specifies the units for unitless, numeric intervals
-// and also specifies the precision of the interval. Any precision in the input
-// interval that's higher than the DurationField value will be truncated
-// downward.
-func ParseDIntervalWithField(s string, field DurationField) (*DInterval, error) {
-	d, err := parseDInterval(s, field)
+// ParseDIntervalWithTypeMetadata is like ParseDInterval, but it also takes a
+// types.IntervalTypeMetadata that both specifies the units for unitless, numeric intervals
+// and also specifies the precision of the interval.
+func ParseDIntervalWithTypeMetadata(s string, itm types.IntervalTypeMetadata) (*DInterval, error) {
+	d, err := parseDInterval(s, itm)
 	if err != nil {
 		return nil, err
 	}
-	truncateDInterval(d, field)
+	truncateDInterval(d, itm)
 	return d, nil
 }
 
-func parseDInterval(s string, field DurationField) (*DInterval, error) {
+func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error) {
 	// At this time the only supported interval formats are:
 	// - SQL standard.
 	// - Postgres compatible.
@@ -2523,23 +2511,23 @@ func parseDInterval(s string, field DurationField) (*DInterval, error) {
 		// An interval that's just a number uses the field as its unit.
 		// All numbers are rounded down unless the precision is SECOND.
 		ret := &DInterval{Duration: duration.Duration{}}
-		switch field {
-		case Year:
+		switch itm.DurationField.DurationType {
+		case types.IntervalDurationType_YEAR:
 			ret.Months = int64(f) * 12
-		case Month:
+		case types.IntervalDurationType_MONTH:
 			ret.Months = int64(f)
-		case Day:
+		case types.IntervalDurationType_DAY:
 			ret.Days = int64(f)
-		case Hour:
+		case types.IntervalDurationType_HOUR:
 			ret.SetNanos(time.Hour.Nanoseconds() * int64(f))
-		case Minute:
+		case types.IntervalDurationType_MINUTE:
 			ret.SetNanos(time.Minute.Nanoseconds() * int64(f))
-		case Second:
+		case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
 			ret.SetNanos(int64(float64(time.Second.Nanoseconds()) * f))
-		case Millisecond:
+		case types.IntervalDurationType_MILLISECOND:
 			ret.SetNanos(int64(float64(time.Millisecond.Nanoseconds()) * f))
 		default:
-			return nil, errors.AssertionFailedf("unhandled DurationField constant %d", field)
+			return nil, errors.AssertionFailedf("unhandled DurationField constant %#v", itm.DurationField)
 		}
 		return ret, nil
 	} else if strings.IndexFunc(s, unicode.IsLetter) == -1 {

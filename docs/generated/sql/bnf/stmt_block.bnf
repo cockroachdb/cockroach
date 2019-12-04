@@ -1496,6 +1496,7 @@ d_expr ::=
 	| 'BITCONST'
 	| const_typename 'SCONST'
 	| interval
+	| const_interval '(' iconst32 ')' 'SCONST'
 	| 'TRUE'
 	| 'FALSE'
 	| 'NULL'
@@ -1523,6 +1524,8 @@ simple_typename ::=
 	| bit_with_length
 	| character_with_length
 	| const_interval
+	| const_interval interval_qualifier
+	| const_interval '(' iconst32 ')'
 	| postgres_oid
 
 opt_array_bounds ::=
@@ -1834,6 +1837,12 @@ const_typename ::=
 interval ::=
 	const_interval 'SCONST' opt_interval
 
+const_interval ::=
+	'INTERVAL'
+
+iconst32 ::=
+	'ICONST'
+
 column_path_with_star ::=
 	column_path
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
@@ -1878,8 +1887,20 @@ bit_with_length ::=
 character_with_length ::=
 	character_base '(' iconst32 ')'
 
-const_interval ::=
-	'INTERVAL'
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
 
 postgres_oid ::=
 	'REGPROC'
@@ -2169,14 +2190,15 @@ opt_varying ::=
 	'VARYING'
 	| 
 
-iconst32 ::=
-	'ICONST'
-
 character_base ::=
 	char_aliases
 	| char_aliases 'VARYING'
 	| 'VARCHAR'
 	| 'STRING'
+
+interval_second ::=
+	'SECOND'
+	| 'SECOND' '(' iconst32 ')'
 
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
@@ -2281,21 +2303,6 @@ opt_timezone ::=
 	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
 
-interval_qualifier ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
-
 func_name ::=
 	type_function_name
 	| prefixed_column_path
@@ -2360,9 +2367,6 @@ reference_action ::=
 	| 'CASCADE'
 	| 'SET' 'NULL'
 	| 'SET' 'DEFAULT'
-
-interval_second ::=
-	'SECOND'
 
 type_function_name ::=
 	'identifier'
