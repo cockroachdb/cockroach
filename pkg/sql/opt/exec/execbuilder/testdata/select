@@ -416,7 +416,8 @@ CREATE TABLE t (
   c INT,
   d INT,
   INDEX b_idx (b) STORING (c, d),
-  UNIQUE INDEX c_idx (c) STORING (b, d)
+  UNIQUE INDEX c_idx (c) STORING (b, d),
+  FAMILY (a, b, c, d)
 )
 
 query TTBITTBB colnames

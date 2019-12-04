@@ -44,7 +44,7 @@ func (s *Server) refreshSettings() {
 		{
 			types := []types.T{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
-			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
+			_, matches, _, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}

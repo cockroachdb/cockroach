@@ -309,6 +309,8 @@ message IndexDescriptor {
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
   optional bool unique = 3 [(gogoproto.nullable) = false];
 
+  optional uint32 version = 18 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorVersion"];
+
   // An ordered list of column names of which the index is comprised; these
   // columns do not include any additional stored columns (which are in
   // stored_column_names). This list parallels the column_ids list.

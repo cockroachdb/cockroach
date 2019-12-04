@@ -200,6 +200,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				ColumnNames:      []string{"a"},
 				ColumnIDs:        []sqlbase.ColumnID{1},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 			},
 			[]sqlbase.IndexDescriptor{},
 		},
@@ -212,6 +213,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				ColumnNames:      []string{"b"},
 				ColumnIDs:        []sqlbase.ColumnID{2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 			},
 			[]sqlbase.IndexDescriptor{
 				{
@@ -222,6 +224,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					ColumnIDs:        []sqlbase.ColumnID{1},
 					ExtraColumnIDs:   []sqlbase.ColumnID{2},
 					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+					Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 				},
 			},
 		},
@@ -234,6 +237,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				ColumnNames:      []string{"a", "b"},
 				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
+				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 			},
 			[]sqlbase.IndexDescriptor{},
 		},
@@ -246,6 +250,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				ColumnNames:      []string{"a", "b"},
 				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
+				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 			},
 			[]sqlbase.IndexDescriptor{
 				{
@@ -256,6 +261,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					ColumnIDs:        []sqlbase.ColumnID{2},
 					ExtraColumnIDs:   []sqlbase.ColumnID{1},
 					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+					Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 				},
 			},
 		},
@@ -268,6 +274,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				ColumnNames:      []string{"a", "b"},
 				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
+				Version:          sqlbase.SecondaryIndexFamilyFormatVersion,
 			},
 			[]sqlbase.IndexDescriptor{},
 		},

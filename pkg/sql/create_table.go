@@ -1012,6 +1012,19 @@ func MakeTableDesc(
 
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges, temporary)
 
+	// If all nodes in the cluster know how to handle secondary indexes with column families,
+	// write the new version into new index descriptors.
+	indexEncodingVersion := sqlbase.BaseIndexFormatVersion
+	// We can't use cluster.Version.IsActive because this method is sometimes called
+	// before the version has been initialized, leading to a panic. There are also
+	// cases where this function is called in tests where st is nil.
+	if st != nil {
+		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
+			version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
+			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
+		}
+	}
+
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
@@ -1037,6 +1050,7 @@ func MakeTableDesc(
 			}
 
 			if idx != nil {
+				idx.Version = indexEncodingVersion
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return desc, err
 				}
@@ -1088,6 +1102,7 @@ func MakeTableDesc(
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
+				Version:          indexEncodingVersion,
 			}
 			if d.Inverted {
 				idx.Type = sqlbase.IndexDescriptor_INVERTED
@@ -1102,6 +1117,7 @@ func MakeTableDesc(
 				}
 				idx.Partitioning = partitioning
 			}
+
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
 			}
@@ -1113,6 +1129,7 @@ func MakeTableDesc(
 				Name:             string(d.Name),
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
+				Version:          indexEncodingVersion,
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
