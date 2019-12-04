@@ -134,6 +134,14 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 	return C.CString(mvccKey.String())
 }
 
+func init() {
+	goSize := unsafe.Sizeof(C.DBSlice{})
+	cSize := C.DBSizeofSlice()
+	if int(goSize) != int(cSize) {
+		panic(fmt.Sprintf("go:sizeof(DBSlice)==%d != C:sizeof(DBSlice)==%d", goSize, cSize))
+	}
+}
+
 const (
 	// RecommendedMaxOpenFiles is the recommended value for RocksDB's
 	// max_open_files option.

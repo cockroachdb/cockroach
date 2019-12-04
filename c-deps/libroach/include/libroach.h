@@ -80,6 +80,11 @@ typedef struct {
   DBSlice extra_options;
 } DBOptions;
 
+// DBSizeofSlice returns the sizeof of a DBSlice structure, allowing
+// Go code to ensure that it is compiled with a compatible view of the
+// size of the DBSlice members.
+int32_t DBSizeofSlice();
+
 // Create a new cache with the specified size.
 DBCache* DBNewCache(uint64_t size);
 

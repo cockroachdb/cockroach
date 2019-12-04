@@ -114,6 +114,10 @@ void BatchSSTablesForCompaction(const std::vector<rocksdb::SstFileMetaData>& sst
 
 }  // namespace cockroach
 
+int32_t DBSizeofSlice() {
+  return sizeof(DBSlice);
+}
+
 namespace {
 
 DBIterState DBIterGetState(DBIterator* iter) {

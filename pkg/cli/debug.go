@@ -114,6 +114,7 @@ type OpenEngineOptions struct {
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (engine.Engine, error) {
+	fmt.Printf("OpenExistingStore: forcing CI to stressrace the cli package\n")
 	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
 }
 
