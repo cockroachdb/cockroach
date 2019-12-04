@@ -1,0 +1,258 @@
+import file=tpch_schema
+----
+
+import file=tpch_stats
+----
+
+# --------------------------------------------------
+# Q17
+# Small-Quantity-Order Revenue
+# Determines how much average yearly revenue would be lost if orders were no
+# longer filled for small quantities of certain parts. This may reduce overhead
+# expenses by concentrating sales on larger shipments.
+#
+# Considers parts of a given brand and with a given container type and
+# determines the average lineitem quantity of such parts ordered for all orders
+# (past and pending) in the 7-year database. What would be the average yearly
+# gross (undiscounted) loss in revenue if orders for these parts with a quantity
+# of less than 20% of this average were no longer taken?
+#
+# TODO:
+#   1. Allow Select to be pushed below Ordinality used to add key column
+# --------------------------------------------------
+save-tables database=tpch save-tables-prefix=q17
+SELECT
+    sum(l_extendedprice) / 7.0 AS avg_yearly
+FROM
+    lineitem,
+    part
+WHERE
+    p_partkey = l_partkey
+    AND p_brand = 'Brand#23'
+    AND p_container = 'MED BOX'
+    AND l_quantity < (
+        SELECT
+            0.2 * avg(l_quantity)
+        FROM
+            lineitem
+        WHERE
+            l_partkey = p_partkey
+    );
+----
+project
+ ├── save-table-name: q17_project_1
+ ├── columns: avg_yearly:45(float)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── stats: [rows=1, distinct(45)=1, null(45)=0]
+ ├── key: ()
+ ├── fd: ()-->(45)
+ ├── scalar-group-by
+ │    ├── save-table-name: q17_scalar_group_by_2
+ │    ├── columns: sum:44(float)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(44)=1, null(44)=0]
+ │    ├── key: ()
+ │    ├── fd: ()-->(44)
+ │    ├── inner-join (lookup lineitem)
+ │    │    ├── save-table-name: q17_lookup_join_3
+ │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) p_partkey:17(int!null) "?column?":43(float!null)
+ │    │    ├── key columns: [1 4] = [1 4]
+ │    │    ├── stats: [rows=2008.02163, distinct(2)=199.999619, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2005.84759, null(6)=0, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
+ │    │    ├── fd: (17)-->(43), (2)==(17), (17)==(2)
+ │    │    ├── inner-join (lookup lineitem@l_pk)
+ │    │    │    ├── save-table-name: q17_lookup_join_4
+ │    │    │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) p_partkey:17(int!null) "?column?":43(float)
+ │    │    │    ├── key columns: [17] = [2]
+ │    │    │    ├── stats: [rows=6024.06489, distinct(1)=6012.21509, null(1)=0, distinct(2)=199.999619, null(2)=0, distinct(4)=7, null(4)=0, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
+ │    │    │    ├── key: (1,4)
+ │    │    │    ├── fd: (17)-->(43), (1,4)-->(2), (2)==(17), (17)==(2)
+ │    │    │    ├── project
+ │    │    │    │    ├── save-table-name: q17_project_5
+ │    │    │    │    ├── columns: "?column?":43(float) p_partkey:17(int!null)
+ │    │    │    │    ├── stats: [rows=199.999619, distinct(17)=199.999619, null(17)=0, distinct(43)=199.999619, null(43)=0]
+ │    │    │    │    ├── key: (17)
+ │    │    │    │    ├── fd: (17)-->(43)
+ │    │    │    │    ├── group-by
+ │    │    │    │    │    ├── save-table-name: q17_group_by_6
+ │    │    │    │    │    ├── columns: p_partkey:17(int!null) avg:42(float)
+ │    │    │    │    │    ├── grouping columns: p_partkey:17(int!null)
+ │    │    │    │    │    ├── internal-ordering: +17 opt(20,23)
+ │    │    │    │    │    ├── stats: [rows=199.999619, distinct(17)=199.999619, null(17)=0, distinct(42)=199.999619, null(42)=0]
+ │    │    │    │    │    ├── key: (17)
+ │    │    │    │    │    ├── fd: (17)-->(42)
+ │    │    │    │    │    ├── left-join (lookup lineitem)
+ │    │    │    │    │    │    ├── save-table-name: q17_lookup_join_7
+ │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(char!null) p_container:23(char!null) l_partkey:27(int) l_quantity:30(float)
+ │    │    │    │    │    │    ├── key columns: [26 29] = [26 29]
+ │    │    │    │    │    │    ├── stats: [rows=6024.07637, distinct(17)=199.999619, null(17)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0, distinct(27)=199.999619, null(27)=0, distinct(30)=50, null(30)=0]
+ │    │    │    │    │    │    ├── fd: ()-->(20,23)
+ │    │    │    │    │    │    ├── ordering: +17 opt(20,23) [actual: +17]
+ │    │    │    │    │    │    ├── left-join (lookup lineitem@l_pk)
+ │    │    │    │    │    │    │    ├── save-table-name: q17_lookup_join_8
+ │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(char!null) p_container:23(char!null) l_orderkey:26(int) l_partkey:27(int) l_linenumber:29(int)
+ │    │    │    │    │    │    │    ├── key columns: [17] = [27]
+ │    │    │    │    │    │    │    ├── stats: [rows=6024.07637, distinct(17)=199.999619, null(17)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0, distinct(26)=6012.22652, null(26)=0, distinct(27)=199.999619, null(27)=0, distinct(29)=7, null(29)=0]
+ │    │    │    │    │    │    │    ├── key: (17,26,29)
+ │    │    │    │    │    │    │    ├── fd: ()-->(20,23), (26,29)-->(27)
+ │    │    │    │    │    │    │    ├── ordering: +17 opt(20,23) [actual: +17]
+ │    │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    │    ├── save-table-name: q17_select_9
+ │    │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(char!null) p_container:23(char!null)
+ │    │    │    │    │    │    │    │    ├── stats: [rows=200, distinct(17)=199.999619, null(17)=0, distinct(20)=1, null(20)=0, distinct(23)=1, null(23)=0]
+ │    │    │    │    │    │    │    │    ├── key: (17)
+ │    │    │    │    │    │    │    │    ├── fd: ()-->(20,23)
+ │    │    │    │    │    │    │    │    ├── ordering: +17 opt(20,23) [actual: +17]
+ │    │    │    │    │    │    │    │    ├── scan part
+ │    │    │    │    │    │    │    │    │    ├── save-table-name: q17_scan_10
+ │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:17(int!null) p_brand:20(char!null) p_container:23(char!null)
+ │    │    │    │    │    │    │    │    │    ├── stats: [rows=200000, distinct(17)=199241, null(17)=0, distinct(20)=25, null(20)=0, distinct(23)=40, null(23)=0]
+ │    │    │    │    │    │    │    │    │    │   histogram(17)=  0  20  980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20   980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980   20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    980    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20    1000    20
+ │    │    │    │    │    │    │    │    │    │                 <--- 27 ----- 1110 ----- 2241 ----- 3086 ----- 4134 ----- 5302 ----- 6222 ----- 7308 ----- 8249 ----- 9171 ----- 10049 ----- 10958 ----- 11832 ----- 13025 ----- 14063 ----- 14953 ----- 16249 ----- 17419 ----- 18363 ----- 19412 ----- 20257 ----- 21190 ----- 22110 ----- 23045 ----- 23956 ----- 24962 ----- 25942 ----- 26990 ----- 27934 ----- 28876 ----- 29513 ----- 30326 ----- 31259 ----- 32300 ----- 33577 ----- 34550 ----- 35562 ----- 36498 ----- 37475 ----- 38584 ----- 39641 ----- 40548 ----- 41605 ----- 42527 ----- 43612 ----- 44702 ----- 45701 ----- 46726 ----- 47795 ----- 48935 ----- 50152 ----- 51183 ----- 52001 ----- 52904 ----- 53868 ----- 54808 ----- 55986 ----- 57155 ----- 58516 ----- 59526 ----- 60557 ----- 61547 ----- 62369 ----- 63672 ----- 64583 ----- 65360 ----- 66147 ----- 67201 ----- 68142 ----- 69145 ----- 70209 ----- 71141 ----- 71923 ----- 73031 ----- 73987 ----- 74974 ----- 76170 ----- 77138 ----- 77849 ----- 78931 ----- 79832 ----- 80761 ----- 81843 ----- 82834 ----- 84032 ----- 85072 ----- 86287 ----- 87302 ----- 88422 ----- 89432 ----- 90550 ----- 91463 ----- 92249 ----- 93385 ----- 94789 ----- 96013 ----- 96893 ----- 98000 ----- 99008 ----- 100166 ----- 101263 ----- 102351 ----- 103236 ----- 104121 ----- 105363 ----- 106329 ----- 107325 ----- 108231 ----- 109054 ----- 110019 ----- 111185 ----- 112112 ----- 112908 ----- 113904 ----- 114785 ----- 115410 ----- 116526 ----- 117559 ----- 118310 ----- 119073 ----- 120034 ----- 120817 ----- 121744 ----- 122566 ----- 123720 ----- 124813 ----- 125835 ----- 126622 ----- 127651 ----- 128328 ----- 129315 ----- 130244 ----- 131450 ----- 132439 ----- 133288 ----- 134164 ----- 135298 ----- 136347 ----- 137243 ----- 138256 ----- 139427 ----- 140374 ----- 141371 ----- 142302 ----- 143322 ----- 144335 ----- 145333 ----- 146212 ----- 147321 ----- 148591 ----- 149594 ------ 150514 ------ 151361 ------ 152059 ------ 153070 ------ 154059 ------ 155259 ------ 156473 ------ 157690 ------ 158703 ------ 159675 ------ 160597 ------ 161668 ------ 162737 ------ 163955 ------ 164942 ------ 165924 ------ 167059 ------ 167866 ------ 169034 ------ 169935 ------ 170712 ------ 171806 ------ 172841 ------ 174078 ------ 175347 ------ 176430 ------ 177346 ------ 178566 ------ 179515 ------ 180677 ------ 181729 ------ 182983 ------ 183814 ------ 184892 ------ 185696 ------ 186611 ------ 187744 ------ 188974 ------ 189911 ------ 190671 ------ 191607 ------ 192820 ------ 193789 ------ 195057 ------ 196224 ------ 197231 ------ 198281 ------ 199119 ------ 199999
+ │    │    │    │    │    │    │    │    │    ├── key: (17)
+ │    │    │    │    │    │    │    │    │    ├── fd: (17)-->(20,23)
+ │    │    │    │    │    │    │    │    │    └── ordering: +17 opt(20,23) [actual: +17]
+ │    │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │    │         ├── p_brand = 'Brand#23' [type=bool, outer=(20), constraints=(/20: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(20)]
+ │    │    │    │    │    │    │    │         └── p_container = 'MED BOX' [type=bool, outer=(23), constraints=(/23: [/'MED BOX' - /'MED BOX']; tight), fd=()-->(23)]
+ │    │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── aggregations
+ │    │    │    │    │         └── avg [type=float, outer=(30)]
+ │    │    │    │    │              └── variable: l_quantity [type=float]
+ │    │    │    │    └── projections
+ │    │    │    │         └── avg * 0.2 [type=float, outer=(42)]
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── l_quantity < ?column? [type=bool, outer=(5,43), constraints=(/5: (/NULL - ]; /43: (/NULL - ])]
+ │    └── aggregations
+ │         └── sum [type=float, outer=(6)]
+ │              └── variable: l_extendedprice [type=float]
+ └── projections
+      └── sum / 7.0 [type=float, outer=(44), side-effects]
+
+stats table=q17_project_1
+----
+column_names  row_count  distinct_count  null_count
+{avg_yearly}  1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{avg_yearly}  1.00           1.00           1.00                1.00                0.00            1.00
+
+stats table=q17_scalar_group_by_2
+----
+column_names  row_count  distinct_count  null_count
+{sum}         1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{sum}         1.00           1.00           1.00                1.00                0.00            1.00
+
+stats table=q17_lookup_join_3
+----
+column_names       row_count  distinct_count  null_count
+{?column?}         587        185             0
+{l_extendedprice}  587        430             0
+{l_partkey}        587        195             0
+{l_quantity}       587        6               0
+{p_partkey}        587        195             0
+~~~~
+column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{?column?}         2008.00        3.42 <==       200.00              1.08                0.00            1.00
+{l_extendedprice}  2008.00        3.42 <==       2006.00             4.67 <==            0.00            1.00
+{l_partkey}        2008.00        3.42 <==       200.00              1.03                0.00            1.00
+{l_quantity}       2008.00        3.42 <==       50.00               8.33 <==            0.00            1.00
+{p_partkey}        2008.00        3.42 <==       200.00              1.03                0.00            1.00
+
+stats table=q17_lookup_join_4
+----
+column_names    row_count  distinct_count  null_count
+{?column?}      6088       194             0
+{l_linenumber}  6088       7               0
+{l_orderkey}    6088       6116            0
+{l_partkey}     6088       204             0
+{p_partkey}     6088       204             0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{?column?}      6024.00        1.01           200.00              1.03                0.00            1.00
+{l_linenumber}  6024.00        1.01           7.00                1.00                0.00            1.00
+{l_orderkey}    6024.00        1.01           6012.00             1.02                0.00            1.00
+{l_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
+{p_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
+
+stats table=q17_project_5
+----
+column_names  row_count  distinct_count  null_count
+{?column?}    204        194             0
+{p_partkey}   204        204             0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{?column?}    200.00         1.02           200.00              1.03                0.00            1.00
+{p_partkey}   200.00         1.02           200.00              1.02                0.00            1.00
+
+stats table=q17_group_by_6
+----
+column_names  row_count  distinct_count  null_count
+{avg}         204        194             0
+{p_partkey}   204        204             0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{avg}         200.00         1.02           200.00              1.03                0.00            1.00
+{p_partkey}   200.00         1.02           200.00              1.02                0.00            1.00
+
+stats table=q17_lookup_join_7
+----
+column_names   row_count  distinct_count  null_count
+{l_partkey}    6088       204             0
+{l_quantity}   6088       50              0
+{p_brand}      6088       1               0
+{p_container}  6088       1               0
+{p_partkey}    6088       204             0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_partkey}    6024.00        1.01           200.00              1.02                0.00            1.00
+{l_quantity}   6024.00        1.01           50.00               1.00                0.00            1.00
+{p_brand}      6024.00        1.01           1.00                1.00                0.00            1.00
+{p_container}  6024.00        1.01           1.00                1.00                0.00            1.00
+{p_partkey}    6024.00        1.01           200.00              1.02                0.00            1.00
+
+stats table=q17_lookup_join_8
+----
+column_names    row_count  distinct_count  null_count
+{l_linenumber}  6088       7               0
+{l_orderkey}    6088       6116            0
+{l_partkey}     6088       204             0
+{p_brand}       6088       1               0
+{p_container}   6088       1               0
+{p_partkey}     6088       204             0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}  6024.00        1.01           7.00                1.00                0.00            1.00
+{l_orderkey}    6024.00        1.01           6012.00             1.02                0.00            1.00
+{l_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
+{p_brand}       6024.00        1.01           1.00                1.00                0.00            1.00
+{p_container}   6024.00        1.01           1.00                1.00                0.00            1.00
+{p_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
+
+stats table=q17_select_9
+----
+column_names   row_count  distinct_count  null_count
+{p_brand}      204        1               0
+{p_container}  204        1               0
+{p_partkey}    204        204             0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{p_brand}      200.00         1.02           1.00                1.00                0.00            1.00
+{p_container}  200.00         1.02           1.00                1.00                0.00            1.00
+{p_partkey}    200.00         1.02           200.00              1.02                0.00            1.00
+
+stats table=q17_scan_10
+----
+column_names   row_count  distinct_count  null_count
+{p_brand}      200000     25              0
+{p_container}  200000     40              0
+{p_partkey}    200000     199241          0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{p_brand}      200000.00      1.00           25.00               1.00                0.00            1.00
+{p_container}  200000.00      1.00           40.00               1.00                0.00            1.00
+{p_partkey}    200000.00      1.00           199241.00           1.00                0.00            1.00
