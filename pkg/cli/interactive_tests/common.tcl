@@ -17,7 +17,8 @@ system "rm -f $histfile"
 
 # Everything in this test should be fast. Don't be tolerant for long
 # waits.
-set timeout 30
+set stdTimeout 30
+set timeout $stdTimeout
 
 # When run via Docker the enclosing terminal has 0 columns and 0 rows,
 # and this confuses readline. Ensure sane defaults here.
