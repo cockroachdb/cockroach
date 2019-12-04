@@ -76,6 +76,12 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 		return ParseDInterval(s)
 	case types.JsonFamily:
 		return ParseDJSON(s)
+	case types.OidFamily:
+		// TODO(mjibson): Is it possible to create OID types with
+		// names? If so, this approach will fail during int parsing,
+		// which is ok and better than silently dropping them.
+		i, err := ParseDInt(s)
+		return NewDOid(*i), err
 	case types.StringFamily:
 		return NewDString(s), nil
 	case types.TimeFamily:
