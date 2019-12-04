@@ -484,7 +484,11 @@ func NewTransactionRetryError(
 }
 
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("TransactionRetryError: retry txn (%s)", e.Reason)
+	msg := ""
+	if e.ExtraMsg != "" {
+		msg = " - " + e.ExtraMsg
+	}
+	return fmt.Sprintf("TransactionRetryError: retry txn (%s%s)", e.Reason, msg)
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
