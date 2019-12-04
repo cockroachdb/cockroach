@@ -60,7 +60,7 @@ void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
     len -= avail;
 
     const int max_size = 128 << 20; // 128 MB
-    int new_size = bufs_.empty() ? 16 : bufs_.back().len * 2;
+    size_t new_size = bufs_.empty() ? 16 : bufs_.back().len * 2;
     for (; new_size < len + next_size_hint && new_size < max_size; new_size *= 2) {
     }
     if (new_size > max_size) {
