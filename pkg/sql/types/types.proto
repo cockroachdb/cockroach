@@ -342,6 +342,44 @@ enum Family {
     reserved 201;
 }
 
+// IntervalDurationType represents a duration that can be used
+// when defining an Interval Duration Field.
+// See https://www.postgresql.org/docs/current/datatype-datetime.html.
+enum IntervalDurationType {
+  // UNSET defaults to SECOND during evaluation.
+  // This indicates no typmod.
+  UNSET = 0;
+
+  YEAR = 1;
+  MONTH = 2;
+  DAY = 3;
+  HOUR = 4;
+  MINUTE = 5;
+  // SECOND is the only unit where precision can be added.
+  SECOND = 6;
+
+  // MILLISECOND is not technically part of the SQL standard for intervals, but we
+  // provide it as a field to allow code to parse intervals with a default unit
+  // of milliseconds, which is useful for some internal use cases like
+  // statement_timeout.
+  MILLISECOND = 7;
+}
+
+// IntervalDurationField represents precisions in intervals which are
+// outside of the regular time precision syntax.
+// i.e. instead of INTERVAL(6), we can have INTERVAL SECOND(6), INTERVAL MONTH, etc.
+// This is represented as a bitmask on the first 4 bits of precision in postgres.
+message IntervalDurationField {
+  // DurationType is the unit of measurement in which durations
+  // should truncate themselves to.
+  // This (unlike precision) gets truncated downward.
+  optional IntervalDurationType duration_type = 1 [(gogoproto.nullable) = false];
+  // FromDurationType is the left side of the "duration field".
+  // i.e. in the `DurationType_1 TO DurationType_2` syntax, this represents `DurationType_1`.
+  // Note this is ignored, see https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net.
+  optional IntervalDurationType from_duration_type = 2 [(gogoproto.nullable) = false];
+}
+
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
 // a T struct, and should never be used directly by outside packages. See the
 // comment header for the T struct for more details.
@@ -399,13 +437,18 @@ message InternalType {
     optional bytes array_contents = 11 [(gogoproto.customtype) = "T"];
 
     // TimePrecisionIsSet indicates whether the precision was explicitly set.
-    // It is currently in use for the TIME-related families, where a Precision of
-    // 0 indicated the default precision of 6 in versions pre-20.1.
-    // For time-related families:
+    // It is currently in use for the TIME-related families and INTERVALs
+    // where a Precision of 0 indicated the default precision of 6
+    // in versions pre-20.1.
+    // The rules for Precision to use are as follows:
     //   * If Precision is > 0, then that is the precision.
     //   * If Precision is 0, it will default to 6 if TimePrecisionIsSet is false
     //    (for compatibility reasons).
     //   * Otherwise, Precision = 0 and TimePrecisionIsSet = true, so it is
     //     actually 0.
     optional bool time_precision_is_set = 12 [(gogoproto.nullable) = false];
+
+    // IntervalDurationField is populated for intervals, representing extra
+    // typmod or precision data that may be required.
+    optional IntervalDurationField interval_duration_field = 13;
 }

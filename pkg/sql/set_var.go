@@ -309,7 +309,11 @@ func stmtTimeoutVarGetStringVal(
 }
 
 func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
-	interval, err := tree.ParseDIntervalWithField(s, tree.Millisecond)
+	interval, err := tree.ParseDIntervalWithTypeMetadata(s, types.IntervalTypeMetadata{
+		DurationField: types.IntervalDurationField{
+			DurationType: types.IntervalDurationType_MILLISECOND,
+		},
+	})
 	if err != nil {
 		return wrapSetVarError("statement_timeout", s, "%v", err)
 	}

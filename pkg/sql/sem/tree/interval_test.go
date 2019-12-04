@@ -13,8 +13,15 @@ package tree
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+var secondIntervalTypeMetadata = types.IntervalTypeMetadata{
+	DurationField: types.IntervalDurationField{
+		DurationType: types.IntervalDurationType_SECOND,
+	},
+}
 
 func TestValidSQLIntervalSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -100,7 +107,7 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 			}
 
 			// Test that a Datum recognizes the format.
-			di, err := parseDInterval(test.input, Second)
+			di, err := parseDInterval(test.input, secondIntervalTypeMetadata)
 			if err != nil {
 				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 			}
@@ -161,7 +168,7 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 		}
 
 		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, Second)
+		di, err := parseDInterval(test.input, secondIntervalTypeMetadata)
 		if err != nil {
 			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
 			continue
@@ -349,7 +356,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 			}
 
 			// Test that a Datum recognizes the format.
-			di, err := parseDInterval(test.input, Second)
+			di, err := parseDInterval(test.input, secondIntervalTypeMetadata)
 			if err != nil {
 				t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 			}
