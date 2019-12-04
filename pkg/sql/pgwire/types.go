@@ -458,7 +458,11 @@ func (b *writeBuffer) writeBinaryDatum(
 		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
 		subWriter := newWriteBuffer(nil /* bytecount */)
 		// Put the number of dimensions. We currently support 1d arrays only.
-		subWriter.putInt32(1)
+		var ndims int32 = 1
+		if v.Len() == 0 {
+			ndims = 0
+		}
+		subWriter.putInt32(ndims)
 		hasNulls := 0
 		if v.HasNulls {
 			hasNulls = 1
@@ -466,11 +470,13 @@ func (b *writeBuffer) writeBinaryDatum(
 		oid := v.ParamTyp.Oid()
 		subWriter.putInt32(int32(hasNulls))
 		subWriter.putInt32(int32(oid))
-		subWriter.putInt32(int32(v.Len()))
-		// Lower bound, we only support a lower bound of 1.
-		subWriter.putInt32(1)
-		for _, elem := range v.Array {
-			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
+		if v.Len() > 0 {
+			subWriter.putInt32(int32(v.Len()))
+			// Lower bound, we only support a lower bound of 1.
+			subWriter.putInt32(1)
+			for _, elem := range v.Array {
+				subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
+			}
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 	case *tree.DJSON:
