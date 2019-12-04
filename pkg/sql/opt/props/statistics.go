@@ -80,33 +80,12 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 
 // ApplySelectivity applies a given selectivity to the statistics. RowCount and
 // Selectivity are updated. Note that DistinctCounts and NullCounts are not
-// updated, other than limiting them to the new RowCount.
+// updated.
 // See ColumnStatistic.ApplySelectivity for updating distinct counts and null
 // counts.
 func (s *Statistics) ApplySelectivity(selectivity float64) {
-	if selectivity == 0 {
-		s.RowCount = 0
-		for i, n := 0, s.ColStats.Count(); i < n; i++ {
-			colStat := s.ColStats.Get(i)
-			colStat.DistinctCount = 0
-			colStat.NullCount = 0
-		}
-		return
-	}
-
 	s.RowCount *= selectivity
 	s.Selectivity *= selectivity
-
-	// Make sure none of the distinct / null counts are larger than the row count.
-	for i, n := 0, s.ColStats.Count(); i < n; i++ {
-		colStat := s.ColStats.Get(i)
-		if colStat.DistinctCount > s.RowCount {
-			colStat.DistinctCount = s.RowCount
-		}
-		if colStat.NullCount > s.RowCount {
-			colStat.NullCount = s.RowCount
-		}
-	}
 }
 
 func (s *Statistics) String() string {
