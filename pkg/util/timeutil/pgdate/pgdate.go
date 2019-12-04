@@ -100,7 +100,15 @@ func MakeDateFromTime(t time.Time) (Date, error) {
 	sec := t.Unix()
 	_, offset := t.Zone()
 	sec += int64(offset)
+
 	days := sec / secondsPerDay
+	if sec < 0 && sec%secondsPerDay != 0 {
+		// If days are negative AND not divisible by secondsPerDay,
+		// we need to round down.
+		// e.g. for 1969-12-30 01:00, the division will round to -1
+		// but we want -2.
+		days--
+	}
 	d, err := MakeDateFromUnixEpoch(days)
 	return d, err
 }
