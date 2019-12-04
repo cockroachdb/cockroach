@@ -559,7 +559,8 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
               ├ *colexec.hashJoinEqOp
               │ ├ *colexec.colBatchScan
               │ └ *execinfra.JoinReader
-              │   └ *execinfra.JoinReader
+              │   └ *colexec.mergeJoinInnerOp
+              │     ├ *colexec.colBatchScan
               │     └ *colexec.selEQBytesBytesConstOp
               │       └ *colexec.colBatchScan
               └ *colexec.hashJoinEqOp
@@ -702,9 +703,10 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
             │           │ │ └ *colexec.hashJoinEqOp
             │           │ │   ├ *colexec.hashJoinEqOp
             │           │ │   │ ├ *execinfra.JoinReader
-            │           │ │   │ │ └ *execinfra.JoinReader
-            │           │ │   │ │   └ *colexec.selEQBytesBytesConstOp
-            │           │ │   │ │     └ *colexec.colBatchScan
+            │           │ │   │ │ └ *colexec.mergeJoinInnerOp
+            │           │ │   │ │   ├ *colexec.selEQBytesBytesConstOp
+            │           │ │   │ │   │ └ *colexec.colBatchScan
+            │           │ │   │ │   └ *colexec.colBatchScan
             │           │ │   │ └ *colexec.colBatchScan
             │           │ │   └ *colexec.selLEInt64Int64ConstOp
             │           │ │     └ *colexec.selGEInt64Int64ConstOp
@@ -730,9 +732,9 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
           └ *colexec.hashJoinEqOp
             ├ *colexec.hashJoinEqOp
             │ ├ *execinfra.JoinReader
-            │ │ └ *execinfra.JoinReader
-            │ │   └ *execinfra.JoinReader
-            │ │     └ *colexec.colBatchScan
+            │ │ └ *colexec.hashJoinEqOp
+            │ │   ├ *colexec.colBatchScan
+            │ │   └ *colexec.colBatchScan
             │ └ *colexec.colBatchScan
             └ *colexec.colBatchScan
 
@@ -858,7 +860,8 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
     └ *colexec.topKSorter
       └ *colexec.orderedAggregator
         └ *colexec.hashGrouper
-          └ *execinfra.JoinReader
+          └ *colexec.hashJoinEqOp
+            ├ *colexec.colBatchScan
             └ *colexec.hashJoinEqOp
               ├ *colexec.mergeJoinLeftSemiOp
               │ ├ *colexec.colBatchScan

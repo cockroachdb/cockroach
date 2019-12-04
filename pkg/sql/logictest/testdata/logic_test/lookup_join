@@ -115,6 +115,16 @@ INSERT INTO data SELECT a, b, c, d FROM
    generate_series(1, 10) AS c(c),
    generate_series(1, 10) AS d(d)
 
+statement ok
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
 # Ensure lookup join performs properly on input that has more than 100 rows.
 query I
 SELECT count(*) FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r

@@ -48,7 +48,7 @@ left-join (lookup abc@ab)
  ├── columns: t.public.abc.a:5(int) t.public.abc.b:6(int)
  ├── key columns: [5] = [5]
  ├── stats: [rows=3333.33333, distinct(5)=100, null(5)=33.3333333]
- ├── cost: 25560.04
+ ├── cost: 41560.04
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]

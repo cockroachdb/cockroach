@@ -427,6 +427,7 @@ var LookupJoinSpec = &opbench.Spec{
 			(Index "lineitem@l_sk")
 			(KeyCols "s_suppkey")
 			(Cols "l_suppkey")
+			(LookupColsAreTableKey "true")
 		]
 		[
 		]
