@@ -300,7 +300,7 @@ ALTER TABLE t INJECT STATISTICS '[
   {
     "columns": ["x"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 100,
+    "row_count": 1000,
     "distinct_count": 10
   },
   {
