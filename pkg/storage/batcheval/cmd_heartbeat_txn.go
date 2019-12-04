@@ -69,6 +69,9 @@ func HeartbeatTxn(
 	}
 
 	if !txn.Status.IsFinalized() {
+		// NOTE: this only updates the LastHeartbeat. It doesn't update any other
+		// field from h.Txn, even if it could. Whether that's a good thing or not
+		// is up for debate.
 		txn.LastHeartbeat.Forward(args.Now)
 		txnRecord := txn.AsRecord()
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {

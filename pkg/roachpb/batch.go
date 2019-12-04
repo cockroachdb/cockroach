@@ -242,12 +242,6 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	if !hasET || !et.(*EndTransactionRequest).Commit {
 		return false
 	}
-	if _, hasBegin := ba.GetArg(BeginTransaction); hasBegin {
-		// TODO(nvanbenschoten): Remove this condition in 2.3. It can be removed
-		// in 2.3 once we're sure that all nodes will properly set sequence
-		// numbers (i.e. on writes only).
-		return true
-	}
 	maxSeq := et.Header().Sequence
 	switch maxSeq {
 	case 0:
