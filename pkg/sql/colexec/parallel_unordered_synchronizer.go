@@ -74,12 +74,12 @@ type ParallelUnorderedSynchronizer struct {
 }
 
 // ChildCount implements the execinfra.OpNode interface.
-func (s *ParallelUnorderedSynchronizer) ChildCount() int {
+func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {
 	return len(s.inputs)
 }
 
 // Child implements the execinfra.OpNode interface.
-func (s *ParallelUnorderedSynchronizer) Child(nth int) execinfra.OpNode {
+func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 	return s.inputs[nth]
 }
 

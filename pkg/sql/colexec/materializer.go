@@ -113,12 +113,12 @@ func NewMaterializer(
 var _ execinfra.OpNode = &Materializer{}
 
 // ChildCount is part of the exec.OpNode interface.
-func (m *Materializer) ChildCount() int {
+func (m *Materializer) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child is part of the exec.OpNode interface.
-func (m *Materializer) Child(nth int) execinfra.OpNode {
+func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return m.input
 	}

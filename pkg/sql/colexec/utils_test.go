@@ -69,6 +69,9 @@ var unorderedVerifier verifier = (*opTestOutput).VerifyAnyOrder
 // maybeHasNulls is a helper function that returns whether any of the columns in b
 // (maybe) have nulls.
 func maybeHasNulls(b coldata.Batch) bool {
+	if b.Length() == 0 {
+		return false
+	}
 	for i := 0; i < b.Width(); i++ {
 		if b.ColVec(i).MaybeHasNulls() {
 			return true

@@ -73,11 +73,11 @@ func New_OP_TITLEProjOp(
 	}
 }
 
-func (o *_OP_LOWERProjOp) ChildCount() int {
+func (o *_OP_LOWERProjOp) ChildCount(verbose bool) int {
 	return 3
 }
 
-func (o *_OP_LOWERProjOp) Child(nth int) execinfra.OpNode {
+func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	switch nth {
 	case 0:
 		return o.input
