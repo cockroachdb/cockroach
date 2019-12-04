@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -137,11 +136,6 @@ func (m *LeaseManager) TimeRemaining(l *Lease) time.Duration {
 
 func (m *LeaseManager) timeRemaining(val *LeaseVal) time.Duration {
 	maxOffset := m.clock.MaxOffset()
-	if maxOffset == timeutil.ClocklessMaxOffset {
-		// Clockless reads are active, so we don't need to stop using the lease
-		// early.
-		maxOffset = 0
-	}
 	return val.Expiration.GoTime().Sub(m.clock.Now().GoTime()) - maxOffset
 }
 

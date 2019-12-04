@@ -328,7 +328,7 @@ func (c *Clock) updateLocked(rt Timestamp, updateIfMaxOffsetExceeded bool) (Time
 	}
 
 	offset := time.Duration(rt.WallTime - physicalClock)
-	if c.maxOffset > 0 && c.maxOffset != timeutil.ClocklessMaxOffset && offset > c.maxOffset {
+	if c.maxOffset > 0 && offset > c.maxOffset {
 		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
 		if !updateIfMaxOffsetExceeded {
 			return Timestamp{}, err

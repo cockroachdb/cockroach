@@ -570,11 +570,6 @@ func (r *Replica) sendWithRangeID(
 	isReadOnly := ba.IsReadOnly()
 	useRaft := !isReadOnly && ba.IsWrite()
 
-	if isReadOnly && r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
-		// Clockless reads mode: reads go through Raft.
-		useRaft = true
-	}
-
 	if err := r.checkBatchRequest(&ba, isReadOnly); err != nil {
 		return nil, roachpb.NewError(err)
 	}

@@ -564,10 +564,6 @@ func (r *Replica) leaseStatus(
 		expiration = hlc.Timestamp(status.Liveness.Expiration)
 	}
 	maxOffset := r.store.Clock().MaxOffset()
-	if maxOffset == timeutil.ClocklessMaxOffset {
-		// No stasis when using clockless reads.
-		maxOffset = 0
-	}
 	stasis := expiration.Add(-int64(maxOffset), 0)
 	if timestamp.Less(stasis) {
 		status.State = storagepb.LeaseState_VALID
