@@ -557,19 +557,21 @@ CREATE UNIQUE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                 distributed  true       ·                ·
-·                 vectorized   true       ·                ·
-render            ·            ·          (a)              ·
- │                render 0     a          ·                ·
- └── lookup-join  ·            ·          (a, d, e, a, d)  ·
-      │           table        u@idx      ·                ·
-      │           type         inner      ·                ·
-      │           equality     (d) = (d)  ·                ·
-      │           pred         @1 = @4    ·                ·
-      └── scan    ·            ·          (a, d, e)        ·
-·                 table        t@primary  ·                ·
-·                 spans        ALL        ·                ·
-·                 filter       e = 5      ·                ·
+·                 distributed            true       ·                ·
+·                 vectorized             true       ·                ·
+render            ·                      ·          (a)              ·
+ │                render 0               a          ·                ·
+ └── lookup-join  ·                      ·          (a, d, e, a, d)  ·
+      │           table                  u@idx      ·                ·
+      │           type                   inner      ·                ·
+      │           equality               (d) = (d)  ·                ·
+      │           equality cols are key  ·          ·                ·
+      │           parallel               ·          ·                ·
+      │           pred                   @1 = @4    ·                ·
+      └── scan    ·                      ·          (a, d, e)        ·
+·                 table                  t@primary  ·                ·
+·                 spans                  ALL        ·                ·
+·                 filter                 e = 5      ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
