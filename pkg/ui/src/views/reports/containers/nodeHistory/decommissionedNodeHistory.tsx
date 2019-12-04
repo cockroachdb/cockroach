@@ -12,7 +12,6 @@ import * as React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link } from "react-router";
-import moment from "moment";
 import _ from "lodash";
 
 import { AdminUIState } from "src/redux/state";
@@ -98,7 +97,7 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
                 className: "sort-table__cell--link",
               },
               {
-                title: `${statusName} Since`,
+                title: `${statusName} On`,
                 cell: (ns) => {
                   const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
                   if (!liveness) {
@@ -107,7 +106,7 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
 
                   const deadTime = liveness.expiration.wall_time;
                   const deadMoment = LongToMoment(deadTime);
-                  return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
+                  return deadMoment.format("LL[ at ]h:mm a");
                 },
                 sort: (ns) => {
                   const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];

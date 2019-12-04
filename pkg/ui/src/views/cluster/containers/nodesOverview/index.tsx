@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router";
 import { connect } from "react-redux";
-import moment from "moment";
+import moment, { Moment } from "moment";
 import _ from "lodash";
 
 import {
@@ -26,7 +26,7 @@ import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SortedTable } from "src/views/shared/components/sortedtable";
+import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
@@ -223,13 +223,51 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     return null;
   }
 
+  // Get column configuratin for the time node has been dead or decommissioned.
+  // Depending on the node status it returns relative or absolute date representation.
+  getDownTimeColumnConfig(): ColumnDescriptor<INodeStatus> {
+    const { status, nodesSummary } = this.props;
+    const displayAsRelativeTime = status === LivenessStatus.DEAD;
+    const statusName = _.capitalize(LivenessStatus[status]);
+
+    let title: string;
+    let formatDate: (date: Moment) => string;
+
+    if (displayAsRelativeTime) {
+      title = `${statusName} Since`;
+      formatDate = (date: Moment) => `${moment.duration(date.diff(moment())).humanize()} ago`;
+    } else {
+      title = `${statusName} On`;
+      formatDate = (date: Moment) => date.format("LL[ at ]h:mm a");
+    }
+
+    return {
+      title,
+      cell: (ns) => {
+        const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+        if (!liveness) {
+          return "no information";
+        }
+
+        const deadTime = liveness.expiration.wall_time;
+        const deadMoment = LongToMoment(deadTime);
+        return formatDate(deadMoment);
+      },
+      sort: (ns) => {
+        const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+        return liveness.expiration.wall_time;
+      },
+    };
+  }
+
   render() {
-    const { status, statuses, nodesSummary, sortSetting } = this.props;
+    const { status, statuses, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
       return null;
     }
     const footer = this.getFooter();
     const statusName = _.capitalize(LivenessStatus[status]);
+    const downTimeColumnConfig = this.getDownTimeColumnConfig();
 
     return (
       <div className="embedded-table">
@@ -274,23 +312,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
             },
             // Down/decommissioned since - displays how long the node has been
             // considered dead.
-            {
-              title: `${statusName} Since`,
-              cell: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                if (!liveness) {
-                  return "no information";
-                }
-
-                const deadTime = liveness.expiration.wall_time;
-                const deadMoment = LongToMoment(deadTime);
-                return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
-              },
-              sort: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                return liveness.expiration.wall_time;
-              },
-            },
+            downTimeColumnConfig,
           ]} />
         {footer}
       </div>
