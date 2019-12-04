@@ -55,6 +55,16 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	return nil
 }
 
+// GetActiveTimestamp returns the timestamp at which the request will read.
+func (ba *BatchRequest) GetActiveTimestamp() hlc.Timestamp {
+	if txn := ba.Txn; txn != nil {
+		ts := txn.ReadTimestamp
+		ts.Forward(txn.DeprecatedOrigTimestamp)
+		return ts
+	}
+	return ba.Timestamp
+}
+
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.
