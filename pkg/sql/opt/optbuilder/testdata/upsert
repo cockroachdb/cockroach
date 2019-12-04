@@ -1913,6 +1913,7 @@ upsert decimals
       │    ├── left-join (lookup decimals)
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
+      │    │    ├── lookup columns are key
       │    │    ├── project
       │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
       │    │    │    ├── values
@@ -1989,6 +1990,7 @@ upsert decimals
       │    ├── left-join (lookup decimals)
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
+      │    │    ├── lookup columns are key
       │    │    ├── project
       │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
       │    │    │    ├── values
@@ -2076,6 +2078,7 @@ upsert decimals
       │    ├── left-join (lookup decimals)
       │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
       │    │    ├── key columns: [8] = [13]
+      │    │    ├── lookup columns are key
       │    │    ├── project
       │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
       │    │    │    ├── values

@@ -115,11 +115,13 @@ upsert xy
       ├── left-join (lookup uv)
       │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int) u:7(int) v:8(int)
       │    ├── key columns: [3] = [7]
+      │    ├── lookup columns are key
       │    ├── cardinality: [2 - ]
       │    ├── fd: (5)-->(6), (7)-->(8)
       │    ├── left-join (lookup xy)
       │    │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
       │    │    ├── key columns: [3] = [5]
+      │    │    ├── lookup columns are key
       │    │    ├── cardinality: [2 - ]
       │    │    ├── fd: (5)-->(6)
       │    │    ├── values
@@ -790,6 +792,7 @@ project
  └── inner-join (lookup a)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
       ├── key columns: [6] = [1]
+      ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
@@ -910,6 +913,7 @@ project
  └── inner-join (lookup a)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
       ├── key columns: [6] = [1]
+      ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
@@ -3195,6 +3199,7 @@ SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 semi-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
@@ -3319,6 +3324,7 @@ SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 anti-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
@@ -3343,6 +3349,7 @@ WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHE
 anti-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)
@@ -3390,6 +3397,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT *
 semi-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)

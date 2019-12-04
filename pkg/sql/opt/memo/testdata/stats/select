@@ -766,6 +766,7 @@ WHERE
 inner-join (lookup lineitem)
  ├── columns: l_shipdate:11(date!null) l_commitdate:12(date!null) l_orderkey:1(int!null) l_linenumber:4(int!null) l_quantity:5(float!null)
  ├── key columns: [1 4] = [1 4]
+ ├── lookup columns are key
  ├── stats: [rows=0.1, distinct(11)=0.1, null(11)=0, distinct(12)=0.1, null(12)=0, distinct(11,12)=0.1, null(11,12)=0]
  ├── key: (1,4)
  ├── fd: ()-->(11,12), (1,4)-->(5)
@@ -854,6 +855,7 @@ SELECT * FROM tjson WHERE b @> '{"a":"b", "c":"d"}'
 inner-join (lookup tjson)
  ├── columns: a:1(int!null) b:2(jsonb) c:3(jsonb)
  ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── stats: [rows=61.7283951]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
