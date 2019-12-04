@@ -11,13 +11,17 @@
 package mutations
 
 import (
+	"bytes"
 	"encoding/json"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -102,17 +106,21 @@ func ApplyString(
 	return sb.String(), true
 }
 
-// TODO(mjibson): This type is copied from sql/stats, but due to that package
-// depending on sqlbase, which depends on this package, a cycle would be
-// created. Refactor something such that we avoid the cycle. This probably
-// means moving all of the rand table/datum stuff out of sqlbase.
-type jsonStatistic struct {
-	Name          string   `json:"name,omitempty"`
-	CreatedAt     string   `json:"created_at"`
-	Columns       []string `json:"columns"`
-	RowCount      uint64   `json:"row_count"`
-	DistinctCount uint64   `json:"distinct_count"`
-	NullCount     uint64   `json:"null_count"`
+// randPosInt returns a random positive integer. It attempts to distribute it
+// over powers of 10.
+func randPosInt(rng *rand.Rand) int64 {
+	var v int64
+	if n := rng.Intn(20); n == 0 {
+		// ignore
+	} else if n <= 10 {
+		v = rng.Int63n(10) + 1
+		for i := 0; i < n; i++ {
+			v *= 10
+		}
+	} else {
+		v = rng.Int63()
+	}
+	return v
 }
 
 func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
@@ -124,44 +132,77 @@ func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 		alter := &tree.AlterTable{
 			Table: create.Table.ToUnresolvedObjectName(),
 		}
-		// rowCount should be the same for all columns in a
-		// table. Attempt to distribute it over powers of 10.
-		var rowCount int64
-		if n := rng.Intn(20); n == 0 {
-			// ignore
-		} else if n <= 10 {
-			rowCount = rng.Int63n(10) + 1
+		rowCount := randPosInt(rng)
+		cols := map[tree.Name]*tree.ColumnTableDef{}
+		colStats := map[tree.Name]*stats.JSONStatistic{}
+		makeHistogram := func(col *tree.ColumnTableDef) {
+			n := rng.Intn(10)
+			seen := map[string]bool{}
+			h := stats.HistogramData{
+				ColumnType: *col.Type,
+			}
 			for i := 0; i < n; i++ {
-				rowCount *= 10
-			}
-		} else {
-			rowCount = rng.Int63()
-		}
-		var stats []jsonStatistic
-		for _, def := range create.Defs {
-			col, ok := def.(*tree.ColumnTableDef)
-			if !ok {
-				continue
-			}
-			var nullCount, distinctCount uint64
-			if rowCount > 0 {
-				if col.Nullable.Nullability != tree.NotNull {
-					nullCount = uint64(rng.Int63n(rowCount))
+				upper := sqlbase.RandDatumWithNullChance(rng, col.Type, 0)
+				if upper == tree.DNull {
+					continue
 				}
-				distinctCount = uint64(rng.Int63n(rowCount))
+				enc, err := sqlbase.EncodeTableKey(nil, upper, encoding.Ascending)
+				if err != nil {
+					panic(err)
+				}
+				if es := string(enc); seen[es] {
+					continue
+				} else {
+					seen[es] = true
+				}
+
+				h.Buckets = append(h.Buckets, stats.HistogramData_Bucket{
+					NumEq:         randPosInt(rng),
+					NumRange:      randPosInt(rng),
+					DistinctRange: float64(randPosInt(rng)),
+					UpperBound:    enc,
+				})
 			}
-			// TODO(mjibson): Generate histograms for the first column of indexes.
-			stats = append(stats, jsonStatistic{
-				Name:          "__auto__",
-				CreatedAt:     "2000-01-01 00:00:00+00:00",
-				RowCount:      uint64(rowCount),
-				Columns:       []string{col.Name.String()},
-				DistinctCount: distinctCount,
-				NullCount:     nullCount,
+			sort.Slice(h.Buckets, func(i, j int) bool {
+				return bytes.Compare(h.Buckets[i].UpperBound, h.Buckets[j].UpperBound) < 0
 			})
+			stat := colStats[col.Name]
+			stat.SetHistogram(&h)
 		}
-		if len(stats) > 0 {
-			b, err := json.Marshal(stats)
+		for _, def := range create.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				var nullCount, distinctCount uint64
+				if rowCount > 0 {
+					if def.Nullable.Nullability != tree.NotNull {
+						nullCount = uint64(rng.Int63n(rowCount))
+					}
+					distinctCount = uint64(rng.Int63n(rowCount))
+				}
+				cols[def.Name] = def
+				colStats[def.Name] = &stats.JSONStatistic{
+					Name:          "__auto__",
+					CreatedAt:     "2000-01-01 00:00:00+00:00",
+					RowCount:      uint64(rowCount),
+					Columns:       []string{def.Name.String()},
+					DistinctCount: distinctCount,
+					NullCount:     nullCount,
+				}
+				if def.Unique || def.PrimaryKey {
+					makeHistogram(def)
+				}
+			case *tree.IndexTableDef:
+				makeHistogram(cols[def.Columns[0].Column])
+			case *tree.UniqueConstraintTableDef:
+				makeHistogram(cols[def.Columns[0].Column])
+			}
+		}
+		if len(colStats) > 0 {
+			var allStats []*stats.JSONStatistic
+			for _, cs := range colStats {
+				allStats = append(allStats, cs)
+			}
+			b, err := json.Marshal(allStats)
 			if err != nil {
 				// Should not happen.
 				panic(err)
