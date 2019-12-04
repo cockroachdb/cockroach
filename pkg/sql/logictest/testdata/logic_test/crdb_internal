@@ -359,3 +359,19 @@ query T
 select crdb_internal.node_executable_version()
 ----
 2.1
+
+subtest builtin_is_admin
+
+user root
+
+query B
+SELECT crdb_internal.is_admin()
+----
+true
+
+user testuser
+
+query B
+SELECT crdb_internal.is_admin()
+----
+false

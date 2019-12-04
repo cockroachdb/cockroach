@@ -34,8 +34,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/knz/strtime"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/knz/strtime"
 	"github.com/pkg/errors"
 )
 
@@ -2880,6 +2879,31 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "This function is used for internal debugging purposes. " +
 				"Incorrect use can severely impact performance.",
+		},
+	),
+
+	// Returns true iff the current user has admin role.
+	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
+	"crdb_internal.is_admin": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlacklist: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				if evalCtx.SessionAccessor == nil {
+					return nil, pgerror.NewAssertionErrorf("session accessor not set")
+				}
+				ctx := evalCtx.Ctx()
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(isAdmin)), nil
+			},
+			Info: "Retrieves the current user's admin status.",
 		},
 	),
 }

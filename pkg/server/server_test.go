@@ -259,7 +259,7 @@ func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	client, err := s.GetAuthenticatedHTTPClient()
+	client, err := s.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -954,7 +954,7 @@ Binary built without web UI.
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)
 
-		loggedInClient, err := tsrv.GetAuthenticatedHTTPClient()
+		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}

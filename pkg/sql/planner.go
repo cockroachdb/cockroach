@@ -255,6 +255,7 @@ func newInternalPlanner(
 	)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.Sequence = p
+	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
 

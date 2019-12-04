@@ -25,9 +25,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -47,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -2259,6 +2258,12 @@ type EvalPlanner interface {
 	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
+// EvalSessionAccessor is a limited interface to access session variables.
+type EvalSessionAccessor interface {
+	// HasAdminRole returns true iff the current session user has the admin role.
+	HasAdminRole(ctx context.Context) (bool, error)
+}
+
 // SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
 // this sem/tree package which can't even import sqlutil. Executor used through
 // this interface are always "session-bound" - they inherit session variables
@@ -2372,6 +2377,8 @@ type EvalContext struct {
 	InternalExecutor SessionBoundInternalExecutor
 
 	Planner EvalPlanner
+
+	SessionAccessor EvalSessionAccessor
 
 	Sequence SequenceOperators
 
