@@ -608,13 +608,6 @@ a public network without combining it with --listen-addr.`,
 		Description: `Path to the CA key.`,
 	}
 
-	// TODO(tschottdorf): once clockless mode becomes non-experimental, explain it here:
-	// <PRE>
-	//
-	// </PRE>
-	// Specifying the string value 'experimental-clockless' instead of a duration runs the cluster
-	// in clockless reads mode. In that mode, reads are routed through Raft and subsequently
-	// performance is reduced, but clock synchronization is not relied upon for correctness.
 	MaxOffset = FlagInfo{
 		Name: "max-offset",
 		Description: `

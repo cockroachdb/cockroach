@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/montanaflynn/stats"
 )
@@ -194,7 +193,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	//
 	// TODO(tschottdorf): disallow maxOffset == 0 but probably lots of tests to
 	// fix.
-	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 && maxOffset != timeutil.ClocklessMaxOffset {
+	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
 		now := r.clock.PhysicalTime()
 
 		healthyOffsetCount := 0

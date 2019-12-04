@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
@@ -93,10 +92,6 @@ func (mo *MaxOffsetType) Type() string {
 
 // Set implements the pflag.Value interface.
 func (mo *MaxOffsetType) Set(v string) error {
-	if v == "experimental-clockless" {
-		*mo = MaxOffsetType(timeutil.ClocklessMaxOffset)
-		return nil
-	}
 	nanos, err := time.ParseDuration(v)
 	if err != nil {
 		return err
@@ -110,9 +105,6 @@ func (mo *MaxOffsetType) Set(v string) error {
 
 // String implements the pflag.Value interface.
 func (mo *MaxOffsetType) String() string {
-	if *mo == timeutil.ClocklessMaxOffset {
-		return "experimental-clockless"
-	}
 	return time.Duration(*mo).String()
 }
 

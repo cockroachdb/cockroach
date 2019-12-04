@@ -746,12 +746,9 @@ func (r *Replica) evaluateProposal(
 	// 2. the request had an impact on the MVCCStats. NB: this is possible
 	//    even with an empty write batch when stats are recomputed.
 	// 3. the request has replicated side-effects.
-	// 4. the cluster is in "clockless" mode, in which case consensus is
-	//    used to enforce a linearization of all reads and writes.
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{}) ||
-		r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
+		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{})
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of

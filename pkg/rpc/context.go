@@ -1113,9 +1113,7 @@ func (ctx *Context) runHeartbeat(
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
 				maxOffset := ctx.LocalClock.MaxOffset()
-				if maxOffset != timeutil.ClocklessMaxOffset &&
-					pingDuration > maximumPingDurationMult*maxOffset {
-
+				if pingDuration > maximumPingDurationMult*maxOffset {
 					request.Offset.Reset()
 				} else {
 					// Offset and error are measured using the remote clock reading

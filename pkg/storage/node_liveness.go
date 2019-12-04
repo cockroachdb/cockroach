@@ -587,13 +587,9 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 	}
 	// We need to add the maximum clock offset to the expiration because it's
-	// used when determining liveness for a node (unless we're configured for
-	// clockless reads).
+	// used when determining liveness for a node.
 	{
 		maxOffset := nl.clock.MaxOffset()
-		if maxOffset == timeutil.ClocklessMaxOffset {
-			maxOffset = 0
-		}
 		update.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold + maxOffset).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long

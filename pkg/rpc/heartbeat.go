@@ -146,10 +146,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// Note that we validated this connection already. Different clusters
 	// could very well have different max offsets.
 	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
-	if mo != 0 && amo != 0 &&
-		mo != timeutil.ClocklessMaxOffset && amo != timeutil.ClocklessMaxOffset &&
-		mo != amo {
-
+	if mo != 0 && amo != 0 && mo != amo {
 		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.Addr, amo))
 	}

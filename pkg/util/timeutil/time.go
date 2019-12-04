@@ -11,15 +11,9 @@
 package timeutil
 
 import (
-	"math"
 	"strings"
 	"time"
 )
-
-// ClocklessMaxOffset is a special-cased value that is used when the cluster
-// runs in "clockless" mode. In that (experimental) mode, we operate without
-// assuming any bound on the clock drift.
-const ClocklessMaxOffset = math.MaxInt64
 
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
