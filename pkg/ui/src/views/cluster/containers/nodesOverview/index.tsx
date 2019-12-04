@@ -37,6 +37,7 @@ import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
 import { cockroach } from "src/js/protos";
 
 import { BytesBarChart } from "./barChart";
+import TableSection from "./tableSection";
 import "./nodes.styl";
 
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
@@ -90,10 +91,10 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
     }
 
     return (
-      <div className="embedded-table">
-        <section className="section section--heading">
-          <h2>Live Nodes</h2>
-        </section>
+      <TableSection
+        id={`nodes-overview__live-nodes`}
+        title={`Live Nodes`}
+        className="embedded-table">
         <NodeSortedTable
           data={statuses}
           sortSetting={sortSetting}
@@ -194,7 +195,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               className: "expand-link",
             },
           ]} />
-      </div>
+      </TableSection>
     );
   }
 }
@@ -204,20 +205,19 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
   status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
+  isCollapsible: boolean;
 }
 
 /**
  * NotLiveNodeList renders a sortable table of all "dead" or "decommissioned"
  * nodes on the cluster.
  */
-class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
+class NotLiveNodeList extends React.Component<NotLiveNodeListProps> {
   getFooter() {
     const { status } = this.props;
     if (status === LivenessStatus.DECOMMISSIONED) {
       return (
-        <div className="embedded-table__footer">
-          <Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>
-        </div>
+        <Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>
       );
     }
     return null;
@@ -261,7 +261,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
   }
 
   render() {
-    const { status, statuses, sortSetting } = this.props;
+    const { status, statuses, sortSetting, isCollapsible } = this.props;
     if (!statuses || statuses.length === 0) {
       return null;
     }
@@ -270,10 +270,12 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     const downTimeColumnConfig = this.getDownTimeColumnConfig();
 
     return (
-      <div className="embedded-table">
-        <section className="section section--heading">
-          <h2>{`${statusName} Nodes`}</h2>
-        </section>
+      <TableSection
+        id={`nodes-overview__${statusName}-nodes`}
+        title={`${statusName} Nodes`}
+        footer={footer}
+        isCollapsible={isCollapsible}
+        className="embedded-table">
         <NodeSortedTable
           data={statuses}
           sortSetting={sortSetting}
@@ -314,8 +316,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
             // considered dead.
             downTimeColumnConfig,
           ]} />
-        {footer}
-      </div>
+      </TableSection>
     );
   }
 }
@@ -350,6 +351,7 @@ const DeadNodesConnected = connect(
       status: LivenessStatus.DEAD,
       statuses: statuses.dead,
       nodesSummary: nodesSummarySelector(state),
+      isCollapsible: false,
     };
   },
   {
@@ -378,6 +380,7 @@ const DecommissionedNodesConnected = connect(
       status: LivenessStatus.DECOMMISSIONED,
       statuses: recentDecommissionedNodes,
       nodesSummary,
+      isCollapsible: true,
     };
   },
   {
@@ -419,7 +422,7 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 
   render() {
     return (
-      <div>
+      <div className="nodes-list-container">
         <DeadNodesConnected />
         <LiveNodesConnected />
         <DecommissionedNodesConnected />

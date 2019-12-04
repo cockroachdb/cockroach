@@ -57,6 +57,7 @@ export default class NodeList extends React.Component<RouterState & { router: In
           width: "100%",
           height: "100%",
           overflow: "auto",
+          background: "#f6f6f6",
         }}>
           <NodesOverview />
         </div>
