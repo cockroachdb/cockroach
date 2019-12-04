@@ -76,6 +76,9 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 		return ParseDInterval(s)
 	case types.JsonFamily:
 		return ParseDJSON(s)
+	case types.OidFamily:
+		i, err := ParseDInt(s)
+		return NewDOid(*i), err
 	case types.StringFamily:
 		return NewDString(s), nil
 	case types.TimeFamily:
