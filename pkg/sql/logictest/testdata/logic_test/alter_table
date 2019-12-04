@@ -574,10 +574,10 @@ ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 statement ok
 CREATE SEQUENCE initial_seq
 
-statement error cannot backfill such sequence operation
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
 ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
 
-statement error cannot backfill such evaluated expression
+statement error pgcode 22C01 cannot evaluate scalar expressions using table lookups in this context
 ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 
 statement error cannot access virtual schema in anonymous database

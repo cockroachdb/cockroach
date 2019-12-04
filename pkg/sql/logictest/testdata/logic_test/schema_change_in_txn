@@ -1754,7 +1754,7 @@ CREATE TABLE t42508(x INT); INSERT INTO t42508(x) VALUES (1);
 statement ok
 CREATE SEQUENCE s42508
 
-statement error pgcode 0A000 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
+statement error pgcode 0A000 unimplemented: cannot evaluate scalar expressions containing sequence operations.*\nHINT.*\n.*42508
 ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
 
 statement ok
@@ -1763,5 +1763,5 @@ BEGIN
 statement ok
 ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
 
-statement error pgcode XXA00 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
+statement error pgcode XXA00 unimplemented: cannot evaluate scalar expressions containing sequence operations.*\nHINT.*\n.*42508
 COMMIT
