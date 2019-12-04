@@ -2543,7 +2543,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Header.DeferWriteTooOldError = true
 				b.Put("a", "put")
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+				// Both sub-batches will succeed, but the Put(a) will return a pushed
+				// timestamp, which is turned into a retriable error by the txnCommitter
+				// interceptor (because it's concurrent with writing the STAGING record).
+				return txn.CommitInBatch(ctx, b)
 			},
 			txnCoordRetry: true,
 		},

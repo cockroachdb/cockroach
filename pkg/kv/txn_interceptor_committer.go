@@ -347,7 +347,15 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 		// condition and neither the transaction coordinator nor any
 		// other concurrent actor will consider this transaction to
 		// be committed as is.
-		err := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "" /* extraMsg */)
+		// Note that we leave the transaction record that we wrote in the STAGING
+		// state, which is not ideal. But as long as we continue heartbeating the
+		// txn record, it being PENDING or STAGING does not make a difference.
+		reason := roachpb.RETRY_SERIALIZABLE
+		if br.Txn.WriteTooOld {
+			reason = roachpb.RETRY_WRITE_TOO_OLD
+		}
+		err := roachpb.NewTransactionRetryError(
+			reason, "serializability failure concurrent with STAGING")
 		txn := cloneWithStatus(br.Txn, roachpb.PENDING)
 		return roachpb.NewErrorWithTxn(err, txn)
 	}

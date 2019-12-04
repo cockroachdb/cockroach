@@ -415,5 +415,5 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
 	require.IsType(t, &roachpb.TransactionRetryError{}, pErr.GetDetail())
-	require.Equal(t, roachpb.RETRY_SERIALIZABLE, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
+	require.Equal(t, roachpb.RETRY_WRITE_TOO_OLD, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
 }
