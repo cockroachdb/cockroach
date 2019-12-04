@@ -587,6 +587,11 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			// No more keys in the scan. We need to transition
 			// rf.rowReadyTable to rf.currentTable for the last
 			// row.
+			//
+			// NB: this assumes that the KV layer will never split a range
+			// between column families, which is a brittle assumption.
+			// See:
+			// https://github.com/cockroachdb/cockroach/pull/42056
 			rf.rowReadyTable = rf.currentTable
 			return true, nil
 		}
