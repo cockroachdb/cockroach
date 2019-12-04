@@ -179,6 +179,9 @@ var _ tree.WindowFunc = &nthValueWindow{}
 type aggregateWindowFunc struct {
 	agg     tree.AggregateFunc
 	peerRes tree.Datum
+	// peerFrameStartIdx and peerFrameEndIdx indicate the boundaries of the
+	// window frame over which peerRes was computed.
+	peerFrameStartIdx, peerFrameEndIdx int
 }
 
 // NewAggregateWindowFunc creates a constructor of aggregateWindowFunc
@@ -200,7 +203,8 @@ func (w *aggregateWindowFunc) Compute(
 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
-	for i := 0; i < wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum); i++ {
+	peerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
+	for i := 0; i < peerGroupRowCount; i++ {
 		if skipped, err := wfr.IsRowSkipped(ctx, wfr.RowIdx+i); err != nil {
 			return nil, err
 		} else if skipped {
@@ -228,6 +232,8 @@ func (w *aggregateWindowFunc) Compute(
 		return nil, err
 	}
 	w.peerRes = peerRes
+	w.peerFrameStartIdx = wfr.RowIdx
+	w.peerFrameEndIdx = wfr.RowIdx + peerGroupRowCount
 	return w.peerRes, nil
 }
 
@@ -235,6 +241,8 @@ func (w *aggregateWindowFunc) Compute(
 func (w *aggregateWindowFunc) Reset(ctx context.Context) {
 	w.agg.Reset(ctx)
 	w.peerRes = nil
+	w.peerFrameStartIdx = 0
+	w.peerFrameEndIdx = 0
 }
 
 func (w *aggregateWindowFunc) Close(ctx context.Context, _ *tree.EvalContext) {
@@ -269,9 +277,6 @@ func newFramableAggregateWindow(
 func (w *framableAggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
-		return w.agg.peerRes, nil
-	}
 	if wfr.FullPartitionIsInWindow() {
 		// Full partition is always inside of the window, and aggregations will
 		// return the same result for all of the rows, so we're actually performing
@@ -280,6 +285,25 @@ func (w *framableAggregateWindowFunc) Compute(
 		if wfr.RowIdx > 0 {
 			return w.agg.peerRes, nil
 		}
+	}
+	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
+		// The concept of window framing takes precedence over the concept of
+		// peers - although we calculated the result for one of the peers of the
+		// current row, it is possible for that peer to have a different window
+		// frame, so we check that.
+		if frameStartIdx == w.agg.peerFrameStartIdx && frameEndIdx == w.agg.peerFrameEndIdx {
+			// The window frame is the same, so we return already calculated result.
+			return w.agg.peerRes, nil
+		}
+		// The window frame is different, so we need to recalculate the result.
 	}
 	if !w.shouldReset {
 		// We should not reset, so we will use the same aggregateWindowFunc.
@@ -291,17 +315,12 @@ func (w *framableAggregateWindowFunc) Compute(
 	w.agg.Close(ctx, evalCtx)
 	// No arguments are passed into the aggConstructor and they are instead passed
 	// in during the call to add().
-	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx, nil /* arguments */), tree.DNull}
+	*w.agg = aggregateWindowFunc{
+		agg:     w.aggConstructor(evalCtx, nil /* arguments */),
+		peerRes: tree.DNull,
+	}
 
 	// Accumulate all values in the window frame.
-	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
-	if err != nil {
-		return nil, err
-	}
-	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
-	if err != nil {
-		return nil, err
-	}
 	for i := frameStartIdx; i < frameEndIdx; i++ {
 		if skipped, err := wfr.IsRowSkipped(ctx, i); err != nil {
 			return nil, err
@@ -330,6 +349,8 @@ func (w *framableAggregateWindowFunc) Compute(
 		return nil, err
 	}
 	w.agg.peerRes = peerRes
+	w.agg.peerFrameStartIdx = frameStartIdx
+	w.agg.peerFrameEndIdx = frameEndIdx
 	return w.agg.peerRes, nil
 }
 
