@@ -1198,8 +1198,9 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
-		// TODO(radu): LaxKey should be enough (NULLs won't match anything).
-		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreStrictKey(rightSideCols.ToSet())
+		// A lookup join will drop any input row which contains NULLs, so a lax key
+		// is sufficient.
+		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
 
 		// Construct the projections for the constant columns.
 		if needProjection {
