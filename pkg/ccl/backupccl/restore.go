@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -1573,14 +1572,13 @@ func loadBackupSQLDescs(
 }
 
 type restoreResumer struct {
-	job            *jobs.Job
-	settings       *cluster.Settings
-	res            roachpb.BulkOpSummary
-	databases      []*sqlbase.DatabaseDescriptor
-	tables         []*sqlbase.TableDescriptor
-	exec           sqlutil.InternalExecutor
-	latestStats    []*stats.TableStatisticProto
-	statsRefresher *stats.Refresher
+	job         *jobs.Job
+	settings    *cluster.Settings
+	res         roachpb.BulkOpSummary
+	databases   []*sqlbase.DatabaseDescriptor
+	tables      []*sqlbase.TableDescriptor
+	latestStats []*stats.TableStatisticProto
+	execCfg     *sql.ExecutorConfig
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
@@ -1606,6 +1604,46 @@ func remapRelevantStatistics(
 	}
 
 	return relevantTableStatistics
+}
+
+// isDatabaseEmpty checks if there exists any tables in the given database.
+// It pretends that the `ignoredTables` do not exist for the purposes of
+// checking if a database is empty.
+//
+// It is used to construct a transaction which deletes a set of tables as well
+// as some empty databases. However, we want to check that the databases are
+// empty _after_ the transaction would have completed, so we want to ignore
+// the tables that we're deleting in the same transaction. It is done this way
+// to avoid having 2 transactions reading and writing the same keys one right
+// after the other.
+func isDatabaseEmpty(
+	ctx context.Context,
+	db *client.DB,
+	dbDesc *sql.DatabaseDescriptor,
+	ignoredTables map[sqlbase.ID]struct{},
+) (bool, error) {
+	var allDescs []sqlbase.Descriptor
+	if err := db.Txn(
+		ctx,
+		func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			allDescs, err = allSQLDescriptors(ctx, txn)
+			return err
+		}); err != nil {
+		return false, err
+	}
+
+	for _, desc := range allDescs {
+		if t := desc.Table(hlc.Timestamp{}); t != nil {
+			if _, ok := ignoredTables[t.GetID()]; ok {
+				continue
+			}
+			if t.GetParentID() == dbDesc.ID {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 // createImportingTables create the tables that we will restore into. It also
@@ -1698,8 +1736,7 @@ func (r *restoreResumer) Resume(
 	}
 	r.tables = tables
 	r.databases = databases
-	r.exec = p.ExecCfg().InternalExecutor
-	r.statsRefresher = p.ExecCfg().StatsRefresher
+	r.execCfg = p.ExecCfg()
 	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
 
 	if len(r.tables) == 0 {
@@ -1744,7 +1781,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
+
 	b := txn.NewBatch()
+	// Drop the table descriptors that were created at the start of the restore.
 	for _, tbl := range details.TableDescs {
 		tableDesc := *tbl
 		tableDesc.Version++
@@ -1766,6 +1805,28 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 			existingDescVal,
 		)
 	}
+	// Drop the database descriptors that were created at the start of the
+	// restore if they are now empty (i.e. no user created a table in this
+	// database during the restore.
+	var isDBEmpty bool
+	var err error
+	ignoredTables := make(map[sqlbase.ID]struct{})
+	for _, table := range details.TableDescs {
+		ignoredTables[table.ID] = struct{}{}
+	}
+	for _, dbDesc := range r.databases {
+		// We need to ignore details.TableDescs since we haven't committed the txn that deletes these.
+		isDBEmpty, err = isDatabaseEmpty(ctx, r.execCfg.DB, dbDesc, ignoredTables)
+		if err != nil {
+			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.Name)
+		}
+
+		if isDBEmpty {
+			descKey := sqlbase.MakeDescMetadataKey(dbDesc.ID)
+			b.Del(descKey)
+			b.Del(sqlbase.NewDatabaseKey(dbDesc.Name).Key())
+		}
+	}
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "dropping tables")
 	}
@@ -1777,7 +1838,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
 
-	if err := stats.InsertNewStats(ctx, r.exec, txn, r.latestStats); err != nil {
+	if err := stats.InsertNewStats(ctx, r.execCfg.InternalExecutor, txn, r.latestStats); err != nil {
 		return errors.Wrapf(err, "could not reinsert table statistics")
 	}
 
@@ -1806,7 +1867,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
 	for i := range r.tables {
-		r.statsRefresher.NotifyMutation(r.tables[i].ID, math.MaxInt32 /* rowsAffected */)
+		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].ID, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil
