@@ -59,11 +59,18 @@ function run_json_test() {
       # GITHUB_API_TOKEN must be in the env or github-post will barf if it's
       # ever asked to post, so enforce that on all runs.
       echo "GITHUB_API_TOKEN must be set"
-      exit 1
+      # TODO(tbg): we don't actually have the token available here in most
+      # cases. This is because this build is, say, a test or testrace build, amd
+      # if those had the token, you could just open a PR that prints it and
+      # steal it. The token can only live in a higher-level job that is only
+      # triggered on merged changes. For now, just don't post failures from
+      # this code.
+      # exit 1
+    else
+      tc_start_block "post issues"
+      github-post < "${tmpfile}"
+      tc_end_block "post issues"
     fi
-    tc_start_block "post issues"
-    github-post < "${tmpfile}"
-    tc_end_block "post issues"
   fi
 
   tc_start_block "artifacts"
