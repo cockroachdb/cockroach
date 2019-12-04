@@ -327,13 +327,13 @@ func TestDFloatCompare(t *testing.T) {
 	}
 }
 
-// TestParseDIntervalWithField tests that the additional features available
-// to tree.ParseDIntervalWithField beyond those in tree.ParseDInterval behave as expected.
-func TestParseDIntervalWithField(t *testing.T) {
+// TestParseDIntervalWithTypeMetadata tests that the additional features available
+// to tree.ParseDIntervalWithTypeMetadata beyond those in tree.ParseDInterval behave as expected.
+func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testData := []struct {
 		str      string
-		field    tree.DurationField
+		dtype    tree.DurationType
 		expected string
 	}{
 		// Test cases for raw numbers with fields
@@ -358,9 +358,9 @@ func TestParseDIntervalWithField(t *testing.T) {
 		{"1-2 3 4:56:07", tree.Year, "1 year"},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDIntervalWithField(td.str, td.field)
+		actual, err := tree.ParseDIntervalWithTypeMetadata(td.str, td.dtype)
 		if err != nil {
-			t.Errorf("unexpected error while parsing INTERVAL %s %d: %s", td.str, td.field, err)
+			t.Errorf("unexpected error while parsing INTERVAL %s %#v: %s", td.str, td.dtype, err)
 			continue
 		}
 		expected, err := tree.ParseDInterval(td.expected)
@@ -371,7 +371,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
-			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
+			t.Errorf("INTERVAL %s %#v: got %s, expected %s", td.str, td.dtype, actual, expected)
 		}
 	}
 }
