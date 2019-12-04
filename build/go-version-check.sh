@@ -28,7 +28,7 @@ version_patch=$(cut -f3 -d. <<< "$version")
 required_version_patch=$(eval echo \$minimum_version_${version_minor}_patch)
 check_patch=$(if test -n "$version_patch"; then echo 1; else echo 0; fi)
 if (( version_major != required_version_major )) || \
-	   (( version_minor < minimum_version_minor )); then
+     (( version_minor < minimum_version_minor )); then
   echo "go$required_version_major.$minimum_version_minor+ required (detected go$version)" >&2
   exit 1
 elif (( check_patch == 1 && version_patch < required_version_patch )); then

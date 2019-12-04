@@ -24,7 +24,7 @@ fi
 
 tc_start_block "Ensure dependencies are up-to-date"
 run build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
-runlogged "build/builder.sh ... github-pull-request-make" build/builder.sh env GITHUB_API_TOKEN="$GITHUB_API_TOKEN" BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=checkdeps github-pull-request-make
+run build/builder.sh env GITHUB_API_TOKEN="$GITHUB_API_TOKEN" BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=checkdeps github-pull-request-make
 tc_end_block "Ensure dependencies are up-to-date"
 
 tc_start_block "Ensure generated code is up-to-date"
@@ -49,11 +49,8 @@ tc_start_block "Lint"
 #
 # TODO(benesch): once GOPATH/pkg goes away because Go static analysis tools can
 # rebuild on demand, remove this. Upstream issue: golang/go#25650.
-COCKROACH_BUILDER_CCACHE= build/builder.sh \
-	stdbuf -eL -oL \
-	make lint 2>&1 \
-	| tee artifacts/lint.log \
-	| go-test-teamcity
+run_json_test env COCKROACH_BUILDER_CCACHE= \
+  build/builder.sh stdbuf -eL -oL make GOTESTFLAGS=-json lint
 tc_end_block "Lint"
 
 tc_start_block "Test web UI"

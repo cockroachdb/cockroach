@@ -592,7 +592,7 @@ func (r *testRunner) runTest(
 				}
 			}
 
-			shout(ctx, l, stdout, "--- FAIL: %s %s\n%s", t.Name(), durationStr, output)
+			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
 				authorEmail := getAuthorEmail(t.spec.Tags, failLoc.file, failLoc.line)
@@ -621,7 +621,7 @@ func (r *testRunner) runTest(
 				}
 			}
 		} else {
-			shout(ctx, l, stdout, "--- PASS: %s %s", t.Name(), durationStr)
+			shout(ctx, l, stdout, "--- PASS: %s (%s)", t.Name(), durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 			// TeamCity regards the test as successful.
 		}
