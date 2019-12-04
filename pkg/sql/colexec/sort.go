@@ -203,9 +203,11 @@ type sortOp struct {
 	state sortState
 
 	output coldata.Batch
+
+	exported uint64
 }
 
-var _ Operator = &sortOp{}
+var _ bufferingInMemoryOperator = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
@@ -256,12 +258,17 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			newEmitted = p.input.getNumTuples()
 		}
 		p.output.ResetInternalBatch()
-		p.output.SetLength(uint16(newEmitted - p.emitted))
-		if p.output.Length() == 0 {
-			return p.output
+		if newEmitted == p.emitted {
+			return coldata.ZeroBatch
 		}
 
 		for j := 0; j < len(p.inputTypes); j++ {
+			// TODO(yuzefovich): at this point, we have already fully sorted the
+			// input. I think it is ok if we do this Copy outside of the Allocator -
+			// the work has been done, but theoretically it is possible to hit the
+			// limit here (mainly with variable-sized types like Bytes). Nonetheless,
+			// for performance reasons it would be sad to fallback to disk at this
+			// point.
 			p.allocator.Copy(
 				p.output.ColVec(j),
 				coldata.CopySliceArgs{
@@ -269,12 +276,13 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 						ColType:     p.inputTypes[j],
 						Src:         p.input.getValues(j),
 						SrcStartIdx: p.emitted,
-						SrcEndIdx:   p.emitted + uint64(p.output.Length()),
+						SrcEndIdx:   newEmitted,
 					},
 					Sel64: p.order,
 				},
 			)
 		}
+		p.output.SetLength(uint16(newEmitted - p.emitted))
 		p.emitted = newEmitted
 		return p.output
 	}
@@ -385,18 +393,49 @@ func (p *sortOp) reset() {
 		r.reset()
 	}
 	p.emitted = 0
+	p.exported = 0
 	p.state = sortSpooling
 }
 
-func (p *sortOp) ChildCount() int {
+func (p *sortOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (p *sortOp) Child(nth int) execinfra.OpNode {
+func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
+}
+
+func (p *sortOp) ExportBuffered(allocator *Allocator) coldata.Batch {
+	if p.exported == p.input.getNumTuples() {
+		return coldata.ZeroBatch
+	}
+	p.output.ResetInternalBatch()
+	newExported := p.exported + uint64(coldata.BatchSize())
+	if newExported > p.input.getNumTuples() {
+		newExported = p.input.getNumTuples()
+	}
+	for j := 0; j < len(p.inputTypes); j++ {
+		// TODO(yuzefovich): refactor spooler interface so that the spooler could
+		// return buffered tuples as batches and we didn't need to copy the data.
+		// We're using the provided Allocator.
+		allocator.Copy(
+			p.output.ColVec(j),
+			coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
+					ColType:     p.inputTypes[j],
+					Src:         p.input.getValues(j),
+					SrcStartIdx: p.exported,
+					SrcEndIdx:   newExported,
+				},
+			},
+		)
+	}
+	p.output.SetLength(uint16(newExported - p.exported))
+	p.exported = newExported
+	return p.output
 }

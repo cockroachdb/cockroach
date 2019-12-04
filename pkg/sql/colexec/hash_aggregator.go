@@ -175,11 +175,11 @@ type hashGrouper struct {
 
 var _ execinfra.OpNode = &hashGrouper{}
 
-func (op *hashGrouper) ChildCount() int {
+func (op *hashGrouper) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (op *hashGrouper) Child(nth int) execinfra.OpNode {
+func (op *hashGrouper) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return op.builder.spec.source
 	}

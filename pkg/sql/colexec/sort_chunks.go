@@ -58,11 +58,11 @@ type sortChunksOp struct {
 	sorter resettableOperator
 }
 
-func (c *sortChunksOp) ChildCount() int {
+func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 0
 }
 
-func (c *sortChunksOp) Child(nth int) execinfra.OpNode {
+func (c *sortChunksOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}

@@ -263,12 +263,12 @@ func (ij *IndexJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 }
 
 // ChildCount is part of the OpNode interface.
-func (ij *IndexJoiner) ChildCount() int {
+func (ij *IndexJoiner) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child is part of the OpNode interface.
-func (ij *IndexJoiner) Child(nth int) OpNode {
+func (ij *IndexJoiner) Child(nth int, verbose bool) OpNode {
 	if nth == 0 {
 		if n, ok := ij.input.(OpNode); ok {
 			return n
