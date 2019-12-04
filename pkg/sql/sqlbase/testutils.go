@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -820,9 +819,16 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	return roachpb.Key(key), nil
 }
 
+// Mutator defines a method that can mutate or add SQL statements. See the
+// sql/mutations package. This interface is defined here to avoid cyclic
+// dependencies.
+type Mutator interface {
+	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
-	rng *rand.Rand, prefix string, num int, mutators ...mutations.MultiStatementMutation,
+	rng *rand.Rand, prefix string, num int, mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -830,15 +836,13 @@ func RandCreateTables(
 
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
-	byName := map[tree.TableName]*tree.CreateTable{}
 	for i := 1; i <= num; i++ {
 		t := RandCreateTable(rng, prefix, i)
 		tables[i-1] = t
-		byName[t.Table] = t
 	}
 
 	for _, m := range mutators {
-		tables, _ = m(rng, tables)
+		tables, _ = m.Mutate(rng, tables)
 	}
 
 	return tables
@@ -909,12 +913,192 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 
 	// Create some random column families.
 	if rng.Intn(2) == 0 {
-		mutations.ColumnFamilyMutator(rng, ret)
+		ColumnFamilyMutator(rng, ret)
 	}
 
 	// Maybe add some storing columns.
-	res, _ := mutations.IndexStoringMutator(rng, []tree.Statement{ret})
+	res, _ := IndexStoringMutator(rng, []tree.Statement{ret})
 	return res[0].(*tree.CreateTable)
+}
+
+// ColumnFamilyMutator is mutations.StatementMutator, but lives here to prevent
+// dependency cycles with RandCreateTable.
+func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+	ast, ok := stmt.(*tree.CreateTable)
+	if !ok {
+		return false
+	}
+
+	var columns []tree.Name
+	isPKCol := map[tree.Name]bool{}
+	for _, def := range ast.Defs {
+		switch def := def.(type) {
+		case *tree.FamilyTableDef:
+			return false
+		case *tree.ColumnTableDef:
+			if def.HasColumnFamily() {
+				return false
+			}
+			// Primary keys must be in the first
+			// column family, so don't add them to
+			// the list.
+			if def.PrimaryKey {
+				continue
+			}
+			columns = append(columns, def.Name)
+		case *tree.UniqueConstraintTableDef:
+			// If there's an explicit PK index
+			// definition, save the columns from it
+			// and remove them later.
+			if def.PrimaryKey {
+				for _, col := range def.Columns {
+					isPKCol[col.Column] = true
+				}
+			}
+		}
+	}
+
+	if len(columns) <= 1 {
+		return false
+	}
+
+	// Any columns not specified in column families
+	// are auto assigned to the first family, so
+	// there's no requirement to exhaust columns here.
+
+	// Remove columns specified in PK index
+	// definitions. We need to do this here because
+	// index defs and columns can appear in any
+	// order in the CREATE TABLE.
+	{
+		n := 0
+		for _, x := range columns {
+			if !isPKCol[x] {
+				columns[n] = x
+				n++
+			}
+		}
+		columns = columns[:n]
+	}
+	rng.Shuffle(len(columns), func(i, j int) {
+		columns[i], columns[j] = columns[j], columns[i]
+	})
+	fd := &tree.FamilyTableDef{}
+	for {
+		if len(columns) == 0 {
+			if len(fd.Columns) > 0 {
+				ast.Defs = append(ast.Defs, fd)
+			}
+			break
+		}
+		fd.Columns = append(fd.Columns, columns[0])
+		columns = columns[1:]
+		// 50% chance to make a new column family.
+		if rng.Intn(2) != 0 {
+			ast.Defs = append(ast.Defs, fd)
+			fd = &tree.FamilyTableDef{}
+		}
+	}
+	return true
+}
+
+type tableInfo struct {
+	columnNames []tree.Name
+	pkCols      []tree.Name
+}
+
+// IndexStoringMutator is mutations.StatementMutator, but lives here to prevent
+// dependency cycles with RandCreateTable.
+func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := map[tree.Name]tableInfo{}
+	getTableInfoFromCreateStatement := func(ct *tree.CreateTable) tableInfo {
+		var columnNames []tree.Name
+		var pkCols []tree.Name
+		for _, def := range ct.Defs {
+			switch ast := def.(type) {
+			case *tree.ColumnTableDef:
+				columnNames = append(columnNames, ast.Name)
+				if ast.PrimaryKey {
+					pkCols = []tree.Name{ast.Name}
+				}
+			case *tree.UniqueConstraintTableDef:
+				if ast.PrimaryKey {
+					for _, elem := range ast.Columns {
+						pkCols = append(pkCols, elem.Column)
+					}
+				}
+			}
+		}
+		return tableInfo{columnNames: columnNames, pkCols: pkCols}
+	}
+	mapFromIndexCols := func(cols []tree.Name) map[tree.Name]struct{} {
+		colMap := map[tree.Name]struct{}{}
+		for _, col := range cols {
+			colMap[col] = struct{}{}
+		}
+		return colMap
+	}
+	generateStoringCols := func(rng *rand.Rand, tableCols []tree.Name, indexCols map[tree.Name]struct{}) []tree.Name {
+		var storingCols []tree.Name
+		for _, col := range tableCols {
+			_, ok := indexCols[col]
+			if ok {
+				continue
+			}
+			if rng.Intn(2) == 0 {
+				storingCols = append(storingCols, col)
+			}
+		}
+		return storingCols
+	}
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			tableInfo, ok := tables[ast.Table.TableName]
+			if !ok {
+				continue
+			}
+			// If we don't have a storing list, make one with 50% chance.
+			if ast.Storing == nil && rng.Intn(2) == 0 {
+				indexCols := mapFromIndexCols(tableInfo.pkCols)
+				for _, elem := range ast.Columns {
+					indexCols[elem.Column] = struct{}{}
+				}
+				ast.Storing = generateStoringCols(rng, tableInfo.columnNames, indexCols)
+				changed = true
+			}
+		case *tree.CreateTable:
+			// Write down this table for later.
+			tableInfo := getTableInfoFromCreateStatement(ast)
+			tables[ast.Table.TableName] = tableInfo
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey {
+						idx = &defType.IndexTableDef
+					} else {
+						continue
+					}
+				default:
+					continue
+				}
+				// If we don't have a storing list, make one with 50% chance.
+				if idx.Storing == nil && rng.Intn(2) == 0 {
+					indexCols := mapFromIndexCols(tableInfo.pkCols)
+					for _, elem := range idx.Columns {
+						indexCols[elem.Column] = struct{}{}
+					}
+					idx.Storing = generateStoringCols(rng, tableInfo.columnNames, indexCols)
+					changed = true
+				}
+			}
+		}
+	}
+	return stmts, changed
 }
 
 // randColumnTableDef produces a random ColumnTableDef, with a random type and

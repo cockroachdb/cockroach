@@ -74,9 +74,9 @@ type options struct {
 	}
 }
 
-var sqlMutators = []mutations.Mutator{mutations.ColumnFamilyMutator}
+var sqlMutators = []sqlbase.Mutator{mutations.ColumnFamilyMutator}
 
-func enableMutations(shouldEnable bool, mutations []mutations.Mutator) []mutations.Mutator {
+func enableMutations(shouldEnable bool, mutations []sqlbase.Mutator) []sqlbase.Mutator {
 	if shouldEnable {
 		return mutations
 	}
@@ -240,7 +240,7 @@ func compareConns(
 	ctx context.Context,
 	opts *options,
 	rng *rand.Rand,
-	sqlMutations []mutations.Mutator,
+	sqlMutations []sqlbase.Mutator,
 	prep, exec string,
 	smitherName string,
 	conns map[string]*Conn,
