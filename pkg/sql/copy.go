@@ -31,6 +31,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type copyMachineInterface interface {
+	run(ctx context.Context) error
+}
+
 // copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
 // machine is created by the Executor when that statement is executed; from that
 // moment on, the machine takes control of the pgwire connection until
@@ -83,6 +87,8 @@ type copyMachine struct {
 	// parsing. Is it not correctly initialized with timestamps, transactions and
 	// other things that statements more generally need.
 	parsingEvalCtx *tree.EvalContext
+
+	processRows func(ctx context.Context) error
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -96,7 +102,9 @@ func newCopyMachine(
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
-		conn:    conn,
+		conn: conn,
+		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
+		//  but that dependency can be removed by refactoring it.
 		table:   &n.Table,
 		columns: n.Columns,
 		txnOpt:  txnOpt,
@@ -131,6 +139,7 @@ func newCopyMachine(
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.processRows = c.insertRows
 	return c, nil
 }
 
@@ -265,7 +274,7 @@ func (c *copyMachine) processCopyData(
 	if ln := len(c.rows); ln == 0 || (ln < copyBatchRowSize && !final) {
 		return nil
 	}
-	return c.insertRows(ctx)
+	return c.processRows(ctx)
 }
 
 // preparePlanner resets the planner so that it can be used for execution.

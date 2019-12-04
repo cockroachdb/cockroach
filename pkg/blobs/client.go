@@ -122,12 +122,12 @@ var _ BlobClient = &localClient{}
 // localClient executes the local blob service's code
 // to Read or Write bulk files on the current node.
 type localClient struct {
-	localStorage *localStorage
+	localStorage *LocalStorage
 }
 
 // newLocalClient instantiates a local blob service client.
 func newLocalClient(externalIODir string) (BlobClient, error) {
-	storage, err := newLocalStorage(externalIODir)
+	storage, err := NewLocalStorage(externalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating local client")
 	}
