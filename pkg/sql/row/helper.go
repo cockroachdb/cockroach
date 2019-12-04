@@ -59,12 +59,7 @@ func newRowHelper(
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
 ) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
-	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
-			rh.TableDesc.PrimaryIndex.ID)
-	}
-	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.TableDesc.TableDesc(), &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,6 +68,19 @@ func (rh *rowHelper) encodeIndexes(
 		return nil, nil, err
 	}
 	return primaryIndexKey, secondaryIndexEntries, nil
+}
+
+// encodePrimaryIndex encodes the primary index key.
+func (rh *rowHelper) encodePrimaryIndex(
+	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
+) (primaryIndexKey []byte, err error) {
+	if rh.primaryIndexKeyPrefix == nil {
+		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
+			rh.TableDesc.PrimaryIndex.ID)
+	}
+	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
+		rh.TableDesc.TableDesc(), &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+	return primaryIndexKey, err
 }
 
 // encodeSecondaryIndexes encodes the secondary index keys. The

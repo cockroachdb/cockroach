@@ -46,9 +46,10 @@ type Updater struct {
 	marshaled       []roachpb.Value
 	newValues       []tree.Datum
 	key             roachpb.Key
-	indexEntriesBuf []sqlbase.IndexEntry
 	valueBuf        []byte
 	value           roachpb.Value
+	oldIndexEntries [][]sqlbase.IndexEntry
+	newIndexEntries [][]sqlbase.IndexEntry
 }
 
 type rowUpdaterType int
@@ -184,6 +185,8 @@ func makeUpdaterWithoutCascader(
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshaled:             make([]roachpb.Value, len(updateCols)),
+		oldIndexEntries:       make([][]sqlbase.IndexEntry, len(includeIndexes)),
+		newIndexEntries:       make([][]sqlbase.IndexEntry, len(includeIndexes)),
 	}
 
 	if primaryKeyColChange {
@@ -308,7 +311,7 @@ func (ru *Updater) UpdateRow(
 		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.UpdateCols))
 	}
 
-	primaryIndexKey, oldSecondaryIndexEntries, err := ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
+	primaryIndexKey, err := ru.Helper.encodePrimaryIndex(ru.FetchColIDtoRowIndex, oldValues)
 	if err != nil {
 		return nil, err
 	}
@@ -319,11 +322,6 @@ func (ru *Updater) UpdateRow(
 			return nil, err
 		}
 	}
-	// The secondary index entries returned by rowHelper.encodeIndexes are only
-	// valid until the next call to encodeIndexes. We need to copy them so that
-	// we can compare against the new secondary index entries.
-	oldSecondaryIndexEntries = append(ru.indexEntriesBuf[:0], oldSecondaryIndexEntries...)
-	ru.indexEntriesBuf = oldSecondaryIndexEntries
 
 	// Check that the new value types match the column types. This needs to
 	// happen before index encoding because certain datum types (i.e. tuple)
@@ -341,22 +339,31 @@ func (ru *Updater) UpdateRow(
 	}
 
 	rowPrimaryKeyChanged := false
-	var newSecondaryIndexEntries []sqlbase.IndexEntry
 	if ru.primaryKeyColChange {
 		var newPrimaryIndexKey []byte
-		newPrimaryIndexKey, newSecondaryIndexEntries, err =
-			ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, ru.newValues)
+		newPrimaryIndexKey, err =
+			ru.Helper.encodePrimaryIndex(ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
-	} else {
-		newSecondaryIndexEntries, err =
-			ru.Helper.encodeSecondaryIndexes(ru.FetchColIDtoRowIndex, ru.newValues)
+	}
+
+	for i := range ru.Helper.Indexes {
+		// TODO (rohany): include a version of sqlbase.EncodeSecondaryIndex that allocates index entries
+		//  into an argument list.
+		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
+			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues)
+		if err != nil {
+			return nil, err
+		}
+		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
+			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	if rowPrimaryKeyChanged {
 		if err := ru.rd.DeleteRow(ctx, batch, oldValues, SkipFKs, traceKV); err != nil {
 			return nil, err
@@ -370,7 +377,11 @@ func (ru *Updater) UpdateRow(
 		if ru.Fks.checker != nil {
 			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
 			for i := range ru.Helper.Indexes {
-				if !bytes.Equal(newSecondaryIndexEntries[i].Key, oldSecondaryIndexEntries[i].Key) {
+				// * We always will have at least 1 entry in the index, so indexing 0 is safe.
+				// * The only difference between column family 0 vs other families encodings is
+				//   just the family key ending of the key, so if index[0] is different, the other
+				//   index entries will be different as well.
+				if !bytes.Equal(ru.newIndexEntries[i][0].Key, ru.oldIndexEntries[i][0].Key) {
 					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
 				}
 			}
@@ -418,47 +429,55 @@ func (ru *Updater) UpdateRow(
 	}
 
 	// Update secondary indexes.
-	// We're iterating through all of the indexes, which should have corresponding entries in both oldSecondaryIndexEntries
-	// and newSecondaryIndexEntries. Inverted indexes could potentially have more entries at the end of both and we will
-	// update those separately.
+	// We're iterating through all of the indexes, which should have corresponding entries
+	// in the new and old values.
 	for i := range ru.Helper.Indexes {
 		index := &ru.Helper.Indexes[i]
-		oldSecondaryIndexEntry := &oldSecondaryIndexEntries[i]
-		newSecondaryIndexEntry := &newSecondaryIndexEntries[i]
-
-		// We're skipping inverted indexes in this loop, but appending the inverted index entry to the back of
-		// newSecondaryIndexEntries to process later. For inverted indexes we need to remove all old entries before adding
-		// new ones.
-		if index.Type == sqlbase.IndexDescriptor_INVERTED {
-			newSecondaryIndexEntries = append(newSecondaryIndexEntries, *newSecondaryIndexEntry)
-			oldSecondaryIndexEntries = append(oldSecondaryIndexEntries, *oldSecondaryIndexEntry)
-
-			continue
-		}
-
-		var expValue *roachpb.Value
-		if !bytes.Equal(newSecondaryIndexEntry.Key, oldSecondaryIndexEntry.Key) {
-			ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
-			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldSecondaryIndexEntry.Key))
+		if index.Type == sqlbase.IndexDescriptor_FORWARD {
+			if len(ru.oldIndexEntries[i]) != len(ru.newIndexEntries[i]) {
+				panic("expected same number of index entries for old and new values")
 			}
-			batch.Del(oldSecondaryIndexEntry.Key)
-		} else if !newSecondaryIndexEntry.Value.EqualData(oldSecondaryIndexEntry.Value) {
-			expValue = &oldSecondaryIndexEntry.Value
+			for j := range ru.oldIndexEntries[i] {
+				oldEntry := &ru.oldIndexEntries[i][j]
+				newEntry := &ru.newIndexEntries[i][j]
+				var expValue *roachpb.Value
+				if !bytes.Equal(oldEntry.Key, newEntry.Key) {
+					// TODO (rohany): this check is duplicated here and above, is there a reason?
+					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
+					if traceKV {
+						log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
+					}
+					batch.Del(oldEntry.Key)
+				} else if !newEntry.Value.EqualData(oldEntry.Value) {
+					expValue = &oldEntry.Value
+				} else {
+					continue
+				}
+				if traceKV {
+					k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
+					v := newEntry.Value.PrettyPrint()
+					if expValue != nil {
+						log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
+					} else {
+						log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+					}
+				}
+				batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
+			}
 		} else {
-			continue
-		}
-
-		if traceKV {
-			k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key)
-			v := newSecondaryIndexEntry.Value.PrettyPrint()
-			if expValue != nil {
-				log.VEventf(ctx, 2, "CPut %s -> %v (replacing %v, if exists)", k, v, expValue)
-			} else {
-				log.VEventf(ctx, 2, "CPut %s -> %v (expecting does not exist)", k, v)
+			// Remove all inverted index entries, and re-add them.
+			for j := range ru.oldIndexEntries[i] {
+				if traceKV {
+					log.VEventf(ctx, 2, "Del %s", ru.oldIndexEntries[i][j].Key)
+				}
+				batch.Del(ru.oldIndexEntries[i][j].Key)
+			}
+			putFn := insertInvertedPutFn
+			// We're adding all of the inverted index entries from the row being updated.
+			for j := range ru.newIndexEntries[i] {
+				putFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
 			}
 		}
-		batch.CPutAllowingIfNotExists(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 	}
 
 	// We're deleting indexes in a delete only state. We're bounding this by the number of indexes because inverted
@@ -470,20 +489,6 @@ func (ru *Updater) UpdateRow(
 			}
 			batch.Del(deletedSecondaryIndexEntry.Key)
 		}
-	}
-
-	// We're removing all of the inverted index entries from the row being updated.
-	for i := len(ru.Helper.Indexes); i < len(oldSecondaryIndexEntries); i++ {
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", oldSecondaryIndexEntries[i].Key)
-		}
-		batch.Del(oldSecondaryIndexEntries[i].Key)
-	}
-
-	putFn := insertInvertedPutFn
-	// We're adding all of the inverted index entries from the row being updated.
-	for i := len(ru.Helper.Indexes); i < len(newSecondaryIndexEntries); i++ {
-		putFn(ctx, batch, &newSecondaryIndexEntries[i].Key, &newSecondaryIndexEntries[i].Value, traceKV)
 	}
 
 	if ru.cascader != nil {

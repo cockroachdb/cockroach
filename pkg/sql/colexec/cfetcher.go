@@ -619,11 +619,20 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
+			// foundNull is set when decoding a new index key for a row finds a NULL value
+			// in the index key. This is used when decoding unique secondary indexes in order
+			// to tell whether they have extra columns appended to the key.
+			var foundNull bool
 			if rf.mustDecodeIndexKey || rf.traceKV {
 				if debugState {
 					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
-				key, matches, err := colencoding.DecodeIndexKeyToCols(
+				var (
+					key     []byte
+					matches bool
+					err     error
+				)
+				key, matches, foundNull, err = colencoding.DecodeIndexKeyToCols(
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.desc,
@@ -659,6 +668,52 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen]
 			}
+
+			// For unique secondary indexes, the index-key does not distinguish one row
+			// from the next if both rows contain identical values along with a NULL.
+			// Consider the keys:
+			//
+			//   /test/unique_idx/NULL/0
+			//   /test/unique_idx/NULL/1
+			//
+			// The index-key extracted from the above keys is /test/unique_idx/NULL. The
+			// trailing /0 and /1 are the primary key used to unique-ify the keys when a
+			// NULL is present. When a null is present in the index key, we cut off more
+			// of the index key so that the prefix includes the primary key columns.
+			//
+			// Note that we do not need to do this for non-unique secondary indexes because
+			// the extra columns in the primary key will _always_ be there, so we can decode
+			// them when processing the index. The difference with unique secondary indexes
+			// is that the extra columns are not always there, and are used to unique-ify
+			// the index key, rather than provide the primary key column values.
+			if foundNull && rf.table.isSecondaryIndex && rf.table.index.Unique && len(rf.table.desc.Families) != 1 {
+				// We get the remaining bytes after the computed prefix, and then
+				// slice off the extra encoded columns from those bytes. We calculate
+				// how many bytes were sliced away, and then extend lastRowPrefix
+				// by that amount.
+				prefixLen := len(rf.machine.lastRowPrefix)
+				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
+				origRemainingBytesLen := len(remainingBytes)
+				for _, colID := range rf.table.index.ExtraColumnIDs {
+					colIdx, ok := rf.table.colIdxMap.get(colID)
+					if !ok {
+						return nil, errors.Errorf("column id %d was in index.ExtraColumnIDs but not in colIdxMap", colID)
+					}
+					var err error
+					// Slice off an extra encoded column from remainingBytes.
+					remainingBytes, err = colencoding.SkipTableKey(
+						&rf.table.cols[colIdx].Type,
+						remainingBytes,
+						// Extra columns are always stored in ascending order.
+						sqlbase.IndexDescriptor_ASC,
+					)
+					if err != nil {
+						return nil, err
+					}
+				}
+				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen+(origRemainingBytesLen-len(remainingBytes))]
+			}
+
 			familyID, err := rf.getCurrentColumnFamilyID()
 			if err != nil {
 				return nil, err
@@ -672,7 +727,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			if rf.traceKV {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
-			if rf.table.isSecondaryIndex || len(rf.table.desc.Families) == 1 {
+			if len(rf.table.desc.Families) == 1 {
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateInitFetch
 				continue
@@ -886,47 +941,60 @@ func (rf *cFetcher) processValue(
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
-		valueBytes, err := val.GetBytes()
-		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
-		}
-
-		if cHasExtraCols(table) {
-			// This is a unique secondary index; decode the extra
-			// column values from the value.
-			var err error
-			if rf.traceKV {
-				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
-					rf.machine.rowIdx,
-					table.allExtraValColOrdinals,
-					table.extraTypes,
-					nil,
-					&rf.machine.remainingValueColsByIdx,
-					valueBytes,
-				)
-			} else {
-				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
-					rf.machine.rowIdx,
-					table.extraValColOrdinals,
-					table.extraTypes,
-					nil,
-					&rf.machine.remainingValueColsByIdx,
-					valueBytes,
-				)
-			}
+		tag := val.GetTag()
+		var valueBytes []byte
+		switch tag {
+		case roachpb.ValueType_BYTES:
+			// If we have the ValueType_BYTES on a secondary index, then we know we
+			// are looking at column family 0. Column family 0 stores the extra primary
+			// key columns if they are present, so we decode them here.
+			valueBytes, err = val.GetBytes()
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
-			if rf.traceKV {
-				var buf strings.Builder
-				for j := range table.extraTypes {
-					idx := table.allExtraValColOrdinals[j]
-					buf.WriteByte('/')
-					buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+
+			if cHasExtraCols(table) {
+				// This is a unique secondary index; decode the extra
+				// column values from the value.
+				var err error
+				if rf.traceKV {
+					valueBytes, _, err = colencoding.DecodeKeyValsToCols(
+						rf.machine.colvecs,
+						rf.machine.rowIdx,
+						table.allExtraValColOrdinals,
+						table.extraTypes,
+						nil,
+						&rf.machine.remainingValueColsByIdx,
+						valueBytes,
+					)
+				} else {
+					valueBytes, _, err = colencoding.DecodeKeyValsToCols(
+						rf.machine.colvecs,
+						rf.machine.rowIdx,
+						table.extraValColOrdinals,
+						table.extraTypes,
+						nil,
+						&rf.machine.remainingValueColsByIdx,
+						valueBytes,
+					)
 				}
-				prettyValue = buf.String()
+				if err != nil {
+					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
+				}
+				if rf.traceKV {
+					var buf strings.Builder
+					for j := range table.extraTypes {
+						idx := table.allExtraValColOrdinals[j]
+						buf.WriteByte('/')
+						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+					}
+					prettyValue = buf.String()
+				}
+			}
+		case roachpb.ValueType_TUPLE:
+			valueBytes, err = val.GetTuple()
+			if err != nil {
+				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 
