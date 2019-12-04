@@ -636,6 +636,13 @@ func (r *RocksDB) open() error {
 		existingVersion = versionCurrent
 	}
 
+	// Check if go has a consistent view of cpp types.
+	var testSlice C.DBSlice
+	if unsafe.Sizeof(testSlice) != uintptr(C.DBSizeofSlice()) {
+		return fmt.Errorf("go and C++ reporting inconsistent sizes of C++ structs: %d != %d",
+			unsafe.Sizeof(testSlice), int(C.DBSizeofSlice()))
+	}
+
 	maxOpenFiles := uint64(RecommendedMaxOpenFiles)
 	if r.cfg.MaxOpenFiles != 0 {
 		maxOpenFiles = r.cfg.MaxOpenFiles

@@ -346,6 +346,9 @@ typedef struct {
   DBSlice resume_key;
 } DBScanResults;
 
+// DBSizeofSlice returns the size of a DBSlice.
+int32_t DBSizeofSlice();
+
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
                       bool inconsistent, bool tombstones);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
