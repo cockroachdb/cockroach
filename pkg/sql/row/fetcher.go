@@ -227,6 +227,9 @@ type Fetcher struct {
 
 	// Buffered allocation of decoded datums.
 	alloc *sqlbase.DatumAlloc
+
+	// Allocation avoidance for secondary index entries.
+	indexEntries []sqlbase.IndexEntry
 }
 
 // Reset resets this Fetcher, preserving the memory capacity that was used
@@ -1340,12 +1343,13 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 		values[i] = table.row[i].Datum
 	}
 
-	indexEntries, err := sqlbase.EncodeSecondaryIndex(table.desc.TableDesc(), table.index, table.colIdxMap, values)
+	var err error
+	rf.indexEntries, err = sqlbase.EncodeSecondaryIndexWithResultBuffer(table.desc.TableDesc(), table.index, table.colIdxMap, values, rf.indexEntries[:0])
 	if err != nil {
 		return err
 	}
 
-	for _, indexEntry := range indexEntries {
+	for _, indexEntry := range rf.indexEntries {
 		// We ignore the first 4 bytes of the values. These bytes are a
 		// checksum which are not set by EncodeSecondaryIndex.
 		if !indexEntry.Key.Equal(rf.rowReadyTable.lastKV.Key) {

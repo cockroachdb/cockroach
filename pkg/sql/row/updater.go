@@ -350,15 +350,13 @@ func (ru *Updater) UpdateRow(
 	}
 
 	for i := range ru.Helper.Indexes {
-		// TODO (rohany): include a version of sqlbase.EncodeSecondaryIndex that allocates index entries
-		//  into an argument list.
-		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues)
+		ru.oldIndexEntries[i], err = sqlbase.EncodeSecondaryIndexWithResultBuffer(
+			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, oldValues, ru.oldIndexEntries[i][:0])
 		if err != nil {
 			return nil, err
 		}
-		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndex(
-			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues)
+		ru.newIndexEntries[i], err = sqlbase.EncodeSecondaryIndexWithResultBuffer(
+			ru.Helper.TableDesc.TableDesc(), &ru.Helper.Indexes[i], ru.FetchColIDtoRowIndex, ru.newValues, ru.newIndexEntries[i][:0])
 		if err != nil {
 			return nil, err
 		}

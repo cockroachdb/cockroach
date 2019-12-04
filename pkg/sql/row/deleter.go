@@ -29,7 +29,8 @@ type Deleter struct {
 	Fks                  fkExistenceCheckForDelete
 	cascader             *cascader
 	// For allocation avoidance.
-	key roachpb.Key
+	key          roachpb.Key
+	indexEntries []sqlbase.IndexEntry
 }
 
 // MakeDeleter creates a Deleter for the given table.
@@ -137,12 +138,13 @@ func (rd *Deleter) DeleteRow(
 
 	// Delete the row from any secondary indices.
 	for i := range rd.Helper.Indexes {
-		entries, err := sqlbase.EncodeSecondaryIndex(
-			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values)
+		var err error
+		rd.indexEntries, err = sqlbase.EncodeSecondaryIndexWithResultBuffer(
+			rd.Helper.TableDesc.TableDesc(), &rd.Helper.Indexes[i], rd.FetchColIDtoRowIndex, values, rd.indexEntries[:0])
 		if err != nil {
 			return err
 		}
-		for _, e := range entries {
+		for _, e := range rd.indexEntries {
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], e.Key))
 			}
@@ -210,13 +212,14 @@ func (rd *Deleter) DeleteIndexRow(
 			return err
 		}
 	}
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
-		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values)
+	var err error
+	rd.indexEntries, err = sqlbase.EncodeSecondaryIndexWithResultBuffer(
+		rd.Helper.TableDesc.TableDesc(), idx, rd.FetchColIDtoRowIndex, values, rd.indexEntries[:0])
 	if err != nil {
 		return err
 	}
 
-	for _, entry := range secondaryIndexEntry {
+	for _, entry := range rd.indexEntries {
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", entry.Key)
 		}

@@ -759,6 +759,19 @@ func EncodeSecondaryIndex(
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 ) ([]IndexEntry, error) {
+	return EncodeSecondaryIndexWithResultBuffer(tableDesc, secondaryIndex, colMap, values, nil)
+}
+
+// EncodeSecondaryIndexWithResultBuffer returns a slice of IndexEntry encodings for a secondary index,
+// but allocates them into the given entries slice. If the input slice is nil, a new one is allocated
+// by this function.
+func EncodeSecondaryIndexWithResultBuffer(
+	tableDesc *TableDescriptor,
+	secondaryIndex *IndexDescriptor,
+	colMap map[ColumnID]int,
+	values []tree.Datum,
+	entries []IndexEntry,
+) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 
 	var containsNull = false
@@ -785,9 +798,11 @@ func EncodeSecondaryIndex(
 		return []IndexEntry{}, err
 	}
 
-	// entries is the resulting array that we will return. We allocate upfront at least
-	// len(secondaryKeys) positions to avoid allocations from appending.
-	entries := make([]IndexEntry, 0, len(secondaryKeys))
+	// If a buffer was not passed in to allocate into, allocate upfront len(secondaryKeys) positions
+	// to avoid allocations from appending.
+	if entries == nil {
+		entries = make([]IndexEntry, 0, len(secondaryKeys))
+	}
 	for _, key := range secondaryKeys {
 		if !secondaryIndex.Unique || containsNull {
 			// If the index is not unique or it contains a NULL value, append
@@ -833,7 +848,8 @@ func EncodeSecondaryIndex(
 					}
 				}
 			}
-			entries, err = encodeSecondaryIndexWithFamilies(familyToColumns, secondaryIndex, colMap, key, values, extraKey, entries)
+			entries, err = encodeSecondaryIndexWithFamilies(
+				familyToColumns, secondaryIndex, colMap, key, values, extraKey, entries)
 			if err != nil {
 				return []IndexEntry{}, err
 			}
