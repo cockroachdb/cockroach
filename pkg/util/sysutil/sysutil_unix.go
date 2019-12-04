@@ -68,3 +68,10 @@ func StatAndLinkCount(path string) (os.FileInfo, int64, error) {
 	}
 	return stat, 0, nil
 }
+
+// IsCrossDeviceLinkErrno checks whether the given error object (as
+// extracted from an *os.LinkError) is a cross-device link/rename
+// error.
+func IsCrossDeviceLinkErrno(errno error) bool {
+	return errno == syscall.EXDEV
+}

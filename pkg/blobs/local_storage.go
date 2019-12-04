@@ -18,7 +18,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/errors"
 )
 
 // LocalStorage wraps all operations with the local file system
@@ -37,47 +38,107 @@ func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
 	return &LocalStorage{externalIODir: absPath}, nil
 }
 
+// prependExternalIODir makes `path` relative to the configured external I/O directory.
+//
+// Note that we purposefully only rely on the simplified cleanup
+// performed by filepath.Join() - which is limited to stripping out
+// occurrences of "../" - because we intendedly want to allow
+// operators to "open up" their I/O directory via symlinks. Therefore,
+// a full check via filepath.Abs() would be inadequate.
 func (l *LocalStorage) prependExternalIODir(path string) (string, error) {
 	localBase := filepath.Join(l.externalIODir, path)
-	// Make sure we didn't ../ our way back out.
 	if !strings.HasPrefix(localBase, l.externalIODir) {
-		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
+		return "", errors.Errorf("local file access to paths outside of external-io-dir is not allowed: %s", path)
 	}
 	return localBase, nil
 }
 
 // WriteFile prepends IO dir to filename and writes the content to that local file.
-func (l *LocalStorage) WriteFile(filename string, content io.Reader) error {
-	fullPath, err := l.prependExternalIODir(filename)
+func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error) {
+	var fullPath string
+	fullPath, err = l.prependExternalIODir(filename)
 	if err != nil {
 		return err
 	}
-	tmpFile, err := ioutil.TempFile(os.TempDir(), filepath.Base(fullPath))
+
+	targetDir := filepath.Dir(fullPath)
+	if err = os.MkdirAll(targetDir, 0755); err != nil {
+		return errors.Wrapf(err, "creating target local directory %q", targetDir)
+	}
+
+	// We generate the temporary file in the desired target directory.
+	// This has two purposes:
+	// - it avoids relying on the system-wide temporary directory, which
+	//   may not be large enough to receive the file.
+	// - it avoids a cross-filesystem rename in the common case.
+	//   (There can still be cross-filesystem renames in very
+	//   exotic edge cases, hence the use fileutil.Move below.)
+	tmpFile, err := ioutil.TempFile(targetDir, filepath.Base(fullPath))
 	if err != nil {
-		return errors.Wrap(err, "creating tmp file")
+		return errors.Wrap(err, "creating temporary file")
 	}
-	// TODO(georgiah): cleanup intermediate state on failure
-	defer tmpFile.Close()
-	_, err = io.Copy(tmpFile, content)
-	if err != nil {
-		return errors.Wrapf(err, "writing to local external tmp file %q", tmpFile.Name())
+	tmpFileFullName := tmpFile.Name()
+	defer func() {
+		if err != nil {
+			// When an error occurs, we need to clean up the newly created
+			// temporary file.
+			_ = os.Remove(tmpFileFullName)
+			//
+			// TODO(someone): in the special case where an attempt is made
+			// to upload to a sub-directory of the ext i/o dir for the first
+			// time (MkdirAll above did create the sub-directory), and the
+			// copy/rename fails, we're now left with a newly created but empty
+			// sub-directory.
+			//
+			// We cannot safely remove that target directory here, because
+			// perhaps there is another concurrent operation that is also
+			// targeting it. A more principled approach could be to use a
+			// mutex lock on directory accesses, and/or occasionally prune
+			// empty sub-directories upon node start-ups.
+		}
+	}()
+
+	// Copy the data into the temp file. We use a closure here to
+	// ensure the temp file is closed after the copy is done.
+	if err = func() error {
+		defer tmpFile.Close()
+		if _, err := io.Copy(tmpFile, content); err != nil {
+			return errors.Wrapf(err, "writing to temporary file %q", tmpFileFullName)
+		}
+		return errors.Wrapf(tmpFile.Sync(), "flushing temporary file %q", tmpFileFullName)
+	}(); err != nil {
+		return err
 	}
-	if err := tmpFile.Sync(); err != nil {
-		return errors.Wrapf(err, "syncing to local external tmp file %q", tmpFile.Name())
-	}
-	if err = os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		return errors.Wrap(err, "creating local external storage path")
-	}
-	return errors.Wrapf(os.Rename(tmpFile.Name(), fullPath), "renaming to local export file %q", fullPath)
+
+	// Finally put the file to its final location.
+	return errors.Wrapf(
+		fileutil.Move(tmpFileFullName, fullPath),
+		"moving temporary file to final location %q", fullPath)
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.
-func (l *LocalStorage) ReadFile(filename string) (io.ReadCloser, error) {
+func (l *LocalStorage) ReadFile(filename string) (res io.ReadCloser, err error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return nil, err
 	}
-	return os.Open(fullPath)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = f.Close()
+		}
+	}()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, errors.Errorf("expected a file but %q is a directory", fi.Name())
+	}
+	return f, nil
 }
 
 // List prepends IO dir to pattern and glob matches all local files against that pattern.
