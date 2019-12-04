@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"syscall"
 )
 
 // ProcessIdentity returns a string describing the user and group that this
@@ -39,4 +40,13 @@ func StatFS(path string) (*FSInfo, error) {
 func StatAndLinkCount(path string) (os.FileInfo, int64, error) {
 	stat, err := os.Stat(path)
 	return stat, 0, err
+}
+
+// IsCrossDeviceLinkErrno checks whether the given error object (as
+// extracted from an *os.LinkError) is a cross-device link/rename
+// error.
+func IsCrossDeviceLinkErrno(errno error) bool {
+	// 0x11 is Win32 Error Code ERROR_NOT_SAME_DEVICE
+	// See: https://msdn.microsoft.com/en-us/library/cc231199.aspx
+	return errno == syscall.Errno(0x11)
 }
