@@ -55,7 +55,7 @@ function run_json_test() {
   # Post issues, if on a release branch. Note that we're feeding github-post all
   # of the build output; it also does some slow test analysis.
   if tc_release_branch; then
-    if [ -z "${GITHUB_API_TOKEN}" ]; then
+    if [ -z "${GITHUB_API_TOKEN-}" ]; then
       # GITHUB_API_TOKEN must be in the env or github-post will barf if it's
       # ever asked to post, so enforce that on all runs.
       echo "GITHUB_API_TOKEN must be set"
