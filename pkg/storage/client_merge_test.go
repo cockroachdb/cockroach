@@ -1207,8 +1207,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 	}()
 
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, distSender, mergeArgs)
-	if pErr != nil && !testutils.IsPError(pErr, "range changed during merge") {
+	if _, pErr := client.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1224,9 +1223,9 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 //
 // The bug works like this. A merge of adjacent ranges P and Q and a split of Q
 // execute concurrently, though the merge executes with an earlier timestamp.
-// First, the merge transaction writes an intent to update P's local range
-// descriptor. Then it reads Q's local range descriptor to verify that Q hasn't
-// changed since the decision to merge was made.
+// First, the merge transaction reads Q's local range descriptor to determine
+// the combined range's range descriptor. Then it writes an intent to update P's
+// local range descriptor.
 //
 // Next, the split transaction runs from start to finish, updating Q's local
 // descriptor and its associated meta2 record. Notably, the split transaction
@@ -1273,24 +1272,22 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 
 	var distSender *kv.DistSender
+	var lhsDescKey atomic.Value
 	var launchSplit int64
-	done := make(chan struct{})
+	var mergeRetries int64
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
-			if bt := req.GetBeginTransaction(); bt != nil &&
-				bt.Key.Equal(keys.RangeDescriptorKey(roachpb.RKeyMin)) &&
-				atomic.CompareAndSwapInt64(&launchSplit, 1, 0) {
-				_, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
-				return pErr
-			}
-			if ri := req.GetResolveIntent(); ri != nil &&
-				ri.Key.Equal(keys.RangeMetaKey(roachpb.RKey("c")).AsRawKey()) &&
-				ri.Status == roachpb.COMMITTED {
-				// Don't allow resolution of the split transaction's meta2 intent until
-				// the test finishes. This ensures that the merge watcher goroutine
-				// sees a nil value when it performs its meta2 lookup, as described in
-				// the comment on this test.
-				<-done
+			if cput := req.GetConditionalPut(); cput != nil {
+				if v := lhsDescKey.Load(); v != nil && v.(roachpb.Key).Equal(cput.Key) {
+					// If this is the first merge attempt, launch the split
+					// before the merge's first write succeeds.
+					if atomic.CompareAndSwapInt64(&launchSplit, 1, 0) {
+						_, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
+						return pErr
+					}
+					// Otherwise, record that the merge retried and proceed.
+					atomic.AddInt64(&mergeRetries, 1)
+				}
 			}
 		}
 		return nil
@@ -1299,19 +1296,21 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
-	defer close(done)
 	distSender = mtc.distSenders[0]
 
 	lhsDesc, _, err := createSplitRanges(ctx, mtc.Store(0))
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	lhsDescKey.Store(keys.RangeDescriptorKey(lhsDesc.StartKey))
 	atomic.StoreInt64(&launchSplit, 1)
+
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := client.SendWrapped(ctx, distSender, mergeArgs)
-	if pErr != nil && !testutils.IsPError(pErr, "range changed during merge") {
+	if _, pErr := client.SendWrapped(ctx, distSender, mergeArgs); pErr != nil {
 		t.Fatal(pErr)
+	}
+	if atomic.LoadInt64(&mergeRetries) == 0 {
+		t.Fatal("expected merge to retry at least once due to concurrent split")
 	}
 }
 
