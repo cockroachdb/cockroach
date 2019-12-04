@@ -547,6 +547,7 @@ project
  ├── inner-join (lookup idtable)
  │    ├── columns: primary_id:1(uuid!null) idtable.secondary_id:2(uuid!null) data:3(jsonb!null) value:4(jsonb) column5:5(uuid!null)
  │    ├── key columns: [1] = [1]
+ │    ├── lookup columns are key
  │    ├── side-effects
  │    ├── fd: (1)-->(2,3), (4)-->(5), (2)==(5), (5)==(2)
  │    ├── inner-join (lookup idtable@secondary_id)

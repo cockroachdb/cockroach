@@ -368,6 +368,7 @@ GenerateLookupJoins
   -      ├── left ordering: +1
   -      ├── right ordering: +6
   +      ├── key columns: [1] = [6]
+  +      ├── lookup columns are key
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
          ├── select
@@ -400,6 +401,7 @@ GenerateMergeJoins (higher cost)
   + └── inner-join (merge)
          ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
   -      ├── key columns: [1] = [6]
+  -      ├── lookup columns are key
   +      ├── left ordering: +6
   +      ├── right ordering: +1
          ├── key: (6)
@@ -433,6 +435,7 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      ├── left ordering: +6
   -      ├── right ordering: +1
   +      ├── key columns: [6] = [1]
+  +      ├── lookup columns are key
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
          ├── scan xy
@@ -464,6 +467,7 @@ Final best expression
    └── inner-join (lookup xy)
         ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
         ├── key columns: [1] = [6]
+        ├── lookup columns are key
         ├── key: (6)
         ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
         ├── select

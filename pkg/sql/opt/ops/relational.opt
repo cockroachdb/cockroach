@@ -275,8 +275,7 @@ define LookupJoin {
 
 [Private]
 define LookupJoinPrivate {
-    # JoinType is InnerJoin or LeftJoin.
-    # TODO(radu): support SemiJoin, AntiJoin.
+    # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
     JoinType Operator
 
     # Table identifies the table do to lookups in.
@@ -303,6 +302,10 @@ define LookupJoinPrivate {
     # exploration transforms which currently leads to problems related to lookup
     # join statistics.
     Cols ColSet
+
+    # LookupColsAreTableKey is true if the lookup columns form a key in the
+    # table (and thus each left row matches with at most one table row).
+    LookupColsAreTableKey bool
 
     # lookupProps caches relational properties for the "table" side of the lookup
     # join, treating it as if it were another relational input. This makes the

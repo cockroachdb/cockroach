@@ -60,11 +60,13 @@ project
  ├── inner-join (lookup phone)
  │    ├── columns: phone_id:1(int!null) person_id:2(int!null) unidirecti1_.id:3(int!null) unidirecti1_.number:4(varchar) unidirecti1_.since:5(timestamp) unidirecti1_.type:6(int4) a10.id:7(int!null) a10.since:9(timestamp)
  │    ├── key columns: [2] = [7]
+ │    ├── lookup columns are key
  │    ├── key: (7)
  │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3,7), (3)==(2,7), (7)-->(9), (7)==(2,3)
  │    ├── inner-join (lookup phone)
  │    │    ├── columns: phone_id:1(int!null) person_id:2(int!null) unidirecti1_.id:3(int!null) unidirecti1_.number:4(varchar) unidirecti1_.since:5(timestamp) unidirecti1_.type:6(int4)
  │    │    ├── key columns: [2] = [3]
+ │    │    ├── lookup columns are key
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
  │    │    ├── scan phoneregis0_
@@ -187,6 +189,7 @@ inner-join (hash)
  ├── inner-join (lookup person)
  │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) phone0_.person_id:4(int!null) person1_.id:6(int!null) address:7(varchar) createdon:8(timestamp) name:9(varchar) nickname:10(varchar) version:11(int4!null)
  │    ├── key columns: [4] = [6]
+ │    ├── lookup columns are key
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (6)-->(7-11), (4)==(6), (6)==(4)
  │    ├── project
@@ -196,6 +199,7 @@ inner-join (hash)
  │    │    └── inner-join (lookup phone)
  │    │         ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) phone0_.person_id:4(int) phone_id:18(int!null)
  │    │         ├── key columns: [18] = [1]
+ │    │         ├── lookup columns are key
  │    │         ├── key: (18)
  │    │         ├── fd: (1)-->(2-4), (1)==(18), (18)==(1)
  │    │         ├── distinct-on
@@ -244,6 +248,7 @@ project
       ├── inner-join (lookup person)
       │    ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) phone0_.person_id:4(int!null) person1_.id:6(int!null)
       │    ├── key columns: [4] = [6]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
       │    ├── project
@@ -253,6 +258,7 @@ project
       │    │    └── inner-join (lookup phone)
       │    │         ├── columns: phone0_.id:1(int!null) phone_number:2(varchar) phone_type:3(varchar) phone0_.person_id:4(int) phone_id:18(int!null)
       │    │         ├── key columns: [18] = [1]
+      │    │         ├── lookup columns are key
       │    │         ├── key: (18)
       │    │         ├── fd: (1)-->(2-4), (1)==(18), (18)==(1)
       │    │         ├── distinct-on
@@ -311,6 +317,7 @@ inner-join (hash)
  │    └── inner-join (lookup person)
  │         ├── columns: person0_.id:1(int!null) address:2(varchar!null) createdon:3(timestamp) person0_.name:4(varchar) nickname:5(varchar) person0_.version:6(int4!null) person_id:13(int!null)
  │         ├── key columns: [13] = [1]
+ │         ├── lookup columns are key
  │         ├── has-placeholder
  │         ├── key: (13)
  │         ├── fd: (1)-->(2-6), (1)==(13), (13)==(1)
@@ -973,6 +980,7 @@ project
  └── inner-join (lookup person)
       ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:10(int!null)
       ├── key columns: [10] = [1]
+      ├── lookup columns are key
       ├── has-placeholder
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
@@ -1022,6 +1030,7 @@ project
  └── inner-join (lookup person)
       ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:10(int!null)
       ├── key columns: [10] = [1]
+      ├── lookup columns are key
       ├── has-placeholder
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
@@ -1070,6 +1079,7 @@ project
  └── inner-join (lookup person)
       ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:10(int!null)
       ├── key columns: [10] = [1]
+      ├── lookup columns are key
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       ├── distinct-on
@@ -1144,6 +1154,7 @@ project
  └── inner-join (lookup person)
       ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:10(int!null)
       ├── key columns: [10] = [1]
+      ├── lookup columns are key
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       ├── distinct-on
@@ -1207,6 +1218,7 @@ project
       │    │    ├── inner-join (lookup person)
       │    │    │    ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) phones2_.id:7(int!null) phones2_.phone_type:9(varchar!null) phones2_.person_id:10(int!null) phones2_.order_id:11(int4)
       │    │    │    ├── key columns: [10] = [1]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── key: (7)
       │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10), (10)==(1)
       │    │    │    ├── select
@@ -1300,6 +1312,7 @@ project
  └── inner-join (lookup person)
       ├── columns: person0_.id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:10(int!null)
       ├── key columns: [10] = [1]
+      ├── lookup columns are key
       ├── key: (10)
       ├── fd: (1)-->(2-6), (1)==(10), (10)==(1)
       ├── distinct-on
@@ -1366,6 +1379,7 @@ project
  └── inner-join (lookup person)
       ├── columns: id:1(int!null) address:2(varchar) createdon:3(timestamp) name:4(varchar) nickname:5(varchar) version:6(int4!null) person_id:7(int!null)
       ├── key columns: [7] = [1]
+      ├── lookup columns are key
       ├── key: (7)
       ├── fd: (1)-->(2-6), (1)==(7), (7)==(1)
       ├── distinct-on
@@ -1677,11 +1691,13 @@ project
  ├── left-join (lookup news)
  │    ├── columns: newspaper_id:1(int4!null) news_news_id:2(int4!null) news1_.news_id:3(int4!null) news1_.detail:4(varchar) news1_.title:5(varchar) a0.news_id:6(int4) a0.title:8(varchar)
  │    ├── key columns: [2] = [6]
+ │    ├── lookup columns are key
  │    ├── key: (3,6)
  │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2), (6)-->(8)
  │    ├── inner-join (lookup news)
  │    │    ├── columns: newspaper_id:1(int4!null) news_news_id:2(int4!null) news1_.news_id:3(int4!null) news1_.detail:4(varchar) news1_.title:5(varchar)
  │    │    ├── key columns: [2] = [3]
+ │    │    ├── lookup columns are key
  │    │    ├── key: (3)
  │    │    ├── fd: ()-->(1), (3)-->(4,5), (2)==(3), (3)==(2)
  │    │    ├── scan news0_
@@ -1754,21 +1770,25 @@ project
  ├── left-join (lookup generationgroup)
  │    ├── columns: generationuser_id:1(int4!null) ref_id:2(int4!null) generation1_.id:3(int4!null) generation1_.age:4(varchar) generation1_.culture:5(varchar) generation1_.description:6(varchar) a13.id:7(int4) a13.age:8(varchar) a15.id:11(int4) a15.culture:13(varchar) a13.id:15(int4) a13.description:18(varchar)
  │    ├── key columns: [2] = [15]
+ │    ├── lookup columns are key
  │    ├── key: (3,7,11,15)
  │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13), (15)-->(18)
  │    ├── left-join (lookup generationgroup)
  │    │    ├── columns: generationuser_id:1(int4!null) ref_id:2(int4!null) generation1_.id:3(int4!null) generation1_.age:4(varchar) generation1_.culture:5(varchar) generation1_.description:6(varchar) a13.id:7(int4) a13.age:8(varchar) a15.id:11(int4) a15.culture:13(varchar)
  │    │    ├── key columns: [2] = [11]
+ │    │    ├── lookup columns are key
  │    │    ├── key: (3,7,11)
  │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8), (11)-->(13)
  │    │    ├── left-join (lookup generationgroup)
  │    │    │    ├── columns: generationuser_id:1(int4!null) ref_id:2(int4!null) generation1_.id:3(int4!null) generation1_.age:4(varchar) generation1_.culture:5(varchar) generation1_.description:6(varchar) a13.id:7(int4) a13.age:8(varchar)
  │    │    │    ├── key columns: [2] = [7]
+ │    │    │    ├── lookup columns are key
  │    │    │    ├── key: (3,7)
  │    │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2), (7)-->(8)
  │    │    │    ├── inner-join (lookup generationgroup)
  │    │    │    │    ├── columns: generationuser_id:1(int4!null) ref_id:2(int4!null) generation1_.id:3(int4!null) generation1_.age:4(varchar) generation1_.culture:5(varchar) generation1_.description:6(varchar)
  │    │    │    │    ├── key columns: [2] = [3]
+ │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── key: (3)
  │    │    │    │    ├── fd: ()-->(1), (3)-->(4-6), (2)==(3), (3)==(2)
  │    │    │    │    ├── scan ref0_

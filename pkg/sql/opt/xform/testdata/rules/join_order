@@ -34,12 +34,14 @@ SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 inner-join (lookup bx)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) b:5(int!null) x:6(int) c:7(int!null) y:8(int)
  ├── key columns: [2] = [5]
+ ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
  │    ├── columns: a:1(int!null) abc.b:2(int) abc.c:3(int!null) d:4(int) cy.c:7(int!null) y:8(int)
  │    ├── key columns: [3] = [7]
+ │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4,7,8)
@@ -58,12 +60,14 @@ SELECT * FROM bx, abc, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 inner-join (lookup bx)
  ├── columns: b:1(int!null) x:2(int) a:3(int!null) b:4(int!null) c:5(int!null) d:6(int) c:7(int!null) y:8(int)
  ├── key columns: [4] = [1]
+ ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
  │    ├── columns: a:3(int!null) abc.b:4(int) abc.c:5(int!null) d:6(int) cy.c:7(int!null) y:8(int)
  │    ├── key columns: [5] = [7]
+ │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
@@ -82,12 +86,14 @@ SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 inner-join (lookup bx)
  ├── columns: b:1(int!null) x:2(int) c:3(int!null) y:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
  ├── key columns: [6] = [1]
+ ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
  │    ├── columns: cy.c:3(int!null) y:4(int) a:5(int!null) abc.b:6(int) abc.c:7(int!null) d:8(int)
  │    ├── key columns: [7] = [3]
+ │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
@@ -106,12 +112,14 @@ SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 inner-join (lookup bx)
  ├── columns: b:1(int!null) x:2(int) c:3(int!null) y:4(int) a:5(int!null) b:6(int!null) c:7(int!null) d:8(int)
  ├── key columns: [6] = [1]
+ ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
  │    ├── columns: cy.c:3(int!null) y:4(int) a:5(int!null) abc.b:6(int) abc.c:7(int!null) d:8(int)
  │    ├── key columns: [7] = [3]
+ │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
