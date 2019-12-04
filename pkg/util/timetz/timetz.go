@@ -104,8 +104,7 @@ func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, erro
 	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
-		return TimeTZ{}, pgerror.Wrapf(
-			err,
+		return TimeTZ{}, pgerror.Newf(
 			pgcode.InvalidTextRepresentation,
 			"could not parse %q as TimeTZ",
 			s,

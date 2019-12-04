@@ -178,6 +178,15 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testTimeTZ() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("SELECT '01:02:03.456-07:00'::TIMETZ");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        String actual = new SimpleDateFormat("HH:mm:ss.SSSZ").format(rs.getTime(1));
+        Assert.assertEquals("08:02:03.456+0000", actual);
+    }
+
+    @Test
     public void testUUID() throws Exception {
         UUID uuid = UUID.randomUUID();
         PreparedStatement stmt = conn.prepareStatement("SELECT ?");
