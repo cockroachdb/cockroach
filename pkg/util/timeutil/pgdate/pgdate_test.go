@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-func TestDateFromTime(t *testing.T) {
+func TestParseDate(t *testing.T) {
 	for _, tc := range []struct {
 		s      string
 		err    string
@@ -116,24 +116,37 @@ func TestMakeCompatibleDateFromDisk(t *testing.T) {
 }
 
 func TestMakeDateFromTime(t *testing.T) {
+	pgEpoch := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	pgEpochWithHourOffset := time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC)
+	// These dates are negative, which makes rounding a little different.
+	dayBeforeUnixEpoch := time.Date(1969, 12, 31, 0, 0, 0, 0, time.UTC)
+	dayBeforeUnixEpochWithHourOffset := time.Date(1969, 12, 31, 1, 0, 0, 0, time.UTC)
+	twoDaysBeforeUnixEpoch := time.Date(1969, 12, 30, 0, 0, 0, 0, time.UTC)
+	twoDaysBeforeUnixEpochWithHourOffset := time.Date(1969, 12, 30, 1, 0, 0, 0, time.UTC)
+
 	for _, tc := range []struct {
-		loc *time.Location
+		in  time.Time
 		out string
 	}{
-		{time.FixedZone("secsPerDay", secondsPerDay), "2000-01-02"},
-		{time.FixedZone("secsPerDay-1", secondsPerDay-1), "2000-01-01"},
-		{time.FixedZone("1", 1), "2000-01-01"},
-		{time.UTC, "2000-01-01"},
-		{time.FixedZone("-1", -1), "1999-12-31"},
-		{time.FixedZone("-secsPerDay", -secondsPerDay), "1999-12-31"},
+		{pgEpoch.In(time.FixedZone("secsPerDay", secondsPerDay)), "2000-01-02"},
+		{pgEpoch.In(time.FixedZone("secsPerDay-1", secondsPerDay-1)), "2000-01-01"},
+		{pgEpoch.In(time.FixedZone("1", 1)), "2000-01-01"},
+		{pgEpoch, "2000-01-01"},
+		{pgEpoch.In(time.FixedZone("-1", -1)), "1999-12-31"},
+		{pgEpoch.In(time.FixedZone("-secsPerDay", -secondsPerDay)), "1999-12-31"},
+		{pgEpochWithHourOffset, "2000-01-01"},
+
+		{dayBeforeUnixEpoch, "1969-12-31"},
+		{dayBeforeUnixEpochWithHourOffset, "1969-12-31"},
+		{twoDaysBeforeUnixEpoch, "1969-12-30"},
+		{twoDaysBeforeUnixEpochWithHourOffset, "1969-12-30"},
 	} {
-		t.Run(tc.loc.String(), func(t *testing.T) {
-			tm := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).In(tc.loc)
-			d, err := MakeDateFromTime(tm)
+		t.Run(tc.in.Format(time.RFC3339), func(t *testing.T) {
+			d, err := MakeDateFromTime(tc.in)
 			if err != nil {
 				t.Fatal(err)
 			}
-			exp := tm.Format("2006-01-02")
+			exp := tc.in.Format("2006-01-02")
 			// Sanity check our tests.
 			if exp != tc.out {
 				t.Fatalf("got %s, expected %s", exp, tc.out)
