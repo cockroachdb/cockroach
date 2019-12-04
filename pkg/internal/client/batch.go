@@ -242,7 +242,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
-			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:

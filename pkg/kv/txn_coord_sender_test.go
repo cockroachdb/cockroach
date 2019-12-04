@@ -1440,12 +1440,12 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 }
 
 // Test that intent tracking behaves correctly for transactions that attempt to
-// run a batch containing both a BeginTransaction and an EndTransaction. Since
-// in case of an error it's not easy to determine whether any intents have been
-// laid down (i.e. in case the batch was split by the DistSender and then there
-// was mixed success for the sub-batches, or in case a retriable error is
-// returned), the test verifies that all possible intents are properly tracked
-// and attached to a subsequent EndTransaction.
+// run a batch containing an EndTransaction. Since in case of an error it's not
+// easy to determine whether any intents have been laid down (i.e. in case the
+// batch was split by the DistSender and then there was mixed success for the
+// sub-batches, or in case a retriable error is returned), the test verifies
+// that all possible intents are properly tracked and attached to a subsequent
+// EndTransaction.
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

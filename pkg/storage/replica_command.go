@@ -193,14 +193,7 @@ func splitTxnAttempt(
 			return err
 		}
 		// Commit this batch first to ensure that the transaction record
-		// is created in the right place (split trigger relies on this),
-		// but also to ensure the transaction record is created _before_
-		// intents for the RHS range descriptor or addressing records.
-		// Keep in mind that the BeginTransaction request is injected
-		// to accompany the first write request, but if part of a batch
-		// which spans ranges, the dist sender does not guarantee the
-		// order which parts of the split batch arrive.
-		//
+		// is created in the right place (split trigger relies on this).
 		// Sending the batch containing only the first write guarantees
 		// the transaction record is written first, preventing cases
 		// where splits are aborted early due to conflicts with meta

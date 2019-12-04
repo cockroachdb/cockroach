@@ -355,7 +355,7 @@ func (r *Replica) applyTimestampCache(
 //                  PushTxn(TIMESTAMP)                                HeartbeatTxn
 //                  then: v1 -> push.ts                             then: update record
 //                      +------+                                        +------+
-//    PushTxn(ABORT)    |      |        BeginTxn or HeartbeatTxn        |      |   PushTxn(TIMESTAMP)
+//    PushTxn(ABORT)    |      |        HeartbeatTxn                    |      |   PushTxn(TIMESTAMP)
 //   then: v2 -> txn.ts |      v        if: v2 < txn.orig               |      v  then: update record
 //                 +-----------------+  then: txn.ts -> v1      +--------------------+
 //            +----|                 |  else: fail              |                    |----+

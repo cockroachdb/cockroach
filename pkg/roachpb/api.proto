@@ -325,9 +325,8 @@ message RevertRangeResponse {
 // apply to all the scans in the batch.
 //
 // If ScanOptions is present on a batch, the batch can only be made up of scan
-// requests (i.e.  {Reverse,}ScanReques), except for
-// {Begin,End}TransactionRequest which are still allowed. Moreover, the batch
-// cannot mix forward and reverse scans.
+// requests (i.e. {Reverse,}ScanReques), except for EndTransactionRequest which
+// are still allowed. Moreover, the batch cannot mix forward and reverse scans.
 //
 // TODO(andrei): add option to stop scan(s) when an intent is encountered.
 message ScanOptions {
@@ -570,18 +569,6 @@ message RecomputeStatsResponse {
 
   // added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
   storage.engine.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
-}
-
-// A BeginTransactionRequest is the argument to the BeginTransaction() method.
-message BeginTransactionRequest {
-  option (gogoproto.equal) = true;
-
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// A BeginTransactionResponse is the return value from the BeginTransaction() method.
-message BeginTransactionResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
@@ -1649,7 +1636,6 @@ message RequestUnion {
     ClearRangeRequest clear_range = 38;
     RevertRangeRequest revert_range = 48;
     ScanRequest scan = 7;
-    BeginTransactionRequest begin_transaction = 8;
     EndTransactionRequest end_transaction = 9;
     AdminSplitRequest admin_split = 10;
     AdminUnsplitRequest admin_unsplit = 47;
@@ -1685,7 +1671,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
   }
-  reserved 15, 23, 25, 27;
+  reserved 8, 15, 23, 25, 27;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1701,7 +1687,6 @@ message ResponseUnion {
     ClearRangeResponse clear_range = 38;
     RevertRangeResponse revert_range = 48;
     ScanResponse scan = 7;
-    BeginTransactionResponse begin_transaction = 8;
     EndTransactionResponse end_transaction = 9;
     AdminSplitResponse admin_split = 10;
     AdminUnsplitResponse admin_unsplit = 47;
@@ -1736,7 +1721,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
   }
-  reserved 15, 23, 25, 27, 28;
+  reserved 8, 15, 23, 25, 27, 28;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

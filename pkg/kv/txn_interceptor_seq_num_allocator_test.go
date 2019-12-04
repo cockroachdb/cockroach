@@ -105,8 +105,8 @@ func TestSequenceNumberAllocation(t *testing.T) {
 }
 
 // TestSequenceNumberAllocationTxnRequests tests sequence number allocation's
-// interaction with transaction state requests (BeginTxn, HeartbeatTxn, and
-// EndTxn). Only EndTxn requests should be assigned unique sequence numbers.
+// interaction with transaction state requests (HeartbeatTxn and EndTxn). Only
+// EndTxn requests should be assigned unique sequence numbers.
 func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -117,15 +117,13 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.BeginTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.HeartbeatTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 3)
+		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
