@@ -487,9 +487,8 @@ CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix ./pkg/,$(addsuffix /zcgo_flags.go,$(CG
 CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./pkg/,$(addsuffix /zcgo_flags_$(native-tag).go,$(CGO_PKGS)))
 CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
-$(CGO_UNSUFFIXED_FLAGS_FILES): build/defs.mk.sig
-
-$(CGO_FLAGS_FILES): Makefile
+$(CGO_FLAGS_FILES): Makefile build/defs.mk.sig
+	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo '// +build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
@@ -718,7 +717,7 @@ endif
 # Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
 # in place will go unnoticed, for example. Similar problems exist in all Make-
 # based build systems and are not worth solving.
-build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS)
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS):$(ENABLE_LIBROACH_ASSERTIONS):$(ENABLE_ROCKSB_ASSERTIONS)
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
