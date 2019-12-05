@@ -251,11 +251,6 @@ type planTop struct {
 	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
 	deps planDependencies
 
-	// hasStar collects whether any star expansion has occurred during
-	// logical plan construction. This is used by CREATE VIEW until
-	// #10028 is addressed.
-	hasStar bool
-
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 

@@ -149,8 +149,8 @@ func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) 
 func asDataSource(n exec.Node) planDataSource {
 	plan := n.(planNode)
 	return planDataSource{
-		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(plan)},
-		plan: plan,
+		columns: planColumns(plan),
+		plan:    plan,
 	}
 }
 
@@ -170,7 +170,7 @@ func (ef *execFactory) ConstructFilter(
 	f := &filterNode{
 		source: src,
 	}
-	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
 	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	f.reqOrdering = ReqOrdering(reqOrdering)
 
@@ -268,9 +268,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 	if err != nil {
 		return nil, err
 	}
@@ -287,8 +285,8 @@ func (ef *execFactory) ConstructHashJoin(
 	for i := range leftEqCols {
 		pred.leftEqualityIndices[i] = int(leftEqCols[i])
 		pred.rightEqualityIndices[i] = int(rightEqCols[i])
-		pred.leftColNames[i] = tree.Name(leftSrc.info.SourceColumns[leftEqCols[i]].Name)
-		pred.rightColNames[i] = tree.Name(rightSrc.info.SourceColumns[rightEqCols[i]].Name)
+		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftEqCols[i]].Name)
+		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightEqCols[i]].Name)
 	}
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
@@ -314,17 +312,14 @@ func (ef *execFactory) ConstructApplyJoin(
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(fakeRight)
 	rightSrc.plan.Close(context.TODO())
-	p := ef.planner
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 	if err != nil {
 		return nil, err
 	}
 	pred.onCond = pred.iVarHelper.Rebind(
 		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
 	)
-	rightCols := rightSrc.info.SourceColumns
+	rightCols := rightSrc.columns
 	return newApplyJoinNode(joinType, asDataSource(left), leftBoundColMap, rightProps, rightCols, right, pred, memo)
 }
 
@@ -340,9 +335,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
-	)
+	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 	if err != nil {
 		return nil, err
 	}
@@ -364,8 +357,8 @@ func (ef *execFactory) ConstructMergeJoin(
 		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
 		pred.leftEqualityIndices[i] = leftColIdx
 		pred.rightEqualityIndices[i] = rightColIdx
-		pred.leftColNames[i] = tree.Name(leftSrc.info.SourceColumns[leftColIdx].Name)
-		pred.rightColNames[i] = tree.Name(rightSrc.info.SourceColumns[rightColIdx].Name)
+		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftColIdx].Name)
+		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightColIdx].Name)
 	}
 
 	node := p.makeJoinNode(leftSrc, rightSrc, pred)
@@ -801,12 +794,12 @@ func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
 	src := asDataSource(n)
-	cols := append(src.info.SourceColumns, zipCols...)
+	cols := append(src.columns, zipCols...)
 	p := &projectSetNode{
 		source:          src.plan,
-		sourceInfo:      src.info,
+		sourceCols:      src.columns,
 		columns:         cols,
-		numColsInSource: len(src.info.SourceColumns),
+		numColsInSource: len(src.columns),
 		exprs:           exprs,
 		funcs:           make([]*tree.FuncExpr, len(exprs)),
 		numColsPerGen:   numColsPerGen,
@@ -1837,12 +1830,11 @@ type renderBuilder struct {
 func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering, cap int) {
 	src := asDataSource(n)
 	rb.r = &renderNode{
-		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
-		render:     make([]tree.TypedExpr, 0, cap),
-		columns:    make([]sqlbase.ResultColumn, 0, cap),
+		source:  src,
+		render:  make([]tree.TypedExpr, 0, cap),
+		columns: make([]sqlbase.ResultColumn, 0, cap),
 	}
-	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.info.SourceColumns))
+	rb.r.ivarHelper = tree.MakeIndexedVarHelper(rb.r, len(src.columns))
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.

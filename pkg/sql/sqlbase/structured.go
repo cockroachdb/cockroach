@@ -3109,12 +3109,11 @@ func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T 
 }
 
 // ColumnsSelectors generates Select expressions for cols.
-func ColumnsSelectors(cols []ColumnDescriptor, forUpdateOrDelete bool) tree.SelectExprs {
+func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	exprs := make(tree.SelectExprs, len(cols))
 	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
 		colItems[i].ColumnName = tree.Name(col.Name)
-		colItems[i].ForUpdateOrDelete = forUpdateOrDelete
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs

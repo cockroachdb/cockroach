@@ -18,14 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// resolveNamesForRender resolves the names in expr using the naming
-// context of the given renderNode (FROM clause).
-func (p *planner) resolveNamesForRender(
-	expr tree.Expr, s *renderNode,
-) (tree.Expr, bool, bool, error) {
-	return p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
-}
-
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
 // If anything that looks like a column reference (indexed vars, star,
@@ -33,10 +25,10 @@ func (p *planner) resolveNamesForRender(
 // row in a table, the 2nd return value is true.
 // If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
-	expr tree.Expr, sources sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
-) (tree.Expr, bool, bool, error) {
+	expr tree.Expr, source *sqlbase.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
+) (tree.Expr, bool, error) {
 	if expr == nil {
-		return nil, false, false, nil
+		return nil, false, nil
 	}
-	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, sources, ivarHelper, p.SessionData().SearchPath)
+	return sqlbase.ResolveNamesUsingVisitor(&p.nameResolutionVisitor, expr, source, ivarHelper, p.SessionData().SearchPath)
 }
