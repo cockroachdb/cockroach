@@ -84,9 +84,10 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		require.NoError(t, s.Flush(ctx))
 
-		require.Equal(t, []string{
-			"v1\n",
-		}, slurpDir(t, sinkDir))
+		dataFile, err := ioutil.ReadFile(filepath.Join(
+			dir, sinkDir, `1970-01-01`, `197001010000000000000000000000000-t1-0-1-7-00000000.ndjson`))
+		require.NoError(t, err)
+		require.Equal(t, "v1\n", string(dataFile))
 
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(5)))
 		resolvedFile, err := ioutil.ReadFile(filepath.Join(
@@ -137,13 +138,16 @@ func TestCloudStorageSink(t *testing.T) {
 		sort.Strings(actual)
 		require.Equal(t, expected, actual)
 
-		// Note that since we haven't forwarded `testSpan` yet, all files initiated until
-		// this point must have the same `frontier` timestamp. Since fileID increases
-		// monotonically, the last file emitted should be ordered as such.
-		require.NoError(t, s.Flush(ctx))
-		require.Equal(t, []string{
+		// Flush and now it does.
+		expected = []string{
+			"v1\nv2\n",
 			"v3\n",
-		}, slurpDir(t, dir)[2:])
+			"w1\n",
+		}
+		require.NoError(t, s.Flush(ctx))
+		actual = slurpDir(t, dir)
+		sort.Strings(actual)
+		require.Equal(t, expected, actual)
 
 		// Data from different versions of a table is put in different files, so that we
 		// can guarantee that all rows in any given file have the same schema.
@@ -181,10 +185,6 @@ func TestCloudStorageSink(t *testing.T) {
 		s1.(*cloudStorageSink).sinkID = 0
 		s2.(*cloudStorageSink).sinkID = 0
 
-		// Force deterministic job session IDs to force ordering of output files.
-		s1.(*cloudStorageSink).jobSessionID = "a"
-		s2.(*cloudStorageSink).jobSessionID = "b"
-
 		// Each node writes some data at the same timestamp. When this data is
 		// written out, the files have different names and don't conflict because
 		// the sinks have different job session IDs.
@@ -209,11 +209,6 @@ func TestCloudStorageSink(t *testing.T) {
 		s1R.(*cloudStorageSink).sinkID = 0
 		s2R.(*cloudStorageSink).sinkID = 7
 
-		// Again, force deterministic job session IDs to force ordering of output
-		// files. Note that making s1R have the same job session ID as s1 should make
-		// its output overwrite s1's output.
-		s1R.(*cloudStorageSink).jobSessionID = "a"
-		s2R.(*cloudStorageSink).jobSessionID = "b"
 		// Each resends the data it did before.
 		require.NoError(t, s1R.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		require.NoError(t, s2R.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1)))
@@ -242,12 +237,10 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts, timestampOracle)
 		require.NoError(t, err)
-		s1.(*cloudStorageSink).sinkID = 7         // Force a deterministic sinkID.
-		s1.(*cloudStorageSink).jobSessionID = "a" // Force deterministic job session ID.
+		s1.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 		s2, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts, timestampOracle)
 		require.NoError(t, err)
-		s2.(*cloudStorageSink).sinkID = 8         // Force a deterministic sinkID.
-		s2.(*cloudStorageSink).jobSessionID = "b" // Force deterministic job session ID.
+		s2.(*cloudStorageSink).sinkID = 8 // Force a deterministic sinkID.
 
 		// Good job writes
 		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))

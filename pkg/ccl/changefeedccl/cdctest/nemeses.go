@@ -29,7 +29,7 @@ import (
 // duplicates, which the two cdctest.Validator implementations verify for the
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
-func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, error) {
+func RunNemesis(f TestFeedFactory, db *gosql.DB, omitPause bool) (Validator, error) {
 	// possible additional nemeses:
 	// - schema changes
 	// - merges
@@ -51,12 +51,7 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	}
 
 	eventPauseCount := 10
-	if isSinkless {
-		// Disable eventPause for sinkless changefeeds because we currently do not
-		// have "correct" pause and unpause mechanisms for changefeeds that aren't
-		// based on the jobs infrastructure. Enabling it for sinkless might require
-		// using "AS OF SYSTEM TIME" for sinkless changefeeds. See #41006 for more
-		// details.
+	if omitPause {
 		eventPauseCount = 0
 	}
 	ns := &nemeses{

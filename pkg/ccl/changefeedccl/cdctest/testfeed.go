@@ -432,7 +432,7 @@ func (c *TableFeed) Close() error {
 	return c.db.Close()
 }
 
-var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-(\d+)-([0-9a-fA-F]{8})-(.+?)-`)
+var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-`)
 
 type cloudFeedFactory struct {
 	s       serverutils.TestServerInterface
@@ -637,7 +637,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 	if subs == nil {
 		return errors.Errorf(`unexpected file: %s`, path)
 	}
-	topic = subs[5]
+	topic = subs[1]
 
 	f, err := os.Open(path)
 	if err != nil {
