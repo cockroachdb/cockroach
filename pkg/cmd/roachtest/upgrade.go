@@ -477,8 +477,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		binaryVersionUpgrade("v19.1.5", nodes),
 		clusterVersionUpgrade(""),
 
-		// TODO(andrei): Change to the final 19.2 version once released.
-		binaryVersionUpgrade("v19.2.0-rc.2", nodes),
+		binaryVersionUpgrade("v19.2.1", nodes),
 		clusterVersionUpgrade(""),
 
 		// Each new release has to be added here. When adding a new release, you'll

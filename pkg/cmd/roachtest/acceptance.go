@@ -44,7 +44,16 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
-		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0", timeout: 30 * time.Minute},
+		{
+			name: "version-upgrade",
+			fn:   runVersionUpgrade,
+			// This test doesn't like running on old versions because it upgrades to
+			// the latest released version and then it tries to "head", where head is
+			// the cockroach binary built from the branch on which the test is
+			// running. If that branch corresponds to an older release, then upgrading
+			// to head after 19.2 fails.
+			minVersion: "v19.2.0",
+			timeout:    30 * time.Minute},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
