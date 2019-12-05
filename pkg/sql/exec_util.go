@@ -154,7 +154,7 @@ var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 var optDrivenFKClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_optimizer_foreign_keys.enabled",
 	"default value for experimental_optimizer_foreign_keys session setting; enables optimizer-driven foreign key checks by default",
-	false,
+	true,
 )
 
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
