@@ -1648,6 +1648,7 @@ func TestMergeJoiner(t *testing.T) {
 				result, err := NewColOperator(
 					ctx, flowCtx, spec, input, testMemAcc,
 					true, /* useStreamingMemAccountForBuffering */
+					nil,  /* processorConstructor */
 				)
 				if err != nil {
 					return nil, err

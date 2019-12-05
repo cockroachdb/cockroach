@@ -226,6 +226,7 @@ func TestEval(t *testing.T) {
 				},
 				&acc,
 				true, /* useStreamingMemAccountForBuffering */
+				nil,  /* processorConstructor */
 			)
 			if testutils.IsError(err, "unable to columnarize") {
 				// Skip this test as execution is not supported by the vectorized
