@@ -623,6 +623,10 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
 		// Nothing to do for directories.
 		return nil
 	}
+	if strings.HasSuffix(path, ".tmp") {
+		// Temporary upload file. Ignore.
+		return nil
+	}
 
 	if strings.Compare(c.resolved, path) >= 0 {
 		// Already output this in a previous walkDir.
