@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Mock typing context for the typechecker.
@@ -96,7 +97,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					return NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), tc.outputTypes, tc.inputCols, 1, input[0]), nil
+					return NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), tc.outputTypes, tc.inputCols, 1, input[0])
 				})
 		})
 	}
@@ -147,7 +148,8 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	if err != nil {
 		b.Fatal(err)
 	}
-	op := NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
+	op, err := NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), []types.T{*types.Int}, []int{0}, 1, source)
+	require.NoError(b, err)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()

@@ -1274,8 +1274,8 @@ func planProjectionOperators(
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(ct)
 		ct = append(ct, *funcOutputType)
-		op = NewBuiltinFunctionOperator(NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op)
-		return op, resultIdx, ct, internalMemUsed, nil
+		op, err = NewBuiltinFunctionOperator(NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op)
+		return op, resultIdx, ct, internalMemUsed, err
 	case tree.Datum:
 		datumType := t.ResolvedType()
 		ct = columnTypes
