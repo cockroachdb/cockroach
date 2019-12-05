@@ -57,9 +57,6 @@ type cTableInfo struct {
 	// schema changes.
 	cols []sqlbase.ColumnDescriptor
 
-	// The exec types corresponding to the table columns in cols.
-	typs []coltypes.T
-
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
 
@@ -284,7 +281,6 @@ func (rf *cFetcher) Init(
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
 		cols:             colDescriptors,
-		typs:             typs,
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
@@ -613,8 +609,10 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			for i := range rf.machine.colvecs {
-				rf.machine.colvecs[i].Nulls().UnsetNulls()
+			for _, colvec := range rf.machine.colvecs {
+				if colvec.Type() != coltypes.Unhandled {
+					colvec.Nulls().UnsetNulls()
+				}
 			}
 			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
