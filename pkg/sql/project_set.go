@@ -35,7 +35,7 @@ import (
 // with zip(a,b,c).
 type projectSetNode struct {
 	source     planNode
-	sourceInfo *sqlbase.DataSourceInfo
+	sourceCols sqlbase.ResultColumns
 
 	// columns contains all the columns from the source, and then
 	// the columns from the generators.
@@ -75,7 +75,7 @@ func (n *projectSetNode) IndexedVarResolvedType(idx int) *types.T {
 }
 
 func (n *projectSetNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return n.sourceInfo.NodeFormatter(idx)
+	return n.columns.NodeFormatter(idx)
 }
 
 type projectSetRun struct {

@@ -129,19 +129,15 @@ func MakeComputedExprs(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	sources := []*DataSourceInfo{NewSourceInfoForSingleTable(
-		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
-	)}
-
+	source := NewSourceInfoForSingleTable(*tn, ResultColumnsFromColDescs(tableDesc.Columns))
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = iv
 
 	addColumnInfo := func(col *ColumnDescriptor) {
 		ivarHelper.AppendSlot()
 		iv.cols = append(iv.cols, *col)
-		sources = append(sources, NewSourceInfoForSingleTable(
-			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{*col}),
-		))
+		newCols := ResultColumnsFromColDescs([]ColumnDescriptor{*col})
+		source.SourceColumns = append(source.SourceColumns, newCols...)
 	}
 
 	compExprIdx := 0
@@ -154,9 +150,8 @@ func MakeComputedExprs(
 			}
 			continue
 		}
-		expr, _, _, err := ResolveNames(exprs[compExprIdx],
-			MakeMultiSourceInfo(sources...),
-			ivarHelper, evalCtx.SessionData.SearchPath)
+		expr, _, err := ResolveNames(
+			exprs[compExprIdx], source, ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, err
 		}

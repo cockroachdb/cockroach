@@ -45,7 +45,7 @@ type CheckHelper struct {
 type AnalyzeExprFunction func(
 	ctx context.Context,
 	raw tree.Expr,
-	sources MultiSourceInfo,
+	source *DataSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
 	expectedType *types.T,
 	requireType bool,
@@ -82,7 +82,7 @@ func NewEvalCheckHelper(
 		typedExpr, err := analyzeExpr(
 			ctx,
 			raw,
-			MakeMultiSourceInfo(c.sourceInfo),
+			c.sourceInfo,
 			ivarHelper,
 			types.Bool,
 			false, /* requireType */

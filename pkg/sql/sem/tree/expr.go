@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -856,36 +855,6 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 // ResolvedType implements the TypedExpr interface.
 func (node *Tuple) ResolvedType() *types.T {
 	return node.typ
-}
-
-// Truncate returns a new Tuple that contains only a prefix of the original
-// expressions. E.g.
-//   Tuple:       (1, 2, 3)
-//   Truncate(2): (1, 2)
-func (node *Tuple) Truncate(prefix int) *Tuple {
-	return &Tuple{
-		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
-		Row:   node.Row,
-		typ:   types.MakeTuple(append([]types.T(nil), node.typ.TupleContents()[:prefix]...)),
-	}
-}
-
-// Project returns a new Tuple that contains a subset of the original
-// expressions. E.g.
-//  Tuple:           (1, 2, 3)
-//  Project({0, 2}): (1, 3)
-func (node *Tuple) Project(set util.FastIntSet) *Tuple {
-	exprs := make(Exprs, 0, set.Len())
-	contents := make([]types.T, 0, set.Len())
-	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
-		exprs = append(exprs, node.Exprs[i])
-		contents = append(contents, node.typ.TupleContents()[i])
-	}
-	return &Tuple{
-		Exprs: exprs,
-		Row:   node.Row,
-		typ:   types.MakeTuple(contents),
-	}
 }
 
 // Array represents an array constructor.

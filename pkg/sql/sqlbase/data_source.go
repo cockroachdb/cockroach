@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // To understand DataSourceInfo below it is crucial to understand the
@@ -59,9 +58,7 @@ import (
 // is implemented as follows:
 //
 // - DataSourceInfo provides column metadata for exactly one data source;
-// - MultiSourceInfo contains an array of one or more DataSourceInfo
-// - the index in IndexedVars points to one of the columns in the
-//   logical concatenation of all items in the MultiSourceInfo;
+// - the index in IndexedVars points to one of the columns in the DataSourceInfo.
 // - IndexedVarResolver (select_name_resolution.go) is tasked with
 //   linking back IndexedVars with their data source and column index.
 //
@@ -109,32 +106,10 @@ type DataSourceInfo struct {
 	// names might be different if the statement renames them using AS.
 	SourceColumns ResultColumns
 
-	// SourceAliases indicates to which table alias column ranges
-	// belong.
-	// These often correspond to the original table names for each
-	// column but might be different if the statement renames
-	// them using AS.
-	SourceAliases SourceAliases
-
-	// ColOffset is the offset of the first column in this DataSourceInfo in the
-	// MultiSourceInfo array it is part of.
-	// The value is populated and used during name resolution, and shouldn't get
-	// touched by anything but the nameResolutionVisitor without care.
-	ColOffset int
-
-	// The number of backfill source columns. The backfill columns are
-	// always the last columns from SourceColumns.
-	NumBackfillColumns int
-}
-
-// SourceAlias associates a table name (alias) to a set of columns in the result
-// row of a data source.
-type SourceAlias struct {
-	Name tree.TableName
-	// ColumnSet identifies a non-empty set of columns in a
-	// selection. This is used by DataSourceInfo.SourceAliases to map
-	// table names to column ranges.
-	ColumnSet util.FastIntSet
+	// SourceAlias indicates to which table the source columns belong.
+	// This often corresponds to the original table names for each column but
+	// might be different if the statement renames them using AS.
+	SourceAlias tree.TableName
 }
 
 func (src *DataSourceInfo) String() string {
@@ -156,42 +131,17 @@ func (src *DataSourceInfo) String() string {
 		buf.WriteString(c.Name)
 	}
 	buf.WriteString("\toutput column names\n")
-	for i := range src.SourceAliases {
-		a := &src.SourceAliases[i]
-		for j := range src.SourceColumns {
-			if j > 0 {
-				buf.WriteByte('\t')
-			}
-			if a.ColumnSet.Contains(j) {
-				buf.WriteString("x")
-			}
-		}
-		if a.Name == AnonymousTable {
-			buf.WriteString("\t<anonymous table>")
-		} else {
-			fmt.Fprintf(&buf, "\t'%s'", a.Name.String())
-		}
-		fmt.Fprintf(&buf, " - %s\n", a.ColumnSet)
+	if src.SourceAlias == AnonymousTable {
+		buf.WriteString("\t<anonymous table>\n")
+	} else {
+		fmt.Fprintf(&buf, "\t'%s'\n", src.SourceAlias.String())
 	}
 	return buf.String()
 }
 
-// SourceAliases is an array of one or more SourceAlias.
-type SourceAliases []SourceAlias
-
 // AnonymousTable is the empty table name, used when a data source
 // has no own name, e.g. VALUES, subqueries or the empty source.
 var AnonymousTable = tree.TableName{}
-
-// FillColumnRange creates a single range that refers to all the
-// columns between firstIdx and lastIdx, inclusive.
-func FillColumnRange(firstIdx, lastIdx int) util.FastIntSet {
-	var res util.FastIntSet
-	for i := firstIdx; i <= lastIdx; i++ {
-		res.Add(i)
-	}
-	return res
-}
 
 // NewSourceInfoForSingleTable creates a simple DataSourceInfo
 // which maps the same tableAlias to all columns.
@@ -207,38 +157,8 @@ func NewSourceInfoForSingleTable(tn tree.TableName, columns ResultColumns) *Data
 	}
 	return &DataSourceInfo{
 		SourceColumns: columns,
-		SourceAliases: SourceAliases{{Name: tn, ColumnSet: FillColumnRange(0, len(columns)-1)}},
+		SourceAlias:   tn,
 	}
-}
-
-// MultiSourceInfo is a list of *DataSourceInfo.
-type MultiSourceInfo []*DataSourceInfo
-
-// MakeMultiSourceInfo constructs a MultiSourceInfo for the
-// given DataSourceInfos.
-func MakeMultiSourceInfo(args ...*DataSourceInfo) MultiSourceInfo {
-	return MultiSourceInfo(args)
-}
-
-func (m MultiSourceInfo) String() string {
-	var buf bytes.Buffer
-	for _, ds := range m {
-		buf.WriteString("<ds>\n")
-		buf.WriteString(ds.String())
-		buf.WriteString("</ds>\n")
-	}
-	return buf.String()
-}
-
-// findTableAlias returns the first table alias providing the column
-// index given as argument. The index must be valid.
-func (src *DataSourceInfo) findTableAlias(colIdx int) (tree.TableName, bool) {
-	for _, alias := range src.SourceAliases {
-		if alias.ColumnSet.Contains(colIdx) {
-			return alias.Name, true
-		}
-	}
-	return AnonymousTable, false
 }
 
 type varFormatter struct {
@@ -271,10 +191,8 @@ func (c *varFormatter) Format(ctx *tree.FmtCtx) {
 // NodeFormatter returns a tree.NodeFormatter that, when formatted,
 // represents the object at the input column index.
 func (src *DataSourceInfo) NodeFormatter(colIdx int) tree.NodeFormatter {
-	var ret varFormatter
-	ret.ColumnName = tree.Name(src.SourceColumns[colIdx].Name)
-	if tableAlias, found := src.findTableAlias(colIdx); found {
-		ret.TableName = tableAlias
+	return &varFormatter{
+		TableName:  src.SourceAlias,
+		ColumnName: tree.Name(src.SourceColumns[colIdx].Name),
 	}
-	return &ret
 }
