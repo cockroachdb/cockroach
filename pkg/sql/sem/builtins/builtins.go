@@ -1939,15 +1939,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				// From the given time in the context location, we also have to subtract
-				// the offset.
-				// This is because we expect to truncate in the given timezone,
-				// but the date argument assumed no timezone, meaning converting it into
-				// the location's timestamp with the date library converts it into the
-				// wrong time locally.
-				_, offset := fromTSTZ.Time.Zone()
-				fromTSTZTime := fromTSTZ.Time.Add(time.Duration(-offset) * time.Second)
-				return truncateTimestamp(ctx, fromTSTZTime, timeSpan)
+				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
