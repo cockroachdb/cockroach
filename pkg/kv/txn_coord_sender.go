@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -845,20 +844,16 @@ func (tc *TxnCoordSender) Send(
 // client.
 // Below we choose the option that involves less waiting, which is likely the
 // first one unless a transaction commits with an odd timestamp.
-//
-// Can't use linearizable mode with clockless reads since in that case we don't
-// know how long to sleep - could be forever!
 func (tc *TxnCoordSender) maybeSleepForLinearizable(
 	ctx context.Context, br *roachpb.BatchResponse, startNs int64,
 ) {
 	if tsNS := br.Txn.WriteTimestamp.WallTime; startNs > tsNS {
 		startNs = tsNS
 	}
-	maxOffset := tc.clock.MaxOffset()
-	sleepNS := maxOffset -
+	sleepNS := tc.clock.MaxOffset() -
 		time.Duration(tc.clock.PhysicalNow()-startNs)
 
-	if maxOffset != timeutil.ClocklessMaxOffset && tc.linearizable && sleepNS > 0 {
+	if tc.linearizable && sleepNS > 0 {
 		// TODO(andrei): perhaps we shouldn't sleep with the lock held.
 		log.VEventf(ctx, 2, "%v: waiting %s on EndTransaction for linearizability",
 			br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))

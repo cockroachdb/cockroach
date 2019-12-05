@@ -750,10 +750,6 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
 	maxOffset := sc.Clock.MaxOffset()
-	if maxOffset == timeutil.ClocklessMaxOffset {
-		// Don't do shady math on clockless reads.
-		maxOffset = 0
-	}
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 

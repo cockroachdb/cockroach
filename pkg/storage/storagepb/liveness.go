@@ -14,16 +14,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // IsLive returns whether the node is considered live at the given time with the
 // given clock offset.
 func (l *Liveness) IsLive(now hlc.Timestamp, maxOffset time.Duration) bool {
-	if maxOffset == timeutil.ClocklessMaxOffset {
-		// When using clockless reads, we're live without a buffer period.
-		maxOffset = 0
-	}
 	expiration := hlc.Timestamp(l.Expiration).Add(-maxOffset.Nanoseconds(), 0)
 	return now.Less(expiration)
 }

@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -782,15 +781,7 @@ func MakeTransaction(
 	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
 ) Transaction {
 	u := uuid.FastMakeV4()
-	var maxTS hlc.Timestamp
-	if maxOffsetNs == timeutil.ClocklessMaxOffset {
-		// For clockless reads, use the largest possible maxTS. This means we'll
-		// always restart if we see something in our future (but we do so at
-		// most once thanks to ObservedTimestamps).
-		maxTS.WallTime = math.MaxInt64
-	} else {
-		maxTS = now.Add(maxOffsetNs, 0)
-	}
+	maxTS := now.Add(maxOffsetNs, 0)
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{

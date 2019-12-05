@@ -2149,9 +2149,11 @@ func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
 		}
 		return ts.Time, true
 	case *DTimestampTZ:
-		return t.stripTimeZone(ctx).Time, true
-	case *DTimestamp:
 		return t.Time, true
+	case *DTimestamp:
+		// Normalize to the timezone of the context.
+		_, zoneOffset := ctx.GetRelativeParseTime().Zone()
+		return t.Time.In(ctx.GetLocation()).Add(-time.Duration(zoneOffset) * time.Second), true
 	case *DTime:
 		// Normalize to the timezone of the context.
 		toTime := timeofday.TimeOfDay(*t).ToTime()
@@ -2289,12 +2291,16 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 }
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
+// This will be equivalent to the midnight of the given zone.
 func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, error) {
 	t, err := d.ToTime()
 	if err != nil {
 		return nil, err
 	}
-	return MakeDTimestampTZ(t.In(loc), time.Microsecond), nil
+	// Normalize to the correct zone.
+	t = t.In(loc)
+	_, offset := t.Zone()
+	return MakeDTimestampTZ(t.Add(time.Duration(-offset)*time.Second), time.Microsecond), nil
 }
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by

@@ -1007,12 +1007,7 @@ func ensureClockMonotonicity(
 		// As an optimization for tests, we don't sleep if all the stores are brand
 		// new. In this case, the node will not serve anything anyway until it
 		// synchronizes with other nodes.
-
-		// Don't have to sleep for monotonicity when using clockless reads
-		// (nor can we, for we would sleep forever).
-		if maxOffset := clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
-			sleepUntil = startTime.UnixNano() + int64(maxOffset) + 1
-		}
+		sleepUntil = startTime.UnixNano() + int64(clock.MaxOffset()) + 1
 	}
 
 	currentWallTimeFn := func() int64 { /* function to report current time */
