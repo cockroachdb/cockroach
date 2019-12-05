@@ -785,7 +785,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				// as ABORTED) to prevent it from being created again in the
 				// future.
 				if !sp.status.IsFinalized() {
-					wTS, _ := tc.store.tsCache.GetMaxWrite(key, nil /* end */)
+					wTS, _ := tc.store.tsCache.GetMaxWrite(key)
 					if min := (hlc.Timestamp{WallTime: sp.orig}); wTS.Less(min) {
 						return fmt.Errorf("%s: expected write tscache entry for txn key to be >= %s, but found %s", strKey, min, wTS)
 					}
