@@ -1,0 +1,113 @@
+run error
+cput k=k v=v cond=v2 ts=123
+----
+>> at end:
+<no data>
+error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
+
+# Verify the difference between missing value and empty value.
+
+run error
+cput k=k v=v cond= ts=123,1
+----
+>> at end:
+<no data>
+error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
+
+# Do a conditional put with expectation that the value is completely missing; will succeed.
+
+run ok
+cput k=k v=v ts=123,2
+----
+>> at end:
+data: "k"/0.000000123,2 -> /BYTES/v
+
+# Another conditional put expecting value missing will fail, now that value1 is written.
+
+run error
+cput k=k v=v ts=123,3
+----
+>> at end:
+data: "k"/0.000000123,2 -> /BYTES/v
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123 logical:2 > 
+
+# Conditional put expecting wrong value2, will fail.
+
+run error
+cput k=k v=v cond=v2 ts=123,4
+----
+>> at end:
+data: "k"/0.000000123,2 -> /BYTES/v
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:123 logical:2 > 
+
+# Move to an empty value. Will succeed.
+
+run ok
+cput k=k v= cond=v ts=123,5
+----
+>> at end:
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+
+# Move key2 (which does not exist) to from value1 to value2.
+# Expect it to fail since it does not exist with value1.
+
+run error
+cput k=k2 v=v2 cond=v ts=123,6
+----
+>> at end:
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
+
+# Move key2 (which does not yet exist) to from value1 to value2, but
+# allowing for it not existing.
+
+run ok
+cput k=k2 v=v2 cond=v ts=123,7 allow_missing
+----
+>> at end:
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+data: "k2"/0.000000123,7 -> /BYTES/v2
+
+# Try to move key2 (which has value2) from value1 to empty. Expect error.
+
+run error
+cput k=k2 v= cond=v allow_missing ts=123,8
+----
+>> at end:
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+data: "k2"/0.000000123,7 -> /BYTES/v2
+error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\000\003v2" timestamp:<wall_time:123 logical:7 > 
+
+# Try to move key2 (which has value2) from value2 to empty. Expect success.
+
+run ok
+cput k=k2 v= cond=v2 allow_missing ts=123,9
+----
+>> at end:
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+data: "k2"/0.000000123,9 -> /BYTES/
+data: "k2"/0.000000123,7 -> /BYTES/v2
+
+# Now move to value2 from expected empty value.
+
+run ok
+cput k=k v=v2 cond= ts=123,10
+----
+>> at end:
+data: "k"/0.000000123,10 -> /BYTES/v2
+data: "k"/0.000000123,5 -> /BYTES/
+data: "k"/0.000000123,2 -> /BYTES/v
+data: "k2"/0.000000123,9 -> /BYTES/
+data: "k2"/0.000000123,7 -> /BYTES/v2
+
+# Verify we get value2 as expected.
+
+run ok
+get k=k ts=123,11
+----
+get: "k" -> /BYTES/v2 @0.000000123,10
