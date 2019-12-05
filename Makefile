@@ -502,8 +502,9 @@ native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)$(if
 #
 # Suffixed flags files (e.g. zcgo_flags_{native-tag}.go) have the build
 # constraint `{native-tag}` and are built the first time a Make-driven build
-# encounters a given native tag. These tags are unset when building with the Go
-# toolchain directly, so these files are only compiled when building with Make.
+# encounters a given native tag or when the build signature changes (see
+# build/defs.mk.sig). These tags are unset when building with the Go toolchain
+# directly, so these files are only compiled when building with Make.
 CGO_PKGS := \
 	pkg/cli \
 	pkg/server/status \
@@ -517,9 +518,8 @@ CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./,$(addsuffix /zcgo_flags_$(native-ta
 BASE_CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 CGO_FLAGS_FILES := $(BASE_CGO_FLAGS_FILES) vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go
 
-$(CGO_UNSUFFIXED_FLAGS_FILES): build/defs.mk.sig
-
-$(BASE_CGO_FLAGS_FILES): Makefile | bin/.submodules-initialized
+$(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialized
+	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo '// +build $(if $(findstring $(native-tag),$@),$(native-tag),!make)' >> $@
@@ -531,6 +531,7 @@ $(BASE_CGO_FLAGS_FILES): Makefile | bin/.submodules-initialized
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
+	@echo "regenerating $@"
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo 'package $($(@D)-package)' >> $@
@@ -773,7 +774,7 @@ endif
 # Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
 # in place will go unnoticed, for example. Similar problems exist in all Make-
 # based build systems and are not worth solving.
-build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS)
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS):$(ENABLE_LIBROACH_ASSERTIONS):$(ENABLE_ROCKSB_ASSERTIONS)
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
