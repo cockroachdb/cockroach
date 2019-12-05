@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -678,7 +677,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 				colIdx := rf.currentTable.colIdxMap[colID]
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
-				rf.keyRemainingBytes, err = colencoding.SkipTableKey(
+				rf.keyRemainingBytes, err = sqlbase.SkipTableKey(
 					&rf.currentTable.cols[colIdx].Type,
 					rf.keyRemainingBytes,
 					// Extra columns are always stored in ascending order.
