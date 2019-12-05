@@ -73,7 +73,9 @@ func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error)
 	// - it avoids a cross-filesystem rename in the common case.
 	//   (There can still be cross-filesystem renames in very
 	//   exotic edge cases, hence the use fileutil.Move below.)
-	tmpFile, err := ioutil.TempFile(targetDir, filepath.Base(fullPath))
+	// See the explanatory comment for ioutil.TempFile to understand
+	// what the "*" in the suffix means.
+	tmpFile, err := ioutil.TempFile(targetDir, filepath.Base(fullPath)+"*.tmp")
 	if err != nil {
 		return errors.Wrap(err, "creating temporary file")
 	}
