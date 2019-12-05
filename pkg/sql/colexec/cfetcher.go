@@ -268,15 +268,6 @@ func (rf *cFetcher) Init(
 	}
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
-	typs := make([]coltypes.T, len(colDescriptors))
-	for i := range typs {
-		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
-			// Only return an error if the type is unhandled and needed. If not needed,
-			// a placeholder Vec will be created.
-			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
-		}
-	}
 	table := cTableInfo{
 		spans:            tableArgs.Spans,
 		desc:             tableArgs.Desc,
@@ -284,7 +275,6 @@ func (rf *cFetcher) Init(
 		index:            tableArgs.Index,
 		isSecondaryIndex: tableArgs.IsSecondaryIndex,
 		cols:             colDescriptors,
-		typs:             typs,
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
@@ -292,6 +282,31 @@ func (rf *cFetcher) Init(
 		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
+
+	// All columns that are part of the index key will be decoded when reading a key. Since some types
+	// are not supported by the vectorized engine, we should error out during setup if some needed columns
+	// or columns we decode always will be attempted to be decoded.
+	typs := make([]coltypes.T, len(colDescriptors))
+	for i := range typs {
+		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
+	}
+	var indexedCols util.FastIntSet
+	for _, colID := range tableArgs.Index.ColumnIDs {
+		indexedCols.Add(int(colID))
+	}
+	if cHasExtraCols(&table) {
+		for _, colID := range tableArgs.Index.ExtraColumnIDs {
+			indexedCols.Add(int(colID))
+		}
+	}
+	for i := range typs {
+		if typs[i] == coltypes.Unhandled && (tableArgs.ValNeededForCol.Contains(i) || indexedCols.Contains(int(colDescriptors[i].ID))) {
+			// Only return an error if the type is unhandled and needed. If not needed,
+			// a placeholder Vec will be created.
+			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
+		}
+	}
+	table.typs = typs
 	rf.machine.batch = allocator.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
 
