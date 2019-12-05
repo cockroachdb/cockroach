@@ -299,7 +299,6 @@ func (r *Replica) applyTimestampCache(
 					if ba.Txn.WriteTimestamp.Less(nextWTS) {
 						txn := ba.Txn.Clone()
 						bumpedCurReq = txn.WriteTimestamp.Forward(nextWTS)
-						txn.WriteTooOld = true
 						ba.Txn = txn
 					}
 				}
