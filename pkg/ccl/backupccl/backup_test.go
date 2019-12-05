@@ -1110,6 +1110,38 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		)
 	})
 
+	t.Run("pause-cancel", func(t *testing.T) {
+		backupDir := "nodelocal:///backup"
+
+		backupJobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, nil, "BACKUP DATABASE data TO $1", backupDir)
+		if err != nil {
+			t.Fatalf("error while running backup %+v", err)
+		}
+		jobutils.WaitForJob(t, sqlDB, backupJobID)
+
+		sqlDB.Exec(t, `DROP DATABASE data`)
+
+		query := `RESTORE DATABASE data FROM $1`
+		ops := []string{"PAUSE"}
+		jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, ops, query, backupDir)
+		if !testutils.IsError(err, "job paused") {
+			t.Fatalf("expected 'job paused' error, but got %+v", err)
+		}
+
+		// Create a table while the RESTORE is in progress on the database that was
+		// created by the restore.
+		sqlDB.Exec(t, `CREATE TABLE data.new_table (a int)`)
+
+		// Do things while the job is paused.
+		sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+
+		// Ensure that the tables created by the user, during the RESTORE are
+		// still present. Also ensure that the table that was being restored (bank)
+		// is not.
+		sqlDB.Exec(t, `USE data;`)
+		sqlDB.CheckQueryResults(t, `SHOW TABLES;`, [][]string{{"new_table"}})
+	})
+
 	t.Run("cancel", func(t *testing.T) {
 		cancelDir := "nodelocal:///cancel"
 		sqlDB.Exec(t, `CREATE DATABASE cancel`)
@@ -1178,6 +1210,52 @@ func TestRestoreFailCleanup(t *testing.T) {
 	sqlDB.CheckQueryResults(t,
 		`SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'`,
 		[][]string{{"bank"}},
+	)
+}
+
+// TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
+// when restoring an entire database.
+func TestRestoreFailDatabaseCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{}
+	// Disable external processing of mutations so that the final check of
+	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
+	// was never observed by a stress test, it is here for safety.
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: func() error {
+			return errors.New("async schema changer disabled")
+		},
+	}
+
+	const numAccounts = 1000
+	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		initNone, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
+
+	dir = filepath.Join(dir, "foo")
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
+	// Bugger the backup by removing the SST files.
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Name() == backupccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+			return nil
+		}
+		return os.Remove(path)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.Exec(t, `DROP DATABASE data`)
+	sqlDB.ExpectErr(
+		t, "sst: no such file",
+		`RESTORE DATABASE data FROM $1`, localFoo,
+	)
+	sqlDB.ExpectErr(
+		t, `database "data" does not exist`,
+		`DROP DATABASE data`,
 	)
 }
 
