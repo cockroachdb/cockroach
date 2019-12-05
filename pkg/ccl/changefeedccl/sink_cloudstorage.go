@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/pkg/errors"
 )
 
 func isCloudStorageSink(u *url.URL) bool {
@@ -275,13 +275,11 @@ type cloudStorageSink struct {
 	fileID          int64
 	files           map[cloudStorageSinkKey]*cloudStorageSinkFile
 	timestampOracle timestampLowerBoundOracle
-	jobSessionID    string
 	// We keep track of the successor of the least resolved timestamp in the local
 	// frontier as of the time of the last `Flush()` call. If `Flush()` hasn't been
 	// called, these fields are based on the statement time of the changefeed.
 	dataFileTs        string
 	dataFilePartition string
-	prevFilename      string
 }
 
 var cloudStorageSinkIDAtomic int64
@@ -307,8 +305,6 @@ func makeCloudStorageSink(
 		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
-		// TODO(aayush): Use the jobs framework's session ID once that's available.
-		jobSessionID: generateChangefeedSessionID(),
 	}
 	if timestampOracle != nil {
 		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
@@ -448,13 +444,8 @@ func (s *cloudStorageSink) flushFile(
 	// Note that we use `-` here to delimit the filename because we want
 	// `%d.RESOLVED` files to lexicographically succeed data files that have the
 	// same timestamp. This works because ascii `-` < ascii '.'.
-	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-		s.jobSessionID, s.nodeID, s.sinkID, fileID, key.Topic, key.SchemaID, s.ext)
-	if s.prevFilename != "" && filename < s.prevFilename {
-		return errors.AssertionFailedf("error: detected a filename %s that lexically "+
-			"precedes a file emitted before: %s", filename, s.prevFilename)
-	}
-	s.prevFilename = filename
+	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%08d%s`, s.dataFileTs,
+		key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.ext)
 	return s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes()))
 }
 
