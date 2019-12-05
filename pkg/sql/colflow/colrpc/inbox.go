@@ -280,7 +280,11 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	// termination). DrainMeta will use the stream to read any remaining metadata
 	// after Next returns a zero-length batch during normal execution.
 	if err := i.maybeInitLocked(ctx); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		// An error occurred while initializing the Inbox and is likely caused by
+		// the connection issues. We propagate the error as a "non-vectorized
+		// panic" so that the whole stack trace is not printed out (as an
+		// unexpected vectorized error) and the sentry issue is not reported.
+		execerror.NonVectorizedPanic(err)
 	}
 
 	for {
