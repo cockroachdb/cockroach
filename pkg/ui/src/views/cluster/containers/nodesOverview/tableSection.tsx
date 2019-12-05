@@ -54,10 +54,6 @@ class TableSection extends React.Component<TableSectionProps & MapStateToProps &
     isCollapsed: false,
   };
 
-  componentWillUnmount() {
-    this.props.saveExpandedState(this.state.isCollapsed);
-  }
-
   onExpandSectionToggle = () => {
     this.setState({
       isCollapsed: !this.state.isCollapsed,
