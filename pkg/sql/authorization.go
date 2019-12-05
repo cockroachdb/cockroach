@@ -22,14 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type membershipCache struct {
+// MembershipCache is a shared cache for role membership information.
+type MembershipCache struct {
 	syncutil.Mutex
 	tableVersion sqlbase.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[string]userRoleMembership
 }
-
-var roleMembersCache membershipCache
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
 type userRoleMembership map[string]bool
@@ -195,6 +194,8 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
+	roleMembersCache := p.execCfg.RoleMemberCache
+
 	// Lookup table version.
 	objDesc, err := p.PhysicalSchemaAccessor().GetObjectDesc(ctx, p.txn, &roleMembersTableName,
 		p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
@@ -212,7 +213,7 @@ func (p *planner) MemberOfWithAdminOption(
 		roleMembersCache.Lock()
 		if roleMembersCache.tableVersion != tableVersion {
 			// Update version and drop the map.
-			roleMembersCache.tableVersion = tableDesc.Version
+			roleMembersCache.tableVersion = tableVersion
 			roleMembersCache.userCache = make(map[string]userRoleMembership)
 		}
 
@@ -242,7 +243,6 @@ func (p *planner) MemberOfWithAdminOption(
 		// Table version remains the same: update map, unlock, return.
 		roleMembersCache.userCache[member] = memberships
 		roleMembersCache.Unlock()
-
 		return memberships, nil
 	}
 }

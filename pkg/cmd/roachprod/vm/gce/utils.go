@@ -159,7 +159,9 @@ func SyncDNS(vms vm.List) error {
 		}
 	}()
 	for _, vm := range vms {
-		fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
+		if len(vm.Name) < 60 {
+			fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
+		}
 	}
 	f.Close()
 

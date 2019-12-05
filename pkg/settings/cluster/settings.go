@@ -30,7 +30,7 @@ import (
 //
 // For testing or one-off situations in which a ClusterSetting is needed, but
 // cluster settings don't play a crucial role, MakeTestingClusterSetting() is
-// provided; the version is pre-initialized to the binary's ServerVersion.
+// provided; the version is pre-initialized to the binary's server version.
 type Settings struct {
 	SV settings.Values
 
@@ -96,21 +96,21 @@ const KeyVersionSetting = "version"
 // enabled or disabled through the IsActive() method.
 //
 // During the node startup sequence, an initial version (persisted to the
-// engines) is read and passed to InitializeVersion(). It is only after that
-// that the Version field of this struct is ready for use (i.e. Version() and
-// IsActive() can be called). In turn, the node usually registers itself as a
-// callback to be notified of any further updates to the setting, which are then
-// persisted.
+// engines) is read and passed to Initialize(). It is only after that that the
+// Version field of this struct is ready for use (i.e. Version() and IsActive()
+// can be called). In turn, the node usually registers itself as a callback to
+// be notified of any further updates to the setting, which are also persisted.
 //
 // This dance is necessary because we cannot determine a safe default value for
 // the version setting without looking at what's been persisted: The setting
 // specifies the minimum binary version we have to expect to be in a mixed
-// cluster with. We can't assume this binary's MinimumSupportedVersion as we
-// could've started up earlier and enabled features that are not actually
-// compatible with that version; we can't assume it's our binary's ServerVersion
-// as that would enable features that may trip up older versions running in the
-// same cluster. Hence, only once we get word of the "safe" version to use can
-// we allow moving parts that actually need to know what's going on.
+// cluster with. We can't assume this binary's MinimumSupportedVersion as the
+// cluster could've started up earlier and enabled features that are no longer
+// compatible with this binary's MinimumSupportedVersion; we can't assume it's
+// our binary's ServerVersion as that would enable features that may trip up
+// older versions running in the same cluster. Hence, only once we get word of
+// the "safe" version to use can we allow moving parts that actually need to
+// know what's going on.
 //
 // Additionally, whenever the version changes, we want to persist that update to
 // wherever the caller to Initialize() got the initial version from
@@ -234,7 +234,7 @@ func (cv clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.
 	return st.binaryMinSupportedVersion
 }
 
-// InitializeVersion initializes cluster version. Before this method has been
+// Initialize initializes cluster version. Before this method has been
 // called, usage of the version is illegal and leads to a fatal error.
 func (cv clusterVersionSetting) Initialize(
 	ctx context.Context, version roachpb.Version, st *Settings,
@@ -267,7 +267,7 @@ func (cv clusterVersionSetting) Initialize(
 // ActiveVersion returns the cluster's current active version: the minimum
 // cluster version the caller may assume is in effect.
 //
-// ActiveVersion fatals is the version has not been initialized.
+// ActiveVersion fatals if the version has not been initialized.
 func (cv *clusterVersionSetting) ActiveVersion(ctx context.Context, st *Settings) ClusterVersion {
 	ver := cv.ActiveVersionOrEmpty(ctx, st)
 	if ver == (ClusterVersion{}) {
@@ -301,15 +301,22 @@ func (cv *clusterVersionSetting) ActiveVersionOrEmpty(
 //
 // If this returns true then all nodes in the cluster will eventually see this
 // version. However, this is not atomic because versions are gossiped. Because
-// of this, nodes should not gate proper handling of remotely initiated requests
-// that their binary knows how to handle on this state. The following example
-// shows why this is important:
+// of this, nodes should not be gating proper handling of remotely initiated
+// requests that their binary knows how to handle on this state. The following
+// example shows why this is important:
+//
 //  The cluster restarts into the new version and the operator issues a SET
 //  VERSION, but node1 learns of the bump 10 seconds before node2, so during
 //  that window node1 might be receiving "old" requests that it itself wouldn't
 //  issue any more. Similarly, node2 might be receiving "new" requests that its
 //  binary must necessarily be able to handle (because the SET VERSION was
 //  successful) but that it itself wouldn't issue yet.
+//
+// This is still a useful method to have as node1, in the example above, can use
+// this information to know when it's safe to start issuing "new" outbound
+// requests. When receiving these "new" inbound requests, despite not seeing the
+// latest active version, node2 is aware that the sending node has, and it will
+// too, eventually.
 func (cv *clusterVersionSetting) IsActive(
 	ctx context.Context, st *Settings, versionKey VersionKey,
 ) bool {
