@@ -1421,7 +1421,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		}
 		// Verify expected low water mark.
 		rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, _ := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
+		wTS, _ := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"))
 
 		if test.expLowWater == 0 {
 			continue
@@ -2274,7 +2274,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	t1 := 2 * time.Second
 	key := roachpb.Key([]byte("b"))
 	tc.manualClock.Set(t1.Nanoseconds())
-	drArgs := roachpb.NewDeleteRange(key, key.Next(), false)
+	drArgs := roachpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
 
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: tc.Clock().Now()}, drArgs); pErr != nil {
 		t.Error(pErr)
@@ -2282,21 +2282,18 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	noID := uuid.UUID{}
 	rTS, rTxnID := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-	wTS, wTxnID := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
-	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
-		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
+	if rTS.WallTime != t0.Nanoseconds() || rTxnID != noID {
+		t.Errorf("expected rTS=1s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
-	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
+	// Verify the timestamp cache has rTS=2s for "b".
 	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("b"), nil)
-	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("b"), nil)
-	if rTS.WallTime != startNanos || wTS.WallTime != t1.Nanoseconds() || rTxnID != noID || wTxnID != noID {
-		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
+	if rTS.WallTime != t1.Nanoseconds() || rTxnID != noID {
+		t.Errorf("expected rTS=2s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
 	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
-	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("c"), nil)
-	if rTS.WallTime != startNanos || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
-		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
+	if rTS.WallTime != startNanos || rTxnID != noID {
+		t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
 }
 
@@ -11996,18 +11993,6 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 			},
 		},
 		{
-			// Test the case where we bump due to the write ts cache rather than the minReadTS.
-			name: "bump due to later write tscache entry", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
-				ba.Add(putReq(keyA))
-				ba.Timestamp = r.store.Clock().Now()
-				minReadTS := ba.Timestamp.Next()
-				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), false)
-				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
-				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
-			},
-		},
-		{
 			// Test the case where we do initially bump due to the minReadTS but then
 			// bump again to a higher ts due to the read ts cache.
 			name: "higher bump due to read ts cache entry", f: func(t *testing.T, r *Replica) {
@@ -12018,21 +12003,6 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
 				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), true)
-				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
-				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
-			},
-		},
-		{
-			// Test the case where we do initially bump due to the minReadTS but then
-			// bump again to a higher ts due to the write ts cache.
-			name: "higher bump due to write ts cache entry", f: func(t *testing.T, r *Replica) {
-				ba := roachpb.BatchRequest{}
-				ba.Add(putReq(keyA))
-				ba.Add(putReq(keyAA))
-				ba.Timestamp = r.store.Clock().Now()
-				minReadTS := ba.Timestamp.Next()
-				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
-				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), false)
 				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},

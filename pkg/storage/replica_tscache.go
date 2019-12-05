@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -199,7 +200,11 @@ func (r *Replica) updateTimestampCache(
 				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{}, true /* readCache */)
 			}
 		default:
-			addToTSCache(start, end, ts, txnID, !roachpb.UpdatesWriteTimestampCache(args))
+			if roachpb.UpdatesWriteTimestampCache(args) {
+				// Only requests specially cased above update the timestamp cache.
+				log.Fatalf(context.TODO(), "unexpected update of the timestamp cache for request: %s", args)
+			}
+			addToTSCache(start, end, ts, txnID, true /* read */)
 		}
 	}
 }
@@ -288,24 +293,6 @@ func (r *Replica) applyTimestampCache(
 			bumpedDueToMinReadTS = (!bumpedCurReq && bumpedDueToMinReadTS) || (bumpedCurReq && forwardedToMinReadTS)
 			bumped, bumpedCurReq = bumped || bumpedCurReq, false
 
-			// On more recent writes, forward the timestamp and set the
-			// write too old boolean for transactions. Note that currently
-			// only EndTransaction and DeleteRange requests update the
-			// write timestamp cache.
-			wTS, wTxnID := r.store.tsCache.GetMaxWrite(header.Key, header.EndKey)
-			nextWTS := wTS.Next()
-			if ba.Txn != nil {
-				if ba.Txn.ID != wTxnID {
-					if ba.Txn.WriteTimestamp.Less(nextWTS) {
-						txn := ba.Txn.Clone()
-						bumpedCurReq = txn.WriteTimestamp.Forward(nextWTS)
-						txn.WriteTooOld = true
-						ba.Txn = txn
-					}
-				}
-			} else {
-				bumpedCurReq = ba.Timestamp.Forward(nextWTS)
-			}
 			// Clear bumpedDueToMinReadTS if we just bumped due to the write tscache.
 			bumpedDueToMinReadTS = !bumpedCurReq && bumpedDueToMinReadTS
 			bumped = bumped || bumpedCurReq
@@ -467,7 +454,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
+	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if !wTS.Less(txnMinTS) {

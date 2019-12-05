@@ -27601,7 +27601,6 @@ void RefreshRequest::clear_refresh_from() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RefreshRequest::kHeaderFieldNumber;
-const int RefreshRequest::kWriteFieldNumber;
 const int RefreshRequest::kRefreshFromFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -27626,14 +27625,13 @@ RefreshRequest::RefreshRequest(const RefreshRequest& from)
   } else {
     refresh_from_ = NULL;
   }
-  write_ = from.write_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RefreshRequest)
 }
 
 void RefreshRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&write_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(write_));
+      reinterpret_cast<char*>(&refresh_from_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(refresh_from_));
 }
 
 RefreshRequest::~RefreshRequest() {
@@ -27669,7 +27667,6 @@ void RefreshRequest::Clear() {
     delete refresh_from_;
   }
   refresh_from_ = NULL;
-  write_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -27694,20 +27691,6 @@ bool RefreshRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // bool write = 2;
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &write_)));
         } else {
           goto handle_unusual;
         }
@@ -27756,11 +27739,6 @@ void RefreshRequest::SerializeWithCachedSizes(
       1, this->_internal_header(), output);
   }
 
-  // bool write = 2;
-  if (this->write() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->write(), output);
-  }
-
   if (this->has_refresh_from()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, this->_internal_refresh_from(), output);
@@ -27789,11 +27767,6 @@ size_t RefreshRequest::ByteSizeLong() const {
         *refresh_from_);
   }
 
-  // bool write = 2;
-  if (this->write() != 0) {
-    total_size += 1 + 1;
-  }
-
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -27817,9 +27790,6 @@ void RefreshRequest::MergeFrom(const RefreshRequest& from) {
   if (from.has_refresh_from()) {
     mutable_refresh_from()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refresh_from());
   }
-  if (from.write() != 0) {
-    set_write(from.write());
-  }
 }
 
 void RefreshRequest::CopyFrom(const RefreshRequest& from) {
@@ -27841,7 +27811,6 @@ void RefreshRequest::InternalSwap(RefreshRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(refresh_from_, other->refresh_from_);
-  swap(write_, other->write_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -28053,7 +28022,6 @@ void RefreshRangeRequest::clear_refresh_from() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RefreshRangeRequest::kHeaderFieldNumber;
-const int RefreshRangeRequest::kWriteFieldNumber;
 const int RefreshRangeRequest::kRefreshFromFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -28078,14 +28046,13 @@ RefreshRangeRequest::RefreshRangeRequest(const RefreshRangeRequest& from)
   } else {
     refresh_from_ = NULL;
   }
-  write_ = from.write_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RefreshRangeRequest)
 }
 
 void RefreshRangeRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&write_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(write_));
+      reinterpret_cast<char*>(&refresh_from_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(refresh_from_));
 }
 
 RefreshRangeRequest::~RefreshRangeRequest() {
@@ -28121,7 +28088,6 @@ void RefreshRangeRequest::Clear() {
     delete refresh_from_;
   }
   refresh_from_ = NULL;
-  write_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -28146,20 +28112,6 @@ bool RefreshRangeRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      // bool write = 2;
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &write_)));
         } else {
           goto handle_unusual;
         }
@@ -28208,11 +28160,6 @@ void RefreshRangeRequest::SerializeWithCachedSizes(
       1, this->_internal_header(), output);
   }
 
-  // bool write = 2;
-  if (this->write() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->write(), output);
-  }
-
   if (this->has_refresh_from()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, this->_internal_refresh_from(), output);
@@ -28241,11 +28188,6 @@ size_t RefreshRangeRequest::ByteSizeLong() const {
         *refresh_from_);
   }
 
-  // bool write = 2;
-  if (this->write() != 0) {
-    total_size += 1 + 1;
-  }
-
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -28269,9 +28211,6 @@ void RefreshRangeRequest::MergeFrom(const RefreshRangeRequest& from) {
   if (from.has_refresh_from()) {
     mutable_refresh_from()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refresh_from());
   }
-  if (from.write() != 0) {
-    set_write(from.write());
-  }
 }
 
 void RefreshRangeRequest::CopyFrom(const RefreshRangeRequest& from) {
@@ -28293,7 +28232,6 @@ void RefreshRangeRequest::InternalSwap(RefreshRangeRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(refresh_from_, other->refresh_from_);
-  swap(write_, other->write_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
