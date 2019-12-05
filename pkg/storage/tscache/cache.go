@@ -70,8 +70,8 @@ type Cache interface {
 	// timestamp is returned for the read timestamps.
 	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 	// GetMaxWrite behaves like GetMaxRead, but returns the maximum write
-	// timestamp which overlaps the interval spanning from start to end.
-	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
+	// timestamp which overlaps the key.
+	GetMaxWrite(key roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
 	// Metrics returns the Cache's metrics struct.
 	Metrics() Metrics

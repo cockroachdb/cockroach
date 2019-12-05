@@ -1499,10 +1499,7 @@ message RefreshRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If set, indicates that the write timestamp cache should be
-  // updated. This handles the case of DeleteRange, which must set the
-  // write too old flag on transactions which attempt earlier writes.
-  bool write = 2;
+  reserved 2;
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
@@ -1521,10 +1518,7 @@ message RefreshRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If set, indicates that the write timestamp cache should be
-  // updated. This handles the case of DeleteRange, which must set the
-  // write too old flag on transactions which attempt earlier writes.
-  bool write = 2;
+  reserved 2;
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
