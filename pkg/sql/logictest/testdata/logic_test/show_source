@@ -41,7 +41,7 @@ enable_insert_fast_path              on
 enable_zigzag_join                   on
 experimental_enable_temp_tables      off
 experimental_force_split_at          off
-experimental_optimizer_foreign_keys  off
+experimental_optimizer_foreign_keys  on
 experimental_serial_normalization    rowid
 extra_float_digits                   0
 force_savepoint_restart              off

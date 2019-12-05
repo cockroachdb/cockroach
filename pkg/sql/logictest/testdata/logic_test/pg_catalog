@@ -1566,7 +1566,7 @@ enable_insert_fast_path              on                  NULL      NULL        N
 enable_zigzag_join                   on                  NULL      NULL        NULL        string
 experimental_enable_temp_tables      off                 NULL      NULL        NULL        string
 experimental_force_split_at          off                 NULL      NULL        NULL        string
-experimental_optimizer_foreign_keys  off                 NULL      NULL        NULL        string
+experimental_optimizer_foreign_keys  on                  NULL      NULL        NULL        string
 experimental_serial_normalization    rowid               NULL      NULL        NULL        string
 extra_float_digits                   0                   NULL      NULL        NULL        string
 force_savepoint_restart              off                 NULL      NULL        NULL        string
@@ -1623,7 +1623,7 @@ enable_insert_fast_path              on                  NULL  user     NULL    
 enable_zigzag_join                   on                  NULL  user     NULL      on                  on
 experimental_enable_temp_tables      off                 NULL  user     NULL      off                 off
 experimental_force_split_at          off                 NULL  user     NULL      off                 off
-experimental_optimizer_foreign_keys  off                 NULL  user     NULL      off                 off
+experimental_optimizer_foreign_keys  on                  NULL  user     NULL      on                  on
 experimental_serial_normalization    rowid               NULL  user     NULL      rowid               rowid
 extra_float_digits                   0                   NULL  user     NULL      0                   2
 force_savepoint_restart              off                 NULL  user     NULL      off                 off

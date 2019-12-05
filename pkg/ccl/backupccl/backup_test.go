@@ -1482,25 +1482,25 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation on customers from receipts is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* referenced in table \"receipts\"|update.*violates foreign key constraint on table \"receipts\"",
+			t, "update.*violates foreign key constraint \"fk_dest_ref_customers\"",
 			`UPDATE store.customers SET email = concat(id::string, 'nope')`,
 		)
 
 		// FK validation on customers from orders is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* referenced in table \"orders\"|update.*violates foreign key constraint on table \"orders\"",
+			t, "update.*violates foreign key constraint \"fk_customerid_ref_customers\"",
 			`UPDATE store.customers SET id = id * 1000`,
 		)
 
 		// FK validation of customer id is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* in customers@primary|insert.*violates foreign key constraint \"fk_customerid_ref_customers\"",
+			t, "insert.*violates foreign key constraint \"fk_customerid_ref_customers\"",
 			`INSERT INTO store.orders VALUES (999, NULL, 999)`,
 		)
 
 		// FK validation of self-FK is preserved.
 		db.ExpectErr(
-			t, "foreign key violation: value .999. not found in receipts@primary|insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
+			t, "insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
 			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
 		)
 	})
@@ -1515,7 +1515,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation on customers from orders is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* referenced in table \"orders\"|update.*violates foreign key constraint on table \"orders\"",
+			t, "update.*violates foreign key constraint \"fk_customerid_ref_customers\"",
 			`UPDATE store.customers SET id = id*100`,
 		)
 
@@ -1556,7 +1556,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation of self-FK is preserved.
 		db.ExpectErr(
-			t, "foreign key violation: value .999. not found in receipts@primary|insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
+			t, "insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
 			`INSERT INTO store.receipts VALUES (-1, 999, NULL, NULL)`,
 		)
 	})
@@ -1574,19 +1574,19 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation of customer email is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* in customers@customers_email_key|insert.*violates foreign key constraint \"fk_dest_ref_customers\"",
+			t, "nsert.*violates foreign key constraint \"fk_dest_ref_customers\"",
 			`INSERT INTO store.receipts VALUES (-1, NULL, '999', 999)`,
 		)
 
 		// FK validation on customers from receipts is preserved.
 		db.ExpectErr(
-			t, "foreign key violation.* referenced in table \"receipts\"|delete.*violates foreign key constraint on table \"receipts\"",
+			t, "delete.*violates foreign key constraint \"fk_dest_ref_customers\"",
 			`DELETE FROM store.customers`,
 		)
 
 		// FK validation of self-FK is preserved.
 		db.ExpectErr(
-			t, "foreign key violation: value .999. not found in receipts@primary|insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
+			t, "insert.*violates foreign key constraint \"fk_reissue_ref_receipts\"",
 			`INSERT INTO store.receipts VALUES (-1, 999, NULL, NULL)`,
 		)
 	})
