@@ -34,13 +34,11 @@ type tpchBench int
 const (
 	sql20 tpchBench = iota
 	tpch
-	tpchVec
 )
 
 var urlMap = map[tpchBench]string{
-	sql20:   `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
-	tpch:    `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
-	tpchVec: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries-vec`,
+	sql20: `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/2.1-sql-20`,
+	tpch:  `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
 }
 
 type tpchBenchSpec struct {
@@ -103,19 +101,14 @@ func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		// run b.numRunsPerQuery number of times.
 		maxOps := b.numRunsPerQuery * numQueries
 
-		vectorizeSetting := ""
-		if b.benchType == tpchVec {
-			vectorizeSetting = "experimental_on"
-		}
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
 			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d --vectorize=%s {pgurl%s} "+
+				"--num-runs=%d --max-ops=%d {pgurl%s} "+
 				"--histograms="+perfArtifactsDir+"/stats.json --histograms-max-latency=%s",
 			filename,
 			b.numRunsPerQuery,
 			maxOps,
-			vectorizeSetting,
 			roachNodes,
 			b.maxLatency.String(),
 		)
@@ -268,15 +261,6 @@ func registerTPCHBench(r *testRegistry) {
 			CPUs:            4,
 			ScaleFactor:     1,
 			benchType:       tpch,
-			numRunsPerQuery: 3,
-			minVersion:      `v19.1.0`,
-			maxLatency:      500 * time.Second,
-		},
-		{
-			Nodes:           3,
-			CPUs:            4,
-			ScaleFactor:     1,
-			benchType:       tpchVec,
 			numRunsPerQuery: 3,
 			minVersion:      `v19.1.0`,
 			maxLatency:      500 * time.Second,
