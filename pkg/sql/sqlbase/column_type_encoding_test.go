@@ -175,6 +175,37 @@ func TestEncodeTableKey(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestSkipTableKey(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 10000
+	properties := gopter.NewProperties(parameters)
+	properties.Property("correctness", prop.ForAll(
+		func(d tree.Datum, dir encoding.Direction) string {
+			descDir := IndexDescriptor_ASC
+			if dir == encoding.Descending {
+				descDir = IndexDescriptor_DESC
+			}
+			b, err := EncodeTableKey(nil, d, dir)
+			if err != nil {
+				return "error: " + err.Error()
+			}
+			res, err := SkipTableKey(d.ResolvedType(), b, descDir)
+			if err != nil {
+				return "error: " + err.Error()
+			}
+			if len(res) != 0 {
+				fmt.Println(res, len(res), d.ResolvedType(), d.ResolvedType().Family())
+				return "expected 0 bytes remaining"
+			}
+			return ""
+		},
+		genColumnType().
+			SuchThat(hasKeyEncoding).FlatMap(genDatumWithType, reflect.TypeOf((*tree.Datum)(nil)).Elem()),
+		genEncodingDirection(),
+	))
+	properties.TestingRun(t)
+}
+
 func TestMarshalColumnValueRoundtrip(t *testing.T) {
 	a := &DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
