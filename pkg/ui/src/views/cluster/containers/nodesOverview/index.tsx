@@ -223,7 +223,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     return null;
   }
 
-  // Get column configuratin for the time node has been dead or decommissioned.
+  // Get column configuration for the time node has been dead or decommissioned.
   // Depending on the node status it returns relative or absolute date representation.
   getDownTimeColumnConfig(): ColumnDescriptor<INodeStatus> {
     const { status, nodesSummary } = this.props;
