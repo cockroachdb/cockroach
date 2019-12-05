@@ -18,11 +18,12 @@ import thunk from "redux-thunk";
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
-import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
+import { metricsReducer, MetricsState } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
+import rootSaga from "./sagas";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
@@ -72,7 +73,7 @@ export function createAdminUIStore() {
     ) as GenericStoreEnhancer,
   );
 
-  sagaMiddleware.run(queryMetricsSaga);
+  sagaMiddleware.run(rootSaga);
   return s;
 }
 
