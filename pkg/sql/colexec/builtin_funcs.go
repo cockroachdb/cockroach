@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 type defaultBuiltinFuncOperator struct {
@@ -180,7 +181,7 @@ func NewBuiltinFunctionOperator(
 	argumentCols []int,
 	outputIdx int,
 	input Operator,
-) Operator {
+) (Operator, error) {
 
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
@@ -188,9 +189,16 @@ func NewBuiltinFunctionOperator(
 			OneInputNode: NewOneInputNode(input),
 			argumentCols: argumentCols,
 			outputIdx:    outputIdx,
-		}
+		}, nil
 	default:
 		outputType := funcExpr.ResolvedType()
+		outputPhysType := typeconv.FromColumnType(outputType)
+		if outputPhysType == coltypes.Unhandled {
+			return nil, errors.Errorf(
+				"unsupported output type %q of %s",
+				outputType.String(), funcExpr.String(),
+			)
+		}
 		return &defaultBuiltinFuncOperator{
 			OneInputNode:   NewOneInputNode(input),
 			evalCtx:        evalCtx,
@@ -198,10 +206,10 @@ func NewBuiltinFunctionOperator(
 			outputIdx:      outputIdx,
 			columnTypes:    columnTypes,
 			outputType:     outputType,
-			outputPhysType: typeconv.FromColumnType(outputType),
+			outputPhysType: outputPhysType,
 			converter:      typeconv.GetDatumToPhysicalFn(outputType),
 			row:            make(tree.Datums, len(argumentCols)),
 			argumentCols:   argumentCols,
-		}
+		}, nil
 	}
 }
