@@ -283,6 +283,18 @@ func validateForeignKey(
 
 	values, err := ie.QueryRow(ctx, "validate fk constraint", txn, query)
 	if err != nil {
+		if strings.Contains(err.Error(), "unexpected error from the vectorized runtime: interface conversion:") {
+			fmtctx := tree.NewFmtCtx(tree.FmtSimple)
+			for _, opt := range []string{"", "(VEC,VERBOSE)", "(TYPES)", "(DISTSQL)"} {
+				fmtctx.Printf("\nEXPLAIN %s %s\n", opt, query)
+				datums, _ := ie.Query(ctx, "explaining", txn, fmt.Sprintf("EXPLAIN %s %s;", opt, query))
+				for i := range datums {
+					datums[i].Format(fmtctx)
+					fmtctx.Printf("\n")
+				}
+			}
+			err = errors.AssertionFailedf("%v\n%s", fmtctx.CloseAndGetString(), err.Error())
+		}
 		return err
 	}
 	if values.Len() > 0 {

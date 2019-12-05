@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -620,7 +621,13 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
 		if src != nil {
-			srcCol = src._TemplateType()
+			if err := execerror.CatchVectorizedRuntimeError(func() { srcCol = src._TemplateType() }); err != nil {
+				execerror.VectorizedInternalPanic(
+					errors.AssertionFailedf(
+						"input.outCols = %v, outColIdx = %d, inColIdx = %d\n%s",
+						input.outCols, outColIdx, inColIdx, err,
+					))
+			}
 		}
 		outCol := out._TemplateType()
 		var val _GOTYPE
@@ -791,7 +798,13 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
 		if src != nil {
-			srcCol = src._TemplateType()
+			if err := execerror.CatchVectorizedRuntimeError(func() { srcCol = src._TemplateType() }); err != nil {
+				execerror.VectorizedInternalPanic(
+					errors.AssertionFailedf(
+						"input.outCols = %v, outColIdx = %d, inColIdx = %d\n%s",
+						input.outCols, outColIdx, inColIdx, err,
+					))
+			}
 		}
 		outCol := out._TemplateType()
 
