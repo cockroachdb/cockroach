@@ -207,7 +207,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := b.sink.Reset(); err != nil {
+	if err := b.sink.Reset(ctx); err != nil {
 		return err
 	}
 	b.flushCounts.total++
