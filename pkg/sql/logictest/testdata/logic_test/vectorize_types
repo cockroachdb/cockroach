@@ -88,3 +88,20 @@ RESET vectorize
 # (TimestampTZ). We're only interested in not getting an error. See #42871.
 statement ok
 SELECT experimental_strptime(_string, _string) IS NULL FROM all_types
+
+statement ok
+CREATE TABLE unsupported_type (id INT PRIMARY KEY, unsupported INT ARRAY)
+
+statement ok
+INSERT INTO unsupported_type (id) SELECT * FROM generate_series(1, 2000)
+
+statement ok
+SET vectorize=experimental_always
+
+# This query makes sure that CFetcher when reading from a table with an
+# unhandled type (that isn't needed) is reset correctly between batches.
+statement ok
+SELECT id FROM unsupported_type LIMIT 1 OFFSET 1100
+
+statement ok
+RESET vectorize
