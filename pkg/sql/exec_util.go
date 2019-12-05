@@ -530,6 +530,9 @@ type ExecutorConfig struct {
 	// Caches updated by DistSQL.
 	RangeDescriptorCache *kv.RangeDescriptorCache
 	LeaseHolderCache     *kv.LeaseHolderCache
+
+	// Role membership cache.
+	RoleMemberCache *MembershipCache
 }
 
 // Organization returns the value of cluster.organization.

@@ -252,7 +252,7 @@ func DefaultStressFailureTitle(packageName, testName string) string {
 	return fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, testName)
 }
 
-func (p *poster) post(ctx context.Context, req PostRequest) error {
+func (p *poster) defaultBodyTemplate(req PostRequest) string {
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
 Parameters:%[2]s
@@ -273,50 +273,31 @@ make stressrace TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -
 Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
-	body := func(packageName, testName, message string) string {
-		// If the test has artifacts, link straight to them.
-		// Otherwise, link to the build log in TeamCity.
-		var testURL *url.URL
-		if req.Artifacts != "" {
-			testURL = p.teamcityArtifactsURL(req.Artifacts)
-		} else {
-			testURL = p.teamcityBuildLogURL()
-		}
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), testURL, packageName, testName) + messageTemplate
-		// We insert a raw "%s" above so we can figure out the length of the
-		// body so far, without the actual error text. We need this length so we
-		// can calculate the maximum amount of error text we can include in the
-		// issue without exceeding GitHub's limit. We replace that %s in the
-		// following Sprintf.
-		return fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
+	// If the test has artifacts, link straight to them.
+	// Otherwise, link to the build log in TeamCity.
+	var testURL *url.URL
+	if req.Artifacts != "" {
+		testURL = p.teamcityArtifactsURL(req.Artifacts)
+	} else {
+		testURL = p.teamcityBuildLogURL()
 	}
+	body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), testURL, req.PackageName, req.TestName) + messageTemplate
+	// We insert a raw "%s" above so we can figure out the length of the
+	// body so far, without the actual error text. We need this length so we
+	// can calculate the maximum amount of error text we can include in the
+	// issue without exceeding GitHub's limit. We replace that %s in the
+	// following Sprintf.
+	return fmt.Sprintf(body, trimIssueRequestBody(req.Message, len(body)))
+}
 
-	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
-		b := body(packageName, testName, message)
-
-		labels := append(issueLabels, req.ExtraLabels...)
-		return &github.IssueRequest{
-			Title:     &req.Title,
-			Body:      &b,
-			Labels:    &labels,
-			Assignee:  &assignee,
-			Milestone: p.milestone,
-		}
-	}
-
-	newIssueComment := func(packageName, testName, message string) *github.IssueComment {
-		b := body(packageName, testName, message)
-		return &github.IssueComment{Body: &b}
-	}
-
+func (p *poster) post(ctx context.Context, req PostRequest) error {
 	assignee, err := getAssignee(ctx, req.AuthorEmail, p.listCommits)
 	if err != nil {
 		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
-	issueRequest := newIssueRequest(req.PackageName, req.TestName, req.Message, assignee)
 	searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`,
-		*issueRequest.Title, githubUser, githubRepo)
+		req.Title, githubUser, githubRepo)
 	for _, label := range issueLabels {
 		searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
 	}
@@ -335,15 +316,24 @@ Failed test: %[3]s`
 		foundIssue = result.Issues[0].Number
 	}
 
+	body := p.defaultBodyTemplate(req)
 	if foundIssue == nil {
-		if _, _, err := p.createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
+		labels := append(issueLabels, req.ExtraLabels...)
+		issueRequest := github.IssueRequest{
+			Title:     &req.Title,
+			Body:      &body,
+			Labels:    &labels,
+			Assignee:  &assignee,
+			Milestone: p.milestone,
+		}
+		if _, _, err := p.createIssue(ctx, githubUser, githubRepo, &issueRequest); err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s",
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(req.PackageName, req.TestName, req.Message)
+		comment := github.IssueComment{Body: &body}
 		if _, _, err := p.createComment(
-			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
+			ctx, githubUser, githubRepo, *foundIssue, &comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
 				*foundIssue, github.Stringify(comment))
 		}
