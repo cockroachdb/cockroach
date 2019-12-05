@@ -1056,15 +1056,10 @@ func (drr *DeleteRangeRequest) flags() int {
 	}
 	// DeleteRange updates the timestamp cache as it doesn't leave intents or
 	// tombstones for keys which don't yet exist, but still wants to prevent
-	// anybody from writing under it.
-	//
-	// By updating write timestamp cache (as opposed to the read timestamp cache),
-	// it forces subsequent writes to get a write-too-old error and avoids the
-	// lost delete anomaly under SNAPSHOT ISOLATION (which no longer exists,
-	// so this is historical). Note that, even without it, deletes of keys that
-	// exist would not be lost (since the DeleteRange leaves intents on those
-	// keys), but deletes of "empty space" would.
-	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesWriteTSCache | needsRefresh | canBackpressure
+	// anybody from writing under it. Note that, even if we didn't update the ts
+	// cache, deletes of keys that exist would not be lost (since the DeleteRange
+	// leaves intents on those keys), but deletes of "empty space" would.
+	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesReadTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
@@ -1146,15 +1141,9 @@ func (*AddSSTableRequest) flags() int {
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.
 func (r *RefreshRequest) flags() int {
-	if r.Write {
-		return isRead | isTxn | updatesWriteTSCache
-	}
 	return isRead | isTxn | updatesReadTSCache
 }
 func (r *RefreshRangeRequest) flags() int {
-	if r.Write {
-		return isRead | isTxn | isRange | updatesWriteTSCache
-	}
 	return isRead | isTxn | isRange | updatesReadTSCache
 }
 
