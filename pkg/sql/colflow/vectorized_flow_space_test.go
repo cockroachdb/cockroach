@@ -95,6 +95,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				result, err := colexec.NewColOperator(
 					ctx, flowCtx, tc.spec, inputs, &mon.BoundAccount{},
 					true, /* useStreamingMemAccountForBuffering */
+					nil,  /* processorConstructor */
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -202,6 +203,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				result, err := colexec.NewColOperator(
 					ctx, flowCtx, tc.spec, inputs, &acc,
 					true, /* useStreamingMemAccountForBuffering */
+					nil,  /* processorConstructor */
 				)
 				require.NoError(t, err)
 				err = execerror.CatchVectorizedRuntimeError(func() {

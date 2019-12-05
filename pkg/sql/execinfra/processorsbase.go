@@ -325,6 +325,21 @@ func (h *ProcOutputHelper) consumerClosed() {
 	h.rowIdx = h.maxRowIdx
 }
 
+// ProcessorConstructor is a function that creates a Processor. It is
+// abstracted away so that we could create mixed flows (i.e. a vectorized flow
+// with wrapped processors) without bringing a dependency on sql/rowexec
+// package into sql/colexec package.
+type ProcessorConstructor func(
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	processorID int32,
+	core *execinfrapb.ProcessorCoreUnion,
+	post *execinfrapb.PostProcessSpec,
+	inputs []RowSource,
+	outputs []RowReceiver,
+	localProcessors []LocalProcessor,
+) (Processor, error)
+
 // ProcessorBase is supposed to be embedded by Processors. It provides
 // facilities for dealing with filtering and projection (through a
 // ProcOutputHelper) and for implementing the RowSource interface (draining,

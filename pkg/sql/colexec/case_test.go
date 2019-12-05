@@ -85,6 +85,7 @@ func TestCaseOp(t *testing.T) {
 			result, err := NewColOperator(
 				ctx, flowCtx, spec, inputs, testMemAcc,
 				true, /* useStreamingMemAccountForBuffering */
+				nil,  /* processorConstructor */
 			)
 			if err != nil {
 				return nil, err

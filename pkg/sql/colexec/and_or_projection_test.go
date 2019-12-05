@@ -210,6 +210,7 @@ func TestAndOrOps(t *testing.T) {
 						result, err := NewColOperator(
 							ctx, flowCtx, spec, input, testMemAcc,
 							true, /* useStreamingMemAccountForBuffering */
+							nil,  /* processorConstructor */
 						)
 						if err != nil {
 							return nil, err
@@ -278,6 +279,7 @@ func benchmarkLogicalProjOp(
 	result, err := NewColOperator(
 		ctx, flowCtx, spec, []Operator{input}, testMemAcc,
 		true, /* useStreamingMemAccountForBuffering */
+		nil,  /* processorConstructor */
 	)
 	if err != nil {
 		b.Fatal(err)

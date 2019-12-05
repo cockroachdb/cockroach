@@ -90,6 +90,7 @@ func verifyColOperator(
 	result, err := colexec.NewColOperator(
 		ctx, flowCtx, pspec, columnarizers, &acc,
 		true, /* useStreamingMemAccountForBuffering */
+		nil,  /* processorConstructor */
 	)
 	if err != nil {
 		return err
