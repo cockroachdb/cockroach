@@ -5892,7 +5892,7 @@ void LeafTxnFinalState::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int LeafTxnFinalState::kTxnFieldNumber;
 const int LeafTxnFinalState::kDeprecatedCommandCountFieldNumber;
-const int LeafTxnFinalState::kRefreshReadsFieldNumber;
+const int LeafTxnFinalState::kRefreshSpansFieldNumber;
 const int LeafTxnFinalState::kRefreshInvalidFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -5906,7 +5906,7 @@ LeafTxnFinalState::LeafTxnFinalState()
 LeafTxnFinalState::LeafTxnFinalState(const LeafTxnFinalState& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      refresh_reads_(from.refresh_reads_) {
+      refresh_spans_(from.refresh_spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_txn()) {
     txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
@@ -5949,7 +5949,7 @@ void LeafTxnFinalState::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  refresh_reads_.Clear();
+  refresh_spans_.Clear();
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
     delete txn_;
   }
@@ -6005,7 +6005,7 @@ bool LeafTxnFinalState::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_refresh_reads()));
+                input, add_refresh_spans()));
         } else {
           goto handle_unusual;
         }
@@ -6063,10 +6063,10 @@ void LeafTxnFinalState::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->refresh_reads_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->refresh_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4,
-      this->refresh_reads(static_cast<int>(i)),
+      this->refresh_spans(static_cast<int>(i)),
       output);
   }
 
@@ -6087,12 +6087,12 @@ size_t LeafTxnFinalState::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->refresh_reads_size());
+    unsigned int count = static_cast<unsigned int>(this->refresh_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->refresh_reads(static_cast<int>(i)));
+          this->refresh_spans(static_cast<int>(i)));
     }
   }
 
@@ -6131,7 +6131,7 @@ void LeafTxnFinalState::MergeFrom(const LeafTxnFinalState& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  refresh_reads_.MergeFrom(from.refresh_reads_);
+  refresh_spans_.MergeFrom(from.refresh_spans_);
   if (from.has_txn()) {
     mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
   }
@@ -6160,7 +6160,7 @@ void LeafTxnFinalState::Swap(LeafTxnFinalState* other) {
 }
 void LeafTxnFinalState::InternalSwap(LeafTxnFinalState* other) {
   using std::swap;
-  CastToBase(&refresh_reads_)->InternalSwap(CastToBase(&other->refresh_reads_));
+  CastToBase(&refresh_spans_)->InternalSwap(CastToBase(&other->refresh_spans_));
   swap(txn_, other->txn_);
   swap(deprecated_command_count_, other->deprecated_command_count_);
   swap(refresh_invalid_, other->refresh_invalid_);

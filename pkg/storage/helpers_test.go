@@ -319,9 +319,6 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
 	t, _ := r.store.tsCache.GetMaxRead(start, end)
-	if w, _ := r.store.tsCache.GetMaxWrite(start, end); t.Less(w) {
-		t = w
-	}
 	return t
 }
 

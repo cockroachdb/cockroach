@@ -406,7 +406,7 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 		tc.Add(roachpb.Key("a"), nil, ts3, txn2ID, false)
 
 		rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, wTxnID := tc.GetMaxWrite(roachpb.Key("a"), nil)
+		wTS, wTxnID := tc.GetMaxWrite(roachpb.Key("a"))
 		if rTS != ts2 || wTS != ts3 || rTxnID != txn1ID || wTxnID != txn2ID {
 			t.Errorf("expected (%s,%s) and (%s,%s); got (%s,%s) and (%s,%s)",
 				ts2, txn1ID, ts3, txn2ID, rTS, rTxnID, wTS, wTxnID)

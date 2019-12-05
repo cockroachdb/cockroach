@@ -475,8 +475,8 @@ func (tc *treeImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID
 }
 
 // GetMaxWrite implements the Cache interface.
-func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	return tc.getMax(start, end, false)
+func (tc *treeImpl) GetMaxWrite(start roachpb.Key) (hlc.Timestamp, uuid.UUID) {
+	return tc.getMax(start, nil /* end */, false)
 }
 
 func (tc *treeImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
