@@ -2932,7 +2932,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
+	return MakeDTimestampTZ(ctx.GetRelativeParseTime(), precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
@@ -2943,7 +2943,10 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestamp(ctx.TxnTimestamp, precision)
+	// Move the time to UTC, but keeping the location's time.
+	t := ctx.GetRelativeParseTime()
+	_, offsetSecs := t.Zone()
+	return MakeDTimestamp(t.Add(time.Second*time.Duration(offsetSecs)).In(time.UTC), precision)
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
