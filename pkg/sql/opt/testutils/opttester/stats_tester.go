@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // statsTester is used for testing the quality of our estimated statistics
@@ -64,7 +64,13 @@ type statsTester struct {
 //
 func (st statsTester) testStats(
 	catalog *testcat.Catalog, d *datadriven.TestData, tableName string,
-) (string, error) {
+) (_ string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.AssertionFailedf("%v", r)
+		}
+	}()
+
 	// Get the actual stats.
 	const sep = "~~~~"
 	actualStats, actualStatsMap, err := st.getActualStats(d, tableName, sep)
