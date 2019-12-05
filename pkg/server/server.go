@@ -702,6 +702,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
