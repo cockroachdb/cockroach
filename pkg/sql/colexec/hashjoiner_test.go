@@ -920,6 +920,7 @@ func TestHashJoiner(t *testing.T) {
 				result, err := NewColOperator(
 					ctx, flowCtx, spec, sources, testMemAcc,
 					true, /* useStreamingMemAccountForBuffering */
+					nil,  /* processorConstructor */
 				)
 				if err != nil {
 					return nil, err
@@ -1134,6 +1135,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	hjOp, err := NewColOperator(
 		ctx, flowCtx, spec, []Operator{leftSource, rightSource}, testMemAcc,
 		true, /* useStreamingMemAccountForBuffering */
+		nil,  /* processorConstructor */
 	)
 	require.NoError(t, err)
 	hjOp.Op.Init()

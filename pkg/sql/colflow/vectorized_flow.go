@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -710,6 +711,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		result, err := colexec.NewColOperator(
 			ctx, flowCtx, pspec, inputs, s.newStreamingMemAccount(flowCtx),
 			false, /* useStreamingMemAccountForBuffering */
+			rowexec.NewProcessor,
 		)
 		// Even when err is non-nil, it is possible that the buffering memory
 		// monitor and account have been created, so we always want to accumulate

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -367,6 +366,7 @@ func NewColOperator(
 	inputs []Operator,
 	streamingMemAccount *mon.BoundAccount,
 	useStreamingMemAccountForBuffering bool,
+	processorConstructor execinfra.ProcessorConstructor,
 ) (result NewColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -421,7 +421,7 @@ func NewColOperator(
 				// all processors expect a single output. Passing nil is ok here
 				// because when wrapping the processor, the materializer will be its
 				// output, and it will be set up in wrapRowSources.
-				proc, err := rowexec.NewProcessor(
+				proc, err := processorConstructor(
 					ctx, flowCtx, spec.ProcessorID, core, post, inputs,
 					[]execinfra.RowReceiver{nil}, /* outputs */
 					nil,                          /* localProcessors */
@@ -449,7 +449,9 @@ func NewColOperator(
 		)
 
 		// We say that the wrapped processor is "streaming" because it is not a
-		// buffering operator (even if it is a buffering processor).
+		// buffering operator (even if it is a buffering processor). This is not a
+		// problem for memory accounting because each processor does that on its
+		// own, so the used memory will be accounted for.
 		result.Op, result.IsStreaming = c, true
 		result.MetadataSources = append(result.MetadataSources, c)
 	} else {
