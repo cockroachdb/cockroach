@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -1226,6 +1227,10 @@ type optVirtualTable struct {
 
 	// family is a synthesized primary family.
 	family optVirtualFamily
+
+	// colMap is a mapping from unique ColumnID to column ordinal within the
+	// table. This is a common lookup that needs to be fast.
+	colMap map[sqlbase.ColumnID]int
 }
 
 var _ cat.Table = &optVirtualTable{}
@@ -1267,6 +1272,12 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
+	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+	}
+
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
@@ -1284,6 +1295,7 @@ func newOptVirtualTable(
 			idxDesc = &ot.desc.Indexes[i-1]
 		}
 
+		fmt.Println("Making index", ot.desc.Name, idxDesc.Name, idxDesc.ColumnNames, idxDesc.StoreColumnNames)
 		ot.indexes[i] = optVirtualIndex{
 			tab:          ot,
 			desc:         idxDesc,
@@ -1293,6 +1305,25 @@ func newOptVirtualTable(
 			// key. There is no separate lax key.
 			numLaxKeyCols: len(desc.Columns),
 			numKeyCols:    len(desc.Columns),
+		}
+		oi := &ot.indexes[i]
+		if i == 0 {
+			// Although the primary index contains all columns in the table, the index
+			// descriptor does not contain columns that are not explicitly part of the
+			// primary key. Retrieve those columns from the table descriptor.
+			oi.storedCols = make([]sqlbase.ColumnID, 0, ot.DeletableColumnCount()-len(idxDesc.ColumnIDs))
+			var pkCols util.FastIntSet
+			for i := range idxDesc.ColumnIDs {
+				pkCols.Add(int(idxDesc.ColumnIDs[i]))
+			}
+			for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+				id := ot.Column(i).ColID()
+				if !pkCols.Contains(int(id)) {
+					oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
+				}
+			}
+		} else {
+			oi.storedCols = idxDesc.StoreColumnIDs
 		}
 	}
 
@@ -1441,6 +1472,7 @@ type optVirtualIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+	storedCols    []sqlbase.ColumnID
 }
 
 // ID is part of the cat.Index interface.
@@ -1478,9 +1510,39 @@ func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 	return oi.numLaxKeyCols
 }
 
+// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// cache makes the lookup O(1).
+func (ot *optVirtualTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
+	col, ok := ot.colMap[colID]
+	if ok {
+		return col, nil
+	}
+	return col, pgerror.Newf(pgcode.UndefinedColumn,
+		"column [%d] does not exist", colID)
+}
+
 // Column is part of the cat.Index interface.
 func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
-	return cat.IndexColumn{Column: oi.tab.Column(i), Ordinal: i}
+	length := len(oi.desc.ColumnIDs)
+	if i < length {
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		return cat.IndexColumn{
+			Column:     oi.tab.Column(ord),
+			Ordinal:    ord,
+			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
+		}
+	}
+
+	i -= length
+	length = len(oi.desc.ExtraColumnIDs)
+	if i < length {
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
+		return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	}
+
+	i -= length
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
 // Zone is part of the cat.Index interface.

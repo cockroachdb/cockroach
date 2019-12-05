@@ -510,3 +510,7 @@ offset
  │         ├── fd: (1)-->(2,4,5)
  │         └── ordering: -4
  └── const: 10 [type=int]
+
+optsteps
+SELECT * FROM pg_constraint WHERE conrelid = 5
+----

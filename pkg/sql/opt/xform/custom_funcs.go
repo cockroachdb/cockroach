@@ -127,7 +127,7 @@ func (c *CustomFuncs) GenerateVirtualTableIndexScans(
 ) {
 	// Iterate over all secondary indexes.
 	tab := c.e.mem.Metadata().Table(virtualScanPrivate.Table)
-	for i := 1; i < tab.IndexCount(); i++ {
+	for i := 0; i < tab.IndexCount(); i++ {
 		virtualScan := memo.VirtualScanExpr{VirtualScanPrivate: *virtualScanPrivate}
 		virtualScan.Index = i
 		c.e.mem.AddVirtualScanToGroup(&virtualScan, grp)
@@ -675,6 +675,71 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	}
 }
 
+// GenerateConstrainedVirtualScans enumerates all secondary indexes on the VirtualScan
+// operator's table and tries to push the given Select filter into new
+// constrained VirtualScan operators using those indexes. Since this only needs to be
+// done once per table, GenerateConstrainedVirtualScans should only be called on the
+// original unaltered primary index VirtualScan operator (i.e. not constrained or
+// limited).
+//
+// For each secondary index that "covers" the columns needed by the scan, there
+// are three cases:
+//
+//  - a filter that can be completely converted to a constraint over that index
+//    generates a single constrained VirtualScan operator (to be added to the same
+//    group as the original Select operator):
+//
+//      (VirtualScan $scanDef)
+//
+//  - a filter that can be partially converted to a constraint over that index
+//    generates a constrained VirtualScan operator in a new memo group, wrapped in a
+//    Select operator having the remaining filter (to be added to the same group
+//    as the original Select operator):
+//
+//      (Select (VirtualScan $scanDef) $filter)
+//
+//  - a filter that cannot be converted to a constraint generates nothing
+func (c *CustomFuncs) GenerateConstrainedVirtualScans(
+	grp memo.RelExpr, virtualScanPrivate *memo.VirtualScanPrivate, explicitFilters memo.FiltersExpr,
+) {
+	var sb indexScanBuilder
+	sb.init(c, virtualScanPrivate.Table)
+
+	// Iterate over all indexes.
+	//var iter scanIndexIter
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(virtualScanPrivate.Table)
+	//iter.init(c.e.mem, virtualScanPrivate)
+	for i := 0; i < tabMeta.Table.IndexCount(); i++ {
+		fmt.Println("Gen constrained virtual scans. index", i, virtualScanPrivate.Table, tabMeta.Table.Name())
+		// Check whether the filter can constrain the index.
+		constraint, remainingFilters, ok := c.tryConstrainIndex(
+			explicitFilters, virtualScanPrivate.Table, i, false /* isInverted */)
+		if !ok {
+			fmt.Println("Failed")
+			continue
+		}
+
+		// Construct new constrained ScanPrivate.
+		newVirtualScanPrivate := *virtualScanPrivate
+		newVirtualScanPrivate.Index = i
+		newVirtualScanPrivate.Constraint = constraint
+
+		virtualScan := memo.VirtualScanExpr{VirtualScanPrivate: *virtualScanPrivate}
+
+		// If there are remaining filters, then the constrained Scan operator
+		// will be created in a new group, and a Select operator will be added
+		// to the same group as the original operator.
+		if len(remainingFilters) > 0 {
+			input := c.e.f.ConstructVirtualScan(virtualScanPrivate)
+			c.e.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: remainingFilters}, grp)
+		} else {
+			fmt.Println("There are no remaining filters")
+			c.e.mem.AddVirtualScanToGroup(&virtualScan, grp)
+		}
+	}
+}
+
 // HasInvertedIndexes returns true if at least one inverted index is defined on
 // the Scan operator's table.
 func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
@@ -825,6 +890,7 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 ) bool {
 	md := c.e.mem.Metadata()
 	index := md.Table(tabID).Index(indexOrd)
+	fmt.Println("Index:", index.Name(), index.ID(), index.Ordinal(), index.ColumnCount(), index.Column(0))
 
 	for i := range filters {
 		filterProps := filters[i].ScalarProps(c.e.mem)
@@ -835,6 +901,7 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 		if filterProps.OuterCols.Contains(firstIndexCol) {
 			return true
 		}
+		fmt.Println("Did not contain fic", filterProps.OuterCols, firstIndexCol)
 
 		// If the constraints are not tight, then the index can possibly be
 		// constrained, because index constraint generation supports more

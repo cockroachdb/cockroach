@@ -1047,7 +1047,6 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *MutableTableDescriptor) AllocateIDs() error {
-	// Only physical tables can have / need a primary key.
 	if desc.IsPhysicalTable() {
 		if err := desc.ensurePrimaryKey(); err != nil {
 			return err

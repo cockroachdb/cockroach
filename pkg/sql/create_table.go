@@ -1136,6 +1136,7 @@ func MakeTableDesc(
 			if d.Interleave != nil {
 				return desc, unimplemented.NewWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
+			fmt.Printf("%+v\n", idx)
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
 

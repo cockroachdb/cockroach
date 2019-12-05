@@ -18,6 +18,18 @@
 =>
 (GenerateConstrainedScans $scanPrivate $filters)
 
+# GenerateConstrainedVirtualScans generates a set of constrained VirtualScan expressions, one
+# for each matching index on the scanned table. The expressions consist of
+# either a standalone VirtualScan operator (if no remaining filter), or else a VirtualScan
+# wrapped by a Select (with a remaining filter).
+[GenerateConstrainedVirtualScans, Explore]
+(Select
+  (VirtualScan $virtualScanPrivate:* & (IsCanonicalVirtualScan $virtualScanPrivate))
+  $filters:*
+)
+=>
+(GenerateConstrainedVirtualScans $virtualScanPrivate $filters)
+
 # GenerateInvertedIndexScans creates alternate expressions for filters that can
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
