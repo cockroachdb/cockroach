@@ -492,6 +492,7 @@ var inputs = map[string][]string{
 		`array[1,NULL]::numeric[]`,
 		`array['test',NULL]::text[]`,
 		`array['test',NULL]::name[]`,
+		`array[]::int4[]`,
 	},
 
 	"(%s,null)": {
