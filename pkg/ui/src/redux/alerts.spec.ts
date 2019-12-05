@@ -9,12 +9,14 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-import fetchMock from "src/util/fetch-mock";
 import { Store } from "redux";
 import moment from "moment";
+import sinon from "sinon";
 
 import * as protos from "src/js/protos";
 import { API_PREFIX } from "src/util/api";
+import fetchMock from "src/util/fetch-mock";
+
 import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
@@ -32,6 +34,8 @@ import {
   livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
 
+const sandbox = sinon.createSandbox();
+
 describe("alerts", function() {
   let store: Store<AdminUIState>;
   let dispatch: typeof store.dispatch;
@@ -41,9 +45,13 @@ describe("alerts", function() {
     store = createAdminUIStore();
     dispatch = store.dispatch;
     state = store.getState;
+    // localSettings persist values in sessionStorage and
+    // this stub disables caching values between tests.
+    sandbox.stub(sessionStorage, "getItem").returns(null);
   });
 
   afterEach(function() {
+    sandbox.restore();
     fetchMock.restore();
   });
 
