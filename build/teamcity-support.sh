@@ -58,13 +58,17 @@ function run_json_test() {
     if [ -z "${GITHUB_API_TOKEN-}" ]; then
       # GITHUB_API_TOKEN must be in the env or github-post will barf if it's
       # ever asked to post, so enforce that on all runs.
+      # The way this env var is made available here is quite tricky. The build
+      # calling this method is usually a build that is invoked from PRs, so it
+      # can't have secrets available to it (for the PR could modify
+      # build/teamcity-* to leak the secret). Instead, we provide the secrets
+      # to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
+      # pass that env var through when it's there. This means we won't have the
+      # env var on PR builds, but we'll have it for builds that are triggered
+      # from the release branches.
       echo "GITHUB_API_TOKEN must be set"
-      # TODO(tbg): we don't actually have the token available here in most
-      # cases. This is because this build is, say, a test or testrace build, amd
-      # if those had the token, you could just open a PR that prints it and
-      # steal it. The token can only live in a higher-level job that is only
-      # triggered on merged changes. For now, just don't post failures from
-      # this code.
+      # TODO(tbg): let this bake for a few days and if all looks good make it
+      # an error to not have the token specified when it's needed.
       # exit 1
     else
       tc_start_block "post issues"
