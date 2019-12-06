@@ -1649,7 +1649,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer cancel()
 
 	// This transaction will try to write "under" a served read.
-	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Do something with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Scan(ctx, "a", "b", 0); err != nil {
@@ -1729,7 +1729,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 
 	// Verify that the txn's safe timestamp was set.
-	if txnOld.Serialize().ReadTimestamp == (hlc.Timestamp{}) {
+	if txnOld.TestingCloneTxn().ReadTimestamp == (hlc.Timestamp{}) {
 		t.Fatal("expected non-zero refreshed timestamp")
 	}
 
@@ -2314,7 +2314,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 			// Run a distributed transaction involving the lhsKey and rhsKey.
 			var txnKey roachpb.Key
 			ctx := context.Background()
-			txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+			txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 			txnFn := func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(lhsKey), force, commit), "lhsValue")
@@ -2322,7 +2322,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}
-				proto := txn.Serialize()
+				proto := txn.TestingCloneTxn()
 				txnKey = keys.TransactionKey(proto.Key, proto.ID)
 				// If force=true, we're force-aborting the txn out from underneath.
 				// This simulates txn deadlock or a max priority txn aborting a

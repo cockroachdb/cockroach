@@ -562,23 +562,29 @@ func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
 	tp.wrapped = wrapped
 }
 
-// populateMetaLocked implements the txnReqInterceptor interface.
-func (tp *txnPipeliner) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
+// populateLeafInputState is part of the txnInterceptor interface.
+func (tp *txnPipeliner) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
 	if l := tp.ifWrites.len(); l > 0 {
-		meta.InFlightWrites = make([]roachpb.SequencedWrite, 0, l)
+		tis.InFlightWrites = make([]roachpb.SequencedWrite, 0, l)
 		tp.ifWrites.ascend(func(w *inFlightWrite) {
-			meta.InFlightWrites = append(meta.InFlightWrites, w.SequencedWrite)
+			tis.InFlightWrites = append(tis.InFlightWrites, w.SequencedWrite)
 		})
 	}
 }
 
-// augmentMetaLocked implements the txnReqInterceptor interface.
-func (tp *txnPipeliner) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+// initializeLeaf loads the in-flight writes for a leaf transaction.
+func (tp *txnPipeliner) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// Copy all in-flight writes into the inFlightWrite tree.
-	for _, w := range meta.InFlightWrites {
+	for _, w := range tis.InFlightWrites {
 		tp.ifWrites.insert(w.Key, w.Sequence)
 	}
 }
+
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (tp *txnPipeliner) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (tp *txnPipeliner) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {

@@ -1913,7 +1913,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// and the write will be attempted on the new leaseholder (node 2).
 	// It should not succeed because it should run into the timestamp cache.
 	db := mtc.dbs[0]
-	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Perform a write with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Inc(ctx, keyB, 3); err != nil {
@@ -1931,7 +1931,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// mark of the new leaseholder's timestamp cache. Amusingly, if the bug
 	// we're regression testing against here still existed, we would not have
 	// to do this.
-	hb, hbH := heartbeatArgs(txnOld.Serialize(), mtc.clock.Now())
+	hb, hbH := heartbeatArgs(txnOld.TestingCloneTxn(), mtc.clock.Now())
 	if _, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}

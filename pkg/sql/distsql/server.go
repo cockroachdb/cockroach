@@ -220,19 +220,19 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
 	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*client.Txn, error) {
-		meta := req.TxnCoordMeta
-		if meta == nil {
+		tis := req.LeafTxnInputState
+		if tis == nil {
 			// This must be a flow running for some bulk-io operation that doesn't use
 			// a txn.
 			return nil, nil
 		}
-		if meta.Txn.Status != roachpb.PENDING {
+		if tis.Txn.Status != roachpb.PENDING {
 			return nil, errors.AssertionFailedf("cannot create flow in non-PENDING txn: %s",
-				meta.Txn)
+				tis.Txn)
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta), nil
+		return client.NewLeafTxn(ctx, ds.FlowDB, req.Flow.Gateway, tis), nil
 	}
 
 	var evalCtx *tree.EvalContext
@@ -366,7 +366,7 @@ func (ds *ServerImpl) setupFlow(
 	// Figure out what txn the flow needs to run in, if any. For gateway flows
 	// that have no remote flows and also no concurrency, the txn comes from
 	// localState.Txn. Otherwise, we create a txn based on the request's
-	// TxnCoordMeta.
+	// LeafTxnInputState.
 	var txn *client.Txn
 	if localState.IsLocal && !f.ConcurrentExecution() {
 		txn = localState.Txn
