@@ -1007,12 +1007,21 @@ SELECT * FROM t_42816 ORDER BY a OFFSET 1020 LIMIT 10
 1024
 1025
 
-# Regression test for #42994
+# Regression tests for #42994
 statement ok
-CREATE TABLE t42994 (a int primary key, b bit, index i (a, b));
+CREATE TABLE t42994 (a INT PRIMARY KEY, b BIT, INDEX i (a, b));
 INSERT INTO t42994 VALUES (1, 1::BIT);
 
 query I
 SELECT a FROM t42994@i
 ----
 1
+
+statement ok
+CREATE TABLE t42994_2 (a BIT PRIMARY KEY, b INT, UNIQUE INDEX i (b));
+INSERT INTO t42994_2 VALUES (1::BIT, NULL);
+
+query I
+SELECT b FROM t42994_2@i
+----
+NULL
