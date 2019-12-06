@@ -228,7 +228,6 @@ type nemeses struct {
 	rowCount           int
 	maxTestColumnCount int
 	eventMix           map[fsm.Event]int
-	mixTotal           int
 	usingPoller        bool
 
 	v  *CountValidator

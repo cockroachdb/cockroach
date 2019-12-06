@@ -85,7 +85,7 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s.Flush(ctx))
 
 		dataFile, err := ioutil.ReadFile(filepath.Join(
-			dir, sinkDir, `1970-01-01`, `197001010000000000000000000000000-t1-0-1-7-00000000.ndjson`))
+			dir, sinkDir, `1970-01-01`, `197001010000000000000000000000000-t1-00000000-1-7-00000000.ndjson`))
 		require.NoError(t, err)
 		require.Equal(t, "v1\n", string(dataFile))
 
