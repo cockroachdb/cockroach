@@ -208,8 +208,9 @@ func createBenchmarkChangefeed(
 		m:        th,
 	}
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
+	sf := makeSpanFrontier(spans...)
 	tickFn := emitEntries(
-		s.ClusterSettings(), details, spans, encoder, sink, rowsFn, TestingKnobs{}, metrics)
+		s.ClusterSettings(), details, sf, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = poller.Run(ctx) }()

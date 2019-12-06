@@ -29,7 +29,7 @@ import (
 // duplicates, which the two cdctest.Validator implementations verify for the
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
-func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
+func RunNemesis(f TestFeedFactory, db *gosql.DB, omitPause bool) (Validator, error) {
 	// possible additional nemeses:
 	// - schema changes
 	// - merges
@@ -50,6 +50,10 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 		return nil, err
 	}
 
+	eventPauseCount := 10
+	if omitPause {
+		eventPauseCount = 0
+	}
 	ns := &nemeses{
 		rowCount:    4,
 		db:          db,
@@ -67,7 +71,7 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB) (Validator, error) {
 
 			// eventPause PAUSEs the changefeed. The state machine will handle
 			// RESUMEing it.
-			// TODO(dan): This deadlocks eventPause{}: 10,
+			eventPause{}: eventPauseCount,
 
 			// eventPush pushes every open transaction by running a high priority
 			// SELECT.

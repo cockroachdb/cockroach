@@ -290,7 +290,8 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			nodeID := p.ExtendedEvalContext().NodeID
-			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
+			var nilOracle timestampLowerBoundOracle
+			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings, nilOracle)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
 			}
@@ -448,6 +449,7 @@ func validateChangefeedTable(
 
 type changefeedResumer struct{}
 
+// Resume is part of the jobs.Resumer interface.
 func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {

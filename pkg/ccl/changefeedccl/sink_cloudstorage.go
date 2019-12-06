@@ -52,17 +52,30 @@ type cloudStorageSinkKey struct {
 }
 
 type cloudStorageSinkFile struct {
-	earliestTs hlc.Timestamp
-	buf        bytes.Buffer
+	buf bytes.Buffer
 }
 
 // cloudStorageSink emits to files on cloud storage.
+//
+// WARNING: We found correctness bugs with the cloud storage sink that would
+// violate changefeed invariants. Some of these have been backported into
+// release-19.1, but others require changes to the format of filenames created,
+// which was deemed too disruptive for a patch release. As a result, this is a
+// hybrid of what it was previously and what's in release-19.2. It does provide
+// our guarantees within a session, but there are buggy edge cases around
+// changefeed restarts. See the cloudStorageSink godoc in release-19.2 for a
+// much better explanation of how this all fits together.
 //
 // The data files written by this sink are named according to the pattern
 // `<timestamp>_<topic>_<schema_id>_<uniquer>.<ext>`, each component of which is
 // as follows:
 //
-// `<timestamp>` is the smallest timestamp of any entries in the file.
+// `<timestamp>` is the smallest resolved timestamp being tracked by this sink's
+// `changeAggregator`, as of the time the last `Flush()` call was made (or `StatementTime`
+// if `Flush()` hasn't been called yet). Intuitively, this can be thought of as an
+// inclusive lower bound on the timestamps of updates that can be seen in a given file.
+// NOTE: Due to a bug in the poller, this is not always true when there's a schema change
+// that causes a backfill. See issue #41415 for more details.
 //
 // `<topic>` corresponds to one SQL table.
 //
@@ -106,9 +119,18 @@ type cloudStorageSink struct {
 	ext           string
 	recordDelimFn func(io.Writer) error
 
-	es     storageccl.ExportStorage
-	fileID int64
-	files  map[cloudStorageSinkKey]*cloudStorageSinkFile
+	es storageccl.ExportStorage
+
+	// These are fields to track information needed to output files based on the naming
+	// convention described above. See comment on cloudStorageSink above for more details.
+	fileID          int64
+	files           map[cloudStorageSinkKey]*cloudStorageSinkFile
+	timestampOracle timestampLowerBoundOracle
+	// We keep track of the successor of the least resolved timestamp in the local
+	// frontier as of the time of the last `Flush()` call. If `Flush()` hasn't been
+	// called, these fields are based on the statement time of the changefeed.
+	dataFileTs        string
+	dataFilePartition string
 }
 
 var cloudStorageSinkIDAtomic int64
@@ -119,6 +141,7 @@ func makeCloudStorageSink(
 	targetMaxFileSize int64,
 	settings *cluster.Settings,
 	opts map[string]string,
+	timestampOracle timestampLowerBoundOracle,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
@@ -132,6 +155,11 @@ func makeCloudStorageSink(
 		targetMaxFileSize: targetMaxFileSize,
 		files:             make(map[cloudStorageSinkKey]*cloudStorageSinkFile),
 		partitionFormat:   defaultPartitionFormat,
+		timestampOracle:   timestampOracle,
+	}
+	if timestampOracle != nil {
+		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
+		s.dataFilePartition = timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	}
 
 	switch formatType(opts[optFormat]) {
@@ -186,9 +214,6 @@ func (s *cloudStorageSink) EmitRow(
 		// careful to bound the size of the memory held by the pool.
 		file = &cloudStorageSinkFile{}
 		s.files[key] = file
-	}
-	if file.earliestTs.IsEmpty() || updated.Less(file.earliestTs) {
-		file.earliestTs = updated
 	}
 
 	// TODO(dan): Memory monitoring for this
@@ -245,6 +270,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	for key := range s.files {
 		delete(s.files, key)
 	}
+	// Record the least resolved timestamp being tracked in the frontier as of this point,
+	// to use for naming files until the next `Flush()`. See comment on cloudStorageSink
+	// for an overview of the naming convention and proof of correctness.
+	s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
+	s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
 	return nil
 }
 
@@ -257,16 +287,17 @@ func (s *cloudStorageSink) flushFile(
 		return nil
 	}
 
-	part := file.earliestTs.GoTime().Format(s.partitionFormat)
-	ts := cloudStorageFormatTime(file.earliestTs)
+	// We use this monotonically increasing fileID to ensure correct ordering
+	// among files emitted at the same timestamp during the same job session.
 	fileID := s.fileID
 	s.fileID++
-	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%d%s`,
-		ts, key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.ext)
-	if log.V(1) {
-		log.Info(ctx, "writing ", filename)
-	}
-	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(file.buf.Bytes()))
+	// Pad file ID to maintain lexical ordering among files from the same sink.
+	// Note that we use `-` here to delimit the filename because we want
+	// `%d.RESOLVED` files to lexicographically succeed data files that have the
+	// same timestamp. This works because ascii `-` < ascii '.'.
+	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%08d%s`, s.dataFileTs,
+		key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.ext)
+	return s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes()))
 }
 
 // Close implements the Sink interface.
