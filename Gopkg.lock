@@ -701,27 +701,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a33e657a9724e1dcaffade9d45dd579ad560313313dbc776e677ae20e1d82668"
+  digest = "1:b87c6f69cfb9f9b332c582ed93f7371150d21f40da6118d6547534e69b12cabb"
   name = "github.com/golang/leveldb"
   packages = [
     "crc",
     "db",
-    "memfs",
     "table",
   ]
   pruneopts = "UT"
   revision = "259d9253d71996b7778a3efb4144fe4892342b18"
-
-[[projects]]
-  branch = "travis-1.9"
-  digest = "1:e8f5d9c09a7209c740e769713376abda388c41b777ba8e9ed52767e21acf379f"
-  name = "github.com/golang/lint"
-  packages = [
-    ".",
-    "golint",
-  ]
-  pruneopts = "UT"
-  revision = "883fe33ffc4344bad1ecd881f61afd5ec5d80e0a"
 
 [[projects]]
   digest = "1:6ce94e52c5f56dfbea4e3cb99ccf4b44d701d91b16167486e9842b2fe45e717a"
@@ -1454,6 +1442,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:334b27eac455cb6567ea28cd424230b07b1a64334a2f861a8075ac26ce10af43"
+  name = "golang.org/x/lint"
+  packages = [
+    ".",
+    "golint",
+  ]
+  pruneopts = "UT"
+  revision = "fdd1cda4f05fd1fd86124f0ef9ce31a0b72c8448"
+
+[[projects]]
+  branch = "master"
   digest = "1:aa2a7acc4a2f78d9bc0e6ffc795e24221d25f1b1d56fb472f834e377ebed7d28"
   name = "golang.org/x/net"
   packages = [
@@ -1773,9 +1772,7 @@
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
     "github.com/golang/leveldb/db",
-    "github.com/golang/leveldb/memfs",
     "github.com/golang/leveldb/table",
-    "github.com/golang/lint/golint",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",
@@ -1843,6 +1840,7 @@
     "golang.org/x/crypto/ssh/knownhosts",
     "golang.org/x/crypto/ssh/terminal",
     "golang.org/x/exp/rand",
+    "golang.org/x/lint/golint",
     "golang.org/x/net/html",
     "golang.org/x/net/http2",
     "golang.org/x/net/trace",
