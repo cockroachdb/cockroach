@@ -774,7 +774,7 @@ endif
 # Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
 # in place will go unnoticed, for example. Similar problems exist in all Make-
 # based build systems and are not worth solving.
-build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS):$(ENABLE_LIBROACH_ASSERTIONS):$(ENABLE_ROCKSB_ASSERTIONS)
+build/defs.mk.sig: sig = $(PATH):$(CURDIR):$(GO):$(GOPATH):$(CC):$(CXX):$(TARGET_TRIPLE):$(BUILDTYPE):$(IGNORE_GOVERS):$(ENABLE_LIBROACH_ASSERTIONS):$(ENABLE_ROCKSDB_ASSERTIONS)
 build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
