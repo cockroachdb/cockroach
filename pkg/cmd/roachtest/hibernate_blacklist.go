@@ -23,7 +23,6 @@ var hibernateBlacklists = blacklistsForVersion{
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
 var hibernateBlackList20_1 = blacklist{
-	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                                                    "31708",
 	"org.hibernate.jpa.test.criteria.basic.PredicateTest.testQuotientConversion":                                                                                                "26732",
 	"org.hibernate.jpa.test.lock.LockTest.testFindWithTimeoutHint":                                                                                                              "40476",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                          "40476",

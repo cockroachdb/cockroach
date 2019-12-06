@@ -213,7 +213,6 @@ SELECT extract(timezone FROM '2001-01-01 13:00:00+01:15'::timestamptz)
 ----
 10800
 
-
 subtest regression_41776
 
 statement ok
@@ -223,3 +222,24 @@ query T
 SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
 ----
 2001-01-01 00:00:00 +0100 +0100
+
+# test that current_timestamp is correct in different timezones.
+subtest current_timestamp_correct_in_timezone
+
+statement ok
+set time zone +3
+
+statement ok
+create table current_timestamp_test (a timestamp, b timestamptz)
+
+statement ok
+insert into current_timestamp_test values (current_timestamp, current_timestamp)
+
+statement ok
+set time zone 0
+
+# a was written at an interval 3 hours ahead, and should persist that way.
+# b will remember the timezone, so should be "constant" for comparison's sake.
+query TT
+select * from current_timestamp_test WHERE a - interval '3h' <> b
+----
