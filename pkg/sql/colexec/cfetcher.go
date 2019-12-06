@@ -358,77 +358,77 @@ func (rf *cFetcher) Init(
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
+	}
 
-		// - If there are interleaves, we need to read the index key in order to
-		//   determine whether this row is actually part of the index we're scanning.
-		// - If there are needed columns from the index key, we need to read it.
-		//
-		// Otherwise, we can completely avoid decoding the index key.
-		if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
-			rf.mustDecodeIndexKey = true
-		}
+	// - If there are interleaves, we need to read the index key in order to
+	//   determine whether this row is actually part of the index we're scanning.
+	// - If there are needed columns from the index key, we need to read it.
+	//
+	// Otherwise, we can completely avoid decoding the index key.
+	if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
+		rf.mustDecodeIndexKey = true
+	}
 
-		if table.isSecondaryIndex {
-			for i := range table.cols {
-				if neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
-					return errors.Errorf("requested column %s not in index", table.cols[i].Name)
-				}
+	if table.isSecondaryIndex {
+		for i := range table.cols {
+			if neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
+				return errors.Errorf("requested column %s not in index", table.cols[i].Name)
 			}
 		}
+	}
 
-		// Prepare our index key vals slice.
-		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
+	// Prepare our index key vals slice.
+	table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), indexColumnIDs)
+	if err != nil {
+		return err
+	}
+	if cHasExtraCols(&table) {
+		// Unique secondary indexes have a value that is the
+		// primary index key.
+		// Primary indexes only contain ascendingly-encoded
+		// values. If this ever changes, we'll probably have to
+		// figure out the directions here too.
+		table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
+		nExtraColumns := len(table.index.ExtraColumnIDs)
+		if cap(table.extraValColOrdinals) >= nExtraColumns {
+			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
+		} else {
+			table.extraValColOrdinals = make([]int, nExtraColumns)
+		}
+
+		if cap(table.allExtraValColOrdinals) >= nExtraColumns {
+			table.allExtraValColOrdinals = table.allExtraValColOrdinals[:nExtraColumns]
+		} else {
+			table.allExtraValColOrdinals = make([]int, nExtraColumns)
+		}
+
+		for i, id := range table.index.ExtraColumnIDs {
+			table.allExtraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+			if neededCols.Contains(int(id)) {
+				table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
+			} else {
+				table.extraValColOrdinals[i] = -1
+			}
+		}
 		if err != nil {
 			return err
 		}
-		if cHasExtraCols(&table) {
-			// Unique secondary indexes have a value that is the
-			// primary index key.
-			// Primary indexes only contain ascendingly-encoded
-			// values. If this ever changes, we'll probably have to
-			// figure out the directions here too.
-			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc.TableDesc(), table.index.ExtraColumnIDs)
-			nExtraColumns := len(table.index.ExtraColumnIDs)
-			if cap(table.extraValColOrdinals) >= nExtraColumns {
-				table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
-			} else {
-				table.extraValColOrdinals = make([]int, nExtraColumns)
-			}
-
-			if cap(table.allExtraValColOrdinals) >= nExtraColumns {
-				table.allExtraValColOrdinals = table.allExtraValColOrdinals[:nExtraColumns]
-			} else {
-				table.allExtraValColOrdinals = make([]int, nExtraColumns)
-			}
-
-			for i, id := range table.index.ExtraColumnIDs {
-				table.allExtraValColOrdinals[i] = tableArgs.ColIdxMap[id]
-				if neededCols.Contains(int(id)) {
-					table.extraValColOrdinals[i] = tableArgs.ColIdxMap[id]
-				} else {
-					table.extraValColOrdinals[i] = -1
-				}
-			}
-			if err != nil {
-				return err
-			}
-		}
-
-		// Keep track of the maximum keys per row to accommodate a
-		// limitHint when StartScan is invoked.
-		if keysPerRow := table.desc.KeysPerRow(table.index.ID); keysPerRow > rf.maxKeysPerRow {
-			rf.maxKeysPerRow = keysPerRow
-		}
-
-		for i := range table.desc.Families {
-			id := table.desc.Families[i].ID
-			if id > table.maxColumnFamilyID {
-				table.maxColumnFamilyID = id
-			}
-		}
-
-		rf.table = table
 	}
+
+	// Keep track of the maximum keys per row to accommodate a
+	// limitHint when StartScan is invoked.
+	if keysPerRow := table.desc.KeysPerRow(table.index.ID); keysPerRow > rf.maxKeysPerRow {
+		rf.maxKeysPerRow = keysPerRow
+	}
+
+	for i := range table.desc.Families {
+		id := table.desc.Families[i].ID
+		if id > table.maxColumnFamilyID {
+			table.maxColumnFamilyID = id
+		}
+	}
+
+	rf.table = table
 
 	return nil
 }
