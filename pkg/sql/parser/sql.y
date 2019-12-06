@@ -8202,7 +8202,7 @@ func_expr_common_subexpr:
   }
 | CURRENT_TIME
   {
-    return unimplementedWithIssueDetail(sqllex, 26097, "current_time")
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_USER
   {
@@ -8286,7 +8286,11 @@ special_function:
 | CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_TIME '(' ')'
   {
-    return unimplementedWithIssueDetail(sqllex, 26097, "current_time")
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_TIME '(' a_expr ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: tree.Exprs{$3.expr()}}
   }
 | CURRENT_TIME '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_USER '(' ')'

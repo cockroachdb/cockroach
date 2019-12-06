@@ -2932,7 +2932,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
+	return MakeDTimestampTZ(ctx.GetRelativeParseTime(), precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
@@ -2943,7 +2943,32 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestamp(ctx.TxnTimestamp, precision)
+	// Move the time to UTC, but keeping the location's time.
+	t := ctx.GetRelativeParseTime()
+	_, offsetSecs := t.Zone()
+	return MakeDTimestamp(t.Add(time.Second*time.Duration(offsetSecs)).In(time.UTC), precision)
+}
+
+// GetTxnTime retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTime(precision time.Duration) *DTimeTZ {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return NewDTimeTZFromTime(ctx.GetRelativeParseTime().Round(precision))
+}
+
+// GetTxnTimeNoZone retrieves the current transaction time as per
+// the evaluation context.
+func (ctx *EvalContext) GetTxnTimeNoZone(precision time.Duration) *DTime {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
+	}
+	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision)))
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
