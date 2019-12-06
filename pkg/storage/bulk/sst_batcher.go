@@ -105,10 +105,10 @@ type SSTBatcher struct {
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, flushBytes func() int64,
+	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, maxSize: flushBytes, disallowShadowing: true}
-	err := b.Reset()
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	err := b.Reset(ctx)
 	return b, err
 }
 
@@ -174,10 +174,17 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
-func (b *SSTBatcher) Reset() error {
+func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.sstWriter.Close()
 	b.sstFile = &engine.MemFile{}
-	b.sstWriter = engine.MakeIngestionSSTWriter(b.sstFile)
+	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
+	// in the cluster can support it. Until then, for backward compatibility,
+	// create SSTs in the leveldb format ("backup" ones).
+	if cluster.Version.IsActive(ctx, b.settings, cluster.VersionStart20_1) {
+		b.sstWriter = engine.MakeIngestionSSTWriter(b.sstFile)
+	} else {
+		b.sstWriter = engine.MakeBackupSSTWriter(b.sstFile)
+	}
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -221,14 +228,14 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if err := b.doFlush(ctx, rangeFlush, nil); err != nil {
 			return err
 		}
-		return b.Reset()
+		return b.Reset(ctx)
 	}
 
 	if b.sstWriter.DataSize >= b.maxSize() {
 		if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
 			return err
 		}
-		return b.Reset()
+		return b.Reset(ctx)
 	}
 	return nil
 }
@@ -424,7 +431,7 @@ func AddSSTable(
 				if m, ok := errors.Cause(err).(*roachpb.RangeKeyMismatchError); ok {
 					split := m.MismatchedRange.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
-					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter)
+					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
 					if err != nil {
 						return err
 					}
@@ -469,9 +476,15 @@ func createSplitSSTable(
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
 	iter engine.SimpleIterator,
+	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &engine.MemFile{}
-	w := engine.MakeIngestionSSTWriter(sstFile)
+	var w engine.SSTWriter
+	if cluster.Version.IsActive(ctx, settings, cluster.VersionStart20_1) {
+		w = engine.MakeIngestionSSTWriter(sstFile)
+	} else {
+		w = engine.MakeBackupSSTWriter(sstFile)
+	}
 	defer w.Close()
 
 	split := false
@@ -501,7 +514,11 @@ func createSplitSSTable(
 				disallowShadowing: disallowShadowing,
 			}
 			*sstFile = engine.MemFile{}
-			w = engine.MakeIngestionSSTWriter(sstFile)
+			if cluster.Version.IsActive(ctx, settings, cluster.VersionStart20_1) {
+				w = engine.MakeIngestionSSTWriter(sstFile)
+			} else {
+				w = engine.MakeBackupSSTWriter(sstFile)
+			}
 			split = true
 			first = nil
 			last = nil
