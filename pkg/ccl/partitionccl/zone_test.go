@@ -283,7 +283,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			continue
 		}
 		t.Run(test.name, func(t *testing.T) {
-			if err := test.parse(); err != nil {
+			if err := test.parse(false /* useLeaseholderPrefs */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			clusterID := uuid.MakeV4()
