@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -115,7 +116,11 @@ func TestCandidateSelection(t *testing.T) {
 				store: roachpb.StoreDescriptor{
 					StoreID: roachpb.StoreID(i + idShift),
 				},
-				diversityScore: float64(score.diversity),
+				// We want to test here that everything works when the deversity score
+				// is not the exact value but very close to it. Nextafter will give us
+				// the closest number to the diversity score in the test case,
+				// that isn't equal to it and is either above or below (at random).
+				diversityScore: math.Nextafter(float64(score.diversity), rand.Float64()),
 				rangeCount:     score.rangeCount,
 				valid:          true,
 			})
@@ -215,7 +220,7 @@ func TestCandidateSelection(t *testing.T) {
 			if good == nil {
 				t.Fatalf("no good candidate found")
 			}
-			actual := scoreTuple{int(good.diversityScore), good.rangeCount}
+			actual := scoreTuple{int(good.diversityScore + 0.5), good.rangeCount}
 			if actual != tc.good {
 				t.Errorf("expected:%v actual:%v", tc.good, actual)
 			}
@@ -225,7 +230,7 @@ func TestCandidateSelection(t *testing.T) {
 			if bad == nil {
 				t.Fatalf("no bad candidate found")
 			}
-			actual := scoreTuple{int(bad.diversityScore), bad.rangeCount}
+			actual := scoreTuple{int(bad.diversityScore + 0.5), bad.rangeCount}
 			if actual != tc.bad {
 				t.Errorf("expected:%v actual:%v", tc.bad, actual)
 			}
@@ -244,7 +249,7 @@ func TestBetterThan(t *testing.T) {
 		},
 		{
 			valid:          true,
-			diversityScore: 1,
+			diversityScore: 0.9999999999999999,
 			rangeCount:     0,
 		},
 		{
