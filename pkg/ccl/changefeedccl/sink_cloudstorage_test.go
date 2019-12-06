@@ -443,8 +443,10 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
 			"v2\n",
-			"v3\ntrigger-flush-v3\n",
+			// NOTE: x1 comes after v3 in release-19.1 because it sorts by fileID
+			// before schemaID but release 19.1 is the other way.
 			"x1\n",
+			"v3\ntrigger-flush-v3\n",
 			"w1\n",
 		}, slurpDir(t, dir))
 	})
