@@ -699,9 +699,9 @@ func (a Allocator) RebalanceTarget(
 			ReplicaID: maxReplicaID(existingReplicas) + 1,
 		}
 		// Deep-copy the Replicas slice since we'll mutate it below.
-		replicaCandidates := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
-		replicaCandidates = append(replicaCandidates, newReplica)
-
+		existingPlusOneNew := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
+		existingPlusOneNew = append(existingPlusOneNew, newReplica)
+		replicaCandidates := existingPlusOneNew
 		// If we can, filter replicas as we would if we were actually removing one.
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
 		// it's better to simulate the removal with the info that we do have than to
@@ -724,7 +724,7 @@ func (a Allocator) RebalanceTarget(
 			target.store.StoreID,
 			zone,
 			replicaCandidates,
-			replicaCandidates,
+			existingPlusOneNew,
 			rangeUsageInfo,
 		)
 		if err != nil {
