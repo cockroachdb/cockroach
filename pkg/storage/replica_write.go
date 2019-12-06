@@ -101,6 +101,7 @@ func (r *Replica) executeWriteBatch(
 		ec.done(ba, br, pErr)
 	}()
 
+	// Determine the lease under which to evaluate the write.
 	var lease roachpb.Lease
 	var status storagepb.LeaseStatus
 	// For lease commands, use the provided previous lease for verification.
@@ -115,6 +116,13 @@ func (r *Replica) executeWriteBatch(
 		lease = status.Lease
 	}
 	r.limitTxnMaxTimestamp(ctx, ba, status)
+
+	// Verify that the batch can be executed.
+	if ec.lg != nil {
+		if err := r.checkForPendingMerge(ctx, ba, ec.lg, &status); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
