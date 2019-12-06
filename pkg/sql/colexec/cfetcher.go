@@ -72,6 +72,9 @@ type cTableInfo struct {
 	// One value per column that is part of the key; each value is a column
 	// index (into cols); -1 if we don't need the value for that column.
 	indexColOrdinals []int
+	// allIndexColOrdinals is the same as indexColOrdinals but
+	// does not contain any -1's. It is meant to be used only in logging.
+	allIndexColOrdinals []int
 
 	// The set of column ordinals which are both composite and part of the index
 	// key.
@@ -267,7 +270,9 @@ func (rf *cFetcher) Init(
 	typs := make([]coltypes.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled {
+		if typs[i] == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
+			// Only return an error if the type is unhandled and needed. If not needed,
+			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
@@ -284,6 +289,7 @@ func (rf *cFetcher) Init(
 		// the old table here in case they've got enough capacity already.
 		indexColOrdinals:       oldTable.indexColOrdinals[:0],
 		extraValColOrdinals:    oldTable.extraValColOrdinals[:0],
+		allIndexColOrdinals:    oldTable.allIndexColOrdinals[:0],
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 	rf.machine.batch = coldata.NewMemBatch(typs)
@@ -323,19 +329,23 @@ func (rf *cFetcher) Init(
 	} else {
 		table.indexColOrdinals = make([]int, nIndexCols)
 	}
+	if cap(table.allIndexColOrdinals) >= nIndexCols {
+		table.allIndexColOrdinals = table.allIndexColOrdinals[:nIndexCols]
+	} else {
+		table.allIndexColOrdinals = make([]int, nIndexCols)
+	}
 	for i, id := range indexColumnIDs {
 		colIdx, ok := tableArgs.ColIdxMap[id]
-		if ok {
+		table.allIndexColOrdinals[i] = colIdx
+		if ok && neededCols.Contains(int(id)) {
 			table.indexColOrdinals[i] = colIdx
-			if neededCols.Contains(int(id)) {
-				neededIndexCols++
-				// A composite column might also have a value encoding which must be
-				// decoded. Others can be removed from neededValueColsByIdx.
-				if compositeColumnIDs.Contains(int(id)) {
-					table.compositeIndexColOrdinals.Add(colIdx)
-				} else {
-					table.neededValueColsByIdx.Remove(colIdx)
-				}
+			neededIndexCols++
+			// A composite column might also have a value encoding which must be
+			// decoded. Others can be removed from neededValueColsByIdx.
+			if compositeColumnIDs.Contains(int(id)) {
+				table.compositeIndexColOrdinals.Add(colIdx)
+			} else {
+				table.neededValueColsByIdx.Remove(colIdx)
 			}
 		} else {
 			table.indexColOrdinals[i] = -1
@@ -604,12 +614,16 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if debugState {
 					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
 				}
+				indexOrds := rf.table.indexColOrdinals
+				if rf.traceKV {
+					indexOrds = rf.table.allIndexColOrdinals
+				}
 				key, matches, err := colencoding.DecodeIndexKeyToCols(
 					rf.machine.colvecs,
 					rf.machine.rowIdx,
 					rf.table.desc,
 					rf.table.index,
-					rf.table.indexColOrdinals,
+					indexOrds,
 					rf.table.keyValTypes,
 					rf.table.indexColumnDirs,
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
@@ -807,7 +821,7 @@ func (rf *cFetcher) processValue(
 		buf.WriteString(rf.table.desc.Name)
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.index.Name)
-		for _, idx := range rf.table.indexColOrdinals {
+		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
 				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
@@ -873,30 +887,20 @@ func (rf *cFetcher) processValue(
 		}
 
 		if cHasExtraCols(table) {
-			// This is a unique secondary index; decode the extra
-			// column values from the value.
 			var err error
+			extraColOrds := table.extraValColOrdinals
 			if rf.traceKV {
-				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
-					rf.machine.rowIdx,
-					table.allExtraValColOrdinals,
-					table.extraTypes,
-					nil,
-					&rf.machine.remainingValueColsByIdx,
-					valueBytes,
-				)
-			} else {
-				valueBytes, err = colencoding.DecodeKeyValsToCols(
-					rf.machine.colvecs,
-					rf.machine.rowIdx,
-					table.extraValColOrdinals,
-					table.extraTypes,
-					nil,
-					&rf.machine.remainingValueColsByIdx,
-					valueBytes,
-				)
+				extraColOrds = table.allExtraValColOrdinals
 			}
+			valueBytes, err = colencoding.DecodeKeyValsToCols(
+				rf.machine.colvecs,
+				rf.machine.rowIdx,
+				extraColOrds,
+				table.extraTypes,
+				nil,
+				&rf.machine.remainingValueColsByIdx,
+				valueBytes,
+			)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 			}
