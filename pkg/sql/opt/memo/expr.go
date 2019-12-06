@@ -12,6 +12,7 @@ package memo
 
 import (
 	"fmt"
+	"math/bits"
 	"sort"
 	"strings"
 
@@ -363,36 +364,79 @@ func (sf *ScanFlags) Empty() bool {
 
 // JoinFlags stores restrictions on the join execution method, derived from
 // hints for a join specified in the query (see tree.JoinTableExpr).
-type JoinFlags struct {
-	DisallowLookupJoin bool
-	DisallowMergeJoin  bool
-	DisallowHashJoin   bool
+// It is a bitfield where a bit is 1 if a certain type of join is allowed. The
+// value 0 is special and indicates that any join is allowed.
+type JoinFlags uint8
+
+// Each flag indicates if a certain type of join is allowed. The JoinFlags are
+// an OR of these flags, with the special case that the value 0 means anything
+// is allowed.
+const (
+	// AllowHashJoinStoreLeft corresponds to a hash join where the left side is
+	// stored into the hashtable. Note that execution can override the stored side
+	// if it finds that the other side is smaller (up to a certain size).
+	AllowHashJoinStoreLeft JoinFlags = (1 << iota)
+
+	// AllowHashJoinStoreRight corresponds to a hash join where the right side is
+	// stored into the hashtable. Note that execution can override the stored side
+	// if it finds that the other side is smaller (up to a certain size).
+	AllowHashJoinStoreRight
+
+	// AllowMergeJoin corresponds to a merge join.
+	AllowMergeJoin
+
+	// AllowLookupJoinIntoLeft corresponds to a lookup join where the lookup
+	// table is on the left side.
+	AllowLookupJoinIntoLeft
+
+	// AllowLookupJoinIntoRight corresponds to a lookup join where the lookup
+	// table is on the right side.
+	AllowLookupJoinIntoRight
+)
+
+var joinFlagStr = map[JoinFlags]string{
+	AllowHashJoinStoreLeft:   "hash join (store left side)",
+	AllowHashJoinStoreRight:  "hash join (store right side)",
+	AllowMergeJoin:           "merge join",
+	AllowLookupJoinIntoLeft:  "lookup join (into left side)",
+	AllowLookupJoinIntoRight: "lookup join (into right side)",
 }
 
-// Empty returns true if there are no flags set.
+// Empty returns true if this is the default value (where all join types are
+// allowed).
 func (jf JoinFlags) Empty() bool {
-	return !jf.DisallowLookupJoin && !jf.DisallowMergeJoin && !jf.DisallowHashJoin
+	return jf == 0
+}
+
+// Has returns true if the given flag is set.
+func (jf JoinFlags) Has(flag JoinFlags) bool {
+	return jf.Empty() || jf&flag != 0
 }
 
 func (jf JoinFlags) String() string {
 	if jf.Empty() {
 		return "no flags"
 	}
+
+	// Special cases for prettier results.
+	switch jf {
+	case AllowHashJoinStoreLeft | AllowHashJoinStoreRight:
+		return "force hash join"
+	case AllowLookupJoinIntoLeft | AllowLookupJoinIntoRight:
+		return "force lookup join"
+	}
+
 	var b strings.Builder
-	if jf.DisallowLookupJoin {
-		b.WriteString("no-lookup-join")
-	}
-	if jf.DisallowMergeJoin {
-		if b.Len() > 0 {
-			b.WriteByte(';')
+	b.WriteString("force ")
+	first := true
+	for jf != 0 {
+		flag := JoinFlags(1 << uint8(bits.TrailingZeros8(uint8(jf))))
+		if !first {
+			b.WriteString(" or ")
 		}
-		b.WriteString("no-merge-join")
-	}
-	if jf.DisallowHashJoin {
-		if b.Len() > 0 {
-			b.WriteByte(';')
-		}
-		b.WriteString("no-hash-join")
+		first = false
+		b.WriteString(joinFlagStr[flag])
+		jf ^= flag
 	}
 	return b.String()
 }
