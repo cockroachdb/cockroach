@@ -29,19 +29,6 @@ import (
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease or
-	// permission to serve via follower reads.
-	var status storagepb.LeaseStatus
-	if ba.ReadConsistency.RequiresReadLease() {
-		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
-				return nil, nErr
-			}
-			r.store.metrics.FollowerReadsCount.Inc(1)
-		}
-	}
-	r.limitTxnMaxTimestamp(ctx, ba, status)
-
 	spans, err := r.collectSpans(ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
@@ -61,21 +48,32 @@ func (r *Replica) executeReadOnlyBatch(
 		ec.done(ba, br, pErr)
 	}()
 
+	// If the read is not inconsistent, the read requires the range lease or
+	// permission to serve via follower reads.
+	var status storagepb.LeaseStatus
+	if ba.ReadConsistency.RequiresReadLease() {
+		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
+				return nil, nErr
+			}
+			r.store.metrics.FollowerReadsCount.Inc(1)
+		}
+	}
+	r.limitTxnMaxTimestamp(ctx, ba, status)
+
 	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
+	// Verify that the batch can be executed.
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
 	if _, err := r.IsDestroyed(); err != nil {
 		return nil, roachpb.NewError(err)
-	}
-
-	rSpan, err := keys.Range(ba.Requests)
-	if err != nil {
+	} else if rSpan, err := keys.Range(ba.Requests); err != nil {
 		return nil, roachpb.NewError(err)
-	}
-
-	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+	} else if err = r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
+		return nil, roachpb.NewError(err)
+	} else if err := r.checkForPendingMerge(ctx, ba, ec.lg, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 

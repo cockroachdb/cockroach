@@ -1064,6 +1064,72 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 	return mismatchErr
 }
 
+// checkForPendingMerge determines whether the replica is being merged into its
+// left-hand neighbor. If so, an error is returned to prevent the request from
+// proceeding until the merge completes.
+//
+// The method accepts a spanlatch.Guard and a LeaseStatus parameter. These are
+// unused, but indicate that it is only safe to call checkForPendingMerge on a
+// replica after latches have been acquired and after the replica's lease has
+// been checked. See the comment below for why this is.
+func (r *Replica) checkForPendingMerge(
+	ctx context.Context, ba *roachpb.BatchRequest, _ *spanlatch.Guard, _ *storagepb.LeaseStatus,
+) error {
+	if r.getMergeCompleteCh() == nil {
+		return nil
+	}
+	if ba.IsSingleSubsumeRequest() {
+		return nil
+	}
+	// The replica is being merged into its left-hand neighbor. This request
+	// cannot proceed until the merge completes, signaled by the closing of the
+	// channel.
+	//
+	// It is very important that this check occur after we have acquired latches
+	// from the spanlatch manager. Only after we release these latches are we
+	// guaranteed that we're not racing with a Subsume command. (Subsume
+	// commands declare a conflict with all other commands.) It is also
+	// important that this check occur after we have verified that this replica
+	// is the leaseholder. Only the leaseholder will have its merge complete
+	// channel set.
+	//
+	// Note that Subsume commands are exempt from waiting on the mergeComplete
+	// channel. This is necessary to avoid deadlock. While normally a Subsume
+	// request will trigger the installation of a mergeComplete channel after it
+	// is executed, it may sometimes execute after the mergeComplete channel has
+	// been installed. Consider the case where the RHS replica acquires a new
+	// lease after the merge transaction deletes its local range descriptor but
+	// before the Subsume command is sent. The lease acquisition request will
+	// notice the intent on the local range descriptor and install a
+	// mergeComplete channel. If the forthcoming Subsume blocked on that
+	// channel, the merge transaction would deadlock.
+	//
+	// This exclusion admits a small race condition. If a Subsume request is
+	// sent to the right-hand side of a merge, outside of a merge transaction,
+	// after the merge has committed but before the RHS has noticed that the
+	// merge has committed, the request may return stale data. Since the merge
+	// has committed, the LHS may have processed writes to the keyspace
+	// previously owned by the RHS that the RHS is unaware of. This window
+	// closes quickly, as the RHS will soon notice the merge transaction has
+	// committed and mark itself as destroyed, which prevents it from serving
+	// all traffic, including Subsume requests.
+	//
+	// In our current, careful usage of Subsume, this race condition is
+	// irrelevant. Subsume is only sent from within a merge transaction, and
+	// merge transactions read the RHS descriptor at the beginning of the
+	// transaction to verify that it has not already been merged away.
+	//
+	// We can't wait for the merge to complete here, though. The replica might
+	// need to respond to a Subsume request in order for the merge to complete,
+	// and blocking here would force that Subsume request to sit in hold its
+	// latches forever, deadlocking the merge. Instead, we release the latches
+	// we acquired above and return a MergeInProgressError. The store will catch
+	// that error and resubmit the request after mergeCompleteCh closes. See
+	// #27442 for the full context.
+	log.Event(ctx, "waiting on in-progress merge")
+	return &roachpb.MergeInProgressError{}
+}
+
 // isNewerThanSplit is a helper used in split(Pre|Post)Apply to
 // determine whether the Replica on the right hand side of the split must
 // have been removed from this store after the split. There is one
@@ -1242,16 +1308,11 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 	return spans, nil
 }
 
-// beginCmds waits for any in-flight, conflicting commands to complete. This
-// includes merges in their critical phase or overlapping, already-executing
-// commands.
-//
-// More specifically, after waiting for in-flight merges, beginCmds acquires
-// latches for the request based on keys affected by the batched commands.
-// This gates subsequent commands with overlapping keys or key ranges. It
-// returns a cleanup function to be called when the commands are done and can be
-// removed from the queue, and whose returned error is to be used in place of
-// the supplied error.
+// beginCmds waits for any in-flight, conflicting commands to complete. More
+// specifically, beginCmds acquires latches for the request based on keys
+// affected by the batched commands. This gates subsequent commands with
+// overlapping keys or key ranges. It returns a cleanup function to be called
+// when the commands are done and can release their latches.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (endCmds, error) {
@@ -1288,54 +1349,6 @@ func (r *Replica) beginCmds(
 				r.latchMgr.Release(lg)
 				return endCmds{}, pErr.GoError()
 			}
-		}
-
-		if r.getMergeCompleteCh() != nil && !ba.IsSingleSubsumeRequest() {
-			// The replica is being merged into its left-hand neighbor. This request
-			// cannot proceed until the merge completes, signaled by the closing of
-			// the channel.
-			//
-			// It is very important that this check occur after we have acquired latches
-			// from the spanlatch manager. Only after we release these latches are we
-			// guaranteed that we're not racing with a Subsume command. (Subsume
-			// commands declare a conflict with all other commands.)
-			//
-			// Note that Subsume commands are exempt from waiting on the mergeComplete
-			// channel. This is necessary to avoid deadlock. While normally a Subsume
-			// request will trigger the installation of a mergeComplete channel after
-			// it is executed, it may sometimes execute after the mergeComplete
-			// channel has been installed. Consider the case where the RHS replica
-			// acquires a new lease after the merge transaction deletes its local
-			// range descriptor but before the Subsume command is sent. The lease
-			// acquisition request will notice the intent on the local range
-			// descriptor and install a mergeComplete channel. If the forthcoming
-			// Subsume blocked on that channel, the merge transaction would deadlock.
-			//
-			// This exclusion admits a small race condition. If a Subsume request is
-			// sent to the right-hand side of a merge, outside of a merge transaction,
-			// after the merge has committed but before the RHS has noticed that the
-			// merge has committed, the request may return stale data. Since the merge
-			// has committed, the LHS may have processed writes to the keyspace
-			// previously owned by the RHS that the RHS is unaware of. This window
-			// closes quickly, as the RHS will soon notice the merge transaction has
-			// committed and mark itself as destroyed, which prevents it from serving
-			// all traffic, including Subsume requests.
-			//
-			// In our current, careful usage of Subsume, this race condition is
-			// irrelevant. Subsume is only sent from within a merge transaction, and
-			// merge transactions read the RHS descriptor at the beginning of the
-			// transaction to verify that it has not already been merged away.
-			//
-			// We can't wait for the merge to complete here, though. The replica might
-			// need to respond to a Subsume request in order for the merge to
-			// complete, and blocking here would force that Subsume request to sit in
-			// hold its latches forever, deadlocking the merge. Instead, we release
-			// the latches we acquired above and return a MergeInProgressError.
-			// The store will catch that error and resubmit the request after
-			// mergeCompleteCh closes. See #27442 for the full context.
-			log.Event(ctx, "waiting on in-progress merge")
-			r.latchMgr.Release(lg)
-			return endCmds{}, &roachpb.MergeInProgressError{}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
