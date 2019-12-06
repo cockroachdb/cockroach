@@ -11,10 +11,10 @@
     $left:*
     $right:*
     $on:*
-    $private:* & (NoJoinHints $private)
+    $private:*
 )
 =>
-((OpName) $right $left $on $private)
+((OpName) $right $left $on (CommuteJoinFlags $private))
 
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 [CommuteLeftJoin, Explore]
@@ -22,10 +22,10 @@
     $left:*
     $right:*
     $on:*
-    $private:* & (NoJoinHints $private)
+    $private:*
 )
 =>
-(RightJoin $right $left $on $private)
+(RightJoin $right $left $on (CommuteJoinFlags $private))
 
 # CommuteRightJoin creates a Join with the left and right inputs swapped.
 [CommuteRightJoin, Explore]
@@ -33,10 +33,10 @@
     $left:*
     $right:*
     $on:*
-    $private:* & (NoJoinHints $private)
+    $private:*
 )
 =>
-(LeftJoin $right $left $on $private)
+(LeftJoin $right $left $on (CommuteJoinFlags $private))
 
 # CommuteSemiJoin generates an InnerJoin that is equivalent to the SemiJoin.
 # SemiJoins impose a partial order on the joining tables. We can convert a

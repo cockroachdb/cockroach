@@ -725,9 +725,11 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
-	if f := join.Private().(*memo.JoinPrivate).Flags; f.DisallowHashJoin {
+	if f := join.Private().(*memo.JoinPrivate).Flags; !f.Has(memo.AllowHashJoinStoreRight) {
+		// We need to do a bit of reverse engineering here to determine what the
+		// hint was.
 		hint := tree.AstLookup
-		if !f.DisallowMergeJoin {
+		if f.Has(memo.AllowMergeJoin) {
 			hint = tree.AstMerge
 		}
 
