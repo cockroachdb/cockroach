@@ -364,7 +364,7 @@ SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
 ----
 inner-join (lookup xy@y2)
  ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
- ├── flags: no-merge-join;no-hash-join
+ ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [5]
  ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
  ├── cost: 412.59
@@ -402,7 +402,7 @@ SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
 ----
 inner-join (lookup xy@y1)
  ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
- ├── flags: no-merge-join;no-hash-join
+ ├── flags: force lookup join (into right side)
  ├── key columns: [2] = [5]
  ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
  ├── cost: 412.59

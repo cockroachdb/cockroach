@@ -54,13 +54,11 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	case "":
 	case tree.AstHash:
 		telemetry.Inc(sqltelemetry.HashJoinHintUseCounter)
-		flags.DisallowMergeJoin = true
-		flags.DisallowLookupJoin = true
+		flags = memo.AllowHashJoinStoreRight
 
 	case tree.AstLookup:
 		telemetry.Inc(sqltelemetry.LookupJoinHintUseCounter)
-		flags.DisallowHashJoin = true
-		flags.DisallowMergeJoin = true
+		flags = memo.AllowLookupJoinIntoRight
 		if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s can only be used with INNER or LEFT joins", tree.AstLookup,
@@ -69,8 +67,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 	case tree.AstMerge:
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
-		flags.DisallowLookupJoin = true
-		flags.DisallowHashJoin = true
+		flags = memo.AllowMergeJoin
 
 	default:
 		panic(pgerror.Newf(
