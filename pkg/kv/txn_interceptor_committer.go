@@ -431,11 +431,14 @@ func makeTxnCommitExplicitLocked(
 // setWrapped implements the txnInterceptor interface.
 func (tc *txnCommitter) setWrapped(wrapped lockedSender) { tc.wrapped = wrapped }
 
-// populateMetaLocked implements the txnReqInterceptor interface.
-func (tc *txnCommitter) populateMetaLocked(meta *roachpb.TxnCoordMeta) {}
+// populateLeafInputState is part of the txnInterceptor interface.
+func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
-// augmentMetaLocked implements the txnReqInterceptor interface.
-func (tc *txnCommitter) augmentMetaLocked(meta roachpb.TxnCoordMeta) {}
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (*txnCommitter) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (*txnCommitter) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tc *txnCommitter) epochBumpedLocked() {}

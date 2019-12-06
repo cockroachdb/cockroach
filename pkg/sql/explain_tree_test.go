@@ -54,7 +54,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 
 			internalPlanner, cleanup := NewInternalPlanner(
 				"test",
-				client.NewTxn(ctx, db, s.NodeID(), client.RootTxn),
+				client.NewTxn(ctx, db, s.NodeID()),
 				security.RootUser,
 				&MemoryMetrics{},
 				&execCfg,

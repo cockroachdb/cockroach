@@ -147,7 +147,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	// we'll assert that the txn wait queue is told that the transaction
 	// aborted, and we also check that the reader got a nil value.
 
-	txn := client.NewTxn(ctx, db, s.NodeID(), client.RootTxn)
+	txn := client.NewTxn(ctx, db, s.NodeID())
 	keyLeft, keyRight := "a", "c"
 	for _, key := range []string{keyLeft, keyRight} {
 		if err := txn.Put(ctx, key, "val"); err != nil {

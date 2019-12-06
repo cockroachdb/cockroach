@@ -88,8 +88,8 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, s.flowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
+	if tfs := execinfra.GetLeafTxnFinalState(ctx, s.flowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }

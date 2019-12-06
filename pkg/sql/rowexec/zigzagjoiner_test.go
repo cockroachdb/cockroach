@@ -509,7 +509,7 @@ func TestZigzagJoiner(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: st},
-				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -572,7 +572,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-		Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)

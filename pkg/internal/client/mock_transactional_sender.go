@@ -45,15 +45,24 @@ func (m *MockTransactionalSender) Send(
 	return m.senderFunc(ctx, &m.txn, ba)
 }
 
-// GetMeta is part of the TxnSender interface.
-func (m *MockTransactionalSender) GetMeta(
+// GetLeafTxnInputState is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetLeafTxnInputState(
 	context.Context, TxnStatusOpt,
-) (roachpb.TxnCoordMeta, error) {
+) (roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
-// AugmentMeta is part of the TxnSender interface.
-func (m *MockTransactionalSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) {
+// GetLeafTxnFinalState is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetLeafTxnFinalState(
+	context.Context, TxnStatusOpt,
+) (roachpb.LeafTxnFinalState, error) {
+	panic("unimplemented")
+}
+
+// UpdateRootWithLeafFinalState is part of the TxnSender interface.
+func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
+	context.Context, *roachpb.LeafTxnFinalState,
+) {
 	panic("unimplemented")
 }
 
@@ -81,6 +90,11 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 // ReadTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
 	return m.txn.ReadTimestamp
+}
+
+// ProvisionalCommitTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+	return m.txn.WriteTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
@@ -124,9 +138,14 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
-// SerializeTxn is part of the TxnSender interface.
-func (m *MockTransactionalSender) SerializeTxn() *roachpb.Transaction {
+// TestingCloneTxn is part of the TxnSender interface.
+func (m *MockTransactionalSender) TestingCloneTxn() *roachpb.Transaction {
 	return m.txn.Clone()
+}
+
+// Active is part of the TxnSender interface.
+func (m *MockTransactionalSender) Active() bool {
+	panic("unimplemented")
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
@@ -138,6 +157,11 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 
 // DisablePipelining is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
+
+// PrepareRetryableError is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg string) error {
+	return roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
+}
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
@@ -160,11 +184,16 @@ func MakeMockTxnSenderFactory(
 	}
 }
 
-// TransactionalSender is part of TxnSenderFactory.
-func (f MockTxnSenderFactory) TransactionalSender(
-	_ TxnType, coordMeta roachpb.TxnCoordMeta, _ roachpb.UserPriority,
+// RootTransactionalSender is part of TxnSenderFactory.
+func (f MockTxnSenderFactory) RootTransactionalSender(
+	txn *roachpb.Transaction, _ roachpb.UserPriority,
 ) TxnSender {
-	return NewMockTransactionalSender(f.senderFunc, &coordMeta.Txn)
+	return NewMockTransactionalSender(f.senderFunc, txn)
+}
+
+// LeafTransactionalSender is part of TxnSenderFactory.
+func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputState) TxnSender {
+	return NewMockTransactionalSender(f.senderFunc, &tis.Txn)
 }
 
 // NonTransactionalSender is part of TxnSenderFactory.

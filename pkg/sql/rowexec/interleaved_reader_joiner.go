@@ -445,8 +445,8 @@ func (irj *interleavedReaderJoiner) generateMeta(
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, irj.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
+	if tfs := execinfra.GetLeafTxnFinalState(ctx, irj.FlowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }

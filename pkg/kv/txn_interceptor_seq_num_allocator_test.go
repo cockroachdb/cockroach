@@ -195,9 +195,9 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-// TestSequenceNumberAllocationAfterAugmentation tests that the sequence number
-// allocator updates its sequence counter based on the provided TxnCoordMeta.
-func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
+// TestSequenceNumberAllocationAfterLeafInitialization tests that the sequence number
+// allocator updates its sequence counter based on the provided LeafTxnInitialState
+func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
@@ -205,33 +205,19 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	txn := makeTxnProto()
 	keyA := roachpb.Key("a")
 
-	// Create a TxnCoordMeta object. This simulates the interceptor living
-	// on a Leaf transaction coordinator and being initialized by the Root
-	// coordinator.
-	var inMeta roachpb.TxnCoordMeta
-	inMeta.Txn.Sequence = 4
-	s.augmentMetaLocked(inMeta)
-
-	// Ensure that the update round-trips.
-	var outMeta roachpb.TxnCoordMeta
-	s.populateMetaLocked(&outMeta)
-	require.Equal(t, enginepb.TxnSeq(4), outMeta.Txn.Sequence)
+	s.seqGen = 4
 
 	// Perform a few reads and writes. The sequence numbers assigned should
-	// start at the sequence number provided in the TxnCoordMeta.
+	// start at the sequence number provided in the LeafTxnInputState.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 4)
+		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[2].GetInner().Header().Sequence)
-		require.Equal(t, enginepb.TxnSeq(6), ba.Requests[3].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[1].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -241,9 +227,4 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	br, pErr := s.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-
-	// Ensure that the updated sequence counter is reflected in a TxnCoordMeta.
-	outMeta = roachpb.TxnCoordMeta{}
-	s.populateMetaLocked(&outMeta)
-	require.Equal(t, enginepb.TxnSeq(6), outMeta.Txn.Sequence)
 }

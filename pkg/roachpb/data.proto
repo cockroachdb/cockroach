@@ -597,19 +597,43 @@ message AbortSpanEntry {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnPriority"];
 }
 
-// TxnCoordMeta is metadata held by a transaction coordinator. This
-// message is defined here because it is used in several layers of the
-// system (internal/client, sql/distsqlrun, kv).
-message TxnCoordMeta {
-  // txn is a copy of the transaction record, updated with each request.
+// LeafTxnInputState is the state from a transaction coordinator
+// necessary and sufficient to set up a leaf transaction coordinator
+// on another node.
+message LeafTxnInputState {
+  // txn is a copy of the transaction record.
+  Transaction txn = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3, 4, 5, 6;
+  // refresh_invalid indicates that the root txn is not
+  // collecting refresh spans so the leaf should also avoid
+  // collecting them. This is an optimization: it avoids
+  // the collection work in that cases and also possibly
+  // reduces memory usage.
+  bool refresh_invalid = 7;
+  // in_flight_writes stores all writes that are in-flight and have not yet
+  // been proven to have succeeded. Overlapping requests must chain on to
+  // their success using a QueryIntent request.
+  repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
+}
+
+// LeafTxnFinalState is the state from a leaf transaction coordinator
+// necessary and sufficient to update a RootTxn on the gateway
+// coordinator.
+message LeafTxnFinalState {
+  // txn is a copy of the transaction record.
+  // TODO(knz,andrei): We don't actually need the fully txn
+  // record. This can be simplified.
+  // See: https://github.com/cockroachdb/cockroach/issues/43192
   Transaction txn = 1 [(gogoproto.nullable) = false];
   reserved 2;
-  // command_count indicates how many requests have been sent through
-  // this transaction. Reset on retryable txn errors.
-  int32 command_count = 3;
-  // refresh_reads and refresh_writes store key spans which were read
-  // or, less frequently, written during a transaction. These fields
-  // are utilized for SERIALIZABLE transactions in the event a
+  // deprecated_command_count indicates that at least one request
+  // has been processed in this transaction.
+  // Populated only for compatibility with pre-20.1 nodes.
+  // TODO(knz,andrei): Remove this in 20.2.
+  int32 deprecated_command_count = 3;
+  // refresh_reads stores key spans which were read
+  // or, less frequently, written during a transaction. This field
+  // is utilized for SERIALIZABLE transactions in the event a
   // transaction experiences a retry error. In that case, the
   // coordinator uses the Refresh and RefreshRange RPCs to verify that
   // no write has occurred to the spans more recently than the txn's
@@ -619,16 +643,16 @@ message TxnCoordMeta {
   // current timestamps are forwarded to the refresh timestamp, and
   // the transaction can continue.
   repeated Span refresh_reads = 4 [(gogoproto.nullable) = false];
-  repeated Span refresh_writes = 5 [(gogoproto.nullable) = false];
+  reserved 5;
   reserved 6;
-  // refresh_invalid indicates that spans were discarded or not collected (i.e.
-  // because the memory budget for tracking reads was exceeded). This is false
-  // if all spans encountered during the transaction which need refreshing have
-  // been collected to the refresh_reads and refresh_writes span slices.
+  // refresh_invalid indicates that spans were discarded or not
+  // collected (i.e.  because the memory budget for tracking reads was
+  // exceeded).
+  // It is also true if the original LeafTxnInputState also hard
+  // refresh_invalid = false.
+  // If false, all spans encountered during the transaction which need
+  // refreshing have been collected to the refresh_reads and
+  // refresh_writes span slices.
   bool refresh_invalid = 7;
-  // in_flight_writes stores all writes that are in-flight and have not yet
-  // been proven to have succeeded. Any client wishing to send a request that
-  // overlaps with them must chain on to their success using a QueryIntent
-  // request.
-  repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
+  reserved 8;
 }

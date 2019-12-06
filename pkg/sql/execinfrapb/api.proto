@@ -27,11 +27,12 @@ import "sql/execinfrapb/processors.proto";
 message SetupFlowRequest {
   reserved 1, 2;
 
-  // TxnCoordMeta is the TxnCoordMeta for the transaction in which the flow
-  // will run. If nil, the flow will not run in a higher-level transaction
+  // LeafTxnInputState is the input parameter for the *client.Txn needed for
+  // executing the flow.
+  // If nil, the flow will not run in a higher-level transaction
   // (i.e. it is responsible for managing its own transactions, if any). Most
   // flows expect to run in a txn, but some, like backfills, don't.
-  optional roachpb.TxnCoordMeta txn_coord_meta = 7;
+  optional roachpb.LeafTxnInputState leaf_txn_input_state = 7;
 
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.

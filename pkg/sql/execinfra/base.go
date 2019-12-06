@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // RowChannelBufSize is the default buffer size of a RowChannel.
@@ -251,22 +252,30 @@ func SendTraceData(ctx context.Context, dst RowReceiver) {
 	}
 }
 
-// GetTxnCoordMeta returns the txn metadata from a transaction if it is present
-// and the transaction is a leaf transaction, otherwise nil.
+// GetLeafTxnFinalState returns the txn metadata from a transaction if
+// it is present and the transaction is a leaf transaction. It returns
+// nil when called on a Root. This is done as a convenience allowing
+// DistSQL processors to be oblivious about whether they're running in
+// a Leaf or a Root.
 //
 // NOTE(andrei): As of 04/2018, the txn is shared by all processors scheduled on
 // a node, and so it's possible for multiple processors to send the same
-// TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
+// LeafTxnFinalState. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func GetTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
-	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetTxnCoordMeta(ctx)
-		txnMeta.StripLeafToRoot(ctx)
-		if txnMeta.Txn.ID != uuid.Nil {
-			return &txnMeta
-		}
+func GetLeafTxnFinalState(ctx context.Context, txn *client.Txn) *roachpb.LeafTxnFinalState {
+	if txn.Type() != client.LeafTxn {
+		return nil
 	}
-	return nil
+	txnMeta, err := txn.GetLeafTxnFinalState(ctx)
+	if err != nil {
+		// TODO(knz): plumb errors through the callers.
+		panic(errors.Wrap(err, "in execinfra.GetLeafTxnFinalState"))
+	}
+
+	if txnMeta.Txn.ID == uuid.Nil {
+		return nil
+	}
+	return &txnMeta
 }
 
 // DrainAndClose is a version of DrainAndForwardMetadata that drains multiple

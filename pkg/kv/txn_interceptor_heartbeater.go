@@ -173,11 +173,14 @@ func (h *txnHeartbeater) setWrapped(wrapped lockedSender) {
 	h.wrapped = wrapped
 }
 
-// populateMetaLocked is part of the txnInterceptor interface.
-func (h *txnHeartbeater) populateMetaLocked(*roachpb.TxnCoordMeta) {}
+// populateLeafInputState is part of the txnInterceptor interface.
+func (*txnHeartbeater) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
-// augmentMetaLocked is part of the txnInterceptor interface.
-func (h *txnHeartbeater) augmentMetaLocked(roachpb.TxnCoordMeta) {}
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (*txnHeartbeater) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (*txnHeartbeater) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) epochBumpedLocked() {}
