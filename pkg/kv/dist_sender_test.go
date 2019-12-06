@@ -2702,7 +2702,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		{
 			err1:   retryErr,
 			err2:   nil,
-			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE - test err)",
 		},
 		{
 			err1:   abortErr,
@@ -2717,7 +2717,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		{
 			err1:   retryErr,
 			err2:   retryErr,
-			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+			expErr: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE - test err)",
 		},
 		{
 			err1:   retryErr,

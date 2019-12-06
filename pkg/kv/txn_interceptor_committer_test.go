@@ -371,49 +371,54 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc, mockSender := makeMockTxnCommitter()
-	defer tc.stopper.Stop(ctx)
+	testutils.RunTrueAndFalse(t, "WriteTooOld", func(t *testing.T, writeTooOld bool) {
+		tc, mockSender := makeMockTxnCommitter()
+		defer tc.stopper.Stop(ctx)
 
-	txn := makeTxnProto()
-	keyA := roachpb.Key("a")
+		txn := makeTxnProto()
+		keyA := roachpb.Key("a")
 
-	var ba roachpb.BatchRequest
-	ba.Header = roachpb.Header{Txn: &txn}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	etArgs := roachpb.EndTransactionRequest{Commit: true}
-	putArgs.Sequence = 1
-	etArgs.Sequence = 2
-	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
-	ba.Add(&putArgs, &etArgs)
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: &txn}
+		putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+		etArgs := roachpb.EndTransactionRequest{Commit: true}
+		putArgs.Sequence = 1
+		etArgs.Sequence = 2
+		etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
+		ba.Add(&putArgs, &etArgs)
 
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 2)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
+		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
 
-		et := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
-		require.True(t, et.Commit)
-		require.Len(t, et.InFlightWrites, 1)
-		require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
+			et := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+			require.True(t, et.Commit)
+			require.Len(t, et.InFlightWrites, 1)
+			require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
 
-		br := ba.CreateReply()
-		br.Txn = ba.Txn
-		br.Txn.Status = roachpb.STAGING
-		br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.WriteTimestamp
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.STAGING
+			br.Responses[1].GetInner().(*roachpb.EndTransactionResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
-		// Pretend the PutRequest was split and sent to a different Range. It
-		// could hit a WriteTooOld error (which marks the WriteTooOld flag) and
-		// have its timestamp pushed if it attempts to write under a committed
-		// value. The intent will be written but the response transaction's
-		// timestamp will be larger than the staging timestamp.
-		br.Txn.WriteTooOld = true
-		br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
-		return br, nil
+			// Pretend the PutRequest was split and sent to a different Range. It
+			// could hit the timestamp cache, or a WriteTooOld error (which sets the
+			// WriteTooOld flag). The intent will be written but the response
+			// transaction's timestamp will be larger than the staging timestamp.
+			br.Txn.WriteTooOld = writeTooOld
+			br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(1, 0)
+			return br, nil
+		})
+
+		br, pErr := tc.SendLocked(ctx, ba)
+		require.Nil(t, br)
+		require.NotNil(t, pErr)
+		require.IsType(t, &roachpb.TransactionRetryError{}, pErr.GetDetail())
+		expReason := roachpb.RETRY_SERIALIZABLE
+		if writeTooOld {
+			expReason = roachpb.RETRY_WRITE_TOO_OLD
+		}
+		require.Equal(t, expReason, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
 	})
-
-	br, pErr := tc.SendLocked(ctx, ba)
-	require.Nil(t, br)
-	require.NotNil(t, pErr)
-	require.IsType(t, &roachpb.TransactionRetryError{}, pErr.GetDetail())
-	require.Equal(t, roachpb.RETRY_SERIALIZABLE, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
 }
