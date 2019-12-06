@@ -179,17 +179,25 @@ type txnInterceptor interface {
 	// setWrapped sets the txnInterceptor wrapped lockedSender.
 	setWrapped(wrapped lockedSender)
 
-	// populateMetaLocked populates the provided TxnCoordMeta with any
-	// internal state that the txnInterceptor contains. This is used
-	// to serialize the interceptor's state so that it can be passed to
-	// other TxnCoordSenders within a distributed transaction.
-	populateMetaLocked(meta *roachpb.TxnCoordMeta)
+	// initializeFromTxn populates the interceptor's initial
+	// state from a given Transaction.
+	initializeFromTxn(*roachpb.Transaction)
 
-	// augmentMetaLocked updates any internal state held inside the
-	// interceptor that is a function of the TxnCoordMeta. This is used
-	// to deserialize the interceptor's state when it is provided by
-	// another TxnCoordSender within a distributed transaction.
-	augmentMetaLocked(meta roachpb.TxnCoordMeta)
+	// populateLeafInputState populates the given input payload
+	// for a LeafTxn.
+	populateLeafInputState(*roachpb.LeafTxnInputState)
+
+	// initializeLeaf initializes the interceptor from
+	// an input payload coming from a RootTxn.
+	initializeLeaf(*roachpb.LeafTxnInputState)
+
+	// populateLeafFinalState populates the final payload
+	// for a LeafTxn to bring back into a RootTxn.
+	populateLeafFinalState(*roachpb.LeafTxnFinalState)
+
+	// importLeafFinalState updates any internal state held inside the
+	// interceptor from the given LeafTxn final state.
+	importLeafFinalState(*roachpb.LeafTxnFinalState)
 
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
@@ -489,9 +497,9 @@ func NewTxnCoordSenderFactory(
 
 // TransactionalSender is part of the TxnSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) TransactionalSender(
-	typ client.TxnType, meta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
+	typ client.TxnType, txn *roachpb.Transaction, pri roachpb.UserPriority,
 ) client.TxnSender {
-	meta.Txn.AssertInitialized(context.TODO())
+	txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
 		typ:                   typ,
 		TxnCoordSenderFactory: tcf,
@@ -612,7 +620,14 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		}
 	}
 
-	tcs.augmentMetaLocked(context.TODO(), meta)
+	if txn.Status != roachpb.PENDING {
+		// It's invalid to create a new TCS if the transaction is not in a pending state.
+		log.Fatalf(context.TODO(), "unexpected non-pending txn in TransactionalSender: %s", txn)
+	}
+	tcs.mu.txn.Update(txn)
+	for _, reqInt := range tcs.interceptorStack {
+		reqInt.initializeFromTxn(txn)
+	}
 	return tcs
 }
 
@@ -624,78 +639,6 @@ func (tcf *TxnCoordSenderFactory) NonTransactionalSender() client.Sender {
 // Metrics returns the factory's metrics struct.
 func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 	return tcf.metrics
-}
-
-// GetMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) GetMeta(
-	ctx context.Context, opt client.TxnStatusOpt,
-) (roachpb.TxnCoordMeta, error) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	// Copy mutable state so access is safe for the caller.
-	var meta roachpb.TxnCoordMeta
-	meta.Txn = tc.mu.txn
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateMetaLocked(&meta)
-	}
-	switch opt {
-	case client.AnyTxnStatus:
-		// Nothing to check.
-	case client.OnlyPending:
-		// Check the coordinator's proto status.
-		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
-		if rejectErr != nil {
-			return roachpb.TxnCoordMeta{}, rejectErr.GoError()
-		}
-	default:
-		panic("unreachable")
-	}
-	return meta, nil
-}
-
-// AugmentMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
-	if tc.mu.txn.ID == (uuid.UUID{}) {
-		log.Fatalf(ctx, "cannot AugmentMeta on unbound TxnCoordSender. meta id: %s", meta.Txn.ID)
-	}
-
-	// Sanity check: don't combine if the meta is for a different txn ID.
-	if tc.mu.txn.ID != meta.Txn.ID {
-		return
-	}
-
-	// If the TxnCoordMeta is telling us the transaction has been aborted, it's
-	// better if we don't ingest it. Ingesting it would possibly put us in an
-	// inconsistent state, with an ABORTED proto but with the heartbeat loop still
-	// running. When this TxnCoordMeta was received from DistSQL, it presumably
-	// followed a TxnAbortedError that was also received. If that error was also
-	// passed to us, then we've already aborted the txn and ingesting the meta
-	// would be OK. However, as it stands, if the TxnAbortedError followed a
-	// non-retriable error, than we don't get the aborted error (in fact, we don't
-	// get either of the errors; the client is responsible for rolling back).
-	// TODO(andrei): A better design would be to abort the txn as soon as any
-	// error is received from DistSQL, which would eliminate qualms about what
-	// error comes first.
-	if meta.Txn.Status != roachpb.PENDING {
-		return
-	}
-
-	tc.augmentMetaLocked(ctx, meta)
-}
-
-func (tc *TxnCoordSender) augmentMetaLocked(ctx context.Context, meta roachpb.TxnCoordMeta) {
-	if meta.Txn.Status != roachpb.PENDING {
-		// Non-pending transactions should only come in errors, which are not
-		// handled by this method.
-		log.Fatalf(ctx, "unexpected non-pending txn in augmentMetaLocked: %s", meta.Txn)
-	}
-	tc.mu.txn.Update(&meta.Txn)
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.augmentMetaLocked(meta)
-	}
 }
 
 // DisablePipelining is part of the client.TxnSender interface.
@@ -1176,6 +1119,13 @@ func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	return tc.mu.txn.ReadTimestamp
 }
 
+// ProvisionalCommitTimestamp is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.WriteTimestamp
+}
+
 // CommitTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
@@ -1253,16 +1203,169 @@ func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	return tc.mu.txn.Epoch
 }
 
-// SerializeTxn is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SerializeTxn() *roachpb.Transaction {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.txn.Clone()
-}
-
 // IsTracking returns true if the heartbeat loop is running.
 func (tc *TxnCoordSender) IsTracking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
+}
+
+// IsStarted returns true iff there were commands executed already.
+func (tc *TxnCoordSender) IsStarted() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.interceptorAlloc.txnSeqNumAllocator.commandCount > 0
+}
+
+// GetLeafTxnInputState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) GetLeafTxnInputState(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.LeafTxnInputState, error) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
+		return roachpb.LeafTxnInputState{}, err
+	}
+
+	// Copy mutable state so access is safe for the caller.
+	var tis roachpb.LeafTxnInputState
+	tis.Txn = tc.mu.txn
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.populateLeafInputState(&tis)
+	}
+	return tis, nil
+}
+
+// GetLeafTxnFinalState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) GetLeafTxnFinalState(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.LeafTxnFinalState, error) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
+		return roachpb.LeafTxnFinalState{}, err
+	}
+
+	// Copy mutable state so access is safe for the caller.
+	var tfs roachpb.LeafTxnFinalState
+	tfs.Txn = tc.mu.txn
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.populateLeafFinalState(&tfs)
+	}
+	return tfs, nil
+}
+
+func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt client.TxnStatusOpt) error {
+	switch opt {
+	case client.AnyTxnStatus:
+		// Nothing to check.
+	case client.OnlyPending:
+		// Check the coordinator's proto status.
+		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
+		if rejectErr != nil {
+			return rejectErr.GoError()
+		}
+	default:
+		panic("unreachable")
+	}
+	return nil
+}
+
+// InitializeLeafTxn is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) InitializeLeafTxn(ctx context.Context, tis *roachpb.LeafTxnInputState) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot InitializeLeafTxn on unbound TxnCoordSender. input id: %s", tis.Txn.ID)
+	}
+
+	// Sanity check: don't combine if the meta is for a different txn ID.
+	if tc.mu.txn.ID != tis.Txn.ID {
+		return
+	}
+
+	// If the LeafTxnInputState is telling us the transaction has been
+	// aborted, it's better if we don't ingest it. Ingesting it would
+	// possibly put us in an inconsistent state, with an ABORTED proto
+	// but with the heartbeat loop still running. It presumably follows
+	// a TxnAbortedError that was also received. If that error was also
+	// passed to us, then we've already aborted the txn and setting up
+	// the leaf would be OK. However, as it stands, if the
+	// TxnAbortedError followed a non-retriable error, than we don't get
+	// the aborted error (in fact, we don't get either of the errors;
+	// the client is responsible for rolling back).
+	//
+	// TODO(andrei): A better design would be to abort the txn as soon
+	// as any error is received from DistSQL, which would eliminate
+	// qualms about what error comes first.
+	if tis.Txn.Status != roachpb.PENDING {
+		// It's invalid to create a leaf if the transaction is not in a pending state.
+		log.Fatalf(ctx, "unexpected non-pending txn in initializeLeafLocked: %s", tis.Txn)
+		return
+	}
+
+	tc.mu.txn.Update(&tis.Txn)
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.initializeLeaf(tis)
+	}
+}
+
+// UpdateRootWithLeafFinalState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
+	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
+) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot UpdateRootWithLeafFinalState on unbound TxnCoordSender. input id: %s", tfs.Txn.ID)
+	}
+
+	// Sanity check: don't combine if the tfs is for a different txn ID.
+	if tc.mu.txn.ID != tfs.Txn.ID {
+		return
+	}
+
+	// If the LeafTxnFinalState is telling us the transaction has been
+	// aborted, it's better if we don't ingest it. Ingesting it would
+	// possibly put us in an inconsistent state, with an ABORTED proto
+	// but with the heartbeat loop still running. It presumably follows
+	// a TxnAbortedError that was also received. If that error was also
+	// passed to us, then we've already aborted the txn and importing
+	// the leaf statewould be OK. However, as it stands, if the
+	// TxnAbortedError followed a non-retriable error, than we don't get
+	// the aborted error (in fact, we don't get either of the errors;
+	// the client is responsible for rolling back).
+	//
+	// TODO(andrei): A better design would be to abort the txn as soon
+	// as any error is received from DistSQL, which would eliminate
+	// qualms about what error comes first.
+	if tfs.Txn.Status != roachpb.PENDING {
+		return
+	}
+
+	tc.mu.txn.Update(&tfs.Txn)
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.importLeafFinalState(tfs)
+	}
+}
+
+// TestingCloneTxn is part of the client.TxnSender interface.
+// This is for use by tests only. To derive leaf TxnCoordSenders,
+// use GetLeafTxnInitialState instead.
+func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.Clone()
+}
+
+// PrepareRetryableError is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return roachpb.NewTransactionRetryWithProtoRefreshError(
+		msg, tc.mu.txn.ID, tc.mu.txn)
 }

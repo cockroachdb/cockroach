@@ -800,28 +800,6 @@ func MakeTransaction(
 	}
 }
 
-// MakeTxnCoordMeta creates a new transaction coordinator meta for the given
-// transaction.
-func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
-	return TxnCoordMeta{Txn: txn}
-}
-
-// StripRootToLeaf strips out all information that is unnecessary to communicate
-// to leaf transactions.
-func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
-	meta.CommandCount = 0
-	meta.RefreshReads = nil
-	meta.RefreshWrites = nil
-	return meta
-}
-
-// StripLeafToRoot strips out all information that is unnecessary to communicate
-// back to the root transaction.
-func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
-	meta.InFlightWrites = nil
-	return meta
-}
-
 // LastActive returns the last timestamp at which client activity definitely
 // occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {

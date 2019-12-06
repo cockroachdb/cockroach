@@ -75,9 +75,7 @@ type Txn struct {
 	}
 }
 
-// NewTxn returns a new txn. The typ parameter specifies whether this
-// transaction is the top level (root), or one of potentially many
-// distributed transactions (leaf).
+// NewTxn returns a new RootTxn.
 //
 // If the transaction is used to send any operations, CommitOrCleanup() or
 // CleanupOnError() should eventually be called to commit/rollback the
@@ -93,51 +91,64 @@ type Txn struct {
 //   away any clock uncertainty for our own node, as our clock is accessible.
 //
 // See also db.NewTxn().
-func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
+func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	if db == nil {
+		log.Fatalf(ctx, "attempting to create txn with nil db")
+	}
+
 	now := db.clock.Now()
-	txn := roachpb.MakeTransaction(
+	kvTxn := roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
 		now,
 		db.clock.MaxOffset().Nanoseconds(),
 	)
-	// Ensure the gateway node ID is marked as free from clock offset
-	// if this is a root transaction.
-	if gatewayNodeID != 0 && typ == RootTxn {
-		txn.UpdateObservedTimestamp(gatewayNodeID, now)
-	}
-	return NewTxnWithProto(ctx, db, gatewayNodeID, typ, txn)
+
+	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 }
 
-// NewTxnWithProto is like NewTxn, except it returns a new txn with the provided
-// Transaction proto. This allows a client.Txn to be created with an already
-// initialized proto.
-func NewTxnWithProto(
-	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, proto roachpb.Transaction,
+// NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
+// Do not use this directly; use NewTxn() instead.
+// This function exists for testing only.
+func NewTxnFromProto(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	now hlc.Timestamp,
+	typ TxnType,
+	proto *roachpb.Transaction,
 ) *Txn {
-	meta := roachpb.MakeTxnCoordMeta(proto)
-	return NewTxnWithCoordMeta(ctx, db, gatewayNodeID, typ, meta)
+	// Ensure the gateway node ID is marked as free from clock offset.
+	if gatewayNodeID != 0 && typ == RootTxn {
+		proto.UpdateObservedTimestamp(gatewayNodeID, now)
+	}
+
+	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
+	txn.mu.ID = proto.ID
+	txn.mu.userPriority = roachpb.NormalUserPriority
+	txn.mu.sender = db.factory.TransactionalSender(RootTxn, proto, txn.mu.userPriority)
+	return txn
 }
 
-// NewTxnWithCoordMeta is like NewTxn, except it returns a new txn with the
-// provided TxnCoordMeta. This allows a client.Txn to be created with an already
-// initialized proto and TxnCoordSender.
-func NewTxnWithCoordMeta(
-	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, typ TxnType, meta roachpb.TxnCoordMeta,
+// NewLeafTxn is like NewTxn, except it returns a new LeafTxn from
+// the provided LeafTxnInputState.
+func NewLeafTxn(
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, tis *roachpb.LeafTxnInputState,
 ) *Txn {
 	if db == nil {
-		log.Fatalf(ctx, "attempting to create txn with nil db for Transaction: %s", meta.Txn)
+		log.Fatalf(ctx, "attempting to create leaf txn with nil db for Transaction: %s", tis.Txn)
 	}
-	if meta.Txn.Status != roachpb.PENDING {
-		log.Fatalf(ctx, "can't create txn with non-PENDING proto: %s",
-			meta.Txn)
+	if tis.Txn.Status != roachpb.PENDING {
+		log.Fatalf(ctx, "can't create leaf txn with non-PENDING proto: %s",
+			tis.Txn)
 	}
-	meta.Txn.AssertInitialized(ctx)
-	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
-	txn.mu.ID = meta.Txn.ID
+	tis.Txn.AssertInitialized(ctx)
+	txn := &Txn{db: db, typ: LeafTxn, gatewayNodeID: gatewayNodeID}
+	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
-	txn.mu.sender = db.factory.TransactionalSender(typ, meta, txn.mu.userPriority)
+	txn.mu.sender = db.factory.TransactionalSender(LeafTxn, &tis.Txn, txn.mu.userPriority)
+	txn.mu.sender.InitializeLeafTxn(ctx, tis)
 	return txn
 }
 
@@ -259,6 +270,15 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()
+}
+
+// ProvisionalCommitTimestamp returns the transaction's provisional
+// commit timestamp. This can evolve throughout a txn's lifecycle. See
+// the comment on the WriteTimestamp field of TxnMeta for details.
+func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ProvisionalCommitTimestamp()
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
@@ -816,42 +836,59 @@ func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
 	txn.replaceSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
 }
 
-// GetTxnCoordMeta returns the TxnCoordMeta information for this
-// transaction for use with AugmentTxnCoordMeta(), when combining the
-// impact of multiple distributed transaction coordinators that are
-// all operating on the same transaction.
-func (txn *Txn) GetTxnCoordMeta(ctx context.Context) roachpb.TxnCoordMeta {
+// GetLeafTxnInputState returns the LeafTxnInputState information for this
+// transaction for use with InitializeLeafTxn(), when distributing
+// the state of the current transaction to multiple distributed
+// transaction coordinators.
+func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputState {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	meta, err := txn.mu.sender.GetMeta(ctx, AnyTxnStatus)
+	ts, err := txn.mu.sender.GetLeafTxnInputState(ctx, AnyTxnStatus)
 	if err != nil {
-		log.Fatalf(ctx, "unexpected error from GetMeta(AnyTxnStatus): %s", err)
+		log.Fatalf(ctx, "unexpected error from GetLeafTxnInputState(AnyTxnStatus): %s", err)
 	}
-	return meta
+	return ts
 }
 
-// GetTxnCoordMetaOrRejectClient is like GetTxnCoordMeta except, if the
-// transaction is already aborted or otherwise in a final state, it returns an
-// error. If the transaction is aborted, the error will be a retryable one, and
-// the transaction will have been prepared for another transaction attempt (so,
-// on retryable errors, it acts like Send()).
-func (txn *Txn) GetTxnCoordMetaOrRejectClient(ctx context.Context) (roachpb.TxnCoordMeta, error) {
+// GetLeafTxnInputStateOrRejectClient is like GetLeafTxnInputState
+// except, if the transaction is already aborted or otherwise in state
+// that cannot make progress, it returns an error. If the transaction
+// is aborted, the error will be a retryable one, and the transaction
+// will have been prepared for another transaction attempt (so, on
+// retryable errors, it acts like Send()).
+func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
+	ctx context.Context,
+) (roachpb.LeafTxnInputState, error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	meta, err := txn.mu.sender.GetMeta(ctx, OnlyPending)
+	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
 		txn.handleErrIfRetryableLocked(ctx, err)
-		return roachpb.TxnCoordMeta{}, err
+		return roachpb.LeafTxnInputState{}, err
 	}
-	return meta, nil
+	return tfs, nil
 }
 
-// AugmentTxnCoordMeta augments this transaction's TxnCoordMeta
-// information with the supplied meta. For use with GetTxnCoordMeta().
-func (txn *Txn) AugmentTxnCoordMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
+// GetLeafTxnFinalState returns the LeafTxnFinalState information for this
+// transaction for use with UpdateRootWithLeafFinalState(), when combining the
+// impact of multiple distributed transaction coordinators that are
+// all operating on the same transaction.
+func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) roachpb.LeafTxnFinalState {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	txn.mu.sender.AugmentMeta(ctx, meta)
+	tfs, err := txn.mu.sender.GetLeafTxnFinalState(ctx, AnyTxnStatus)
+	if err != nil {
+		log.Fatalf(ctx, "unexpected error from GetLeafTxnFinalState(AnyTxnStatus): %s", err)
+	}
+	return tfs
+}
+
+// UpdateRootWithLeafFinalState augments this RootTxn with the supplied
+// LeafTxn final state. For use with GetLeafTxnFinalState().
+func (txn *Txn) UpdateRootWithLeafFinalState(ctx context.Context, tfs *roachpb.LeafTxnFinalState) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.UpdateRootWithLeafFinalState(ctx, tfs)
 }
 
 // UpdateStateOnRemoteRetryableErr updates the txn in response to an error
@@ -913,8 +950,7 @@ func (txn *Txn) replaceSenderIfTxnAbortedLocked(
 	txn.recordPreviousTxnIDLocked(txn.mu.ID)
 	txn.mu.ID = newTxn.ID
 	// Create a new txn sender.
-	meta := roachpb.MakeTxnCoordMeta(*newTxn)
-	txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, meta, txn.mu.userPriority)
+	txn.mu.sender = txn.db.factory.TransactionalSender(txn.typ, newTxn, txn.mu.userPriority)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
@@ -962,6 +998,16 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 		))
 }
 
+// PrepareRetryableError returns a
+// TransactionRetryWithProtoRefreshError that will cause the txn to be
+// retried. The current txn parameters are used. The txn remains valid
+// for use.
+func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.PrepareRetryableError(ctx, msg)
+}
+
 // ManualRestart bumps the transactions epoch, and can upgrade the timestamp.
 // An uninitialized timestamp can be passed to leave the timestamp alone.
 //
@@ -997,18 +1043,28 @@ func (txn *Txn) Type() TxnType {
 	return txn.typ
 }
 
-// Serialize returns a clone of the transaction's current proto.
-// This is a nuclear option; generally client code shouldn't deal with protos.
-// However, this is used by DistSQL for sending the transaction over the wire
-// when it creates flows.
-func (txn *Txn) Serialize() *roachpb.Transaction {
+// TestingCloneTxn returns a clone of the current txn.
+// This is for use by tests only. Leaf txns should be derived
+// using GetLeafTxnInitialState() and NewLeafTxn().
+func (txn *Txn) TestingCloneTxn() *roachpb.Transaction {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.SerializeTxn()
+	return txn.mu.sender.TestingCloneTxn()
 }
 
 func (txn *Txn) deadline() *hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.deadline
+}
+
+// IsStarted returns true iff some commands have been performed with
+// this txn already.
+//
+// TODO(knz): Remove this, see
+// https://github.com/cockroachdb/cockroach/issues/15012
+func (txn *Txn) IsStarted() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.IsStarted()
 }

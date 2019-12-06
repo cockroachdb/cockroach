@@ -251,8 +251,8 @@ func (ij *IndexJoiner) outputStatsToTrace() {
 }
 
 func (ij *IndexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, ij.FlowCtx.Txn); meta != nil {
-		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
+	if tfs := GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
+		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
 	}
 	return nil
 }

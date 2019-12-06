@@ -92,18 +92,29 @@ func (s *txnSeqNumAllocator) SendLocked(
 // setWrapped is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrapped }
 
-// populateMetaLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	meta.CommandCount = s.commandCount
-	meta.Txn.Sequence = s.seqGen
+// initializeFromTxn is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) initializeFromTxn(txn *roachpb.Transaction) {
+	s.seqGen = txn.Sequence
 }
 
-// augmentMetaLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
-	s.commandCount += meta.CommandCount
-	if meta.Txn.Sequence > s.seqGen {
-		s.seqGen = meta.Txn.Sequence
-	}
+// populateLeafInputState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+	tis.Txn.Sequence = s.seqGen
+}
+
+// initializeLeaf is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) initializeLeaf(tis *roachpb.LeafTxnInputState) {
+	s.seqGen = tis.Txn.Sequence
+}
+
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) populateLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
+	tfs.CommandCount = s.commandCount
+}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) importLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
+	s.commandCount += tfs.CommandCount
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.

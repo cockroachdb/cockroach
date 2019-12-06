@@ -298,7 +298,7 @@ message RemoteProducerMetadata {
     RangeInfos range_info = 1;
     Error error = 2;
     TraceData trace_data = 3;
-    roachpb.TxnCoordMeta txn_coord_meta = 4;
+    roachpb.LeafTxnFinalState leaf_txn_final_state = 4;
     RowNum row_num = 5;
     SamplerProgress sampler_progress = 7;
     Metrics metrics = 8;

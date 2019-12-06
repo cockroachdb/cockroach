@@ -50,7 +50,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	db := tc.Server(0).DB()
 
-	txn := client.NewTxn(ctx, db, tc.Server(0).NodeID(), client.RootTxn)
+	txn := client.NewTxn(ctx, db, tc.Server(0).NodeID())
 	it := resolver.NewSpanResolverIterator(txn)
 
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")

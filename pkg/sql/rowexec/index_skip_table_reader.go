@@ -260,8 +260,8 @@ func (t *indexSkipTableReader) generateMeta(ctx context.Context) []execinfrapb.P
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: t.misplannedRanges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, t.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
+	if tfs := execinfra.GetLeafTxnFinalState(ctx, t.FlowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
 }

@@ -27,9 +27,9 @@ type TxnType int
 const (
 	_ TxnType = iota
 	// RootTxn specifies this sender is the root transaction, and is
-	// responsible for aggregating all transactional state (see
-	// TxnCoordMeta) and finalizing the transaction. The root txn is
-	// responsible for heartbeating the transaction record.
+	// responsible for aggregating all transactional state and
+	// finalizing the transaction. The root txn is responsible for
+	// heartbeating the transaction record.
 	RootTxn
 	// LeafTxn specifies this sender is for one of potentially many
 	// distributed client transactions. The state from this transaction
@@ -105,16 +105,22 @@ type TxnSender interface {
 	// It is allowed to call this method multiple times.
 	AnchorOnSystemConfigRange() error
 
-	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent from root
-	// to leaf transactions or the other way around. Can be combined via
-	// AugmentMeta().
-	//
-	// If AnyTxnStatus is passed, then this function never returns errors.
-	GetMeta(context.Context, TxnStatusOpt) (roachpb.TxnCoordMeta, error)
+	// GetLeafTxnInputState retrieves the input state necessary and sufficient
+	// to initialize a LeafTxn from the current RootTxn.
+	GetLeafTxnInputState(context.Context, TxnStatusOpt) (roachpb.LeafTxnInputState, error)
 
-	// AugmentMeta combines the TxnCoordMeta from another distributed
-	// TxnSender which is part of the same transaction.
-	AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta)
+	// InitializeLeafTxn sets up a LeafTxn using the provided input
+	// state from a RootTxn.
+	InitializeLeafTxn(context.Context, *roachpb.LeafTxnInputState)
+
+	// GetLeafTxnFinalState retrieves the final state of a LeafTxn
+	// necessary and sufficient to update a RootTxn with progress made
+	// on its behalf by the LeafTxn.
+	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (roachpb.LeafTxnFinalState, error)
+
+	// UpdateRootWithLeafFinalState updates a RootTxn using the
+	// final state of a LeafTxn.
+	UpdateRootWithLeafFinalState(context.Context, *roachpb.LeafTxnFinalState)
 
 	// SetUserPriority sets the txn's priority.
 	SetUserPriority(roachpb.UserPriority) error
@@ -170,6 +176,12 @@ type TxnSender interface {
 	// timestamp.
 	CommitTimestamp() hlc.Timestamp
 
+	// ProvisionalCommitTimestamp returns the transaction's provisional
+	// commit timestamp. This can move forward throughout the txn's
+	// lifetime. See the explanatory comments for the WriteTimestamp
+	// field.
+	ProvisionalCommitTimestamp() hlc.Timestamp
+
 	// CommitTimestampFixed returns true if the commit timestamp has
 	// been fixed to the start timestamp and cannot be pushed forward.
 	CommitTimestampFixed() bool
@@ -187,14 +199,25 @@ type TxnSender interface {
 	// conflicting writes).
 	IsSerializablePushAndRefreshNotPossible() bool
 
+	// IsStarted returns true iff some commands have been performed with
+	// this txn already.
+	//
+	// TODO(knz): Remove this, see
+	// https://github.com/cockroachdb/cockroach/issues/15012
+	IsStarted() bool
+
 	// Epoch returns the txn's epoch.
 	Epoch() enginepb.TxnEpoch
 
-	// SerializeTxn returns a clone of the transaction's current proto.
-	// This is a nuclear option; generally client code shouldn't deal with protos.
-	// However, this is used by DistSQL for sending the transaction over the wire
-	// when it creates flows.
-	SerializeTxn() *roachpb.Transaction
+	// PrepareRetryableError generates a
+	// TransactionRetryWithProtoRefreshError with a payload initialized
+	// from this txn.
+	PrepareRetryableError(ctx context.Context, msg string) error
+
+	// TestingCloneTxn returns a clone of the transaction's current proto.
+	// This is for use by tests only. Leaf transactions are to be derived
+	// using GetLeafTxnInitialState().
+	TestingCloneTxn() *roachpb.Transaction
 }
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().
@@ -218,10 +241,9 @@ type TxnSenderFactory interface {
 	// typ specifies whether the sender is the root or one of potentially many
 	// child "leaf" nodes in a tree of transaction objects, as is created during a
 	// DistSQL flow.
-	// coordMeta is the TxnCoordMeta which contains the transaction whose requests
-	// this sender will carry.
+	// txn contains the transaction whose requests this sender will carry.
 	TransactionalSender(
-		typ TxnType, coordMeta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
+		typ TxnType, txn *roachpb.Transaction, pri roachpb.UserPriority,
 	) TxnSender
 	// NonTransactionalSender returns a sender to be used for non-transactional
 	// requests. Generally this is a sender that TransactionalSender() wraps.
@@ -265,15 +287,29 @@ func (m *MockTransactionalSender) Send(
 	return m.senderFunc(ctx, &m.txn, ba)
 }
 
-// GetMeta is part of the TxnSender interface.
-func (m *MockTransactionalSender) GetMeta(
+// GetLeafTxnInputState is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetLeafTxnInputState(
 	context.Context, TxnStatusOpt,
-) (roachpb.TxnCoordMeta, error) {
+) (roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
-// AugmentMeta is part of the TxnSender interface.
-func (m *MockTransactionalSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) {
+// GetLeafTxnFinalState is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetLeafTxnFinalState(
+	context.Context, TxnStatusOpt,
+) (roachpb.LeafTxnFinalState, error) {
+	panic("unimplemented")
+}
+
+// InitializeLeafTxn is part of the TxnSender interface.
+func (m *MockTransactionalSender) InitializeLeafTxn(context.Context, *roachpb.LeafTxnInputState) {
+	panic("unimplemented")
+}
+
+// UpdateRootWithLeafFinalState is part of the TxnSender interface.
+func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
+	context.Context, *roachpb.LeafTxnFinalState,
+) {
 	panic("unimplemented")
 }
 
@@ -301,6 +337,11 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 // ReadTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
 	return m.txn.ReadTimestamp
+}
+
+// ProvisionalCommitTimestamp is part of the TxnSender interface.
+func (m *MockTransactionalSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+	return m.txn.WriteTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
@@ -344,9 +385,14 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
-// SerializeTxn is part of the TxnSender interface.
-func (m *MockTransactionalSender) SerializeTxn() *roachpb.Transaction {
+// TestingCloneTxn is part of the TxnSender interface.
+func (m *MockTransactionalSender) TestingCloneTxn() *roachpb.Transaction {
 	return m.txn.Clone()
+}
+
+// IsStarted is part of the TxnSender interface.
+func (m *MockTransactionalSender) IsStarted() bool {
+	panic("unimplemented")
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
@@ -358,6 +404,11 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 
 // DisablePipelining is part of the client.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
+
+// PrepareRetryableError is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg string) error {
+	return roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
+}
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
@@ -382,9 +433,9 @@ func MakeMockTxnSenderFactory(
 
 // TransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) TransactionalSender(
-	_ TxnType, coordMeta roachpb.TxnCoordMeta, _ roachpb.UserPriority,
+	_ TxnType, txn *roachpb.Transaction, _ roachpb.UserPriority,
 ) TxnSender {
-	return NewMockTransactionalSender(f.senderFunc, &coordMeta.Txn)
+	return NewMockTransactionalSender(f.senderFunc, txn)
 }
 
 // NonTransactionalSender is part of TxnSenderFactory.
@@ -400,7 +451,7 @@ var _ TxnSenderFactory = NonTransactionalFactoryFunc(nil)
 
 // TransactionalSender is part of the TxnSenderFactory.
 func (f NonTransactionalFactoryFunc) TransactionalSender(
-	_ TxnType, _ roachpb.TxnCoordMeta, _ roachpb.UserPriority,
+	_ TxnType, _ *roachpb.Transaction, _ roachpb.UserPriority,
 ) TxnSender {
 	panic("not supported")
 }

@@ -128,11 +128,16 @@ class AbortSpanEntryDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<AbortSpanEntry>
       _instance;
 } _AbortSpanEntry_default_instance_;
-class TxnCoordMetaDefaultTypeInternal {
+class LeafTxnInputStateDefaultTypeInternal {
  public:
-  ::google::protobuf::internal::ExplicitlyConstructed<TxnCoordMeta>
+  ::google::protobuf::internal::ExplicitlyConstructed<LeafTxnInputState>
       _instance;
-} _TxnCoordMeta_default_instance_;
+} _LeafTxnInputState_default_instance_;
+class LeafTxnFinalStateDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<LeafTxnFinalState>
+      _instance;
+} _LeafTxnFinalState_default_instance_;
 }  // namespace roachpb
 }  // namespace cockroach
 namespace protobuf_roachpb_2fdata_2eproto {
@@ -404,22 +409,37 @@ static void InitDefaultsAbortSpanEntry() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAbortSpanEntry}, {
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
-static void InitDefaultsTxnCoordMeta() {
+static void InitDefaultsLeafTxnInputState() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   {
-    void* ptr = &::cockroach::roachpb::_TxnCoordMeta_default_instance_;
-    new (ptr) ::cockroach::roachpb::TxnCoordMeta();
+    void* ptr = &::cockroach::roachpb::_LeafTxnInputState_default_instance_;
+    new (ptr) ::cockroach::roachpb::LeafTxnInputState();
     ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
   }
-  ::cockroach::roachpb::TxnCoordMeta::InitAsDefaultInstance();
+  ::cockroach::roachpb::LeafTxnInputState::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<3> scc_info_TxnCoordMeta =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsTxnCoordMeta}, {
+::google::protobuf::internal::SCCInfo<2> scc_info_LeafTxnInputState =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsLeafTxnInputState}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_SequencedWrite.base,}};
+
+static void InitDefaultsLeafTxnFinalState() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_LeafTxnFinalState_default_instance_;
+    new (ptr) ::cockroach::roachpb::LeafTxnFinalState();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::LeafTxnFinalState::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<2> scc_info_LeafTxnFinalState =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsLeafTxnFinalState}, {
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
 
 void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_Span.base);
@@ -439,7 +459,8 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_SequencedWrite.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Lease.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AbortSpanEntry.base);
-  ::google::protobuf::internal::InitSCC(&scc_info_TxnCoordMeta.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_LeafTxnInputState.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_LeafTxnFinalState.base);
 }
 
 }  // namespace protobuf_roachpb_2fdata_2eproto
@@ -5549,32 +5570,284 @@ void AbortSpanEntry::InternalSwap(AbortSpanEntry* other) {
 
 // ===================================================================
 
-void TxnCoordMeta::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_TxnCoordMeta_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
+void LeafTxnInputState::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_LeafTxnInputState_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
       ::cockroach::roachpb::Transaction::internal_default_instance());
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int TxnCoordMeta::kTxnFieldNumber;
-const int TxnCoordMeta::kCommandCountFieldNumber;
-const int TxnCoordMeta::kRefreshReadsFieldNumber;
-const int TxnCoordMeta::kRefreshWritesFieldNumber;
-const int TxnCoordMeta::kRefreshInvalidFieldNumber;
-const int TxnCoordMeta::kInFlightWritesFieldNumber;
+const int LeafTxnInputState::kTxnFieldNumber;
+const int LeafTxnInputState::kRefreshInvalidFieldNumber;
+const int LeafTxnInputState::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
-TxnCoordMeta::TxnCoordMeta()
+LeafTxnInputState::LeafTxnInputState()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
   ::google::protobuf::internal::InitSCC(
-      &protobuf_roachpb_2fdata_2eproto::scc_info_TxnCoordMeta.base);
+      &protobuf_roachpb_2fdata_2eproto::scc_info_LeafTxnInputState.base);
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.LeafTxnInputState)
 }
-TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
+LeafTxnInputState::LeafTxnInputState(const LeafTxnInputState& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      in_flight_writes_(from.in_flight_writes_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_txn()) {
+    txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
+  } else {
+    txn_ = NULL;
+  }
+  refresh_invalid_ = from.refresh_invalid_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LeafTxnInputState)
+}
+
+void LeafTxnInputState::SharedCtor() {
+  ::memset(&txn_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&refresh_invalid_) -
+      reinterpret_cast<char*>(&txn_)) + sizeof(refresh_invalid_));
+}
+
+LeafTxnInputState::~LeafTxnInputState() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.LeafTxnInputState)
+  SharedDtor();
+}
+
+void LeafTxnInputState::SharedDtor() {
+  if (this != internal_default_instance()) delete txn_;
+}
+
+void LeafTxnInputState::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const LeafTxnInputState& LeafTxnInputState::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_LeafTxnInputState.base);
+  return *internal_default_instance();
+}
+
+
+void LeafTxnInputState::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.LeafTxnInputState)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  in_flight_writes_.Clear();
+  if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
+    delete txn_;
+  }
+  txn_ = NULL;
+  refresh_invalid_ = false;
+  _internal_metadata_.Clear();
+}
+
+bool LeafTxnInputState::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.LeafTxnInputState)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_txn()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool refresh_invalid = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &refresh_invalid_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_in_flight_writes()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.LeafTxnInputState)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.LeafTxnInputState)
+  return false;
+#undef DO_
+}
+
+void LeafTxnInputState::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LeafTxnInputState)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_txn(), output);
+  }
+
+  // bool refresh_invalid = 7;
+  if (this->refresh_invalid() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->refresh_invalid(), output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->in_flight_writes_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      8,
+      this->in_flight_writes(static_cast<int>(i)),
+      output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LeafTxnInputState)
+}
+
+size_t LeafTxnInputState::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.LeafTxnInputState)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->in_flight_writes_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->in_flight_writes(static_cast<int>(i)));
+    }
+  }
+
+  if (this->has_txn()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *txn_);
+  }
+
+  // bool refresh_invalid = 7;
+  if (this->refresh_invalid() != 0) {
+    total_size += 1 + 1;
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void LeafTxnInputState::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const LeafTxnInputState*>(&from));
+}
+
+void LeafTxnInputState::MergeFrom(const LeafTxnInputState& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.LeafTxnInputState)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
+  if (from.has_txn()) {
+    mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
+  }
+  if (from.refresh_invalid() != 0) {
+    set_refresh_invalid(from.refresh_invalid());
+  }
+}
+
+void LeafTxnInputState::CopyFrom(const LeafTxnInputState& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.LeafTxnInputState)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LeafTxnInputState::IsInitialized() const {
+  return true;
+}
+
+void LeafTxnInputState::Swap(LeafTxnInputState* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void LeafTxnInputState::InternalSwap(LeafTxnInputState* other) {
+  using std::swap;
+  CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
+  swap(txn_, other->txn_);
+  swap(refresh_invalid_, other->refresh_invalid_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string LeafTxnInputState::GetTypeName() const {
+  return "cockroach.roachpb.LeafTxnInputState";
+}
+
+
+// ===================================================================
+
+void LeafTxnFinalState::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_LeafTxnFinalState_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::roachpb::Transaction*>(
+      ::cockroach::roachpb::Transaction::internal_default_instance());
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int LeafTxnFinalState::kTxnFieldNumber;
+const int LeafTxnFinalState::kCommandCountFieldNumber;
+const int LeafTxnFinalState::kRefreshReadsFieldNumber;
+const int LeafTxnFinalState::kRefreshWritesFieldNumber;
+const int LeafTxnFinalState::kRefreshInvalidFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+LeafTxnFinalState::LeafTxnFinalState()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fdata_2eproto::scc_info_LeafTxnFinalState.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.LeafTxnFinalState)
+}
+LeafTxnFinalState::LeafTxnFinalState(const LeafTxnFinalState& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       refresh_reads_(from.refresh_reads_),
-      refresh_writes_(from.refresh_writes_),
-      in_flight_writes_(from.in_flight_writes_) {
+      refresh_writes_(from.refresh_writes_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_txn()) {
     txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
@@ -5584,42 +5857,41 @@ TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
   ::memcpy(&command_count_, &from.command_count_,
     static_cast<size_t>(reinterpret_cast<char*>(&refresh_invalid_) -
     reinterpret_cast<char*>(&command_count_)) + sizeof(refresh_invalid_));
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LeafTxnFinalState)
 }
 
-void TxnCoordMeta::SharedCtor() {
+void LeafTxnFinalState::SharedCtor() {
   ::memset(&txn_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&refresh_invalid_) -
       reinterpret_cast<char*>(&txn_)) + sizeof(refresh_invalid_));
 }
 
-TxnCoordMeta::~TxnCoordMeta() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.TxnCoordMeta)
+LeafTxnFinalState::~LeafTxnFinalState() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.LeafTxnFinalState)
   SharedDtor();
 }
 
-void TxnCoordMeta::SharedDtor() {
+void LeafTxnFinalState::SharedDtor() {
   if (this != internal_default_instance()) delete txn_;
 }
 
-void TxnCoordMeta::SetCachedSize(int size) const {
+void LeafTxnFinalState::SetCachedSize(int size) const {
   _cached_size_.Set(size);
 }
-const TxnCoordMeta& TxnCoordMeta::default_instance() {
-  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_TxnCoordMeta.base);
+const LeafTxnFinalState& LeafTxnFinalState::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_LeafTxnFinalState.base);
   return *internal_default_instance();
 }
 
 
-void TxnCoordMeta::Clear() {
-// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.TxnCoordMeta)
+void LeafTxnFinalState::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.LeafTxnFinalState)
   ::google::protobuf::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
   refresh_reads_.Clear();
   refresh_writes_.Clear();
-  in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
     delete txn_;
   }
@@ -5630,7 +5902,7 @@ void TxnCoordMeta::Clear() {
   _internal_metadata_.Clear();
 }
 
-bool TxnCoordMeta::MergePartialFromCodedStream(
+bool LeafTxnFinalState::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
@@ -5640,7 +5912,7 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
       unknown_fields_setter.buffer());
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_output, false);
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.LeafTxnFinalState)
   for (;;) {
     ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
@@ -5707,17 +5979,6 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
         break;
       }
 
-      case 8: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_in_flight_writes()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -5730,17 +5991,17 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.LeafTxnFinalState)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.LeafTxnFinalState)
   return false;
 #undef DO_
 }
 
-void TxnCoordMeta::SerializeWithCachedSizes(
+void LeafTxnFinalState::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LeafTxnFinalState)
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
@@ -5775,21 +6036,13 @@ void TxnCoordMeta::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->refresh_invalid(), output);
   }
 
-  for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->in_flight_writes_size()); i < n; i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      8,
-      this->in_flight_writes(static_cast<int>(i)),
-      output);
-  }
-
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TxnCoordMeta)
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LeafTxnFinalState)
 }
 
-size_t TxnCoordMeta::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.TxnCoordMeta)
+size_t LeafTxnFinalState::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.LeafTxnFinalState)
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
@@ -5811,16 +6064,6 @@ size_t TxnCoordMeta::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->refresh_writes(static_cast<int>(i)));
-    }
-  }
-
-  {
-    unsigned int count = static_cast<unsigned int>(this->in_flight_writes_size());
-    total_size += 1UL * count;
-    for (unsigned int i = 0; i < count; i++) {
-      total_size +=
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->in_flight_writes(static_cast<int>(i)));
     }
   }
 
@@ -5847,13 +6090,13 @@ size_t TxnCoordMeta::ByteSizeLong() const {
   return total_size;
 }
 
-void TxnCoordMeta::CheckTypeAndMergeFrom(
+void LeafTxnFinalState::CheckTypeAndMergeFrom(
     const ::google::protobuf::MessageLite& from) {
-  MergeFrom(*::google::protobuf::down_cast<const TxnCoordMeta*>(&from));
+  MergeFrom(*::google::protobuf::down_cast<const LeafTxnFinalState*>(&from));
 }
 
-void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.TxnCoordMeta)
+void LeafTxnFinalState::MergeFrom(const LeafTxnFinalState& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.LeafTxnFinalState)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::google::protobuf::uint32 cached_has_bits = 0;
@@ -5861,7 +6104,6 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
 
   refresh_reads_.MergeFrom(from.refresh_reads_);
   refresh_writes_.MergeFrom(from.refresh_writes_);
-  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_txn()) {
     mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
   }
@@ -5873,34 +6115,33 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   }
 }
 
-void TxnCoordMeta::CopyFrom(const TxnCoordMeta& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.TxnCoordMeta)
+void LeafTxnFinalState::CopyFrom(const LeafTxnFinalState& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.LeafTxnFinalState)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool TxnCoordMeta::IsInitialized() const {
+bool LeafTxnFinalState::IsInitialized() const {
   return true;
 }
 
-void TxnCoordMeta::Swap(TxnCoordMeta* other) {
+void LeafTxnFinalState::Swap(LeafTxnFinalState* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
+void LeafTxnFinalState::InternalSwap(LeafTxnFinalState* other) {
   using std::swap;
   CastToBase(&refresh_reads_)->InternalSwap(CastToBase(&other->refresh_reads_));
   CastToBase(&refresh_writes_)->InternalSwap(CastToBase(&other->refresh_writes_));
-  CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(txn_, other->txn_);
   swap(command_count_, other->command_count_);
   swap(refresh_invalid_, other->refresh_invalid_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
-::std::string TxnCoordMeta::GetTypeName() const {
-  return "cockroach.roachpb.TxnCoordMeta";
+::std::string LeafTxnFinalState::GetTypeName() const {
+  return "cockroach.roachpb.LeafTxnFinalState";
 }
 
 
@@ -5960,8 +6201,11 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Lease* Arena
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AbortSpanEntry* Arena::CreateMaybeMessage< ::cockroach::roachpb::AbortSpanEntry >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AbortSpanEntry >(arena);
 }
-template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TxnCoordMeta* Arena::CreateMaybeMessage< ::cockroach::roachpb::TxnCoordMeta >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::roachpb::TxnCoordMeta >(arena);
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LeafTxnInputState* Arena::CreateMaybeMessage< ::cockroach::roachpb::LeafTxnInputState >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::LeafTxnInputState >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LeafTxnFinalState* Arena::CreateMaybeMessage< ::cockroach::roachpb::LeafTxnFinalState >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::LeafTxnFinalState >(arena);
 }
 }  // namespace protobuf
 }  // namespace google

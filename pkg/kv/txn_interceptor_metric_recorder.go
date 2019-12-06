@@ -63,11 +63,20 @@ func (m *txnMetricRecorder) SendLocked(
 // setWrapped is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) setWrapped(wrapped lockedSender) { m.wrapped = wrapped }
 
-// populateMetaLocked is part of the txnInterceptor interface.
-func (*txnMetricRecorder) populateMetaLocked(*roachpb.TxnCoordMeta) {}
+// initializeFromTxn is part of the txnInterceptor interface.
+func (*txnMetricRecorder) initializeFromTxn(*roachpb.Transaction) {}
 
-// augmentMetaLocked is part of the txnInterceptor interface.
-func (*txnMetricRecorder) augmentMetaLocked(roachpb.TxnCoordMeta) {}
+// populateLeafInputState is part of the txnInterceptor interface.
+func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState) {}
+
+// initializeLeaf is part of the txnInterceptor interface.
+func (*txnMetricRecorder) initializeLeaf(*roachpb.LeafTxnInputState) {}
+
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (*txnMetricRecorder) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (*txnMetricRecorder) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) epochBumpedLocked() {}

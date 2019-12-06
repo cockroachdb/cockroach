@@ -708,8 +708,8 @@ func (jr *JoinReader) outputStatsToTrace() {
 }
 
 func (jr *JoinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, jr.FlowCtx.Txn); meta != nil {
-		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
+	if tfs := GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
+		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
 	}
 	return nil
 }

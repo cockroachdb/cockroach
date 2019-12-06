@@ -251,22 +251,23 @@ func SendTraceData(ctx context.Context, dst RowReceiver) {
 	}
 }
 
-// GetTxnCoordMeta returns the txn metadata from a transaction if it is present
-// and the transaction is a leaf transaction, otherwise nil.
+// GetLeafTxnFinalState returns the txn metadata from a transaction if
+// it is present and the transaction is a leaf transaction, otherwise
+// nil.
 //
 // NOTE(andrei): As of 04/2018, the txn is shared by all processors scheduled on
 // a node, and so it's possible for multiple processors to send the same
-// TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
+// LeafTxnFinalState. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func GetTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
-	if txn.Type() == client.LeafTxn {
-		txnMeta := txn.GetTxnCoordMeta(ctx)
-		txnMeta.StripLeafToRoot()
-		if txnMeta.Txn.ID != uuid.Nil {
-			return &txnMeta
-		}
+func GetLeafTxnFinalState(ctx context.Context, txn *client.Txn) *roachpb.LeafTxnFinalState {
+	if txn.Type() != client.LeafTxn {
+		return nil
 	}
-	return nil
+	txnMeta := txn.GetLeafTxnFinalState(ctx)
+	if txnMeta.Txn.ID == uuid.Nil {
+		return nil
+	}
+	return &txnMeta
 }
 
 // DrainAndClose is a version of DrainAndForwardMetadata that drains multiple
