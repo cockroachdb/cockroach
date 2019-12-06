@@ -198,10 +198,10 @@ type ProducerMetadata struct {
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
-	// TxnCoordMeta contains the updated transaction coordinator metadata,
-	// to be sent from leaf transactions to augment the root transaction,
-	// held by the flow's ultimate receiver.
-	TxnCoordMeta *roachpb.TxnCoordMeta
+	// LeafTxnFinalState contains the final state of the LeafTxn to be
+	// sent from leaf flows to the RootTxn held by the flow's ultimate
+	// receiver.
+	LeafTxnFinalState *roachpb.LeafTxnFinalState
 	// RowNum corresponds to a row produced by a "source" processor that takes no
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.
@@ -270,8 +270,8 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Ranges = v.RangeInfo.RangeInfo
 	case *RemoteProducerMetadata_TraceData_:
 		meta.TraceData = v.TraceData.CollectedSpans
-	case *RemoteProducerMetadata_TxnCoordMeta:
-		meta.TxnCoordMeta = v.TxnCoordMeta
+	case *RemoteProducerMetadata_LeafTxnFinalState:
+		meta.LeafTxnFinalState = v.LeafTxnFinalState
 	case *RemoteProducerMetadata_RowNum_:
 		meta.RowNum = v.RowNum
 	case *RemoteProducerMetadata_SamplerProgress_:
@@ -306,9 +306,9 @@ func LocalMetaToRemoteProducerMeta(
 				CollectedSpans: meta.TraceData,
 			},
 		}
-	} else if meta.TxnCoordMeta != nil {
-		rpm.Value = &RemoteProducerMetadata_TxnCoordMeta{
-			TxnCoordMeta: meta.TxnCoordMeta,
+	} else if meta.LeafTxnFinalState != nil {
+		rpm.Value = &RemoteProducerMetadata_LeafTxnFinalState{
+			LeafTxnFinalState: meta.LeafTxnFinalState,
 		}
 	} else if meta.RowNum != nil {
 		rpm.Value = &RemoteProducerMetadata_RowNum_{

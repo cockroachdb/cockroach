@@ -551,13 +551,13 @@ const (
 	//
 	// Other categories of errors might be safe to ignore too; however we
 	// can't ignore all of them. Generally, we need to ensure that all the
-	// trailing metadata (e.g. TxnCoordMeta's) make it to the gateway for
+	// trailing metadata (e.g. LeafTxnFinalState's) make it to the gateway for
 	// successful flows. If an error is telling us that some metadata might
 	// have been dropped, we can't ignore that.
 	StateDraining
 
 	// StateTrailingMeta is the state in which the processor is outputting final
-	// metadata such as the tracing information or the TxnCoordMeta. Once all the
+	// metadata such as the tracing information or the LeafTxnFinalState. Once all the
 	// trailing metadata has been produced, the processor transitions to
 	// StateExhausted.
 	StateTrailingMeta

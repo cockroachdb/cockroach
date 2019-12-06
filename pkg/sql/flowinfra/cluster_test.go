@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -85,14 +86,16 @@ func TestClusterFlow(t *testing.T) {
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 
+	now := tc.Server(0).Clock().Now()
 	txnProto := roachpb.MakeTransaction(
 		"cluster-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		tc.Server(0).Clock().Now(),
+		now,
 		0, // maxOffset
 	)
-	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
+	txn := client.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, client.RootTxn, &txnProto)
+	leafInputState := txn.GetLeafTxnInputState(ctx)
 
 	tr1 := execinfrapb.TableReaderSpec{
 		Table:    *desc,
@@ -115,8 +118,8 @@ func TestClusterFlow(t *testing.T) {
 	fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 	req1 := &execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
-		TxnCoordMeta: &txnCoordMeta,
+		Version:           execinfra.Version,
+		LeafTxnInputState: &leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
 			Processors: []execinfrapb.ProcessorSpec{{
@@ -137,8 +140,8 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req2 := &execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
-		TxnCoordMeta: &txnCoordMeta,
+		Version:           execinfra.Version,
+		LeafTxnInputState: &leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
 			Processors: []execinfrapb.ProcessorSpec{{
@@ -159,8 +162,8 @@ func TestClusterFlow(t *testing.T) {
 	}
 
 	req3 := &execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
-		TxnCoordMeta: &txnCoordMeta,
+		Version:           execinfra.Version,
+		LeafTxnInputState: &leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
 			Processors: []execinfrapb.ProcessorSpec{
@@ -258,7 +261,7 @@ func TestClusterFlow(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
@@ -292,12 +295,12 @@ func ignoreMisplannedRanges(metas []execinfrapb.ProducerMetadata) []execinfrapb.
 	return res
 }
 
-// ignoreTxnCoordMeta takes a slice of metadata and returns the entries excluding
-// the transaction coordinator metadata.
-func ignoreTxnCoordMeta(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+// ignoreLeafTxnState takes a slice of metadata and returns the
+// entries excluding the leaf txn state.
+func ignoreLeafTxnState(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
 	res := make([]execinfrapb.ProducerMetadata, 0)
 	for _, m := range metas {
-		if m.TxnCoordMeta == nil {
+		if m.LeafTxnFinalState == nil {
 			res = append(res, m)
 		}
 	}
@@ -405,18 +408,22 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		Type: sqlbase.InnerJoin,
 	}
 
+	now := tc.Server(0).Clock().Now()
 	txnProto := roachpb.MakeTransaction(
 		"deadlock-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		tc.Server(0).Clock().Now(),
+		now,
 		0, // maxOffset
 	)
-	txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
+	txn := client.NewTxnFromProto(
+		context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
+		now, client.RootTxn, &txnProto)
+	leafInputState := txn.GetLeafTxnInputState(context.TODO())
 
 	req := execinfrapb.SetupFlowRequest{
-		Version:      execinfra.Version,
-		TxnCoordMeta: &txnCoordMeta,
+		Version:           execinfra.Version,
+		LeafTxnInputState: &leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			// The left-hand Values processor in the diagram above.
@@ -524,7 +531,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
@@ -716,18 +723,22 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						return execinfrapb.StreamEndpointSpec_REMOTE
 					}
+					now := tc.Server(0).Clock().Now()
 					txnProto := roachpb.MakeTransaction(
 						"cluster-test",
 						nil, // baseKey
 						roachpb.NormalUserPriority,
-						tc.Server(0).Clock().Now(),
+						now,
 						0, // maxOffset
 					)
-					txnCoordMeta := roachpb.MakeTxnCoordMeta(txnProto)
+					txn := client.NewTxnFromProto(
+						context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
+						now, client.RootTxn, &txnProto)
+					leafInputState := txn.GetLeafTxnInputState(context.TODO())
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
-							Version:      execinfra.Version,
-							TxnCoordMeta: &txnCoordMeta,
+							Version:           execinfra.Version,
+							LeafTxnInputState: &leafInputState,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{
 									Core: execinfrapb.ProcessorCoreUnion{Values: &valSpecs[i]},
@@ -824,7 +835,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
 						}
 						metas = ignoreMisplannedRanges(metas)
-						metas = ignoreTxnCoordMeta(metas)
+						metas = ignoreLeafTxnState(metas)
 						metas = ignoreMetricsMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)

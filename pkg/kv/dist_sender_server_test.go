@@ -1727,7 +1727,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		_ = txn.CommitTimestamp()
 
 		epoch++
-		proto := txn.Serialize()
+		proto := txn.TestingCloneTxn()
 		if epoch >= 2 {
 			// ObservedTimestamps must contain the timestamp returned from the
 			// Put operation.
@@ -1857,7 +1857,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	db := s.DB()
 
 	// Write values to key "a".
-	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	b := txn.NewBatch()
 	b.Put(keyA, []byte("value"))
 	if err := txn.Run(ctx, b); err != nil {
@@ -2772,7 +2772,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{
 						Key: roachpb.Key("a"),
 					},
-					IntentTxn: txn.Serialize().TxnMeta,
+					IntentTxn: txn.TestingCloneTxn().TxnMeta,
 					Status:    roachpb.ABORTED,
 				})
 				if _, pErr := txn.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {
@@ -2798,7 +2798,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{
 						Key: roachpb.Key("a"),
 					},
-					IntentTxn: txn.Serialize().TxnMeta,
+					IntentTxn: txn.TestingCloneTxn().TxnMeta,
 					Status:    roachpb.ABORTED,
 				})
 				if _, pErr := txn.DB().NonTransactionalSender().Send(ctx, ba); pErr != nil {

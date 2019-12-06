@@ -401,7 +401,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID: s.NodeID(),
 			}
 
@@ -531,7 +531,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
-				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+				Txn:    client.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID: s.NodeID(),
 			}
 
@@ -585,11 +585,15 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 	defer sp.Finish()
 
+	rootTxn := client.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := client.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		// Run in a LeafTxn so that txn metadata is produced.
-		Txn:    client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		Txn:    leafTxn,
 		NodeID: s.NodeID(),
 	}
 
@@ -620,7 +624,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 
 	// Check for trailing metadata.
-	var traceSeen, txnCoordMetaSeen bool
+	var traceSeen, txnFinalStateSeen bool
 	for {
 		row, meta := out.Next()
 		if row != nil {
@@ -632,14 +636,14 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		if meta.TraceData != nil {
 			traceSeen = true
 		}
-		if meta.TxnCoordMeta != nil {
-			txnCoordMetaSeen = true
+		if meta.LeafTxnFinalState != nil {
+			txnFinalStateSeen = true
 		}
 	}
 	if !traceSeen {
 		t.Fatal("missing tracing trailing metadata")
 	}
-	if !txnCoordMetaSeen {
-		t.Fatal("missing txn trailing metadata")
+	if !txnFinalStateSeen {
+		t.Fatal("missing txn final state")
 	}
 }

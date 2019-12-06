@@ -58,12 +58,6 @@ import (
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
 	seqGen  enginepb.TxnSeq
-
-	// commandCount indicates how many requests have been sent through
-	// this transaction. Reset on retryable txn errors.
-	// TODO(andrei): let's get rid of this. It should be maintained
-	// in the SQL level.
-	commandCount int32
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -84,32 +78,26 @@ func (s *txnSeqNumAllocator) SendLocked(
 		ru.GetInner().SetHeader(oldHeader)
 	}
 
-	s.commandCount += int32(len(ba.Requests))
-
 	return s.wrapped.SendLocked(ctx, ba)
 }
 
 // setWrapped is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) setWrapped(wrapped lockedSender) { s.wrapped = wrapped }
 
-// populateMetaLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	meta.CommandCount = s.commandCount
-	meta.Txn.Sequence = s.seqGen
+// populateLeafInputState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+	tis.Txn.Sequence = s.seqGen
 }
 
-// augmentMetaLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
-	s.commandCount += meta.CommandCount
-	if meta.Txn.Sequence > s.seqGen {
-		s.seqGen = meta.Txn.Sequence
-	}
-}
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) populateLeafFinalState(tfs *roachpb.LeafTxnFinalState) {}
+
+// importLeafFinalState is part of the txnInterceptor interface.
+func (s *txnSeqNumAllocator) importLeafFinalState(tfs *roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) epochBumpedLocked() {
 	s.seqGen = 0
-	s.commandCount = 0
 }
 
 // closeLocked is part of the txnInterceptor interface.
