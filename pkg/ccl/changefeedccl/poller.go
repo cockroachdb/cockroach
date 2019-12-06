@@ -152,6 +152,7 @@ func (p *poller) Run(ctx context.Context) error {
 
 		// Determine if we are at a scanBoundary, and trigger a full scan if needed.
 		isFullScan := false
+		var resolvedOverride hlc.Timestamp
 		p.mu.Lock()
 		if len(p.mu.scanBoundaries) > 0 {
 			if p.mu.scanBoundaries[0].Equal(lastHighwater) {
@@ -166,6 +167,10 @@ func (p *poller) Run(ctx context.Context) error {
 				// scan boundary. This will cause us to capture all changes up to the
 				// scan boundary, then consume the boundary on the next iteration.
 				nextHighWater = p.mu.scanBoundaries[0]
+				// A boundary here means we're about to do a full scan (backfill) at
+				// this timestamp, so at the changefeed level the boundary itself is not
+				// resolved.
+				resolvedOverride = nextHighWater.Prev()
 			}
 		}
 		p.mu.Unlock()
@@ -182,9 +187,16 @@ func (p *poller) Run(ctx context.Context) error {
 			return err
 		}
 
-		if err := p.exportSpansParallel(ctx, spans, lastHighwater, nextHighWater, isFullScan); err != nil {
+		if resolvedOverride.IsEmpty() {
+			resolvedOverride = nextHighWater
+		}
+
+		if err := p.exportSpansParallel(
+			ctx, spans, lastHighwater, nextHighWater, resolvedOverride, isFullScan,
+		); err != nil {
 			return err
 		}
+
 		p.mu.Lock()
 		p.mu.highWater = nextHighWater
 		p.mu.Unlock()
@@ -232,8 +244,14 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		p.mu.Unlock()
 		if scanTime != (hlc.Timestamp{}) {
 			if err := p.exportSpansParallel(
-				ctx, spans, scanTime, scanTime, true, /* fullScan */
+				ctx, spans, scanTime, scanTime, scanTime, true, /* fullScan */
 			); err != nil {
+				return err
+			}
+		}
+
+		for _, span := range spans {
+			if err := p.buf.AddResolved(ctx, span, scanTime); err != nil {
 				return err
 			}
 		}
@@ -441,7 +459,10 @@ func getSpansToProcess(
 }
 
 func (p *poller) exportSpansParallel(
-	ctx context.Context, spans []roachpb.Span, start, end hlc.Timestamp, isFullScan bool,
+	ctx context.Context,
+	spans []roachpb.Span,
+	start, end, willBeResolvedAfterScan hlc.Timestamp,
+	isFullScan bool,
 ) error {
 	// Export requests for the various watched spans are executed in parallel,
 	// with a semaphore-enforced limit based on a cluster setting.
@@ -466,7 +487,7 @@ func (p *poller) exportSpansParallel(
 		g.GoCtx(func(ctx context.Context) error {
 			defer func() { <-exportsSem }()
 
-			err := p.exportSpan(ctx, span, start, end, isFullScan)
+			err := p.exportSpan(ctx, span, start, end, willBeResolvedAfterScan, isFullScan)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d`, finished, len(spans))
@@ -481,7 +502,10 @@ func (p *poller) exportSpansParallel(
 }
 
 func (p *poller) exportSpan(
-	ctx context.Context, span roachpb.Span, start, end hlc.Timestamp, isFullScan bool,
+	ctx context.Context,
+	span roachpb.Span,
+	start, end, willBeResolvedAfterScan hlc.Timestamp,
+	isFullScan bool,
 ) error {
 	sender := p.db.NonTransactionalSender()
 	if log.V(2) {
@@ -532,7 +556,7 @@ func (p *poller) exportSpan(
 			return err
 		}
 	}
-	if err := p.buf.AddResolved(ctx, span, end); err != nil {
+	if err := p.buf.AddResolved(ctx, span, willBeResolvedAfterScan); err != nil {
 		return err
 	}
 
