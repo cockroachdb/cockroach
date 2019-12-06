@@ -261,7 +261,7 @@ func SendTraceData(ctx context.Context, dst RowReceiver) {
 func GetTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
 	if txn.Type() == client.LeafTxn {
 		txnMeta := txn.GetTxnCoordMeta(ctx)
-		txnMeta.StripLeafToRoot()
+		txnMeta.StripLeafToRoot(ctx)
 		if txnMeta.Txn.ID != uuid.Nil {
 			return &txnMeta
 		}
