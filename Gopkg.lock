@@ -472,7 +472,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8add68593460ce16d3ff3cfd2a1f8f747984447312ca852fd0be806a72e7bf48"
+  digest = "1:82e014177667982413bc45aefda0df2aaca5da4476f288a777223ce834786ddd"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -495,7 +495,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "1afbdce75eb9ce54c692711aa0eff0455b20003d"
+  revision = "382a403837cb2edfc5d60d4a4476e61c17ac435e"
 
 [[projects]]
   branch = "master"
@@ -1691,13 +1691,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:826837a6c03df57828c1128425043fb47a6007c1ca701c8c094570563d49072d"
+  digest = "1:a73a22d151d0961c7b1b403dc7e8471f5ef96675d45a92b5360f182e8d98f48a"
   name = "golang.org/x/perf"
   packages = [
     "benchstat",
     "cmd/benchstat",
     "internal/stats",
-    "storage",
     "storage/benchfmt",
   ]
   pruneopts = "UT"
@@ -2145,7 +2144,6 @@
     "golang.org/x/oauth2",
     "golang.org/x/oauth2/google",
     "golang.org/x/perf/cmd/benchstat",
-    "golang.org/x/perf/storage",
     "golang.org/x/sync/errgroup",
     "golang.org/x/sync/syncmap",
     "golang.org/x/sys/unix",
