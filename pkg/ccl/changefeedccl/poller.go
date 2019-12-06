@@ -125,6 +125,15 @@ func makePoller(
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
 func (p *poller) Run(ctx context.Context) error {
+	// Fetch the table descs as of the initial highWater and prime the table
+	// history with them. This addresses #41694 where we'd skip the rest of a
+	// backfill if the changefeed was paused/unpaused during it. The bug was that
+	// the changefeed wouldn't notice the table descriptor had changed (and thus
+	// we were in the backfill state) when it restarted.
+	if err := p.primeInitialTableDescs(ctx); err != nil {
+		return err
+	}
+
 	for {
 		// Wait for polling interval
 		p.mu.Lock()
