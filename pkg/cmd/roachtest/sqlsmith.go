@@ -100,8 +100,9 @@ func registerSQLSmith(r *testRegistry) {
 		c.l.Printf("setup:\n%s", setup)
 		if _, err := conn.Exec(setup); err != nil {
 			t.Fatal(err)
+		} else {
+			logStmt(setup)
 		}
-		logStmt(setup)
 
 		const timeout = time.Minute
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())

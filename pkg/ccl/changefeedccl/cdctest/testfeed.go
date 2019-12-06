@@ -613,10 +613,20 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 	}
 }
 
-func (c *cloudFeed) walkDir(path string, info os.FileInfo, _ error) error {
+func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	if strings.HasSuffix(path, `.tmp`) {
 		// File in the process of being written by ExternalStorage. Ignore.
 		return nil
+	}
+
+	if err != nil {
+		// From filepath.WalkFunc:
+		//  If there was a problem walking to the file or directory named by
+		//  path, the incoming error will describe the problem and the function
+		//  can decide how to handle that error (and Walk will not descend into
+		//  that directory). In the case of an error, the info argument will be
+		//  nil. If an error is returned, processing stops.
+		return err
 	}
 
 	if info.IsDir() {
