@@ -61,11 +61,13 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
-	txnCoordMeta := txn.GetTxnCoordMeta(ctx)
-	txnCoordMeta.StripRootToLeaf()
+	txn := client.NewTxn(ctx, kvDB, s.NodeID())
+	leafInputState := txn.GetLeafTxnInputState(ctx)
 
-	req := &execinfrapb.SetupFlowRequest{Version: execinfra.Version, TxnCoordMeta: &txnCoordMeta}
+	req := &execinfrapb.SetupFlowRequest{
+		Version:           execinfra.Version,
+		LeafTxnInputState: &leafInputState,
+	}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
@@ -103,7 +105,7 @@ func TestServer(t *testing.T) {
 		}
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
-	metas = ignoreTxnCoordMeta(metas)
+	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)

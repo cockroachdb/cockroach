@@ -117,6 +117,7 @@ type TxnCoordSender struct {
 		txn roachpb.Transaction
 
 		// userPriority is the txn's priority. Used when restarting the transaction.
+		// This field is only populated on rootTxns.
 		userPriority roachpb.UserPriority
 	}
 
@@ -159,17 +160,30 @@ type txnInterceptor interface {
 	// setWrapped sets the txnInterceptor wrapped lockedSender.
 	setWrapped(wrapped lockedSender)
 
-	// populateMetaLocked populates the provided TxnCoordMeta with any
-	// internal state that the txnInterceptor contains. This is used
-	// to serialize the interceptor's state so that it can be passed to
-	// other TxnCoordSenders within a distributed transaction.
-	populateMetaLocked(meta *roachpb.TxnCoordMeta)
+	// loadTxn populates the interceptor's initial state from a given
+	// Transaction.
+	//
+	// This is called once, both for root and leaf txns.
+	loadTxn(*roachpb.Transaction)
 
-	// augmentMetaLocked updates any internal state held inside the
-	// interceptor that is a function of the TxnCoordMeta. This is used
-	// to deserialize the interceptor's state when it is provided by
-	// another TxnCoordSender within a distributed transaction.
-	augmentMetaLocked(meta roachpb.TxnCoordMeta)
+	// initializeLeaf initializes the interceptor from an input payload
+	// coming from a RootTxn.
+	//
+	// This is called once upon leaf txn initialization, immediately
+	// after init() above.
+	initializeLeaf(*roachpb.LeafTxnInputState)
+
+	// populateLeafInputState populates the given input payload
+	// for a LeafTxn.
+	populateLeafInputState(*roachpb.LeafTxnInputState)
+
+	// populateLeafFinalState populates the final payload
+	// for a LeafTxn to bring back into a RootTxn.
+	populateLeafFinalState(*roachpb.LeafTxnFinalState)
+
+	// importLeafFinalState updates any internal state held inside the
+	// interceptor from the given LeafTxn final state.
+	importLeafFinalState(*roachpb.LeafTxnFinalState)
 
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
@@ -181,15 +195,18 @@ type txnInterceptor interface {
 	closeLocked()
 }
 
-func newTxnCoordSender(
-	tcf *TxnCoordSenderFactory,
-	typ client.TxnType,
-	meta roachpb.TxnCoordMeta,
-	pri roachpb.UserPriority,
+func newRootTxnCoordSender(
+	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, pri roachpb.UserPriority,
 ) client.TxnSender {
-	meta.Txn.AssertInitialized(context.TODO())
+	txn.AssertInitialized(context.TODO())
+
+	if txn.Status != roachpb.PENDING {
+		// It's invalid to create a new TCS if the transaction is not in a pending state.
+		log.Fatalf(context.TODO(), "unexpected non-pending txn in RootTransactionalSender: %s", txn)
+	}
+
 	tcs := &TxnCoordSender{
-		typ:                   typ,
+		typ:                   client.RootTxn,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
@@ -205,34 +222,74 @@ func newTxnCoordSender(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen = ds.rangeIteratorGen
 	}
-	// Some interceptors are only needed by roots.
-	if typ == client.RootTxn {
-		tcs.interceptorAlloc.txnHeartbeater.init(
-			tcf.AmbientContext,
-			tcs.stopper,
-			tcs.clock,
-			&tcs.metrics,
-			tcs.heartbeatInterval,
-			&tcs.interceptorAlloc.txnLockGatekeeper,
-			&tcs.mu.Mutex,
-			&tcs.mu.txn,
-		)
-		tcs.interceptorAlloc.txnCommitter = txnCommitter{
-			st:      tcf.st,
-			stopper: tcs.stopper,
-			mu:      &tcs.mu.Mutex,
-		}
-		tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
-			metrics: &tcs.metrics,
-			clock:   tcs.clock,
-			txn:     &tcs.mu.txn,
-		}
+	tcs.interceptorAlloc.txnHeartbeater.init(
+		tcf.AmbientContext,
+		tcs.stopper,
+		tcs.clock,
+		&tcs.metrics,
+		tcs.heartbeatInterval,
+		&tcs.interceptorAlloc.txnLockGatekeeper,
+		&tcs.mu.Mutex,
+		&tcs.mu.txn,
+	)
+	tcs.interceptorAlloc.txnCommitter = txnCommitter{
+		st:      tcf.st,
+		stopper: tcs.stopper,
+		mu:      &tcs.mu.Mutex,
 	}
-	tcs.interceptorAlloc.txnPipeliner = txnPipeliner{
+	tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
+		metrics: &tcs.metrics,
+		clock:   tcs.clock,
+		txn:     &tcs.mu.txn,
+	}
+	tcs.initCommonInterceptors(tcf, client.RootTxn, riGen)
+
+	// Once the interceptors are initialized, piece them all together in the
+	// correct order.
+	tcs.interceptorAlloc.arr = [...]txnInterceptor{
+		&tcs.interceptorAlloc.txnHeartbeater,
+		// Various interceptors below rely on sequence number allocation,
+		// so the sequence number allocator is near the top of the stack.
+		&tcs.interceptorAlloc.txnSeqNumAllocator,
+		// The pipelinger sits above the span refresher because it will
+		// never generate transaction retry errors that could be avoided
+		// with a refresh.
+		&tcs.interceptorAlloc.txnPipeliner,
+		// The span refresher may resend entire batches to avoid transaction
+		// retries. Because of that, we need to be careful which interceptors
+		// sit below it in the stack.
+		&tcs.interceptorAlloc.txnSpanRefresher,
+		// The committer sits beneath the span refresher so that any
+		// retryable errors that it generates have a chance of being
+		// "refreshed away" without the need for a txn restart. Because the
+		// span refresher can re-issue batches, it needs to be careful about
+		// what parts of the batch it mutates. Any mutation needs to be
+		// idempotent and should avoid writing to memory when not changing
+		// it to avoid looking like a data race.
+		&tcs.interceptorAlloc.txnCommitter,
+		// The metrics recorder sits at the bottom of the stack so that it
+		// can observe all transformations performed by other interceptors.
+		&tcs.interceptorAlloc.txnMetricRecorder,
+	}
+	tcs.interceptorStack = tcs.interceptorAlloc.arr[:]
+
+	tcs.connectInterceptors()
+
+	tcs.mu.txn.Update(txn)
+	for _, reqInt := range tcs.interceptorStack {
+		reqInt.loadTxn(txn)
+	}
+	return tcs
+}
+
+func (tc *TxnCoordSender) initCommonInterceptors(
+	tcf *TxnCoordSenderFactory, typ client.TxnType, riGen RangeIteratorGen,
+) {
+	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:    tcf.st,
 		riGen: riGen,
 	}
-	tcs.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
+	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
 		knobs: &tcf.testingKnobs,
 		// We can only allow refresh span retries on root transactions
@@ -240,148 +297,84 @@ func newTxnCoordSender(
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
 		canAutoRetry:     typ == client.RootTxn,
-		autoRetryCounter: tcs.metrics.AutoRetries,
+		autoRetryCounter: tc.metrics.AutoRetries,
 	}
-	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
-		wrapped:                 tcs.wrapped,
-		mu:                      &tcs.mu.Mutex,
+	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
+		wrapped:                 tc.wrapped,
+		mu:                      &tc.mu.Mutex,
 		allowConcurrentRequests: typ == client.LeafTxn,
 	}
+}
+
+func (tc *TxnCoordSender) connectInterceptors() {
+	for i, reqInt := range tc.interceptorStack {
+		if i < len(tc.interceptorStack)-1 {
+			reqInt.setWrapped(tc.interceptorStack[i+1])
+		} else {
+			reqInt.setWrapped(&tc.interceptorAlloc.txnLockGatekeeper)
+		}
+	}
+}
+
+func newLeafTxnCoordSender(
+	tcf *TxnCoordSenderFactory, tis *roachpb.LeafTxnInputState,
+) client.TxnSender {
+	tis.Txn.AssertInitialized(context.TODO())
+
+	if tis.Txn.Status != roachpb.PENDING {
+		// It's invalid to create a new TCS if the transaction is not in a pending state.
+		log.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
+	}
+
+	tcs := &TxnCoordSender{
+		typ:                   client.LeafTxn,
+		TxnCoordSenderFactory: tcf,
+	}
+	tcs.mu.txnState = txnPending
+	// No need to initialize tcs.mu.userPriority here,
+	// as this field is only used in root txns.
+
+	// Create a stack of request/response interceptors. All of the objects in
+	// this stack are pre-allocated on the TxnCoordSender struct, so this just
+	// initializes the interceptors and pieces them together. It then adds a
+	// txnLockGatekeeper at the bottom of the stack to connect it with the
+	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
+	// is initialized.
+	var riGen RangeIteratorGen
+	if ds, ok := tcf.wrapped.(*DistSender); ok {
+		riGen = ds.rangeIteratorGen
+	}
+	tcs.initCommonInterceptors(tcf, client.LeafTxn, riGen)
 
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.
-	switch typ {
-	case client.RootTxn:
-		tcs.interceptorAlloc.arr = [...]txnInterceptor{
-			&tcs.interceptorAlloc.txnHeartbeater,
-			// Various interceptors below rely on sequence number allocation,
-			// so the sequence number allocator is near the top of the stack.
-			&tcs.interceptorAlloc.txnSeqNumAllocator,
-			// The pipelinger sits above the span refresher because it will
-			// never generate transaction retry errors that could be avoided
-			// with a refresh.
-			&tcs.interceptorAlloc.txnPipeliner,
-			// The span refresher may resend entire batches to avoid transaction
-			// retries. Because of that, we need to be careful which interceptors
-			// sit below it in the stack.
-			&tcs.interceptorAlloc.txnSpanRefresher,
-			// The committer sits beneath the span refresher so that any
-			// retryable errors that it generates have a chance of being
-			// "refreshed away" without the need for a txn restart. Because the
-			// span refresher can re-issue batches, it needs to be careful about
-			// what parts of the batch it mutates. Any mutation needs to be
-			// idempotent and should avoid writing to memory when not changing
-			// it to avoid looking like a data race.
-			&tcs.interceptorAlloc.txnCommitter,
-			// The metrics recorder sits at the bottom of the stack so that it
-			// can observe all transformations performed by other interceptors.
-			&tcs.interceptorAlloc.txnMetricRecorder,
-		}
-		tcs.interceptorStack = tcs.interceptorAlloc.arr[:]
-	case client.LeafTxn:
-		tcs.interceptorAlloc.arr = [cap(tcs.interceptorAlloc.arr)]txnInterceptor{
-			// LeafTxns never perform writes so the sequence number allocator
-			// should never increment its sequence number counter over its
-			// lifetime, but it still plays the important role of assigning each
-			// read request the latest sequence number.
-			&tcs.interceptorAlloc.txnSeqNumAllocator,
-			// The pipeliner is needed on leaves to ensure that in-flight writes
-			// are chained onto by reads that should see them.
-			&tcs.interceptorAlloc.txnPipeliner,
-			// The span refresher was configured above to not actually perform
-			// refreshes for leaves. It is still needed for accumulating the
-			// spans to be reported to the Root. But the gateway doesn't do much
-			// with them; see #24798.
-			&tcs.interceptorAlloc.txnSpanRefresher,
-		}
-		// All other interceptors are absent from a LeafTxn's interceptor stack
-		// because they do not serve a role on leaves.
-		tcs.interceptorStack = tcs.interceptorAlloc.arr[:3]
-	default:
-		panic(fmt.Sprintf("unknown TxnType %v", typ))
+	tcs.interceptorAlloc.arr = [cap(tcs.interceptorAlloc.arr)]txnInterceptor{
+		// LeafTxns never perform writes so the sequence number allocator
+		// should never increment its sequence number counter over its
+		// lifetime, but it still plays the important role of assigning each
+		// read request the latest sequence number.
+		&tcs.interceptorAlloc.txnSeqNumAllocator,
+		// The pipeliner is needed on leaves to ensure that in-flight writes
+		// are chained onto by reads that should see them.
+		&tcs.interceptorAlloc.txnPipeliner,
+		// The span refresher was configured above to not actually perform
+		// refreshes for leaves. It is still needed for accumulating the
+		// spans to be reported to the Root. But the gateway doesn't do much
+		// with them; see #24798.
+		&tcs.interceptorAlloc.txnSpanRefresher,
 	}
-	for i, reqInt := range tcs.interceptorStack {
-		if i < len(tcs.interceptorStack)-1 {
-			reqInt.setWrapped(tcs.interceptorStack[i+1])
-		} else {
-			reqInt.setWrapped(&tcs.interceptorAlloc.txnLockGatekeeper)
-		}
-	}
+	// All other interceptors are absent from a LeafTxn's interceptor stack
+	// because they do not serve a role on leaves.
+	tcs.interceptorStack = tcs.interceptorAlloc.arr[:3]
 
-	tcs.augmentMetaLocked(context.TODO(), meta)
+	tcs.connectInterceptors()
+
+	tcs.mu.txn.Update(&tis.Txn)
+	for _, reqInt := range tcs.interceptorStack {
+		reqInt.loadTxn(&tis.Txn)
+		reqInt.initializeLeaf(tis)
+	}
 	return tcs
-}
-
-// GetMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) GetMeta(
-	ctx context.Context, opt client.TxnStatusOpt,
-) (roachpb.TxnCoordMeta, error) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	// Copy mutable state so access is safe for the caller.
-	var meta roachpb.TxnCoordMeta
-	meta.Txn = tc.mu.txn
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateMetaLocked(&meta)
-	}
-	switch opt {
-	case client.AnyTxnStatus:
-		// Nothing to check.
-	case client.OnlyPending:
-		// Check the coordinator's proto status.
-		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
-		if rejectErr != nil {
-			return roachpb.TxnCoordMeta{}, rejectErr.GoError()
-		}
-	default:
-		panic("unreachable")
-	}
-	return meta, nil
-}
-
-// AugmentMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoordMeta) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-
-	if tc.mu.txn.ID == (uuid.UUID{}) {
-		log.Fatalf(ctx, "cannot AugmentMeta on unbound TxnCoordSender. meta id: %s", meta.Txn.ID)
-	}
-
-	// Sanity check: don't combine if the meta is for a different txn ID.
-	if tc.mu.txn.ID != meta.Txn.ID {
-		return
-	}
-
-	// If the TxnCoordMeta is telling us the transaction has been aborted, it's
-	// better if we don't ingest it. Ingesting it would possibly put us in an
-	// inconsistent state, with an ABORTED proto but with the heartbeat loop still
-	// running. When this TxnCoordMeta was received from DistSQL, it presumably
-	// followed a TxnAbortedError that was also received. If that error was also
-	// passed to us, then we've already aborted the txn and ingesting the meta
-	// would be OK. However, as it stands, if the TxnAbortedError followed a
-	// non-retriable error, than we don't get the aborted error (in fact, we don't
-	// get either of the errors; the client is responsible for rolling back).
-	// TODO(andrei): A better design would be to abort the txn as soon as any
-	// error is received from DistSQL, which would eliminate qualms about what
-	// error comes first.
-	if meta.Txn.Status != roachpb.PENDING {
-		return
-	}
-
-	tc.augmentMetaLocked(ctx, meta)
-}
-
-func (tc *TxnCoordSender) augmentMetaLocked(ctx context.Context, meta roachpb.TxnCoordMeta) {
-	if meta.Txn.Status != roachpb.PENDING {
-		// Non-pending transactions should only come in errors, which are not
-		// handled by this method.
-		log.Fatalf(ctx, "unexpected non-pending txn in augmentMetaLocked: %s", meta.Txn)
-	}
-	tc.mu.txn.Update(&meta.Txn)
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.augmentMetaLocked(meta)
-	}
 }
 
 // DisablePipelining is part of the client.TxnSender interface.
@@ -833,12 +826,14 @@ func (tc *TxnCoordSender) SetUserPriority(pri roachpb.UserPriority) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.active && pri != tc.mu.userPriority {
-		return errors.Errorf("cannot change the user priority of a running transaction")
+		return errors.WithStack(errCannotChangePriority)
 	}
 	tc.mu.userPriority = pri
 	tc.mu.txn.Priority = roachpb.MakePriority(pri)
 	return nil
 }
+
+var errCannotChangePriority = errors.New("cannot change the user priority of a running transaction")
 
 // SetDebugName is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetDebugName(name string) {
@@ -860,6 +855,13 @@ func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.ReadTimestamp
+}
+
+// ProvisionalCommitTimestamp is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.WriteTimestamp
 }
 
 // CommitTimestamp is part of the client.TxnSender interface.
@@ -939,16 +941,186 @@ func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	return tc.mu.txn.Epoch
 }
 
-// SerializeTxn is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SerializeTxn() *roachpb.Transaction {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.txn.Clone()
-}
-
 // IsTracking returns true if the heartbeat loop is running.
 func (tc *TxnCoordSender) IsTracking() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.interceptorAlloc.txnHeartbeater.heartbeatLoopRunningLocked()
+}
+
+// Active returns true iff there were commands executed already.
+func (tc *TxnCoordSender) Active() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.active
+}
+
+// GetLeafTxnInputState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) GetLeafTxnInputState(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.LeafTxnInputState, error) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
+		return roachpb.LeafTxnInputState{}, err
+	}
+
+	// Copy mutable state so access is safe for the caller.
+	var tis roachpb.LeafTxnInputState
+	tis.Txn = tc.mu.txn
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.populateLeafInputState(&tis)
+	}
+
+	// Also mark the TxnCoordSender as "active".  This prevents changing
+	// the priority after a leaf has been created. It als conservatively
+	// ensures that Active() returns true if there's maybe a command
+	// being executed concurrently by a leaf.
+	tc.mu.active = true
+
+	return tis, nil
+}
+
+// GetLeafTxnFinalState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) GetLeafTxnFinalState(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.LeafTxnFinalState, error) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
+		return roachpb.LeafTxnFinalState{}, err
+	}
+
+	var tfs roachpb.LeafTxnFinalState
+
+	// For compatibility with pre-20.1 nodes: populate the command
+	// count.
+	// TODO(knz,andrei): Remove this and the command count
+	// field in 20.2.
+	if tc.mu.active {
+		tfs.DeprecatedCommandCount = 1
+	}
+
+	// Copy mutable state so access is safe for the caller.
+	tfs.Txn = tc.mu.txn
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.populateLeafFinalState(&tfs)
+	}
+
+	return tfs, nil
+}
+
+func (tc *TxnCoordSender) checkTxnStatusLocked(ctx context.Context, opt client.TxnStatusOpt) error {
+	switch opt {
+	case client.AnyTxnStatus:
+		// Nothing to check.
+	case client.OnlyPending:
+		// Check the coordinator's proto status.
+		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
+		if rejectErr != nil {
+			return rejectErr.GoError()
+		}
+	default:
+		panic("unreachable")
+	}
+	return nil
+}
+
+// InitializeLeafTxn is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) InitializeLeafTxn(ctx context.Context, tis *roachpb.LeafTxnInputState) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot InitializeLeafTxn on unbound TxnCoordSender. input id: %s", tis.Txn.ID)
+	}
+
+	// Sanity check: don't combine if the meta is for a different txn ID.
+	if tc.mu.txn.ID != tis.Txn.ID {
+		return
+	}
+
+	// If the LeafTxnInputState is telling us the transaction has been
+	// aborted, it's better if we don't ingest it. Ingesting it would
+	// possibly put us in an inconsistent state, with an ABORTED proto
+	// but with the heartbeat loop still running. It presumably follows
+	// a TxnAbortedError that was also received. If that error was also
+	// passed to us, then we've already aborted the txn and setting up
+	// the leaf would be OK. However, as it stands, if the
+	// TxnAbortedError followed a non-retriable error, than we don't get
+	// the aborted error (in fact, we don't get either of the errors;
+	// the client is responsible for rolling back).
+	//
+	// TODO(andrei): A better design would be to abort the txn as soon
+	// as any error is received from DistSQL, which would eliminate
+	// qualms about what error comes first.
+	if tis.Txn.Status != roachpb.PENDING {
+		// It's invalid to create a leaf if the transaction is not in a pending state.
+		log.Fatalf(ctx, "unexpected non-pending txn in initializeLeafLocked: %s", tis.Txn)
+		return
+	}
+
+	tc.mu.txn.Update(&tis.Txn)
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.initializeLeaf(tis)
+	}
+}
+
+// UpdateRootWithLeafFinalState is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
+	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
+) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.ID == (uuid.UUID{}) {
+		log.Fatalf(ctx, "cannot UpdateRootWithLeafFinalState on unbound TxnCoordSender. input id: %s", tfs.Txn.ID)
+	}
+
+	// Sanity check: don't combine if the tfs is for a different txn ID.
+	if tc.mu.txn.ID != tfs.Txn.ID {
+		return
+	}
+
+	// If the LeafTxnFinalState is telling us the transaction has been
+	// aborted, it's better if we don't ingest it. Ingesting it would
+	// possibly put us in an inconsistent state, with an ABORTED proto
+	// but with the heartbeat loop still running. It presumably follows
+	// a TxnAbortedError that was also received. If that error was also
+	// passed to us, then we've already aborted the txn and importing
+	// the leaf statewould be OK. However, as it stands, if the
+	// TxnAbortedError followed a non-retriable error, than we don't get
+	// the aborted error (in fact, we don't get either of the errors;
+	// the client is responsible for rolling back).
+	//
+	// TODO(andrei): A better design would be to abort the txn as soon
+	// as any error is received from DistSQL, which would eliminate
+	// qualms about what error comes first.
+	if tfs.Txn.Status != roachpb.PENDING {
+		return
+	}
+
+	tc.mu.txn.Update(&tfs.Txn)
+	for _, reqInt := range tc.interceptorStack {
+		reqInt.importLeafFinalState(tfs)
+	}
+}
+
+// TestingCloneTxn is part of the client.TxnSender interface.
+// This is for use by tests only. To derive leaf TxnCoordSenders,
+// use GetLeafTxnInitialState instead.
+func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.Clone()
+}
+
+// PrepareRetryableError is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return roachpb.NewTransactionRetryWithProtoRefreshError(
+		msg, tc.mu.txn.ID, tc.mu.txn)
 }

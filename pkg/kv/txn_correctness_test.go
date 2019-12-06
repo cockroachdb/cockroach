@@ -777,7 +777,7 @@ func (hv *historyVerifier) runTxn(
 		}
 
 		txn.SetDebugName(txnName)
-		txn.InternalSetPriority(priority)
+		txn.TestingSetPriority(priority)
 
 		env := map[string]int64{}
 		for cmdIdx+1 < len(cmds) {

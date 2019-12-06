@@ -152,7 +152,7 @@ func TestOracleFactory(t *testing.T) {
 		Tracer: tracing.NewTracer(),
 	}, client.MockTxnSenderFactory{},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond))
-	txn := client.NewTxn(context.TODO(), c, 0, client.RootTxn)
+	txn := client.NewTxn(context.TODO(), c, 0)
 	of := replicaoracle.NewOracleFactory(followerReadAwareChoice, replicaoracle.Config{
 		Settings:   st,
 		RPCContext: rpcContext,
