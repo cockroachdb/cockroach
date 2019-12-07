@@ -298,7 +298,9 @@ start_key                          start_pretty                   end_key       
 [161]                              /Table/25                      [162]                              /Table/26                      system         replication_constraint_stats     ·           {1}       1
 [162]                              /Table/26                      [163]                              /Table/27                      system         replication_critical_localities  ·           {1}       1
 [163]                              /Table/27                      [164]                              /Table/28                      system         replication_stats                ·           {1}       1
-[164]                              /Table/28                      [189 137]                          /Table/53/1                    system         reports_meta                     ·           {1}       1
+[164]                              /Table/28                      [165]                              /Table/29                      system         reports_meta                     ·           {1}       1
+[165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
+[166]                              /NamespaceTable/30             [189 137]                          /Table/53/1                    system         namespace                        ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -345,7 +347,9 @@ start_key                          start_pretty                   end_key       
 [161]                              /Table/25                      [162]                              /Table/26                      system         replication_constraint_stats     ·           {1}       1
 [162]                              /Table/26                      [163]                              /Table/27                      system         replication_critical_localities  ·           {1}       1
 [163]                              /Table/27                      [164]                              /Table/28                      system         replication_stats                ·           {1}       1
-[164]                              /Table/28                      [189 137]                          /Table/53/1                    system         reports_meta                     ·           {1}       1
+[164]                              /Table/28                      [165]                              /Table/29                      system         reports_meta                     ·           {1}       1
+[165]                              /Table/29                      [166]                              /NamespaceTable/30             ·              ·                                ·           {1}       1
+[166]                              /NamespaceTable/30             [189 137]                          /Table/53/1                    system         namespace                        ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -514,5 +518,4 @@ query T
 SELECT crdb_internal.pretty_key(crdb_internal.encode_key(70, 4, (1, )), 0)
 ----
 /70/4/1/0
-
 

@@ -76,7 +76,7 @@ query IITTITTTTTTT colnames
 SELECT table_id, parent_id, name, database_name, version, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name FROM crdb_internal.tables WHERE NAME = 'namespace'
 ----
 table_id  parent_id  name       database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name
-2         1          namespace  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public
+30        1          namespace  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public
 
 # Verify that table names are not double escaped.
 

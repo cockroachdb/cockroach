@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -137,6 +138,11 @@ type TableCollection struct {
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
 	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
+
+	// settings are required to correctly resolve system.namespace accesses in
+	// mixed version (19.2/20.1) clusters.
+	// TODO(whomever): This field could maybe be removed in 20.2.
+	settings *cluster.Settings
 }
 
 type dbCacheSubscriber interface {
@@ -173,8 +179,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -189,7 +194,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
-	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
 	if obj == nil {
 		return nil, err
 	}
@@ -229,8 +234,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == sqlbase.InvalidID && tc.databaseCache != nil {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.db.Txn, tn.Catalog(), flags.Required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
@@ -265,7 +269,7 @@ func (tc *TableCollection) getTableVersion(
 
 	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
 		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tn, flags)
+		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
 		if obj == nil {
 			return nil, err
 		}

@@ -63,9 +63,10 @@ const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
   "parentID" INT8,
+  "parentSchemaID" INT8,
   name       STRING,
   id         INT8,
-  PRIMARY KEY ("parentID", name)
+  PRIMARY KEY ("parentID", "parentSchemaID", name)
 );`
 
 	DescriptorTableSchema = `
@@ -243,11 +244,12 @@ func pk(name string) IndexDescriptor {
 // system object. Super users (root and admin) must have exactly the specified privileges,
 // other users must not exceed the specified privileges.
 var SystemAllowedPrivileges = map[ID]privilege.List{
-	keys.SystemDatabaseID:  privilege.ReadData,
-	keys.NamespaceTableID:  privilege.ReadData,
-	keys.DescriptorTableID: privilege.ReadData,
-	keys.UsersTableID:      privilege.ReadWriteData,
-	keys.ZonesTableID:      privilege.ReadWriteData,
+	keys.SystemDatabaseID:           privilege.ReadData,
+	keys.NamespaceTableID:           privilege.ReadData,
+	keys.DeprecatedNamespaceTableID: privilege.ReadData,
+	keys.DescriptorTableID:          privilege.ReadData,
+	keys.UsersTableID:               privilege.ReadWriteData,
+	keys.ZonesTableID:               privilege.ReadWriteData,
 	// We eventually want to migrate the table to appear read-only to force the
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
 	// read-only privs to make that migration possible later.
@@ -297,10 +299,10 @@ var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = MakeSystemDatabaseDesc()
 
-	// NamespaceTable is the descriptor for the namespace table.
-	NamespaceTable = TableDescriptor{
-		Name:     "namespace",
-		ID:       keys.NamespaceTableID,
+	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
+	DeprecatedNamespaceTable = TableDescriptor{
+		Name:     "namespace_deprecated",
+		ID:       keys.DeprecatedNamespaceTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
@@ -321,6 +323,39 @@ var (
 			ColumnNames:      []string{"parentID", "name"},
 			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 			ColumnIDs:        []ColumnID{1, 2},
+			Version:          SecondaryIndexFamilyFormatVersion,
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// NamespaceTable is the descriptor for the namespace table.
+	NamespaceTable = TableDescriptor{
+		Name:     "namespace",
+		ID:       keys.NamespaceTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "parentID", ID: 1, Type: *types.Int},
+			{Name: "parentSchemaID", ID: 2, Type: *types.Int},
+			{Name: "name", ID: 3, Type: *types.String},
+			{Name: "id", ID: 4, Type: *types.Int, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []ColumnID{1, 2, 3}},
+			{Name: "fam_4_id", ID: 4, ColumnNames: []string{"id"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+		},
+		NextFamilyID: 5,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"parentID", "parentSchemaID", "name"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2, 3},
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
 		NextIndexID:    2,
@@ -1093,6 +1128,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
 	// Add system config tables.
+	target.AddDescriptor(keys.SystemDatabaseID, &DeprecatedNamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)

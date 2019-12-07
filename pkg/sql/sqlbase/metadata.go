@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -121,7 +122,9 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 // a bootstrapping cluster in order to create the tables contained
 // in the schema. Also returns a list of split points (a split for each SQL
 // table descriptor part of the initial values). Both returned sets are sorted.
-func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey) {
+func (ms MetadataSchema) GetInitialValues(
+	bootstrapVersion cluster.ClusterVersion,
+) ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
 	var splits []roachpb.RKey
 
@@ -140,10 +143,37 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
-		ret = append(ret, roachpb.KeyValue{
-			Key:   NewTableKey(parentID, desc.GetName()).Key(),
-			Value: value,
-		})
+
+		// TODO(whomever): This if/else can be removed in 20.2, as there will be no
+		// need to support the deprecated namespace table.
+		if bootstrapVersion.IsActive(cluster.VersionNamespaceTableWithSchemas) {
+			if parentID != keys.RootNamespaceID {
+				ret = append(ret, roachpb.KeyValue{
+					Key:   NewPublicTableKey(parentID, desc.GetName()).Key(),
+					Value: value,
+				})
+			} else {
+				// Initializing a database. Databases must be initialized with
+				// the public schema, as all tables are scoped under the public schema.
+				publicSchemaValue := roachpb.Value{}
+				publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+				ret = append(
+					ret,
+					roachpb.KeyValue{
+						Key:   NewDatabaseKey(desc.GetName()).Key(),
+						Value: value,
+					},
+					roachpb.KeyValue{
+						Key:   NewPublicSchemaKey(desc.GetID()).Key(),
+						Value: publicSchemaValue,
+					})
+			}
+		} else {
+			ret = append(ret, roachpb.KeyValue{
+				Key:   NewDeprecatedTableKey(parentID, desc.GetName()).Key(),
+				Value: value,
+			})
+		}
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
@@ -217,9 +247,17 @@ var systemTableIDCache = func() map[string]ID {
 
 // LookupSystemTableDescriptorID uses the lookup cache above
 // to bypass a KV lookup when resolving the name of system tables.
-func LookupSystemTableDescriptorID(dbID ID, tableName string) ID {
+func LookupSystemTableDescriptorID(
+	ctx context.Context, settings *cluster.Settings, dbID ID, tableName string,
+) ID {
 	if dbID != SystemDB.ID {
 		return InvalidID
+	}
+
+	if settings != nil &&
+		!cluster.Version.IsActive(ctx, settings, cluster.VersionNamespaceTableWithSchemas) &&
+		tableName == NamespaceTable.Name {
+		return DeprecatedNamespaceTable.ID
 	}
 	dbID, ok := systemTableIDCache[tableName]
 	if !ok {

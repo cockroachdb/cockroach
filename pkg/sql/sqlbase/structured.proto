@@ -863,7 +863,7 @@ message TableDescriptor {
   // the referenced table.
   repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
 
-  // Temporary table support will be added to CRDB starting from 20.1 . The temporary
+  // Temporary table support will be added to CRDB starting from 20.1. The temporary
   // flag is set to true for all temporary tables. All table descriptors created
   // before 20.1 refer to persistent tables, so lack of the flag being set implies
   // the table is persistent.

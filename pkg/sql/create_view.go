@@ -46,7 +46,9 @@ func (n *createViewNode) startExec(params runParams) error {
 	viewName := string(n.viewName)
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
-	tKey := sqlbase.NewTableKey(n.dbDesc.ID, viewName)
+	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
+		params.ExecCfg().Settings, n.dbDesc.ID, viewName)
+
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.

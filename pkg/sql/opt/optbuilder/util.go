@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -424,6 +425,18 @@ func (b *Builder) resolveAndBuildScalar(
 	inScope.context = context
 	texpr := inScope.resolveAndRequireType(expr, requiredType)
 	return b.buildScalar(texpr, inScope, nil, nil, nil)
+}
+
+// In Postgres, qualifying an object name with pg_temp is equivalent to explicitly
+// specifying TEMP/TEMPORARY in the CREATE syntax. resolveTemporaryStatus returns
+// true if either(or both) of these conditions are true.
+func resolveTemporaryStatus(name *tree.TableName, explicitTemp bool) bool {
+	// An explicit schema can only be provided in the CREATE TEMP TABLE statement
+	// iff it is pg_temp.
+	if explicitTemp && name.ExplicitSchema && name.SchemaName != sessiondata.PgTempSchemaName {
+		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
+	}
+	return name.SchemaName == sessiondata.PgTempSchemaName || explicitTemp
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created
