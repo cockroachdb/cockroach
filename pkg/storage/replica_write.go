@@ -167,10 +167,26 @@ func (r *Replica) executeWriteBatch(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
+	startPropTime := timeutil.Now()
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
-	tBegin := timeutil.Now()
+	// NOTE: this defer was moved from a case in the select statement to here
+	// because escape analysis does a better job avoiding allocations to the
+	// heap when defers are unconditional. When this was in the slowTimer select
+	// case, it was causing pErr to escape.
+	defer func() {
+		if slowTimer.Read {
+			r.store.metrics.SlowRaftRequests.Dec(1)
+			log.Infof(
+				ctx,
+				"slow command %s finished after %.2fs with error %v",
+				ba,
+				timeutil.Since(startPropTime).Seconds(),
+				pErr,
+			)
+		}
+	}()
 
 	for {
 		select {
@@ -197,6 +213,7 @@ func (r *Replica) executeWriteBatch(
 			return propResult.Reply, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true
+			r.store.metrics.SlowRaftRequests.Inc(1)
 			log.Warningf(ctx, `have been waiting %.2fs for proposing command %s.
 This range is likely unavailable.
 Please submit this message at
@@ -208,23 +225,11 @@ along with
 	https://yourhost:8080/#/reports/range/%d
 
 and the following Raft status: %+v`,
-				timeutil.Since(tBegin).Seconds(),
+				timeutil.Since(startPropTime).Seconds(),
 				ba,
 				r.RangeID,
 				r.RaftStatus(),
 			)
-			r.store.metrics.SlowRaftRequests.Inc(1)
-			defer func() {
-				r.store.metrics.SlowRaftRequests.Dec(1)
-				log.Infof(
-					ctx,
-					"slow command %s finished after %.2fs with error %v",
-					ba,
-					timeutil.Since(tBegin).Seconds(),
-					pErr,
-				)
-			}()
-
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
