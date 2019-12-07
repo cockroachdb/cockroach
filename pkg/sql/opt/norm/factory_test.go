@@ -29,13 +29,15 @@ import (
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	var f norm.Factory
-	f.Init(&evalCtx)
 
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
 		t.Fatal(err)
 	}
+
+	var f norm.Factory
+	f.Init(&evalCtx, cat)
+
 	tn := tree.NewTableName("t", "a")
 	a := f.Metadata().AddTable(cat.Table(tn), tn)
 	ax := a.ColumnID(0)
@@ -93,7 +95,7 @@ func TestCopyAndReplace(t *testing.T) {
 
 	m := o.Factory().DetachMemo()
 
-	o.Init(&evalCtx)
+	o.Init(&evalCtx, cat)
 	var replaceFn norm.ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if e.Op() == opt.PlaceholderOp {

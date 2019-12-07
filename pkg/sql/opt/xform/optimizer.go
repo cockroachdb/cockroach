@@ -14,6 +14,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -93,9 +94,9 @@ type Optimizer struct {
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
-func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
+func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	o.evalCtx = evalCtx
-	o.f.Init(evalCtx)
+	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
@@ -113,7 +114,7 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 // used to extract a read-only memo during the PREPARE phase.
 func (o *Optimizer) DetachMemo() *memo.Memo {
 	detach := o.f.DetachMemo()
-	o.Init(o.evalCtx)
+	o.Init(o.evalCtx, nil)
 	return detach
 }
 

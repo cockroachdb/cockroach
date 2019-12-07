@@ -12,7 +12,9 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -103,6 +105,27 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 // a constant expression as long as the evaluation causes no error.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
 	if typ.Family() == types.OidFamily {
+		if typ.Oid() == types.RegClass.Oid() {
+			if input.DataType().Family() == types.StringFamily {
+				// Special case: we're casting a string to a REGCLASS oid, which is a
+				// table id lookup.
+				flags := cat.Flags{AvoidDescriptorCaches: false /* TODO(jordan) is this right? */, NoTableStats: true}
+				datum := memo.ExtractConstDatum(input)
+				s := tree.MustBeDString(datum)
+				tn, err := c.f.evalCtx.Planner.ParseQualifiedTableName(c.f.evalCtx.Ctx(), string(s))
+				if err != nil {
+					return nil
+				}
+				ds, resName, err := c.f.catalog.ResolveDataSource(c.f.evalCtx.Context, flags, tn)
+				if err != nil {
+					panic(err)
+				}
+				c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+
+				return c.f.ConstructConstVal(tree.NewDOidWithName(tree.DInt(ds.ID()), types.RegClass, string(tn.TableName)),
+					typ)
+			}
+		}
 		// Save this cast for the execbuilder.
 		return nil
 	}

@@ -537,7 +537,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 		return
 	}
 
-	h.optimizer.Init(&h.evalCtx)
+	h.optimizer.Init(&h.evalCtx, h.cat)
 	if bmType == OptBuild {
 		h.optimizer.DisableOptimizations()
 	}

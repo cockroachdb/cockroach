@@ -55,7 +55,7 @@ func TestNormRules(t *testing.T) {
 func TestRuleFoldNullInEmpty(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var f norm.Factory
-	f.Init(&evalCtx)
+	f.Init(&evalCtx, nil /* catalog */)
 
 	in := f.ConstructIn(memo.NullSingleton, memo.EmptyTuple)
 	if in.Op() != opt.FalseOp {
