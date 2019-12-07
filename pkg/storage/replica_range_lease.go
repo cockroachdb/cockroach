@@ -793,7 +793,9 @@ func newNotLeaseHolderError(
 	err := &roachpb.NotLeaseHolderError{
 		RangeID: rangeDesc.RangeID,
 	}
-	err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
+	if proposerStoreID != 0 {
+		err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
+	}
 	if l != nil {
 		// Normally, we return the lease-holding Replica here. However, in the
 		// case in which a leader removes itself, we want the followers to
