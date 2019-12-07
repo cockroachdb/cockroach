@@ -65,7 +65,7 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
-	lease roachpb.Lease,
+	lease *roachpb.Lease,
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
 	ec endCmds,
