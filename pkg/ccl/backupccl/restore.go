@@ -361,12 +361,11 @@ func allocateTableRewrites(
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			dKey := sqlbase.NewDatabaseKey(name)
-			existingDatabaseID, err := txn.Get(ctx, dKey.Key())
+			found, _, err := sqlbase.LookupDatabaseID(ctx, txn, name)
 			if err != nil {
 				return err
 			}
-			if existingDatabaseID.Value != nil {
+			if found {
 				return errors.Errorf("database %q already exists", name)
 			}
 		}
@@ -389,21 +388,15 @@ func allocateTableRewrites(
 			} else {
 				var parentID sqlbase.ID
 				{
-					dKey := sqlbase.NewDatabaseKey(targetDB)
-					existingDatabaseID, err := txn.Get(ctx, dKey.Key())
+					found, newParentID, err := sqlbase.LookupDatabaseID(ctx, txn, targetDB)
 					if err != nil {
 						return err
 					}
-					if existingDatabaseID.Value == nil {
+					if !found {
 						return errors.Errorf("a database named %q needs to exist to restore table %q",
 							targetDB, table.Name)
 					}
-
-					newParentID, err := existingDatabaseID.Value.GetInt()
-					if err != nil {
-						return err
-					}
-					parentID = sqlbase.ID(newParentID)
+					parentID = newParentID
 				}
 
 				// Check that the table name is _not_ in use.
@@ -480,12 +473,11 @@ func allocateTableRewrites(
 func CheckTableExists(
 	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
 ) error {
-	tKey := sqlbase.NewTableKey(parentID, name)
-	res, err := txn.Get(ctx, tKey.Key())
+	found, _, err := sqlbase.LookupPublicTableID(ctx, txn, parentID, name)
 	if err != nil {
 		return err
 	}
-	if res.Exists() {
+	if found {
 		return sqlbase.NewRelationAlreadyExistsError(name)
 	}
 	return nil
@@ -1035,7 +1027,11 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, desc.ID, desc); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewDatabaseKey(desc.Name).Key(), desc.ID, nil)
+			// Depending on which cluster version we are restoring to, we decide which
+			// namespace table to write the descriptor into. This may cause wrong
+			// behavior if the cluster version is bumped DURING a restore.
+			dKey := sqlbase.MakeDatabaseNameKey(ctx, settings, desc.Name)
+			b.CPut(dKey.Key(), desc.ID, nil)
 		}
 		for i := range tables {
 			if wrote, ok := wroteDBs[tables[i].ParentID]; ok {
@@ -1057,7 +1053,11 @@ func WriteTableDescs(
 			if err := sql.WriteNewDescToBatch(ctx, false /* kvTrace */, settings, b, tables[i].ID, tables[i]); err != nil {
 				return err
 			}
-			b.CPut(sqlbase.NewTableKey(tables[i].ParentID, tables[i].Name).Key(), tables[i].ID, nil)
+			// Depending on which cluster version we are restoring to, we decide which
+			// namespace table to write the descriptor into. This may cause wrong
+			// behavior if the cluster version is bumped DURING a restore.
+			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, tables[i].ParentID, tables[i].Name)
+			b.CPut(tkey.Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -1788,13 +1788,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		tableDesc := *tbl
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
-		var existingIDVal roachpb.Value
-		existingIDVal.SetInt(int64(tableDesc.ID))
-		b.CPut(
-			sqlbase.NewTableKey(tableDesc.ParentID, tableDesc.Name).Key(),
-			nil,
-			&existingIDVal,
-		)
+		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tbl.ParentID, tbl.Name)
+		if err != nil {
+			return nil
+		}
 		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables")

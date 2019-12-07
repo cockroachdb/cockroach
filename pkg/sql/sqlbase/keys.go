@@ -18,16 +18,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// MakeNameMetadataKey returns the key for the name. Pass name == "" in order
-// to generate the prefix key to use to scan over all of the names for the
-// specified parentID.
-func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
+// MakeNameMetadataKey returns the key for the name, as expected by
+// versions >= 20.1.
+// Pass name == "" in order to generate the prefix key to use to scan over all
+// of the names for the specified parentID.
+func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
+	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[2].ID))
+		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[3].ID))
+	}
+	return k
+}
+
+// MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
+// versions < 20.1. Pass name == "" in order to generate the prefix key to use
+// to scan over all of the names for the specified parentID.
+func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
+	k := keys.MakeTablePrefix(uint32(DeprecatedNamespaceTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(DeprecatedNamespaceTable.PrimaryIndex.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
+	if name != "" {
+		k = encoding.EncodeBytesAscending(k, []byte(name))
+		k = keys.MakeFamilyKey(k, uint32(DeprecatedNamespaceTable.Columns[2].ID))
 	}
 	return k
 }

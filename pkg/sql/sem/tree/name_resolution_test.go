@@ -520,6 +520,10 @@ func newFakeMetadata() *fakeMetadata {
 				{"public", []tree.Name{"foo"}},
 				{"extended", []tree.Name{"bar", "pg_tables"}},
 			}},
+			{"db3", []knownSchema{
+				{"public", []tree.Name{"foo", "bar"}},
+				{"pg_temp_123", []tree.Name{"foo", "baz"}},
+			}},
 		},
 	}
 }
@@ -528,7 +532,13 @@ func TestResolveTablePatternOrName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type spath = sessiondata.SearchPath
 
-	var mpath = func(args ...string) spath { return sessiondata.MakeSearchPath(args) }
+	var mpath = func(args ...string) spath {
+		return sessiondata.MakeSearchPath(args, sessiondata.DefaultTemporarySchemaName)
+	}
+
+	var tpath = func(tempSchemaName string, args ...string) spath {
+		return sessiondata.MakeSearchPath(args, tempSchemaName)
+	}
 
 	testCases := []struct {
 		// Test inputs.
@@ -693,6 +703,68 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`db1.pg_catalog.*`, ``, mpath(), false, `db1.pg_catalog.*`, `db1.pg_catalog.*`, `db1.pg_catalog`, ``},
 		{`"".pg_catalog.*`, ``, mpath(), false, `"".pg_catalog.*`, `"".pg_catalog.*`, `.pg_catalog`, ``},
 		{`blix.pg_catalog.*`, ``, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+
+		//
+		// Tests for temporary table resolution
+		//
+
+		// Names of length 1
+
+		{`foo`, `db3`, tpath("pg_temp_123", "public"), true, `foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+		{`foo`, `db3`, tpath("pg_temp_123", "public", "pg_temp"), true, `foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`baz`, `db3`, tpath("pg_temp_123", "public"), true, `baz`, `db3.pg_temp_123.baz`, `db3.pg_temp_123[1]`, ``},
+		{`bar`, `db3`, tpath("pg_temp_123", "public"), true, `bar`, `db3.public.bar`, `db3.public[1]`, ``},
+		{`bar`, `db3`, tpath("pg_temp_123", "public", "pg_temp"), true, `bar`, `db3.public.bar`, `db3.public[1]`, ``},
+
+		// Names of length 2
+
+		{`public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp.foo`, `db3.pg_temp.foo`, `db3.pg_temp[0]`, ``},
+		{`pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+
+		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
+		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+
+		// Cases where a session tries to access a temporary table of another session.
+		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
+		{`pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
+
+		// Case where the temporary table being created has the same name as an
+		// existing persistent table.
+		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `pg_temp.bar`, `db3.pg_temp.bar`, `db3.pg_temp_123`, ``},
+
+		// Case where the persistent table being created has the same name as an
+		// existing temporary table.
+		{`public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `public.baz`, `db3.public.baz`, `db3.public`, ``},
+
+		// Cases where the temporary schema has not been created yet
+		{`pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+
+		// Names of length 3
+
+		{`db3.public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
+		{`db3.pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp.foo`, `db3.pg_temp.foo`, `db3.pg_temp[0]`, ``},
+		{`db3.pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
+
+		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
+		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `prefix or object not found`},
+
+		// Cases where a session tries to access a temporary table of another session.
+		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), true, ``, ``, ``, `cannot access temporary tables of other sessions`},
+		{`db3.pg_temp_111.foo`, `db3`, tpath("pg_temp_123", "public"), false, ``, ``, ``, `cannot access temporary tables of other sessions`},
+
+		// Case where the temporary table being created has the same name as an
+		// existing persistent table.
+		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `db3.pg_temp.bar`, `db3.pg_temp.bar`, `db3.pg_temp_123`, ``},
+
+		// Case where the persistent table being created has the same name as an
+		// existing temporary table.
+		{`db3.public.baz`, `db3`, tpath("pg_temp_123", "public"), false, `db3.public.baz`, `db3.public.baz`, `db3.public`, ``},
+
+		// Cases where the temporary schema has not been created yet
+		{`db3.pg_temp.foo`, `db3`, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
 	}
 
 	fakeResolver := newFakeMetadata()

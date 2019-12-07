@@ -590,6 +590,7 @@ func (s *Server) newConnExecutor(
 		leaseMgr:          s.cfg.LeaseManager,
 		databaseCache:     s.dbCache.getDatabaseCache(),
 		dbCacheSubscriber: s.dbCache,
+		settings:          s.cfg.Settings,
 	}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)

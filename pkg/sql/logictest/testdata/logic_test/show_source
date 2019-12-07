@@ -173,7 +173,7 @@ query T colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
-namespace
+namespace_deprecated
 descriptor
 users
 zones
@@ -192,12 +192,13 @@ replication_constraint_stats
 replication_critical_localities
 replication_stats
 reports_meta
+namespace
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 table_name                       comment
-namespace                        ·
+namespace_deprecated             ·
 descriptor                       ·
 users                            ·
 zones                            ·
@@ -216,6 +217,7 @@ replication_constraint_stats     ·
 replication_critical_localities  ·
 replication_stats                ·
 reports_meta                     ·
+namespace                        ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries

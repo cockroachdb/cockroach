@@ -1571,18 +1571,18 @@ func (m *LeaseManager) AcquireByName(
 func (m *LeaseManager) resolveName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
-	key := sqlbase.NewTableKey(dbID, tableName).Key()
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)
-		gr, err := txn.Get(ctx, key)
+		var found bool
+		var err error
+		found, id, err = sqlbase.LookupPublicTableID(ctx, txn, dbID, tableName)
 		if err != nil {
 			return err
 		}
-		if !gr.Exists() {
+		if !found {
 			return nil
 		}
-		id = sqlbase.ID(gr.ValueInt())
 		return nil
 	}); err != nil {
 		return id, err

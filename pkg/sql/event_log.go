@@ -158,7 +158,6 @@ VALUES(
 		}
 		args[3] = string(infoBytes)
 	}
-
 	rows, err := ev.Exec(ctx, "log-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err

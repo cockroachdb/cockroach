@@ -1366,7 +1366,9 @@ func (b *backupResumer) Resume(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn) error { return nil }
+func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn) error {
+	return nil
+}
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (b *backupResumer) OnSuccess(context.Context, *client.Txn) error { return nil }

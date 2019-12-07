@@ -275,9 +275,16 @@ func (t *TableName) ResolveExisting(
 	searchPath sessiondata.SearchPath,
 ) (bool, NameResolutionResult, error) {
 	if t.ExplicitSchema {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(t.Schema())
+		if err != nil {
+			return false, nil, err
+		}
 		if t.ExplicitCatalog {
 			// Already 3 parts: nothing to search. Delegate to the resolver.
-			return r.LookupObject(ctx, lookupFlags, t.Catalog(), t.Schema(), t.Table())
+			return r.LookupObject(ctx, lookupFlags, t.Catalog(), scName, t.Table())
 		}
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
@@ -287,7 +294,8 @@ func (t *TableName) ResolveExisting(
 		// database is not set. For example, `select * from
 		// pg_catalog.pg_tables` is meant to show all tables across all
 		// databases when there is no current database set.
-		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, t.Schema(), t.Table()); found || err != nil {
+
+		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, t.Table()); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
 			}
@@ -326,13 +334,20 @@ func (t *TableName) ResolveTarget(
 	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
 ) (found bool, scMeta SchemaMeta, err error) {
 	if t.ExplicitSchema {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(t.Schema())
+		if err != nil {
+			return false, nil, err
+		}
 		if t.ExplicitCatalog {
 			// Already 3 parts: nothing to do.
-			return r.LookupSchema(ctx, t.Catalog(), t.Schema())
+			return r.LookupSchema(ctx, t.Catalog(), scName)
 		}
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, t.Schema()); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
 			}
@@ -353,7 +368,7 @@ func (t *TableName) ResolveTarget(
 
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGCatalog()
+	iter := searchPath.IterWithoutImplicitPGSchemas()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
@@ -372,14 +387,21 @@ func (tp *TableNamePrefix) Resolve(
 	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
 ) (found bool, scMeta SchemaMeta, err error) {
 	if tp.ExplicitSchema {
+		// pg_temp can be used as an alias for the current sessions temporary schema.
+		// We must perform this resolution before looking up the object. This
+		// resolution only succeeds if the session already has a temporary schema.
+		scName, err := searchPath.MaybeResolveTemporarySchema(tp.Schema())
+		if err != nil {
+			return false, nil, err
+		}
 		if tp.ExplicitCatalog {
 			// Catalog name is explicit; nothing to do.
-			return r.LookupSchema(ctx, tp.Catalog(), tp.Schema())
+			return r.LookupSchema(ctx, tp.Catalog(), scName)
 		}
 		// Try with the current database. This may be empty, because
 		// virtual schemas exist even when the db name is empty
 		// (CockroachDB extension).
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, tp.Schema()); found || err != nil {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
 			}
@@ -399,7 +421,7 @@ func (tp *TableNamePrefix) Resolve(
 	}
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
-	iter := searchPath.IterWithoutImplicitPGCatalog()
+	iter := searchPath.IterWithoutImplicitPGSchemas()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {

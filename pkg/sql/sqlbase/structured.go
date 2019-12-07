@@ -3689,12 +3689,12 @@ type DatabaseKey struct {
 
 // NewDatabaseKey returns a new DatabaseKey.
 func NewDatabaseKey(name string) DatabaseKey {
-	return DatabaseKey{name}
+	return DatabaseKey{name: name}
 }
 
 // Key implements DescriptorKey interface.
 func (dk DatabaseKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(keys.RootNamespaceID, dk.name)
+	return MakeNameMetadataKey(keys.RootNamespaceID, keys.RootNamespaceID, dk.name)
 }
 
 // Name implements DescriptorKey interface.
@@ -3704,21 +3704,94 @@ func (dk DatabaseKey) Name() string {
 
 // TableKey implements DescriptorKey interface.
 type TableKey struct {
-	parentID ID
-	name     string
+	parentID       ID
+	parentSchemaID ID
+	name           string
 }
 
-// NewTableKey returns a new TableKey.
-func NewTableKey(parentID ID, name string) TableKey {
-	return TableKey{parentID, name}
+// NewPublicTableKey returns a new TableKey scoped under the public schema.
+func NewPublicTableKey(parentID ID, name string) TableKey {
+	return TableKey{parentID: parentID, parentSchemaID: keys.PublicSchemaID, name: name}
+}
+
+// NewTableKey returns a new TableKey
+func NewTableKey(parentID ID, parentSchemaID ID, name string) TableKey {
+	return TableKey{parentID: parentID, parentSchemaID: parentSchemaID, name: name}
 }
 
 // Key implements DescriptorKey interface.
 func (tk TableKey) Key() roachpb.Key {
-	return MakeNameMetadataKey(tk.parentID, tk.name)
+	return MakeNameMetadataKey(tk.parentID, tk.parentSchemaID, tk.name)
 }
 
 // Name implements DescriptorKey interface.
 func (tk TableKey) Name() string {
 	return tk.name
+}
+
+// SchemaKey implements DescriptorKey interface.
+type SchemaKey struct {
+	parentID ID
+	name     string
+}
+
+// NewSchemaKey returns a new SchemaKey
+func NewSchemaKey(parentID ID, name string) SchemaKey {
+	return SchemaKey{parentID: parentID, name: name}
+}
+
+// NewPublicSchemaKey returns a new SchemaKey specific to the public schema.
+func NewPublicSchemaKey(parentID ID) SchemaKey {
+	return SchemaKey{parentID: parentID, name: tree.PublicSchema}
+}
+
+// Key implements DescriptorKey interface.
+func (sk SchemaKey) Key() roachpb.Key {
+	return MakeNameMetadataKey(sk.parentID, keys.RootNamespaceID, sk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (sk SchemaKey) Name() string {
+	return sk.name
+}
+
+// DeprecatedTableKey implements DescriptorKey interface.
+type DeprecatedTableKey struct {
+	parentID ID
+	name     string
+}
+
+// NewDeprecatedTableKey returns a new DeprecatedTableKey
+func NewDeprecatedTableKey(parentID ID, name string) DeprecatedTableKey {
+	return DeprecatedTableKey{parentID, name}
+}
+
+// Key implements DescriptorKey interface.
+func (dtk DeprecatedTableKey) Key() roachpb.Key {
+	return MakeDeprecatedNameMetadataKey(dtk.parentID, dtk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (dtk DeprecatedTableKey) Name() string {
+	return dtk.name
+}
+
+// DeprecatedDatabaseKey implements DescriptorKey interface.
+type DeprecatedDatabaseKey struct {
+	name string
+}
+
+// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey
+func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
+	return DeprecatedDatabaseKey{name: name}
+}
+
+// Key implements DescriptorKey interface.
+func (ddk DeprecatedDatabaseKey) Key() roachpb.Key {
+	return MakeDeprecatedNameMetadataKey(keys.RootNamespaceID, ddk.name)
+}
+
+// Name implements DescriptorKey interface.
+func (ddk DeprecatedDatabaseKey) Name() string {
+	return ddk.name
 }

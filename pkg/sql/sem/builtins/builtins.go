@@ -2849,7 +2849,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
-				iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
+				iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGSchemas()
 				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {
 						if err != nil {
@@ -2872,6 +2872,8 @@ may increase either contention or retry errors, or both.`,
 	// schemas in the search path to compute current_schemas. This is
 	// not documented but can be verified by a SQL client against a pg
 	// server.
+	// The argument supplied applies to all implicit pg schemas, which includes
+	// pg_catalog and pg_temp (if one exists).
 	"current_schemas": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
@@ -2883,13 +2885,13 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
-				includePgCatalog := *(args[0].(*tree.DBool))
+				includeImplicitPgSchemas := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
 				var iter sessiondata.SearchPathIter
-				if includePgCatalog {
+				if includeImplicitPgSchemas {
 					iter = evalCtx.SessionData.SearchPath.Iter()
 				} else {
-					iter = evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
+					iter = evalCtx.SessionData.SearchPath.IterWithoutImplicitPGSchemas()
 				}
 				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {

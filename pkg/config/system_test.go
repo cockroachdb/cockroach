@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -163,7 +164,7 @@ func TestGetLargestID(t *testing.T) {
 			ms := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
 			maxDescID := descIDs[len(descIDs)-1]
-			kvs, _ /* splits */ := ms.GetInitialValues()
+			kvs, _ /* splits */ := ms.GetInitialValues(cluster.TestingClusterVersion)
 			return testCase{kvs, uint32(maxDescID), 0, ""}
 		}(),
 
@@ -256,7 +257,7 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 	}
 
 	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
-	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues()
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}
@@ -288,12 +289,14 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 
 	schema := sqlbase.MakeMetadataSchema(config.DefaultZoneConfigRef(), config.DefaultSystemZoneConfigRef())
 	// Real system tables only.
-	baseSql, _ /* splits */ := schema.GetInitialValues()
+	baseSql, _ /* splits */ := schema.GetInitialValues(cluster.TestingClusterVersion)
 	// Real system tables plus some user stuff.
-	kvs, _ /* splits */ := schema.GetInitialValues()
+	kvs, _ /* splits */ := schema.GetInitialValues(cluster.TestingClusterVersion)
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
-	subzoneSQL := append(userSQL,
+	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
+	copy(subzoneSQL, userSQL)
+	subzoneSQL = append(subzoneSQL,
 		zoneConfig(start+1, subzone("a", ""), subzone("c", "e")),
 		zoneConfig(start+5, subzone("b", ""), subzone("c", "d"), subzone("d", "")))
 
@@ -404,13 +407,13 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
 
 		// Gossiped system tables should refer to the SystemDatabaseID.
-		{tkey(keys.NamespaceTableID), keys.SystemDatabaseID},
 		{tkey(keys.ZonesTableID), keys.SystemDatabaseID},
 
 		// Non-gossiped system tables should refer to themselves.
 		{tkey(keys.LeaseTableID), keys.LeaseTableID},
 		{tkey(keys.JobsTableID), keys.JobsTableID},
 		{tkey(keys.LocationsTableID), keys.LocationsTableID},
+		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 
 		// Pseudo-tables should refer to the SystemDatabaseID.
 		{tkey(keys.MetaRangesID), keys.SystemDatabaseID},
@@ -430,7 +433,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	}()
 	cfg := config.NewSystemConfig(config.DefaultZoneConfigRef())
 
-	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues()
+	kvs, _ /* splits */ := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, config.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
 	}

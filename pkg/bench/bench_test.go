@@ -1090,3 +1090,48 @@ func BenchmarkSortJoinAggregation(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkNameResolution(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "SELECT * FROM namespace")
+		}
+		b.StopTimer()
+	})
+}
+
+// When temporary tables are present in the system, the PG search path semantics
+// dictate that we try searching for tables under the temporary schema before
+// the public physical schema. This test is used to microbenchmark the effects
+// of this scenario.
+func BenchmarkNameResolutionTempTablesExist(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			b.StopTimer()
+			// Setup
+			db.Exec(b, `SET experimental_enable_temp_tables = true`)
+			db.Exec(b, `CREATE TEMP TABLE IF NOT EXISTS temp_table(k INT PRIMARY KEY, v INT)`)
+			b.StartTimer()
+			db.Exec(b, "SELECT * FROM namespace")
+		}
+		b.StopTimer()
+	})
+}

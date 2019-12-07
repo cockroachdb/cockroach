@@ -45,15 +45,16 @@ func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 		panic("unknown format")
 	}
 	res := EvalContext{
-		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
-		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
-		Location:           evalCtx.GetLocation().String(),
-		Database:           evalCtx.SessionData.Database,
-		User:               evalCtx.SessionData.User,
-		ApplicationName:    evalCtx.SessionData.ApplicationName,
-		BytesEncodeFormat:  be,
-		ExtraFloatDigits:   int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
-		Vectorize:          int32(evalCtx.SessionData.VectorizeMode),
+		StmtTimestampNanos:  evalCtx.StmtTimestamp.UnixNano(),
+		TxnTimestampNanos:   evalCtx.TxnTimestamp.UnixNano(),
+		Location:            evalCtx.GetLocation().String(),
+		Database:            evalCtx.SessionData.Database,
+		TemporarySchemaName: evalCtx.SessionData.SearchPath.GetTemporarySchemaName(),
+		User:                evalCtx.SessionData.User,
+		ApplicationName:     evalCtx.SessionData.ApplicationName,
+		BytesEncodeFormat:   be,
+		ExtraFloatDigits:    int32(evalCtx.SessionData.DataConversion.ExtraFloatDigits),
+		Vectorize:           int32(evalCtx.SessionData.VectorizeMode),
 	}
 
 	// Populate the search path. Make sure not to include the implicit pg_catalog,

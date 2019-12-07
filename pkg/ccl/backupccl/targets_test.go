@@ -108,7 +108,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
 		{"system", `TABLE *`, []string{"system", "foo", "bar"}, nil, ``},
 	}
-	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
+	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"}, sessiondata.DefaultTemporarySchemaName)
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
 			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)
