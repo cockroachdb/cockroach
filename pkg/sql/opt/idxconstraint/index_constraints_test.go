@@ -81,7 +81,7 @@ func TestIndexConstraints(t *testing.T) {
 			var err error
 
 			var f norm.Factory
-			f.Init(&evalCtx)
+			f.Init(&evalCtx, nil /* catalog */)
 			md := f.Metadata()
 
 			for _, arg := range d.CmdArgs {
@@ -241,7 +241,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 			var f norm.Factory
-			f.Init(&evalCtx)
+			f.Init(&evalCtx, nil /* catalog */)
 			md := f.Metadata()
 			for i, typ := range varTypes {
 				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)

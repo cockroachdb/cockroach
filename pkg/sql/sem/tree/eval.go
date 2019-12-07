@@ -2585,7 +2585,8 @@ func (e *MultipleResultsError) Error() string {
 type EvalDatabase interface {
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
-	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
+	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
+	ParseQualifiedTableName(sql string) (*TableName, error)
 
 	// ResolveTableName expands the given table name and
 	// makes it point to a valid object.
@@ -3783,7 +3784,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				}, nil
 
 			case oid.T_regclass:
-				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
+				tn, err := ctx.Planner.ParseQualifiedTableName(origS)
 				if err != nil {
 					return nil, err
 				}

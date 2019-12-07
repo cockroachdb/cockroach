@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,9 +32,7 @@ var errSequenceOperators = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing sequence operations in this context")
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
+func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
@@ -83,10 +82,8 @@ var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessi
 	"cannot evaluate scalar expressions using table lookups in this context")
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
-func (ep *DummyEvalPlanner) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+func (ep *DummyEvalPlanner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
+	return parser.ParseQualifiedTableName(sql)
 }
 
 // LookupSchema is part of the tree.EvalDatabase interface.

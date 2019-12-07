@@ -12,7 +12,10 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -99,10 +102,44 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 	return c.f.ConstructConstVal(result, o.ReturnType)
 }
 
+// foldStringToRegclassCast resolves a string that is a table name into an OID
+// by resolving the table name and returning its table ID. This permits the
+// optimizer to do intelligent things like push down filters that look like:
+// ... WHERE oid = 'my_table'::REGCLASS
+func (c *CustomFuncs) foldStringToRegclassCast(
+	input opt.ScalarExpr, typ *types.T,
+) (opt.ScalarExpr, error) {
+	// Special case: we're casting a string to a REGCLASS oid, which is a
+	// table id lookup.
+	flags := cat.Flags{AvoidDescriptorCaches: false, NoTableStats: true}
+	datum := memo.ExtractConstDatum(input)
+	s := tree.MustBeDString(datum)
+	tn, err := parser.ParseQualifiedTableName(string(s))
+	if err != nil {
+		return nil, err
+	}
+	ds, resName, err := c.f.catalog.ResolveDataSource(c.f.evalCtx.Context, flags, tn)
+	if err != nil {
+		return nil, err
+	}
+
+	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+
+	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.TableName))
+	return c.f.ConstructConstVal(regclassOid, typ), nil
+
+}
+
 // FoldCast evaluates a cast expression with a constant input. It returns
 // a constant expression as long as the evaluation causes no error.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
 	if typ.Family() == types.OidFamily {
+		if typ.Oid() == types.RegClass.Oid() && input.DataType().Family() == types.StringFamily {
+			expr, err := c.foldStringToRegclassCast(input, typ)
+			if err == nil {
+				return expr
+			}
+		}
 		// Save this cast for the execbuilder.
 		return nil
 	}

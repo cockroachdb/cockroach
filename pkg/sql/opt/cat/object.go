@@ -16,6 +16,12 @@ type Object interface {
 	// StableID for more detail.
 	ID() StableID
 
+	// DescriptorID is the descriptor ID for this object. This can differ from the
+	// ID of this object in some cases. This is only important for reporting the
+	// Postgres-compatible identifiers for objects in the various object catalogs.
+	// In the vast majority of cases, you should use ID() instead.
+	PostgresDescriptorID() StableID
+
 	// Equals returns true if this object is identical to the given Object.
 	//
 	// Two objects are identical if they have the same identifier and there were

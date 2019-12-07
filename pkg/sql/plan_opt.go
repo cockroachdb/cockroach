@@ -220,7 +220,7 @@ func (opc *optPlanningCtx) init(p *planner) {
 func (opc *optPlanningCtx) reset() {
 	p := opc.p
 	opc.catalog.reset()
-	opc.optimizer.Init(p.EvalContext())
+	opc.optimizer.Init(p.EvalContext(), &opc.catalog)
 	opc.flags = planFlagOptUsed
 
 	// We only allow memo caching for SELECT/INSERT/UPDATE/DELETE. We could
