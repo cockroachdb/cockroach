@@ -827,9 +827,12 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 
 func (r *Replica) getMergeCompleteCh() chan struct{} {
 	r.mu.RLock()
-	mergeCompleteCh := r.mu.mergeComplete
-	r.mu.RUnlock()
-	return mergeCompleteCh
+	defer r.mu.RUnlock()
+	return r.getMergeCompleteChRLocked()
+}
+
+func (r *Replica) getMergeCompleteChRLocked() chan struct{} {
+	return r.mu.mergeComplete
 }
 
 // setLastReplicaDescriptors sets the the most recently seen replica
@@ -1014,68 +1017,94 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
 	}
 }
 
-// requestCanProceed returns an error if a request (identified by its
-// key span and timestamp) can proceed. It may be called multiple
-// times during the processing of the request (i.e. during both
-// proposal and application for write commands).
+// checkExecutionCanProceed returns an error if a batch request cannot be
+// executed by the Replica. An error indicates that the Replica is not live and
+// able to serve traffic or that the request is not compatible with the state of
+// the Range.
 //
-// This function is called both upstream and downstream of raft.
-// It is called upstream for read-only batches and admin batches;
-// and in the propose phase of write batches.
-// It is then also called downstream of raft for write batches.
-//
-// It also accesses replica state that is not declared in the SpanSet;
-// this is OK although it can run downstream of raft, because it can
-// never change the evaluation of a batch, only allow or disallow
-// it.
-func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
-	r.mu.RLock()
-	desc := r.mu.state.Desc
-	threshold := r.mu.state.GCThreshold
-	r.mu.RUnlock()
-	if !threshold.Less(ts) {
-		return &roachpb.BatchTimestampBeforeGCError{
-			Timestamp: ts,
-			Threshold: *threshold,
-		}
+// The method accepts a spanlatch.Guard and a LeaseStatus parameter. These are
+// used to indicate whether the caller has acquired latches and checked the
+// Range lease. The method will only check for a pending merge if both of these
+// conditions are true. If either lg == nil or st == nil then the method will
+// not check for a pending merge. Callers might be ok with this if they know
+// that they will end up checking for a pending merge at some later time.
+func (r *Replica) checkExecutionCanProceed(
+	ba *roachpb.BatchRequest, lg *spanlatch.Guard, st *storagepb.LeaseStatus,
+) error {
+	rSpan, err := keys.Range(ba.Requests)
+	if err != nil {
+		return err
 	}
 
-	if rspan.Key == nil && rspan.EndKey == nil {
-		return nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, err := r.isDestroyedRLocked(); err != nil {
+		return err
+	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+		return err
+	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp); err != nil {
+		return err
+	} else if lg != nil && st != nil {
+		// Only check for a pending merge if latches are held and the Range
+		// lease is held by this Replica. Without both of these conditions,
+		// checkForPendingMergeRLocked could return false negatives.
+		return r.checkForPendingMergeRLocked(ba)
 	}
+	return nil
+}
+
+// checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
+// cannot be executed by the Replica.
+func (r *Replica) checkExecutionCanProceedForRangeFeed(
+	rSpan roachpb.RSpan, ts hlc.Timestamp,
+) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, err := r.isDestroyedRLocked(); err != nil {
+		return err
+	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+		return err
+	} else if err := r.checkTSAboveGCThresholdRLocked(ts); err != nil {
+		return err
+	} else if r.requiresExpiringLeaseRLocked() {
+		// Ensure that the range does not require an expiration-based lease. If it
+		// does, it will never get closed timestamp updates and the rangefeed will
+		// never be able to advance its resolved timestamp.
+		return errors.New("expiration-based leases are incompatible with rangefeeds")
+	}
+	return nil
+}
+
+// checkSpanInRangeRLocked returns an error if a request (identified by its
+// key span) can be run on the replica.
+func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
+	desc := r.mu.state.Desc
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
-
-	mismatchErr := roachpb.NewRangeKeyMismatchError(
-		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc)
-	// Try to suggest the correct range on a key mismatch error where
-	// even the start key of the request went to the wrong range.
-	if !desc.ContainsKey(rspan.Key) {
-		if repl := r.store.LookupReplica(rspan.Key); repl != nil {
-			// Only return the correct range descriptor as a hint
-			// if we know the current lease holder for that range, which
-			// indicates that our knowledge is not stale.
-			if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
-				mismatchErr.SuggestedRange = repl.Desc()
-			}
-		}
-	}
-	return mismatchErr
+	return roachpb.NewRangeKeyMismatchError(
+		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
+	)
 }
 
-// checkForPendingMerge determines whether the replica is being merged into its
-// left-hand neighbor. If so, an error is returned to prevent the request from
-// proceeding until the merge completes.
-//
-// The method accepts a spanlatch.Guard and a LeaseStatus parameter. These are
-// unused, but indicate that it is only safe to call checkForPendingMerge on a
-// replica after latches have been acquired and after the replica's lease has
-// been checked. See the comment below for why this is.
-func (r *Replica) checkForPendingMerge(
-	ctx context.Context, ba *roachpb.BatchRequest, _ *spanlatch.Guard, _ *storagepb.LeaseStatus,
-) error {
-	if r.getMergeCompleteCh() == nil {
+// checkTSAboveGCThresholdRLocked returns an error if a request (identified
+// by its MVCC timestamp) can be run on the replica.
+func (r *Replica) checkTSAboveGCThresholdRLocked(ts hlc.Timestamp) error {
+	threshold := r.mu.state.GCThreshold
+	if threshold.Less(ts) {
+		return nil
+	}
+	return &roachpb.BatchTimestampBeforeGCError{
+		Timestamp: ts,
+		Threshold: *threshold,
+	}
+}
+
+// checkForPendingMergeRLocked determines whether the replica is being merged
+// into its left-hand neighbor. If so, an error is returned to prevent the
+// request from proceeding until the merge completes.
+func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
+	if r.getMergeCompleteChRLocked() == nil {
 		return nil
 	}
 	if ba.IsSingleSubsumeRequest() {
@@ -1126,7 +1155,6 @@ func (r *Replica) checkForPendingMerge(
 	// we acquired above and return a MergeInProgressError. The store will catch
 	// that error and resubmit the request after mergeCompleteCh closes. See
 	// #27442 for the full context.
-	log.Event(ctx, "waiting on in-progress merge")
 	return &roachpb.MergeInProgressError{}
 }
 
@@ -1383,26 +1411,25 @@ func (r *Replica) executeAdminBatch(
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	rSpan, err := keys.Range(ba.Requests)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
 	args := ba.Requests[0].GetInner()
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
 		sp.SetOperationName(reflect.TypeOf(args).String())
 	}
 
 	// Admin commands always require the range lease.
-	_, pErr := r.redirectOnOrAcquireLease(ctx)
+	status, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return nil, pErr
 	}
 	// Note there is no need to limit transaction max timestamp on admin requests.
+
+	// Verify that the batch can be executed.
+	// NB: we pass nil for the spanlatch guard because we haven't acquired
+	// latches yet. This is ok because each individual request that the admin
+	// request sends will acquire latches.
+	if err := r.checkExecutionCanProceed(ba, nil /* lg */, &status); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	var resp roachpb.Response
 	switch tArgs := args.(type) {
