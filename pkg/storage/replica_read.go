@@ -13,7 +13,6 @@ package storage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -66,14 +65,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
-	if _, err := r.IsDestroyed(); err != nil {
-		return nil, roachpb.NewError(err)
-	} else if rSpan, err := keys.Range(ba.Requests); err != nil {
-		return nil, roachpb.NewError(err)
-	} else if err = r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, roachpb.NewError(err)
-	} else if err := r.checkForPendingMerge(ctx, ba, ec.lg, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
