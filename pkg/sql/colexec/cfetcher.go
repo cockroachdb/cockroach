@@ -417,7 +417,11 @@ func (rf *cFetcher) Init(
 
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
-	if keysPerRow := table.desc.KeysPerRow(table.index.ID); keysPerRow > rf.maxKeysPerRow {
+	keysPerRow, err := table.desc.KeysPerRow(table.index.ID)
+	if err != nil {
+		return err
+	}
+	if keysPerRow > rf.maxKeysPerRow {
 		rf.maxKeysPerRow = keysPerRow
 	}
 
