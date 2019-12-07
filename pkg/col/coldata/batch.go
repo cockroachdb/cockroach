@@ -64,7 +64,8 @@ func BatchSize() uint16 {
 	return batchSize
 }
 
-// NewMemBatch allocates a new in-memory Batch.
+// NewMemBatch allocates a new in-memory Batch. A coltypes.Unknown type
+// will create a placeholder Vec that may not be accessed.
 // TODO(jordan): pool these allocations.
 func NewMemBatch(types []coltypes.T) Batch {
 	return NewMemBatchWithSize(types, int(BatchSize()))
@@ -179,7 +180,9 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
 	for _, v := range m.b {
-		v.Nulls().UnsetNulls()
+		if v.Type() != coltypes.Unhandled {
+			v.Nulls().UnsetNulls()
+		}
 		if v.Type() == coltypes.Bytes {
 			v.Bytes().Reset()
 		}
