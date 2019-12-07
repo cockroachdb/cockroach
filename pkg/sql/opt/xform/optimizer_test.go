@@ -99,7 +99,7 @@ func TestDetachMemoRace(t *testing.T) {
 		go func() {
 			var o xform.Optimizer
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			o.Init(&evalCtx)
+			o.Init(&evalCtx, catalog)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {

@@ -34,7 +34,7 @@ func TestLookupJoinProvided(t *testing.T) {
 	}
 	evalCtx := tree.NewTestingEvalContext(nil /* st */)
 	var f norm.Factory
-	f.Init(evalCtx)
+	f.Init(evalCtx, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)

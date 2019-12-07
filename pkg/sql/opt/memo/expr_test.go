@@ -102,7 +102,7 @@ func TestExprIsNeverNull(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer
-				o.Init(&evalCtx)
+				o.Init(&evalCtx, catalog)
 				for i, typ := range varTypes {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}

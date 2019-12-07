@@ -74,7 +74,7 @@ func TestOrdinalityProvided(t *testing.T) {
 		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 			evalCtx := tree.NewTestingEvalContext(nil /* st */)
 			var f norm.Factory
-			f.Init(evalCtx)
+			f.Init(evalCtx, nil /* catalog */)
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{
