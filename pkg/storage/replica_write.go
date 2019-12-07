@@ -161,7 +161,7 @@ func (r *Replica) executeWriteBatch(
 
 	// After the command is proposed to Raft, invoking endCmds.done is the
 	// responsibility of Raft, so move the endCmds into evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, spans, ec.move())
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, &lease, ba, spans, ec.move())
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
