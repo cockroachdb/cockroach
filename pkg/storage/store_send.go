@@ -277,59 +277,56 @@ func (s *Store) Send(
 			pErr = nil
 
 		case *roachpb.WriteIntentError:
-			// Process and resolve write intent error. We do this here because
-			// this is the code path with the requesting client waiting.
-			if pErr.Index != nil {
-				var pushType roachpb.PushTxnType
-				if ba.IsWrite() {
-					pushType = roachpb.PUSH_ABORT
-				} else {
-					pushType = roachpb.PUSH_TIMESTAMP
-				}
-
-				index := pErr.Index
-				args := ba.Requests[index.Index].GetInner()
-				// Make a copy of the header for the upcoming push; we will update
-				// the timestamp.
-				h := ba.Header
-				if h.Txn != nil {
-					// We must push at least to h.Timestamp, but in fact we want to
-					// go all the way up to a timestamp which was taken off the HLC
-					// after our operation started. This allows us to not have to
-					// restart for uncertainty as we come back and read.
-					obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
-					if !ok {
-						// This was set earlier in this method, so it's
-						// completely unexpected to not be found now.
-						log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
-					}
-					h.Timestamp.Forward(obsTS)
-					// We are going to hand the header (and thus the transaction proto)
-					// to the RPC framework, after which it must not be changed (since
-					// that could race). Since the subsequent execution of the original
-					// request might mutate the transaction, make a copy here.
-					//
-					// See #9130.
-					h.Txn = h.Txn.Clone()
-				}
-				// Handle the case where we get more than one write intent error;
-				// we need to cleanup the previous attempt to handle it to allow
-				// any other pusher queued up behind this RPC to proceed.
-				if cleanupAfterWriteIntentError != nil {
-					cleanupAfterWriteIntentError(t, nil)
-				}
-				if cleanupAfterWriteIntentError, pErr =
-					s.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
-					// Do not propagate ambiguous results; assume success and retry original op.
-					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
-						// Preserve the error index.
-						pErr.Index = index
-						return nil, pErr
-					}
-					pErr = nil
-				}
-				// We've resolved the write intent; retry command.
+			// Process and resolve write intent error.
+			var pushType roachpb.PushTxnType
+			if ba.IsWrite() {
+				pushType = roachpb.PUSH_ABORT
+			} else {
+				pushType = roachpb.PUSH_TIMESTAMP
 			}
+
+			index := pErr.Index
+			args := ba.Requests[index.Index].GetInner()
+			// Make a copy of the header for the upcoming push; we will update
+			// the timestamp.
+			h := ba.Header
+			if h.Txn != nil {
+				// We must push at least to h.Timestamp, but in fact we want to
+				// go all the way up to a timestamp which was taken off the HLC
+				// after our operation started. This allows us to not have to
+				// restart for uncertainty as we come back and read.
+				obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
+				if !ok {
+					// This was set earlier in this method, so it's
+					// completely unexpected to not be found now.
+					log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
+				}
+				h.Timestamp.Forward(obsTS)
+				// We are going to hand the header (and thus the transaction proto)
+				// to the RPC framework, after which it must not be changed (since
+				// that could race). Since the subsequent execution of the original
+				// request might mutate the transaction, make a copy here.
+				//
+				// See #9130.
+				h.Txn = h.Txn.Clone()
+			}
+			// Handle the case where we get more than one write intent error;
+			// we need to cleanup the previous attempt to handle it to allow
+			// any other pusher queued up behind this RPC to proceed.
+			if cleanupAfterWriteIntentError != nil {
+				cleanupAfterWriteIntentError(t, nil)
+			}
+			if cleanupAfterWriteIntentError, pErr =
+				s.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
+				// Do not propagate ambiguous results; assume success and retry original op.
+				if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
+					// Preserve the error index.
+					pErr.Index = index
+					return nil, pErr
+				}
+				pErr = nil
+			}
+			// We've resolved the write intent; retry command.
 
 		case *roachpb.MergeInProgressError:
 			// A merge was in progress. We need to retry the command after the merge
