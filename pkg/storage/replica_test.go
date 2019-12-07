@@ -1002,7 +1002,9 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	_, pErr := tc.SendWrapped(&gArgs)
+	_, pErr := client.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+		RangeID: 1,
+	}, &gArgs)
 
 	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", pErr)

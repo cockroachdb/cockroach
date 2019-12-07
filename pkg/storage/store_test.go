@@ -727,19 +727,18 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	})
 	require.Equal(t, errRemoved, err)
 
-	repl1.mu.Lock()
-	expErr := roachpb.NewError(repl1.mu.destroyStatus.err)
-	lease := *repl1.mu.state.Lease
-	repl1.mu.Unlock()
+	repl1.mu.RLock()
+	expErr := repl1.mu.destroyStatus.err
+	repl1.mu.RUnlock()
 
 	if expErr == nil {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if _, _, _, pErr := repl1.evalAndPropose(
-		context.Background(), lease, &roachpb.BatchRequest{}, &allSpans, endCmds{},
-	); !pErr.Equal(expErr) {
-		t.Fatalf("expected error %s, but got %v", expErr, pErr)
+	if err = repl1.checkExecutionCanProceed(
+		&roachpb.BatchRequest{}, nil /* lg */, nil, /* st */
+	); err != expErr {
+		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -337,6 +338,7 @@ func (s *Store) Send(
 			// its mergeComplete channel will be nil.
 			mergeCompleteCh := repl.getMergeCompleteCh()
 			if mergeCompleteCh != nil {
+				log.Event(ctx, "waiting on in-progress merge")
 				select {
 				case <-mergeCompleteCh:
 					// Merge complete. Retry the command.
@@ -347,6 +349,25 @@ func (s *Store) Send(
 				}
 			}
 			pErr = nil
+
+		case *roachpb.RangeKeyMismatchError:
+			// On a RangeKeyMismatchError where the batch didn't even overlap
+			// the start of the mismatched Range, try to suggest a more suitable
+			// Range from this Store.
+			rSpan, err := keys.Range(ba.Requests)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			if !t.MismatchedRange.ContainsKey(rSpan.Key) {
+				if repl := s.LookupReplica(rSpan.Key); repl != nil {
+					// Only return the correct range descriptor as a hint
+					// if we know the current lease holder for that range, which
+					// indicates that our knowledge is not stale.
+					if l, _ := repl.GetLease(); repl.IsLeaseValid(l, s.Clock().Now()) {
+						t.SuggestedRange = repl.Desc()
+					}
+				}
+			}
 		}
 
 		if pErr != nil {

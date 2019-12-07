@@ -581,18 +581,10 @@ func (r *Replica) leaseStatus(
 	return status
 }
 
-// requiresExpiringLease returns whether this range uses an expiration-based
-// lease; false if epoch-based. Ranges located before or including the node
-// liveness table must use expiration leases to avoid circular dependencies on
-// the node liveness table.
-func (r *Replica) requiresExpiringLease() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.requiresExpiringLeaseRLocked()
-}
-
-// requiresExpiringLeaseRLocked is like requiresExpiringLease, but requires that
-// the replica mutex be held.
+// requiresExpiringLeaseRLocked returns whether this range uses an
+// expiration-based lease; false if epoch-based. Ranges located before or
+// including the node liveness table must use expiration leases to avoid
+// circular dependencies on the node liveness table.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil || !r.store.cfg.EnableEpochRangeLeases ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
