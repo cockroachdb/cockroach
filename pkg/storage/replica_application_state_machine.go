@@ -240,8 +240,8 @@ func checkForcedErr(
 	if leaseMismatch {
 		log.VEventf(
 			ctx, 1,
-			"command proposed from replica %+v with lease #%d incompatible to %v",
-			raftCmd.ProposerReplica, raftCmd.ProposerLeaseSequence, *replicaState.Lease,
+			"command with lease #%d incompatible to %v",
+			raftCmd.ProposerLeaseSequence, *replicaState.Lease,
 		)
 		if isLeaseRequest {
 			// For lease requests we return a special error that
@@ -254,8 +254,9 @@ func checkForcedErr(
 			})
 		}
 		// We return a NotLeaseHolderError so that the DistSender retries.
-		nlhe := newNotLeaseHolderError(
-			replicaState.Lease, raftCmd.ProposerReplica.StoreID, replicaState.Desc)
+		// NB: we set proposerStoreID to 0 because we don't know who proposed the
+		// Raft command. This is ok, as this is only used for debug information.
+		nlhe := newNotLeaseHolderError(replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc)
 		nlhe.CustomMsg = fmt.Sprintf(
 			"stale proposal: command was proposed under lease #%d but is being applied "+
 				"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease)

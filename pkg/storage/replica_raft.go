@@ -85,12 +85,6 @@ func (r *Replica) evalAndPropose(
 		r.mu.RUnlock()
 		return nil, nil, 0, roachpb.NewError(err)
 	}
-
-	repDesc, err := r.getReplicaDescriptorRLocked()
-	if err != nil {
-		r.mu.RUnlock()
-		return nil, nil, 0, roachpb.NewError(err)
-	}
 	r.mu.RUnlock()
 
 	rSpan, err := keys.Range(ba.Requests)
@@ -181,7 +175,6 @@ func (r *Replica) evalAndPropose(
 	}
 
 	// Attach information about the proposer to the command.
-	proposal.command.ProposerReplica = repDesc
 	proposal.command.ProposerLeaseSequence = lease.Sequence
 
 	// Once a command is written to the raft log, it must be loaded into memory
@@ -303,7 +296,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		// since there's no stopping the actual removal/demotion once it's there.
 		// The Removed() field has contains these replicas when this first
 		// transition is initiated, so its use here is copacetic.
-		replID := p.command.ProposerReplica.ReplicaID
+		replID := r.ReplicaID()
 		for _, rDesc := range crt.Removed() {
 			if rDesc.ReplicaID == replID {
 				msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
@@ -346,12 +339,10 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	// debug proposal sizes.
 	if false {
 		log.Infof(p.ctx, `%s: proposal: %d
-  RaftCommand.ProposerReplica:               %d
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
 `, p.Request.Summary(), cmdLen,
-			p.command.ProposerReplica.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
