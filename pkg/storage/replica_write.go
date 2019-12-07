@@ -118,10 +118,12 @@ func (r *Replica) executeWriteBatch(
 	r.limitTxnMaxTimestamp(ctx, ba, status)
 
 	// Verify that the batch can be executed.
-	if ec.lg != nil {
-		if err := r.checkForPendingMerge(ctx, ba, ec.lg, &status); err != nil {
-			return nil, roachpb.NewError(err)
-		}
+	// NB: we only need to check that the request is in the Range's key bounds
+	// at proposal time, not at application time, because the spanlatch manager
+	// will synchronize all requests (notably EndTransaction with SplitTrigger)
+	// that may cause this condition to change.
+	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
@@ -149,8 +151,13 @@ func (r *Replica) executeWriteBatch(
 			}
 		}()
 	}
-
 	log.Event(ctx, "applied timestamp cache")
+
+	// Checking the context just before proposing can help avoid ambiguous errors.
+	if err := ctx.Err(); err != nil {
+		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
+		return nil, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
+	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is the
 	// responsibility of Raft, so move the endCmds into evalAndPropose.
