@@ -680,7 +680,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.evalAndPropose(context.TODO(), exLease, &ba, &allSpans, endCmds{})
+	ch, _, _, pErr := r.evalAndPropose(context.TODO(), &exLease, &ba, &allSpans, endCmds{})
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1462,7 +1462,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), exLease, &ba, &allSpans, endCmds{})
+	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &exLease, &ba, &allSpans, endCmds{})
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -7717,7 +7717,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, err := repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
+		ch, _, idx, err := repl.evalAndPropose(ctx, &lease, &ba, &allSpans, endCmds{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7786,7 +7786,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, err := tc.repl.evalAndPropose(ctx, lease, &ba, &allSpans, endCmds{})
+		ch, _, idx, err := tc.repl.evalAndPropose(ctx, &lease, &ba, &allSpans, endCmds{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -9092,7 +9092,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 
 	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), exLease, &ba, &allSpans, endCmds{},
+		context.Background(), &exLease, &ba, &allSpans, endCmds{},
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9139,7 +9139,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.evalAndPropose(
-		context.Background(), exLease, &ba, &allSpans, endCmds{},
+		context.Background(), &exLease, &ba, &allSpans, endCmds{},
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9203,7 +9203,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, pErr := repl.evalAndPropose(ctx, exLease, &ba, &allSpans, endCmds{})
+	_, _, _, pErr := repl.evalAndPropose(ctx, &exLease, &ba, &allSpans, endCmds{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9221,7 +9221,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.evalAndPropose(ctx, exLease, &ba, &allSpans, endCmds{})
+		ch, _, _, pErr = repl.evalAndPropose(ctx, &exLease, &ba, &allSpans, endCmds{})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -11786,7 +11786,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
-	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &lease, &ba, &allSpans, endCmds{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -11882,7 +11882,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, lease, &ba, &allSpans, endCmds{})
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &lease, &ba, &allSpans, endCmds{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
