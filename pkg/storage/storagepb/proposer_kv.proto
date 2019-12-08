@@ -119,8 +119,6 @@ message SuggestedCompaction {
 message ReplicatedEvalResult {
   option (gogoproto.equal) = true;
 
-  // Whether to block concurrent readers while processing the proposal data.
-  bool block_reads = 1;
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
@@ -169,7 +167,7 @@ message ReplicatedEvalResult {
   // but before we tried to apply it.
   util.hlc.Timestamp prev_lease_proposal = 20;
 
-  reserved 5, 7, 9, 14, 15, 16, 10001 to 10013;
+  reserved 1, 5, 7, 9, 14, 15, 16, 10001 to 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
