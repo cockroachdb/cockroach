@@ -594,11 +594,6 @@ func (r *Replica) sendWithRangeID(
 		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if pErr != nil {
-		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
-			// This error needs to be converted appropriately so that
-			// clients will retry.
-			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()))
-		}
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
