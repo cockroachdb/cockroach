@@ -329,6 +329,7 @@ func internalExtendedEvalCtx(
 		Tables:          tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
+		SchemaChangers:  &schemaChangerCollection{},
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
@@ -348,6 +349,13 @@ func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
+}
+
+// HasSessionCreatedTemporarySchema returns true if the session associated with
+// the planner has created a temporary schema.
+func (p *planner) HasSessionCreatedTemporarySchema(sessionID ClusterWideID) bool {
+	tempSchemaName := temporarySchemaName(sessionID)
+	return p.SessionData().SearchPath.GetTemporarySchemaName() == tempSchemaName
 }
 
 func (p *planner) CurrentDatabase() string {
@@ -385,9 +393,7 @@ func (p *planner) User() string {
 }
 
 func (p *planner) TemporarySchemaName() string {
-	return fmt.Sprintf("pg_temp_%v%v",
-		p.ExtendedEvalContext().SessionID.Hi,
-		p.ExtendedEvalContext().SessionID.Lo)
+	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
 func (p *planner) SetTemporarySchemaName(scName string) {

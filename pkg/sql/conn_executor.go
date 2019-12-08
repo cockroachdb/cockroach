@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
 
@@ -737,11 +738,20 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		// panic or safeErr. I'm propagating safeErr to be on the safe side.
 		panic(safeErr)
 	}
-	ex.close(ctx, normalClose)
+	// Closing is not cancelable.
+	closeCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	ex.close(closeCtx, normalClose)
 }
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+
+	if ex.planner.HasSessionCreatedTemporarySchema(ex.sessionID) {
+		err := cleanupSessionTempObjects(ctx, ex.server, ex.sessionID)
+		if err != nil {
+			log.Errorf(ctx, "error deleting temporary objects: %s", err)
+		}
+	}
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {

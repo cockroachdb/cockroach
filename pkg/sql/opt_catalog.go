@@ -108,7 +108,8 @@ func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceNa
 		os.planner,
 		os.desc,
 		os.name.Schema(),
-		true, /* explicitPrefix */
+		true,  /* explicitPrefix */
+		false, /* required */
 	)
 }
 

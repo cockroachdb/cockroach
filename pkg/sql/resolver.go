@@ -67,10 +67,11 @@ func GetObjectNames(
 	dbDesc *DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
+	required bool,
 ) (res TableNames, err error) {
 	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, dbDesc, scName,
 		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /*required*/),
+			CommonLookupFlags: sc.CommonLookupFlags(required),
 			ExplicitPrefix:    explicitPrefix,
 		})
 }
