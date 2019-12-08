@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -156,7 +157,9 @@ func makeViewTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 ) (sqlbase.MutableTableDescriptor, error) {
-	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges, false /* temporary */)
+	desc := InitTableDescriptor(
+		id, parentID, keys.PublicSchemaID, viewName, creationTime, privileges, false, /* temporary */
+	)
 	desc.ViewQuery = viewQuery
 	for _, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}

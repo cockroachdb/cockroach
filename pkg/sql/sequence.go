@@ -457,15 +457,17 @@ func maybeAddSequenceDependencies(
 	return seqDescs, nil
 }
 
-// When a table/column is dropped that owns sequences, the sequences must be dropped
-// as well.
-func dropSequencesOwnedByCol(col *sqlbase.ColumnDescriptor, params runParams) error {
+// dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
+// Called when the respective column (or the whole table) is being dropped.
+func (p *planner) dropSequencesOwnedByCol(
+	ctx context.Context, col *sqlbase.ColumnDescriptor,
+) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
-		seqDesc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, sequenceID, params.p.txn)
+		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
-		if err := params.p.dropSequenceImpl(params.ctx, seqDesc, tree.DropRestrict); err != nil {
+		if err := p.dropSequenceImpl(ctx, seqDesc, tree.DropRestrict); err != nil {
 			return err
 		}
 	}
@@ -477,12 +479,12 @@ func dropSequencesOwnedByCol(col *sqlbase.ColumnDescriptor, params runParams) er
 //   - removes the reference from the sequence descriptor to the column descriptor.
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
-func removeSequenceDependencies(
-	tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
+func (p *planner) removeSequenceDependencies(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, sequenceID, params.p.txn)
+		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -524,7 +526,7 @@ func removeSequenceDependencies(
 				seqDesc.DependedOnBy[refTableIdx+1:]...)
 		}
 
-		if err := params.p.writeSchemaChange(params.ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
+		if err := p.writeSchemaChange(ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
