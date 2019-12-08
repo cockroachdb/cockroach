@@ -268,16 +268,32 @@ type PebbleConfig struct {
 	Opts *pebble.Options
 }
 
+// EncryptionStatsHandler provides encryption related stats.
+type EncryptionStatsHandler interface {
+	// Returns a serialized enginepbccl.EncryptionStatus.
+	GetEncryptionStatus() ([]byte, error)
+	// Returns a serialized enginepbccl.DataKeysRegistry, scrubbed of key contents.
+	GetDataKeysRegistry() ([]byte, error)
+	// Returns the ID of the active data key, or "plain" if none.
+	GetActiveDataKeyID() (string, error)
+	// Returns the enum value of the encryption type.
+	GetActiveStoreKeyType() int32
+	// Returns the KeyID embedded in the serialized EncryptionSettings.
+	GetKeyIDFromSettings(settings []byte) (string, error)
+}
+
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
 	db *pebble.DB
 
-	closed   bool
-	path     string
-	auxDir   string
-	maxSize  int64
-	attrs    roachpb.Attributes
-	settings *cluster.Settings
+	closed       bool
+	path         string
+	auxDir       string
+	maxSize      int64
+	attrs        roachpb.Attributes
+	settings     *cluster.Settings
+	statsHandler EncryptionStatsHandler
+	fileRegistry *PebbleFileRegistry
 
 	// Relevant options copied over from pebble.Options.
 	fs     vfs.FS
@@ -290,7 +306,7 @@ var _ Engine = &Pebble{}
 // and writing data. This should be initialized by calling engineccl.Init() before calling
 // NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
-var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, error)
+var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, EncryptionStatsHandler, error)
 
 // NewPebble creates a new Pebble instance, at the specified path.
 func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
@@ -330,8 +346,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 			return nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
+		fileRegistry = nil
 	}
 
+	var statsHandler EncryptionStatsHandler
 	if len(cfg.ExtraOptions) > 0 {
 		// Encryption is enabled.
 		if !cfg.UseFileRegistry {
@@ -340,11 +358,12 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		if NewEncryptedEnvFunc == nil {
 			return nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
 		}
-		fs, err := NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
+		var err error
+		cfg.Opts.FS, statsHandler, err =
+			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
 		if err != nil {
 			return nil, err
 		}
-		cfg.Opts.FS = fs
 	}
 
 	// The context dance here is done so that we have a clean context without
@@ -360,14 +379,16 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	}
 
 	return &Pebble{
-		db:       db,
-		path:     cfg.Dir,
-		auxDir:   auxDir,
-		maxSize:  cfg.MaxSize,
-		attrs:    cfg.Attrs,
-		settings: cfg.Settings,
-		fs:       cfg.Opts.FS,
-		logger:   cfg.Opts.Logger,
+		db:           db,
+		path:         cfg.Dir,
+		auxDir:       auxDir,
+		maxSize:      cfg.MaxSize,
+		attrs:        cfg.Attrs,
+		settings:     cfg.Settings,
+		statsHandler: statsHandler,
+		fileRegistry: fileRegistry,
+		fs:           cfg.Opts.FS,
+		logger:       cfg.Opts.Logger,
 	}, nil
 }
 
@@ -624,14 +645,55 @@ func (p *Pebble) GetStats() (*Stats, error) {
 
 // GetEncryptionRegistries implements the Engine interface.
 func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
-	// TODO(sumeer): Implement this. These are encryption-at-rest specific stats.
-	return &EncryptionRegistries{}, nil
+	rv := &EncryptionRegistries{}
+	var err error
+	if p.statsHandler != nil {
+		rv.KeyRegistry, err = p.statsHandler.GetDataKeysRegistry()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.fileRegistry != nil {
+		rv.FileRegistry = []byte(p.fileRegistry.getRegistryCopy().String())
+	}
+	return rv, nil
 }
 
 // GetEnvStats implements the Engine interface.
 func (p *Pebble) GetEnvStats() (*EnvStats, error) {
-	// TODO(sumeer): Implement this. These are encryption-at-rest specific stats.
-	return &EnvStats{}, nil
+	// TODO(sumeer): make the stats complete. There are no bytes stats. The TotalFiles is missing
+	// files that are not in the registry (from before encryption was enabled).
+	stats := &EnvStats{}
+	if p.statsHandler == nil {
+		return stats, nil
+	}
+	stats.EncryptionType = p.statsHandler.GetActiveStoreKeyType()
+	var err error
+	stats.EncryptionStatus, err = p.statsHandler.GetEncryptionStatus()
+	if err != nil {
+		return nil, err
+	}
+	fr := p.fileRegistry.getRegistryCopy()
+	if fr != nil {
+		stats.TotalFiles = uint64(len(fr.Files))
+	}
+	activeKeyID, err := p.statsHandler.GetActiveDataKeyID()
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range fr.Files {
+		keyID, err := p.statsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
+		if err != nil {
+			return nil, err
+		}
+		if len(keyID) == 0 {
+			keyID = "plain"
+		}
+		if keyID == activeKeyID {
+			stats.ActiveKeyFiles++
+		}
+	}
+	return stats, nil
 }
 
 // GetAuxiliaryDir implements the Engine interface.

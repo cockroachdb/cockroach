@@ -216,3 +216,11 @@ func (r *PebbleFileRegistry) writeRegistry(newProto *enginepb.FileRegistry) erro
 	r.mu.currProto = newProto
 	return nil
 }
+
+func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rv := &enginepb.FileRegistry{}
+	proto.Merge(rv, r.mu.currProto)
+	return rv
+}
