@@ -209,10 +209,11 @@ func newInternalPlanner(
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
-		SearchPath:    sqlbase.DefaultSearchPath,
-		User:          user,
-		Database:      "system",
-		SequenceState: sessiondata.NewSequenceState(),
+		SearchPath:                sqlbase.DefaultSearchPath,
+		HasCreatedTemporarySchema: false,
+		User:                      user,
+		Database:                  "system",
+		SequenceState:             sessiondata.NewSequenceState(),
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},
@@ -329,6 +330,7 @@ func internalExtendedEvalCtx(
 		Tables:          tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
+		SchemaChangers:  &schemaChangerCollection{},
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
@@ -385,13 +387,7 @@ func (p *planner) User() string {
 }
 
 func (p *planner) TemporarySchemaName() string {
-	return fmt.Sprintf("pg_temp_%v%v",
-		p.ExtendedEvalContext().SessionID.Hi,
-		p.ExtendedEvalContext().SessionID.Lo)
-}
-
-func (p *planner) SetTemporarySchemaName(scName string) {
-	p.sessionDataMutator.SetTemporarySchemaName(scName)
+	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
 // DistSQLPlanner returns the DistSQLPlanner

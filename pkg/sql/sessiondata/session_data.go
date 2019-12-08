@@ -96,6 +96,9 @@ type SessionData struct {
 	SaveTablesPrefix string
 	// TempTablesEnabled indicates whether temporary tables can be created or not.
 	TempTablesEnabled bool
+	// HasCreatedTemporarySchema indicates if the session has created a temporary
+	// schema or not.
+	HasCreatedTemporarySchema bool
 }
 
 // DataConversionConfig contains the parameters that influence

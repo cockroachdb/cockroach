@@ -265,11 +265,12 @@ func (ds *ServerImpl) setupFlow(
 				errors.Safe(req.EvalContext.BytesEncodeFormat))
 		}
 		sd := &sessiondata.SessionData{
-			ApplicationName: req.EvalContext.ApplicationName,
-			Database:        req.EvalContext.Database,
-			User:            req.EvalContext.User,
-			SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath, req.EvalContext.TemporarySchemaName),
-			SequenceState:   sessiondata.NewSequenceState(),
+			ApplicationName:           req.EvalContext.ApplicationName,
+			Database:                  req.EvalContext.Database,
+			User:                      req.EvalContext.User,
+			SearchPath:                sessiondata.MakeSearchPath(req.EvalContext.SearchPath, req.EvalContext.TemporarySchemaName),
+			HasCreatedTemporarySchema: req.EvalContext.TemporarySchemaName != sessiondata.DefaultTemporarySchemaName,
+			SequenceState:             sessiondata.NewSequenceState(),
 			DataConversion: sessiondata.DataConversionConfig{
 				Location:          location,
 				BytesEncodeFormat: be,

@@ -156,7 +156,9 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 	if err != nil {
 		return err
 	}
-	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	tbNames, err := GetObjectNames(
+		ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/, true, /* required */
+	)
 	if err != nil {
 		return err
 	}

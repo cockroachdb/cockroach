@@ -828,6 +828,16 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	`has_created_temporary_schema`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.HasCreatedTemporarySchema)
+		},
+		GlobalDefault: globalFalse,
+		// Is automatically set when the session creates a temporary schema for the
+		// first time.
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

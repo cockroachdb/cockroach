@@ -1793,6 +1793,10 @@ func (m *sessionDataMutator) SetTemporarySchemaName(scName string) {
 	m.data.SearchPath = m.data.SearchPath.WithTemporarySchemaName(scName)
 }
 
+func (m *sessionDataMutator) SetHasCreatedTemporarySchema(val bool) {
+	m.data.HasCreatedTemporarySchema = val
+}
+
 func (m *sessionDataMutator) SetDefaultIntSize(size int) {
 	m.data.DefaultIntSize = size
 }
