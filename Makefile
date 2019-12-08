@@ -837,6 +837,7 @@ $(shell find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) -delete 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
 	pkg/sql/opt/operator.og.go \
+	pkg/sql/opt/optbuilder/factory.og.go \
 	pkg/sql/opt/xform/explorer.og.go \
 	pkg/sql/opt/norm/factory.og.go \
 	pkg/sql/opt/rule_name.og.go \
@@ -1521,6 +1522,9 @@ pkg/sql/opt/memo/expr.og.go: $(optgen-defs) bin/optgen
 
 pkg/sql/opt/operator.og.go: $(optgen-defs) bin/optgen
 	optgen -out $@ ops $(optgen-defs)
+
+pkg/sql/opt/optbuilder/factory.og.go: $(optgen-defs) bin/optgen
+	optgen -out $@ ifactory $(optgen-defs)
 
 pkg/sql/opt/rule_name.og.go: $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules) bin/optgen
 	optgen -out $@ rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)

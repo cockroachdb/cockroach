@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,7 +82,7 @@ type Builder struct {
 	// statements.
 	DisableMemoReuse bool
 
-	factory *norm.Factory
+	factory Factory
 	stmt    tree.Statement
 
 	ctx        context.Context
@@ -140,7 +138,7 @@ func New(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	catalog cat.Catalog,
-	factory *norm.Factory,
+	factory Factory,
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
@@ -173,13 +171,6 @@ func (b *Builder) Build() (err error) {
 			}
 		}
 	}()
-
-	// Special case for CannedOptPlan.
-	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
-		b.factory.DisableOptimizations()
-		_, err := exprgen.Build(b.catalog, b.factory, canned.Plan)
-		return err
-	}
 
 	b.pushWithFrame()
 

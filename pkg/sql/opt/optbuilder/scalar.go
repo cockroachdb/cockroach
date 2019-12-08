@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -712,7 +711,7 @@ type ScalarBuilder struct {
 // NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
 func NewScalar(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *norm.Factory,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory Factory,
 ) *ScalarBuilder {
 	md := factory.Metadata()
 	sb := &ScalarBuilder{

@@ -94,6 +94,7 @@ func (g *optgen) run(args ...string) bool {
 	case "explorer":
 	case "exprs":
 	case "factory":
+	case "ifactory":
 	case "ops":
 	case "rulenames":
 
@@ -168,6 +169,10 @@ func (g *optgen) run(args ...string) bool {
 
 	case "factory":
 		var gen factoryGen
+		err = g.generate(compiled, gen.generate)
+
+	case "ifactory":
+		var gen ifactoryGen
 		err = g.generate(compiled, gen.generate)
 
 	case "ops":
@@ -252,6 +257,7 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\texplorer   generate expression tree exploration rules\n")
 	fmt.Fprintf(g.stdErr, "\texprs      generate expression definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
+	fmt.Fprintf(g.stdErr, "\tifactory   generate interface for normalization factory\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\trulenames  generate enumeration of rule names\n")
 	fmt.Fprintf(g.stdErr, "\n")

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -266,7 +267,7 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo, _ error) {
 	p := opc.p
 
-	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
+	canned, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
 	if isCanned {
 		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
 			return nil, pgerror.New(pgcode.InsufficientPrivilege,
@@ -294,15 +295,22 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
-	bld.KeepPlaceholders = true
-	if err := bld.Build(); err != nil {
-		return nil, err
-	}
+	if isCanned {
+		f.DisableOptimizations()
+		if _, err := exprgen.Build(&opc.catalog, f, canned.Plan); err != nil {
+			return nil, err
+		}
+	} else {
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
+		bld.KeepPlaceholders = true
+		if err := bld.Build(); err != nil {
+			return nil, err
+		}
 
-	if bld.DisableMemoReuse {
-		opc.allowMemoReuse = false
-		opc.useCache = false
+		if bld.DisableMemoReuse {
+			opc.allowMemoReuse = false
+			opc.useCache = false
+		}
 	}
 
 	if isCanned {
@@ -415,21 +423,31 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// We are executing a statement for which there is no reusable memo
 	// available.
+	useCache := opc.useCache
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
-	if err := bld.Build(); err != nil {
-		return nil, err
-	}
-	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
+	if canned, ok := opc.p.stmt.AST.(*tree.CannedOptPlan); ok {
+		f.DisableOptimizations()
+		if _, err := exprgen.Build(&opc.catalog, f, canned.Plan); err != nil {
+			return nil, err
+		}
+	} else {
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, opc.p.stmt.AST)
+		if err := bld.Build(); err != nil {
+			return nil, err
+		}
 		if _, err := opc.optimizer.Optimize(); err != nil {
 			return nil, err
 		}
+
+		// If this statement has placeholders, don't add it to the cache. Note
+		// that non-prepared statements from pgwire clients cannot have
+		// placeholders.
+		if bld.HadPlaceholders || bld.DisableMemoReuse {
+			useCache = false
+		}
 	}
 
-	// If this statement doesn't have placeholders, add it to the cache. Note
-	// that non-prepared statements from pgwire clients cannot have
-	// placeholders.
-	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse {
+	if useCache {
 		memo := opc.optimizer.DetachMemo()
 		cachedData := querycache.CachedData{
 			SQL:  opc.p.stmt.SQL,

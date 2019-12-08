@@ -19,6 +19,7 @@ The commands are:
 	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for normalization factory
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 
@@ -51,6 +52,7 @@ The commands are:
 	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for normalization factory
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 
@@ -84,6 +86,7 @@ The commands are:
 	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for normalization factory
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 

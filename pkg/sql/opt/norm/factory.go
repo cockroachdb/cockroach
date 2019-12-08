@@ -279,15 +279,6 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 //
 // ----------------------------------------------------------------------
 
-// ConstructZeroValues constructs a Values operator with zero rows and zero
-// columns. It is used to create a dummy input for operators like CreateTable.
-func (f *Factory) ConstructZeroValues() memo.RelExpr {
-	return f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
-		Cols: opt.ColList{},
-		ID:   f.Metadata().NextValuesID(),
-	})
-}
-
 // ConstructJoin constructs the join operator that corresponds to the given join
 // operator type.
 func (f *Factory) ConstructJoin(
@@ -318,11 +309,11 @@ func (f *Factory) ConstructJoin(
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
-// ConstructConstVal constructs one of the constant value operators from the
-// given datum value. While most constants are represented with Const, there are
-// special-case operators for True, False, and Null, to make matching easier.
-// Null operators require the static type to be specified, so that rewrites do
-// not change it.
+// ConstructConstVal is a helper function that constructs one of the constant
+// value operators from the given datum value. While most constants are
+// represented with Const, there are special-case operators for True, False, and
+// Null, to make matching easier. Null operators require the static type to be
+// specified, so that rewrites do not change it.
 func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 	if d == tree.DNull {
 		return f.ConstructNull(t)

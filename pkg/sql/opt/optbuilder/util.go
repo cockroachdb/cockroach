@@ -619,3 +619,12 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv pri
 	// cached and later checked for freshness.
 	b.factory.Metadata().AddDependency(name, ds, priv)
 }
+
+// ConstructZeroValues constructs a Values operator with zero rows and zero
+// columns. It is used to create a dummy input for operators like CreateTable.
+func (b *Builder) constructZeroValues() memo.RelExpr {
+	return b.factory.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   b.factory.Metadata().NextValuesID(),
+	})
+}

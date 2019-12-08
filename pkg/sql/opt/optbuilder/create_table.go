@@ -94,12 +94,17 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 			}
 			fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
 			scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
-			input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
+			projections := memo.ProjectionsExpr{{
+				Element:    fn,
+				ColPrivate: memo.ColPrivate{Col: scopeCol.id}},
+			}
+			outCols := outScope.expr.Relational().OutputCols
+			input = b.factory.ConstructProject(outScope.expr, projections, outCols)
 		}
 		inputCols = outScope.makePhysicalProps().Presentation
 	} else {
 		// Create dummy empty input.
-		input = b.factory.ConstructZeroValues()
+		input = b.constructZeroValues()
 	}
 
 	expr := b.factory.ConstructCreateTable(
