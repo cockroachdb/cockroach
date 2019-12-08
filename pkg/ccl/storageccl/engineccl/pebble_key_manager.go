@@ -293,6 +293,17 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	return nil
 }
 
+func (m *DataKeyManager) getScrubbedRegistry() *enginepbccl.DataKeysRegistry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r := makeRegistryProto()
+	proto.Merge(r, m.mu.keyRegistry)
+	for _, v := range r.DataKeys {
+		v.Key = nil
+	}
+	return r
+}
+
 func validateRegistry(keyRegistry *enginepbccl.DataKeysRegistry) error {
 	if keyRegistry.ActiveStoreKeyId != "" && keyRegistry.StoreKeys[keyRegistry.ActiveStoreKeyId] == nil {
 		return fmt.Errorf("active store key %s not found", keyRegistry.ActiveStoreKeyId)
