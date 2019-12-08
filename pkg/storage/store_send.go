@@ -368,6 +368,12 @@ func (s *Store) Send(
 					}
 				}
 			}
+
+		case *roachpb.RaftGroupDeletedError:
+			// This error needs to be converted appropriately so that clients
+			// will retry.
+			err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+			pErr = roachpb.NewError(err)
 		}
 
 		if pErr != nil {
