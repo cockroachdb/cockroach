@@ -644,6 +644,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
 
+
 # From #26504
 query OOI colnames
 SELECT indexrelid,

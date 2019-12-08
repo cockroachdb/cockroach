@@ -329,6 +329,7 @@ func internalExtendedEvalCtx(
 		Tables:          tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
+		SchemaChangers:  &schemaChangerCollection{},
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
@@ -348,6 +349,15 @@ func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
+}
+
+func (p *planner) HasCreatedTemporarySchema(sessionID ClusterWideID) bool {
+	tempSchemaName := temporarySchemaName(sessionID)
+	// Session bound internal executors do not have the ability to modify session
+	// data, so planners created by them do not set this field. As this function
+	// can be called by session bound internal executors, this nil check is
+	// required.
+	return p.sessionDataMutator != nil && p.sessionDataMutator.data.SearchPath.HasCreatedTemporarySchema(tempSchemaName)
 }
 
 func (p *planner) CurrentDatabase() string {
@@ -385,9 +395,7 @@ func (p *planner) User() string {
 }
 
 func (p *planner) TemporarySchemaName() string {
-	return fmt.Sprintf("pg_temp_%v%v",
-		p.ExtendedEvalContext().SessionID.Hi,
-		p.ExtendedEvalContext().SessionID.Lo)
+	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }
 
 func (p *planner) SetTemporarySchemaName(scName string) {

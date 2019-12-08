@@ -114,6 +114,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		st,
 		create,
 		0, /* parentID */
+		0, /* parentSchemaID */
 		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,

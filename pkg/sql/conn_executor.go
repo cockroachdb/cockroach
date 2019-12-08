@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
 
@@ -742,6 +743,16 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+
+	if ex.planner.HasCreatedTemporarySchema(ex.sessionID) {
+		// Don't inherit context cancellation. This cleanup happens after the
+		// connection is closed.
+		cleanupCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+		err := cleanupSessionTempObjects(cleanupCtx, ex.server, ex.sessionID)
+		if err != nil {
+			log.Errorf(cleanupCtx, "error deleting temporary objects: %s", err)
+		}
+	}
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
