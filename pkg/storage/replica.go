@@ -193,11 +193,6 @@ type Replica struct {
 	// via a raft message.
 	creatingReplica *roachpb.ReplicaDescriptor
 
-	// Held in read mode during read-only commands. Held in exclusive mode to
-	// prevent read-only commands from executing. Acquired before the embedded
-	// RWMutex.
-	readOnlyCmdMu syncutil.RWMutex
-
 	// rangeStr is a string representation of a RangeDescriptor that can be
 	// atomically read and updated without needing to acquire the replica.mu lock.
 	// All updates to state.Desc should be duplicated here.

@@ -153,12 +153,18 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
 	// (preventing any concurrent access to the replica's key range).
 
-	rep.readOnlyCmdMu.Lock()
+	// TODO DURING REVIEW: how does this interact with client traffic? Before it
+	// looks like we properly synced with reads, but what about writes? They
+	// would not have been able to propose a Raft command, but they could have
+	// caused other side-effects like returning an error to a client (e.g.
+	// ConditionFailedError). Intuitively, I would expect that we'd either need
+	// to hold a mutex like the old readOnlyCmdMu around both reads and writes
+	// to sync up with removal or we'd need to check the replicas DestroyStatus
+	// before trusting any RocksDB iteartors/snapshots.
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
 	rep.mu.Unlock()
-	rep.readOnlyCmdMu.Unlock()
 
 	if opts.DestroyData {
 		if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
@@ -219,12 +225,10 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 
 	// Proceed with the removal.
 
-	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
 	rep.mu.Unlock()
-	rep.readOnlyCmdMu.Unlock()
 
 	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
 		log.Fatalf(ctx, "failed to remove uninitialized replica %v: %v", rep, err)

@@ -432,10 +432,10 @@ type Store struct {
 	draining atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
-	// obeyed: baseQueue.mu < Replica.raftMu < Replica.readOnlyCmdMu < Store.mu
-	// < Replica.mu < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
-	// (It is not required to acquire every lock in sequence, but when multiple
-	// locks are held at the same time, it is incorrect to acquire a lock with
+	// obeyed: baseQueue.mu < Replica.raftMu < Store.mu < Replica.mu <
+	// Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu. (It is
+	// not required to acquire every lock in sequence, but when multiple locks
+	// are held at the same time, it is incorrect to acquire a lock with
 	// "lesser" value in this sequence after one with "greater" value).
 	//
 	// Methods of Store with a "Locked" suffix require that
@@ -473,16 +473,6 @@ type Store struct {
 	//
 	//   If holding raftMus for multiple different replicas simultaneously,
 	//   acquire the locks in the order that the replicas appear in replicasByKey.
-	//
-	// * Replica.readOnlyCmdMu (RWMutex): Held in read mode while any
-	//   read-only command is in progress on the replica; held in write
-	//   mode while executing a commit trigger. This is necessary
-	//   because read-only commands mutate the Replica's timestamp cache
-	//   (while holding Replica.mu in addition to readOnlyCmdMu). The
-	//   RWMutex ensures that no reads are being executed during a split
-	//   (which copies the timestamp cache) while still allowing
-	//   multiple reads in parallel (#3148). TODO(bdarnell): this lock
-	//   only needs to be held during splitTrigger, not all triggers.
 	//
 	// * baseQueue.mu: The mutex contained in each of the store's queues (such
 	//   as the replicate queue, replica GC queue, GC queue, ...). The mutex is
