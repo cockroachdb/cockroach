@@ -1179,3 +1179,33 @@ func (txn *Txn) Active() bool {
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Active()
 }
+
+// GetSavepoint establishes a savepoint.
+// This method is only valid when called on RootTxns.
+func (txn *Txn) GetSavepoint(ctx context.Context) (SavepointToken, error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.GetSavepoint(ctx)
+}
+
+// RollbackToSavepoint rolls back to the given savepoint. The
+// savepoint must not have been rolled back or released already.
+// All savepoints "under" the savepoint being rolled back
+// are also rolled back and their token must not be used any more.
+// This method is only valid when called on RootTxns.
+func (txn *Txn) RollbackToSavepoint(ctx context.Context, s SavepointToken) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.RollbackToSavepoint(ctx, s)
+}
+
+// ReleaseSavepoint releases the given savepoint. The savepoint
+// must not have been rolled back or released already.
+// All savepoints "under" the savepoint being released
+// are also released and their token must not be used any more.
+// This method is only valid when called on RootTxns.
+func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ReleaseSavepoint(ctx, s)
+}
