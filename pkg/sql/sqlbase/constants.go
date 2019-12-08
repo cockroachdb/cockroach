@@ -17,7 +17,7 @@ import (
 )
 
 // DefaultSearchPath is the search path used by virgin sessions.
-var DefaultSearchPath = sessiondata.MakeSearchPath([]string{"public"}, sessiondata.DefaultTemporarySchemaName)
+var DefaultSearchPath = sessiondata.MakeSearchPath([]string{"public"})
 
 // AdminRole is the default (and non-droppable) role with superuser privileges.
 var AdminRole = "admin"

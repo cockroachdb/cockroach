@@ -59,7 +59,9 @@ func (p *planner) ResolveUncachedDatabaseByName(
 	return res, err
 }
 
-// GetObjectNames retrieves the names of all objects in the target database/schema.
+// GetObjectNames retrieves the names of all objects in the target database/
+// schema. If explicitPrefix is set, the returned table names will have an
+// explicit schema and catalog name.
 func GetObjectNames(
 	ctx context.Context,
 	txn *client.Txn,
@@ -70,7 +72,7 @@ func GetObjectNames(
 ) (res TableNames, err error) {
 	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, dbDesc, scName,
 		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /*required*/),
+			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
 			ExplicitPrefix:    explicitPrefix,
 		})
 }
