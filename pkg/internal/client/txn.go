@@ -1217,3 +1217,35 @@ func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevM
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ConfigureStepping(ctx, mode)
 }
+
+// CreateSavepoint establishes a savepoint.
+// This method is only valid when called on RootTxns.
+func (txn *Txn) CreateSavepoint(ctx context.Context) (SavepointToken, error) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.CreateSavepoint(ctx)
+}
+
+// RollbackToSavepoint rolls back to the given savepoint.
+// All savepoints "under" the savepoint being rolled back
+// are also rolled back and their token must not be used any more.
+// The token of the savepoint being rolled back remains valid
+// and can be reused later (e.g. to release or roll back again).
+//
+// This method is only valid when called on RootTxns.
+func (txn *Txn) RollbackToSavepoint(ctx context.Context, s SavepointToken) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.RollbackToSavepoint(ctx, s)
+}
+
+// ReleaseSavepoint releases the given savepoint. The savepoint
+// must not have been rolled back or released already.
+// All savepoints "under" the savepoint being released
+// are also released and their token must not be used any more.
+// This method is only valid when called on RootTxns.
+func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ReleaseSavepoint(ctx, s)
+}
