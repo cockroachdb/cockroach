@@ -196,12 +196,6 @@ type Replica struct {
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.
-	//
-	// This mutex ensures proper interleaving of splits with concurrent reads.
-	// Splits register an MVCC write span latch, but reads at lower timestamps
-	// aren't held up by this latch, which could result in reads on the RHS
-	// executed through the LHS after this is valid. For more detail, see:
-	// https://github.com/cockroachdb/cockroach/issues/32583.
 	readOnlyCmdMu syncutil.RWMutex
 
 	// rangeStr is a string representation of a RangeDescriptor that can be
