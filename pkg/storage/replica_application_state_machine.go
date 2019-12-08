@@ -982,11 +982,6 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	if unlock := cmd.splitMergeUnlock; unlock != nil {
 		defer unlock()
 	}
-	if cmd.replicatedResult().BlockReads {
-		cmd.replicatedResult().BlockReads = false
-		sm.r.readOnlyCmdMu.Lock()
-		defer sm.r.readOnlyCmdMu.Unlock()
-	}
 
 	// Set up the local result prior to handling the ReplicatedEvalResult to
 	// give testing knobs an opportunity to inspect it. An injected corruption
