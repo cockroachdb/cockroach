@@ -1079,7 +1079,6 @@ func mergeTrigger(
 	}
 
 	var pd result.Result
-	pd.Replicated.BlockReads = true
 	pd.Replicated.Merge = &storagepb.Merge{
 		MergeTrigger: *merge,
 	}
