@@ -114,10 +114,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	descID := tableDesc.GetID()
+	parentSchemaID := tableDesc.GetParentSchemaID()
 
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
-		ParentID: prevDbDesc.ID,
-		Name:     oldTn.Table()}
+		ParentID:       prevDbDesc.ID,
+		ParentSchemaID: parentSchemaID,
+		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
 		return err

@@ -83,7 +83,7 @@ func TestImpliedSearchPath(t *testing.T) {
 
 	for tcNum, tc := range testCases {
 		t.Run(strings.Join(tc.explicitSearchPath, ","), func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchemaName)
+			searchPath := MakeSearchPath(tc.explicitSearchPath)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.Iter()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
@@ -100,7 +100,7 @@ func TestImpliedSearchPath(t *testing.T) {
 		})
 
 		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-schemas", func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath, DefaultTemporarySchemaName)
+			searchPath := MakeSearchPath(tc.explicitSearchPath)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.IterWithoutImplicitPGSchemas()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
@@ -117,7 +117,7 @@ func TestImpliedSearchPath(t *testing.T) {
 		})
 
 		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/temp-schema-exists", func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath, testTempSchemaName)
+			searchPath := MakeSearchPath(tc.explicitSearchPath).WithTemporarySchemaName(testTempSchemaName)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.Iter()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
@@ -134,7 +134,7 @@ func TestImpliedSearchPath(t *testing.T) {
 		})
 
 		t.Run(strings.Join(tc.explicitSearchPath, ",")+"/no-pg-schemas/temp-schema-exists", func(t *testing.T) {
-			searchPath := MakeSearchPath(tc.explicitSearchPath, testTempSchemaName)
+			searchPath := MakeSearchPath(tc.explicitSearchPath).WithTemporarySchemaName(testTempSchemaName)
 			actualSearchPath := make([]string, 0)
 			iter := searchPath.IterWithoutImplicitPGSchemas()
 			for p, ok := iter.Next(); ok; p, ok = iter.Next() {
@@ -155,42 +155,42 @@ func TestImpliedSearchPath(t *testing.T) {
 func TestSearchPathEquals(t *testing.T) {
 	testTempSchemaName := `test_temp_schema`
 
-	a1 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchemaName)
-	a2 := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchemaName)
+	a1 := MakeSearchPath([]string{"x", "y", "z"})
+	a2 := MakeSearchPath([]string{"x", "y", "z"})
 	assert.True(t, a1.Equals(&a1))
 	assert.True(t, a2.Equals(&a2))
 
 	assert.True(t, a1.Equals(&a2))
 	assert.True(t, a2.Equals(&a1))
 
-	b := MakeSearchPath([]string{"x", "z", "y"}, DefaultTemporarySchemaName)
+	b := MakeSearchPath([]string{"x", "z", "y"})
 	assert.False(t, a1.Equals(&b))
 
-	c1 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"}, DefaultTemporarySchemaName)
-	c2 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"}, DefaultTemporarySchemaName)
+	c1 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"})
+	c2 := MakeSearchPath([]string{"x", "y", "z", "pg_catalog"})
 	assert.True(t, c1.Equals(&c2))
 	assert.False(t, a1.Equals(&c1))
 
-	d := MakeSearchPath([]string{"x"}, DefaultTemporarySchemaName)
+	d := MakeSearchPath([]string{"x"})
 	assert.False(t, a1.Equals(&d))
 
-	e1 := MakeSearchPath([]string{"x", "y", "z"}, testTempSchemaName)
-	e2 := MakeSearchPath([]string{"x", "y", "z"}, testTempSchemaName)
+	e1 := MakeSearchPath([]string{"x", "y", "z"}).WithTemporarySchemaName(testTempSchemaName)
+	e2 := MakeSearchPath([]string{"x", "y", "z"}).WithTemporarySchemaName(testTempSchemaName)
 	assert.True(t, e1.Equals(&e1))
 	assert.True(t, e1.Equals(&e2))
 	assert.False(t, e1.Equals(&a1))
 
-	f := MakeSearchPath([]string{"x", "z", "y"}, testTempSchemaName)
+	f := MakeSearchPath([]string{"x", "z", "y"}).WithTemporarySchemaName(testTempSchemaName)
 	assert.False(t, e1.Equals(&f))
 
-	g := MakeSearchPath([]string{"x", "y", "z", "pg_temp"}, DefaultTemporarySchemaName)
+	g := MakeSearchPath([]string{"x", "y", "z", "pg_temp"})
 	assert.False(t, e1.Equals(&g))
 	assert.False(t, g.Equals(&c1))
 
-	h := MakeSearchPath([]string{"x", "y", "z", "pg_temp"}, testTempSchemaName)
+	h := MakeSearchPath([]string{"x", "y", "z", "pg_temp"}).WithTemporarySchemaName(testTempSchemaName)
 	assert.False(t, g.Equals(&h))
 
-	i := MakeSearchPath([]string{"x", "y", "z", "pg_temp", "pg_catalog"}, testTempSchemaName)
+	i := MakeSearchPath([]string{"x", "y", "z", "pg_temp", "pg_catalog"}).WithTemporarySchemaName(testTempSchemaName)
 	assert.False(t, i.Equals(&h))
 	assert.False(t, i.Equals(&c1))
 }
@@ -198,9 +198,9 @@ func TestSearchPathEquals(t *testing.T) {
 func TestWithTemporarySchema(t *testing.T) {
 	testTempSchemaName := `test_temp_schema`
 
-	sp := MakeSearchPath([]string{"x", "y", "z"}, DefaultTemporarySchemaName)
+	sp := MakeSearchPath([]string{"x", "y", "z"})
 	sp = sp.UpdatePaths([]string{"x", "pg_catalog"})
-	assert.True(t, sp.GetTemporarySchemaName() == DefaultTemporarySchemaName)
+	assert.True(t, sp.GetTemporarySchemaName() == "")
 
 	sp = sp.WithTemporarySchemaName(testTempSchemaName)
 	sp = sp.UpdatePaths([]string{"pg_catalog"})
