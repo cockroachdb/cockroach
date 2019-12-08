@@ -135,6 +135,21 @@ func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool
 	return false
 }
 
+// CreateSavepoint is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) CreateSavepoint(context.Context) (SavepointToken, error) {
+	panic("unimplemented")
+}
+
+// RollbackToSavepoint is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) RollbackToSavepoint(context.Context, SavepointToken) error {
+	panic("unimplemented")
+}
+
+// ReleaseSavepoint is part of the client.TxnSender interface.
+func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointToken) error {
+	panic("unimplemented")
+}
+
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
