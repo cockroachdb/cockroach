@@ -1070,7 +1070,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	}
 
 	if _, err := tx.Exec("SELECT 1"); !testutils.IsError(err,
-		`pq: Expected "ROLLBACK TO SAVEPOINT COCKROACH_RESTART": `+
+		`pq: Expected "ROLLBACK TO SAVEPOINT cockroach_restart": `+
 			"current transaction is aborted, commands ignored until end of transaction block") {
 		t.Fatal(err)
 	}
