@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/google/go-github/github"
@@ -28,17 +29,48 @@ import (
 )
 
 const (
-	githubAPITokenEnv    = "GITHUB_API_TOKEN"
-	teamcityVCSNumberEnv = "BUILD_VCS_NUMBER"
-	teamcityBuildIDEnv   = "TC_BUILD_ID"
-	teamcityServerURLEnv = "TC_SERVER_URL"
-	tagsEnv              = "TAGS"
-	goFlagsEnv           = "GOFLAGS"
-	githubUser           = "cockroachdb"
-	githubRepo           = "cockroach"
+	githubAPITokenEnv      = "GITHUB_API_TOKEN"
+	teamcityVCSNumberEnv   = "BUILD_VCS_NUMBER"
+	teamcityBuildIDEnv     = "TC_BUILD_ID"
+	teamcityServerURLEnv   = "TC_SERVER_URL"
+	teamcityBuildBranchEnv = "TC_BUILD_BRANCH"
+	tagsEnv                = "TAGS"
+	goFlagsEnv             = "GOFLAGS"
+	githubUser             = "cockroachdb"
+	githubRepo             = "cockroach"
 	// CockroachPkgPrefix is the crdb package prefix.
 	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 )
+
+// UnitTestFailureTitle is a title template suitable for posting issues about
+// vanilla Go test failures.
+const UnitTestFailureTitle = `{{ shortpkg .PackageName }}: {{.TestName}} failed`
+
+// UnitTestFailureBody is a body template suitable for posting issues about vanilla Go
+// test failures.
+const UnitTestFailureBody = `[({{shortpkg .PackageName}}).{{.TestName}} failed]({{.URL}}) on [{{.Branch}}@{{.Commit}}]({{commiturl .Commit}}):
+
+{{ threeticks }}
+{{ .CondensedMessage }}
+{{ threeticks }}
+
+<details><summary>details</summary>
+<p>
+{{if .Parameters -}}
+Parameters:
+{{range .Parameters }}
+- {{ . }}{{end}}{{end}}
+
+{{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
+{{end -}}
+{{ threeticks }}
+make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS=-timeout 5m' 2>&1
+{{ threeticks }}
+
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
+</p>
+</details>
+`
 
 var (
 	issueLabels  = []string{"O-robot", "C-test-failure"}
@@ -61,8 +93,8 @@ const githubIssueBodyMaximumLength = 5000
 //
 // TODO(peter): Rather than trimming the message like this, perhaps it can be
 // added as an attachment or some other expandable comment.
-func trimIssueRequestBody(message string, usedCharacters int) string {
-	maxLength := githubIssueBodyMaximumLength - usedCharacters
+func trimIssueRequestBody(message string) string {
+	maxLength := githubIssueBodyMaximumLength
 
 	if m := stacktraceRE.FindStringIndex(message); m != nil {
 		// We want the top stack traces plus a few lines before.
@@ -195,6 +227,7 @@ type poster struct {
 	sha       string
 	buildID   string
 	serverURL string
+	branch    string
 	milestone *int
 
 	createIssue func(ctx context.Context, owner string, repo string,
@@ -233,6 +266,8 @@ func newPoster() *poster {
 
 func (p *poster) init() {
 	var ok bool
+	// TODO(tbg): make these not fatals. It's better to post an incomplete issue than to add
+	// more weird failures to the CI pipeline.
 	if p.sha, ok = os.LookupEnv(teamcityVCSNumberEnv); !ok {
 		log.Fatalf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
 	}
@@ -242,52 +277,83 @@ func (p *poster) init() {
 	if p.serverURL, ok = os.LookupEnv(teamcityServerURLEnv); !ok {
 		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
 	}
+	if p.branch, ok = os.LookupEnv(teamcityBuildBranchEnv); !ok {
+		p.branch = "unknown"
+	}
 	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
 }
 
-// DefaultStressFailureTitle provides the default title for stress failure
-// issues.
-func DefaultStressFailureTitle(packageName, testName string) string {
-	trimmedPkgName := strings.TrimPrefix(packageName, CockroachPkgPrefix)
-	return fmt.Sprintf("%s: %s failed under stress", trimmedPkgName, testName)
+// TemplateData holds the data available in (PostRequest).(Body|Title)Template,
+// respectively. On top of the below, there are also a few functions, for which
+// UnitTestFailureBody can serve as a reference.
+type TemplateData struct {
+	PostRequest
+	Parameters       []string
+	CondensedMessage string
+	Commit           string
+	Branch           string
+	ArtifactsURL     string
+	URL              string
+	Assignee         interface{} // lazy
 }
 
-func (p *poster) defaultBodyTemplate(req PostRequest) string {
-	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
+type lazy struct {
+	work func() interface{}
 
-Parameters:%[2]s
+	s    interface{}
+	once sync.Once
+}
 
-To repro, try:
+func (l *lazy) String() string {
+	l.once.Do(func() {
+		l.s = l.work()
+	})
+	return fmt.Sprint(l.s)
+}
 
-` + "```" + `
-# Don't forget to check out a clean suitable branch and experiment with the
-# stress invocation until the desired results present themselves. For example,
-# using stress instead of stressrace and passing the '-p' stressflag which
-# controls concurrency.
-./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
-cd ~/go/src/github.com/cockroachdb/cockroach && \
-stdbuf -oL -eL \
-make stressrace TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -timeout 10m' 2>&1 | tee /tmp/stress.log
-` + "```" + `
-
-Failed test: %[3]s`
-	const messageTemplate = "\n\n```\n%s\n```"
-
-	// If the test has artifacts, link straight to them.
-	// Otherwise, link to the build log in TeamCity.
-	var testURL *url.URL
-	if req.Artifacts != "" {
-		testURL = p.teamcityArtifactsURL(req.Artifacts)
-	} else {
-		testURL = p.teamcityBuildLogURL()
+func (p *poster) execTemplate(ctx context.Context, tpl string, req PostRequest) (string, error) {
+	tlp, err := template.New("").Funcs(template.FuncMap{
+		"threeticks": func() string { return "```" },
+		"commiturl": func(sha string) string {
+			return fmt.Sprintf("https://github.com/cockroachdb/cockroach/commits/%s", sha)
+		},
+		"shortpkg": func(fullpkg string) string {
+			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
+		},
+	}).Parse(tpl)
+	if err != nil {
+		return "", err
 	}
-	body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), testURL, req.PackageName, req.TestName) + messageTemplate
-	// We insert a raw "%s" above so we can figure out the length of the
-	// body so far, without the actual error text. We need this length so we
-	// can calculate the maximum amount of error text we can include in the
-	// issue without exceeding GitHub's limit. We replace that %s in the
-	// following Sprintf.
-	return fmt.Sprintf(body, trimIssueRequestBody(req.Message, len(body)))
+
+	data := TemplateData{
+		PostRequest:      req,
+		Parameters:       p.parameters(),
+		CondensedMessage: trimIssueRequestBody(req.Message),
+		Branch:           p.branch,
+		Commit:           p.sha,
+		ArtifactsURL: func() string {
+			if req.Artifacts != "" {
+				return p.teamcityArtifactsURL(req.Artifacts).String()
+			}
+			return ""
+		}(),
+		URL: p.teamcityBuildLogURL().String(),
+		Assignee: &lazy{work: func() interface{} {
+			// NB: the laziness here isn't motivated by anything in particular,
+			// so rip it out if it ever causes problems.
+			handle, err := getAssignee(ctx, req.AuthorEmail, p.listCommits)
+			if err != nil {
+				return ""
+			}
+			return handle
+		}},
+	}
+
+	var buf strings.Builder
+	if err := tlp.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func (p *poster) post(ctx context.Context, req PostRequest) error {
@@ -296,8 +362,13 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
+	title, err := p.execTemplate(ctx, req.TitleTemplate, req)
+	if err != nil {
+		return err
+	}
+
 	searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`,
-		req.Title, githubUser, githubRepo)
+		title, githubUser, githubRepo)
 	for _, label := range issueLabels {
 		searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
 	}
@@ -316,11 +387,15 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 		foundIssue = result.Issues[0].Number
 	}
 
-	body := p.defaultBodyTemplate(req)
+	body, err := p.execTemplate(ctx, req.BodyTemplate, req)
+	if err != nil {
+		return err
+	}
+
 	if foundIssue == nil {
 		labels := append(issueLabels, req.ExtraLabels...)
 		issueRequest := github.IssueRequest{
-			Title:     &req.Title,
+			Title:     &title,
 			Body:      &body,
 			Labels:    &labels,
 			Assignee:  &assignee,
@@ -366,7 +441,7 @@ func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
 	return p.teamcityURL("artifacts", artifacts)
 }
 
-func (p *poster) parameters() string {
+func (p *poster) parameters() []string {
 	var parameters []string
 	for _, parameter := range []string{
 		tagsEnv,
@@ -376,10 +451,7 @@ func (p *poster) parameters() string {
 			parameters = append(parameters, parameter+"="+val)
 		}
 	}
-	if len(parameters) == 0 {
-		return ""
-	}
-	return "\n```\n" + strings.Join(parameters, "\n") + "\n```"
+	return parameters
 }
 
 func isInvalidAssignee(err error) bool {
@@ -408,10 +480,10 @@ var defaultP struct {
 // A PostRequest contains the information needed to create an issue about a
 // test failure.
 type PostRequest struct {
-	// The title of the issue to create. A search for this title will be carried
-	// out and on match, a comment will be posted into the existing issue
-	// instead.
-	Title,
+	// The title of the issue. See UnitTestFailureTitleTemplate for an example.
+	TitleTemplate,
+	// The body of the issue. See UnitTestFailureBodyTemplate for an example.
+	BodyTemplate,
 	// The name of the package the test failure relates to.
 	PackageName,
 	// The name of the failing test.
