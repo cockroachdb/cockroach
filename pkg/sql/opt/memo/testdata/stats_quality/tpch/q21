@@ -84,6 +84,7 @@ limit
  │         │    ├── save-table-name: q21_lookup_join_4
  │         │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:8(int!null) l1.l_suppkey:10(int!null) l1.l_commitdate:19(date!null) l1.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(char!null) n_nationkey:33(int!null) n_name:34(char!null)
  │         │    ├── key columns: [8] = [24]
+ │         │    ├── lookup columns are key
  │         │    ├── stats: [rows=17924.776, distinct(1)=9920, null(1)=0, distinct(2)=8329.18391, null(2)=0, distinct(4)=1, null(4)=0, distinct(8)=17568.2329, null(8)=0, distinct(10)=9920, null(10)=0, distinct(19)=2464.28129, null(19)=0, distinct(20)=2551.71335, null(20)=0, distinct(24)=17568.2329, null(24)=0, distinct(26)=1, null(26)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
  │         │    ├── fd: ()-->(26,34), (1)-->(2,4), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(33), (33)==(4)
  │         │    ├── inner-join (hash)
@@ -158,6 +159,7 @@ limit
  │         │    │    │    ├── save-table-name: q21_lookup_join_13
  │         │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) n_nationkey:33(int!null) n_name:34(char!null)
  │         │    │    │    ├── key columns: [1] = [1]
+ │         │    │    │    ├── lookup columns are key
  │         │    │    │    ├── stats: [rows=400, distinct(1)=399.934613, null(1)=0, distinct(2)=399.991883, null(2)=0, distinct(4)=1, null(4)=0, distinct(33)=1, null(33)=0, distinct(34)=1, null(34)=0]
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: ()-->(34), (1)-->(2,4), (4)==(33), (33)==(4)

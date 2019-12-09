@@ -80,6 +80,7 @@ SELECT * FROM a INNER JOIN xy ON (k=x AND i=y) AND true AND (f=3.5 AND s='foo')
 inner-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int!null) y:7(int!null)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (6)
  ├── fd: ()-->(3,4), (1)-->(2,5), (6)-->(7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── select
@@ -625,6 +626,7 @@ select
  ├── left-join (lookup a)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key columns: [6] = [1]
+ │    ├── lookup columns are key
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
  │    ├── select
@@ -656,6 +658,7 @@ SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1
 left-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1,6)
  ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
  ├── select
@@ -681,6 +684,7 @@ select
  ├── left-join (lookup xy)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key columns: [1] = [6]
+ │    ├── lookup columns are key
  │    ├── key: (1,6)
  │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7)
  │    ├── select
@@ -795,6 +799,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 semi-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
@@ -816,6 +821,7 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 anti-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
@@ -839,6 +845,7 @@ SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k WHERE a.f=1.1
 left-join (lookup xy)
  ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  ├── key columns: [3] = [1]
+ ├── lookup columns are key
  ├── key: (1,3)
  ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
  ├── select
@@ -864,6 +871,7 @@ select
  ├── left-join (lookup xy)
  │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
  │    ├── key columns: [3] = [1]
+ │    ├── lookup columns are key
  │    ├── key: (1,3)
  │    ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
  │    ├── select
@@ -1074,6 +1082,7 @@ SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 
 inner-join (lookup a)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb) x:6(int!null) y:7(int!null)
  ├── key columns: [6] = [1]
+ ├── lookup columns are key
  ├── key: (6)
  ├── fd: ()-->(3,4,7), (1)-->(2,5), (1)==(6), (6)==(1)
  ├── select
@@ -1097,6 +1106,7 @@ SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
 inner-join (lookup xy)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key columns: [1] = [6]
+ ├── lookup columns are key
  ├── has-placeholder
  ├── key: (6)
  ├── fd: ()-->(2), (1)-->(3-5), (6)-->(7), (1)==(6), (6)==(1)

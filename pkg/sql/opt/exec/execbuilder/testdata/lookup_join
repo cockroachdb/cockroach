@@ -126,6 +126,16 @@ CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
 statement ok
 ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
+statement ok
+ALTER TABLE data INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+
 # Relocate the ten parts to the five nodes.
 statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
@@ -557,19 +567,21 @@ CREATE UNIQUE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                 distributed  true       ·                ·
-·                 vectorized   true       ·                ·
-render            ·            ·          (a)              ·
- │                render 0     a          ·                ·
- └── lookup-join  ·            ·          (a, d, e, a, d)  ·
-      │           table        u@idx      ·                ·
-      │           type         inner      ·                ·
-      │           equality     (d) = (d)  ·                ·
-      │           pred         @1 = @4    ·                ·
-      └── scan    ·            ·          (a, d, e)        ·
-·                 table        t@primary  ·                ·
-·                 spans        ALL        ·                ·
-·                 filter       e = 5      ·                ·
+·                 distributed            true       ·                ·
+·                 vectorized             true       ·                ·
+render            ·                      ·          (a)              ·
+ │                render 0               a          ·                ·
+ └── lookup-join  ·                      ·          (a, d, e, a, d)  ·
+      │           table                  u@idx      ·                ·
+      │           type                   inner      ·                ·
+      │           equality               (d) = (d)  ·                ·
+      │           equality cols are key  ·          ·                ·
+      │           parallel               ·          ·                ·
+      │           pred                   @1 = @4    ·                ·
+      └── scan    ·                      ·          (a, d, e)        ·
+·                 table                  t@primary  ·                ·
+·                 spans                  ALL        ·                ·
+·                 filter                 e = 5      ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
@@ -786,7 +798,7 @@ SELECT url FROM [ EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9v6kYQxd_7KVbzlChL7F2bf5Yi0TZUpUpCCpGaKuJhg7dgybGpbaQbRXz3K-xcWdiws3sN5I0_8_Oc3XNm5A9I_w_Bg-nwbvj7E1knIfljMr4nL8Pnx7tfRw_k4nY0fZr-fXdJPksEJa9FTfomwpD88-dwMiTD520ZufhRVFT4IhOfBXnxtSA3-Y_X4pKMJ7fDCfntXyJmQCGKffkg3mQK3gswoMCBggMUXKDQhhmFVRLPZZrGybbkIwdG_jfwbApBtFpn259nFOZxIsH7gCzIQgkePInXUE6k8GVi2UDBl5kIwrzNKgneRPI-yLUBhelKRKlHWhYjIvIJI3G2lAlQGK8zjwwYHXCYbSjE6-yzX9nm9Z0sRbrcbTBgMNvMKKSZWEjw2Ib-nO72ft3bm6zL5oXstNRdEV0K4iaCboM0C6J5ZjG7dkoK48SXifSV7ZyD7coucfGcaoer4iIPa2obaTLzzW2mm5ZV62hf3d6j3ctkIf-Kg0gmFuvsPjeU_2UXA3Z1eZMEi2XxURXT8ijto1vwELfilcVZ5UT723d22jP9CWBak2uxlsXPMbsGyjs6s6sQrjm8iKJyUNhRhpd9wRB0TzMEXN9LrpdC3rKcc6TQQHlXK4WHhWumEFFUppAfJYX8C1LYO00KHX0vHb0UOi3LPUcKDZT3tFJ4WLhmChFFZQqdo6TQ-YIU9k-TQlffS1cvhW7Lap8jhQbK-1op3Ao3Th6iokyee5TkuedPHrdP_yq6R8JEpqs4SqXWW6a9PYT0F7K4lzReJ3P5mMTzvE3xdZxz-YuML9Os-Nctvoyi4q-tQH243wRmTiO624TmTE2zKm3v0DuwXYW5EkZO7Ri4xc3gfhO44pYp3W1CV9yq0a7ywtvqC2-rrUa87jQZLjWMDJcaxoYLoZHhUtPYcHWVN95TX3ivyXD1mwSFNVqkCI2YjdCY2xiO2I3g6DJVb1OGjBhrtE9ZbbUYeV5bLUaeq2nMczWNeo7gmOdqHPVcvVZZB_G8tmGMPFdvGMzz2oox8lxNY56radRzBMc8V-Oo5-r1ym3ktam2ZUw85-olU_V8tvnlewAAAP__ZIJ4pw==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFFvmzwUhu-_X3F0rlp9psRA0hRpUraValRp0pFI61Rx4QarYyOY2SCtivLfJyBbk6o1lrjILjHn1fvwHOQNqp8Z-rgIpsHHJVQyg6tofgP3wd3t9H04g5PLcLFcfJ6ewm6EEXhoZ9SaZRl8-RREAQR39Ric_BlqJxJWst1AM3zG4F1zeMZOYR5dBhF8-AosRoK5SPiMrblC_x4pEnSQoIsEPSQ4xJhgIcWKKyVkPbJpAmHyC_0BwTQvqrI-jgmuhOTob7BMy4yjj0v2kPGIs4RLe4AEE16yNGtqCpmumXyaNGxIcFGwXPlg2RRYngAFUX7jEgnOq9KHCSUTB-MtQVGVz32qZI8cfbol5kzXIs13SMNDpOVTwX2YBldLWAQ3IVzPwxmSv6S1OyQ4FeJHVcB3keYg8hrNDNJ5E_KZTciES54cYk3o_xhvX_mSmbBEYdNDsW_Vuwf11Hxv1GhvNrVsp-_mOqj2Njc63uYcc3WOmTrHst2-6jqo9tSdH0-da67ONVPnWrbXV10H1Z668fHUeebqPDN1nmUP-6rroNpTd_FvXLWvQEZcFSJX3OgWHdT3ME8eeXtvK1HJFb-VYtXUtI_zJtccJFyV7VvaPoR5-6oG3A9Tbdg5CNOXYUff3FHtatOePuz14R5qwyN986hP87k2PNY3j_s0X-h3Nej4TfQ_2cvuePvf7wAAAP__PhVS0w==
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)

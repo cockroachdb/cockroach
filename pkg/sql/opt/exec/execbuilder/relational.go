@@ -1287,8 +1287,6 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	for i := range join.KeyCols {
 		eqCols.Add(join.Table.ColumnID(idx.Column(i).Ordinal))
 	}
-	tableFDs := memo.MakeTableFuncDep(md, join.Table)
-	eqColsAreKey := tableFDs.ColsAreStrictKey(eqCols)
 
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinOpToJoinType(join.JoinType),
@@ -1296,7 +1294,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		tab,
 		idx,
 		keyCols,
-		eqColsAreKey,
+		join.LookupColsAreTableKey,
 		lookupOrdinals,
 		onExpr,
 		res.reqOrdering(join),

@@ -199,6 +199,7 @@ insert "order"
            └── anti-join (lookup customer)
                 ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
                 ├── key columns: [38 39 40] = [19 18 17]
+                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.26
@@ -249,6 +250,7 @@ insert new_order
            └── anti-join (lookup order)
                 ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
                 ├── key columns: [15 16 17] = [9 8 7]
+                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.13
@@ -783,6 +785,7 @@ insert order_line
       │    └── anti-join (lookup order)
       │         ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
       │         ├── key columns: [30 31 32] = [24 23 22]
+      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 6]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 36.68
@@ -801,6 +804,7 @@ insert order_line
            └── anti-join (lookup stock@stock_item_fk_idx)
                 ├── columns: column6:50(int!null) column5:51(int!null)
                 ├── key columns: [51 50] = [33 34]
+                ├── lookup columns are key
                 ├── cardinality: [0 - 6]
                 ├── stats: [rows=1e-10]
                 ├── cost: 36.1061434
@@ -1128,6 +1132,7 @@ insert history
       │    └── anti-join (lookup customer)
       │         ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
       │         ├── key columns: [41 42 43] = [22 21 20]
+      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 6.26
@@ -1150,6 +1155,7 @@ insert history
            └── anti-join (lookup district)
                 ├── columns: column5:55(int!null) column4:56(int!null)
                 ├── key columns: [55 56] = [45 44]
+                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.15
@@ -1638,6 +1644,7 @@ scalar-group-by
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
+ │    ├── lookup columns are key
  │    ├── stats: [rows=234.432912, distinct(3)=1, null(3)=0, distinct(5)=199.843131, null(5)=0, distinct(11)=199.843131, null(11)=0, distinct(12)=1, null(12)=0]
  │    ├── cost: 1462.80097
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)

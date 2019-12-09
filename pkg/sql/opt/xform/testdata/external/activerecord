@@ -134,11 +134,13 @@ sort
       │    ├── left-join (lookup pg_attrdef)
       │    │    ├── columns: attrelid:1(oid!null) attname:2(string!null) atttypid:3(oid!null) attnum:6(int!null) atttypmod:9(int!null) attnotnull:13(bool!null) attisdropped:15(bool!null) attcollation:18(oid!null) adrelid:23(oid) adnum:24(int) adbin:25(string)
       │    │    ├── key columns: [22] = [22]
+      │    │    ├── lookup columns are key
       │    │    ├── key: (1,6,23,24)
       │    │    ├── fd: ()-->(15), (1,6)-->(2,3,9,13,18), (1,2)-->(3,6,9,13,18), (23,24)-->(25)
       │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index)
       │    │    │    ├── columns: attrelid:1(oid!null) attname:2(string!null) atttypid:3(oid!null) attnum:6(int!null) atttypmod:9(int!null) attnotnull:13(bool!null) attisdropped:15(bool!null) attcollation:18(oid!null) d.oid:22(oid) adrelid:23(oid) adnum:24(int)
       │    │    │    ├── key columns: [1 6] = [23 24]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── key: (1,6,22)
       │    │    │    ├── fd: ()-->(15), (1,6)-->(2,3,9,13,18), (1,2)-->(3,6,9,13,18), (22)-->(23,24), (23,24)-->(22)
       │    │    │    ├── select

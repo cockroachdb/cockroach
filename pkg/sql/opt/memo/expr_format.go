@@ -335,6 +335,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !f.HasFlags(ExprFmtHideColumns) {
 			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)
 		}
+		if t.LookupColsAreTableKey {
+			tp.Childf("lookup columns are key")
+		}
 
 	case *ZigzagJoinExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
