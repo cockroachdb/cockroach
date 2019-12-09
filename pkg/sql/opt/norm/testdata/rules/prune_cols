@@ -953,6 +953,7 @@ project
  └── anti-join (lookup xy)
       ├── columns: k:1(int!null) i:2(int)
       ├── key columns: [1] = [5]
+      ├── lookup columns are key
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── anti-join (merge)
@@ -2644,6 +2645,7 @@ project
            ├── left-join (lookup returning_test)
            │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(string!null) column12:12(int) column13:13(int) a:14(int) b:15(int) c:16(string) d:17(int) rowid:21(int)
            │    ├── key columns: [13] = [21]
+           │    ├── lookup columns are key
            │    ├── cardinality: [1 - ]
            │    ├── side-effects
            │    ├── key: (21)

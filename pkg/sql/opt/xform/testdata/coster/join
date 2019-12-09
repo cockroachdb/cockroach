@@ -78,6 +78,7 @@ inner-join (lookup a)
  ├── columns: k:4(int!null) x:1(int!null)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
+ ├── lookup columns are key
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
  ├── cost: 7069.53
  ├── fd: (1)==(4), (4)==(1)
@@ -225,13 +226,13 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
 project
  ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
  ├── stats: [rows=500.488759]
- ├── cost: 1555.07489
+ ├── cost: 3155.07489
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:6(string!null) b:7(uuid!null) c:8(uuid!null)
       ├── key columns: [1 2 3] = [6 7 8]
       ├── stats: [rows=500.488759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=25, null(8)=0]
-      ├── cost: 1550.06
+      ├── cost: 3150.06
       ├── fd: ()-->(1,2,6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       ├── select
       │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)

@@ -677,6 +677,7 @@ project
  └── inner-join (lookup b)
       ├── columns: k:1(int!null) j:4(jsonb)
       ├── key columns: [1] = [1]
+      ├── lookup columns are key
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── inner-join (zigzag b@inv_idx b@inv_idx)
@@ -737,6 +738,7 @@ SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 inner-join (lookup b)
  ├── columns: j:4(jsonb) k:1(int!null)
  ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── inner-join (zigzag b@inv_idx b@inv_idx)
@@ -754,6 +756,7 @@ SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 inner-join (lookup b)
  ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
  ├── key columns: [1] = [1]
+ ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  ├── inner-join (zigzag b@inv_idx b@inv_idx)
