@@ -72,7 +72,7 @@ values
 norm format=show-all expect=InlineWith
 WITH foo AS (SELECT 1) SELECT * FROM foo CROSS JOIN (VALUES (2))
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: "?column?":2(int!null) column1:3(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -105,7 +105,7 @@ inner-join (hash)
 norm expect=InlineWith
 WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: "?column?":3(int!null) "?column?":4(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -212,12 +212,12 @@ with &2 (bar)
  │    ├── key: ()
  │    ├── fd: ()-->(2)
  │    └── (2,) [type=tuple{int}]
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(3-5)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
@@ -290,7 +290,7 @@ with &1 (foo)
       │    ├── prune: (2)
       │    └── tuple [type=tuple{int}]
       │         └── const: 2 [type=int]
-      └── inner-join (hash)
+      └── inner-join (cross)
            ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
            ├── cardinality: [1 - 1]
            ├── stats: [rows=1]
@@ -299,7 +299,7 @@ with &1 (foo)
            ├── fd: ()-->(3-6)
            ├── prune: (3-6)
            ├── cte-uses: map[1:2 2:2]
-           ├── inner-join (hash)
+           ├── inner-join (cross)
            │    ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
            │    ├── cardinality: [1 - 1]
            │    ├── stats: [rows=1]
@@ -309,7 +309,7 @@ with &1 (foo)
            │    ├── prune: (3-5)
            │    ├── join-size: 3
            │    ├── cte-uses: map[1:1 2:2]
-           │    ├── inner-join (hash)
+           │    ├── inner-join (cross)
            │    │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── stats: [rows=1]

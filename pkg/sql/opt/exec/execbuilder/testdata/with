@@ -13,7 +13,7 @@ EXPLAIN (VERBOSE)
 ·                           distributed   false            ·       ·
 ·                           vectorized    false            ·       ·
 root                        ·             ·                (a, a)  ·
- ├── hash-join              ·             ·                (a, a)  ·
+ ├── cross-join             ·             ·                (a, a)  ·
  │    │                     type          cross            ·       ·
  │    ├── scan buffer node  ·             ·                (a)     ·
  │    │                     label         buffer 1 (t)     ·       ·
@@ -82,16 +82,16 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-·          distributed  false               ·      ·
-·          vectorized   false               ·      ·
-hash-join  ·            ·                   (col)  ·
- │         type         cross               ·      ·
- ├── scan  ·            ·                   ()     ·
- │         table        table39010@primary  ·      ·
- │         spans        ALL                 ·      ·
- └── scan  ·            ·                   (col)  ·
-·          table        table39010@primary  ·      ·
-·          spans        ALL                 ·      ·
+·           distributed  false               ·      ·
+·           vectorized   false               ·      ·
+cross-join  ·            ·                   (col)  ·
+ │          type         cross               ·      ·
+ ├── scan   ·            ·                   ()     ·
+ │          table        table39010@primary  ·      ·
+ │          spans        ALL                 ·      ·
+ └── scan   ·            ·                   (col)  ·
+·           table        table39010@primary  ·      ·
+·           spans        ALL                 ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE)

@@ -15,7 +15,7 @@ SELECT * FROM a, b
 ----
 project
  ├── columns: x:1(int!null) y:2(float) x:3(int) y:4(float)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) rowid:5(int!null)
       ├── scan a
       │    └── columns: a.x:1(int!null) a.y:2(float)
@@ -30,7 +30,7 @@ project
  ├── columns: x:1(int!null) y:4(float)
  └── select
       ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int!null) b.y:4(float) rowid:5(int!null)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) rowid:5(int!null)
       │    ├── scan a
       │    │    └── columns: a.x:1(int!null) a.y:2(float)
@@ -49,11 +49,11 @@ project
  ├── columns: x:1(int!null) y:2(float) z:3(varchar) x:5(int!null) y:6(float) x:8(int!null) y:9(float)
  └── select
       ├── columns: c.x:1(int!null) c.y:2(float) z:3(varchar) c.rowid:4(int!null) b.x:5(int!null) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: c.x:1(int) c.y:2(float) z:3(varchar) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
       │    ├── scan c
       │    │    └── columns: c.x:1(int) c.y:2(float) z:3(varchar) c.rowid:4(int!null)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
       │    │    ├── scan b
       │    │    │    └── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null)
@@ -91,7 +91,7 @@ error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 build fully-qualify-names
 SELECT * FROM db1.a, db2.a
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(float) z:3(string) x:4(int!null) y:5(float)
  ├── scan db1.public.a
  │    └── columns: db1.public.a.x:1(int!null) db1.public.a.y:2(float) db1.public.a.z:3(string)
@@ -108,7 +108,7 @@ error (42712): source name "a" specified more than once (missing AS clause)
 build fully-qualify-names
 SELECT * FROM a, (SELECT * FROM a) AS a
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
  ├── scan t.public.a
  │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
@@ -124,7 +124,7 @@ error (42712): source name "a" specified more than once (missing AS clause)
 build fully-qualify-names
 SELECT * FROM t.a, a AS a
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
  ├── scan t.public.a
  │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)

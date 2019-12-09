@@ -301,24 +301,24 @@ render               ·            ·                 (name)               +name
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-tree            field        description     columns                                         ordering
-·               distributed  true            ·                                               ·
-·               vectorized   false           ·                                               ·
-render          ·            ·               (title, edition, shelf, title, edition, shelf)  ·
- │              render 0     title           ·                                               ·
- │              render 1     edition         ·                                               ·
- │              render 2     shelf           ·                                               ·
- │              render 3     title           ·                                               ·
- │              render 4     edition         ·                                               ·
- │              render 5     shelf           ·                                               ·
- └── hash-join  ·            ·               (title, edition, shelf, title, edition, shelf)  ·
-      │         type         cross           ·                                               ·
-      ├── scan  ·            ·               (title, edition, shelf)                         ·
-      │         table        books2@primary  ·                                               ·
-      │         spans        ALL             ·                                               ·
-      └── scan  ·            ·               (title, edition, shelf)                         ·
-·               table        books@primary   ·                                               ·
-·               spans        ALL             ·                                               ·
+tree             field        description     columns                                         ordering
+·                distributed  true            ·                                               ·
+·                vectorized   false           ·                                               ·
+render           ·            ·               (title, edition, shelf, title, edition, shelf)  ·
+ │               render 0     title           ·                                               ·
+ │               render 1     edition         ·                                               ·
+ │               render 2     shelf           ·                                               ·
+ │               render 3     title           ·                                               ·
+ │               render 4     edition         ·                                               ·
+ │               render 5     shelf           ·                                               ·
+ └── cross-join  ·            ·               (title, edition, shelf, title, edition, shelf)  ·
+      │          type         cross           ·                                               ·
+      ├── scan   ·            ·               (title, edition, shelf)                         ·
+      │          table        books2@primary  ·                                               ·
+      │          spans        ALL             ·                                               ·
+      └── scan   ·            ·               (title, edition, shelf)                         ·
+·                table        books@primary   ·                                               ·
+·                spans        ALL             ·                                               ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]

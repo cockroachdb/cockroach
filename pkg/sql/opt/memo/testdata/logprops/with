@@ -187,7 +187,7 @@ project
  ├── columns: "?column?":7(unknown)
  ├── fd: ()-->(7)
  ├── prune: (7)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── scan t40930
  │    ├── scan tab_10102
  │    └── filters (true)

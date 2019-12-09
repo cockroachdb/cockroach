@@ -39,7 +39,7 @@ project
 opt
 SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:3(int) rowid:5(int!null) y:2(int) x:1(int!null) y2:2(int) y:4(float)
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
