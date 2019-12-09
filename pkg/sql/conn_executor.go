@@ -2298,11 +2298,12 @@ type StatementCounters struct {
 	TxnCommitCount   telemetry.CounterWithMetric
 	TxnRollbackCount telemetry.CounterWithMetric
 
-	// Savepoint operations. SavepointCount is for real SQL savepoints
-	// (which we don't yet support; this is just a placeholder for
-	// telemetry); the RestartSavepoint variants are for the
+	// Savepoint operations. SavepointCount is for real SQL savepoints;
+	// the RestartSavepoint variants are for the
 	// cockroach-specific client-side retry protocol.
 	SavepointCount                  telemetry.CounterWithMetric
+	ReleaseSavepointCount           telemetry.CounterWithMetric
+	RollbackToSavepointCount        telemetry.CounterWithMetric
 	RestartSavepointCount           telemetry.CounterWithMetric
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
@@ -2322,14 +2323,18 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitStarted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
-		SavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaSavepointStarted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaReleaseRestartSavepointStarted, internal)),
 		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToRestartSavepointStarted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointStarted, internal)),
+		ReleaseSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseSavepointStarted, internal)),
+		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToSavepointStarted, internal)),
 		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectStarted, internal)),
 		UpdateCount: telemetry.NewCounterWithMetric(
@@ -2355,14 +2360,18 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
 		TxnRollbackCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
-		SavepointCount: telemetry.NewCounterWithMetric(
-			getMetricMeta(MetaSavepointExecuted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointExecuted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaReleaseRestartSavepointExecuted, internal)),
 		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToRestartSavepointExecuted, internal)),
+		SavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaSavepointExecuted, internal)),
+		ReleaseSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseSavepointExecuted, internal)),
+		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToSavepointExecuted, internal)),
 		SelectCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaSelectExecuted, internal)),
 		UpdateCount: telemetry.NewCounterWithMetric(
@@ -2398,15 +2407,26 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 	case *tree.RollbackTransaction:
 		sc.TxnRollbackCount.Inc()
 	case *tree.Savepoint:
+		// TODO(knz): Sanitize this.
 		if err := ex.validateSavepointName(t.Name); err == nil {
 			sc.RestartSavepointCount.Inc()
 		} else {
 			sc.SavepointCount.Inc()
 		}
 	case *tree.ReleaseSavepoint:
-		sc.ReleaseRestartSavepointCount.Inc()
+		// TODO(knz): Sanitize this.
+		if err := ex.validateSavepointName(t.Savepoint); err == nil {
+			sc.ReleaseRestartSavepointCount.Inc()
+		} else {
+			sc.ReleaseSavepointCount.Inc()
+		}
 	case *tree.RollbackToSavepoint:
-		sc.RollbackToRestartSavepointCount.Inc()
+		// TODO(knz): Sanitize this.
+		if err := ex.validateSavepointName(t.Savepoint); err == nil {
+			sc.RollbackToRestartSavepointCount.Inc()
+		} else {
+			sc.RollbackToSavepointCount.Inc()
+		}
 	default:
 		if tree.CanModifySchema(stmt) {
 			sc.DdlCount.Inc()
