@@ -977,7 +977,9 @@ func (r *Replica) State() storagepb.RangeInfo {
 	if desc := ri.ReplicaState.Desc; desc != nil {
 		// Learner replicas don't serve follower reads, but they still receive
 		// closed timestamp updates, so include them here.
-		for _, replDesc := range desc.Replicas().All() {
+		allReplicas := desc.Replicas().All()
+		for i := range allReplicas {
+			replDesc := &allReplicas[i]
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {
