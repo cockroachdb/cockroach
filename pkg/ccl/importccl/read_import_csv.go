@@ -127,7 +127,7 @@ func (c *csvInputReader) readFile(
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
-		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context) error {
+		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context, _ int) error {
 			return c.convertRecordWorker(ctx)
 		})
 	})
