@@ -13,31 +13,33 @@ package issues
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/go-github/github"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPost(t *testing.T) {
 	const (
-		expOwner     = "cockroachdb"
-		expRepo      = "cockroach"
-		expAssignee  = "hodor"
-		expMilestone = 2
-		envTags      = "deadlock"
-		envGoFlags   = "race"
-		sha          = "abcd123"
-		serverURL    = "https://teamcity.example.com"
-		buildID      = 8008135
-		issueID      = 1337
-		issueNumber  = 30
+		assignee    = "hodor"
+		milestone   = 2
+		envTags     = "deadlock"
+		envGoFlags  = "race"
+		sha         = "abcd123"
+		branch      = "release-123.45"
+		serverURL   = "https://teamcity.example.com"
+		buildID     = 8008135
+		issueID     = 1337
+		issueNumber = 30
 	)
 
 	for key, value := range map[string]string{
@@ -66,11 +68,6 @@ func TestPost(t *testing.T) {
 		}
 	}
 
-	parameters := "```\n" + strings.Join([]string{
-		tagsEnv + "=" + envTags,
-		goFlagsEnv + "=" + envGoFlags,
-	}, "\n") + "\n```"
-
 	testCases := []struct {
 		name        string
 		packageName string
@@ -94,7 +91,7 @@ func TestPost(t *testing.T) {
 			author:      "bran",
 		},
 		{
-			name:        "with artifacts",
+			name:        "with-artifacts",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "kv/splits/nodes=3/quiesce=true",
 			message:     "The test failed on branch=master, cloud=gce:",
@@ -110,129 +107,48 @@ func TestPost(t *testing.T) {
 				name = name + "-existing-issue"
 			}
 			t.Run(name, func(t *testing.T) {
-				expURL := fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=buildLog", serverURL, buildID)
-				if c.artifacts != "" {
-					expURL = fmt.Sprintf("%s/viewLog.html?buildId=%d&tab=artifacts#%s", serverURL, buildID, c.artifacts)
-				}
-
-				reString := fmt.Sprintf(`(?s)\ASHA: https://github.com/cockroachdb/cockroach/commits/%s
-
-Parameters:
-%s
-
-To repro, try:
-
-`+"```"+`
-# Don't forget to check out a clean suitable branch and experiment with the
-# stress invocation until the desired results present themselves. For example,
-# using stress instead of stressrace and passing the '-p' stressflag which
-# controls concurrency.
-`+regexp.QuoteMeta(`./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
-cd ~/go/src/github.com/cockroachdb/cockroach && \
-stdbuf -oL -eL \
-make stressrace TESTS=%s PKG=%s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -timeout 10m' 2>&1 | tee /tmp/stress.log`)+`
-`+"```"+`
-
-Failed test: %s`,
-					regexp.QuoteMeta(sha),
-					regexp.QuoteMeta(parameters),
-					c.testName,
-					c.packageName,
-					regexp.QuoteMeta(expURL),
-				)
-
-				issueBodyRe, err := regexp.Compile(
-					fmt.Sprintf(reString+`
-
-.*
-%s
-`, regexp.QuoteMeta(c.message)),
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-				commentBodyRe, err := regexp.Compile(reString)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				issueCount := 0
-				commentCount := 0
-
+				var buf strings.Builder
 				p := &poster{}
 
 				p.createIssue = func(_ context.Context, owner string, repo string,
 					issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-					issueCount++
-					if owner != expOwner {
-						t.Fatalf("got %s, expected %s", owner, expOwner)
-					}
-					if repo != expRepo {
-						t.Fatalf("got %s, expected %s", repo, expRepo)
-					}
-					if *issue.Assignee != expAssignee {
-						t.Fatalf("got %s, expected %s", *issue.Assignee, expAssignee)
-					}
-					if expected := fmt.Sprintf("storage: %s failed under stress", c.testName); *issue.Title != expected {
-						t.Fatalf("got %s, expected %s", *issue.Title, expected)
-					}
-					if !issueBodyRe.MatchString(*issue.Body) {
-						t.Fatalf("got:\n%s\nexpected:\n%s", *issue.Body, issueBodyRe)
-					}
-					if length := len(*issue.Body); length > githubIssueBodyMaximumLength {
-						t.Fatalf("issue length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
-					}
-					if *issue.Milestone != expMilestone {
-						t.Fatalf("expected milestone %d, but got %d", expMilestone, *issue.Milestone)
-					}
+					body := *issue.Body
+					issue.Body = nil
+					_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s %s:\n", owner, repo, github.Stringify(issue))
+					_, _ = fmt.Fprintln(&buf, body)
 					return &github.Issue{ID: github.Int64(issueID)}, nil, nil
 				}
 
 				p.searchIssues = func(_ context.Context, query string,
 					opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
+					result := &github.IssuesSearchResult{}
 					total := 0
 					if foundIssue {
 						total = 1
-					}
-					return &github.IssuesSearchResult{
-						Total: &total,
-						Issues: []github.Issue{
+						result.Issues = []github.Issue{
 							{Number: github.Int(issueNumber)},
-						},
-					}, nil, nil
+						}
+					}
+					result.Total = &total
+					_, _ = fmt.Fprintf(&buf, "searchIssue query=%s: result %s\n", query, github.Stringify(result))
+					return result, nil, nil
 				}
 
-				p.createComment = func(_ context.Context, owner string, repo string, number int,
-					comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
-					if owner != expOwner {
-						t.Fatalf("got %s, expected %s", owner, expOwner)
-					}
-					if repo != expRepo {
-						t.Fatalf("got %s, expected %s", repo, expRepo)
-					}
-					if !commentBodyRe.MatchString(*comment.Body) {
-						t.Fatalf("got:\n%s\nexpected:\n%s", *comment.Body, issueBodyRe)
-					}
-					if length := len(*comment.Body); length > githubIssueBodyMaximumLength {
-						t.Fatalf("comment length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
-					}
-					commentCount++
-
-					return nil, nil, nil
+				p.createComment = func(
+					_ context.Context, owner string, repo string, number int, comment *github.IssueComment,
+				) (*github.IssueComment, *github.Response, error) {
+					body := *comment.Body
+					comment.Body = nil
+					_, _ = fmt.Fprintf(&buf, "createComment owner=%s repo=%s issue=%d %s:\n", owner, repo, number, github.Stringify(comment))
+					_, _ = fmt.Fprintln(&buf, body)
+					return &github.IssueComment{}, nil, nil
 				}
 
-				p.listCommits = func(_ context.Context, owner string, repo string,
-					opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
-					if owner != expOwner {
-						t.Fatalf("got %s, expected %s", owner, expOwner)
-					}
-					if repo != expRepo {
-						t.Fatalf("got %s, expected %s", repo, expRepo)
-					}
-					if opts.Author == "" {
-						t.Fatalf("found no author, but expected one")
-					}
-					assignee := expAssignee
+				p.listCommits = func(
+					_ context.Context, owner string, repo string, opts *github.CommitsListOptions,
+				) ([]*github.RepositoryCommit, *github.Response, error) {
+					_, _ = fmt.Fprintf(&buf, "listCommits owner=%s repo=%s %s\n", owner, repo, github.Stringify(opts))
+					assignee := assignee
 					return []*github.RepositoryCommit{
 						{
 							Author: &github.User{
@@ -244,48 +160,45 @@ Failed test: %s`,
 
 				p.listMilestones = func(_ context.Context, owner, repo string,
 					_ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
-					if owner != expOwner {
-						t.Fatalf("got %s, expected %s", owner, expOwner)
-					}
-					if repo != expRepo {
-						t.Fatalf("got %s, expected %s", repo, expRepo)
-					}
-					return []*github.Milestone{
-						{Title: github.String("3.3"), Number: github.Int(expMilestone)},
+					result := []*github.Milestone{
+						{Title: github.String("3.3"), Number: github.Int(milestone)},
 						{Title: github.String("3.2"), Number: github.Int(1)},
-					}, nil, nil
+					}
+					_, _ = fmt.Fprintf(&buf, "listMilestones owner=%s repo=%s: result %s\n", owner, repo, github.Stringify(result))
+					return result, nil, nil
 				}
 
-				p.getLatestTag = func() (string, error) { return "v3.3.0", nil }
+				p.getLatestTag = func() (string, error) {
+					const tag = "v3.3.0"
+					_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
+					return tag, nil
+				}
 
 				p.init()
+				p.branch = branch
 
 				ctx := context.Background()
 				req := PostRequest{
-					Title:       DefaultStressFailureTitle(c.packageName, c.testName),
-					PackageName: c.packageName,
-					TestName:    c.testName,
-					Message:     c.message,
-					Artifacts:   c.artifacts,
-					AuthorEmail: c.author,
+					TitleTemplate: UnitTestFailureTitle,
+					BodyTemplate:  UnitTestFailureBody,
+					PackageName:   c.packageName,
+					TestName:      c.testName,
+					Message:       c.message,
+					Artifacts:     c.artifacts,
+					AuthorEmail:   c.author,
 				}
-				if err := p.post(
-					ctx, req,
-				); err != nil {
-					t.Fatal(err)
+				require.NoError(t, p.post(ctx, req))
+				path := filepath.Join("testdata", name+".txt")
+				b, err := ioutil.ReadFile(path)
+				failed := !assert.NoError(t, err)
+				if !failed {
+					exp, act := string(b), buf.String()
+					failed = failed || !assert.Equal(t, exp, act)
 				}
-
-				expectedIssues := 1
-				expectedComments := 0
-				if foundIssue {
-					expectedIssues = 0
-					expectedComments = 1
-				}
-				if issueCount != expectedIssues {
-					t.Fatalf("%d issues were posted, expected %d", issueCount, expectedIssues)
-				}
-				if commentCount != expectedComments {
-					t.Fatalf("%d comments were posted, expected %d", commentCount, expectedComments)
+				const rewrite = false
+				if failed && rewrite {
+					_ = os.MkdirAll(filepath.Dir(path), 0755)
+					require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
 				}
 			})
 		}
