@@ -26,6 +26,17 @@ import (
 )
 
 const (
+	// This is a somehow arbitrary chosen upper bound on the relative error to be
+	// used when comparing doubles for equality. The assumption that comes with it
+	// is that any sequence of operations on doubles won't produce a result with
+	// accuracy that is worse than this relative error. There is no guarantee
+	// however that this will be the case. A programmer writing code using
+	// floating point numbers will still need to be aware of the effect of the
+	// operations on the results and the possible loss of accuracy.
+	// More info https://en.wikipedia.org/wiki/Machine_epsilon
+	// https://en.wikipedia.org/wiki/Floating-point_arithmetic
+	epsilon = 1e-10
+
 	// The number of random candidates to select from a larger list of possible
 	// candidates. Because the allocator heuristics are being run on every node it
 	// is actually not desirable to set this value higher. Doing so can lead to
@@ -162,7 +173,7 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -4
 	}
-	if c.diversityScore != o.diversityScore {
+	if !scoresAlmostEqual(c.diversityScore, o.diversityScore) {
 		if c.diversityScore > o.diversityScore {
 			return 3
 		}
@@ -174,7 +185,7 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -(2 + float64(o.convergesScore-c.convergesScore)/10.0)
 	}
-	if c.balanceScore.totalScore() != o.balanceScore.totalScore() {
+	if !scoresAlmostEqual(c.balanceScore.totalScore(), o.balanceScore.totalScore()) {
 		if c.balanceScore.totalScore() > o.balanceScore.totalScore() {
 			return 1 + (c.balanceScore.totalScore()-o.balanceScore.totalScore())/10.0
 		}
@@ -238,9 +249,9 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].diversityScore == c[j].diversityScore &&
+	if scoresAlmostEqual(c[i].diversityScore, c[j].diversityScore) &&
 		c[i].convergesScore == c[j].convergesScore &&
-		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
+		scoresAlmostEqual(c[i].balanceScore.totalScore(), c[j].balanceScore.totalScore()) &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
@@ -271,7 +282,7 @@ func (cl candidateList) best() candidateList {
 	}
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary == cl[0].necessary &&
-			cl[i].diversityScore == cl[0].diversityScore &&
+			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) &&
 			cl[i].convergesScore == cl[0].convergesScore {
 			continue
 		}
@@ -305,7 +316,7 @@ func (cl candidateList) worst() candidateList {
 	// Find the worst constraint/locality/converges values.
 	for i := len(cl) - 2; i >= 0; i-- {
 		if cl[i].necessary == cl[len(cl)-1].necessary &&
-			cl[i].diversityScore == cl[len(cl)-1].diversityScore &&
+			scoresAlmostEqual(cl[i].diversityScore, cl[len(cl)-1].diversityScore) &&
 			cl[i].convergesScore == cl[len(cl)-1].convergesScore {
 			continue
 		}
@@ -805,11 +816,13 @@ func betterRebalanceTarget(target1, existing1, target2, existing2 *candidate) *c
 	// they'll replace.
 	comp1 := target1.compare(*existing1)
 	comp2 := target2.compare(*existing2)
-	if comp1 > comp2 {
-		return target1
-	}
-	if comp1 < comp2 {
-		return target2
+	if !scoresAlmostEqual(comp1, comp2) {
+		if comp1 > comp2 {
+			return target1
+		}
+		if comp1 < comp2 {
+			return target2
+		}
 	}
 	// If the two targets are equally better than their corresponding existing
 	// replicas, just return whichever target is better.
@@ -1228,4 +1241,8 @@ func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
 // has enough room to accept a necessary replica (i.e. via AllocateCandidates).
 func rebalanceToMaxCapacityCheck(store roachpb.StoreDescriptor) bool {
 	return store.Capacity.FractionUsed() < rebalanceToMaxFractionUsedThreshold
+}
+
+func scoresAlmostEqual(score1, score2 float64) bool {
+	return math.Abs(score1-score2) < epsilon
 }
