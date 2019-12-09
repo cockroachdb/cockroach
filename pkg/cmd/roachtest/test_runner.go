@@ -605,13 +605,16 @@ func (r *testRunner) runTest(
 				artifacts := fmt.Sprintf("/%s", t.Name())
 
 				req := issues.PostRequest{
-					Title:       fmt.Sprintf("roachtest: %s failed", t.Name()),
-					PackageName: "roachtest",
-					TestName:    t.Name(),
-					Message:     msg,
-					Artifacts:   artifacts,
-					AuthorEmail: authorEmail,
-					ExtraLabels: []string{"O-roachtest"},
+					// TODO(tbg): actually use this as a template.
+					TitleTemplate: fmt.Sprintf("roachtest: %s failed", t.Name()),
+					// TODO(tbg): make a template better adapted to roachtest.
+					BodyTemplate: issues.UnitTestFailureBody,
+					PackageName:  "roachtest",
+					TestName:     t.Name(),
+					Message:      msg,
+					Artifacts:    artifacts,
+					AuthorEmail:  authorEmail,
+					ExtraLabels:  []string{"O-roachtest"},
 				}
 				if err := issues.Post(
 					context.Background(),

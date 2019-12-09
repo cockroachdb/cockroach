@@ -46,12 +46,15 @@ func main() {
 	f := func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error {
 		log.Printf("filing issue with title: %s", title)
 		req := issues.PostRequest{
-			Title:       title,
-			PackageName: packageName,
-			TestName:    testName,
-			Message:     testMessage,
-			Artifacts:   "",
-			AuthorEmail: authorEmail,
+			// TODO(tbg): actually use this as a template and not a hard-coded
+			// string.
+			TitleTemplate: title,
+			BodyTemplate:  issues.UnitTestFailureBody,
+			PackageName:   packageName,
+			TestName:      testName,
+			Message:       testMessage,
+			Artifacts:     "",
+			AuthorEmail:   authorEmail,
 		}
 		return issues.Post(ctx, req)
 	}
