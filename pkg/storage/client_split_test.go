@@ -504,7 +504,7 @@ SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 	// they can occasionally happen during upreplication.
 	numSnapsBefore := numRaftSnaps("before")
 
-	doSplit := func(ctx context.Context) error {
+	doSplit := func(ctx context.Context, _ int) error {
 		_, _, err := tc.SplitRange(
 			[]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
 		return err
