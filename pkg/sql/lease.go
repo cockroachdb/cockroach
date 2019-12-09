@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -944,6 +945,12 @@ func (t *tableState) removeInactiveVersions() []*storedTableLease {
 func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool, error) {
 	var toRelease *storedTableLease
 	resultChan, didAcquire := m.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
+		// Note that we use a new `context` here to avoid a situation where a cancellation
+		// of the first context cancels other callers to the `acquireNodeLease()` method,
+		// because of its use of `singleflight.Group`. See issue #41780 for how this has
+		// happened.
+		newCtx, cancel := m.stopper.WithCancelOnQuiesce(logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+		defer cancel()
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
 		}
@@ -952,26 +959,30 @@ func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool
 		if newest != nil {
 			minExpiration = newest.expiration
 		}
-		table, err := m.LeaseStore.acquire(ctx, minExpiration, id)
+		table, err := m.LeaseStore.acquire(newCtx, minExpiration, id)
 		if err != nil {
 			return nil, err
 		}
 		t := m.findTableState(id, false /* create */)
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		toRelease, err = t.upsertLocked(ctx, table)
+		toRelease, err = t.upsertLocked(newCtx, table)
 		if err != nil {
 			return nil, err
 		}
 		m.tableNames.insert(table)
+		if toRelease != nil {
+			releaseLease(toRelease, m)
+		}
 		return leaseToken(table), nil
 	})
-	result := <-resultChan
-	if result.Err != nil {
-		return false, result.Err
-	}
-	if toRelease != nil {
-		releaseLease(toRelease, m)
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case result := <-resultChan:
+		if result.Err != nil {
+			return false, result.Err
+		}
 	}
 	return didAcquire, nil
 }
