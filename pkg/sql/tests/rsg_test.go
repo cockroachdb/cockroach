@@ -708,7 +708,7 @@ func testRandomSyntax(
 		}
 	}(ctx)
 	ctx, timeoutCancel := context.WithTimeout(ctx, *flagRSGTime)
-	err = ctxgroup.GroupWorkers(ctx, *flagRSGGoRoutines, func(ctx context.Context) error {
+	err = ctxgroup.GroupWorkers(ctx, *flagRSGGoRoutines, func(ctx context.Context, _ int) error {
 		for {
 			select {
 			case <-ctx.Done():

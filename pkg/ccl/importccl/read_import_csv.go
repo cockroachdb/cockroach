@@ -13,6 +13,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,6 +45,18 @@ type csvInputReader struct {
 
 var _ inputConverter = &csvInputReader{}
 
+var inputReaderBatchSize = 500
+
+// TestingSetCsvInputReaderBatchSize is a testing knob to modify
+// csv input reader batch size.
+// Returns a function that resets the value back to the default.
+func TestingSetCsvInputReaderBatchSize(s int) func() {
+	inputReaderBatchSize = s
+	return func() {
+		inputReaderBatchSize = 500
+	}
+}
+
 func newCSVInputReader(
 	kvCh chan row.KVBatch,
 	opts roachpb.CSVOptions,
@@ -65,7 +78,7 @@ func newCSVInputReader(
 		expectedCols: len(tableDesc.VisibleColumns()),
 		tableDesc:    tableDesc,
 		targetCols:   targetCols,
-		batchSize:    500,
+		batchSize:    inputReaderBatchSize,
 		parallelism:  parallelism,
 	}
 }
@@ -118,7 +131,7 @@ func (c *csvInputReader) readFile(
 	c.batch = csvRecord{
 		file:      inputName,
 		fileIndex: inputIdx,
-		rowOffset: 1,
+		rowOffset: 1 + resumePos,
 		r:         make([][]string, 0, c.batchSize),
 		rejected:  rejected,
 	}
@@ -127,13 +140,15 @@ func (c *csvInputReader) readFile(
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
-		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context) error {
-			return c.convertRecordWorker(ctx)
+		return ctxgroup.GroupWorkers(ctx, c.parallelism, func(ctx context.Context, id int) error {
+			return c.convertRecordWorker(ctx, id)
 		})
 	})
 
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(c.recordCh)
+		minEmitted := make([]int64, c.parallelism)
+		c.batch.minEmitted = &minEmitted
 		for i := int64(1); ; i++ {
 			record, err := cr.Read()
 			finished := err == io.EOF
@@ -154,9 +169,10 @@ func (c *csvInputReader) readFile(
 				return errors.Wrapf(err, "row %d: reading CSV record", i)
 			}
 			// Ignore the first N lines.
-			if uint32(i) <= c.opts.Skip {
+			if uint32(i) <= c.opts.Skip || i <= resumePos {
 				continue
 			}
+
 			if len(record) == c.expectedCols {
 				// Expected number of columns.
 			} else if len(record) == c.expectedCols+1 && record[c.expectedCols] == "" {
@@ -187,11 +203,13 @@ type csvRecord struct {
 	progress  float32
 	// Channel on which to report bad rows.
 	rejected chan string
+	// smallest emitted row across all convert workers
+	minEmitted *[]int64
 }
 
 // convertRecordWorker converts CSV records into KV pairs and sends them on the
 // kvCh chan.
-func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
+func (c *csvInputReader) convertRecordWorker(ctx context.Context, workerID int) error {
 	// Create a new evalCtx per converter so each go routine gets its own
 	// collationenv, which can't be accessed in parallel.
 	evalCtx := c.evalCtx.Copy()
@@ -203,11 +221,20 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		panic("uninitialized session data")
 	}
 
+	var rowNum int64
+
+	var minEmitted *[]int64 // Set in the loop below.
+	conv.CompletedRowFn = func() int64 {
+		m := c.emittedRowLowWatermark(workerID, rowNum, *minEmitted)
+		return m
+	}
+
 	epoch := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 	const precision = uint64(10 * time.Microsecond)
 	timestamp := uint64(c.walltime-epoch) / precision
 
 	for batch := range c.recordCh {
+		minEmitted = batch.minEmitted
 		if conv.KvBatch.Source != batch.fileIndex {
 			if err := conv.SendBatch(ctx); err != nil {
 				return err
@@ -217,7 +244,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		conv.KvBatch.Progress = batch.progress
 	ROW_LOOP:
 		for batchIdx, record := range batch.r {
-			rowNum := batch.rowOffset + int64(batchIdx)
+			rowNum = batch.rowOffset + int64(batchIdx)
 			datumIdx := 0
 			for i, field := range record {
 				// Skip over record entries corresponding to columns not in the target
@@ -252,4 +279,23 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 		}
 	}
 	return conv.SendBatch(ctx)
+}
+
+// Updates emitted row for the specified worker and returns
+// low watermark for the emitted rows across all workers.
+func (c *csvInputReader) emittedRowLowWatermark(
+	workerID int, emittedRow int64, minEmitted []int64,
+) int64 {
+	atomic.StoreInt64(&minEmitted[workerID], emittedRow)
+
+	for i := 0; i < len(minEmitted); i++ {
+		if i != workerID {
+			w := atomic.LoadInt64(&minEmitted[i])
+			if w < emittedRow {
+				emittedRow = w
+			}
+		}
+	}
+
+	return emittedRow
 }
