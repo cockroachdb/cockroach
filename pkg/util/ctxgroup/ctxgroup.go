@@ -168,10 +168,11 @@ func (g Group) GoCtx(f func(ctx context.Context) error) {
 }
 
 // GroupWorkers runs num worker go routines in an errgroup.
-func GroupWorkers(ctx context.Context, num int, f func(context.Context) error) error {
+func GroupWorkers(ctx context.Context, num int, f func(context.Context, int) error) error {
 	group := WithContext(ctx)
 	for i := 0; i < num; i++ {
-		group.GoCtx(f)
+		workerID := i
+		group.GoCtx(func(ctx context.Context) error { return f(ctx, workerID) })
 	}
 	return group.Wait()
 }

@@ -211,6 +211,9 @@ type TestingKnobs struct {
 	// EnableVectorizedInvariantsChecker, if enabled, will allow for planning
 	// the invariant checkers between all columnar operators.
 	EnableVectorizedInvariantsChecker bool
+
+	// Forces bulk adder flush every time a KV batch is processed.
+	BulkAdderFlushesEveryBatch bool
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
