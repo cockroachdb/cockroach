@@ -304,7 +304,7 @@ where
     )
     and partner1_.version=0
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: id1_4_0_:1(int!null) id1_2_1_:7(int!null) address2_4_0_:2(varchar!null) createdo3_4_0_:3(timestamp) name4_4_0_:4(varchar) nickname5_4_0_:5(varchar) version6_4_0_:6(int4!null) name2_2_1_:8(varchar!null) version3_2_1_:9(int4!null)
  ├── has-placeholder
  ├── key: (1,7)
@@ -2456,7 +2456,7 @@ group-by
  │    │    ├── grouping columns: this_.studentid:1(int!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null)
  │    │    ├── key: (1,6,7)
  │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (1,6,7)-->(2-5,9,14)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: this_.studentid:1(int!null) name:2(varchar!null) address_city:3(varchar) address_state:4(varchar) preferredcoursecode:5(varchar!null) enrolment_.studentid:6(int!null) enrolment_.coursecode:7(varchar!null) enrolment_.year:9(int2!null) maxstudentenrolment_.coursecode:11(varchar!null) maxstudentenrolment_.year:13(int2!null)
  │    │    │    ├── fd: (1)-->(2-5), (6,7)-->(9), (5)==(11), (11)==(5)
  │    │    │    ├── inner-join (hash)

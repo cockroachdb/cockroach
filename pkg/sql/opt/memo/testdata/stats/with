@@ -110,13 +110,13 @@ with &1 (t0)
            ├── columns: "?column?":27(unknown)
            ├── stats: [rows=10000]
            ├── fd: ()-->(27)
-           ├── inner-join (hash)
+           ├── inner-join (cross)
            │    ├── columns: true_agg:25(bool!null)
            │    ├── stats: [rows=10000]
            │    ├── fd: ()-->(25)
            │    ├── scan a
            │    │    └── stats: [rows=5000]
-           │    ├── inner-join (hash)
+           │    ├── inner-join (cross)
            │    │    ├── columns: true_agg:25(bool!null)
            │    │    ├── cardinality: [0 - 2]
            │    │    ├── stats: [rows=2]
