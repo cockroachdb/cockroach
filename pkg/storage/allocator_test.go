@@ -881,8 +881,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			storeFilterThrottled,
 		)
 		expTo := stores[1].StoreID
-		expFrom := map[roachpb.StoreID]bool{stores[3].StoreID: true, stores[4].StoreID: true}
-		if !ok || target.StoreID != expTo || !expFrom[origin.StoreID] {
+		expFrom := stores[0].StoreID
+		if !ok || target.StoreID != expTo || origin.StoreID != expFrom {
 			t.Fatalf("%d: expected rebalance from either of %v to s%d, but got %v->%v; details: %s",
 				i, expFrom, expTo, origin, target, details)
 		}
