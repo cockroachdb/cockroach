@@ -32,7 +32,7 @@ SELECT xy.x + 1 = length('foo') + xy.y AS a, uv.rowid * xy.x AS b FROM xy, uv
 project
  ├── columns: a:6(bool) b:7(int)
  ├── prune: (6,7)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2), (5)-->(3,4)

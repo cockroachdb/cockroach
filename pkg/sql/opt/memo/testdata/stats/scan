@@ -551,7 +551,7 @@ project
  │    ├── project
  │    │    ├── columns: col1:25(bool)
  │    │    ├── stats: [rows=333333.333, distinct(25)=333333.333, null(25)=16336.65]
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:16(varchar) tab1.f:17("char") tab1.j:21(float!null)
  │    │    │    ├── stats: [rows=333333.333, distinct(5,6,8,16,17)=333333.333, null(5,6,8,16,17)=16336.65]
  │    │    │    ├── scan tab0

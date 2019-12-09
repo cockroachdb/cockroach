@@ -102,7 +102,7 @@ sort
       │    │    │    │    │    ├── stats: [rows=8000, distinct(33)=7944.47548, null(33)=0, distinct(36)=1.29975178, null(36)=0, distinct(41)=1.29975178, null(41)=0, distinct(42)=1.33333333, null(42)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(42,46)=1.33333333, null(42,46)=0]
       │    │    │    │    │    ├── key: (33,41)
       │    │    │    │    │    ├── fd: (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36)
-      │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    ├── save-table-name: q7_inner_join_8
       │    │    │    │    │    │    ├── columns: n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
       │    │    │    │    │    │    ├── stats: [rows=1.33333333, distinct(41)=1.29975178, null(41)=0, distinct(42)=1.33333333, null(42)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(42,46)=1.33333333, null(42,46)=0]

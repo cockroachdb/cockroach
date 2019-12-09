@@ -207,7 +207,7 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ----
 ·                         distributed  false
 ·                         vectorized   false
-hash-join                 ·            ·
+cross-join                ·            ·
  │                        type         cross
  ├── spool                ·            ·
  │    └── run             ·            ·

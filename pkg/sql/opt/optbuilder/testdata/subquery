@@ -1465,7 +1465,7 @@ SELECT (SELECT t.kv.k) FROM db1.kv, kv
 ----
 project
  ├── columns: k:6(int)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
  │    ├── scan db1.public.kv
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
@@ -1500,7 +1500,7 @@ SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv
 ----
 project
  ├── columns: k:6(int)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
  │    ├── scan db1.public.kv
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)

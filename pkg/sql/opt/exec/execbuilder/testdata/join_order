@@ -35,33 +35,33 @@ SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-·                    distributed         false            ·                         ·
-·                    vectorized          false            ·                         ·
-render               ·                   ·                (a, b, c, d, b, x, c, y)  ·
- │                   render 0            a                ·                         ·
- │                   render 1            b                ·                         ·
- │                   render 2            c                ·                         ·
- │                   render 3            d                ·                         ·
- │                   render 4            b                ·                         ·
- │                   render 5            x                ·                         ·
- │                   render 6            c                ·                         ·
- │                   render 7            y                ·                         ·
- └── hash-join       ·                   ·                (b, x, c, y, a, b, c, d)  ·
-      │              type                inner            ·                         ·
-      │              equality            (b, c) = (b, c)  ·                         ·
-      │              left cols are key   ·                ·                         ·
-      │              right cols are key  ·                ·                         ·
-      ├── hash-join  ·                   ·                (b, x, c, y)              ·
-      │    │         type                cross            ·                         ·
-      │    ├── scan  ·                   ·                (b, x)                    ·
-      │    │         table               bx@primary       ·                         ·
-      │    │         spans               ALL              ·                         ·
-      │    └── scan  ·                   ·                (c, y)                    ·
-      │              table               cy@primary       ·                         ·
-      │              spans               ALL              ·                         ·
-      └── scan       ·                   ·                (a, b, c, d)              ·
-·                    table               abc@primary      ·                         ·
-·                    spans               /1-/1/#          ·                         ·
+·                     distributed         false            ·                         ·
+·                     vectorized          false            ·                         ·
+render                ·                   ·                (a, b, c, d, b, x, c, y)  ·
+ │                    render 0            a                ·                         ·
+ │                    render 1            b                ·                         ·
+ │                    render 2            c                ·                         ·
+ │                    render 3            d                ·                         ·
+ │                    render 4            b                ·                         ·
+ │                    render 5            x                ·                         ·
+ │                    render 6            c                ·                         ·
+ │                    render 7            y                ·                         ·
+ └── hash-join        ·                   ·                (b, x, c, y, a, b, c, d)  ·
+      │               type                inner            ·                         ·
+      │               equality            (b, c) = (b, c)  ·                         ·
+      │               left cols are key   ·                ·                         ·
+      │               right cols are key  ·                ·                         ·
+      ├── cross-join  ·                   ·                (b, x, c, y)              ·
+      │    │          type                cross            ·                         ·
+      │    ├── scan   ·                   ·                (b, x)                    ·
+      │    │          table               bx@primary       ·                         ·
+      │    │          spans               ALL              ·                         ·
+      │    └── scan   ·                   ·                (c, y)                    ·
+      │               table               cy@primary       ·                         ·
+      │               spans               ALL              ·                         ·
+      └── scan        ·                   ·                (a, b, c, d)              ·
+·                     table               abc@primary      ·                         ·
+·                     spans               /1-/1/#          ·                         ·
 
 statement ok
 SET reorder_joins_limit = 3
