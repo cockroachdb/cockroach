@@ -722,6 +722,9 @@ func nodeName(plan planNode) string {
 		if len(n.mergeJoinOrdering) > 0 {
 			return "merge-join"
 		}
+		if len(n.pred.leftEqualityIndices) == 0 {
+			return "cross-join"
+		}
 		return "hash-join"
 	}
 

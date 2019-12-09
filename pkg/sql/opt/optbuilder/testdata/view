@@ -32,7 +32,7 @@ project
  ├── columns: k:1(int!null) s:9(string)
  └── select
       ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: k:1(int!null) i:2(int) s:4(string) k:6(int!null) i:7(int) s:9(string)
       │    ├── project
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)

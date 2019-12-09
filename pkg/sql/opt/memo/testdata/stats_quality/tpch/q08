@@ -120,7 +120,7 @@ sort
       │    │    │    │    │    │    │    ├── stats: [rows=2304369.03, distinct(33)=451700.52, null(33)=0, distinct(34)=99405.6121, null(34)=0, distinct(37)=731, null(37)=0, distinct(42)=99405.6121, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0]
       │    │    │    │    │    │    │    ├── key: (33,54)
       │    │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34)
-      │    │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    ├── inner-join (cross)
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_inner_join_11
       │    │    │    │    │    │    │    │    ├── columns: c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    │    │    │    │    ├── stats: [rows=750000, distinct(42)=147944.303, null(42)=0, distinct(45)=24.9055527, null(45)=0, distinct(50)=24.9055527, null(50)=0, distinct(52)=1, null(52)=0, distinct(54)=24.9055527, null(54)=0, distinct(55)=24.9055527, null(55)=0, distinct(58)=1, null(58)=0, distinct(59)=1, null(59)=0]

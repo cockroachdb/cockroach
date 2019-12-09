@@ -49,7 +49,7 @@ ALTER TABLE uv INJECT STATISTICS '[
 norm
 SELECT * FROM xysd JOIN uv ON true
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -66,7 +66,7 @@ inner-join (hash)
 norm colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
 SELECT * FROM xysd JOIN uv ON true
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=500, null(3)=500000, distinct(4)=500, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0, distinct(2,5,6)=4000000, null(2,5,6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -181,7 +181,7 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=50000000]
       ├── key: (1,7)
@@ -201,7 +201,7 @@ project
 build
 SELECT * FROM xysd, xysd AS xysd
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── stats: [rows=25000000]
  ├── key: (1,5)
@@ -230,7 +230,7 @@ project
       ├── stats: [rows=500000, distinct(6)=1, null(6)=0]
       ├── key: (1,7)
       ├── fd: ()-->(6), (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=50000000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
       │    ├── key: (1,7)
@@ -263,7 +263,7 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null) v:6(int!null)
  │    ├── stats: [rows=50000000, distinct(1,6)=500000, null(1,6)=0]
- │    └── inner-join (hash)
+ │    └── inner-join (cross)
  │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
  │         ├── stats: [rows=50000000, distinct(1,6)=500000, null(1,6)=0]
  │         ├── key: (1,7)
@@ -789,7 +789,7 @@ select
 build colstat=2 colstat=(1,2,7) colstat=(2,3) colstat=3 colstat=(3,5) colstat=5
 SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=25250000, distinct(3,5)=250000, null(3,5)=25250000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── key: (1,7)
@@ -814,7 +814,7 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(1,2,7)=25010000, null(1,2,7)=25000000]
       ├── key: (1,7)
@@ -963,7 +963,7 @@ values
 norm
 SELECT * FROM (SELECT 1) LEFT JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -997,7 +997,7 @@ values
 norm
 SELECT * FROM (SELECT 1) FULL JOIN (SELECT 1 WHERE false) ON true
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: "?column?":1(int!null) "?column?":2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1041,7 +1041,7 @@ values
 norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1065,7 +1065,7 @@ right-join (hash)
 norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
@@ -1089,7 +1089,7 @@ right-join (hash)
 norm
 SELECT * FROM (SELECT 1) FULL JOIN (VALUES (1), (2)) ON true
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: "?column?":1(int!null) column1:2(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
@@ -1155,7 +1155,7 @@ project
  │    │         ├── outer: (2)
  │    │         ├── stats: [rows=1000]
  │    │         ├── fd: ()-->(15)
- │    │         ├── left-join (hash)
+ │    │         ├── left-join (cross)
  │    │         │    ├── outer: (2)
  │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
  │    │         │    ├── scan table1
@@ -1175,7 +1175,7 @@ project
 norm colstat=1 colstat=2
 SELECT * FROM (SELECT 1) AS a(x) LEFT JOIN (SELECT 2) AS b(x) ON a.x = b.x
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: x:1(int!null) x:2(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1]
@@ -1384,7 +1384,7 @@ FROM
                     (SELECT NULL)::STRING
                 );
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
  ├── stats: [rows=100]
  ├── key: (1,2)
@@ -1427,7 +1427,7 @@ expr
     []
 )
 ----
-semi-join (hash)
+semi-join (cross)
  ├── columns: a:1(int!null) b:2(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
@@ -1458,7 +1458,7 @@ expr
     []
 )
 ----
-anti-join (hash)
+anti-join (cross)
  ├── columns: a:1(int!null) b:2(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]

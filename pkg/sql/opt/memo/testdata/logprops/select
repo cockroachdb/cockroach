@@ -36,7 +36,7 @@ select
  ├── fd: (1)-->(2), (3)-->(4,5), (1)==(3), (3)==(1)
  ├── prune: (2,4,5)
  ├── interesting orderings: (+1) (+3)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4,5)

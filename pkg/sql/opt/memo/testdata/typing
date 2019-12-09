@@ -401,7 +401,7 @@ project
  ├── group-by
  │    ├── columns: true_agg:8(bool) rownum:10(int!null)
  │    ├── grouping columns: rownum:10(int!null)
- │    ├── left-join (hash)
+ │    ├── left-join (cross)
  │    │    ├── columns: expr:3(int) true:7(bool) rownum:10(int!null)
  │    │    ├── ordinality
  │    │    │    ├── columns: expr:3(int) rownum:10(int!null)

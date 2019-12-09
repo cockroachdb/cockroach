@@ -249,7 +249,7 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ·                                   distributed   false
 ·                                   vectorized    false
 root                                ·             ·
- ├── hash-join                      ·             ·
+ ├── cross-join                     ·             ·
  │    │                             type          cross
  │    ├── scan buffer node          ·             ·
  │    │                             label         buffer 1

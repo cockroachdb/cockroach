@@ -973,7 +973,7 @@ with &2 (included_parts)
  │         ├── columns: p.part:11(string!null) p.sub_part:12(string) p.quantity:13(int)
  │         └── select
  │              ├── columns: sub_part:8(string!null) part:9(string) quantity:10(int) p.part:11(string!null) p.sub_part:12(string) p.quantity:13(int) p.rowid:14(int!null)
- │              ├── inner-join (hash)
+ │              ├── inner-join (cross)
  │              │    ├── columns: sub_part:8(string) part:9(string) quantity:10(int) p.part:11(string) p.sub_part:12(string) p.quantity:13(int) p.rowid:14(int!null)
  │              │    ├── with-scan &1 (included_parts)
  │              │    │    ├── columns: sub_part:8(string) part:9(string) quantity:10(int)
@@ -1043,7 +1043,7 @@ with &2 (search_graph)
  │         ├── columns: "?column?":22(int) "?column?":23(int[]) "?column?":24(bool) g.id:13(int!null) g.link:14(int) g.data:15(string)
  │         ├── select
  │         │    ├── columns: g.id:13(int!null) g.link:14(int) g.data:15(string) id:16(int) link:17(int!null) data:18(string) depth:19(int) path:20(int[]) cycle:21(bool!null)
- │         │    ├── inner-join (hash)
+ │         │    ├── inner-join (cross)
  │         │    │    ├── columns: g.id:13(int!null) g.link:14(int) g.data:15(string) id:16(int) link:17(int) data:18(string) depth:19(int) path:20(int[]) cycle:21(bool)
  │         │    │    ├── scan g
  │         │    │    │    └── columns: g.id:13(int!null) g.link:14(int) g.data:15(string)
@@ -1298,7 +1298,7 @@ with &2 (foo)
       │    │         └── const: 2 [type=int]
       │    └── project
       │         ├── columns: "?column?":11(int) "?column?":12(int)
-      │         ├── inner-join (hash)
+      │         ├── inner-join (cross)
       │         │    ├── columns: a:7(int) b:8(int) a:9(int) b:10(int)
       │         │    ├── with-scan &2 (foo)
       │         │    │    ├── columns: a:7(int) b:8(int)

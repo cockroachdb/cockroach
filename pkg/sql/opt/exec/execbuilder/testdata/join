@@ -42,18 +42,18 @@ hash-join  ·            ·
 query TTT
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
-·               distributed  false
-·               vectorized   false
-render          ·            ·
- └── hash-join  ·            ·
-      │         type         cross
-      ├── scan  ·            ·
-      │         table        twocolumn@primary
-      │         spans        ALL
-      └── scan  ·            ·
-·               table        twocolumn@primary
-·               spans        ALL
-·               filter       x = 44
+·                distributed  false
+·                vectorized   false
+render           ·            ·
+ └── cross-join  ·            ·
+      │          type         cross
+      ├── scan   ·            ·
+      │          table        twocolumn@primary
+      │          spans        ALL
+      └── scan   ·            ·
+·                table        twocolumn@primary
+·                spans        ALL
+·                filter       x = 44
 
 query TTT
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
@@ -123,16 +123,16 @@ limit                ·            ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-·          distributed  false              ·       ·
-·          vectorized   false              ·       ·
-hash-join  ·            ·                  (x, y)  ·
- │         type         cross              ·       ·
- ├── scan  ·            ·                  (x)     ·
- │         table        twocolumn@primary  ·       ·
- │         spans        ALL                ·       ·
- └── scan  ·            ·                  (y)     ·
-·          table        twocolumn@primary  ·       ·
-·          spans        ALL                ·       ·
+·           distributed  false              ·       ·
+·           vectorized   false              ·       ·
+cross-join  ·            ·                  (x, y)  ·
+ │          type         cross              ·       ·
+ ├── scan   ·            ·                  (x)     ·
+ │          table        twocolumn@primary  ·       ·
+ │          spans        ALL                ·       ·
+ └── scan   ·            ·                  (y)     ·
+·           table        twocolumn@primary  ·       ·
+·           spans        ALL                ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
@@ -171,19 +171,19 @@ render          ·            ·                  (y)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-·               distributed  false              ·       ·
-·               vectorized   false              ·       ·
-render          ·            ·                  (x)     ·
- │              render 0     x                  ·       ·
- └── hash-join  ·            ·                  (x, y)  ·
-      │         type         inner              ·       ·
-      │         pred         x < y              ·       ·
-      ├── scan  ·            ·                  (x)     ·
-      │         table        twocolumn@primary  ·       ·
-      │         spans        ALL                ·       ·
-      └── scan  ·            ·                  (y)     ·
-·               table        twocolumn@primary  ·       ·
-·               spans        ALL                ·       ·
+·                distributed  false              ·       ·
+·                vectorized   false              ·       ·
+render           ·            ·                  (x)     ·
+ │               render 0     x                  ·       ·
+ └── cross-join  ·            ·                  (x, y)  ·
+      │          type         inner              ·       ·
+      │          pred         x < y              ·       ·
+      ├── scan   ·            ·                  (x)     ·
+      │          table        twocolumn@primary  ·       ·
+      │          spans        ALL                ·       ·
+      └── scan   ·            ·                  (y)     ·
+·                table        twocolumn@primary  ·       ·
+·                spans        ALL                ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
@@ -351,7 +351,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 4   hash-join      ·            ·
 4   ·              type         inner
 4   ·              equality     (oid) = (objid)
-5   hash-join      ·            ·
+5   cross-join     ·            ·
 5   ·              type         inner
 5   ·              pred         (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
 6   hash-join      ·            ·
@@ -366,7 +366,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 9   hash-join      ·            ·
 9   ·              type         inner
 9   ·              equality     (attrelid) = (oid)
-10  hash-join      ·            ·
+10  cross-join     ·            ·
 10  ·              type         cross
 11  virtual table  ·            ·
 11  ·              source       ·
@@ -477,29 +477,29 @@ render               ·            ·                 (a, b, n, sq)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
-·                         distributed  false           ·                   ·
-·                         vectorized   false           ·                   ·
-render                    ·            ·               (a, b, n, sq)       ·
- │                        render 0     a               ·                   ·
- │                        render 1     b               ·                   ·
- │                        render 2     n               ·                   ·
- │                        render 3     sq              ·                   ·
- └── filter               ·            ·               (div, a, b, n, sq)  ·
-      │                   filter       div = sq        ·                   ·
-      └── render          ·            ·               (div, a, b, n, sq)  ·
-           │              render 0     (a * b) / 2     ·                   ·
-           │              render 1     a               ·                   ·
-           │              render 2     b               ·                   ·
-           │              render 3     n               ·                   ·
-           │              render 4     sq              ·                   ·
-           └── hash-join  ·            ·               (a, b, n, sq)       ·
-                │         type         cross           ·                   ·
-                ├── scan  ·            ·               (a, b)              ·
-                │         table        pairs@primary   ·                   ·
-                │         spans        ALL             ·                   ·
-                └── scan  ·            ·               (n, sq)             ·
-·                         table        square@primary  ·                   ·
-·                         spans        ALL             ·                   ·
+·                          distributed  false           ·                   ·
+·                          vectorized   false           ·                   ·
+render                     ·            ·               (a, b, n, sq)       ·
+ │                         render 0     a               ·                   ·
+ │                         render 1     b               ·                   ·
+ │                         render 2     n               ·                   ·
+ │                         render 3     sq              ·                   ·
+ └── filter                ·            ·               (div, a, b, n, sq)  ·
+      │                    filter       div = sq        ·                   ·
+      └── render           ·            ·               (div, a, b, n, sq)  ·
+           │               render 0     (a * b) / 2     ·                   ·
+           │               render 1     a               ·                   ·
+           │               render 2     b               ·                   ·
+           │               render 3     n               ·                   ·
+           │               render 4     sq              ·                   ·
+           └── cross-join  ·            ·               (a, b, n, sq)       ·
+                │          type         cross           ·                   ·
+                ├── scan   ·            ·               (a, b)              ·
+                │          table        pairs@primary   ·                   ·
+                │          spans        ALL             ·                   ·
+                └── scan   ·            ·               (n, sq)             ·
+·                          table        square@primary  ·                   ·
+·                          spans        ALL             ·                   ·
 
 # The filter expression must stay on top of the outer join.
 query TTTTT
@@ -1302,25 +1302,25 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ]
 ----
-·               distributed  false
-·               vectorized   false
-render          ·            ·
- │              render 0     b
- │              render 1     a
- │              render 2     c
- │              render 3     d
- │              render 4     a
- │              render 5     c
- │              render 6     d
- └── hash-join  ·            ·
-      │         type         inner
-      │         pred         b = b
-      ├── scan  ·            ·
-      │         table        foo@primary
-      │         spans        ALL
-      └── scan  ·            ·
-·               table        bar@primary
-·               spans        ALL
+·                distributed  false
+·                vectorized   false
+render           ·            ·
+ │               render 0     b
+ │               render 1     a
+ │               render 2     c
+ │               render 3     d
+ │               render 4     a
+ │               render 5     c
+ │               render 6     d
+ └── cross-join  ·            ·
+      │          type         inner
+      │          pred         b = b
+      ├── scan   ·            ·
+      │          table        foo@primary
+      │          spans        ALL
+      └── scan   ·            ·
+·                table        bar@primary
+·                spans        ALL
 
 # Only a can be an equality column.
 query TTT
@@ -1379,17 +1379,17 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ]
 ----
-·          distributed  false
-·          vectorized   false
-hash-join  ·            ·
- │         type         inner
- │         pred         b = b
- ├── scan  ·            ·
- │         table        foo@primary
- │         spans        ALL
- └── scan  ·            ·
-·          table        bar@primary
-·          spans        ALL
+·           distributed  false
+·           vectorized   false
+cross-join  ·            ·
+ │          type         inner
+ │          pred         b = b
+ ├── scan   ·            ·
+ │          table        foo@primary
+ │          spans        ALL
+ └── scan   ·            ·
+·           table        bar@primary
+·           spans        ALL
 
 # Only a can be an equality column.
 query TTT
@@ -1415,17 +1415,17 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ]
 ----
-·          distributed  false
-·          vectorized   false
-hash-join  ·            ·
- │         type         inner
- │         pred         b = b
- ├── scan  ·            ·
- │         table        foo@primary
- │         spans        ALL
- └── scan  ·            ·
-·          table        bar@primary
-·          spans        ALL
+·           distributed  false
+·           vectorized   false
+cross-join  ·            ·
+ │          type         inner
+ │          pred         b = b
+ ├── scan   ·            ·
+ │          table        foo@primary
+ │          spans        ALL
+ └── scan   ·            ·
+·           table        bar@primary
+·           spans        ALL
 
 # Only a can be an equality column.
 query TTT
