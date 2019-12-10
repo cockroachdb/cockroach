@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -26,6 +27,11 @@ import (
 type tableRef struct {
 	TableName *tree.TableName
 	Columns   []*tree.ColumnTableDef
+}
+
+type aliasedTableRef struct {
+	*tableRef
+	indexFlags *tree.IndexFlags
 }
 
 type tableRefs []*tableRef
@@ -57,13 +63,31 @@ func (s *Smither) ReloadSchemas() error {
 	return err
 }
 
-func (s *Smither) getRandTable() (*tableRef, bool) {
+func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	if len(s.tables) == 0 {
 		return nil, false
 	}
-	return s.tables[s.rnd.Intn(len(s.tables))], true
+	table := s.tables[s.rnd.Intn(len(s.tables))]
+	indexes := s.getIndexes(*table.TableName)
+	var indexFlags tree.IndexFlags
+	if s.coin() {
+		indexNames := make([]tree.Name, 0, len(indexes))
+		for _, index := range indexes {
+			if !index.Inverted {
+				indexNames = append(indexNames, index.Name)
+			}
+		}
+		if len(indexNames) > 0 {
+			indexFlags.Index = tree.UnrestrictedName(indexNames[s.rnd.Intn(len(indexNames))])
+		}
+	}
+	aliased := &aliasedTableRef{
+		tableRef:   table,
+		indexFlags: &indexFlags,
+	}
+	return aliased, true
 }
 
 func (s *Smither) getIndexes(table tree.TableName) map[tree.Name]*tree.CreateIndex {
@@ -247,6 +271,35 @@ func extractIndexes(
 					Column:    col,
 					Direction: dir,
 				})
+			}
+			row, err := db.Query(fmt.Sprintf(`
+			SELECT
+			    is_inverted
+			FROM
+			    crdb_internal.table_indexes
+			WHERE
+			    descriptor_name = %s AND index_name = %s
+`, t.TableName, idx))
+			if err != nil {
+				return nil, err
+			}
+			if !row.Next() {
+				row.Close()
+				return nil, errors.Newf("unexpectedly index %s for table %s not found in crdb_internal.table_indexes", idx, t.TableName)
+			}
+			var isInverted bool
+			if err = row.Scan(&isInverted); err != nil {
+				row.Close()
+				return nil, err
+			}
+			indexes[idx].Inverted = isInverted
+			if row.Next() {
+				row.Close()
+				return nil, errors.Newf("unexpectedly multiple rows are found for index %s for table %s in crdb_internal.table_indexes", idx, t.TableName)
+			}
+			row.Close()
+			if err = row.Err(); err != nil {
+				return nil, err
 			}
 		}
 		rows.Close()
