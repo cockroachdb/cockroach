@@ -55,6 +55,9 @@ func registerSQLSmith(r *testRegistry) {
 		"no-mutations": sqlsmith.Settings["no-mutations"],
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
 	}
+	unsupportedTypesByVersion := map[string][]string{
+		"v19.2": {"TIMETZ"},
+	}
 
 	runSQLSmith := func(ctx context.Context, t *test, c *cluster, setupName, settingName string) {
 		// Set up a statement logger for easy reproduction. We only
@@ -92,7 +95,28 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatalf("unknown setting %s", settingName)
 		}
 
-		setup := setupFunc(rng)
+		version, err := fetchCockroachVersion(ctx, c, c.Node(0)[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var unsupportedTypes []string
+		if strings.HasPrefix(version, "v19.2") {
+			unsupportedTypes = unsupportedTypesByVersion["v19.2"]
+		}
+
+		var setup string
+		for {
+			setup = setupFunc(rng)
+			for _, unsupportedType := range unsupportedTypes {
+				if strings.Contains(setup, unsupportedType) {
+					// This setup contains an unsupported type, so we want to regenerate
+					// it.
+					continue
+				}
+			}
+			break
+		}
+
 		setting := settingFunc(rng)
 
 		conn := c.Conn(ctx, 1)
