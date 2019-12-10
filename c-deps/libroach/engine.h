@@ -50,7 +50,14 @@ struct DBEngine {
   virtual DBStatus EnvDeleteFile(DBSlice path) = 0;
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir) = 0;
   virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname) = 0;
-
+  virtual DBStatus EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file) = 0;
+  virtual DBStatus EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n) = 0;
+  virtual DBStatus EnvCloseReadableFile(rocksdb::RandomAccessFile* file) = 0;
+  virtual DBStatus EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) = 0;
+  virtual DBStatus EnvSyncDirectory(rocksdb::Directory* file) = 0;
+  virtual DBStatus EnvCloseDirectory(rocksdb::Directory* file) = 0;
+  virtual DBStatus EnvRenameFile(DBSlice oldname, DBSlice newname) = 0;
+  
   DBSSTable* GetSSTables(int* n);
   DBStatus GetSortedWALFiles(DBWALFile** out_files, int* n);
   DBString GetUserProperties();
@@ -99,6 +106,13 @@ struct DBImpl : public DBEngine {
   virtual DBStatus EnvDeleteFile(DBSlice path);
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir);
   virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname);
+  virtual DBStatus EnvOpenReadableFile(DBSlice path, rocksdb::RandomAccessFile** file);
+  virtual DBStatus EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n);
+  virtual DBStatus EnvCloseReadableFile(rocksdb::RandomAccessFile* file);
+  virtual DBStatus EnvOpenDirectory(DBSlice path, rocksdb::Directory** file);
+  virtual DBStatus EnvSyncDirectory(rocksdb::Directory* file);
+  virtual DBStatus EnvCloseDirectory(rocksdb::Directory* file);
+  virtual DBStatus EnvRenameFile(DBSlice oldname, DBSlice newname);
 };
 
 }  // namespace cockroach

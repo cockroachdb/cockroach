@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math"
 	"os"
@@ -3182,16 +3181,6 @@ func (r *RocksDB) InMem() bool {
 	return r.cfg.Dir == ""
 }
 
-// OpenFile opens a DBFile, which is essentially a rocksdb WritableFile
-// with the given filename, in this RocksDB's env.
-func (r *RocksDB) OpenFile(filename string) (DBFile, error) {
-	var file C.DBWritableFile
-	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), &file)); err != nil {
-		return nil, notFoundErrOrDefault(err)
-	}
-	return &rocksdbFile{file: file, rdb: r.rdb}, nil
-}
-
 // ReadFile reads the content from a file with the given filename. The file
 // must have been opened through Engine.OpenFile. Otherwise an error will be
 // returned.
@@ -3284,33 +3273,142 @@ func notFoundErrOrDefault(err error) error {
 	return err
 }
 
-// DBFile is an interface for interacting with DBWritableFile in RocksDB.
-type DBFile interface {
-	io.Writer
-	io.Closer
-	// Sync synchronously flushes this DBFile's data to disk.
-	Sync() error
-}
-
-// rocksdbFile implements DBFile interface. It is used to interact with the
+// rocksdbWritableFile implements the File interface. It is used to interact with the
 // DBWritableFile in the corresponding RocksDB env.
-type rocksdbFile struct {
+type rocksdbWritableFile struct {
 	file C.DBWritableFile
 	rdb  *C.DBEngine
 }
 
-// Write implements the DBFile interface.
-func (f *rocksdbFile) Write(data []byte) (int, error) {
+var _ File = &rocksdbWritableFile{}
+
+// Write implements the File interface.
+func (f *rocksdbWritableFile) Write(data []byte) (int, error) {
 	err := statusToError(C.DBEnvAppendFile(f.rdb, f.file, goToCSlice(data)))
 	return len(data), err
 }
 
-// Close implements the DBFile interface.
-func (f *rocksdbFile) Close() error {
+// Close implements the File interface.
+func (f *rocksdbWritableFile) Close() error {
 	return statusToError(C.DBEnvCloseFile(f.rdb, f.file))
 }
 
-// Sync implements the DBFile interface.
-func (f *rocksdbFile) Sync() error {
+// Sync implements the File interface.
+func (f *rocksdbWritableFile) Sync() error {
 	return statusToError(C.DBEnvSyncFile(f.rdb, f.file))
+}
+
+// Read implements the File interface.
+func (f *rocksdbWritableFile) Read(p []byte) (n int, err error) {
+	return 0, fmt.Errorf("cannot read file opened for writing")
+}
+
+// ReadAt implements the File interface.
+func (f *rocksdbWritableFile) ReadAt(p []byte, off int64) (n int, err error) {
+	return 0, fmt.Errorf("cannot read file opened for writing")
+}
+
+// rocksdbReadableFile implements the File interface. It is used to interact with the
+// DBReadableFile in the corresponding RocksDB env.
+type rocksdbReadableFile struct {
+	file   C.DBReadableFile
+	rdb    *C.DBEngine
+	offset int64
+}
+
+var _ File = &rocksdbReadableFile{}
+
+// Write implements the File interface.
+func (f *rocksdbReadableFile) Write(data []byte) (int, error) {
+	return 0, fmt.Errorf("cannot write file opened for reading")
+}
+
+// Close implements the File interface.
+func (f *rocksdbReadableFile) Close() error {
+	return statusToError(C.DBEnvCloseReadableFile(f.rdb, f.file))
+}
+
+// Sync implements the File interface.
+func (f *rocksdbReadableFile) Sync() error {
+	return fmt.Errorf("cannot sync file opened for reading")
+}
+
+// Read implements the File interface.
+func (f *rocksdbReadableFile) Read(p []byte) (n int, err error) {
+	n, err = f.ReadAt(p, f.offset)
+	f.offset += int64(n)
+	return
+}
+
+// ReadAt implements the File interface.
+func (f *rocksdbReadableFile) ReadAt(p []byte, off int64) (int, error) {
+	var n C.int
+	err := statusToError(C.DBEnvReadAtFile(f.rdb, f.file, goToCSlice(p), C.int64_t(off), &n))
+	return int(n), err
+}
+
+type rocksdbDirectory struct {
+	file C.DBDirectory
+	rdb  *C.DBEngine
+}
+
+var _ File = &rocksdbDirectory{}
+
+// Write implements the File interface.
+func (f *rocksdbDirectory) Write(data []byte) (int, error) {
+	return 0, fmt.Errorf("cannot write to directory")
+}
+
+// Close implements the File interface.
+func (f *rocksdbDirectory) Close() error {
+	return statusToError(C.DBEnvCloseDirectory(f.rdb, f.file))
+}
+
+// Sync implements the File interface.
+func (f *rocksdbDirectory) Sync() error {
+	return statusToError(C.DBEnvSyncDirectory(f.rdb, f.file))
+}
+
+// Read implements the File interface.
+func (f *rocksdbDirectory) Read(p []byte) (n int, err error) {
+	return 0, fmt.Errorf("cannot read directory")
+}
+
+// ReadAt implements the File interface.
+func (f *rocksdbDirectory) ReadAt(p []byte, off int64) (n int, err error) {
+	return 0, fmt.Errorf("cannot read directory")
+}
+
+var _ FS = &RocksDB{}
+
+// CreateFile implements the FS interface.
+func (r *RocksDB) CreateFile(name string) (File, error) {
+	var file C.DBWritableFile
+	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
+		return nil, notFoundErrOrDefault(err)
+	}
+	return &rocksdbWritableFile{file: file, rdb: r.rdb}, nil
+}
+
+// OpenFile implements the FS interface.
+func (r *RocksDB) OpenFile(name string) (File, error) {
+	var file C.DBReadableFile
+	if err := statusToError(C.DBEnvOpenReadableFile(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
+		return nil, notFoundErrOrDefault(err)
+	}
+	return &rocksdbReadableFile{file: file, rdb: r.rdb}, nil
+}
+
+// OpenDir implements the FS interface.
+func (r *RocksDB) OpenDir(name string) (File, error) {
+	var file C.DBDirectory
+	if err := statusToError(C.DBEnvOpenDirectory(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
+		return nil, notFoundErrOrDefault(err)
+	}
+	return &rocksdbDirectory{file: file, rdb: r.rdb}, nil
+}
+
+// RenameFile implements the FS interface.
+func (r *RocksDB) RenameFile(oldname, newname string) error {
+	return statusToError(C.DBEnvRenameFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname))))
 }
