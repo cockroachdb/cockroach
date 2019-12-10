@@ -51,6 +51,16 @@ func (s *Smither) randScalarType() *types.T {
 	}
 }
 
+func (s *Smither) randScalarComparableType() *types.T {
+	for {
+		t := sqlbase.RandScalarComparableType(s.rnd)
+		if !s.allowedType(t) {
+			continue
+		}
+		return t
+	}
+}
+
 func (s *Smither) randType() *types.T {
 	for {
 		t := sqlbase.RandType(s.rnd)

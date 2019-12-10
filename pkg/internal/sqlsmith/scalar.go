@@ -68,6 +68,7 @@ func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)
 	}
 }
 
+// The *types.T is the desired output type.
 type scalarFn func(*Smither, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
 
 type scalarWeight struct {
@@ -302,10 +303,10 @@ var compareOps = [...]tree.ComparisonOperator{
 }
 
 func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
+	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily {
 		return nil, false
 	}
+	typ = s.randScalarComparableType()
 	op := compareOps[s.rnd.Intn(len(compareOps))]
 	if s.vectorizable && (op == tree.IsDistinctFrom || op == tree.IsNotDistinctFrom) {
 		return nil, false

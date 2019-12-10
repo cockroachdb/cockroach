@@ -570,6 +570,31 @@ func RandScalarType(rng *rand.Rand) *types.T {
 	return randType(rng, types.Scalar)
 }
 
+// ScalarComparable contains all Scalar types that can be compared using a binary operator.
+var scalarComparable = []*types.T{
+	types.Bool,
+	types.Int,
+	types.Float,
+	types.Decimal,
+	types.Date,
+	types.Timestamp,
+	types.Interval,
+	types.String,
+	types.Bytes,
+	types.TimestampTZ,
+	types.Oid,
+	types.Uuid,
+	types.INet,
+	types.Time,
+	types.TimeTZ,
+	types.VarBit,
+}
+
+// RandScalarComparableType returns a random scalar type value that is comparable with itself.
+func RandScalarComparableType(rng *rand.Rand) *types.T {
+	return randType(rng, scalarComparable)
+}
+
 // RandArrayContentsType returns a random type that's guaranteed to be valid to
 // use as the contents of an array.
 func RandArrayContentsType(rng *rand.Rand) *types.T {
