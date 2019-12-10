@@ -1026,6 +1026,8 @@ func (ex *connExecutor) runObserverStatement(
 	switch sqlStmt := stmt.AST.(type) {
 	case *tree.ShowTransactionStatus:
 		return ex.runShowTransactionState(ctx, res)
+	case *tree.ShowSavepointStatus:
+		return ex.runShowSavepointState(ctx, res)
 	case *tree.ShowSyntax:
 		return ex.runShowSyntax(ctx, sqlStmt.Statement, res)
 	case *tree.SetTracing:

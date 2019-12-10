@@ -298,6 +298,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRANSACTION ISOLATION LEVEL ??`, `SHOW TRANSACTION`},
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
+		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 

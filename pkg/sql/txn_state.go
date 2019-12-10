@@ -105,10 +105,8 @@ type txnState struct {
 	// stateAborted.
 	txnAbortCount *metric.Counter
 
-	// activeRestartSavepointName stores the name of the active
-	// top-level restart savepoint, or is empty if no top-level restart
-	// savepoint is active.
-	activeRestartSavepointName tree.Name
+	// savepointEnv stores the stack of savepoints.
+	savepointEnv savepointEnv
 }
 
 // txnType represents the type of a SQL transaction.
