@@ -44,6 +44,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"))
 	if err != nil {

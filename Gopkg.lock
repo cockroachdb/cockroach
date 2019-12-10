@@ -1589,13 +1589,14 @@
   revision = "4a2b4c8f7e0a3754fdd5a3341a27c2431c2a5385"
 
 [[projects]]
-  digest = "1:3b5a3bc35810830ded5e26ef9516e933083a2380d8e57371fdfde3c70d7c6952"
+  digest = "1:381ccafa5e013a0e3f9b54604ae522a73b9533a375a6a714b483c634d5e927ab"
   name = "go.opencensus.io"
   packages = [
     ".",
     "exemplar",
     "internal",
     "internal/tagencoding",
+    "plugin/ocgrpc",
     "plugin/ochttp",
     "plugin/ochttp/propagation/b3",
     "stats",
@@ -1609,6 +1610,24 @@
   ]
   pruneopts = "UT"
   revision = "b7bf3cdb64150a8c8c53b769fdeb2ba581bd4d4b"
+  version = "v0.18.0"
+
+[[projects]]
+  digest = "1:460e91b9e7607f2200a66a6a4db465d40b4d1631591ea05271f32377ada171d2"
+  name = "gocloud.dev"
+  packages = [
+    "gcerrors",
+    "internal/batcher",
+    "internal/gcerr",
+    "internal/oc",
+    "internal/openurl",
+    "internal/retry",
+    "pubsub",
+    "pubsub/driver",
+    "pubsub/mempubsub",
+  ]
+  pruneopts = "UT"
+  revision = "70c91b947b5f3e1d993e5a0137761d335e82d05c"
   version = "v0.18.0"
 
 [[projects]]
@@ -1820,6 +1839,17 @@
   ]
   pruneopts = "UT"
   revision = "63859f3815cb436d25749575cb14aef1153e5634"
+
+[[projects]]
+  branch = "master"
+  digest = "1:918a46e4a2fb83df33f668f5a6bd51b2996775d073fce1800d3ec01b0a5ddd2b"
+  name = "golang.org/x/xerrors"
+  packages = [
+    ".",
+    "internal",
+  ]
+  pruneopts = "UT"
+  revision = "9bdfabe68543c54f90421aeb9a60ef8061b5b544"
 
 [[projects]]
   digest = "1:768c35ec83dd17029060ea581d6ca9fdcaef473ec87e93e4bb750949035f6070"
@@ -2131,6 +2161,8 @@
     "go.etcd.io/etcd/raft/quorum",
     "go.etcd.io/etcd/raft/raftpb",
     "go.etcd.io/etcd/raft/tracker",
+    "gocloud.dev/pubsub",
+    "gocloud.dev/pubsub/mempubsub",
     "golang.org/x/crypto/bcrypt",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/agent",

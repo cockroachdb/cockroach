@@ -172,6 +172,10 @@ func getSink(
 		makeSink = func() (Sink, error) {
 			return makeKafkaSink(cfg, u.Host, targets)
 		}
+	case isPubsubSink(u):
+		makeSink = func() (Sink, error) {
+			return makePubsubSink(u.String(), opts)
+		}
 	case isCloudStorageSink(u):
 		fileSizeParam := q.Get(sinkParamFileSize)
 		q.Del(sinkParamFileSize)
