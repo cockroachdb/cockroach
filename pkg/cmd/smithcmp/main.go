@@ -35,6 +35,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,9 +68,19 @@ type options struct {
 	SQL         []string
 
 	Databases map[string]struct {
-		Addr    string
-		InitSQL string
+		Addr           string
+		InitSQL        string
+		AllowMutations bool
 	}
+}
+
+var sqlMutators = []mutations.Mutator{mutations.ColumnFamilyMutator}
+
+func enableMutations(shouldEnable bool, mutations []mutations.Mutator) []mutations.Mutator {
+	if shouldEnable {
+		return mutations
+	}
+	return nil
 }
 
 func main() {
@@ -92,10 +103,12 @@ func main() {
 		timeout = time.Minute
 	}
 
+	rng := rand.New(rand.NewSource(opts.Seed))
 	conns := map[string]*Conn{}
 	for name, db := range opts.Databases {
 		var err error
-		conns[name], err = NewConn(db.Addr, db.InitSQL, opts.InitSQL)
+		conns[name], err = NewConn(
+			db.Addr, rng, enableMutations(opts.Databases[name].AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
 		if err != nil {
 			log.Fatalf("%s (%s): %+v", name, db.Addr, err)
 		}
@@ -106,7 +119,6 @@ func main() {
 		opts.Seed = timeutil.Now().UnixNano()
 		fmt.Println("seed:", opts.Seed)
 	}
-	rng := rand.New(rand.NewSource(opts.Seed))
 	smithOpts := []sqlsmith.SmitherOption{
 		sqlsmith.AvoidConsts(),
 	}
@@ -188,7 +200,7 @@ func main() {
 			}
 		}
 		if compare {
-			if err := compareConns(ctx, prep, exec, opts.Smither, conns, timeout); err != nil {
+			if err := compareConns(ctx, &opts, rng, sqlMutators, prep, exec, opts.Smither, conns, timeout); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
 			}
@@ -208,7 +220,7 @@ func main() {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n%s;\n", name, err, prep, exec)
 				// Try to reconnect.
 				db := opts.Databases[name]
-				newConn, err := NewConn(db.Addr, db.InitSQL, opts.InitSQL)
+				newConn, err := NewConn(db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
 				if err != nil {
 					log.Fatalf("tried to reconnect: %v\n", err)
 				}
@@ -226,6 +238,9 @@ type statement struct {
 
 func compareConns(
 	ctx context.Context,
+	opts *options,
+	rng *rand.Rand,
+	sqlMutations []mutations.Mutator,
 	prep, exec string,
 	smitherName string,
 	conns map[string]*Conn,
@@ -247,6 +262,13 @@ func compareConns(
 				}
 			}()
 			conn := conns[name]
+			if opts.Databases[name].AllowMutations {
+				newExec, changed := mutations.ApplyString(rng, exec, sqlMutations...)
+				if changed {
+					fmt.Printf("rewrote %s -> %s\n", exec, newExec)
+				}
+				exec = newExec
+			}
 			executeStart := timeutil.Now()
 			vals, err := conn.Values(ctx, prep, exec)
 			fmt.Printf("executed %s in %s: %v\n", name, timeutil.Since(executeStart), err)
