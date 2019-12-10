@@ -1,0 +1,5 @@
+show_partitions_stmt ::=
+	'SHOW' 'PARTITIONS' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'PARTITIONS' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_index_name
+	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_name '@' '*'
