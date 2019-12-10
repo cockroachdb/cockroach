@@ -64,7 +64,7 @@ func randTables(r *rand.Rand) string {
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
 	`)
 
-	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
+	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(10)+5,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
 	)
