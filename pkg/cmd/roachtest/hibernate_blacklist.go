@@ -22,15 +22,9 @@ var hibernateBlacklists = blacklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
-var hibernateBlackList20_1 = blacklist{
-	"org.hibernate.query.GroupByAliasTest.testCompoundIdAlias": "failing on Postgres",
-	"org.hibernate.query.GroupByAliasTest.testMultiIdAlias":    "failing on Postgres",
-}
+var hibernateBlackList20_1 = blacklist{}
 
-var hibernateBlackList19_2 = blacklist{
-	"org.hibernate.query.GroupByAliasTest.testCompoundIdAlias": "failing on Postgres",
-	"org.hibernate.query.GroupByAliasTest.testMultiIdAlias":    "failing on Postgres",
-}
+var hibernateBlackList19_2 = blacklist{}
 
 var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne": "6583",
