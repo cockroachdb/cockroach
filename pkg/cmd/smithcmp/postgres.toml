@@ -19,6 +19,9 @@ CREATE TABLE tab_orig AS
     FROM
         generate_series(1, 5) AS g;
 
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT, y INT, z INT);
+
 SET statement_timeout = '9s';
 """
 smither = "cockroach"
@@ -27,6 +30,7 @@ postgres = true
 
 [databases.cockroach]
 addr = "postgresql://root@localhost:26257/postgres?sslmode=disable"
+allowmutations = true
 initsql = """
 DROP DATABASE IF EXISTS postgres;
 CREATE DATABASE postgres;
