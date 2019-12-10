@@ -29,14 +29,17 @@ var (
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = columnFamilyMutator
+
+	// IndexStoringMutator modifies CREATE INDEX and CREATE TABLE statements with
+	// index definitions to have random storing definitions.
+	IndexStoringMutator MultiStatementMutation = indexStoringMutator
 )
 
 // StatementMutator defines a func that can change a statement.
 type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 
-// MultiStatementMutation defines a func that returns additional statements,
-// but must not change any of the statements passed.
-type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement)
+// MultiStatementMutation defines a func that can return a list of new and/or mutated statements.
+type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
 
 // Mutator defines a method that can mutate or add SQL statements.
 type Mutator interface {
@@ -58,11 +61,7 @@ func (sm StatementMutator) Mutate(
 func (msm MultiStatementMutation) Mutate(
 	rng *rand.Rand, stmts []tree.Statement,
 ) (mutated []tree.Statement, changed bool) {
-	additional := msm(rng, stmts)
-	if len(additional) == 0 {
-		return stmts, false
-	}
-	return append(stmts, additional...), true
+	return msm(rng, stmts)
 }
 
 // Apply executes all mutators on stmts. It returns the (possibly mutated and
@@ -117,7 +116,9 @@ type jsonStatistic struct {
 	NullCount     uint64   `json:"null_count"`
 }
 
-func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+func statisticsMutator(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
 	for _, stmt := range stmts {
 		create, ok := stmt.(*tree.CreateTable)
 		if !ok {
@@ -171,13 +172,16 @@ func statisticsMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
 				Stats: tree.NewDString(string(b)),
 			})
-			additional = append(additional, alter)
+			stmts = append(stmts, alter)
+			changed = true
 		}
 	}
-	return additional
+	return stmts, changed
 }
 
-func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tree.Statement) {
+func foreignKeyMutator(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
 	// Find columns in the tables.
 	cols := map[tree.TableName][]*tree.ColumnTableDef{}
 	byName := map[tree.TableName]*tree.CreateTable{}
@@ -332,7 +336,7 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 			if rng.Intn(2) == 0 {
 				actions.Update = randAction(rng, table)
 			}
-			additional = append(additional, &tree.AlterTable{
+			stmts = append(stmts, &tree.AlterTable{
 				Table: table.Table.ToUnresolvedObjectName(),
 				Cmds: tree.AlterTableCmds{&tree.AlterTableAddConstraint{
 					ConstraintDef: &tree.ForeignKeyConstraintTableDef{
@@ -344,11 +348,12 @@ func foreignKeyMutator(rng *rand.Rand, stmts []tree.Statement) (additional []tre
 					},
 				}},
 			})
+			changed = true
 			break
 		}
 	}
 
-	return additional
+	return stmts, changed
 }
 
 func randAction(rng *rand.Rand, table *tree.CreateTable) tree.ReferenceAction {
@@ -376,6 +381,103 @@ Loop:
 		}
 		return action
 	}
+}
+
+type tableInfo struct {
+	columnNames []tree.Name
+	pkCols      []tree.Name
+}
+
+func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := map[tree.Name]tableInfo{}
+	getTableInfoFromCreateStatement := func(ct *tree.CreateTable) tableInfo {
+		var columnNames []tree.Name
+		var pkCols []tree.Name
+		for _, def := range ct.Defs {
+			switch ast := def.(type) {
+			case *tree.ColumnTableDef:
+				columnNames = append(columnNames, ast.Name)
+				if ast.PrimaryKey {
+					pkCols = []tree.Name{ast.Name}
+				}
+			case *tree.UniqueConstraintTableDef:
+				if ast.PrimaryKey {
+					for _, elem := range ast.Columns {
+						pkCols = append(pkCols, elem.Column)
+					}
+				}
+			}
+		}
+		return tableInfo{columnNames: columnNames, pkCols: pkCols}
+	}
+	mapFromIndexCols := func(cols []tree.Name) map[tree.Name]struct{} {
+		colMap := map[tree.Name]struct{}{}
+		for _, col := range cols {
+			colMap[col] = struct{}{}
+		}
+		return colMap
+	}
+	generateStoringCols := func(rng *rand.Rand, tableCols []tree.Name, indexCols map[tree.Name]struct{}) []tree.Name {
+		var storingCols []tree.Name
+		for _, col := range tableCols {
+			_, ok := indexCols[col]
+			if ok {
+				continue
+			}
+			if rng.Intn(2) == 0 {
+				storingCols = append(storingCols, col)
+			}
+		}
+		return storingCols
+	}
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			tableInfo, ok := tables[ast.Table.TableName]
+			if !ok {
+				continue
+			}
+			// If we don't have a storing list, make one with 50% chance.
+			if ast.Storing == nil && rng.Intn(2) == 0 {
+				indexCols := mapFromIndexCols(tableInfo.pkCols)
+				for _, elem := range ast.Columns {
+					indexCols[elem.Column] = struct{}{}
+				}
+				ast.Storing = generateStoringCols(rng, tableInfo.columnNames, indexCols)
+				changed = true
+			}
+		case *tree.CreateTable:
+			// Write down this table for later.
+			tableInfo := getTableInfoFromCreateStatement(ast)
+			tables[ast.Table.TableName] = tableInfo
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey {
+						idx = &defType.IndexTableDef
+					} else {
+						continue
+					}
+				default:
+					continue
+				}
+				// If we don't have a storing list, make one with 50% chance.
+				if idx.Storing == nil && rng.Intn(2) == 0 {
+					indexCols := mapFromIndexCols(tableInfo.pkCols)
+					for _, elem := range idx.Columns {
+						indexCols[elem.Column] = struct{}{}
+					}
+					idx.Storing = generateStoringCols(rng, tableInfo.columnNames, indexCols)
+					changed = true
+				}
+			}
+		}
+	}
+	return stmts, changed
 }
 
 func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
