@@ -666,10 +666,7 @@ var specs = []stmtSpec{
 		regreplace: map[string]string{
 			regList: "",
 		},
-		replace: map[string]string{
-			"qualified_name": "table_name",
-		},
-		unlink: []string{"table_name", "index_name"},
+		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
 		name:    "drop_role_stmt",
@@ -723,8 +720,8 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_index_partition_by",
 		stmt:    "alter_oneindex_stmt",
-		inline:  []string{"alter_index_cmds", "alter_index_cmd", "partition_by"},
-		replace: map[string]string{"table_index_name": "table_name '@' index_name"},
+		inline:  []string{"alter_index_cmds", "alter_index_cmd", "partition_by", "table_index_name"},
+		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
 		name:    "create_table_partition_by",
@@ -931,8 +928,8 @@ var specs = []stmtSpec{
 		stmt:    "alter_rename_index_stmt",
 		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'INDEX'")},
 		inline:  []string{"table_index_name"},
-		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
-		unlink:  []string{"table_name", "index_name"}},
+		replace: map[string]string{"standalone_index_name": "index_name"},
+	},
 	{
 		name:    "rename_sequence",
 		stmt:    "alter_rename_sequence_stmt",
@@ -1263,8 +1260,7 @@ var specs = []stmtSpec{
 		name:    "split_index_at",
 		stmt:    "alter_split_index_stmt",
 		inline:  []string{"table_index_name"},
-		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
-		unlink:  []string{"table_name", "index_name"},
+		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
 		name:   "split_table_at",
@@ -1297,8 +1293,7 @@ var specs = []stmtSpec{
 		name:    "unsplit_index_at",
 		stmt:    "alter_unsplit_index_stmt",
 		inline:  []string{"table_index_name"},
-		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
-		unlink:  []string{"table_name", "index_name"},
+		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
 		name:   "unsplit_table_at",
