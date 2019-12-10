@@ -275,7 +275,6 @@ var psycopgBlackList20_1 = blacklist{
 	"tests.test_transaction.TransactionTests.test_rollback":                                                  "5807",
 	"tests.test_types_basic.TypesBasicTests.testArray":                                                       "32552",
 	"tests.test_types_basic.TypesBasicTests.testArrayOfNulls":                                                "32552",
-	"tests.test_types_basic.TypesBasicTests.testEmptyArray":                                                  "23299",
 	"tests.test_types_basic.TypesBasicTests.testEmptyArrayRegression":                                        "36179",
 	"tests.test_types_basic.TypesBasicTests.testNestedArrays":                                                "32552",
 	"tests.test_types_basic.TypesBasicTests.testNestedEmptyArray":                                            "32552",
