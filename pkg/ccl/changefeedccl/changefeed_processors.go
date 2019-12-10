@@ -88,8 +88,7 @@ func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp
 		// on the timestamps of the updates contained within the file.
 		// Files being created at the point this method is called are guaranteed
 		// to contain row updates with timestamps strictly greater than the local
-		// span frontier timestamp (not in all cases, there's a known bug with
-		// the poller that can violate this. See: #41415. A fix is in progress).
+		// span frontier timestamp.
 		return frontier.Next()
 	}
 	// This should only be returned in the case where the changefeed job hasn't yet

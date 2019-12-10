@@ -58,13 +58,14 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	statementTime := hlc.Timestamp{WallTime: timestamps[0].UnixNano()}
 
 	runBench := func(b *testing.B, feedClock *hlc.Clock) {
 		var sinkBytes int64
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			b.StartTimer()
-			sink, cancelFeed, err := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`)
+			sink, cancelFeed, err := createBenchmarkChangefeed(ctx, s, feedClock, `d`, `bank`, statementTime)
 			require.NoError(b, err)
 			for rows := 0; rows < numRows; {
 				r, sb := sink.WaitForEmit()
@@ -169,10 +170,12 @@ func createBenchmarkChangefeed(
 	s serverutils.TestServerInterface,
 	feedClock *hlc.Clock,
 	database, table string,
+	statementTime hlc.Timestamp,
 ) (*benchSink, func() error, error) {
 	tableDesc := sqlbase.GetTableDescriptor(s.DB(), database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan()}
 	details := jobspb.ChangefeedDetails{
+		StatementTime: statementTime,
 		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
 			StatementTimeName: tableDesc.Name,
 		}},

@@ -12,7 +12,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -309,6 +312,8 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 // operation.
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -470,6 +475,14 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
 }
 
 func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
@@ -546,6 +559,8 @@ func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
 // allowed.
 func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -673,11 +688,21 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
 }
 
 // Regression test for #34314
 func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -696,6 +721,14 @@ func TestChangefeedAfterSchemaChangeBackfill(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	log.Flush()
+	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1, regexp.MustCompile("cdc ux violation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		t.Fatalf("Found violation of CDC's guarantees: %v", entries)
+	}
 }
 
 func TestChangefeedInterleaved(t *testing.T) {
@@ -1853,4 +1886,122 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 	// The mem buffer is only used with RangeFeed.
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+// Regression test for #41694
+func TestChangefeedRestartDuringBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test sometimes flakes with an error coming out of the leasing code.
+	// Probably not worth the time to deflake it since it only exists in this
+	// branch.
+	t.Skip("sometimes fails with 'lease-insert: duplicate key value'")
+
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		beforeEmitRowCh := make(chan error, 20)
+		knobs.BeforeEmitRow = func(ctx context.Context) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case err := <-beforeEmitRowCh:
+				return err
+			}
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0), (1), (2), (3)`)
+
+		// Force the "enterprise" variant to use rangefeed, otherwise both variants
+		// use poller. The bug exists in both branches, so we want test coverage on
+		// both.
+		if strings.Contains(t.Name(), `enterprise`) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = true`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`).(*cdctest.TableFeed)
+		defer closeFeed(t, foo)
+
+		// TODO(dan): At a high level, all we're doing is trying to restart a
+		// changefeed in the middle of changefeed backfill after a schema change
+		// finishes. It turns out this is pretty hard to do with our current testing
+		// knobs and this test ends up being pretty brittle. I'd love it if anyone
+		// thought of a better way to do this.
+
+		// Read the initial data in the rows.
+		for i := 0; i < 4; i++ {
+			beforeEmitRowCh <- nil
+		}
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0}}`,
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+
+		// Run a schema change that backfills kvs.
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING DEFAULT 'backfill'`)
+
+		// Unblock emit for each kv written by the schema change's backfill. The
+		// changefeed actually emits these, but we lose it to overaggressive
+		// duplicate detection in tableFeed.
+		// TODO(dan): Track duplicates more precisely in tableFeed.
+		for i := 0; i < 4; i++ {
+			beforeEmitRowCh <- nil
+		}
+
+		// Unblock the emit for *all but one* of the rows emitted by the changefeed
+		// backfill (run after the schema change completes and the final table
+		// descriptor is written). The reason this test has 4 rows is because the
+		// `sqlSink` that powers `tableFeed` only flushes after it has 3 rows, so we
+		// need 1 more than that to guarantee that this first one gets flushed.
+		for i := 0; i < 3; i++ {
+			beforeEmitRowCh <- nil
+		}
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "backfill"}}`,
+		})
+
+		// Restart the changefeed without allowing the second row to be backfilled.
+		sqlDB.Exec(t, `PAUSE JOB $1`, foo.JobID)
+		// Make extra sure that the zombie changefeed can't write any more data.
+		beforeEmitRowCh <- MarkRetryableError(errors.New(`nope don't write it`))
+
+		// Insert some data that we should only see out of the changefeed after it
+		// re-runs the backfill.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (6, 'bar')`)
+
+		// Unblock all later emits, we don't need this control anymore.
+		close(beforeEmitRowCh)
+
+		// Resume the changefeed and the backfill should start up again. Currently
+		// this does the entire backfill again, you could imagine in the future that
+		// we do some sort of backfill checkpointing and start the backfill up from
+		// the last checkpoint.
+		sqlDB.Exec(t, `RESUME JOB $1`, foo.JobID)
+		assertPayloads(t, foo, []string{
+			// The changefeed actually emits this row, but we lose it to
+			// overaggressive duplicate detection in tableFeed.
+			// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
+			// `foo: [0]->{"after": {"a": 0, "b": "backfill"}}`,
+			`foo: [1]->{"after": {"a": 1, "b": "backfill"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "backfill"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "backfill"}}`,
+		})
+
+		assertPayloads(t, foo, []string{
+			`foo: [6]->{"after": {"a": 6, "b": "bar"}}`,
+		})
+	}
+
+	// Only the enterprise version uses jobs.
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`poller`, pollerTest(enterpriseTest, testFn))
 }
