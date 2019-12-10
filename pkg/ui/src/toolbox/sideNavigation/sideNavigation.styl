@@ -6,3 +6,15 @@
 .side-navigation__navigation-item
   list-style-type none
   margin-bottom $spacing-small
+
+.side-navigation__navigation-item:hover,
+.side-navigation__navigation-item:active
+  color $colors--link
+
+.side-navigation__navigation-item--active
+  color $colors--link
+
+.side-navigation__navigation-item--disabled
+  color $colors--disabled
+  pointer-events none
+  cursor default
