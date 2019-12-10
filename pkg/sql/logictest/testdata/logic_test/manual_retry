@@ -57,8 +57,13 @@ statement ok
 BEGIN
 
 # Ensure that ident case rules are used.
-statement error pq: unimplemented: SAVEPOINT not supported except for cockroach_restart
+statement ok
 SAVEPOINT "COCKROACH_RESTART"
+
+query TB
+SHOW SAVEPOINT STATUS
+----
+COCKROACH_RESTART  false
 
 statement ok
 ROLLBACK; BEGIN
@@ -132,33 +137,49 @@ BEGIN TRANSACTION; SAVEPOINT something_else; COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT foo
 
-statement error pq: SAVEPOINT "foo" is in use
+statement error pq: savepoint bar does not exist
 ROLLBACK TO SAVEPOINT bar
 
 # Verify we're doing the right thing for non-quoted idents.
 statement ok
 ROLLBACK TO SAVEPOINT FOO
 
+statement ok
+ABORT; BEGIN TRANSACTION
+
 # Verify use of quoted idents.
 statement ok
 SAVEPOINT "Foo Bar"
 
-statement error pq: SAVEPOINT "Foo Bar" is in use
+statement error pq: savepoint foobar does not exist
 ROLLBACK TO SAVEPOINT FooBar
 
 # Verify case-sensitivity of quoted idents.
-statement error pq: SAVEPOINT "Foo Bar" is in use
+statement error pq: savepoint foo bar does not exist
 ROLLBACK TO SAVEPOINT "foo bar"
 
 statement ok
 ROLLBACK TO SAVEPOINT "Foo Bar"
 
+query TB
+SHOW SAVEPOINT STATUS
+----
+Foo Bar  true
+
+statement ok
+ABORT; BEGIN TRANSACTION
+
 # Verify case-sensitivity of quoted vs. unquoted idents.
 statement ok
 SAVEPOINT "UpperCase"
 
-statement error pq: SAVEPOINT "UpperCase" is in use
+statement error pq: savepoint uppercase does not exist
 ROLLBACK TO SAVEPOINT UpperCase
+
+query TB
+SHOW SAVEPOINT STATUS
+----
+UpperCase  true
 
 statement ok
 ABORT

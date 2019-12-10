@@ -919,6 +919,10 @@ type connExecutor struct {
 		// stateOpen.
 		autoRetryCounter int
 
+		// numDDL keeps track of how many DDL statements have been
+		// executed so far.
+		numDDL int
+
 		// txnRewindPos is the position within stmtBuf to which we'll rewind when
 		// performing automatic retries. This is more or less the position where the
 		// current transaction started.
@@ -2407,22 +2411,19 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 	case *tree.RollbackTransaction:
 		sc.TxnRollbackCount.Inc()
 	case *tree.Savepoint:
-		// TODO(knz): Sanitize this.
-		if err := ex.validateSavepointName(t.Name); err == nil {
+		if ex.isRestartSavepoint(t.Name) {
 			sc.RestartSavepointCount.Inc()
 		} else {
 			sc.SavepointCount.Inc()
 		}
 	case *tree.ReleaseSavepoint:
-		// TODO(knz): Sanitize this.
-		if err := ex.validateSavepointName(t.Savepoint); err == nil {
+		if ex.isRestartSavepoint(t.Savepoint) {
 			sc.ReleaseRestartSavepointCount.Inc()
 		} else {
 			sc.ReleaseSavepointCount.Inc()
 		}
 	case *tree.RollbackToSavepoint:
-		// TODO(knz): Sanitize this.
-		if err := ex.validateSavepointName(t.Savepoint); err == nil {
+		if ex.isRestartSavepoint(t.Savepoint) {
 			sc.RollbackToRestartSavepointCount.Inc()
 		} else {
 			sc.RollbackToSavepointCount.Inc()

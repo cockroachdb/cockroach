@@ -63,6 +63,11 @@ type Builder struct {
 	allowAutoCommit bool
 
 	allowInsertFastPath bool
+
+	// -- output --
+
+	// IsDDL is set to true if the statement contains DDL.
+	IsDDL bool
 }
 
 // New constructs an instance of the execution node builder using the

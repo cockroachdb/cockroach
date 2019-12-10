@@ -167,7 +167,8 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// Build the plan tree.
 	root := execMemo.RootExpr()
 	execFactory := makeExecFactory(p)
-	plan, err := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext()).Build()
+	bld := execbuilder.New(&execFactory, execMemo, &opc.catalog, root, p.EvalContext())
+	plan, err := bld.Build()
 	if err != nil {
 		return err
 	}
@@ -175,6 +176,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	result := plan.(*planTop)
 	result.AST = stmt.AST
 	result.flags = opc.flags
+	if bld.IsDDL {
+		result.flags.Set(planFlagIsDDL)
+	}
 
 	cols := planColumns(result.plan)
 	if stmt.ExpectedTypes != nil {

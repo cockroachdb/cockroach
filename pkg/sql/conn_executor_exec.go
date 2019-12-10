@@ -573,6 +573,15 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 ) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
 	ex.clearSavepoints()
 
+	return ex.finalizeCommitTransactionInternal(ctx, stmt)
+}
+
+// finalizeCommitTrransaction is like commitSQLTransactionInternal but
+// preserves the savepoint structure. Used by ROLLBACK TO SAVEPOINT
+// cockroach_restart.
+func (ex *connExecutor) finalizeCommitTransactionInternal(
+	ctx context.Context, stmt tree.Statement,
+) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
 	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
 		ev, payload = ex.makeErrEvent(err, stmt)
 		return ev, payload, false
@@ -743,6 +752,13 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return err
 	}
+
+	// TODO(knz): Remove this accounting if/when savepoint rollbacks
+	// support rolling back over DDL.
+	if planner.curPlan.flags.IsSet(planFlagIsDDL) {
+		ex.extraTxnState.numDDL++
+	}
+
 	return nil
 }
 
@@ -1018,6 +1034,8 @@ func (ex *connExecutor) runObserverStatement(
 	switch sqlStmt := stmt.AST.(type) {
 	case *tree.ShowTransactionStatus:
 		return ex.runShowTransactionState(ctx, res)
+	case *tree.ShowSavepointStatus:
+		return ex.runShowSavepointState(ctx, res)
 	case *tree.ShowSyntax:
 		return ex.runShowSyntax(ctx, sqlStmt.Statement, res)
 	case *tree.SetTracing:
