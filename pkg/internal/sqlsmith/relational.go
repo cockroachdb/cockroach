@@ -41,22 +41,28 @@ func makeSchemaTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, co
 	if len(s.tables) == 0 {
 		return makeValuesTable(s, refs, forJoin)
 	}
-	expr, _, _, exprRefs, ok := s.getSchemaTable()
+	expr, _, _, exprRefs, ok := s.getSchemaTable(true /* useIndexHint */)
 	return expr, exprRefs, ok
 }
 
-func (s *Smither) getSchemaTable() (tree.TableExpr, *tree.TableName, *tableRef, colRefs, bool) {
+func (s *Smither) getSchemaTable(
+	useIndexHint bool,
+) (tree.TableExpr, *tree.TableName, *tableRef, colRefs, bool) {
 	table, ok := s.getRandTable()
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
 	alias := s.name("tab")
 	name := tree.NewUnqualifiedTableName(alias)
-	expr, refs := s.tableExpr(table, name)
-	return &tree.AliasedTableExpr{
+	expr, refs := s.tableExpr(table.tableRef, name)
+	ate := &tree.AliasedTableExpr{
 		Expr: expr,
 		As:   tree.AliasClause{Alias: alias},
-	}, name, table, refs, true
+	}
+	if useIndexHint {
+		ate.IndexFlags = table.indexFlags
+	}
+	return ate, name, table.tableRef, refs, true
 }
 
 func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr, colRefs) {
@@ -297,7 +303,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	leftAliasName := tree.NewUnqualifiedTableName(leftAlias)
 	rightAliasName := tree.NewUnqualifiedTableName(rightAlias)
 
-	// Now look for one that satisfies our contraints (some shared prefix
+	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one. We rely on
 	// Go's non-deterministic map iteration ordering for randomness.
 	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
@@ -634,7 +640,7 @@ func (s *Smither) makeOrderedAggregate() (
 ) {
 	// We need a SELECT with a GROUP BY on ordered columns. Choose a random
 	// table and index from that table and pick a random prefix from it.
-	tableExpr, tableAlias, table, tableColRefs, ok := s.getSchemaTable()
+	tableExpr, tableAlias, table, tableColRefs, ok := s.getSchemaTable(true /* useIndexHint */)
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
@@ -786,7 +792,7 @@ func makeDelete(s *Smither) (tree.Statement, bool) {
 }
 
 func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
-	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
+	table, _, tableRef, tableRefs, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, nil, false
 	}
@@ -830,7 +836,7 @@ func makeUpdate(s *Smither) (tree.Statement, bool) {
 }
 
 func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
-	table, _, tableRef, tableRefs, ok := s.getSchemaTable()
+	table, _, tableRef, tableRefs, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, nil, false
 	}
@@ -909,7 +915,7 @@ func makeInsert(s *Smither) (tree.Statement, bool) {
 // used only in the optional returning section. Hence the irregular return
 // signature.
 func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
-	table, _, tableRef, _, ok := s.getSchemaTable()
+	table, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, nil, false
 	}

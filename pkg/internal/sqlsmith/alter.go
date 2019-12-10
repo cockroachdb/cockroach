@@ -74,7 +74,7 @@ func makeCreateTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropTable(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -86,7 +86,7 @@ func makeDropTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeRenameTable(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -105,7 +105,7 @@ func makeRenameTable(s *Smither) (tree.Statement, bool) {
 }
 
 func makeRenameColumn(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -119,7 +119,7 @@ func makeRenameColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -138,7 +138,7 @@ func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAddColumn(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, colRefs, ok := s.getSchemaTable()
+	_, _, tableRef, colRefs, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -172,7 +172,7 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, colRefs, ok := s.getSchemaTable()
+	_, _, tableRef, colRefs, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -210,7 +210,7 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropColumn(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
@@ -228,7 +228,7 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateIndex(s *Smither) (tree.Statement, bool) {
-	_, _, tableRef, _, ok := s.getSchemaTable()
+	_, _, tableRef, _, ok := s.getSchemaTable(false /* useIndexHint */)
 	if !ok {
 		return nil, false
 	}
