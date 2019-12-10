@@ -313,8 +313,8 @@ func TestSavepointMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := txn.Exec("SAVEPOINT blah"); err == nil {
-		t.Fatal("expected an error but didn't get one")
+	if _, err := txn.Exec("SAVEPOINT blah"); err != nil {
+		t.Fatal(err)
 	}
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
