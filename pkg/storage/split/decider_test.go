@@ -11,6 +11,7 @@
 package split
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -205,4 +206,41 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	}
 
 	require.Equal(t, expK, k)
+}
+
+func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	intn := rand.New(rand.NewSource(11)).Intn
+
+	var d Decider
+	Init(&d, intn, func() float64 { return 1.0 })
+
+	baseKey := keys.MakeTablePrefix(51)
+	for i := 0; i < 4; i++ {
+		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
+	}
+	c0 := func() roachpb.Span {
+		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+1)...)}
+	}
+	c1 := func() roachpb.Span {
+		return roachpb.Span{Key: append([]byte(nil), encoding.EncodeUvarintAscending(baseKey, math.MaxInt32+2)...)}
+	}
+
+	_, err := keys.EnsureSafeSplitKey(c1().Key)
+	require.Error(t, err)
+
+	var k roachpb.Key
+	var now time.Time
+	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
+		now = now.Add(500 * time.Millisecond)
+		d.Record(now, 1, c0)
+		now = now.Add(500 * time.Millisecond)
+		d.Record(now, 1, c1)
+		k = d.MaybeSplitKey(now)
+		if len(k) != 0 {
+			break
+		}
+	}
+
+	require.Equal(t, c1().Key, k)
 }
