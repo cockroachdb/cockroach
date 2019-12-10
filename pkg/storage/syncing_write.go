@@ -84,7 +84,7 @@ func writeFileSyncing(
 		sync = false
 	}
 
-	f, err := eng.OpenFile(filename)
+	f, err := eng.CreateFile(filename)
 	if err != nil {
 		if strings.Contains(err.Error(), "No such file or directory") {
 			return os.ErrNotExist

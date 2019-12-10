@@ -15,7 +15,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1108,5 +1111,238 @@ func TestIngestDelayLimit(t *testing.T) {
 		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}},
 	} {
 		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.stats))
+	}
+}
+
+func TestEngineFS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
+
+			testCases := []string{
+				"1a: f = create /bar",
+				"1b: f.write abcdefghijklmnopqrstuvwxyz",
+				"1c: f.close",
+				"2a: f = open /bar",
+				"2b: f.read 5 == abcde",
+				"2c: f.readat 2 1 == bc",
+				"2d: f.readat 5 20 == uvwxy",
+				"2e: f.close",
+				"3a: link /bar /baz",
+				"3b: f = open /baz",
+				"3c: f.read 5 == abcde",
+				"3d: f.close",
+				"4a: delete /bar",
+				"4b: f = open /baz",
+				"4c: f.read 5 == abcde",
+				"4d: f.close",
+				"4e: open /bar [does-not-exist]",
+				"5a: rename /baz /foo",
+				"5b: f = open /foo",
+				"5c: f.readat 5 20 == uvwxy",
+				"5d: f.close",
+				"5e: open /baz [does-not-exist]",
+				"6a: f = create /red",
+				"6b: f.write blue",
+				"6c: f.sync",
+				"6d: f.close",
+				"7a: f = opendir /",
+				"7b: f.sync",
+				"7c: f.close",
+			}
+
+			var f File
+			for _, tc := range testCases {
+				s := strings.Split(tc, " ")[1:]
+
+				saveF := s[0] == "f" && s[1] == "="
+				if saveF {
+					s = s[2:]
+				}
+
+				fails := s[len(s)-1][0] == '['
+				var errorStr string
+				if fails {
+					errorStr = s[len(s)-1][1:]
+					errorStr = errorStr[:len(errorStr)-1]
+					s = s[:len(s)-1]
+				}
+
+				var (
+					g   File
+					err error
+				)
+				switch s[0] {
+				case "create":
+					g, err = e.CreateFile(s[1])
+				case "link":
+					err = e.LinkFile(s[1], s[2])
+				case "open":
+					g, err = e.OpenFile(s[1])
+				case "opendir":
+					g, err = e.OpenDir(s[1])
+				case "delete":
+					err = e.DeleteFile(s[1])
+				case "rename":
+					err = e.RenameFile(s[1], s[2])
+				case "f.write":
+					_, err = f.Write([]byte(s[1]))
+				case "f.read":
+					n, _ := strconv.Atoi(s[1])
+					buf := make([]byte, n)
+					_, err = io.ReadFull(f, buf)
+					if err != nil {
+						break
+					}
+					if got, want := string(buf), s[3]; got != want {
+						t.Fatalf("%q: got %q, want %q", tc, got, want)
+					}
+				case "f.readat":
+					n, _ := strconv.Atoi(s[1])
+					off, _ := strconv.Atoi(s[2])
+					buf := make([]byte, n)
+					_, err = f.ReadAt(buf, int64(off))
+					if err != nil {
+						break
+					}
+					if got, want := string(buf), s[4]; got != want {
+						t.Fatalf("%q: got %q, want %q", tc, got, want)
+					}
+				case "f.close":
+					f, err = nil, f.Close()
+				case "f.sync":
+					err = f.Sync()
+				default:
+					t.Fatalf("bad test case: %q", tc)
+				}
+
+				if saveF {
+					f, g = g, nil
+				} else if g != nil {
+					g.Close()
+				}
+
+				if fails {
+					if err == nil {
+						t.Fatalf("%q: got nil error, want non-nil %s", tc, errorStr)
+					}
+					var actualErrStr string
+					if os.IsExist(err) {
+						actualErrStr = "exists"
+					} else if os.IsNotExist(err) {
+						actualErrStr = "does-not-exist"
+					} else {
+						actualErrStr = "error"
+					}
+					if errorStr != actualErrStr {
+						t.Fatalf("%q: got %s, want %s", tc, actualErrStr, errorStr)
+					}
+				} else {
+					if err != nil {
+						t.Fatalf("%q: %v", tc, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+// These FS implementations are not in-memory.
+var engineRealFSImpls = []struct {
+	name   string
+	create func(*testing.T, string) Engine
+}{
+	{"rocksdb", func(t *testing.T, dir string) Engine {
+		db, err := NewRocksDB(
+			RocksDBConfig{
+				StorageConfig: base.StorageConfig{
+					Settings: cluster.MakeTestingClusterSettings(),
+					Dir:      dir,
+				},
+			},
+			RocksDBCache{},
+		)
+		if err != nil {
+			t.Fatalf("could not create new rocksdb instance at %s: %+v", dir, err)
+		}
+		return db
+	}},
+	{"pebble", func(t *testing.T, dir string) Engine {
+
+		db, err := NewPebble(
+			context.Background(),
+			PebbleConfig{
+				StorageConfig: base.StorageConfig{
+					Dir: dir,
+				},
+				Opts: testPebbleOptions(vfs.Default),
+			})
+		if err != nil {
+			t.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
+		}
+		return db
+	}},
+}
+
+func TestEngineFSFileNotFoundError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, engineImpl := range engineRealFSImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			dir, dirCleanup := testutils.TempDir(t)
+			defer dirCleanup()
+			db := engineImpl.create(t, dir)
+			defer db.Close()
+
+			// Verify DeleteFile returns os.ErrNotExist if file does not exist.
+			if err := db.DeleteFile("/non/existent/file"); !os.IsNotExist(err) {
+				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			}
+
+			// Verify DeleteDirAndFiles returns os.ErrNotExist if dir does not exist.
+			if err := db.DeleteDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
+				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			}
+
+			fname := filepath.Join(dir, "random.file")
+			data := "random data"
+			if f, err := db.CreateFile(fname); err != nil {
+				t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
+			} else {
+				// Write data to file so we can read it later.
+				if _, err := f.Write([]byte(data)); err != nil {
+					t.Fatalf("error writing data: '%s' to file %s, got err %v", data, fname, err)
+				}
+				if err := f.Sync(); err != nil {
+					t.Fatalf("error syncing data, got err %v", err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatalf("error closing file %s, got err %v", fname, err)
+				}
+			}
+
+			if b, err := db.ReadFile(fname); err != nil {
+				t.Errorf("unable to read file with filename %s, got err %v", fname, err)
+			} else if string(b) != data {
+				t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
+			}
+
+			if err := db.DeleteFile(fname); err != nil {
+				t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
+			}
+
+			// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
+			if _, err := db.ReadFile(fname); !os.IsNotExist(err) {
+				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			}
+
+			// Verify DeleteFile returns os.ErrNotExist if deleting an already deleted file.
+			if err := db.DeleteFile(fname); !os.IsNotExist(err) {
+				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			}
+		})
 	}
 }

@@ -13,6 +13,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -373,14 +374,42 @@ func (t TeeEngine) InMem() bool {
 	return t.inMem
 }
 
-// OpenFile implements the Engine interface.
-func (t TeeEngine) OpenFile(filename string) (DBFile, error) {
-	file1, err := t.eng1.OpenFile(filename)
+// CreateFile implements the FS interface.
+func (t TeeEngine) CreateFile(filename string) (File, error) {
+	file1, err := t.eng1.CreateFile(filename)
 	if !t.inMem {
 		// No need to write twice if the two engines share the same file system.
 		return file1, err
 	}
+	file2, err2 := t.eng2.CreateFile(filename)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	return &TeeEngineFile{
+		ctx:   t.ctx,
+		file1: file1,
+		file2: file2,
+	}, nil
+}
+
+// OpenFile implements the FS interface.
+func (t TeeEngine) OpenFile(filename string) (File, error) {
+	file1, err := t.eng1.OpenFile(filename)
 	file2, err2 := t.eng2.OpenFile(filename)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	return &TeeEngineFile{
+		ctx:   t.ctx,
+		file1: file1,
+		file2: file2,
+	}, nil
+}
+
+// OpenDir implements the FS interface.
+func (t TeeEngine) OpenDir(name string) (File, error) {
+	file1, err := t.eng1.OpenDir(name)
+	file2, err2 := t.eng2.OpenDir(name)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, err
 	}
@@ -407,7 +436,7 @@ func (t TeeEngine) WriteFile(filename string, data []byte) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// DeleteFile implements the Engine interface.
+// DeleteFile implements the FS interface.
 func (t TeeEngine) DeleteFile(filename string) error {
 	err := t.eng1.DeleteFile(filename)
 	if !t.inMem {
@@ -429,7 +458,7 @@ func (t TeeEngine) DeleteDirAndFiles(dir string) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// LinkFile implements the Engine interface.
+// LinkFile implements the FS interface.
 func (t TeeEngine) LinkFile(oldname, newname string) error {
 	err := t.eng1.LinkFile(oldname, newname)
 	if !t.inMem {
@@ -437,6 +466,17 @@ func (t TeeEngine) LinkFile(oldname, newname string) error {
 		return err
 	}
 	err2 := t.eng2.LinkFile(oldname, newname)
+	return fatalOnErrorMismatch(t.ctx, err, err2)
+}
+
+// RenameFile implements the FS interface.
+func (t TeeEngine) RenameFile(oldname, newname string) error {
+	err := t.eng1.RenameFile(oldname, newname)
+	if !t.inMem {
+		// No need to write twice if the two engines share the same file system.
+		return err
+	}
+	err2 := t.eng2.RenameFile(oldname, newname)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
@@ -449,31 +489,31 @@ func (t TeeEngine) CreateCheckpoint(dir string) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// TeeEngineFile is a DBFile that writes to both underlying eng1
+// TeeEngineFile is a File that forwards to both underlying eng1
 // and eng2 files.
 type TeeEngineFile struct {
 	ctx   context.Context
-	file1 DBFile
-	file2 DBFile
+	file1 File
+	file2 File
 }
 
-var _ DBFile = &TeeEngineFile{}
+var _ File = &TeeEngineFile{}
 
-// Close implements the DBFile interface.
+// Close implements the File interface.
 func (t TeeEngineFile) Close() error {
 	err := t.file1.Close()
 	err2 := t.file2.Close()
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// Sync implements the DBFile interface.
+// Sync implements the File interface.
 func (t TeeEngineFile) Sync() error {
 	err := t.file1.Sync()
 	err2 := t.file2.Sync()
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
-// Write implements the DBFile interface.
+// Write implements the File interface.
 func (t TeeEngineFile) Write(p []byte) (int, error) {
 	n, err := t.file1.Write(p)
 	n2, err2 := t.file2.Write(p)
@@ -482,6 +522,40 @@ func (t TeeEngineFile) Write(p []byte) (int, error) {
 	}
 	if n != n2 {
 		log.Fatalf(t.ctx, "mismatching number of bytes written by engines: %d != %d", n, n2)
+	}
+	return n, nil
+}
+
+// Read implements the File interface.
+func (t TeeEngineFile) Read(p []byte) (n int, err error) {
+	p2 := make([]byte, len(p))
+	n, err = t.file1.Read(p)
+	n2, err2 := t.file2.Read(p2)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return 0, err
+	}
+	if n != n2 {
+		log.Fatalf(t.ctx, "mismatching number of bytes read by engines: %d != %d", n, n2)
+	}
+	if !bytes.Equal(p[:n], p2[:n]) {
+		log.Fatalf(t.ctx, "different bytes read by engines: %s != %s", hex.EncodeToString(p[:n]), hex.EncodeToString(p2[:n]))
+	}
+	return n, nil
+}
+
+// ReadAt implements the File interface.
+func (t *TeeEngineFile) ReadAt(p []byte, off int64) (n int, err error) {
+	p2 := make([]byte, len(p))
+	n, err = t.file1.ReadAt(p, off)
+	n2, err2 := t.file2.ReadAt(p2, off)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return 0, err
+	}
+	if n != n2 {
+		log.Fatalf(t.ctx, "mismatching number of bytes read by engines: %d != %d", n, n2)
+	}
+	if !bytes.Equal(p[:n], p2[:n]) {
+		log.Fatalf(t.ctx, "different bytes read by engines: %s != %s", hex.EncodeToString(p[:n]), hex.EncodeToString(p2[:n]))
 	}
 	return n, nil
 }
