@@ -10,6 +10,9 @@
 
 @require '~src/toolbox/tokens/index.styl'
 
+.text
+  letter-spacing $letter-spacing--compact
+
 .text > *,
 .text > *:hover,
 .text > *:active
@@ -20,4 +23,9 @@
   font-size $font-size--medium
   line-height $line-height--medium
   font-weight $font-weight--light
-  letter-spacing $letter-spacing--compact
+
+.text--body-strong
+  font-size $font-size--medium
+  line-height $line-height--medium
+  font-weight $font-weight--bold
+
