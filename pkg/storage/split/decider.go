@@ -165,10 +165,16 @@ func (d *Decider) MaybeSplitKey(now time.Time) roachpb.Key {
 		//
 		// We take the risk that the result may sometimes not be a good split
 		// point (or even in this range).
-		var err error
-		key, err = keys.EnsureSafeSplitKey(d.mu.splitFinder.Key())
-		if err != nil {
-			key = nil
+		//
+		// Note that we ignore EnsureSafeSplitKey when it returns an error since
+		// that error only tells us that this key couldn't possibly be a SQL
+		// key. This is more common than one might think since SQL issues plenty
+		// of scans over all column families, meaning that we'll frequently find
+		// a key that has no column family suffix and thus errors out in
+		// EnsureSafeSplitKey.
+		key = d.mu.splitFinder.Key()
+		if safeKey, err := keys.EnsureSafeSplitKey(key); err == nil {
+			key = safeKey
 		}
 	}
 	d.mu.Unlock()
