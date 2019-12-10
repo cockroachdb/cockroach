@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -499,23 +498,17 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	var smither *sqlsmith.Smither
 
-	tableStmts := make([]string, 2)
+	tableStmts := make([]string, 0)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		// Create some random tables for the smither's column references and INSERT.
-		for i := 0; i < len(tableStmts); i++ {
-			create := sqlbase.RandCreateTable(r.Rnd, "table", i)
-			stmt := create.String()
-			if err := db.exec(ctx, stmt); err != nil {
+		setups := []string{"rand-tables", "seed"}
+		for _, s := range setups {
+			randTables := sqlsmith.Setups[s](r.Rnd)
+			if err := db.exec(ctx, randTables); err != nil {
 				return err
 			}
-			fmt.Printf("%s;\n", stmt)
-			tableStmts[i] = stmt
+			tableStmts = append(tableStmts, randTables)
+			fmt.Printf("%s;\n", randTables)
 		}
-		seed := sqlsmith.Setups["seed"](r.Rnd)
-		if err := db.exec(ctx, seed); err != nil {
-			return err
-		}
-		fmt.Printf("%s;\n", seed)
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())
 		return err
