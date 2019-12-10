@@ -41,22 +41,40 @@ func makeSchemaTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, co
 	if len(s.tables) == 0 {
 		return makeValuesTable(s, refs, forJoin)
 	}
-	expr, _, _, exprRefs, ok := s.getSchemaTable()
+	expr, _, _, exprRefs, ok := s.getSchemaTableWithIndexHint()
 	return expr, exprRefs, ok
 }
 
+// getSchemaTable returns a table expression without the index hint.
 func (s *Smither) getSchemaTable() (tree.TableExpr, *tree.TableName, *tableRef, colRefs, bool) {
+	ate, name, tableRef, refs, ok := s.getSchemaTableWithIndexHint()
+	if ate != nil {
+		ate.IndexFlags = nil
+	}
+	return ate, name, tableRef, refs, ok
+}
+
+// getSchemaTableWithIndexHint returns a table expression that might contain an
+// index hint.
+func (s *Smither) getSchemaTableWithIndexHint() (
+	*tree.AliasedTableExpr,
+	*tree.TableName,
+	*tableRef,
+	colRefs,
+	bool,
+) {
 	table, ok := s.getRandTable()
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
 	alias := s.name("tab")
 	name := tree.NewUnqualifiedTableName(alias)
-	expr, refs := s.tableExpr(table, name)
+	expr, refs := s.tableExpr(table.tableRef, name)
 	return &tree.AliasedTableExpr{
-		Expr: expr,
-		As:   tree.AliasClause{Alias: alias},
-	}, name, table, refs, true
+		Expr:       expr,
+		IndexFlags: table.indexFlags,
+		As:         tree.AliasClause{Alias: alias},
+	}, name, table.tableRef, refs, true
 }
 
 func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr, colRefs) {
@@ -297,7 +315,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	leftAliasName := tree.NewUnqualifiedTableName(leftAlias)
 	rightAliasName := tree.NewUnqualifiedTableName(rightAlias)
 
-	// Now look for one that satisfies our contraints (some shared prefix
+	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one. We rely on
 	// Go's non-deterministic map iteration ordering for randomness.
 	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
@@ -634,7 +652,7 @@ func (s *Smither) makeOrderedAggregate() (
 ) {
 	// We need a SELECT with a GROUP BY on ordered columns. Choose a random
 	// table and index from that table and pick a random prefix from it.
-	tableExpr, tableAlias, table, tableColRefs, ok := s.getSchemaTable()
+	tableExpr, tableAlias, table, tableColRefs, ok := s.getSchemaTableWithIndexHint()
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
