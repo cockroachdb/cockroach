@@ -12,6 +12,7 @@ package timeutil
 
 import (
 	"math"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,9 @@ import (
 // runs in "clockless" mode. In that (experimental) mode, we operate without
 // assuming any bound on the clock drift.
 const ClocklessMaxOffset = math.MaxInt64
+
+// LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
+const LibPQTimePrefix = "0000-01-01"
 
 // Since returns the time elapsed since t.
 // It is shorthand for Now().Sub(t).
@@ -71,4 +75,13 @@ func SleepUntil(untilNanos int64, currentTimeNanos func() int64) {
 		}
 		time.Sleep(d)
 	}
+}
+
+// ReplaceLibPQTimePrefix replaces unparsable lib/pq dates used for timestamps
+// (0000-01-01) with timestamps that can be parsed by date libraries.
+func ReplaceLibPQTimePrefix(s string) string {
+	if strings.HasPrefix(s, LibPQTimePrefix) {
+		return "1970-01-01" + s[len(LibPQTimePrefix):]
+	}
+	return s
 }

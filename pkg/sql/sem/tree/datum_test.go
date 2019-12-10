@@ -485,6 +485,7 @@ func TestParseDTime(t *testing.T) {
 		str      string
 		expected timeofday.TimeOfDay
 	}{
+		{" 04:05:06 ", timeofday.New(4, 5, 6, 0)},
 		{"04:05:06", timeofday.New(4, 5, 6, 0)},
 		{"04:05:06.000001", timeofday.New(4, 5, 6, 1)},
 		{"04:05:06-07", timeofday.New(4, 5, 6, 0)},
@@ -492,6 +493,14 @@ func TestParseDTime(t *testing.T) {
 		{"24:00:00", timeofday.Time2400},
 		{"24:00:00.000", timeofday.Time2400},
 		{"24:00:00.000000", timeofday.Time2400},
+		{"0000-01-01 04:05:06", timeofday.New(4, 5, 6, 0)},
+		{"2001-01-01 04:05:06", timeofday.New(4, 5, 6, 0)},
+		{"0000-01-01T04:05:06", timeofday.New(4, 5, 6, 0)},
+		{"0000-01-01T24:00:00", timeofday.Time2400},
+		{"0000-01-01 24:00:00", timeofday.Time2400},
+		{"0000-01-01 24:00:00.0", timeofday.Time2400},
+		{" 24:00:00.0", timeofday.Time2400},
+		{" 24:00:00.0 ", timeofday.Time2400},
 	}
 	for _, td := range testData {
 		actual, err := tree.ParseDTime(nil, td.str)
