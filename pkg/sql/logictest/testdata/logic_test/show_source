@@ -193,6 +193,8 @@ replication_critical_localities
 replication_stats
 reports_meta
 namespace
+protected_ts_meta
+protected_ts_records
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
@@ -218,6 +220,8 @@ replication_critical_localities  ·
 replication_stats                ·
 reports_meta                     ·
 namespace                        ·
+protected_ts_meta                ·
+protected_ts_records             ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries

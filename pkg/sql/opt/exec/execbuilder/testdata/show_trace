@@ -77,7 +77,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 flow                                  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x89
-kv.DistSender: sending partial batch  r26: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -92,7 +92,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 flow                                  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x89
-kv.DistSender: sending partial batch  r26: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 exec stmt                             execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
 
 statement error duplicate key value
@@ -105,7 +105,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 flow                                  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
-kv.DistSender: sending partial batch  r26: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 
 statement ok
@@ -186,7 +186,7 @@ table reader                          Scan /Table/54/{1-2}
 table reader                          fetched: /kv/primary/1/v -> /2
 flow                                  Del /Table/54/2/2/0
 flow                                  Del /Table/54/1/1/0
-kv.DistSender: sending partial batch  r26: sending batch 1 Del to (n1,s1):1
+kv.DistSender: sending partial batch  r28: sending batch 1 Del to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -243,7 +243,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r27: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r29: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 1 CPut, 1 EndTxn
 
 ## TODO(tschottdorf): re-enable
@@ -298,7 +298,7 @@ SELECT DISTINCT node_id, store_id, replica_id
 node_id  store_id  replica_id
 1        1         26
 1        1         6
-1        1         27
+1        1         29
 
 subtest system_table_lookup
 
