@@ -12,6 +12,8 @@ import (
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
+	"crypto/md5"
+	"hash"
 	"io"
 	"io/ioutil"
 	"net/url"
@@ -97,13 +99,19 @@ func readInputFiles(
 			}
 			defer raw.Close()
 
-			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: raw}}
+			src := &fileReader{
+				total: fileSizes[dataFileIndex],
+				counter: byteCounter{
+					r: maybeWrapReader(dataFile, ".gz", raw),
+				},
+			}
+
 			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
 			if err != nil {
 				return err
 			}
 			defer decompressed.Close()
-			src.Reader = decompressed
+			src.Reader = maybeWrapReader(dataFile, "", decompressed)
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
@@ -182,6 +190,50 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
 	b.n += int64(n)
 	return n, err
+}
+
+type tracingReader struct {
+	r         io.Reader
+	id        string
+	runHash   hash.Hash
+	blockHash hash.Hash
+	pos       int64
+}
+
+var _ io.Reader = &tracingReader{}
+
+func (t *tracingReader) Read(p []byte) (int, error) {
+	n, err := t.r.Read(p)
+
+	if n > 0 {
+		t.runHash.Write(p)
+		t.blockHash.Reset()
+		t.blockHash.Write(p)
+
+		log.Infof(context.Background(), "read(%s)@%d: n=%d rh=%x bh=%x\n",
+			t.id, t.pos, n, t.runHash.Sum(nil), t.blockHash.Sum(nil))
+	}
+
+	t.pos += int64(n)
+	return n, err
+}
+
+func maybeWrapReader(id string, layer string, r io.Reader) io.Reader {
+	if log.V(3) {
+		if u, err := url.Parse(id); err == nil {
+			id = u.Path
+		}
+		id += layer
+
+		return &tracingReader{
+			r:         r,
+			id:        id,
+			runHash:   md5.New(),
+			blockHash: md5.New(),
+			pos:       0,
+		}
+	}
+	return r
 }
 
 type fileReader struct {
