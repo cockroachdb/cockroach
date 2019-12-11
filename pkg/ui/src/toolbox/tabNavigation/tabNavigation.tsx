@@ -8,8 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./icon";
-export * from "./globalNavigation";
-export * from "./sideNavigation";
-export * from "./tabNavigation";
-export * from "./text";
+import * as React from "react";
+
+import "./tabNavigation.styl";
+
+export interface TabNavigationProps {
+  children?: React.ReactNode;
+}
+
+export function TabNavigation(props: TabNavigationProps) {
+  return (
+    <div className="tab-navigation">
+      {props.children}
+    </div>
+  );
+}
