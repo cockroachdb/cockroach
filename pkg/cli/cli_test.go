@@ -1487,13 +1487,13 @@ func Example_user() {
 	// CREATE USER 1
 	// user set ,foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters
 	// user set f,oo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters
 	// user set foo,
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters
 	// user set 0foo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
@@ -1508,7 +1508,7 @@ func Example_user() {
 	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+	// ERROR: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
 	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
 	// CREATE USER 1
