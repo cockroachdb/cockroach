@@ -13,8 +13,11 @@ package main
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
+	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -27,7 +30,9 @@ type Conn struct {
 }
 
 // NewConn returns a new Conn on the given uri and executes initSQL on it.
-func NewConn(uri string, initSQL ...string) (*Conn, error) {
+func NewConn(
+	uri string, rng *rand.Rand, sqlMutators []mutations.Mutator, initSQL ...string,
+) (*Conn, error) {
 	var c Conn
 
 	{
@@ -55,7 +60,13 @@ func NewConn(uri string, initSQL ...string) (*Conn, error) {
 		if s == "" {
 			continue
 		}
-		if _, err := c.PGX.Exec(s); err != nil {
+
+		newString, changed := mutations.ApplyString(rng, s, sqlMutators...)
+		if changed {
+			fmt.Printf("rewrote: %s -> %s", s, newString)
+		}
+
+		if _, err := c.PGX.Exec(newString); err != nil {
 			return nil, errors.Wrap(err, "init SQL")
 		}
 	}

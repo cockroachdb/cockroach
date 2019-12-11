@@ -508,18 +508,21 @@ ORDER BY
 
 [databases.vec-off]
 addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+allowmutations = true
 initsql = """
 set vectorize=off;
 """
 
 [databases.vec-auto]
 addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+allowmutations = true
 initsql = """
 set vectorize=auto;
 """
 
 [databases.vec-on]
 addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
+allowmutations = true
 initsql = """
 set vectorize=experimental_on;
 """
