@@ -17,6 +17,8 @@ lease
 locations
 namespace
 namespace_deprecated
+protected_ts_meta
+protected_ts_records
 rangelog
 replication_constraint_stats
 replication_critical_localities
@@ -54,6 +56,8 @@ SELECT id FROM system.descriptor
 27
 28
 30
+31
+32
 50
 51
 52
@@ -236,6 +240,14 @@ system  public  namespace_deprecated             admin   GRANT
 system  public  namespace_deprecated             admin   SELECT
 system  public  namespace_deprecated             root    GRANT
 system  public  namespace_deprecated             root    SELECT
+system  public  protected_ts_meta                admin   GRANT
+system  public  protected_ts_meta                admin   SELECT
+system  public  protected_ts_meta                root    GRANT
+system  public  protected_ts_meta                root    SELECT
+system  public  protected_ts_records             admin   GRANT
+system  public  protected_ts_records             admin   SELECT
+system  public  protected_ts_records             root    GRANT
+system  public  protected_ts_records             root    SELECT
 system  public  rangelog                         admin   DELETE
 system  public  rangelog                         admin   GRANT
 system  public  rangelog                         admin   INSERT

@@ -50,6 +50,7 @@ const (
 	VersionChangeReplicasDemotion
 	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
+	VersionProtectedTimestamps
 
 	// Add new versions here (step one of two).
 
@@ -337,6 +338,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// no longer in the system config range -- implying it is no longer gossiped.
 		Key:     VersionNamespaceTableWithSchemas,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 5},
+	},
+	{
+
+		// VersionProtectedTimestamps introduces the system tables for the protected
+		// timestamps subsystem.
+		//
+		// In this version and later the system.protected_ts_meta and
+		// system.protected_ts_records tables are part of the system bootstap
+		// schema.
+		Key:     VersionProtectedTimestamps,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).

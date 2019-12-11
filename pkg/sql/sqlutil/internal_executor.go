@@ -61,6 +61,34 @@ type InternalExecutor interface {
 	) (tree.Datums, error)
 }
 
+// InternalExecutorWithUser is like an InternalExecutor but allows the client to
+// specify the user for use during execution.
+type InternalExecutorWithUser interface {
+	InternalExecutor
+
+	// QueryWithUser is like Query, except it changes the username to that
+	// specified.
+	QueryWithUser(
+		ctx context.Context,
+		opName string,
+		txn *client.Txn,
+		userName string,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, sqlbase.ResultColumns, error)
+
+	// ExecWithUser is like Exec, except it changes the username to that
+	// specified.
+	ExecWithUser(
+		ctx context.Context,
+		opName string,
+		txn *client.Txn,
+		userName string,
+		stmt string,
+		qargs ...interface{},
+	) (int, error)
+}
+
 // SessionBoundInternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
 type SessionBoundInternalExecutorFactory func(
