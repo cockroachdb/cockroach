@@ -933,6 +933,9 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 // backups). This method must be called on every transaction retry (but note
 // that retries should be rare for read-only queries with no clock uncertainty).
 func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+	if ts.IsEmpty() {
+		log.Fatalf(ctx, "empty timestamp is invalid for SetFixedTimestamp()")
+	}
 	txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
