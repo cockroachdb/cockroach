@@ -15,6 +15,7 @@ import "./text.styl";
 
 export interface TextProps {
   textType?: TextTypes;
+  disabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -60,11 +61,18 @@ const getClassByTextType = (textType: TextTypes) => {
 
 Text.defaultProps = {
   textType: TextTypes.Body,
+  disabled: false,
 };
 
 export function Text(props: TextProps) {
-  const { textType } = props;
-  const textTypeClass = cn("text", getClassByTextType(textType));
+  const { textType, disabled } = props;
+  const textTypeClass = cn(
+    "text",
+    getClassByTextType(textType),
+    {
+      "text--disabled": disabled,
+    },
+  );
   return (
     <span className={textTypeClass}>
       {props.children}
