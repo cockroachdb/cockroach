@@ -8,22 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require "~styl/base/palette.styl"
-@require "~styl/base/layout-vars.styl"
+import LoginIndicator from "./loginIndicator";
 
-.popover
-  position absolute
-  z-index $z-index-tooltip
-  box-shadow: 0 0 4px 0 $popover-shadow-color
-  border-radius 4px
-  border: solid 0.5px $popover-border-color
-  display none
-  background-color white
-  right -20px
-  top 20px
-
-.popover--visible
-  display block
-
-.popover__content
-  cursor pointer
+export default LoginIndicator;
