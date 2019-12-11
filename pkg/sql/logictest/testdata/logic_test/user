@@ -48,10 +48,10 @@ CREATE USER uSEr2 WITH PASSWORD 'cockroach'
 statement ok
 CREATE USER user3 WITH PASSWORD '蟑螂'
 
-statement error pq: username "foo☂" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+statement error pq: username "foo☂" invalid
 CREATE USER foo☂
 
-statement error pq: username "-foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
+statement error pq: username "-foo" invalid
 CREATE USER "-foo"
 
 statement error at or near "-": syntax error
