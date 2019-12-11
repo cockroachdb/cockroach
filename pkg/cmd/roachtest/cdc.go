@@ -246,7 +246,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		nodes: kafkaNode,
 	}
 	kafka.install(ctx)
-	if !kafka.c.isLocal() {
+	if !c.isLocal() {
 		// TODO(dan): This test currently connects to kafka from the test
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
