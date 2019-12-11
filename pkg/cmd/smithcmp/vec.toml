@@ -23,12 +23,14 @@ seed = 0
 
 [databases.cockroach]
 addr = "postgresql://root@localhost:26257?sslmode=disable"
+allowmutations = true
 initsql = """
 set vectorize=off;
 """
 
 [databases.vec]
 addr = "postgresql://root@localhost:26257?sslmode=disable"
+allowmutations = true
 initsql = """
 set vectorize=experimental_on;
 """
