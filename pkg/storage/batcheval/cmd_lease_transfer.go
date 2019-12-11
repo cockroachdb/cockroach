@@ -65,9 +65,7 @@ func TransferLease(
 	}
 
 	prevLease, _ := cArgs.EvalCtx.GetLease()
-	if log.V(2) {
-		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
-	}
+	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	return evalNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
 		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
 }
