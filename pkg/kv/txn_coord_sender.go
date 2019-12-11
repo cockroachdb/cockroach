@@ -273,7 +273,6 @@ type TxnMetrics struct {
 	RestartsWriteTooOld           telemetry.CounterWithMetric
 	RestartsWriteTooOldMulti      telemetry.CounterWithMetric
 	RestartsSerializable          telemetry.CounterWithMetric
-	RestartsPossibleReplay        telemetry.CounterWithMetric
 	RestartsAsyncWriteFailure     telemetry.CounterWithMetric
 	RestartsReadWithinUncertainty telemetry.CounterWithMetric
 	RestartsTxnAborted            telemetry.CounterWithMetric
@@ -359,12 +358,6 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRestartsPossibleReplay = metric.Metadata{
-		Name:        "txn.restarts.possiblereplay",
-		Help:        "Number of restarts due to possible replays of command batches at the storage layer",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",
 		Help:        "Number of restarts due to async consensus writes that failed to leave intents",
@@ -417,7 +410,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
 		RestartsSerializable:          telemetry.NewCounterWithMetric(metaRestartsSerializable),
-		RestartsPossibleReplay:        telemetry.NewCounterWithMetric(metaRestartsPossibleReplay),
 		RestartsAsyncWriteFailure:     telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
 		RestartsReadWithinUncertainty: telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
 		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
@@ -976,8 +968,6 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsWriteTooOld.Inc()
 		case roachpb.RETRY_SERIALIZABLE:
 			tc.metrics.RestartsSerializable.Inc()
-		case roachpb.RETRY_POSSIBLE_REPLAY:
-			tc.metrics.RestartsPossibleReplay.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
 		default:
