@@ -232,7 +232,6 @@ func WriteInitialClusterData(
 			*desc,
 			lease,
 			hlc.Timestamp{}, /* gcThreshold */
-			bootstrapVersion,
 			truncStateType,
 		)
 		if err != nil {
