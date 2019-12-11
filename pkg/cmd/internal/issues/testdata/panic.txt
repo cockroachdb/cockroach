@@ -1,13 +1,14 @@
 getLatestTag: result v3.3.0
 listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
 listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", Path:"", Author:"bran", Since:time.Time{wall:, ext:}, Until:time.Time{wall:, ext:}, ListOptions:github.ListOptions{Page:0, PerPage:1}}
-searchIssue query="storage: TestGossipHandlesReplacedNode failed" user:cockroachdb repo:cockroach is:open label:"O-robot" label:"C-test-failure": result github.IssuesSearchResult{Total:1, Issues:[github.Issue{Number:30}]}
-createComment owner=cockroachdb repo=cockroach issue=30 github.IssueComment{}:
+searchIssue query="storage: TestGossipHandlesReplacedNode failed" user:cockroachdb repo:cockroach is:open label:"O-robot" label:"C-test-failure": result github.IssuesSearchResult{Total:0}
+createIssue owner=cockroachdb repo=cockroach github.IssueRequest{Title:"storage: TestGossipHandlesReplacedNode failed", Labels:["O-robot" "C-test-failure"], Assignee:"hodor", Milestone:2}:
 [(storage).TestGossipHandlesReplacedNode failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-123.45@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
 
 Fatal error:
 ```
-F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] something bad happened:
+panic: something bad happened:
+
 foo
 bar
 

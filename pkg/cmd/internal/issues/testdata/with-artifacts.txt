@@ -6,11 +6,9 @@ createIssue owner=cockroachdb repo=cockroach github.IssueRequest{Title:"storage:
 [(storage).kv/splits/nodes=3/quiesce=true failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-123.45@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
 
 ```
-The test failed on branch=master, cloud=gce:
-```
+The test failed on branch=master, cloud=gce:```
 
-<details><summary>details</summary>
-<p>
+<details><summary>Repro</summary><p>
 Parameters:
 
 - TAGS=deadlock
@@ -21,7 +19,5 @@ Artifacts: [/kv/splits/nodes=3/quiesce=true](https://teamcity.example.com/viewLo
 make stressrace TESTS=kv/splits/nodes=3/quiesce=true PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS=-timeout 5m' 2>&1
 ```
 
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
-</p>
-</details>
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 
