@@ -2082,7 +2082,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				})
 				return txn.Run(ctx, b)
 			},
-			filter: newRetryFilter(roachpb.Key([]byte("a")), roachpb.RETRY_POSSIBLE_REPLAY),
+			filter: newRetryFilter(roachpb.Key([]byte("a")), roachpb.RETRY_REASON_UNKNOWN),
 			// Expect a client retry, which should succeed.
 			clientRetry: true,
 		},
