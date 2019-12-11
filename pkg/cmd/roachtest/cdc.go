@@ -636,9 +636,6 @@ func registerCDC(r *testRegistry) {
 			})
 		},
 	})
-	// TODO(dan): This currently gets its own cluster during the nightly
-	// acceptance tests. Decide whether it's safe to share with the one made for
-	// "acceptance/*".
 	r.Add(testSpec{
 		Name:       "cdc/bank",
 		MinVersion: "v2.1.0",
