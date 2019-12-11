@@ -123,13 +123,6 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 		{
 			pErr: func() *roachpb.Error {
 				return roachpb.NewError(
-					&roachpb.TransactionRetryError{Reason: roachpb.RETRY_POSSIBLE_REPLAY})
-			},
-			expRefresh: false,
-		},
-		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
 					&roachpb.WriteTooOldError{ActualTimestamp: txn.WriteTimestamp.Add(15, 0)})
 			},
 			expRefresh:   true,

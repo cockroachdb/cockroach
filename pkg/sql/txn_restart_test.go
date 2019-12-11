@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type failureRecord struct {
@@ -125,7 +126,7 @@ func injectErrors(
 			{counts: magicVals.restartCounts, errFn: func() error {
 				// Note we use a retry error that cannot be automatically retried
 				// by the transaction coord sender.
-				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY, "injected err")
+				return roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "injected err")
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
@@ -612,10 +613,7 @@ BEGIN;
 
 	// Continue the txn in a new request, which is not retriable.
 	_, err = sqlDB.Exec("INSERT INTO t.public.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
-	if !testutils.IsError(
-		err, "RETRY_POSSIBLE_REPLAY") {
-		t.Errorf("didn't get expected injected error. Got: %v", err)
-	}
+	require.Error(t, err, "RETRY_REASON_UNKNOWN - injected err")
 }
 
 // Test that aborted txn are only retried once.
@@ -765,7 +763,7 @@ func TestTxnUserRestart(t *testing.T) {
 			magicVals: createFilterVals(
 				map[string]int{"boulanger": 2}, // restartCounts
 				nil),
-			expectedErr: "RETRY_POSSIBLE_REPLAY",
+			expectedErr: "RETRY_REASON_UNKNOWN",
 		},
 		{
 			magicVals: createFilterVals(

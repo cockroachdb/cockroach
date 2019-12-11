@@ -795,7 +795,6 @@ var charts = []sectionDescription{
 			{
 				Title: "Restart Cause Mix",
 				Metrics: []string{
-					"txn.restarts.possiblereplay",
 					"txn.restarts.serializable",
 					"txn.restarts.writetooold",
 					"txn.restarts.asyncwritefailure",
