@@ -2,12 +2,12 @@ drop_index_stmt ::=
 	'DROP' 'INDEX' table_name '@' index_name 'CASCADE'
 	| 'DROP' 'INDEX' table_name '@' index_name 'RESTRICT'
 	| 'DROP' 'INDEX' table_name '@' index_name 
-	| 'DROP' 'INDEX' standalone_index_name 'CASCADE'
-	| 'DROP' 'INDEX' standalone_index_name 'RESTRICT'
-	| 'DROP' 'INDEX' standalone_index_name 
+	| 'DROP' 'INDEX' index_name 'CASCADE'
+	| 'DROP' 'INDEX' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' index_name 
 	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 'CASCADE'
 	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 'RESTRICT'
 	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 
-	| 'DROP' 'INDEX' 'IF' 'EXISTS' standalone_index_name 'CASCADE'
-	| 'DROP' 'INDEX' 'IF' 'EXISTS' standalone_index_name 'RESTRICT'
-	| 'DROP' 'INDEX' 'IF' 'EXISTS' standalone_index_name 
+	| 'DROP' 'INDEX' 'IF' 'EXISTS' index_name 'CASCADE'
+	| 'DROP' 'INDEX' 'IF' 'EXISTS' index_name 'RESTRICT'
+	| 'DROP' 'INDEX' 'IF' 'EXISTS' index_name 
