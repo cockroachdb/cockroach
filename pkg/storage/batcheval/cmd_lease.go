@@ -162,16 +162,6 @@ func evalNewLease(
 	}
 
 	var pd result.Result
-	// If we didn't block concurrent reads here, there'd be a chance that
-	// reads could sneak in on a new lease holder between setting the lease
-	// and updating the low water mark. This in itself isn't a consistency
-	// violation, but it's a bit suspicious and did make
-	// TestRangeTransferLease flaky. We err on the side of caution for now, but
-	// at least we don't do it in case of an extension.
-	//
-	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
-	// through potential consequences.
-	pd.Replicated.BlockReads = !isExtension
 	pd.Replicated.State = &storagepb.ReplicaState{
 		Lease: &lease,
 	}
