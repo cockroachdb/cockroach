@@ -508,7 +508,7 @@ type NotNullConstraint struct{}
 // NullConstraint represents NULL on a column.
 type NullConstraint struct{}
 
-// PrimaryKeyConstraint represents NULL on a column.
+// PrimaryKeyConstraint represents PRIMARY KEY on a column.
 type PrimaryKeyConstraint struct{}
 
 // UniqueConstraint represents UNIQUE on a column.
