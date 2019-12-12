@@ -22,11 +22,11 @@ run build/builder.sh make bin/roachprod bin/workload bin/roachtest
 tc_end_block "Compile roachprod/workload/roachtest"
 
 tc_start_block "Run local roachtests"
-echo "Test parsing does not work here, see https://youtrack.jetbrains.com/issue/TW-63449"
-echo "Consult artifacts/failures.txt instead"
 # TODO(peter,dan): curate a suite of the tests that works locally.
-# NB: roachtest doesn't support -json so we have to use run_text_test.
-run_text_test pkg/cmd/roachtest build/builder.sh env COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" \
+# NB: roachtest has its own teamcity output format and posts issues (whenever
+# GITHUB_API_TOKEN) is set, so it doesn't fit into the streamlined process
+# around the run_json_test helper.
+build/builder.sh env COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" GITHUB_API_TOKEN="${GITHUB_API_TOKEN-}" \
   stdbuf -oL -eL \
   ./bin/roachtest run acceptance kv/splits cdc/bank \
   --local \
