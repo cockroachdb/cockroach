@@ -691,7 +691,6 @@ func (r *testRunner) runTest(
 	// We run the actual test in a different goroutine because it might call
 	// t.Fatal() which kills the goroutine, and also because we want to enforce a
 	// timeout.
-	success := false
 	done := make(chan struct{})
 	go func() {
 		defer close(done) // closed only after we've grabbed the debug info below
@@ -715,9 +714,6 @@ func (r *testRunner) runTest(
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
 		select {
 		case <-done:
-			if success {
-				panic("expected success=false after a timeout")
-			}
 		case <-time.After(5 * time.Minute):
 			msg := "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
