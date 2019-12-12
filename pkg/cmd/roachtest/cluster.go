@@ -1727,7 +1727,7 @@ func (c *cluster) Get(ctx context.Context, l *logger, src, dest string, opts ...
 
 // Put a string into the specified file on the remote(s).
 func (c *cluster) PutString(
-	ctx context.Context, l *logger, content, dest string, mode os.FileMode, opts ...option,
+	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.PutString error")
@@ -1751,7 +1751,7 @@ func (c *cluster) PutString(
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	if err := execCmd(ctx, l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
+	if err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
 		return errors.Wrap(err, "PutString")
 	}
 	return nil
@@ -1930,7 +1930,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
-	err := c.RunL(ctx, c.l, node, args...)
+	err := c.RunE(ctx, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -1956,9 +1956,59 @@ func (c *cluster) Install(
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
 }
 
-// RunE runs a command on the specified node, returning an error.
+var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+// cmdLogFileName comes up with a log file to use for the given argument string.
+func cmdLogFileName(t time.Time, nodes nodeListOption, args ...string) string {
+	// Make sure we treat {"./cockroach start"} like {"./cockroach", "start"}.
+	args = strings.Split(strings.Join(args, " "), " ")
+	prefix := []string{reOnlyAlphanumeric.ReplaceAllString(args[0], "")}
+	for _, arg := range args[1:] {
+		if s := reOnlyAlphanumeric.ReplaceAllString(arg, ""); s != arg {
+			break
+		}
+		prefix = append(prefix, arg)
+	}
+	s := strings.Join(prefix, "_")
+	const maxLen = 70
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	logFile := fmt.Sprintf(
+		"run_%s_n%s_%s",
+		t.Format(`150405.000`),
+		nodes.String()[1:],
+		s,
+	)
+	return logFile
+}
+
+// RunE runs a command on the specified node, returning an error. The output
+// will be redirected to a file which is logged via the cluster-wide logger in
+// case of an error. Logs will sort chronologically and those belonging to
+// failing invocations will be suffixed `.failed.log`.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
-	return c.RunL(ctx, c.l, node, args...)
+	cmdString := strings.Join(args, " ")
+	logFile := cmdLogFileName(timeutil.Now(), node, args...)
+
+	// NB: we set no prefix because it's only going to a file anyway.
+	l, err := c.l.ChildLogger(logFile, quietStderr, quietStdout)
+	if err != nil {
+		return err
+	}
+	c.l.PrintfCtx(ctx, "> %s", cmdString)
+	err = c.RunL(ctx, l, node, args...)
+	l.Printf("> result: %+v", err)
+	if err := ctx.Err(); err != nil {
+		l.Printf("(note: incoming context was canceled: %s", err)
+	}
+	physicalFileName := l.file.Name()
+	l.close()
+	if err != nil {
+		_ = os.Rename(physicalFileName, strings.TrimSuffix(physicalFileName, ".log")+".failed.log")
+	}
+	err = errors.Wrapf(err, "output in %s", logFile)
+	return err
 }
 
 // RunL runs a command on the specified node, returning an error.
