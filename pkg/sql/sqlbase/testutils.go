@@ -838,8 +838,7 @@ func RandCreateTables(
 	}
 
 	for _, m := range mutators {
-		muts := m(rng, tables)
-		tables = append(tables, muts...)
+		tables, _ = m(rng, tables)
 	}
 
 	return tables
@@ -913,7 +912,9 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 		mutations.ColumnFamilyMutator(rng, ret)
 	}
 
-	return ret
+	// Maybe add some storing columns.
+	res, _ := mutations.IndexStoringMutator(rng, []tree.Statement{ret})
+	return res[0].(*tree.CreateTable)
 }
 
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
