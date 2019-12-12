@@ -98,17 +98,22 @@ func declareKeysEndTransaction(
 			if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
 				// Splits may read from the entire pre-split range (they read
 				// from the LHS in all cases, and the RHS only when the existing
-				// stats contain estimates), but they need to declare a write
-				// access to block all other concurrent writes. We block writes
-				// to the RHS because they will fail if applied after the split,
-				// and writes to the LHS because their stat deltas will
-				// interfere with the non-delta stats computed as a part of the
-				// split. (see
+				// stats contain estimates). Splits declare non-MVCC read access
+				// across the entire LHS to block all concurrent writes to the
+				// LHS because their stat deltas will interfere with the
+				// non-delta stats computed as a part of the split. Splits
+				// declare non-MVCC write access across the entire RHS to block
+				// all concurrent reads and writes to the RHS because they will
+				// fail if applied after the split. (see
 				// https://github.com/cockroachdb/cockroach/issues/14881)
-				spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{
+				spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    st.LeftDesc.StartKey.AsRawKey(),
+					EndKey: st.LeftDesc.EndKey.AsRawKey(),
+				})
+				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+					Key:    st.RightDesc.StartKey.AsRawKey(),
 					EndKey: st.RightDesc.EndKey.AsRawKey(),
-				}, header.Timestamp)
+				})
 				spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
@@ -1018,8 +1023,6 @@ func splitTriggerHelper(
 	}
 
 	var pd result.Result
-	// This makes sure that no reads are happening in parallel; see #3148.
-	pd.Replicated.BlockReads = true
 	pd.Replicated.Split = &storagepb.Split{
 		SplitTrigger: *split,
 		// NB: the RHSDelta is identical to the stats for the newly created right
@@ -1078,7 +1081,6 @@ func mergeTrigger(
 	}
 
 	var pd result.Result
-	pd.Replicated.BlockReads = true
 	pd.Replicated.Merge = &storagepb.Merge{
 		MergeTrigger: *merge,
 	}

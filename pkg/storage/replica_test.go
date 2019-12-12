@@ -2731,19 +2731,18 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 	}
 }
 
-// TestReplicaLatchingSplitDeclaresWrites verifies that split
-// operations declare write access to their entire span. This is
-// necessary to avoid conflicting changes to the range's stats, even
-// though splits do not actually write to their data span (and
-// therefore a failure to declare writes are not caught directly by
-// any other test).
+// TestReplicaLatchingSplitDeclaresWrites verifies that split operations declare
+// non-MVCC read access to the LHS and non-MVCC write access to the RHS of the
+// split. This is necessary to avoid conflicting changes to the range's stats,
+// even though splits do not actually write to their data span (and therefore a
+// failure to declare writes are not caught directly by any other test).
 func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var spans spanset.SpanSet
 	cmd, _ := batcheval.LookupCommand(roachpb.EndTransaction)
 	cmd.DeclareKeys(
-		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
+		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
 		roachpb.Header{},
 		&roachpb.EndTransactionRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
@@ -2754,14 +2753,29 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 					},
 					RightDesc: roachpb.RangeDescriptor{
 						StartKey: roachpb.RKey("c"),
-						EndKey:   roachpb.RKey("d"),
+						EndKey:   roachpb.RKey("e"),
 					},
 				},
 			},
 		},
 		&spans)
-	if err := spans.CheckAllowed(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
-		t.Fatalf("expected declaration of write access, err=%s", err)
+	for _, tc := range []struct {
+		access       spanset.SpanAccess
+		key          roachpb.Key
+		expectAccess bool
+	}{
+		{spanset.SpanReadOnly, roachpb.Key("b"), true},
+		{spanset.SpanReadOnly, roachpb.Key("d"), true},
+		{spanset.SpanReadWrite, roachpb.Key("b"), false},
+		{spanset.SpanReadWrite, roachpb.Key("d"), true},
+	} {
+		err := spans.CheckAllowed(tc.access, roachpb.Span{Key: tc.key})
+		if tc.expectAccess {
+			require.NoError(t, err)
+		} else {
+			require.NotNil(t, err)
+			require.Regexp(t, "undeclared span", err)
+		}
 	}
 }
 

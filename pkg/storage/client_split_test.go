@@ -3177,3 +3177,96 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		return nil
 	})
 }
+
+// TestSplitBlocksReadsToRHS tests that an ongoing range split does not
+// interrupt reads to the LHS of the split but does interrupt reads for the RHS
+// of the split. The test relies on the fact that EndTransaction(SplitTrigger)
+// declares read access to the LHS of the split but declares write access to the
+// RHS of the split.
+func TestSplitBlocksReadsToRHS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyLHS, keySplit, keyRHS := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	splitBlocked := make(chan struct{})
+	propFilter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		if req, ok := args.Req.GetArg(roachpb.EndTransaction); ok {
+			et := req.(*roachpb.EndTransactionRequest)
+			if tr := et.InternalCommitTrigger.GetSplitTrigger(); tr != nil {
+				if tr.RightDesc.StartKey.Equal(keySplit) {
+					// Signal that the split is blocked.
+					splitBlocked <- struct{}{}
+					// Wait for split to be unblocked.
+					<-splitBlocked
+				}
+			}
+		}
+		return nil
+	}
+
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.TestingProposalFilter = propFilter
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	repl := store.LookupReplica(roachpb.RKey(keySplit))
+	tsBefore := store.Clock().Now()
+
+	// Begin splitting the range.
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		args := adminSplitArgs(keySplit)
+		_, pErr := client.SendWrapped(ctx, store.TestSender(), args)
+		return pErr.GoError()
+	})
+
+	// Wait until split is underway.
+	<-splitBlocked
+	tsAfter := store.Clock().Now()
+
+	// Read from the LHS and RHS, both below and above the split timestamp.
+	lhsDone, rhsDone := make(chan error, 2), make(chan error, 2)
+	for _, keyAndChan := range []struct {
+		key   roachpb.Key
+		errCh chan error
+	}{
+		{keyLHS, lhsDone},
+		{keyRHS, rhsDone},
+	} {
+		for _, ts := range []hlc.Timestamp{tsBefore, tsAfter} {
+			h := roachpb.Header{Timestamp: ts, RangeID: repl.RangeID}
+			args := getArgs(keyAndChan.key)
+			errCh := keyAndChan.errCh
+			g.GoCtx(func(ctx context.Context) error {
+				// Send directly to repl to avoid racing with the
+				// split and routing requests to the post-split RHS.
+				_, pErr := client.SendWrappedWith(ctx, repl, h, args)
+				errCh <- pErr.GoError()
+				return nil
+			})
+		}
+	}
+
+	// Only the LHS reads should succeed. The RHS reads should get
+	// blocked waiting to acquire latches.
+	for i := 0; i < cap(lhsDone); i++ {
+		require.NoError(t, <-lhsDone)
+	}
+	select {
+	case err := <-rhsDone:
+		require.NoError(t, err)
+		t.Fatal("unexpected read on RHS during split")
+	case <-time.After(2 * time.Millisecond):
+	}
+
+	// Unblock the split.
+	splitBlocked <- struct{}{}
+
+	// The RHS reads should now both hit a RangeKeyMismatchError error.
+	for i := 0; i < cap(rhsDone); i++ {
+		require.Regexp(t, "outside of bounds of range", <-rhsDone)
+	}
+	require.Nil(t, g.Wait())
+}
