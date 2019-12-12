@@ -224,7 +224,13 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 		s.large = s.toLarge()
 		s.small = 0
 	}
-	s.large.UnionWith(rhs.toLarge())
+	if rhs.large == nil {
+		for i, ok := rhs.Next(0); ok; i, ok = rhs.Next(i + 1) {
+			s.large.Insert(i)
+		}
+	} else {
+		s.large.UnionWith(rhs.large)
+	}
 }
 
 // Union returns the union of s and rhs as a new set.
