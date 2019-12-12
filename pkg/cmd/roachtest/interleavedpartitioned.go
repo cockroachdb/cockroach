@@ -104,20 +104,15 @@ func registerInterleaved(r *testRegistry) {
 		t.Status("running workload")
 		m := newMonitor(ctx, c, cockroachNodes)
 
-		runLocality := func(name string, node nodeListOption, cmd string) {
+		runLocality := func(node nodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {
-				l, err := t.l.ChildLogger(name)
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer l.close()
-				return c.RunL(ctx, l, node, cmd)
+				return c.RunE(ctx, node, cmd)
 			})
 		}
 
-		runLocality("west", workloadWest, createCmd("west", cockroachWest))
-		runLocality("east", workloadEast, createCmd("east", cockroachEast))
-		runLocality("central", workloadCentral, cmdCentral)
+		runLocality(workloadWest, createCmd("west", cockroachWest))
+		runLocality(workloadEast, createCmd("east", cockroachEast))
+		runLocality(workloadCentral, cmdCentral)
 
 		m.Wait()
 	}

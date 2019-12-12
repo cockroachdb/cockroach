@@ -26,7 +26,7 @@ import (
 // correctly.
 func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
-	c, err := Toxify(ctx, t.l, origC, origC.All())
+	c, err := Toxify(ctx, origC, origC.All())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	origC.Put(ctx, workload, "./workload", origC.All())
 
-	c, err := Toxify(ctx, t.l, origC, serverNodes)
+	c, err := Toxify(ctx, origC, serverNodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,17 +130,12 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 
-		tpccL, err := c.l.ChildLogger("tpcc", quietStdout, quietStderr)
-		if err != nil {
-			return err
-		}
-
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --wait=false"+
 				" --histograms="+perfArtifactsDir+"/stats.json"+
 				" --duration=%s {pgurl:2-%d}",
 			warehouses, duration, c.spec.NodeCount-1)
-		return c.RunL(ctx, tpccL, workerNode, cmd)
+		return c.RunE(ctx, workerNode, cmd)
 	})
 
 	checkGoroutines := func(ctx context.Context) int {

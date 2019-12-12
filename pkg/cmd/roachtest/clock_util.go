@@ -39,22 +39,22 @@ type offsetInjector struct {
 }
 
 // deploy installs ntp and downloads / compiles bumptime used to create a clock offset
-func (oi *offsetInjector) deploy(ctx context.Context, l *logger) error {
+func (oi *offsetInjector) deploy(ctx context.Context) error {
 	if err := oi.c.RunE(ctx, oi.c.All(), "test -x ./bumptime"); err == nil {
 		oi.deployed = true
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, l, oi.c.All(), "ntp"); err != nil {
+	if err := oi.c.Install(ctx, oi.c.l, oi.c.All(), "ntp"); err != nil {
 		return err
 	}
-	if err := oi.c.Install(ctx, l, oi.c.All(), "gcc"); err != nil {
+	if err := oi.c.Install(ctx, oi.c.l, oi.c.All(), "gcc"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, l, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
+	if err := oi.c.RunL(ctx, oi.c.l, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, l,
+	if err := oi.c.RunL(ctx, oi.c.l,
 		oi.c.All(),
 		"curl",
 		"-kO",
@@ -62,7 +62,7 @@ func (oi *offsetInjector) deploy(ctx context.Context, l *logger) error {
 	); err != nil {
 		return err
 	}
-	if err := oi.c.RunL(ctx, l,
+	if err := oi.c.RunL(ctx, oi.c.l,
 		oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
 	); err != nil {
 		return err

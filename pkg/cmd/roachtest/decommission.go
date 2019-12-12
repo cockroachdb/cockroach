@@ -141,18 +141,12 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 	var m *errgroup.Group // see comment in version.go
 	m, ctx = errgroup.WithContext(ctx)
-	for i, cmd := range workloads {
+	for _, cmd := range workloads {
 		cmd := cmd // copy is important for goroutine
-		i := i     // ditto
 
 		cmd = fmt.Sprintf(cmd, nodes)
 		m.Go(func() error {
-			quietL, err := t.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
-			if err != nil {
-				return err
-			}
-			defer quietL.close()
-			return c.RunL(ctx, quietL, c.Node(nodes), cmd)
+			return c.RunE(ctx, c.Node(nodes), cmd)
 		})
 	}
 

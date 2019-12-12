@@ -83,26 +83,26 @@ type ToxiCluster struct {
 // wraps the original cluster, whose returned addresses will all go through
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
-func Toxify(ctx context.Context, l *logger, c *cluster, node nodeListOption) (*ToxiCluster, error) {
+func Toxify(ctx context.Context, c *cluster, node nodeListOption) (*ToxiCluster, error) {
 	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
 		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
 	}
 	if err := func() error {
-		if err := c.RunL(ctx, l, c.All(), "curl", "-Lfo", "toxiproxy-server", toxiURL); err != nil {
+		if err := c.RunE(ctx, c.All(), "curl", "-Lfo", "toxiproxy-server", toxiURL); err != nil {
 			return err
 		}
-		if err := c.RunL(ctx, l, c.All(), "chmod", "+x", "toxiproxy-server"); err != nil {
+		if err := c.RunE(ctx, c.All(), "chmod", "+x", "toxiproxy-server"); err != nil {
 			return err
 		}
 
-		if err := c.RunL(ctx, l, node, "mv cockroach cockroach.real"); err != nil {
+		if err := c.RunE(ctx, node, "mv cockroach cockroach.real"); err != nil {
 			return err
 		}
-		if err := c.PutString(ctx, l, cockroachToxiWrapper, "./cockroach", 0755, node); err != nil {
+		if err := c.PutString(ctx, cockroachToxiWrapper, "./cockroach", 0755, node); err != nil {
 			return err
 		}
-		return c.PutString(ctx, l, toxiServerWrapper, "./toxiproxyd", 0755, node)
+		return c.PutString(ctx, toxiServerWrapper, "./toxiproxyd", 0755, node)
 	}(); err != nil {
 		return nil, errors.Wrap(err, "toxify")
 	}
@@ -117,7 +117,7 @@ func Toxify(ctx context.Context, l *logger, c *cluster, node nodeListOption) (*T
 		n := c.Node(i)
 
 		toxPort := 8474 + i
-		if err := c.RunL(ctx, l, n, fmt.Sprintf("./toxiproxyd %d 2>/dev/null >/dev/null < /dev/null", toxPort)); err != nil {
+		if err := c.RunE(ctx, n, fmt.Sprintf("./toxiproxyd %d 2>/dev/null >/dev/null < /dev/null", toxPort)); err != nil {
 			return nil, errors.Wrap(err, "toxify")
 		}
 
