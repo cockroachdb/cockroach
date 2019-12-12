@@ -710,6 +710,25 @@ func (r *testRunner) runTest(
 		// destroy this cluster (as well as all the others). The cluster
 		// cannot be reused since we have a runaway test goroutine that's presumably
 		// going to continue using the cluster.
+		t.l.Printf("test timed out (%s), sending SIGABRT", timeout)
+		// We send SIGABRT first to give remote commands a chance to dump their
+		// stacks (as Go programs do), which can be helpful as the timeout is
+		// often due to a command not making progress. We wait for that to work
+		// out, though not for very long. Note that printfAndFail will cancel
+		// the main context at which point the commands will get killed, so
+		// there won't be any hope of receiving output from them at that point.
+		// Note also that we're killing everything at around the same time, so
+		// the particular command that was stuck may "unstick" itself and return
+		// an unhelpful eror. Either way, this is better than nothing. It would
+		// be helpful to have a signal that we could send to dump the stacks
+		// without terminating the program to avoid this, but no such thing
+		// is available by default unless we're willing to invoke a debugger
+		// on each node.
+		{
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			_ = execCmd(ctx, t.l, roachprod, "stop", "--signal=6", "--wait=true", c.makeNodes(c.All()))
+			cancel()
+		}
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
 		select {
 		case <-done:
