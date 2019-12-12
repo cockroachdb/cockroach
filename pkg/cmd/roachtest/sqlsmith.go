@@ -95,7 +95,7 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatalf("unknown setting %s", settingName)
 		}
 
-		version, err := fetchCockroachVersion(ctx, c, c.Node(0)[0])
+		version, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 		if err != nil {
 			t.Fatal(err)
 		}
