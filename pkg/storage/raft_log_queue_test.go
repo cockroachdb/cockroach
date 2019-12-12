@@ -64,65 +64,17 @@ func TestShouldTruncate(t *testing.T) {
 	}
 }
 
-func TestGetQuorumIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		progress []uint64
-		expected uint64
-	}{
-		// Basic cases.
-		{[]uint64{1}, 1},
-		{[]uint64{2}, 2},
-		{[]uint64{1, 2}, 1},
-		{[]uint64{2, 3}, 2},
-		{[]uint64{1, 2, 3}, 2},
-		{[]uint64{2, 3, 4}, 3},
-		{[]uint64{1, 2, 3, 4}, 2},
-		{[]uint64{2, 3, 4, 5}, 3},
-		{[]uint64{1, 2, 3, 4, 5}, 3},
-		{[]uint64{2, 3, 4, 5, 6}, 4},
-		// Sorting.
-		{[]uint64{5, 4, 3, 2, 1}, 3},
-	}
-	for i, c := range testCases {
-		status := &raft.Status{
-			Progress: make(map[uint64]tracker.Progress),
-		}
-		for j, v := range c.progress {
-			status.Progress[uint64(j)] = tracker.Progress{
-				State: tracker.StateReplicate,
-				Match: v,
-			}
-		}
-		quorumMatchedIndex := getQuorumIndex(status)
-		if c.expected != quorumMatchedIndex {
-			t.Fatalf("%d: expected %d, but got %d", i, c.expected, quorumMatchedIndex)
-		}
-	}
-
-	// Verify that only replicating followers are taken into account (i.e. others
-	// are treated as Match == 0).
-	status := &raft.Status{
-		Progress: map[uint64]tracker.Progress{
-			1: {State: tracker.StateReplicate, Match: 100},
-			2: {State: tracker.StateSnapshot, Match: 100},
-			3: {State: tracker.StateReplicate, Match: 90},
-		},
-	}
-	assert.Equal(t, uint64(90), getQuorumIndex(status))
-}
-
 func TestComputeTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	const targetSize = 1000
 
-	// NB: all tests here have a truncateDecions which starts with "should
+	// NB: all tests here have a truncateDecisions which starts with "should
 	// truncate: false", because these tests don't simulate enough data to be over
 	// the truncation threshold.
 	testCases := []struct {
+		commit          uint64
 		progress        []uint64
 		raftLogSize     int64
 		firstIndex      uint64
@@ -132,87 +84,89 @@ func TestComputeTruncateDecision(t *testing.T) {
 	}{
 		{
 			// Nothing to truncate.
-			[]uint64{1, 2}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]"},
+			1, []uint64{1, 2}, 100, 1, 1, 0,
+			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+		},
 		{
 			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
 			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
 			// own log asynchronously.
-			[]uint64{1, 5, 5}, 100, 1, 1, 0,
+			1, []uint64{1, 5, 5}, 100, 1, 1, 0,
 			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
 		},
 		{
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
-			[]uint64{1, 5, 5}, 100, 2, 2, 0,
+			2, []uint64{1, 5, 5}, 100, 2, 2, 0,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		{
 			// The happy case.
-			[]uint64{5, 5, 5}, 100, 2, 5, 0,
+			5, []uint64{5, 5, 5}, 100, 2, 5, 0,
 			"should truncate: false [truncate 3 entries to first index 5 (chosen via: last index)]",
 		},
 		{
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
 			// it was already obsolete before. (This example is also not one you could manufacture in
 			// a real system).
-			[]uint64{5, 5, 5}, 100, 2, 2, 1,
+			2, []uint64{5, 5, 5}, 100, 2, 2, 1,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		{
 			// Respecting the pending snapshot.
-			[]uint64{5, 5, 5}, 100, 2, 5, 3,
+			5, []uint64{5, 5, 5}, 100, 2, 5, 3,
 			"should truncate: false [truncate 1 entries to first index 3 (chosen via: pending snapshot)]",
 		},
 		{
 			// Log is below target size, so respecting the slowest follower.
-			[]uint64{1, 2, 3, 4}, 100, 1, 5, 0,
+			3, []uint64{1, 2, 3, 4}, 100, 1, 5, 0,
 			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
 		},
 		{
 			// Truncating since local log starts at 2. One follower is already cut off without a pending
 			// snapshot.
-			[]uint64{1, 2, 3, 4}, 100, 2, 2, 0,
+			2, []uint64{1, 2, 3, 4}, 100, 2, 2, 0,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
 		},
 		// Don't truncate off active followers, even if over targetSize.
 		{
-			[]uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
+			3, []uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
 			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
-			[]uint64{100, 100}, 2000, 1, 100, 50,
+			100, []uint64{100, 100}, 2000, 1, 100, 50,
 			"should truncate: false [truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
-			[]uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
-			[]uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
+			3, []uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
 			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
 		},
-		// The pending snapshot index affects the quorum commit index.
+		// Respecting the pending snapshot.
 		{
-			[]uint64{4}, 2000, 1, 7, 1,
+			7, []uint64{4}, 2000, 1, 7, 1,
 			"should truncate: false [truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
-		// Never truncate past the quorum commit index.
+		// Never truncate past the commit index.
 		{
-			[]uint64{3, 3, 6}, 100, 2, 7, 0,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: quorum)]",
+			3, []uint64{3, 3, 6}, 100, 2, 7, 0,
+			"should truncate: false [truncate 1 entries to first index 3 (chosen via: commit)]",
 		},
 		// Never truncate past the last index.
 		{
-			[]uint64{5}, 100, 1, 3, 0,
+			3, []uint64{5}, 100, 1, 3, 0,
 			"should truncate: false [truncate 2 entries to first index 3 (chosen via: last index)]",
 		},
 		// Never truncate "before the first index".
 		{
-			[]uint64{5}, 100, 2, 3, 1,
+			3, []uint64{5}, 100, 2, 3, 1,
 			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
-		}}
+		},
+	}
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := raft.Status{
@@ -226,6 +180,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 					Next:         v + 1,
 				}
 			}
+			status.Commit = c.commit
 			input := truncateDecisionInput{
 				RaftStatus:           status,
 				LogSize:              c.raftLogSize,
@@ -270,7 +225,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// NB: most tests here have a truncateDecions which starts with "should
+	// NB: most tests here have a truncateDecisions which starts with "should
 	// truncate: false", because these tests don't simulate enough data to be over
 	// the truncation threshold.
 	exp := map[bool]map[bool]string{ // (tooLarge, active)
@@ -289,7 +244,11 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			status := raft.Status{
 				Progress: make(map[uint64]tracker.Progress),
 			}
-			for j, v := range []uint64{100, 200, 300, 400, 500} {
+			progress := []uint64{100, 200, 300, 400, 500}
+			lastIndex := uint64(500)
+			status.Commit = 300
+
+			for i, v := range progress {
 				var pr tracker.Progress
 				if v == 100 {
 					// A probing follower is probed with some index (Next) but
@@ -309,14 +268,14 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 						State:        tracker.StateReplicate,
 					}
 				}
-				status.Progress[uint64(j)] = pr
+				status.Progress[uint64(i)] = pr
 			}
 
 			input := truncateDecisionInput{
 				RaftStatus:     status,
 				MaxLogSize:     1024,
 				FirstIndex:     10,
-				LastIndex:      500,
+				LastIndex:      lastIndex,
 				LogSizeTrusted: true,
 			}
 			if tooLarge {
