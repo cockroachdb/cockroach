@@ -27,7 +27,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	if err := offsetInjector.deploy(ctx, t.l); err != nil {
+	if err := offsetInjector.deploy(ctx); err != nil {
 		t.Fatal(err)
 	}
 
