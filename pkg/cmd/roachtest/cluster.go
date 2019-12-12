@@ -1778,7 +1778,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
-	err := c.RunL(ctx, c.l, node, args...)
+	err := c.RunE(ctx, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -1806,7 +1806,18 @@ func (c *cluster) Install(
 
 // RunE runs a command on the specified node, returning an error.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
-	return c.RunL(ctx, c.l, node, args...)
+	dest := fmt.Sprintf(`run_%s_%s_%s`,
+		timeutil.Now().Format(`15:04:05.000`),
+		c.makeNodes(node),
+		regexp.MustCompile(`[^a-z0-9_]+`).ReplaceAllString(strings.Join(args, "_"), "_"),
+	)
+	// NB: we set no prefix because it's only going to a file anyway.
+	l, err := c.l.ChildLogger(dest, quietStderr, quietStdout)
+	if err != nil {
+		return c.RunL(ctx, c.l, node, args...)
+	}
+	c.l.PrintfCtx(ctx, "redirecting output to artifact %s", dest)
+	return errors.Wrapf(c.RunL(ctx, l, node, args...), "output in %s", dest)
 }
 
 // RunL runs a command on the specified node, returning an error.
