@@ -182,10 +182,10 @@ SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
 
-query ITITTB colnames
+query ITITTBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted
 
 query ITITTITT colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
