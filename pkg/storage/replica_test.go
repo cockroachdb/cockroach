@@ -967,7 +967,6 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 
 	raftCmd := storagepb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
-		ProposerReplica:       invalidLease.Replica,
 		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
 			State: &storagepb.ReplicaState{
@@ -6760,7 +6759,7 @@ func TestProposalOverhead(t *testing.T) {
 	// changes. Try to make this number go down and not up. It slightly
 	// undercounts because our proposal filter is called before
 	// maxLeaseIndex is filled in.
-	const expectedOverhead = 50
+	const expectedOverhead = 42
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -7838,12 +7837,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	r := tc.repl
-	repDesc, err := tc.repl.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Flush a write all the way through the Raft proposal pipeline. This
 	// ensures that leadership settles down before we start manually submitting
 	// proposals and that we don't see any unexpected proposal refreshes due to
@@ -7853,6 +7846,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	r := tc.repl
 	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
@@ -7903,7 +7897,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals
 		dropProposals.Unlock()
 
-		cmd.command.ProposerReplica = repDesc
 		cmd.command.ProposerLeaseSequence = lease.Sequence
 		if _, pErr := r.propose(ctx, cmd); pErr != nil {
 			t.Error(pErr)
@@ -7980,11 +7973,6 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	tc.StartWithStoreConfig(t, stopper, tsc)
 	repl := tc.repl
 
-	repDesc, err := repl.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	key := roachpb.Key("a")
 
 	// Run a few commands first: This advances the lease index, which is
@@ -8049,7 +8037,6 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	// proposed it will be given the incorrect max lease index which ensures
 	// that it will generate a retry when it fails. Then call refreshProposals
 	// twice to repropose it and put it in the logs twice more.
-	proposal.command.ProposerReplica = repDesc
 	proposal.command.ProposerLeaseSequence = repl.mu.state.Lease.Sequence
 	if _, pErr := repl.propose(ctx, proposal); pErr != nil {
 		t.Fatal(pErr)
