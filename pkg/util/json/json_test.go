@@ -60,6 +60,8 @@ func TestJSONOrdering(t *testing.T) {
 	// We test here that every element in order sorts before every one that comes
 	// after it, and is equal to itself.
 	sources := []string{
+		// In Postgres's sorting rules, the empty array comes before everything (even null).
+		`[]`,
 		`null`,
 		`"a"`,
 		`"aa"`,
@@ -70,26 +72,28 @@ func TestJSONOrdering(t *testing.T) {
 		`100`,
 		`false`,
 		`true`,
-		// In Postgres's sorting rules, the empty array comes before everything (even null),
-		// so this is a departure.
-		// Shorter arrays sort before longer arrays (this is the same as in Postgres).
-		`[]`,
+		// Shorter arrays sort before longer arrays.
 		`[1]`,
 		`[2]`,
 		`[1, 2]`,
 		`[1, 3]`,
 		// Objects with fewer keys come before objects with more keys.
 		`{}`,
+		`{"a": "c"}`,
 		`{"a": 1}`,
 		`{"a": 2}`,
-		// In Postgres, keys which are shorter sort before keys which are longer. This
-		// is not true for us (right now). TODO(justin): unclear if it should be.
+		// Longer keys compare larger.
 		`{"aa": 1}`,
 		`{"b": 1}`,
 		`{"b": 2}`,
+		`{"bb": "dd"}`,
+		`{"c": "e"}`,
 		// Objects are compared key-1, value-1, key-2, value-2, ...
 		`{"a": 2, "c": 3}`,
 		`{"a": 3, "b": 3}`,
+		`{"b": 1, "d": 1}`,
+		`{"c": "e", "f": "g"}`,
+		`{"aa": 1, "c": 1}`,
 	}
 	jsons := make([]JSON, len(sources))
 	encJSONs := make([]JSON, len(sources))
@@ -450,6 +454,7 @@ func TestBuildJSONObject(t *testing.T) {
 		{[]string{"a"}},
 		{[]string{"a", "c", "a", "b", "a"}},
 		{[]string{"2", "1", "10", "3", "10", "1"}},
+		{[]string{"c", "cc", "aa"}},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("keys %v", tc.input), func(t *testing.T) {
@@ -558,6 +563,9 @@ func TestJSONRandomFetch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if result == nil {
+				t.Fatal("expected result")
+			}
 			c, err := result.Compare(obj[idx].v)
 			if err != nil {
 				t.Fatal(err)
@@ -586,6 +594,9 @@ func TestJSONFetchFromBig(t *testing.T) {
 			result, err := j.FetchValKey(fmt.Sprintf("key%d", i))
 			if err != nil {
 				t.Fatal(err)
+			}
+			if result == nil {
+				t.Fatal("expected result")
 			}
 
 			expected, err := MakeJSON(i)

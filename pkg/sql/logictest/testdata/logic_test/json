@@ -719,3 +719,781 @@ a  b
 
 statement ok
 DROP TABLE json_family
+
+subtest regression_43123_json_sorting
+
+# These results were obtained by executing this query in Postgres and
+# pasting the results here.
+query TTBBB
+WITH
+    t (c)
+        AS (
+            VALUES
+                ('1'::JSONB),
+                ('true'::JSONB),
+                ('false'::JSONB),
+                ('"s"'::JSONB),
+                ('[]'::JSONB),
+                ('[1]'::JSONB),
+                ('[2]'::JSONB),
+                ('[1, 2]'::JSONB),
+                ('[1, 3]'::JSONB),
+                ('{}'::JSONB),
+                ('{"a": "c"}'::JSONB),
+                ('{"a": 1}'::JSONB),
+                ('{"a": 2}'::JSONB),
+                ('{"aa": 1}'::JSONB),
+                ('{"b": 1}'::JSONB),
+                ('{"b": 2}'::JSONB),
+                ('{"bb": "dd"}'::JSONB),
+                ('{"c": "e"}'::JSONB),
+                ('{"a": 2, "c": 3}'::JSONB),
+                ('{"a": 3, "b": 3}'::JSONB),
+                ('{"b": 1, "d": 1}'::JSONB),
+                ('{"c": "e", "f": "g"}'::JSONB),
+                ('{"c": "e", "f": {"a": 1, "b": []}}'::JSONB),
+                ('{"c": "e", "f": {"b": 1, "c": []}}'::JSONB),
+                ('{"c": "e", "f": {"a": []}}'::JSONB),
+                ('{"aa": 1, "c": 1}'::JSONB),
+                ('null'::JSONB)
+        )
+SELECT
+    a.c AS a,
+    b.c AS b,
+    a.c < b.c AS lt,
+    a.c <= b.c AS lte,
+    a.c = b.c AS eq
+FROM
+    t AS a, t AS b
+ORDER BY
+    a.c::TEXT, b.c::TEXT;
+----
+ "s"                                  "s"                                  false   true    true
+ "s"                                  1                                    true    true    false
+ "s"                                  [1, 2]                               true    true    false
+ "s"                                  [1, 3]                               true    true    false
+ "s"                                  [1]                                  true    true    false
+ "s"                                  [2]                                  true    true    false
+ "s"                                  []                                   false   false   false
+ "s"                                  false                                true    true    false
+ "s"                                  null                                 false   false   false
+ "s"                                  true                                 true    true    false
+ "s"                                  {"a": "c"}                           true    true    false
+ "s"                                  {"a": 1}                             true    true    false
+ "s"                                  {"a": 2, "c": 3}                     true    true    false
+ "s"                                  {"a": 2}                             true    true    false
+ "s"                                  {"a": 3, "b": 3}                     true    true    false
+ "s"                                  {"aa": 1}                            true    true    false
+ "s"                                  {"b": 1, "d": 1}                     true    true    false
+ "s"                                  {"b": 1}                             true    true    false
+ "s"                                  {"b": 2}                             true    true    false
+ "s"                                  {"bb": "dd"}                         true    true    false
+ "s"                                  {"c": "e", "f": "g"}                 true    true    false
+ "s"                                  {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ "s"                                  {"c": "e", "f": {"a": []}}           true    true    false
+ "s"                                  {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ "s"                                  {"c": "e"}                           true    true    false
+ "s"                                  {"c": 1, "aa": 1}                    true    true    false
+ "s"                                  {}                                   true    true    false
+ 1                                    "s"                                  false   false   false
+ 1                                    1                                    false   true    true
+ 1                                    [1, 2]                               true    true    false
+ 1                                    [1, 3]                               true    true    false
+ 1                                    [1]                                  true    true    false
+ 1                                    [2]                                  true    true    false
+ 1                                    []                                   false   false   false
+ 1                                    false                                true    true    false
+ 1                                    null                                 false   false   false
+ 1                                    true                                 true    true    false
+ 1                                    {"a": "c"}                           true    true    false
+ 1                                    {"a": 1}                             true    true    false
+ 1                                    {"a": 2, "c": 3}                     true    true    false
+ 1                                    {"a": 2}                             true    true    false
+ 1                                    {"a": 3, "b": 3}                     true    true    false
+ 1                                    {"aa": 1}                            true    true    false
+ 1                                    {"b": 1, "d": 1}                     true    true    false
+ 1                                    {"b": 1}                             true    true    false
+ 1                                    {"b": 2}                             true    true    false
+ 1                                    {"bb": "dd"}                         true    true    false
+ 1                                    {"c": "e", "f": "g"}                 true    true    false
+ 1                                    {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ 1                                    {"c": "e", "f": {"a": []}}           true    true    false
+ 1                                    {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ 1                                    {"c": "e"}                           true    true    false
+ 1                                    {"c": 1, "aa": 1}                    true    true    false
+ 1                                    {}                                   true    true    false
+ [1, 2]                               "s"                                  false   false   false
+ [1, 2]                               1                                    false   false   false
+ [1, 2]                               [1, 2]                               false   true    true
+ [1, 2]                               [1, 3]                               true    true    false
+ [1, 2]                               [1]                                  false   false   false
+ [1, 2]                               [2]                                  false   false   false
+ [1, 2]                               []                                   false   false   false
+ [1, 2]                               false                                false   false   false
+ [1, 2]                               null                                 false   false   false
+ [1, 2]                               true                                 false   false   false
+ [1, 2]                               {"a": "c"}                           true    true    false
+ [1, 2]                               {"a": 1}                             true    true    false
+ [1, 2]                               {"a": 2, "c": 3}                     true    true    false
+ [1, 2]                               {"a": 2}                             true    true    false
+ [1, 2]                               {"a": 3, "b": 3}                     true    true    false
+ [1, 2]                               {"aa": 1}                            true    true    false
+ [1, 2]                               {"b": 1, "d": 1}                     true    true    false
+ [1, 2]                               {"b": 1}                             true    true    false
+ [1, 2]                               {"b": 2}                             true    true    false
+ [1, 2]                               {"bb": "dd"}                         true    true    false
+ [1, 2]                               {"c": "e", "f": "g"}                 true    true    false
+ [1, 2]                               {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ [1, 2]                               {"c": "e", "f": {"a": []}}           true    true    false
+ [1, 2]                               {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ [1, 2]                               {"c": "e"}                           true    true    false
+ [1, 2]                               {"c": 1, "aa": 1}                    true    true    false
+ [1, 2]                               {}                                   true    true    false
+ [1, 3]                               "s"                                  false   false   false
+ [1, 3]                               1                                    false   false   false
+ [1, 3]                               [1, 2]                               false   false   false
+ [1, 3]                               [1, 3]                               false   true    true
+ [1, 3]                               [1]                                  false   false   false
+ [1, 3]                               [2]                                  false   false   false
+ [1, 3]                               []                                   false   false   false
+ [1, 3]                               false                                false   false   false
+ [1, 3]                               null                                 false   false   false
+ [1, 3]                               true                                 false   false   false
+ [1, 3]                               {"a": "c"}                           true    true    false
+ [1, 3]                               {"a": 1}                             true    true    false
+ [1, 3]                               {"a": 2, "c": 3}                     true    true    false
+ [1, 3]                               {"a": 2}                             true    true    false
+ [1, 3]                               {"a": 3, "b": 3}                     true    true    false
+ [1, 3]                               {"aa": 1}                            true    true    false
+ [1, 3]                               {"b": 1, "d": 1}                     true    true    false
+ [1, 3]                               {"b": 1}                             true    true    false
+ [1, 3]                               {"b": 2}                             true    true    false
+ [1, 3]                               {"bb": "dd"}                         true    true    false
+ [1, 3]                               {"c": "e", "f": "g"}                 true    true    false
+ [1, 3]                               {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ [1, 3]                               {"c": "e", "f": {"a": []}}           true    true    false
+ [1, 3]                               {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ [1, 3]                               {"c": "e"}                           true    true    false
+ [1, 3]                               {"c": 1, "aa": 1}                    true    true    false
+ [1, 3]                               {}                                   true    true    false
+ [1]                                  "s"                                  false   false   false
+ [1]                                  1                                    false   false   false
+ [1]                                  [1, 2]                               true    true    false
+ [1]                                  [1, 3]                               true    true    false
+ [1]                                  [1]                                  false   true    true
+ [1]                                  [2]                                  true    true    false
+ [1]                                  []                                   false   false   false
+ [1]                                  false                                false   false   false
+ [1]                                  null                                 false   false   false
+ [1]                                  true                                 false   false   false
+ [1]                                  {"a": "c"}                           true    true    false
+ [1]                                  {"a": 1}                             true    true    false
+ [1]                                  {"a": 2, "c": 3}                     true    true    false
+ [1]                                  {"a": 2}                             true    true    false
+ [1]                                  {"a": 3, "b": 3}                     true    true    false
+ [1]                                  {"aa": 1}                            true    true    false
+ [1]                                  {"b": 1, "d": 1}                     true    true    false
+ [1]                                  {"b": 1}                             true    true    false
+ [1]                                  {"b": 2}                             true    true    false
+ [1]                                  {"bb": "dd"}                         true    true    false
+ [1]                                  {"c": "e", "f": "g"}                 true    true    false
+ [1]                                  {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ [1]                                  {"c": "e", "f": {"a": []}}           true    true    false
+ [1]                                  {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ [1]                                  {"c": "e"}                           true    true    false
+ [1]                                  {"c": 1, "aa": 1}                    true    true    false
+ [1]                                  {}                                   true    true    false
+ [2]                                  "s"                                  false   false   false
+ [2]                                  1                                    false   false   false
+ [2]                                  [1, 2]                               true    true    false
+ [2]                                  [1, 3]                               true    true    false
+ [2]                                  [1]                                  false   false   false
+ [2]                                  [2]                                  false   true    true
+ [2]                                  []                                   false   false   false
+ [2]                                  false                                false   false   false
+ [2]                                  null                                 false   false   false
+ [2]                                  true                                 false   false   false
+ [2]                                  {"a": "c"}                           true    true    false
+ [2]                                  {"a": 1}                             true    true    false
+ [2]                                  {"a": 2, "c": 3}                     true    true    false
+ [2]                                  {"a": 2}                             true    true    false
+ [2]                                  {"a": 3, "b": 3}                     true    true    false
+ [2]                                  {"aa": 1}                            true    true    false
+ [2]                                  {"b": 1, "d": 1}                     true    true    false
+ [2]                                  {"b": 1}                             true    true    false
+ [2]                                  {"b": 2}                             true    true    false
+ [2]                                  {"bb": "dd"}                         true    true    false
+ [2]                                  {"c": "e", "f": "g"}                 true    true    false
+ [2]                                  {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ [2]                                  {"c": "e", "f": {"a": []}}           true    true    false
+ [2]                                  {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ [2]                                  {"c": "e"}                           true    true    false
+ [2]                                  {"c": 1, "aa": 1}                    true    true    false
+ [2]                                  {}                                   true    true    false
+ []                                   "s"                                  true    true    false
+ []                                   1                                    true    true    false
+ []                                   [1, 2]                               true    true    false
+ []                                   [1, 3]                               true    true    false
+ []                                   [1]                                  true    true    false
+ []                                   [2]                                  true    true    false
+ []                                   []                                   false   true    true
+ []                                   false                                true    true    false
+ []                                   null                                 true    true    false
+ []                                   true                                 true    true    false
+ []                                   {"a": "c"}                           true    true    false
+ []                                   {"a": 1}                             true    true    false
+ []                                   {"a": 2, "c": 3}                     true    true    false
+ []                                   {"a": 2}                             true    true    false
+ []                                   {"a": 3, "b": 3}                     true    true    false
+ []                                   {"aa": 1}                            true    true    false
+ []                                   {"b": 1, "d": 1}                     true    true    false
+ []                                   {"b": 1}                             true    true    false
+ []                                   {"b": 2}                             true    true    false
+ []                                   {"bb": "dd"}                         true    true    false
+ []                                   {"c": "e", "f": "g"}                 true    true    false
+ []                                   {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ []                                   {"c": "e", "f": {"a": []}}           true    true    false
+ []                                   {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ []                                   {"c": "e"}                           true    true    false
+ []                                   {"c": 1, "aa": 1}                    true    true    false
+ []                                   {}                                   true    true    false
+ false                                "s"                                  false   false   false
+ false                                1                                    false   false   false
+ false                                [1, 2]                               true    true    false
+ false                                [1, 3]                               true    true    false
+ false                                [1]                                  true    true    false
+ false                                [2]                                  true    true    false
+ false                                []                                   false   false   false
+ false                                false                                false   true    true
+ false                                null                                 false   false   false
+ false                                true                                 true    true    false
+ false                                {"a": "c"}                           true    true    false
+ false                                {"a": 1}                             true    true    false
+ false                                {"a": 2, "c": 3}                     true    true    false
+ false                                {"a": 2}                             true    true    false
+ false                                {"a": 3, "b": 3}                     true    true    false
+ false                                {"aa": 1}                            true    true    false
+ false                                {"b": 1, "d": 1}                     true    true    false
+ false                                {"b": 1}                             true    true    false
+ false                                {"b": 2}                             true    true    false
+ false                                {"bb": "dd"}                         true    true    false
+ false                                {"c": "e", "f": "g"}                 true    true    false
+ false                                {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ false                                {"c": "e", "f": {"a": []}}           true    true    false
+ false                                {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ false                                {"c": "e"}                           true    true    false
+ false                                {"c": 1, "aa": 1}                    true    true    false
+ false                                {}                                   true    true    false
+ null                                 "s"                                  true    true    false
+ null                                 1                                    true    true    false
+ null                                 [1, 2]                               true    true    false
+ null                                 [1, 3]                               true    true    false
+ null                                 [1]                                  true    true    false
+ null                                 [2]                                  true    true    false
+ null                                 []                                   false   false   false
+ null                                 false                                true    true    false
+ null                                 null                                 false   true    true
+ null                                 true                                 true    true    false
+ null                                 {"a": "c"}                           true    true    false
+ null                                 {"a": 1}                             true    true    false
+ null                                 {"a": 2, "c": 3}                     true    true    false
+ null                                 {"a": 2}                             true    true    false
+ null                                 {"a": 3, "b": 3}                     true    true    false
+ null                                 {"aa": 1}                            true    true    false
+ null                                 {"b": 1, "d": 1}                     true    true    false
+ null                                 {"b": 1}                             true    true    false
+ null                                 {"b": 2}                             true    true    false
+ null                                 {"bb": "dd"}                         true    true    false
+ null                                 {"c": "e", "f": "g"}                 true    true    false
+ null                                 {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ null                                 {"c": "e", "f": {"a": []}}           true    true    false
+ null                                 {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ null                                 {"c": "e"}                           true    true    false
+ null                                 {"c": 1, "aa": 1}                    true    true    false
+ null                                 {}                                   true    true    false
+ true                                 "s"                                  false   false   false
+ true                                 1                                    false   false   false
+ true                                 [1, 2]                               true    true    false
+ true                                 [1, 3]                               true    true    false
+ true                                 [1]                                  true    true    false
+ true                                 [2]                                  true    true    false
+ true                                 []                                   false   false   false
+ true                                 false                                false   false   false
+ true                                 null                                 false   false   false
+ true                                 true                                 false   true    true
+ true                                 {"a": "c"}                           true    true    false
+ true                                 {"a": 1}                             true    true    false
+ true                                 {"a": 2, "c": 3}                     true    true    false
+ true                                 {"a": 2}                             true    true    false
+ true                                 {"a": 3, "b": 3}                     true    true    false
+ true                                 {"aa": 1}                            true    true    false
+ true                                 {"b": 1, "d": 1}                     true    true    false
+ true                                 {"b": 1}                             true    true    false
+ true                                 {"b": 2}                             true    true    false
+ true                                 {"bb": "dd"}                         true    true    false
+ true                                 {"c": "e", "f": "g"}                 true    true    false
+ true                                 {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ true                                 {"c": "e", "f": {"a": []}}           true    true    false
+ true                                 {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ true                                 {"c": "e"}                           true    true    false
+ true                                 {"c": 1, "aa": 1}                    true    true    false
+ true                                 {}                                   true    true    false
+ {"a": "c"}                           "s"                                  false   false   false
+ {"a": "c"}                           1                                    false   false   false
+ {"a": "c"}                           [1, 2]                               false   false   false
+ {"a": "c"}                           [1, 3]                               false   false   false
+ {"a": "c"}                           [1]                                  false   false   false
+ {"a": "c"}                           [2]                                  false   false   false
+ {"a": "c"}                           []                                   false   false   false
+ {"a": "c"}                           false                                false   false   false
+ {"a": "c"}                           null                                 false   false   false
+ {"a": "c"}                           true                                 false   false   false
+ {"a": "c"}                           {"a": "c"}                           false   true    true
+ {"a": "c"}                           {"a": 1}                             true    true    false
+ {"a": "c"}                           {"a": 2, "c": 3}                     true    true    false
+ {"a": "c"}                           {"a": 2}                             true    true    false
+ {"a": "c"}                           {"a": 3, "b": 3}                     true    true    false
+ {"a": "c"}                           {"aa": 1}                            true    true    false
+ {"a": "c"}                           {"b": 1, "d": 1}                     true    true    false
+ {"a": "c"}                           {"b": 1}                             true    true    false
+ {"a": "c"}                           {"b": 2}                             true    true    false
+ {"a": "c"}                           {"bb": "dd"}                         true    true    false
+ {"a": "c"}                           {"c": "e", "f": "g"}                 true    true    false
+ {"a": "c"}                           {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"a": "c"}                           {"c": "e", "f": {"a": []}}           true    true    false
+ {"a": "c"}                           {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"a": "c"}                           {"c": "e"}                           true    true    false
+ {"a": "c"}                           {"c": 1, "aa": 1}                    true    true    false
+ {"a": "c"}                           {}                                   false   false   false
+ {"a": 1}                             "s"                                  false   false   false
+ {"a": 1}                             1                                    false   false   false
+ {"a": 1}                             [1, 2]                               false   false   false
+ {"a": 1}                             [1, 3]                               false   false   false
+ {"a": 1}                             [1]                                  false   false   false
+ {"a": 1}                             [2]                                  false   false   false
+ {"a": 1}                             []                                   false   false   false
+ {"a": 1}                             false                                false   false   false
+ {"a": 1}                             null                                 false   false   false
+ {"a": 1}                             true                                 false   false   false
+ {"a": 1}                             {"a": "c"}                           false   false   false
+ {"a": 1}                             {"a": 1}                             false   true    true
+ {"a": 1}                             {"a": 2, "c": 3}                     true    true    false
+ {"a": 1}                             {"a": 2}                             true    true    false
+ {"a": 1}                             {"a": 3, "b": 3}                     true    true    false
+ {"a": 1}                             {"aa": 1}                            true    true    false
+ {"a": 1}                             {"b": 1, "d": 1}                     true    true    false
+ {"a": 1}                             {"b": 1}                             true    true    false
+ {"a": 1}                             {"b": 2}                             true    true    false
+ {"a": 1}                             {"bb": "dd"}                         true    true    false
+ {"a": 1}                             {"c": "e", "f": "g"}                 true    true    false
+ {"a": 1}                             {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"a": 1}                             {"c": "e", "f": {"a": []}}           true    true    false
+ {"a": 1}                             {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"a": 1}                             {"c": "e"}                           true    true    false
+ {"a": 1}                             {"c": 1, "aa": 1}                    true    true    false
+ {"a": 1}                             {}                                   false   false   false
+ {"a": 2, "c": 3}                     "s"                                  false   false   false
+ {"a": 2, "c": 3}                     1                                    false   false   false
+ {"a": 2, "c": 3}                     [1, 2]                               false   false   false
+ {"a": 2, "c": 3}                     [1, 3]                               false   false   false
+ {"a": 2, "c": 3}                     [1]                                  false   false   false
+ {"a": 2, "c": 3}                     [2]                                  false   false   false
+ {"a": 2, "c": 3}                     []                                   false   false   false
+ {"a": 2, "c": 3}                     false                                false   false   false
+ {"a": 2, "c": 3}                     null                                 false   false   false
+ {"a": 2, "c": 3}                     true                                 false   false   false
+ {"a": 2, "c": 3}                     {"a": "c"}                           false   false   false
+ {"a": 2, "c": 3}                     {"a": 1}                             false   false   false
+ {"a": 2, "c": 3}                     {"a": 2, "c": 3}                     false   true    true
+ {"a": 2, "c": 3}                     {"a": 2}                             false   false   false
+ {"a": 2, "c": 3}                     {"a": 3, "b": 3}                     true    true    false
+ {"a": 2, "c": 3}                     {"aa": 1}                            false   false   false
+ {"a": 2, "c": 3}                     {"b": 1, "d": 1}                     true    true    false
+ {"a": 2, "c": 3}                     {"b": 1}                             false   false   false
+ {"a": 2, "c": 3}                     {"b": 2}                             false   false   false
+ {"a": 2, "c": 3}                     {"bb": "dd"}                         false   false   false
+ {"a": 2, "c": 3}                     {"c": "e", "f": "g"}                 true    true    false
+ {"a": 2, "c": 3}                     {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"a": 2, "c": 3}                     {"c": "e", "f": {"a": []}}           true    true    false
+ {"a": 2, "c": 3}                     {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"a": 2, "c": 3}                     {"c": "e"}                           false   false   false
+ {"a": 2, "c": 3}                     {"c": 1, "aa": 1}                    true    true    false
+ {"a": 2, "c": 3}                     {}                                   false   false   false
+ {"a": 2}                             "s"                                  false   false   false
+ {"a": 2}                             1                                    false   false   false
+ {"a": 2}                             [1, 2]                               false   false   false
+ {"a": 2}                             [1, 3]                               false   false   false
+ {"a": 2}                             [1]                                  false   false   false
+ {"a": 2}                             [2]                                  false   false   false
+ {"a": 2}                             []                                   false   false   false
+ {"a": 2}                             false                                false   false   false
+ {"a": 2}                             null                                 false   false   false
+ {"a": 2}                             true                                 false   false   false
+ {"a": 2}                             {"a": "c"}                           false   false   false
+ {"a": 2}                             {"a": 1}                             false   false   false
+ {"a": 2}                             {"a": 2, "c": 3}                     true    true    false
+ {"a": 2}                             {"a": 2}                             false   true    true
+ {"a": 2}                             {"a": 3, "b": 3}                     true    true    false
+ {"a": 2}                             {"aa": 1}                            true    true    false
+ {"a": 2}                             {"b": 1, "d": 1}                     true    true    false
+ {"a": 2}                             {"b": 1}                             true    true    false
+ {"a": 2}                             {"b": 2}                             true    true    false
+ {"a": 2}                             {"bb": "dd"}                         true    true    false
+ {"a": 2}                             {"c": "e", "f": "g"}                 true    true    false
+ {"a": 2}                             {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"a": 2}                             {"c": "e", "f": {"a": []}}           true    true    false
+ {"a": 2}                             {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"a": 2}                             {"c": "e"}                           true    true    false
+ {"a": 2}                             {"c": 1, "aa": 1}                    true    true    false
+ {"a": 2}                             {}                                   false   false   false
+ {"a": 3, "b": 3}                     "s"                                  false   false   false
+ {"a": 3, "b": 3}                     1                                    false   false   false
+ {"a": 3, "b": 3}                     [1, 2]                               false   false   false
+ {"a": 3, "b": 3}                     [1, 3]                               false   false   false
+ {"a": 3, "b": 3}                     [1]                                  false   false   false
+ {"a": 3, "b": 3}                     [2]                                  false   false   false
+ {"a": 3, "b": 3}                     []                                   false   false   false
+ {"a": 3, "b": 3}                     false                                false   false   false
+ {"a": 3, "b": 3}                     null                                 false   false   false
+ {"a": 3, "b": 3}                     true                                 false   false   false
+ {"a": 3, "b": 3}                     {"a": "c"}                           false   false   false
+ {"a": 3, "b": 3}                     {"a": 1}                             false   false   false
+ {"a": 3, "b": 3}                     {"a": 2, "c": 3}                     false   false   false
+ {"a": 3, "b": 3}                     {"a": 2}                             false   false   false
+ {"a": 3, "b": 3}                     {"a": 3, "b": 3}                     false   true    true
+ {"a": 3, "b": 3}                     {"aa": 1}                            false   false   false
+ {"a": 3, "b": 3}                     {"b": 1, "d": 1}                     true    true    false
+ {"a": 3, "b": 3}                     {"b": 1}                             false   false   false
+ {"a": 3, "b": 3}                     {"b": 2}                             false   false   false
+ {"a": 3, "b": 3}                     {"bb": "dd"}                         false   false   false
+ {"a": 3, "b": 3}                     {"c": "e", "f": "g"}                 true    true    false
+ {"a": 3, "b": 3}                     {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"a": 3, "b": 3}                     {"c": "e", "f": {"a": []}}           true    true    false
+ {"a": 3, "b": 3}                     {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"a": 3, "b": 3}                     {"c": "e"}                           false   false   false
+ {"a": 3, "b": 3}                     {"c": 1, "aa": 1}                    true    true    false
+ {"a": 3, "b": 3}                     {}                                   false   false   false
+ {"aa": 1}                            "s"                                  false   false   false
+ {"aa": 1}                            1                                    false   false   false
+ {"aa": 1}                            [1, 2]                               false   false   false
+ {"aa": 1}                            [1, 3]                               false   false   false
+ {"aa": 1}                            [1]                                  false   false   false
+ {"aa": 1}                            [2]                                  false   false   false
+ {"aa": 1}                            []                                   false   false   false
+ {"aa": 1}                            false                                false   false   false
+ {"aa": 1}                            null                                 false   false   false
+ {"aa": 1}                            true                                 false   false   false
+ {"aa": 1}                            {"a": "c"}                           false   false   false
+ {"aa": 1}                            {"a": 1}                             false   false   false
+ {"aa": 1}                            {"a": 2, "c": 3}                     true    true    false
+ {"aa": 1}                            {"a": 2}                             false   false   false
+ {"aa": 1}                            {"a": 3, "b": 3}                     true    true    false
+ {"aa": 1}                            {"aa": 1}                            false   true    true
+ {"aa": 1}                            {"b": 1, "d": 1}                     true    true    false
+ {"aa": 1}                            {"b": 1}                             true    true    false
+ {"aa": 1}                            {"b": 2}                             true    true    false
+ {"aa": 1}                            {"bb": "dd"}                         true    true    false
+ {"aa": 1}                            {"c": "e", "f": "g"}                 true    true    false
+ {"aa": 1}                            {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"aa": 1}                            {"c": "e", "f": {"a": []}}           true    true    false
+ {"aa": 1}                            {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"aa": 1}                            {"c": "e"}                           true    true    false
+ {"aa": 1}                            {"c": 1, "aa": 1}                    true    true    false
+ {"aa": 1}                            {}                                   false   false   false
+ {"b": 1, "d": 1}                     "s"                                  false   false   false
+ {"b": 1, "d": 1}                     1                                    false   false   false
+ {"b": 1, "d": 1}                     [1, 2]                               false   false   false
+ {"b": 1, "d": 1}                     [1, 3]                               false   false   false
+ {"b": 1, "d": 1}                     [1]                                  false   false   false
+ {"b": 1, "d": 1}                     [2]                                  false   false   false
+ {"b": 1, "d": 1}                     []                                   false   false   false
+ {"b": 1, "d": 1}                     false                                false   false   false
+ {"b": 1, "d": 1}                     null                                 false   false   false
+ {"b": 1, "d": 1}                     true                                 false   false   false
+ {"b": 1, "d": 1}                     {"a": "c"}                           false   false   false
+ {"b": 1, "d": 1}                     {"a": 1}                             false   false   false
+ {"b": 1, "d": 1}                     {"a": 2, "c": 3}                     false   false   false
+ {"b": 1, "d": 1}                     {"a": 2}                             false   false   false
+ {"b": 1, "d": 1}                     {"a": 3, "b": 3}                     false   false   false
+ {"b": 1, "d": 1}                     {"aa": 1}                            false   false   false
+ {"b": 1, "d": 1}                     {"b": 1, "d": 1}                     false   true    true
+ {"b": 1, "d": 1}                     {"b": 1}                             false   false   false
+ {"b": 1, "d": 1}                     {"b": 2}                             false   false   false
+ {"b": 1, "d": 1}                     {"bb": "dd"}                         false   false   false
+ {"b": 1, "d": 1}                     {"c": "e", "f": "g"}                 true    true    false
+ {"b": 1, "d": 1}                     {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"b": 1, "d": 1}                     {"c": "e", "f": {"a": []}}           true    true    false
+ {"b": 1, "d": 1}                     {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"b": 1, "d": 1}                     {"c": "e"}                           false   false   false
+ {"b": 1, "d": 1}                     {"c": 1, "aa": 1}                    true    true    false
+ {"b": 1, "d": 1}                     {}                                   false   false   false
+ {"b": 1}                             "s"                                  false   false   false
+ {"b": 1}                             1                                    false   false   false
+ {"b": 1}                             [1, 2]                               false   false   false
+ {"b": 1}                             [1, 3]                               false   false   false
+ {"b": 1}                             [1]                                  false   false   false
+ {"b": 1}                             [2]                                  false   false   false
+ {"b": 1}                             []                                   false   false   false
+ {"b": 1}                             false                                false   false   false
+ {"b": 1}                             null                                 false   false   false
+ {"b": 1}                             true                                 false   false   false
+ {"b": 1}                             {"a": "c"}                           false   false   false
+ {"b": 1}                             {"a": 1}                             false   false   false
+ {"b": 1}                             {"a": 2, "c": 3}                     true    true    false
+ {"b": 1}                             {"a": 2}                             false   false   false
+ {"b": 1}                             {"a": 3, "b": 3}                     true    true    false
+ {"b": 1}                             {"aa": 1}                            false   false   false
+ {"b": 1}                             {"b": 1, "d": 1}                     true    true    false
+ {"b": 1}                             {"b": 1}                             false   true    true
+ {"b": 1}                             {"b": 2}                             true    true    false
+ {"b": 1}                             {"bb": "dd"}                         true    true    false
+ {"b": 1}                             {"c": "e", "f": "g"}                 true    true    false
+ {"b": 1}                             {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"b": 1}                             {"c": "e", "f": {"a": []}}           true    true    false
+ {"b": 1}                             {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"b": 1}                             {"c": "e"}                           true    true    false
+ {"b": 1}                             {"c": 1, "aa": 1}                    true    true    false
+ {"b": 1}                             {}                                   false   false   false
+ {"b": 2}                             "s"                                  false   false   false
+ {"b": 2}                             1                                    false   false   false
+ {"b": 2}                             [1, 2]                               false   false   false
+ {"b": 2}                             [1, 3]                               false   false   false
+ {"b": 2}                             [1]                                  false   false   false
+ {"b": 2}                             [2]                                  false   false   false
+ {"b": 2}                             []                                   false   false   false
+ {"b": 2}                             false                                false   false   false
+ {"b": 2}                             null                                 false   false   false
+ {"b": 2}                             true                                 false   false   false
+ {"b": 2}                             {"a": "c"}                           false   false   false
+ {"b": 2}                             {"a": 1}                             false   false   false
+ {"b": 2}                             {"a": 2, "c": 3}                     true    true    false
+ {"b": 2}                             {"a": 2}                             false   false   false
+ {"b": 2}                             {"a": 3, "b": 3}                     true    true    false
+ {"b": 2}                             {"aa": 1}                            false   false   false
+ {"b": 2}                             {"b": 1, "d": 1}                     true    true    false
+ {"b": 2}                             {"b": 1}                             false   false   false
+ {"b": 2}                             {"b": 2}                             false   true    true
+ {"b": 2}                             {"bb": "dd"}                         true    true    false
+ {"b": 2}                             {"c": "e", "f": "g"}                 true    true    false
+ {"b": 2}                             {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"b": 2}                             {"c": "e", "f": {"a": []}}           true    true    false
+ {"b": 2}                             {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"b": 2}                             {"c": "e"}                           true    true    false
+ {"b": 2}                             {"c": 1, "aa": 1}                    true    true    false
+ {"b": 2}                             {}                                   false   false   false
+ {"bb": "dd"}                         "s"                                  false   false   false
+ {"bb": "dd"}                         1                                    false   false   false
+ {"bb": "dd"}                         [1, 2]                               false   false   false
+ {"bb": "dd"}                         [1, 3]                               false   false   false
+ {"bb": "dd"}                         [1]                                  false   false   false
+ {"bb": "dd"}                         [2]                                  false   false   false
+ {"bb": "dd"}                         []                                   false   false   false
+ {"bb": "dd"}                         false                                false   false   false
+ {"bb": "dd"}                         null                                 false   false   false
+ {"bb": "dd"}                         true                                 false   false   false
+ {"bb": "dd"}                         {"a": "c"}                           false   false   false
+ {"bb": "dd"}                         {"a": 1}                             false   false   false
+ {"bb": "dd"}                         {"a": 2, "c": 3}                     true    true    false
+ {"bb": "dd"}                         {"a": 2}                             false   false   false
+ {"bb": "dd"}                         {"a": 3, "b": 3}                     true    true    false
+ {"bb": "dd"}                         {"aa": 1}                            false   false   false
+ {"bb": "dd"}                         {"b": 1, "d": 1}                     true    true    false
+ {"bb": "dd"}                         {"b": 1}                             false   false   false
+ {"bb": "dd"}                         {"b": 2}                             false   false   false
+ {"bb": "dd"}                         {"bb": "dd"}                         false   true    true
+ {"bb": "dd"}                         {"c": "e", "f": "g"}                 true    true    false
+ {"bb": "dd"}                         {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"bb": "dd"}                         {"c": "e", "f": {"a": []}}           true    true    false
+ {"bb": "dd"}                         {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"bb": "dd"}                         {"c": "e"}                           true    true    false
+ {"bb": "dd"}                         {"c": 1, "aa": 1}                    true    true    false
+ {"bb": "dd"}                         {}                                   false   false   false
+ {"c": "e", "f": "g"}                 "s"                                  false   false   false
+ {"c": "e", "f": "g"}                 1                                    false   false   false
+ {"c": "e", "f": "g"}                 [1, 2]                               false   false   false
+ {"c": "e", "f": "g"}                 [1, 3]                               false   false   false
+ {"c": "e", "f": "g"}                 [1]                                  false   false   false
+ {"c": "e", "f": "g"}                 [2]                                  false   false   false
+ {"c": "e", "f": "g"}                 []                                   false   false   false
+ {"c": "e", "f": "g"}                 false                                false   false   false
+ {"c": "e", "f": "g"}                 null                                 false   false   false
+ {"c": "e", "f": "g"}                 true                                 false   false   false
+ {"c": "e", "f": "g"}                 {"a": "c"}                           false   false   false
+ {"c": "e", "f": "g"}                 {"a": 1}                             false   false   false
+ {"c": "e", "f": "g"}                 {"a": 2, "c": 3}                     false   false   false
+ {"c": "e", "f": "g"}                 {"a": 2}                             false   false   false
+ {"c": "e", "f": "g"}                 {"a": 3, "b": 3}                     false   false   false
+ {"c": "e", "f": "g"}                 {"aa": 1}                            false   false   false
+ {"c": "e", "f": "g"}                 {"b": 1, "d": 1}                     false   false   false
+ {"c": "e", "f": "g"}                 {"b": 1}                             false   false   false
+ {"c": "e", "f": "g"}                 {"b": 2}                             false   false   false
+ {"c": "e", "f": "g"}                 {"bb": "dd"}                         false   false   false
+ {"c": "e", "f": "g"}                 {"c": "e", "f": "g"}                 false   true    true
+ {"c": "e", "f": "g"}                 {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"c": "e", "f": "g"}                 {"c": "e", "f": {"a": []}}           true    true    false
+ {"c": "e", "f": "g"}                 {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"c": "e", "f": "g"}                 {"c": "e"}                           false   false   false
+ {"c": "e", "f": "g"}                 {"c": 1, "aa": 1}                    true    true    false
+ {"c": "e", "f": "g"}                 {}                                   false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   "s"                                  false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   1                                    false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   [1, 2]                               false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   [1, 3]                               false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   [1]                                  false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   [2]                                  false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   []                                   false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   false                                false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   null                                 false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   true                                 false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"a": "c"}                           false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"a": 1}                             false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"a": 2, "c": 3}                     false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"a": 2}                             false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"a": 3, "b": 3}                     false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"aa": 1}                            false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"b": 1, "d": 1}                     false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"b": 1}                             false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"b": 2}                             false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"bb": "dd"}                         false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": "e", "f": "g"}                 false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": "e", "f": {"a": 1, "b": []}}   false   true    true
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": "e", "f": {"a": []}}           false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": "e"}                           false   false   false
+ {"c": "e", "f": {"a": 1, "b": []}}   {"c": 1, "aa": 1}                    true    true    false
+ {"c": "e", "f": {"a": 1, "b": []}}   {}                                   false   false   false
+ {"c": "e", "f": {"a": []}}           "s"                                  false   false   false
+ {"c": "e", "f": {"a": []}}           1                                    false   false   false
+ {"c": "e", "f": {"a": []}}           [1, 2]                               false   false   false
+ {"c": "e", "f": {"a": []}}           [1, 3]                               false   false   false
+ {"c": "e", "f": {"a": []}}           [1]                                  false   false   false
+ {"c": "e", "f": {"a": []}}           [2]                                  false   false   false
+ {"c": "e", "f": {"a": []}}           []                                   false   false   false
+ {"c": "e", "f": {"a": []}}           false                                false   false   false
+ {"c": "e", "f": {"a": []}}           null                                 false   false   false
+ {"c": "e", "f": {"a": []}}           true                                 false   false   false
+ {"c": "e", "f": {"a": []}}           {"a": "c"}                           false   false   false
+ {"c": "e", "f": {"a": []}}           {"a": 1}                             false   false   false
+ {"c": "e", "f": {"a": []}}           {"a": 2, "c": 3}                     false   false   false
+ {"c": "e", "f": {"a": []}}           {"a": 2}                             false   false   false
+ {"c": "e", "f": {"a": []}}           {"a": 3, "b": 3}                     false   false   false
+ {"c": "e", "f": {"a": []}}           {"aa": 1}                            false   false   false
+ {"c": "e", "f": {"a": []}}           {"b": 1, "d": 1}                     false   false   false
+ {"c": "e", "f": {"a": []}}           {"b": 1}                             false   false   false
+ {"c": "e", "f": {"a": []}}           {"b": 2}                             false   false   false
+ {"c": "e", "f": {"a": []}}           {"bb": "dd"}                         false   false   false
+ {"c": "e", "f": {"a": []}}           {"c": "e", "f": "g"}                 false   false   false
+ {"c": "e", "f": {"a": []}}           {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"c": "e", "f": {"a": []}}           {"c": "e", "f": {"a": []}}           false   true    true
+ {"c": "e", "f": {"a": []}}           {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"c": "e", "f": {"a": []}}           {"c": "e"}                           false   false   false
+ {"c": "e", "f": {"a": []}}           {"c": 1, "aa": 1}                    true    true    false
+ {"c": "e", "f": {"a": []}}           {}                                   false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   "s"                                  false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   1                                    false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   [1, 2]                               false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   [1, 3]                               false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   [1]                                  false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   [2]                                  false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   []                                   false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   false                                false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   null                                 false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   true                                 false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"a": "c"}                           false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"a": 1}                             false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"a": 2, "c": 3}                     false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"a": 2}                             false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"a": 3, "b": 3}                     false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"aa": 1}                            false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"b": 1, "d": 1}                     false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"b": 1}                             false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"b": 2}                             false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"bb": "dd"}                         false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": "e", "f": "g"}                 false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": "e", "f": {"a": 1, "b": []}}   false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": "e", "f": {"a": []}}           false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": "e", "f": {"b": 1, "c": []}}   false   true    true
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": "e"}                           false   false   false
+ {"c": "e", "f": {"b": 1, "c": []}}   {"c": 1, "aa": 1}                    true    true    false
+ {"c": "e", "f": {"b": 1, "c": []}}   {}                                   false   false   false
+ {"c": "e"}                           "s"                                  false   false   false
+ {"c": "e"}                           1                                    false   false   false
+ {"c": "e"}                           [1, 2]                               false   false   false
+ {"c": "e"}                           [1, 3]                               false   false   false
+ {"c": "e"}                           [1]                                  false   false   false
+ {"c": "e"}                           [2]                                  false   false   false
+ {"c": "e"}                           []                                   false   false   false
+ {"c": "e"}                           false                                false   false   false
+ {"c": "e"}                           null                                 false   false   false
+ {"c": "e"}                           true                                 false   false   false
+ {"c": "e"}                           {"a": "c"}                           false   false   false
+ {"c": "e"}                           {"a": 1}                             false   false   false
+ {"c": "e"}                           {"a": 2, "c": 3}                     true    true    false
+ {"c": "e"}                           {"a": 2}                             false   false   false
+ {"c": "e"}                           {"a": 3, "b": 3}                     true    true    false
+ {"c": "e"}                           {"aa": 1}                            false   false   false
+ {"c": "e"}                           {"b": 1, "d": 1}                     true    true    false
+ {"c": "e"}                           {"b": 1}                             false   false   false
+ {"c": "e"}                           {"b": 2}                             false   false   false
+ {"c": "e"}                           {"bb": "dd"}                         false   false   false
+ {"c": "e"}                           {"c": "e", "f": "g"}                 true    true    false
+ {"c": "e"}                           {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {"c": "e"}                           {"c": "e", "f": {"a": []}}           true    true    false
+ {"c": "e"}                           {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {"c": "e"}                           {"c": "e"}                           false   true    true
+ {"c": "e"}                           {"c": 1, "aa": 1}                    true    true    false
+ {"c": "e"}                           {}                                   false   false   false
+ {"c": 1, "aa": 1}                    "s"                                  false   false   false
+ {"c": 1, "aa": 1}                    1                                    false   false   false
+ {"c": 1, "aa": 1}                    [1, 2]                               false   false   false
+ {"c": 1, "aa": 1}                    [1, 3]                               false   false   false
+ {"c": 1, "aa": 1}                    [1]                                  false   false   false
+ {"c": 1, "aa": 1}                    [2]                                  false   false   false
+ {"c": 1, "aa": 1}                    []                                   false   false   false
+ {"c": 1, "aa": 1}                    false                                false   false   false
+ {"c": 1, "aa": 1}                    null                                 false   false   false
+ {"c": 1, "aa": 1}                    true                                 false   false   false
+ {"c": 1, "aa": 1}                    {"a": "c"}                           false   false   false
+ {"c": 1, "aa": 1}                    {"a": 1}                             false   false   false
+ {"c": 1, "aa": 1}                    {"a": 2, "c": 3}                     false   false   false
+ {"c": 1, "aa": 1}                    {"a": 2}                             false   false   false
+ {"c": 1, "aa": 1}                    {"a": 3, "b": 3}                     false   false   false
+ {"c": 1, "aa": 1}                    {"aa": 1}                            false   false   false
+ {"c": 1, "aa": 1}                    {"b": 1, "d": 1}                     false   false   false
+ {"c": 1, "aa": 1}                    {"b": 1}                             false   false   false
+ {"c": 1, "aa": 1}                    {"b": 2}                             false   false   false
+ {"c": 1, "aa": 1}                    {"bb": "dd"}                         false   false   false
+ {"c": 1, "aa": 1}                    {"c": "e", "f": "g"}                 false   false   false
+ {"c": 1, "aa": 1}                    {"c": "e", "f": {"a": 1, "b": []}}   false   false   false
+ {"c": 1, "aa": 1}                    {"c": "e", "f": {"a": []}}           false   false   false
+ {"c": 1, "aa": 1}                    {"c": "e", "f": {"b": 1, "c": []}}   false   false   false
+ {"c": 1, "aa": 1}                    {"c": "e"}                           false   false   false
+ {"c": 1, "aa": 1}                    {"c": 1, "aa": 1}                    false   true    true
+ {"c": 1, "aa": 1}                    {}                                   false   false   false
+ {}                                   "s"                                  false   false   false
+ {}                                   1                                    false   false   false
+ {}                                   [1, 2]                               false   false   false
+ {}                                   [1, 3]                               false   false   false
+ {}                                   [1]                                  false   false   false
+ {}                                   [2]                                  false   false   false
+ {}                                   []                                   false   false   false
+ {}                                   false                                false   false   false
+ {}                                   null                                 false   false   false
+ {}                                   true                                 false   false   false
+ {}                                   {"a": "c"}                           true    true    false
+ {}                                   {"a": 1}                             true    true    false
+ {}                                   {"a": 2, "c": 3}                     true    true    false
+ {}                                   {"a": 2}                             true    true    false
+ {}                                   {"a": 3, "b": 3}                     true    true    false
+ {}                                   {"aa": 1}                            true    true    false
+ {}                                   {"b": 1, "d": 1}                     true    true    false
+ {}                                   {"b": 1}                             true    true    false
+ {}                                   {"b": 2}                             true    true    false
+ {}                                   {"bb": "dd"}                         true    true    false
+ {}                                   {"c": "e", "f": "g"}                 true    true    false
+ {}                                   {"c": "e", "f": {"a": 1, "b": []}}   true    true    false
+ {}                                   {"c": "e", "f": {"a": []}}           true    true    false
+ {}                                   {"c": "e", "f": {"b": 1, "c": []}}   true    true    false
+ {}                                   {"c": "e"}                           true    true    false
+ {}                                   {"c": 1, "aa": 1}                    true    true    false
+ {}                                   {}                                   false   true    true

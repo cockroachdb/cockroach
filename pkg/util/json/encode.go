@@ -284,6 +284,7 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 		}
 		result[i].v = nextJSON
 	}
+	result.sort()
 	return b, result, nil
 }
 

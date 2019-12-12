@@ -421,12 +421,13 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 		// of the offsets by strategically positioning our binary search guesses to
 		// land on them.
 		var err error
+		jsonKey := jsonString(key)
 		i := sort.Search(j.containerLen, func(idx int) bool {
 			data, _, err := j.objectGetNthDataRange(idx)
 			if err != nil {
 				return false
 			}
-			return string(data) >= key
+			return !jsonObjectKeyLess(jsonString(data), jsonKey)
 		})
 		if err != nil {
 			return nil, err
@@ -552,7 +553,7 @@ func (j *jsonEncoded) AsText() (*string, error) {
 }
 
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
-	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
+	if cmp := cmpJSONTypes(j, other); cmp != 0 {
 		return cmp, nil
 	}
 	// TODO(justin): this can be optimized in some cases. We don't necessarily
