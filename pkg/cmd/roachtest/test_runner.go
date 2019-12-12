@@ -693,8 +693,7 @@ func (r *testRunner) runTest(
 	// timeout.
 	done := make(chan struct{})
 	go func() {
-		defer close(done) // closed only after we've grabbed the debug info below
-
+		defer close(done)
 		// This is the call to actually run the test.
 		t.spec.Run(runCtx, t, c)
 	}()
