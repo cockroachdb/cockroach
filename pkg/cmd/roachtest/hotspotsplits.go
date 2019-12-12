@@ -42,16 +42,10 @@ func registerHotSpotSplits(r *testRegistry) {
 		m.Go(func() error {
 			t.l.Printf("starting load generator\n")
 
-			quietL, err := t.l.ChildLogger("kv-0", quietStdout)
-			if err != nil {
-				return err
-			}
-			defer quietL.close()
-
 			// TODO(rytaft): reset this to 1 << 19 (512 KB) once we can dynamically
 			// size kv batches.
 			const blockSize = 1 << 18 // 256 KB
-			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
+			return c.RunE(ctx, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
 				concurrency, blockSize, blockSize, duration.String()))

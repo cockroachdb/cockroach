@@ -1727,7 +1727,7 @@ func (c *cluster) Get(ctx context.Context, l *logger, src, dest string, opts ...
 
 // Put a string into the specified file on the remote(s).
 func (c *cluster) PutString(
-	ctx context.Context, l *logger, content, dest string, mode os.FileMode, opts ...option,
+	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.PutString error")
@@ -1751,7 +1751,7 @@ func (c *cluster) PutString(
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	if err := execCmd(ctx, l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
+	if err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
 		return errors.Wrap(err, "PutString")
 	}
 	return nil
@@ -1959,18 +1959,25 @@ func (c *cluster) Install(
 // RunE runs a command on the specified node, returning an error. The output will
 // be redirected to a file whose name will be logged by the cluster.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
-	dest := fmt.Sprintf(`run_%s_%s_%s`,
+	cmdString := strings.Join(args, " ")
+	logFile := fmt.Sprintf(`run_%s_%s_%s`,
 		timeutil.Now().Format(`15:04:05.000`),
 		c.makeNodes(node),
-		regexp.MustCompile(`[^a-z0-9_]+`).ReplaceAllString(strings.Join(args, "_"), "_"),
+		regexp.MustCompile(`[^a-z0-9_]+`).ReplaceAllString(cmdString, "_"),
 	)
 	// NB: we set no prefix because it's only going to a file anyway.
-	l, err := c.l.ChildLogger(dest, quietStderr, quietStdout)
+	l, err := c.l.ChildLogger(logFile, quietStderr, quietStdout)
 	if err != nil {
 		return err
 	}
-	c.l.PrintfCtx(ctx, "redirecting output to artifact %s", dest)
-	return errors.Wrapf(c.RunL(ctx, l, node, args...), "output in %s", dest)
+	logFileShort := logFile
+	if len(logFile) > 100 {
+		logFileShort = logFile[:97] + "..."
+	}
+	c.l.PrintfCtx(ctx, "> %s: %s", cmdString, logFileShort)
+	err = errors.Wrapf(c.RunL(ctx, l, node, args...), "output in %s", logFile)
+	l.Printf("> result: %v", err)
+	return err
 }
 
 // RunL runs a command on the specified node, returning an error.
