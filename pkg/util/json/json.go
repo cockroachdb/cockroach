@@ -297,7 +297,7 @@ func (s *pairSorter) Len() int {
 }
 
 func (s *pairSorter) Less(i, j int) bool {
-	cmp := strings.Compare(string(s.pairs[i].k), string(s.pairs[j].k))
+	cmp := jsonObjectKeyCompare(s.pairs[i].k, s.pairs[j].k)
 	if cmp != 0 {
 		return cmp == -1
 	}
@@ -334,8 +334,39 @@ func (s *pairSorter) unique() {
 }
 
 // jsonObject represents a JSON object as a sorted-by-key list of key-value
-// pairs, which are unique by key.
+// pairs, which are unique by key. All code here assumes that any jsonObject
+// is sorted in canonical Postgres order (see jsonObjectKeyLess). Any function
+// that creates a jsonObject must provide this invariant, possibly by using the
+// sort() method.
 type jsonObject []jsonKeyValuePair
+
+func (j jsonObject) sort() {
+	sort.Slice(j, func(a, b int) bool {
+		return jsonObjectKeyLess(jsonString(j[a].k), j[b].k)
+	})
+}
+
+// jsonObjectKeyCompare compares object keys a and b using Postgres JSON object
+// key ordering semantics.
+func jsonObjectKeyCompare(a, b jsonString) int {
+	// Shorter keys are sorted first.
+	la, lb := len(a), len(b)
+	if la != lb {
+		return la - lb
+	}
+	return strings.Compare(string(a), string(b))
+}
+
+// jsonObjectKeyLess returns whether a < b using Postgres JSON object key
+// ordering semantics.
+func jsonObjectKeyLess(a, b jsonString) bool {
+	// Shorter keys are sorted first.
+	la, lb := len(a), len(b)
+	if la != lb {
+		return la < lb
+	}
+	return a < b
+}
 
 func (jsonNull) Type() Type   { return NullJSONType }
 func (jsonFalse) Type() Type  { return FalseJSONType }
@@ -361,19 +392,33 @@ func (j jsonString) tryDecode() (JSON, error) { return j, nil }
 func (j jsonArray) tryDecode() (JSON, error)  { return j, nil }
 func (j jsonObject) tryDecode() (JSON, error) { return j, nil }
 
-func cmpJSONTypes(a Type, b Type) int {
-	if b > a {
+func cmpJSONTypes(a, b JSON) int {
+	at := a.Type()
+	bt := b.Type()
+
+	// Zero-length arrays are special. They sort before everything, even
+	// JSON null.
+	if at != bt {
+		if at == ArrayJSONType && a.Len() == 0 {
+			return -1
+		}
+		if bt == ArrayJSONType && b.Len() == 0 {
+			return 1
+		}
+	}
+
+	if bt > at {
 		return -1
 	}
-	if b < a {
+	if bt < at {
 		return 1
 	}
 	return 0
 }
 
-func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
+func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j, other), nil }
+func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j, other), nil }
+func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j, other), nil }
 
 func decodeIfNeeded(j JSON) (JSON, error) {
 	if enc, ok := j.(*jsonEncoded); ok {
@@ -387,7 +432,7 @@ func decodeIfNeeded(j JSON) (JSON, error) {
 }
 
 func (j jsonNumber) Compare(other JSON) (int, error) {
-	cmp := cmpJSONTypes(j.Type(), other.Type())
+	cmp := cmpJSONTypes(j, other)
 	if cmp != 0 {
 		return cmp, nil
 	}
@@ -401,7 +446,7 @@ func (j jsonNumber) Compare(other JSON) (int, error) {
 }
 
 func (j jsonString) Compare(other JSON) (int, error) {
-	cmp := cmpJSONTypes(j.Type(), other.Type())
+	cmp := cmpJSONTypes(j, other)
 	if cmp != 0 {
 		return cmp, nil
 	}
@@ -421,7 +466,7 @@ func (j jsonString) Compare(other JSON) (int, error) {
 }
 
 func (j jsonArray) Compare(other JSON) (int, error) {
-	cmp := cmpJSONTypes(j.Type(), other.Type())
+	cmp := cmpJSONTypes(j, other)
 	if cmp != 0 {
 		return cmp, nil
 	}
@@ -452,7 +497,7 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 }
 
 func (j jsonObject) Compare(other JSON) (int, error) {
-	cmp := cmpJSONTypes(j.Type(), other.Type())
+	cmp := cmpJSONTypes(j, other)
 	if cmp != 0 {
 		return cmp, nil
 	}
@@ -933,7 +978,9 @@ func fromMap(v map[string]interface{}) (JSON, error) {
 		keys[i] = k
 		i++
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		return jsonObjectKeyLess(jsonString(keys[i]), jsonString(keys[j]))
+	})
 	result := make([]jsonKeyValuePair, len(v))
 	for i := range keys {
 		v, err := MakeJSON(v[keys[i]])
@@ -1018,16 +1065,17 @@ func findPairIndexByKey(j jsonObject, key string) (int, bool) {
 	// For small objects, the overhead of binary search is significant and so
 	// it's faster to just do a linear scan.
 	var i int
+	jsonKey := jsonString(key)
 	if len(j) < bsearchCutoff {
 		for i = range j {
-			if string(j[i].k) >= key {
+			if !jsonObjectKeyLess(j[i].k, jsonKey) {
 				break
 			}
 		}
 	} else {
-		i = sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
+		i = sort.Search(len(j), func(i int) bool { return !jsonObjectKeyLess(j[i].k, jsonKey) })
 	}
-	if i < len(j) && string(j[i].k) == key {
+	if i < len(j) && j[i].k == jsonKey {
 		return i, true
 	}
 	return -1, false

@@ -250,7 +250,7 @@ func (j containsableObject) contains(other containsable) (bool, error) {
 		// corresponding keys in `j` since they're both sorted.
 		objIdx := 0
 		for _, rightEntry := range contained {
-			for objIdx < len(j) && j[objIdx].k < rightEntry.k {
+			for objIdx < len(j) && jsonObjectKeyLess(j[objIdx].k, rightEntry.k) {
 				objIdx++
 			}
 			if objIdx >= len(j) ||

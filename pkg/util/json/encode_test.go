@@ -232,6 +232,36 @@ func TestJSONEncodeStrictRoundTrip(t *testing.T) {
 	}
 }
 
+// TestJSONObjectDecodeOld tests that JSON objects can be encoded in any
+// order but decode in the correct order. This is needed because, with the
+// addition of jsonObjectKeyLess, we now sort objects in the same order as
+// Postgres. Objects created before this change are encoded on disk with the
+// old ordering, and all of the current code assumes thet objects are in this
+// new order.
+func TestJSONObjectDecodeOld(t *testing.T) {
+	// This is the previous value of the
+	// testdata/encoded/object_long_strings.json.bytes file. It is the old
+	// encoding of the following object, where "id" is encoded on disk
+	// before "x" since the string "id" < "x". But the new encoding
+	// considers string length first, so "x" < "id" for it.
+	// {"x":[{"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}], "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+	oldObjectEnc := []byte{64, 0, 0, 2, 144, 0, 0, 2, 16, 0, 0, 1, 144, 0, 0, 43, 80, 0, 0, 62, 105, 100, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 128, 0, 0, 1, 208, 0, 0, 54, 64, 0, 0, 1, 144, 0, 0, 2, 144, 0, 0, 42, 105, 100, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120}
+	b, j, err := DecodeJSON(oldObjectEnc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) != 0 {
+		t.Fatal("expected empty bytes")
+	}
+	if s := j.String(); s != `{"x": [{"id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}], "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}` {
+		t.Fatalf("unexpected: %s", s)
+	}
+	o := j.(jsonObject)
+	if len(o) != 2 || o[0].k != "x" || o[1].k != "id" {
+		t.Fatalf("object out of order: %#v", o)
+	}
+}
+
 // Taken from Wikipedia's JSON page.
 const sampleJSON = `{
   "firstName": "John",
