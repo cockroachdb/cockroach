@@ -283,12 +283,22 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 	if e.CustomMsg != "" {
 		return prefix + e.CustomMsg
 	}
-	if e.LeaseHolder == nil {
-		return fmt.Sprintf("%sr%d: replica %s not lease holder; lease holder unknown", prefix, e.RangeID, e.Replica)
-	} else if e.Lease != nil {
-		return fmt.Sprintf("%sr%d: replica %s not lease holder; current lease is %s", prefix, e.RangeID, e.Replica, e.Lease)
+	var buf strings.Builder
+	buf.WriteString(prefix)
+	fmt.Fprintf(&buf, "r%d: ", e.RangeID)
+	if e.Replica != (ReplicaDescriptor{}) {
+		fmt.Fprintf(&buf, "replica %s not lease holder; ", e.Replica)
+	} else {
+		fmt.Fprint(&buf, "replica not lease holder; ")
 	}
-	return fmt.Sprintf("%sr%d: replica %s not lease holder; replica %s is", prefix, e.RangeID, e.Replica, *e.LeaseHolder)
+	if e.LeaseHolder == nil {
+		fmt.Fprint(&buf, "lease holder unknown")
+	} else if e.Lease != nil {
+		fmt.Fprintf(&buf, "current lease is %s", e.Lease)
+	} else {
+		fmt.Fprintf(&buf, "replica %s is", *e.LeaseHolder)
+	}
+	return buf.String()
 }
 
 var _ ErrorDetailInterface = &NotLeaseHolderError{}

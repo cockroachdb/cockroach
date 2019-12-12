@@ -197,10 +197,6 @@ message RaftCommand {
   // top-level instead of being grouped in a sub-message for
   // backwards-compatibility.
 
-  // proposer_replica is the replica which proposed this command, to be
-  // used for lease validation.
-  roachpb.ReplicaDescriptor proposer_replica = 2 [(gogoproto.nullable) = false];
-
   // proposer_lease_seq is provided to verify at raft command apply-time
   // that the lease under which the command was proposed remains in effect.
   //
@@ -279,7 +275,7 @@ message RaftCommand {
   // application on all the replicas that "follow from" the proposer.
   map<string, string> trace_data = 16;
 
-  reserved 1, 10001 to 10014;
+  reserved 1, 2, 10001 to 10014;
 }
 
 // RaftCommandFooter contains a subset of the fields in RaftCommand. It is used

@@ -29,7 +29,7 @@ message NotLeaseHolderError {
   option (gogoproto.equal) = true;
 
   // The replica the error originated from. Used in the error's string
-  // representation.
+  // representation, if known.
   optional ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
   // The lease holder, if known.
   optional ReplicaDescriptor lease_holder = 2;
