@@ -55,17 +55,15 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	log.Event(ctx, "waiting for read lock")
-	r.readOnlyCmdMu.RLock()
-	defer r.readOnlyCmdMu.RUnlock()
-
-	// Guarantee we release the latches that we just acquired. It is
-	// important that this is inside the readOnlyCmdMu lock so that the
-	// timestamp cache update is synchronized. This is wrapped to delay
-	// pErr evaluation to its value when returning.
+	// Guarantee we release the latches that we just acquired. This is wrapped
+	// to delay pErr evaluation to its value when returning.
 	defer func() {
 		ec.done(ba, br, pErr)
 	}()
+
+	log.Event(ctx, "waiting for read lock")
+	r.readOnlyCmdMu.RLock()
+	defer r.readOnlyCmdMu.RUnlock()
 
 	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
 	if _, err := r.IsDestroyed(); err != nil {
@@ -81,9 +79,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Evaluate read-only batch command. It checks for matching key range; note
-	// that holding readOnlyCmdMu throughout is important to avoid reads from the
-	// "wrong" key range being served after the range has been split.
+	// Evaluate read-only batch command.
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
