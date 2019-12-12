@@ -28,7 +28,7 @@ run_counter=-1
 
 # Takes args that produce `go test -json` output. It filters stdout to contain
 # only test output related to failing tests and run/pass/skip events for the
-# other tests (no output). It writes artifacts/failures.log containing text
+# other tests (no output). It writes artifacts/failures.txt containing text
 # output for the failing tests.
 # It's valid to call this multiple times; all output artifacts will be
 # preserved.
@@ -78,8 +78,8 @@ function run_json_test() {
   fi
 
   tc_start_block "artifacts"
-  # Create (or append to) failures.log artifact and delete stripped.txt.
-  testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.log
+  # Create (or append to) failures.txt artifact and delete stripped.txt.
+  testfilter -mode=omit < artifacts/stripped.txt | testfilter -mode convert >> artifacts/failures.txt
   rm -f artifacts/stripped.txt
 
   # Keep the debug file around for failed builds. Compress it to avoid
