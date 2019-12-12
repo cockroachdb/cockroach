@@ -344,6 +344,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		Clock:            r.Clock(),
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
+		PushTxnsInterval: r.store.TestingKnobs().RangeFeedPushTxnsInterval,
+		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
 		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
