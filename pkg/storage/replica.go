@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -528,10 +529,12 @@ func NewReplica(
 // Send executes a command on this range, dispatching it to the
 // read-only, read-write, or admin execution path as appropriate.
 // ctx should contain the log tags from the store (and up).
+// TODO(nvanbenschoten) Move Replica.Send and it's callees into
+// the new replica_send.go file once this review is complete.
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	return r.sendWithRangeID(ctx, r.RangeID, ba)
+	return r.sendWithRangeID(ctx, r.RangeID, &ba)
 }
 
 // sendWithRangeID takes an unused rangeID argument so that the range
@@ -546,7 +549,7 @@ func (r *Replica) Send(
 //
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
-	ctx context.Context, rangeID roachpb.RangeID, ba roachpb.BatchRequest,
+	ctx context.Context, rangeID roachpb.RangeID, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
@@ -564,27 +567,39 @@ func (r *Replica) sendWithRangeID(
 	isReadOnly := ba.IsReadOnly()
 	useRaft := !isReadOnly && ba.IsWrite()
 
-	if err := r.checkBatchRequest(&ba, isReadOnly); err != nil {
+	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// NB: must be performed before collecting request spans.
+	ba, err := maybeStripInFlightWrites(ba)
+	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
 	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
-		if pErr := filter(ba); pErr != nil {
+		if pErr := filter(*ba); pErr != nil {
 			return nil, pErr
 		}
 	}
 
-	// Differentiate between admin, read-only and write.
+	// Differentiate between read-write, read-only, and admin.
 	var pErr *roachpb.Error
 	if useRaft {
 		log.Event(ctx, "read-write path")
-		br, pErr = r.executeWriteBatch(ctx, &ba)
+		fn := (*Replica).executeWriteBatch
+		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if isReadOnly {
 		log.Event(ctx, "read-only path")
-		br, pErr = r.executeReadOnlyBatch(ctx, &ba)
+		fn := (*Replica).executeReadOnlyBatch
+		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
-		br, pErr = r.executeAdminBatch(ctx, &ba)
+		br, pErr = r.executeAdminBatch(ctx, ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
@@ -597,10 +612,260 @@ func (r *Replica) sendWithRangeID(
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
-			pErr = filter(ba, br)
+			pErr = filter(*ba, br)
 		}
 	}
 	return br, pErr
+}
+
+// batchExecutionFn is a method on Replica that is able to execute a
+// BatchRequest. It is called with the batch, along with the span bounds that
+// the batch will operate over and a guard for the latches protecting the span
+// bounds. The function must ensure that the latch guard is eventually released.
+type batchExecutionFn func(
+	*Replica, context.Context, *roachpb.BatchRequest, *spanset.SpanSet, *spanlatch.Guard,
+) (*roachpb.BatchResponse, *roachpb.Error)
+
+var _ batchExecutionFn = (*Replica).executeWriteBatch
+var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
+
+// executeBatchWithConcurrencyRetries is the entry point for client (non-admin)
+// requests that execute against the range's state. The method coordinates the
+// execution of requests that may require multiple retries due to interactions
+// with concurrent transactions.
+//
+// The method acquires latches for the request, which synchronizes it with
+// conflicting requests. This permits the execution function to run without
+// concern of coordinating with logically conflicting operations, although it
+// still needs to worry about coordinating with non-conflicting operations when
+// accessing shared data structures.
+//
+// If the execution function hits a concurrency error like a WriteIntentError or
+// a TransactionPushError it will propagate the error back to this method, which
+// handles the process of retrying batch execution after addressing the error.
+func (r *Replica) executeBatchWithConcurrencyRetries(
+	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Determine the maximal set of key spans that the batch will operate on.
+	spans, err := r.collectSpans(ba)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Handle load-based splitting.
+	r.recordBatchForLoadBasedSplitting(ctx, ba, spans)
+
+	// TODO(nvanbenschoten): Clean this up once it's pulled inside the
+	// concurrency manager.
+	var cleanup intentresolver.CleanupFunc
+	defer func() {
+		if cleanup != nil {
+			// This request wrote an intent only if there was no error, the
+			// request is transactional, the transaction is not yet finalized,
+			// and the request wasn't read-only.
+			if pErr == nil && ba.Txn != nil && !br.Txn.Status.IsFinalized() && !ba.IsReadOnly() {
+				cleanup(nil, &br.Txn.TxnMeta)
+			} else {
+				cleanup(nil, nil)
+			}
+		}
+	}()
+
+	// Try to execute command; exit retry loop on success.
+	for {
+		// Exit loop if context has been canceled or timed out.
+		if err := ctx.Err(); err != nil {
+			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
+		}
+
+		// If necessary, the request may need to wait in the txn wait queue,
+		// pending updates to the target transaction for either PushTxn or
+		// QueryTxn requests.
+		// TODO(nvanbenschoten): Push this into the concurrency package.
+		br, pErr = r.maybeWaitForPushee(ctx, ba)
+		if br != nil || pErr != nil {
+			return br, pErr
+		}
+
+		// Acquire latches to prevent overlapping commands from executing until
+		// this command completes.
+		// TODO(nvanbenschoten): Replace this with a call into the upcoming
+		// concurrency package when it is introduced.
+		lg, err := r.beginCmds(ctx, ba, spans)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		br, pErr = fn(r, ctx, ba, spans, lg)
+		switch t := pErr.GetDetail().(type) {
+		case nil:
+			// Success.
+			return br, nil
+		case *roachpb.WriteIntentError:
+			if cleanup, pErr = r.handleWriteIntentError(ctx, ba, pErr, t, cleanup); pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		case *roachpb.TransactionPushError:
+			if pErr = r.handleTransactionPushError(ctx, ba, pErr, t); pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		case *roachpb.IndeterminateCommitError:
+			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		case *roachpb.MergeInProgressError:
+			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
+				return nil, pErr
+			}
+			// Retry...
+		default:
+			// Propagate error.
+			return nil, pErr
+		}
+	}
+}
+
+func (r *Replica) handleWriteIntentError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.WriteIntentError,
+	cleanup intentresolver.CleanupFunc,
+) (intentresolver.CleanupFunc, *roachpb.Error) {
+	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
+		return cleanup, pErr
+	}
+
+	// Process and resolve write intent error.
+	var pushType roachpb.PushTxnType
+	if ba.IsWrite() {
+		pushType = roachpb.PUSH_ABORT
+	} else {
+		pushType = roachpb.PUSH_TIMESTAMP
+	}
+
+	index := pErr.Index
+	args := ba.Requests[index.Index].GetInner()
+	// Make a copy of the header for the upcoming push; we will update the
+	// timestamp.
+	h := ba.Header
+	if h.Txn != nil {
+		// We must push at least to h.Timestamp, but in fact we want to
+		// go all the way up to a timestamp which was taken off the HLC
+		// after our operation started. This allows us to not have to
+		// restart for uncertainty as we come back and read.
+		obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
+		if !ok {
+			// This was set earlier in this method, so it's
+			// completely unexpected to not be found now.
+			log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
+		}
+		h.Timestamp.Forward(obsTS)
+		// We are going to hand the header (and thus the transaction proto)
+		// to the RPC framework, after which it must not be changed (since
+		// that could race). Since the subsequent execution of the original
+		// request might mutate the transaction, make a copy here.
+		//
+		// See #9130.
+		h.Txn = h.Txn.Clone()
+	}
+
+	// Handle the case where we get more than one write intent error;
+	// we need to cleanup the previous attempt to handle it to allow
+	// any other pusher queued up behind this RPC to proceed.
+	if cleanup != nil {
+		cleanup(t, nil)
+	}
+	cleanup, pErr = r.store.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType)
+	if pErr != nil {
+		// Do not propagate ambiguous results; assume success and retry original op.
+		if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
+			return cleanup, nil
+		}
+		// Propagate new error. Preserve the error index.
+		pErr.Index = index
+		return cleanup, pErr
+	}
+	// We've resolved the write intent; retry command.
+	return cleanup, nil
+}
+
+func (r *Replica) handleTransactionPushError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.TransactionPushError,
+) *roachpb.Error {
+	// On a transaction push error, retry immediately if doing so will enqueue
+	// into the txnWaitQueue in order to await further updates to the unpushed
+	// txn's status. We check ShouldPushImmediately to avoid retrying
+	// non-queueable PushTxnRequests (see #18191).
+	dontRetry := r.store.cfg.TestingKnobs.DontRetryPushTxnFailures
+	if !dontRetry && ba.IsSinglePushTxnRequest() {
+		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+		dontRetry = txnwait.ShouldPushImmediately(pushReq)
+	}
+	if dontRetry {
+		return pErr
+	}
+	// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and retry.
+	r.txnWaitQueue.Enqueue(&t.PusheeTxn)
+	return nil
+}
+
+func (r *Replica) handleIndeterminateCommitError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.IndeterminateCommitError,
+) *roachpb.Error {
+	if r.store.cfg.TestingKnobs.DontRecoverIndeterminateCommits {
+		return pErr
+	}
+	// On an indeterminate commit error, attempt to recover and finalize the
+	// stuck transaction. Retry immediately if successful.
+	if _, err := r.store.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
+		// Do not propagate ambiguous results; assume success and retry original op.
+		if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+			return nil
+		}
+		// Propagate new error. Preserve the error index.
+		newPErr := roachpb.NewError(err)
+		newPErr.Index = pErr.Index
+		return newPErr
+	}
+	// We've recovered the transaction that blocked the push; retry command.
+	return nil
+}
+
+func (r *Replica) handleMergeInProgressError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.MergeInProgressError,
+) *roachpb.Error {
+	// A merge was in progress. We need to retry the command after the merge
+	// completes, as signaled by the closing of the replica's mergeComplete
+	// channel. Note that the merge may have already completed, in which case
+	// its mergeComplete channel will be nil.
+	mergeCompleteCh := r.getMergeCompleteCh()
+	if mergeCompleteCh == nil {
+		// Merge no longer in progress. Retry the command.
+		return nil
+	}
+	log.Event(ctx, "waiting on in-progress merge")
+	select {
+	case <-mergeCompleteCh:
+		// Merge complete. Retry the command.
+		return nil
+	case <-ctx.Done():
+		return roachpb.NewError(errors.Wrap(ctx.Err(), "aborted during merge"))
+	case <-r.store.stopper.ShouldQuiesce():
+		return roachpb.NewError(&roachpb.NodeUnavailableError{})
+	}
 }
 
 // String returns the string representation of the replica using an
@@ -1334,60 +1599,47 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 // when the commands are done and can release their latches.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
-) (endCmds, error) {
+) (*spanlatch.Guard, error) {
 	// Only acquire latches for consistent operations.
-	var lg *spanlatch.Guard
-	if ba.ReadConsistency == roachpb.CONSISTENT {
-		// Check for context cancellation before acquiring latches.
-		if err := ctx.Err(); err != nil {
-			log.VEventf(ctx, 2, "%s before acquiring latches: %s", err, ba.Summary())
-			return endCmds{}, errors.Wrap(err, "aborted before acquiring latches")
-		}
-
-		var beforeLatch time.Time
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			beforeLatch = timeutil.Now()
-		}
-
-		// Acquire latches for all the request's declared spans to ensure
-		// protected access and to avoid interacting requests from operating at
-		// the same time. The latches will be held for the duration of request.
-		var err error
-		lg, err = r.latchMgr.Acquire(ctx, spans)
-		if err != nil {
-			return endCmds{}, err
-		}
-
-		if !beforeLatch.IsZero() {
-			dur := timeutil.Since(beforeLatch)
-			log.VEventf(ctx, 2, "waited %s to acquire latches", dur)
-		}
-
-		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
-			if pErr := filter(*ba); pErr != nil {
-				r.latchMgr.Release(lg)
-				return endCmds{}, pErr.GoError()
-			}
-		}
-	} else {
+	if ba.ReadConsistency != roachpb.CONSISTENT {
 		log.Event(ctx, "operation accepts inconsistent results")
+		return nil, nil
 	}
 
-	// Handle load-based splitting.
-	if r.SplitByLoadEnabled() {
-		shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
-			return spans.BoundarySpan(spanset.SpanGlobal)
-		})
-		if shouldInitSplit {
-			r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+	// Don't acquire latches for lease requests. These are run on replicas that
+	// do not hold the lease, so acquiring latches wouldn't help synchronize
+	// with other requests.
+	if ba.IsLeaseRequest() {
+		return nil, nil
+	}
+
+	var beforeLatch time.Time
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		beforeLatch = timeutil.Now()
+	}
+
+	// Acquire latches for all the request's declared spans to ensure
+	// protected access and to avoid interacting requests from operating at
+	// the same time. The latches will be held for the duration of request.
+	log.Event(ctx, "acquire latches")
+	lg, err := r.latchMgr.Acquire(ctx, spans)
+	if err != nil {
+		return nil, err
+	}
+
+	if !beforeLatch.IsZero() {
+		dur := timeutil.Since(beforeLatch)
+		log.VEventf(ctx, 2, "waited %s to acquire latches", dur)
+	}
+
+	if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
+		if pErr := filter(*ba); pErr != nil {
+			r.latchMgr.Release(lg)
+			return nil, pErr.GoError()
 		}
 	}
 
-	ec := endCmds{
-		repl: r,
-		lg:   lg,
-	}
-	return ec, nil
+	return lg, nil
 }
 
 // executeAdminBatch executes the command directly. There is no interaction

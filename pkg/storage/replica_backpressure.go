@@ -90,9 +90,9 @@ func (r *Replica) shouldBackpressureWrites() bool {
 	return r.exceedsMultipleOfSplitSizeRLocked(mult)
 }
 
-// maybeBackpressureWriteBatch blocks to apply backpressure if the replica
-// deems that backpressure is necessary.
-func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
+// maybeBackpressureBatch blocks to apply backpressure if the replica deems
+// that backpressure is necessary.
+func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
 	if !canBackpressureBatch(ba) {
 		return nil
 	}

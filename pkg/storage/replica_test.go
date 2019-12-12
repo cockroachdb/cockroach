@@ -2878,10 +2878,12 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Set clock to time 2s and do the conditional put.
 	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
@@ -2958,10 +2960,12 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 
 func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// InitPut args to write "0". Should succeed.
 	key := []byte("a")
@@ -3097,7 +3101,9 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Test for both read & write attempts.
 	for i, read := range []bool{true, false} {
@@ -3119,10 +3125,9 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		args := readOrWriteArgs(key, read)
 		ts := tc.Clock().Now() // later timestamp
 
-		if _, pErr := tc.SendWrappedWith(roachpb.Header{
-			Timestamp: ts,
-		}, args); pErr == nil {
-			t.Errorf("test %d: expected failure", i)
+		_, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, args)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+			t.Errorf("expected WriteIntentError; got %v", pErr)
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
@@ -4325,7 +4330,9 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
-		tc.Start(t, stopper)
+		cfg := TestStoreConfig(nil)
+		cfg.TestingKnobs.DontPushOnWriteIntentError = true
+		tc.StartWithStoreConfig(t, stopper, cfg)
 
 		key := []byte("a")
 		txn := newTransaction("test", key, 1, tc.Clock())
@@ -4499,7 +4506,9 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -4717,6 +4726,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.DontPushOnWriteIntentError = true
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
@@ -5375,7 +5385,9 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DontRetryPushTxnFailures = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	key := roachpb.Key("key")
 	pushee := newTransaction("test", key, 1, tc.Clock())
@@ -5413,10 +5425,13 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 // heartbeat within its transaction liveness threshold can be pushed/aborted.
 func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DontRetryPushTxnFailures = true
+	cfg.TestingKnobs.DontRecoverIndeterminateCommits = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	const noError = ""
 	const txnPushError = "failed to push"
@@ -5617,7 +5632,9 @@ func TestPushTxnPriorities(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DontRetryPushTxnFailures = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	now := tc.Clock().Now()
 	ts1 := now.Add(1, 0)
@@ -6375,7 +6392,9 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 		ctx := context.Background()
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		cfg := TestStoreConfig(nil)
+		cfg.TestingKnobs.DontPushOnWriteIntentError = true
+		tc.StartWithStoreConfig(t, stopper, cfg)
 
 		key := roachpb.Key("a")
 
@@ -7340,7 +7359,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
-			_, pErr := tc.repl.executeWriteBatch(ctx, &ba)
+			_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
 			if cancelEarly {
 				if !testutils.IsPError(pErr, context.Canceled.Error()) {
 					t.Fatalf("expected canceled error; got %v", pErr)
@@ -7393,7 +7412,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: []byte("acdfg")},
 	})
-	_, pErr := tc.repl.executeWriteBatch(ctx, &ba)
+	_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
 	if pErr == nil {
 		t.Fatal("expected failure, but found success")
 	}
@@ -7637,9 +7656,10 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		_, pErr := tc.repl.executeWriteBatch(
+		_, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			&ba,
+			(*Replica).executeWriteBatch,
 		)
 		if pErr != nil {
 			t.Fatalf("write batch returned error: %s", pErr)
@@ -7668,9 +7688,10 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			Lease:     lease,
 			PrevLease: prevLease,
 		})
-		_, pErr := tc.repl.executeWriteBatch(
+		_, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			&ba,
+			(*Replica).executeWriteBatch,
 		)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -8799,6 +8820,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DontRetryPushTxnFailures = true
 	rh := roachpb.RequestHeader{Key: roachpb.Key("a")}
 	txn := newTransaction(
 		"name",
@@ -10167,6 +10189,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	tc := testContext{manualClock: manual}
 	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.DisableGCQueue = true
+	tsc.TestingKnobs.DontRetryPushTxnFailures = true
+	tsc.TestingKnobs.DontRecoverIndeterminateCommits = true
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -11815,7 +11839,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 
 	// Round trip another proposal through the replica to ensure that previously
 	// committed entries have been applied.
-	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, ba)
+	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, &ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -11916,7 +11940,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	}
 	// Round trip another proposal through the replica to ensure that previously
 	// committed entries have been applied.
-	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, ba)
+	_, pErr = tc.repl.sendWithRangeID(ctx, tc.repl.RangeID, &ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
