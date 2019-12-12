@@ -1481,7 +1481,8 @@ CREATE TABLE crdb_internal.table_indexes (
   index_id         INT NOT NULL,
   index_name       STRING NOT NULL,
   index_type       STRING NOT NULL,
-  is_unique        BOOL NOT NULL
+  is_unique        BOOL NOT NULL,
+  is_inverted      BOOL NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1498,6 +1499,7 @@ CREATE TABLE crdb_internal.table_indexes (
 					tree.NewDString(table.PrimaryIndex.Name),
 					primary,
 					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
+					tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
 				); err != nil {
 					return err
 				}
@@ -1509,6 +1511,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						tree.NewDString(idx.Name),
 						secondary,
 						tree.MakeDBool(tree.DBool(idx.Unique)),
+						tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
 					); err != nil {
 						return err
 					}

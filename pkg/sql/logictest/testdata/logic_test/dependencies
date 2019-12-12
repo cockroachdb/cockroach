@@ -32,24 +32,24 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 59             test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
 60             test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     NULL            false
 
-query ITITTB colnames
+query ITITTBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
 ----
-descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
-53             test_kv          1         primary          primary     true
-53             test_kv          2         test_v_idx       secondary   true
-53             test_kv          3         test_v_idx2      secondary   false
-53             test_kv          4         test_v_idx3      secondary   false
-54             test_kvr1        1         primary          primary     true
-55             test_kvr2        1         primary          primary     true
-55             test_kvr2        2         test_kvr2_v_key  secondary   true
-56             test_kvr3        1         primary          primary     true
-56             test_kvr3        2         test_kvr3_v_key  secondary   true
-57             test_kvi1        1         primary          primary     true
-58             test_kvi2        1         primary          primary     true
-58             test_kvi2        2         test_kvi2_idx    secondary   true
-59             test_v1          0         ·                primary     false
-60             test_v2          0         ·                primary     false
+descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique  is_inverted
+53             test_kv          1         primary          primary     true       false
+53             test_kv          2         test_v_idx       secondary   true       false
+53             test_kv          3         test_v_idx2      secondary   false      false
+53             test_kv          4         test_v_idx3      secondary   false      false
+54             test_kvr1        1         primary          primary     true       false
+55             test_kvr2        1         primary          primary     true       false
+55             test_kvr2        2         test_kvr2_v_key  secondary   true       false
+56             test_kvr3        1         primary          primary     true       false
+56             test_kvr3        2         test_kvr3_v_key  secondary   true       false
+57             test_kvi1        1         primary          primary     true       false
+58             test_kvi2        1         primary          primary     true       false
+58             test_kvi2        2         test_kvi2_idx    secondary   true       false
+59             test_v1          0         ·                primary     false      false
+60             test_v2          0         ·                primary     false      false
 
 query ITITTITT colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
