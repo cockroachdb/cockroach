@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -22,27 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// executeReadOnlyBatch updates the read timestamp cache and waits for any
-// overlapping writes currently processing through Raft ahead of us to
-// clear via the latches.
+// executeReadOnlyBatch is the execution logic for client requests which do not
+// mutate the range's replicated state. The method uses a single RocksDB
+// iterator to evaluate the batch and then updates the read timestamp cache to
+// reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, lg *spanlatch.Guard,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	spans, err := r.collectSpans(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// Acquire latches to prevent overlapping commands from executing
-	// until this command completes.
-	log.Event(ctx, "acquire latches")
-	ec, err := r.beginCmds(ctx, ba, spans)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// Guarantee we release the latches that we just acquired. This is wrapped
-	// to delay pErr evaluation to its value when returning.
+	// Guarantee we release the provided latches. This is wrapped to delay pErr
+	// evaluation to its value when returning.
+	ec := endCmds{repl: r, lg: lg}
 	defer func() {
 		ec.done(ba, br, pErr)
 	}()
