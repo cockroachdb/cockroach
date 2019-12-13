@@ -407,6 +407,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			if retries == 1 {
 				break
 			}
+			log.Infof(ctx, "!!! local retries updating ba.Timestamp %s->%s", ba.Timestamp, wtoErr.ActualTimestamp)
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
 		}
