@@ -30,6 +30,7 @@ func registerTPCHVec(r *testRegistry) {
 	)
 
 	var vecOnQueriesToSkip = map[int]string{
+		2:  "incorrect: #41108",
 		12: "unsupported: sum_int #38845",
 		15: "unsupported: create view",
 		16: "unsupported: distinct aggregation #39242",
@@ -47,6 +48,7 @@ func registerTPCHVec(r *testRegistry) {
 		// TODO(yuzefovich): remove this once we're not skipping these queries with
 		// vec on.
 		1:  "skipped with vec on",
+		2:  "skipped with vec on",
 		3:  "skipped with vec on",
 		4:  "skipped with vec on",
 		8:  "skipped with vec on",
