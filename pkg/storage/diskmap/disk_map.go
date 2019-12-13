@@ -33,7 +33,7 @@ type Factory interface {
 // 		} else if !ok {
 //			break
 // 		}
-// 		key := i.Key()
+// 		key := i.UnsafeKey()
 //		// Do something.
 // 	}
 type SortedDiskMapIterator interface {
@@ -49,12 +49,6 @@ type SortedDiskMapIterator interface {
 	Valid() (bool, error)
 	// Next advances the iterator to the next key in the iteration.
 	Next()
-	// Key returns the current key. The resulting byte slice is still valid
-	// after the next call to Seek(), Rewind(), or Next().
-	Key() []byte
-	// Value returns the current value. The resulting byte slice is still valid
-	// after the next call to Seek(), Rewind(), or Next().
-	Value() []byte
 
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,Rewind,Seek,Close}.
