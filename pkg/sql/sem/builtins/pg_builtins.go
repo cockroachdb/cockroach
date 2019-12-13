@@ -59,6 +59,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
+	types.AnyNonArray.Oid(): {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},

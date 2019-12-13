@@ -202,7 +202,7 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*BinOp) preferred() bool {
+func (op *BinOp) preferred() bool {
 	return false
 }
 
@@ -1409,6 +1409,22 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.String,
+			RightType:  types.AnyNonArray,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(string(MustBeDString(left)) + right.String()), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.AnyNonArray,
+			RightType:  types.String,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(left.String() + string(MustBeDString(right))), nil
 			},
 		},
 		&BinOp{

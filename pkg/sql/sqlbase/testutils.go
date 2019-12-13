@@ -480,7 +480,7 @@ var (
 func init() {
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
-		case oid.T_unknown, oid.T_anyelement:
+		case oid.T_unknown, oid.T_anyelement, oid.T_anynonarray:
 			// Don't include these.
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.

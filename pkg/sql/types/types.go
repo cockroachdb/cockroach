@@ -352,6 +352,12 @@ var (
 	Any = &T{InternalType: InternalType{
 		Family: AnyFamily, Oid: oid.T_anyelement, Locale: &emptyLocale}}
 
+	// AnyNonArray is a special type used only during static analysis as a wildcard
+	// type that matches non-array types.
+	// Execution-time values should never have this type.
+	AnyNonArray = &T{InternalType: InternalType{
+		Family: AnyFamily, Oid: oid.T_anynonarray, Locale: &emptyLocale}}
+
 	// AnyArray is a special type used only during static analysis as a wildcard
 	// type that matches an array having elements of any (uniform) type (including
 	// nested array types). Execution-time values should never have this type.
@@ -884,6 +890,10 @@ func (t *T) TupleLabels() []string {
 func (t *T) Name() string {
 	switch t.Family() {
 	case AnyFamily:
+		switch t.Oid() {
+		case oid.T_anynonarray:
+			return "anynonarray"
+		}
 		return "anyelement"
 	case ArrayFamily:
 		switch t.Oid() {
@@ -1021,6 +1031,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	var buf strings.Builder
 	switch t.Family() {
 	case AnyFamily:
+		switch t.Oid() {
+		case oid.T_anynonarray:
+			return "anynonarray"
+		}
 		return "anyelement"
 	case ArrayFamily:
 		switch t.Oid() {
@@ -1273,6 +1287,13 @@ func (t *T) SQLString() string {
 // types. And a wildcard collation (empty string) matches any other collation.
 func (t *T) Equivalent(other *T) bool {
 	if t.Family() == AnyFamily || other.Family() == AnyFamily {
+		// Non array families must not have an array family on the other side.
+		if t == AnyNonArray && other.Family() == ArrayFamily {
+			return false
+		}
+		if other == AnyNonArray && t.Family() == ArrayFamily {
+			return false
+		}
 		return true
 	}
 	if t.Family() != other.Family() {

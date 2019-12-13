@@ -415,7 +415,6 @@ func typeCheckOverloadedExprs(
 	if len(overloads) > math.MaxUint8 {
 		return nil, nil, errors.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
 	}
-
 	var s typeCheckOverloadState
 	s.exprs = exprs
 	s.overloads = overloads
@@ -649,6 +648,21 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
+	// We apply another heuristic to try remove any attempts where the overload has Any.
+	// We prefer more strictly typed options if available.
+	if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
+		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
+			for _, typ := range o.params().Types() {
+				if typ.Family() == types.AnyFamily {
+					return false
+				}
+			}
+			return true
+		})
+	}); ok {
+		return typedExprs, fns, err
+	}
+
 	// In a binary expression, in the case of one of the arguments being untyped NULL,
 	// we prefer overloads where we infer the type of the NULL to be the same as the
 	// other argument. This is used to differentiate the behavior of
@@ -684,6 +698,13 @@ func typeCheckOverloadedExprs(
 				}
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 					func(o overloadImpl) bool {
+						// If any side is Any, this filtering will not be useful
+						// for whittling down types. Ignore them.
+						// This is equivalent to adding the AnyFamily check above.
+						if o.params().GetAt(0).Family() == types.AnyFamily ||
+							o.params().GetAt(1).Family() == types.AnyFamily {
+							return false
+						}
 						return o.params().GetAt(0).Equivalent(leftType) &&
 							o.params().GetAt(1).Equivalent(rightType)
 					})

@@ -383,6 +383,7 @@ func TestEquivalent(t *testing.T) {
 	}{
 		// ARRAY
 		{Int2Vector, IntArray, true},
+		{Int2Vector, AnyNonArray, false},
 		{OidVector, MakeArray(Oid), true},
 		{MakeArray(Int), MakeArray(Int4), true},
 		{MakeArray(String), MakeArray(MakeChar(10)), true},
@@ -394,6 +395,7 @@ func TestEquivalent(t *testing.T) {
 		{MakeBit(1), MakeBit(2), true},
 		{MakeBit(1), MakeVarBit(2), true},
 		{MakeVarBit(10), Any, true},
+		{MakeVarBit(10), AnyNonArray, true},
 		{VarBit, Bytes, false},
 
 		// COLLATEDSTRING
@@ -413,6 +415,7 @@ func TestEquivalent(t *testing.T) {
 		{Int2, Int4, true},
 		{Int4, Int, true},
 		{Int, Any, true},
+		{Int, AnyNonArray, true},
 		{Int, IntArray, false},
 
 		// TUPLE
@@ -420,6 +423,7 @@ func TestEquivalent(t *testing.T) {
 		{MakeTuple([]T{*Int, *String}), MakeTuple([]T{*Int4, *VarChar}), true},
 		{MakeTuple([]T{*Int, *String}), AnyTuple, true},
 		{AnyTuple, MakeTuple([]T{*Int, *String}), true},
+		{AnyNonArray, MakeTuple([]T{*Int, *String}), true},
 		{MakeTuple([]T{*Int, *String}),
 			MakeLabeledTuple([]T{*Int4, *VarChar}, []string{"label2", "label1"}), true},
 		{MakeLabeledTuple([]T{*Int, *String}, []string{"label1", "label2"}),
@@ -430,6 +434,7 @@ func TestEquivalent(t *testing.T) {
 		{Unknown, &T{InternalType: InternalType{
 			Family: UnknownFamily, Oid: oid.T_unknown, Locale: &emptyLocale}}, true},
 		{Any, Unknown, true},
+		{AnyNonArray, Unknown, true},
 		{Unknown, Int, false},
 	}
 
