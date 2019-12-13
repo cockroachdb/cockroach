@@ -221,11 +221,16 @@ type StoreTestingKnobs struct {
 	// BeforeRelocateOne intercepts the return values of s.relocateOne before
 	// they're being put into effect.
 	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)
-
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
 	MaxApplicationBatchSize int
+	// RangeFeedPushTxnsInterval overrides the default value for
+	// rangefeed.Config.PushTxnsInterval.
+	RangeFeedPushTxnsInterval time.Duration
+	// RangeFeedPushTxnsAge overrides the default value for
+	// rangefeed.Config.PushTxnsAge.
+	RangeFeedPushTxnsAge time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
