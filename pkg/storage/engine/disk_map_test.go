@@ -171,7 +171,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 				}
 				valid, err := iter.Valid()
 				if valid && err == nil {
-					fmt.Fprintf(&b, "%s:%s\n", iter.Key(), iter.Value())
+					fmt.Fprintf(&b, "%s:%s\n", iter.UnsafeKey(), iter.UnsafeValue())
 				} else if err != nil {
 					fmt.Fprintf(&b, "err=%v\n", err)
 				} else {
@@ -381,8 +381,8 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 					} else if !ok {
 						break
 					}
-					i.Key()
-					i.Value()
+					i.UnsafeKey()
+					i.UnsafeValue()
 				}
 				i.Close()
 			}
@@ -521,8 +521,8 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 					} else if !ok {
 						break
 					}
-					i.Key()
-					i.Value()
+					i.UnsafeKey()
+					i.UnsafeValue()
 				}
 				i.Close()
 			}
