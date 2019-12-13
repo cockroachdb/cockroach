@@ -30,6 +30,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func constantTimeoutFunc(d time.Duration) func(replicaInQueue) time.Duration {
+	return func(replicaInQueue) time.Duration { return d }
+}
+
 // TestBaseQueueConcurrent verifies that under concurrent adds/removes of ranges
 // to the queue including purgatory errors and regular errors, the queue
 // invariants are upheld. The test operates on fake ranges and a mock queue
@@ -49,7 +53,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		maxSize:              num / 2,
 		maxConcurrency:       4,
 		acceptsUnsplitRanges: true,
-		processTimeout:       time.Millisecond,
+		processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 		// We don't care about these, but we don't want to crash.
 		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
 		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
