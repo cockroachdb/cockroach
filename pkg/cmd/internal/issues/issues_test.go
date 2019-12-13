@@ -87,8 +87,38 @@ func TestPost(t *testing.T) {
 			name:        "fatal",
 			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
 			testName:    "TestGossipHandlesReplacedNode",
-			message:     "F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] on-disk and in-memory state diverged:",
-			author:      "bran",
+			message: `logging something
+F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] something bad happened:
+foo
+bar
+
+goroutine 12 [running]:
+  doing something
+
+goroutine 13:
+  hidden
+
+`,
+			author: "bran",
+		},
+		{
+			name:        "panic",
+			packageName: "github.com/cockroachdb/cockroach/pkg/storage",
+			testName:    "TestGossipHandlesReplacedNode",
+			message: `logging something
+panic: something bad happened:
+
+foo
+bar
+
+goroutine 12 [running]:
+  doing something
+
+goroutine 13:
+  hidden
+
+`,
+			author: "bran",
 		},
 		{
 			name:        "with-artifacts",
