@@ -1825,9 +1825,8 @@ message BatchResponse {
     // error and returns it separately). In effect, nearly no usage of
     // BatchResponse needs to care about this field.
     Error error = 1;
-    // timestamp is set only for non-transactional responses and denotes the
-    // timestamp at which the batch executed. The timestamp cache is updated
-    // at this timestamp.
+    // timestamp denotes the timestamp at which the batch's reads executed. The
+    // timestamp cache is updated at this timestamp.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
