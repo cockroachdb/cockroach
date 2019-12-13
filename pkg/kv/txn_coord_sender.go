@@ -15,21 +15,15 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -155,20 +149,6 @@ type TxnCoordSender struct {
 
 var _ client.TxnSender = &TxnCoordSender{}
 
-// lockedSender is like a client.Sender but requires the caller to hold the
-// TxnCoordSender lock to send requests.
-type lockedSender interface {
-	// SendLocked sends the batch request and receives a batch response. It
-	// requires that the TxnCoordSender lock be held when called, but this lock
-	// is not held for the entire duration of the call. Instead, the lock is
-	// released immediately before the batch is sent to a lower-level Sender and
-	// is re-acquired when the response is returned.
-	// WARNING: because the lock is released when calling this method and
-	// re-acquired before it returned, callers cannot rely on a single mutual
-	// exclusion zone mainted across the call.
-	SendLocked(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-}
-
 // txnInterceptors are pluggable request interceptors that transform requests
 // and responses and can perform operations in the context of a transaction. A
 // TxnCoordSender maintains a stack of txnInterceptors that it calls into under
@@ -201,295 +181,11 @@ type txnInterceptor interface {
 	closeLocked()
 }
 
-// txnLockGatekeeper is a lockedSender that sits at the bottom of the
-// TxnCoordSender's interceptor stack and handles unlocking the TxnCoordSender's
-// mutex when sending a request and locking the TxnCoordSender's mutex when
-// receiving a response. It allows the entire txnInterceptor stack to operate
-// under lock without needing to worry about unlocking at the correct time.
-type txnLockGatekeeper struct {
-	wrapped client.Sender
-	mu      sync.Locker // shared with TxnCoordSender
-
-	// If set, concurrent requests are allowed. If not set, concurrent requests
-	// result in an assertion error. Only leaf transactions are supposed allow
-	// concurrent requests - leaves don't restart the transaction and they don't
-	// bump the read timestamp through refreshes.
-	allowConcurrentRequests bool
-	// requestInFlight is set while a request is being processed by the wrapped
-	// sender. Used to detect and prevent concurrent txn use.
-	requestInFlight bool
-}
-
-// SendLocked implements the lockedSender interface.
-func (gs *txnLockGatekeeper) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If so configured, protect against concurrent use of the txn. Concurrent
-	// requests don't work generally because of races between clients sending
-	// requests and the TxnCoordSender restarting the transaction, and also
-	// concurrent requests are not compatible with the span refresher in
-	// particular since refreshing is invalid if done concurrently with requests
-	// in flight whose spans haven't been accounted for.
-	//
-	// As a special case, allow for async rollbacks and heartbeats to be sent
-	// whenever. As another special case, we allow concurrent requests on AS OF
-	// SYSTEM TIME transactions. I think these transactions can't experience
-	// retriable errors, so they're safe. And they're used concurrently by schema
-	// change code.
-	if !gs.allowConcurrentRequests && !ba.Txn.CommitTimestampFixed {
-		asyncRequest := ba.IsSingleAbortTransactionRequest() || ba.IsSingleHeartbeatTxnRequest()
-		if !asyncRequest {
-			if gs.requestInFlight {
-				return nil, roachpb.NewError(
-					errors.AssertionFailedf("concurrent txn use detected. ba: %s", ba))
-			}
-			gs.requestInFlight = true
-			defer func() {
-				gs.requestInFlight = false
-			}()
-		}
-	}
-
-	// Note the funky locking here: we unlock for the duration of the call and the
-	// lock again.
-	gs.mu.Unlock()
-	defer gs.mu.Lock()
-	return gs.wrapped.Send(ctx, ba)
-}
-
-// TxnMetrics holds all metrics relating to KV transactions.
-type TxnMetrics struct {
-	Aborts          *metric.Counter
-	Commits         *metric.Counter
-	Commits1PC      *metric.Counter // Commits which finished in a single phase
-	ParallelCommits *metric.Counter // Commits which entered the STAGING state
-	AutoRetries     *metric.Counter // Auto retries which avoid client-side restarts
-	Durations       *metric.Histogram
-
-	// Restarts is the number of times we had to restart the transaction.
-	Restarts *metric.Histogram
-
-	// Counts of restart types.
-	RestartsWriteTooOld           telemetry.CounterWithMetric
-	RestartsWriteTooOldMulti      telemetry.CounterWithMetric
-	RestartsSerializable          telemetry.CounterWithMetric
-	RestartsPossibleReplay        telemetry.CounterWithMetric
-	RestartsAsyncWriteFailure     telemetry.CounterWithMetric
-	RestartsReadWithinUncertainty telemetry.CounterWithMetric
-	RestartsTxnAborted            telemetry.CounterWithMetric
-	RestartsTxnPush               telemetry.CounterWithMetric
-	RestartsUnknown               telemetry.CounterWithMetric
-}
-
-var (
-	metaAbortsRates = metric.Metadata{
-		Name:        "txn.aborts",
-		Help:        "Number of aborted KV transactions",
-		Measurement: "KV Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaCommitsRates = metric.Metadata{
-		Name:        "txn.commits",
-		Help:        "Number of committed KV transactions (including 1PC)",
-		Measurement: "KV Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaCommits1PCRates = metric.Metadata{
-		Name:        "txn.commits1PC",
-		Help:        "Number of KV transaction on-phase commit attempts",
-		Measurement: "KV Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaParallelCommitsRates = metric.Metadata{
-		Name:        "txn.parallelcommits",
-		Help:        "Number of KV transaction parallel commit attempts",
-		Measurement: "KV Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaAutoRetriesRates = metric.Metadata{
-		Name:        "txn.autoretries",
-		Help:        "Number of automatic retries to avoid serializable restarts",
-		Measurement: "Retries",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaDurationsHistograms = metric.Metadata{
-		Name:        "txn.durations",
-		Help:        "KV transaction durations",
-		Measurement: "KV Txn Duration",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRestartsHistogram = metric.Metadata{
-		Name:        "txn.restarts",
-		Help:        "Number of restarted KV transactions",
-		Measurement: "KV Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	// There are two ways we can get "write too old" restarts. In both
-	// cases, a WriteTooOldError is generated in the MVCC layer. This is
-	// intercepted on the way out by the Store, which performs a single
-	// retry at a pushed timestamp. If the retry succeeds, the immediate
-	// operation succeeds but the WriteTooOld flag is set on the
-	// Transaction, which causes EndTransaction to return a
-	// TransactionRetryError with RETRY_WRITE_TOO_OLD. These are
-	// captured as txn.restarts.writetooold.
-	//
-	// If the Store's retried operation generates a second
-	// WriteTooOldError (indicating a conflict with a third transaction
-	// with a higher timestamp than the one that caused the first
-	// WriteTooOldError), the store doesn't retry again, and the
-	// WriteTooOldError will be returned up the stack to be retried at
-	// this level. These are captured as txn.restarts.writetoooldmulti.
-	// This path is inefficient, and if it turns out to be common we may
-	// want to do something about it.
-	metaRestartsWriteTooOld = metric.Metadata{
-		Name:        "txn.restarts.writetooold",
-		Help:        "Number of restarts due to a concurrent writer committing first",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsWriteTooOldMulti = metric.Metadata{
-		Name:        "txn.restarts.writetoooldmulti",
-		Help:        "Number of restarts due to multiple concurrent writers committing first",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsSerializable = metric.Metadata{
-		Name:        "txn.restarts.serializable",
-		Help:        "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsPossibleReplay = metric.Metadata{
-		Name:        "txn.restarts.possiblereplay",
-		Help:        "Number of restarts due to possible replays of command batches at the storage layer",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsAsyncWriteFailure = metric.Metadata{
-		Name:        "txn.restarts.asyncwritefailure",
-		Help:        "Number of restarts due to async consensus writes that failed to leave intents",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsReadWithinUncertainty = metric.Metadata{
-		Name:        "txn.restarts.readwithinuncertainty",
-		Help:        "Number of restarts due to reading a new value within the uncertainty interval",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsTxnAborted = metric.Metadata{
-		Name:        "txn.restarts.txnaborted",
-		Help:        "Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	// TransactionPushErrors at this level are unusual. They are
-	// normally handled at the Store level with the txnwait and
-	// contention queues. However, they can reach this level and be
-	// retried in tests that disable the store-level retries, and
-	// there may be edge cases that allow them to reach this point in
-	// production.
-	metaRestartsTxnPush = metric.Metadata{
-		Name:        "txn.restarts.txnpush",
-		Help:        "Number of restarts due to a transaction push failure",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsUnknown = metric.Metadata{
-		Name:        "txn.restarts.unknown",
-		Help:        "Number of restarts due to a unknown reasons",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-)
-
-// MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
-// windowed portions retain data for approximately histogramWindow.
-func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
-	return TxnMetrics{
-		Aborts:                        metric.NewCounter(metaAbortsRates),
-		Commits:                       metric.NewCounter(metaCommitsRates),
-		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
-		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
-		AutoRetries:                   metric.NewCounter(metaAutoRetriesRates),
-		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
-		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
-		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
-		RestartsSerializable:          telemetry.NewCounterWithMetric(metaRestartsSerializable),
-		RestartsPossibleReplay:        telemetry.NewCounterWithMetric(metaRestartsPossibleReplay),
-		RestartsAsyncWriteFailure:     telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
-		RestartsReadWithinUncertainty: telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
-		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
-		RestartsTxnPush:               telemetry.NewCounterWithMetric(metaRestartsTxnPush),
-		RestartsUnknown:               telemetry.NewCounterWithMetric(metaRestartsUnknown),
-	}
-}
-
-// TxnCoordSenderFactory implements client.TxnSenderFactory.
-type TxnCoordSenderFactory struct {
-	log.AmbientContext
-
-	st                *cluster.Settings
-	wrapped           client.Sender
-	clock             *hlc.Clock
-	heartbeatInterval time.Duration
-	linearizable      bool // enables linearizable behavior
-	stopper           *stop.Stopper
-	metrics           TxnMetrics
-
-	testingKnobs ClientTestingKnobs
-}
-
-var _ client.TxnSenderFactory = &TxnCoordSenderFactory{}
-
-// TxnCoordSenderFactoryConfig holds configuration and auxiliary objects that can be passed
-// to NewTxnCoordSenderFactory.
-type TxnCoordSenderFactoryConfig struct {
-	AmbientCtx log.AmbientContext
-
-	Settings *cluster.Settings
-	Clock    *hlc.Clock
-	Stopper  *stop.Stopper
-
-	HeartbeatInterval time.Duration
-	Linearizable      bool
-	Metrics           TxnMetrics
-
-	TestingKnobs ClientTestingKnobs
-}
-
-// NewTxnCoordSenderFactory creates a new TxnCoordSenderFactory. The
-// factory creates new instances of TxnCoordSenders.
-func NewTxnCoordSenderFactory(
-	cfg TxnCoordSenderFactoryConfig, wrapped client.Sender,
-) *TxnCoordSenderFactory {
-	tcf := &TxnCoordSenderFactory{
-		AmbientContext:    cfg.AmbientCtx,
-		st:                cfg.Settings,
-		wrapped:           wrapped,
-		clock:             cfg.Clock,
-		stopper:           cfg.Stopper,
-		linearizable:      cfg.Linearizable,
-		heartbeatInterval: cfg.HeartbeatInterval,
-		metrics:           cfg.Metrics,
-		testingKnobs:      cfg.TestingKnobs,
-	}
-	if tcf.st == nil {
-		tcf.st = cluster.MakeTestingClusterSettings()
-	}
-	if tcf.heartbeatInterval == 0 {
-		tcf.heartbeatInterval = base.DefaultTxnHeartbeatInterval
-	}
-	if tcf.metrics == (TxnMetrics{}) {
-		tcf.metrics = MakeTxnMetrics(metric.TestSampleInterval)
-	}
-	return tcf
-}
-
-// TransactionalSender is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) TransactionalSender(
-	typ client.TxnType, meta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
+func newTxnCoordSender(
+	tcf *TxnCoordSenderFactory,
+	typ client.TxnType,
+	meta roachpb.TxnCoordMeta,
+	pri roachpb.UserPriority,
 ) client.TxnSender {
 	meta.Txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
@@ -614,16 +310,6 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 
 	tcs.augmentMetaLocked(context.TODO(), meta)
 	return tcs
-}
-
-// NonTransactionalSender is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) NonTransactionalSender() client.Sender {
-	return tcf.wrapped
-}
-
-// Metrics returns the factory's metrics struct.
-func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
-	return tcf.metrics
 }
 
 // GetMeta is part of the client.TxnSender interface.
