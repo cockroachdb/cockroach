@@ -817,7 +817,13 @@ func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
 
 // StripLeafToRoot strips out all information that is unnecessary to communicate
 // back to the root transaction.
-func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
+func (meta *TxnCoordMeta) StripLeafToRoot(ctx context.Context) *TxnCoordMeta {
+	if len(meta.RefreshWrites) != 0 {
+		// Leaves don't do writes, and StripRootToLeaf strips all the Refresh*
+		// collections before creating the Leaf, so there's no way for a Leaf to
+		// have accumulated anything in RefreshWrites.
+		log.Fatalf(ctx, "unexpected RefreshWrites on leaf: %v", meta.RefreshWrites)
+	}
 	meta.InFlightWrites = nil
 	return meta
 }
