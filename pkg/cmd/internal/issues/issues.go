@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -40,7 +39,21 @@ const (
 	githubRepo             = "cockroach"
 	// CockroachPkgPrefix is the crdb package prefix.
 	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
+	// Based on the following observed API response the maximum here is 1<<16-1.
+	// We shouldn't usually get near that limit but if we do, better to post a
+	// clipped issue.
+	//
+	// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
+	// is too long (maximum is 65536 characters)}]
+	githubIssueBodyMaximumLength = 60000
 )
+
+func enforceMaxLength(s string) string {
+	if len(s) > githubIssueBodyMaximumLength {
+		return s[:githubIssueBodyMaximumLength]
+	}
+	return s
+}
 
 // UnitTestFailureTitle is a title template suitable for posting issues about
 // vanilla Go test failures.
@@ -50,12 +63,25 @@ const UnitTestFailureTitle = `{{ shortpkg .PackageName }}: {{.TestName}} failed`
 // test failures.
 const UnitTestFailureBody = `[({{shortpkg .PackageName}}).{{.TestName}} failed]({{.URL}}) on [{{.Branch}}@{{.Commit}}]({{commiturl .Commit}}):
 
-{{ threeticks }}
-{{ .CondensedMessage }}
-{{ threeticks }}
+{{ if (.CondensedMessage.FatalOrPanic 50).Error }}{{with $fop := .CondensedMessage.FatalOrPanic 50 -}}
+Fatal error:
+{{threeticks}}
+{{ .Error }}{{threeticks}}
 
-<details><summary>details</summary>
-<p>
+Stack:
+{{threeticks}}
+{{ $fop.FirstStack}}{{threeticks}}
+
+<details><summary>Log preceding fatal error</summary><p>
+
+{{threeticks}}
+{{ $fop.LastLines }}{{threeticks}}
+
+</p></details>{{end}}{{ else -}}
+{{threeticks}}
+{{ .CondensedMessage.Digest 50 -}}{{ threeticks }}{{end}}
+
+<details><summary>Repro</summary><p>
 {{if .Parameters -}}
 Parameters:
 {{range .Parameters }}
@@ -63,70 +89,16 @@ Parameters:
 
 {{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
 {{end -}}
-{{ threeticks }}
+{{threeticks}}
 make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS=-timeout 5m' 2>&1
-{{ threeticks }}
+{{threeticks}}
 
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
-</p>
-</details>
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 `
 
 var (
-	issueLabels  = []string{"O-robot", "C-test-failure"}
-	stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
+	issueLabels = []string{"O-robot", "C-test-failure"}
 )
-
-// Based on the following observed API response the maximum here is 1<<16-1
-// (but we stay way below that as nobody likes to scroll for pages and pages).
-//
-// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
-// is too long (maximum is 65536 characters)}]
-const githubIssueBodyMaximumLength = 5000
-
-// trimIssueRequestBody trims message such that the total size of an issue body
-// is less than githubIssueBodyMaximumLength. usedCharacters specifies the
-// number of characters that have already been used for the issue body (see
-// newIssueRequest below). message is usually the test failure message and
-// possibly includes stacktraces for all of the goroutines (which is what makes
-// the message very large).
-//
-// TODO(peter): Rather than trimming the message like this, perhaps it can be
-// added as an attachment or some other expandable comment.
-func trimIssueRequestBody(message string) string {
-	maxLength := githubIssueBodyMaximumLength
-
-	if m := stacktraceRE.FindStringIndex(message); m != nil {
-		// We want the top stack traces plus a few lines before.
-		{
-			startIdx := m[0]
-			for i := 0; i < 100; i++ {
-				if idx := strings.LastIndexByte(message[:startIdx], '\n'); idx != -1 {
-					startIdx = idx
-				}
-			}
-			message = message[startIdx:]
-		}
-		for len(message) > maxLength {
-			if idx := strings.LastIndexByte(message, '\n'); idx != -1 {
-				message = message[:idx]
-			} else {
-				message = message[:maxLength]
-			}
-		}
-	} else {
-		// We want the FAIL line.
-		for len(message) > maxLength {
-			if idx := strings.IndexByte(message, '\n'); idx != -1 {
-				message = message[idx+1:]
-			} else {
-				message = message[len(message)-maxLength:]
-			}
-		}
-	}
-
-	return message
-}
 
 // If the assignee would be the key in this map, assign to the value instead.
 // Helpful to avoid pinging former employees.
@@ -289,7 +261,7 @@ func (p *poster) init() {
 type TemplateData struct {
 	PostRequest
 	Parameters       []string
-	CondensedMessage string
+	CondensedMessage CondensedMessage
 	Commit           string
 	Branch           string
 	ArtifactsURL     string
@@ -328,7 +300,7 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, req PostRequest) 
 	data := TemplateData{
 		PostRequest:      req,
 		Parameters:       p.parameters(),
-		CondensedMessage: trimIssueRequestBody(req.Message),
+		CondensedMessage: CondensedMessage(req.Message),
 		Branch:           p.branch,
 		Commit:           p.sha,
 		ArtifactsURL: func() string {
@@ -353,7 +325,7 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, req PostRequest) 
 	if err := tlp.Execute(&buf, data); err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	return enforceMaxLength(buf.String()), nil
 }
 
 func (p *poster) post(ctx context.Context, req PostRequest) error {

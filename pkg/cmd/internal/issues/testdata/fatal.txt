@@ -5,12 +5,29 @@ searchIssue query="storage: TestGossipHandlesReplacedNode failed" user:cockroach
 createIssue owner=cockroachdb repo=cockroach github.IssueRequest{Title:"storage: TestGossipHandlesReplacedNode failed", Labels:["O-robot" "C-test-failure"], Assignee:"hodor", Milestone:2}:
 [(storage).TestGossipHandlesReplacedNode failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-123.45@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
 
+Fatal error:
 ```
-F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] on-disk and in-memory state diverged:
+F170517 07:33:43.763059 69575 storage/replica.go:1360  [n3,s3,r1/3:/M{in-ax}] something bad happened:
+foo
+bar
+
 ```
 
-<details><summary>details</summary>
-<p>
+Stack:
+```
+goroutine 12 [running]:
+  doing something
+```
+
+<details><summary>Log preceding fatal error</summary><p>
+
+```
+logging something
+```
+
+</p></details>
+
+<details><summary>Repro</summary><p>
 Parameters:
 
 - TAGS=deadlock
@@ -20,7 +37,5 @@ Parameters:
 make stressrace TESTS=TestGossipHandlesReplacedNode PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS=-timeout 5m' 2>&1
 ```
 
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
-</p>
-</details>
+<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 
