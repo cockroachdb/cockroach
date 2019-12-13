@@ -1838,6 +1838,11 @@ func (c *CustomFuncs) SubqueryRequestedCol(sub *memo.SubqueryPrivate) opt.Column
 	return sub.RequestedCol
 }
 
+// SubqueryCmp returns the comparison operation from a SubqueryPrivate.
+func (c *CustomFuncs) SubqueryCmp(sub *memo.SubqueryPrivate) opt.Operator {
+	return sub.Cmp
+}
+
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
 func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) *memo.ColPrivate {
 	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
@@ -1864,6 +1869,62 @@ func (c *CustomFuncs) MakeLimited(sub *memo.SubqueryPrivate) *memo.SubqueryPriva
 	newSub := *sub
 	newSub.WasLimited = true
 	return &newSub
+}
+
+// ValuesCols returns the column list from a ValuesExpr.
+func (c *CustomFuncs) ValuesCols(values memo.RelExpr) opt.ColList {
+	return values.(*memo.ValuesExpr).Cols
+}
+
+// IsTupleOfVars returns true if the given tuple contains Variables
+// corresponding to the given columns (in the same order).
+func (c *CustomFuncs) IsTupleOfVars(tuple opt.ScalarExpr, cols opt.ColList) bool {
+	t := tuple.(*memo.TupleExpr)
+	if len(t.Elems) != len(cols) {
+		return false
+	}
+	for i := range t.Elems {
+		v, ok := t.Elems[i].(*memo.VariableExpr)
+		if !ok || v.Col != cols[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// InlineValues converts a Values operator to a tuple. If there are
+// multiple columns, the result is a tuple of tuples.
+func (c *CustomFuncs) InlineValues(v memo.RelExpr) *memo.TupleExpr {
+	values := v.(*memo.ValuesExpr)
+	md := c.mem.Metadata()
+	if len(values.Cols) > 1 {
+		colTypes := make([]types.T, len(values.Cols))
+		for i, colID := range values.Cols {
+			colTypes[i] = *md.ColumnMeta(colID).Type
+		}
+		// Inlining a multi-column VALUES results in a tuple of tuples. Example:
+		//
+		//   (a,b) IN (VALUES (1,1), (2,2))
+		// =>
+		//   (a,b) IN ((1,1), (2,2))
+		return &memo.TupleExpr{
+			Elems: values.Rows,
+			Typ:   types.MakeTuple([]types.T{*types.MakeTuple(colTypes)}),
+		}
+	}
+	// Inlining a sngle-column VALUES results in a simple tuple. Example:
+	//   a IN (VALUES (1), (2))
+	// =>
+	//   a IN (1, 2)
+	colType := md.ColumnMeta(values.Cols[0]).Type
+	tuple := &memo.TupleExpr{
+		Elems: make(memo.ScalarListExpr, len(values.Rows)),
+		Typ:   types.MakeTuple([]types.T{*colType}),
+	}
+	for i := range values.Rows {
+		tuple.Elems[i] = values.Rows[i].(*memo.TupleExpr).Elems[0]
+	}
+	return tuple
 }
 
 // ----------------------------------------------------------------------
