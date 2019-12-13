@@ -272,6 +272,11 @@ func EndTransaction(
 		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
+		// Update the read timestamp in case we've essentially refreshed. This
+		// update is important because reply.Txn. ReadTimestamp will make its way
+		// into BatchResponse.Timestamp, which is used to update the timestamp
+		// cache.
+		reply.Txn.ReadTimestamp = reply.Txn.WriteTimestamp
 
 		// If the transaction needs to be staged as part of an implicit commit
 		// before being explicitly committed, write the staged transaction
