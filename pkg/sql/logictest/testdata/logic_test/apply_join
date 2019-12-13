@@ -279,46 +279,6 @@ SELECT a, (SELECT a FROM y) FROM x
 ----
 1  1
 
-# Regression test for #40590: non-executable apply join inside apply join.
-
-statement ok
-CREATE TABLE IF NOT EXISTS tab_orig AS
-  SELECT
-    '2001-01-01'::TIMESTAMP + g * '1 day' AS _timestamp,
-    g AS _string
-  FROM
-    generate_series(NULL, NULL) AS g;
-
-statement error could not decorrelate subquery
-SELECT
-    NULL
-FROM
-    tab_orig AS tab_9962, tab_orig AS tab_9963 JOIN tab_orig AS tab_9964 ON true
-WHERE
-    NOT
-        (
-            tab_9964._timestamp IN (SELECT tab_9962._timestamp)
-            OR EXISTS(
-                    WITH
-                        with_2063 AS (SELECT NULL)
-                    SELECT
-                        *
-                    FROM
-                        (
-                            SELECT
-                                COALESCE(
-                                    tab_9962._string,
-                                    tab_9963._string,
-                                    (SELECT * FROM with_2063),
-                                    (SELECT * FROM with_2063)
-                                )
-                                    AS foo
-                        )
-                    WHERE
-                        foo IS NOT NULL
-                )
-        )
-
 # Regression test for #40589.
 statement ok
 CREATE TABLE IF NOT EXISTS t40589 AS

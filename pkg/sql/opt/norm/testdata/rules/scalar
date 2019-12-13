@@ -894,6 +894,109 @@ project
       └── fd: (1)-->(5)
 
 # --------------------------------------------------
+# InlineAnyValuesSingleCol
+# --------------------------------------------------
+
+opt expect=InlineAnyValuesSingleCol
+SELECT k FROM a WHERE k IN (VALUES (1), (2), (3))
+----
+scan a
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: [/1 - /3]
+ ├── cardinality: [0 - 3]
+ └── key: (1)
+
+opt expect=InlineAnyValuesSingleCol
+SELECT k FROM a WHERE k IN (VALUES ((SELECT k*i FROM a)), (2), (3))
+----
+select
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── filters
+      └── in [type=bool, outer=(1), subquery]
+           ├── variable: k [type=int]
+           └── tuple [type=tuple{int}]
+                ├── subquery [type=int]
+                │    └── max1-row
+                │         ├── columns: "?column?":13(int)
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(13)
+                │         └── project
+                │              ├── columns: "?column?":13(int)
+                │              ├── scan a
+                │              │    ├── columns: k:7(int!null) i:8(int)
+                │              │    ├── key: (7)
+                │              │    └── fd: (7)-->(8)
+                │              └── projections
+                │                   └── k * i [type=int, outer=(7,8)]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
+
+# --------------------------------------------------
+# InlineAnyValuesMultiCol
+# --------------------------------------------------
+
+opt expect=InlineAnyValuesMultiCol
+SELECT k FROM a WHERE (k, i) IN (VALUES (1, 1), (2, 2), (3, 3))
+----
+project
+ ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 3]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── cardinality: [0 - 3]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── constraint: /1: [/1 - /3]
+      │    ├── cardinality: [0 - 3]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (k, i) IN ((1, 1), (2, 2), (3, 3)) [type=bool, outer=(1,2), constraints=(/1/2: [/1/1 - /1/1] [/2/2 - /2/2] [/3/3 - /3/3]; /2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+# The rule should not fire if the columns are not in the right order.
+opt expect-not=InlineAnyValuesMultiCol
+SELECT k FROM a WHERE (k, i) IN (SELECT b, a FROM (VALUES (1, 1), (2, 2), (3, 3)) AS v(a,b))
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1(int!null) column10:10(tuple{int, int})
+      ├── key: (1)
+      ├── fd: (1)-->(10)
+      ├── project
+      │    ├── columns: column10:10(tuple{int, int}) k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(10)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections
+      │         └── (k, i) [type=tuple{int, int}, outer=(1,2)]
+      ├── project
+      │    ├── columns: column9:9(tuple{int, int})
+      │    ├── cardinality: [3 - 3]
+      │    ├── values
+      │    │    ├── columns: column1:7(int!null) column2:8(int!null)
+      │    │    ├── cardinality: [3 - 3]
+      │    │    ├── (1, 1) [type=tuple{int, int}]
+      │    │    ├── (2, 2) [type=tuple{int, int}]
+      │    │    └── (3, 3) [type=tuple{int, int}]
+      │    └── projections
+      │         └── (column2, column1) [type=tuple{int, int}, outer=(7,8)]
+      └── filters
+           └── column10 = column9 [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+
+# --------------------------------------------------
 # SimplifyEqualsAnyTuple
 # --------------------------------------------------
 
