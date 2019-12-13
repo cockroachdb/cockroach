@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
@@ -60,7 +61,6 @@ func (g *ifactoryGen) genInterface() {
 	defines := g.compiled.Defines.
 		WithoutTag("Enforcer").
 		WithoutTag("List").
-		WithoutTag("ListItem").
 		WithoutTag("Private")
 
 	g.w.write("type Factory interface {\n")
@@ -99,7 +99,9 @@ func (g *ifactoryGen) genInterface() {
 			g.w.writeIndent("%s %s,\n", unTitle(fieldName), fieldTyp.asParam())
 		}
 
-		if define.Tags.Contains("Relational") {
+		if define.Tags.Contains("ListItem") {
+			g.w.unnest(fmt.Sprintf(") memo.%s\n\n", define.Name))
+		} else if define.Tags.Contains("Relational") {
 			g.w.unnest(") memo.RelExpr\n\n")
 		} else {
 			g.w.unnest(") opt.ScalarExpr\n\n")

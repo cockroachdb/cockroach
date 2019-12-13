@@ -106,12 +106,12 @@ func TestDetachMemoRace(t *testing.T) {
 				if sel, ok := e.(*memo.SelectExpr); ok {
 					return f.ConstructSelect(
 						f.CopyAndReplaceDefault(sel.Input, replaceFn).(memo.RelExpr),
-						memo.FiltersExpr{{
-							Condition: f.ConstructEq(
+						memo.FiltersExpr{f.ConstructFiltersItem(
+							f.ConstructEq(
 								f.ConstructVariable(col),
 								f.ConstructConst(tree.NewDInt(10)),
 							),
-						}},
+						)},
 					)
 				}
 				return f.CopyAndReplaceDefault(e, replaceFn)

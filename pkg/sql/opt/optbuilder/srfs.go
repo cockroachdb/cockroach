@@ -111,8 +111,10 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			}
 			outCol = b.addColumn(outScope, alias, texpr)
 		}
-		zip[i].Func = b.buildScalar(texpr, inScope, outScope, outCol, nil)
-		zip[i].Cols = make(opt.ColList, len(outScope.cols)-startCols)
+		zip[i] = b.factory.ConstructZipItem(
+			b.buildScalar(texpr, inScope, outScope, outCol, nil),
+			make(opt.ColList, len(outScope.cols)-startCols),
+		)
 		for j := startCols; j < len(outScope.cols); j++ {
 			zip[i].Cols[j-startCols] = outScope.cols[j].id
 		}
@@ -173,8 +175,7 @@ func (b *Builder) buildProjectSet(inScope *scope) {
 	// Get the output columns and function expressions of the zip.
 	zip := make(memo.ZipExpr, len(inScope.srfs))
 	for i, srf := range inScope.srfs {
-		zip[i].Func = srf.fn
-		zip[i].Cols = make(opt.ColList, len(srf.cols))
+		zip[i] = b.factory.ConstructZipItem(srf.fn, make(opt.ColList, len(srf.cols)))
 		for j := range srf.cols {
 			zip[i].Cols[j] = srf.cols[j].id
 		}

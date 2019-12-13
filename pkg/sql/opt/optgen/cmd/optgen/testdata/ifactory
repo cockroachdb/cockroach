@@ -84,6 +84,12 @@ type Factory interface {
 		on memo.FiltersExpr,
 	) memo.RelExpr
 
+	// ConstructFiltersItem constructs an expression for the FiltersItem operator.
+	ConstructFiltersItem(
+		condition opt.ScalarExpr,
+		scalar *props.Scalar,
+	) memo.FiltersItem
+
 	// ConstructAnd constructs an expression for the And operator.
 	ConstructAnd(
 		left opt.Expr,

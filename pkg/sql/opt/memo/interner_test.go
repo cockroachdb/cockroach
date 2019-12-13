@@ -87,23 +87,23 @@ func TestInterner(t *testing.T) {
 	scanNode := &ScanExpr{}
 	andExpr := &AndExpr{}
 
-	projections1 := ProjectionsExpr{{Element: andExpr, ColPrivate: ColPrivate{Col: 0}}}
-	projections2 := ProjectionsExpr{{Element: andExpr, ColPrivate: ColPrivate{Col: 0}}}
-	projections3 := ProjectionsExpr{{Element: andExpr, ColPrivate: ColPrivate{Col: 1}}}
+	projections1 := ProjectionsExpr{{Element: andExpr, Col: 0}}
+	projections2 := ProjectionsExpr{{Element: andExpr, Col: 0}}
+	projections3 := ProjectionsExpr{{Element: andExpr, Col: 1}}
 	projections4 := ProjectionsExpr{
-		{Element: andExpr, ColPrivate: ColPrivate{Col: 1}},
-		{Element: andExpr, ColPrivate: ColPrivate{Col: 2}},
+		{Element: andExpr, Col: 1},
+		{Element: andExpr, Col: 2},
 	}
-	projections5 := ProjectionsExpr{{Element: &AndExpr{}, ColPrivate: ColPrivate{Col: 1}}}
+	projections5 := ProjectionsExpr{{Element: &AndExpr{}, Col: 1}}
 
-	aggs1 := AggregationsExpr{{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 0}}}
-	aggs2 := AggregationsExpr{{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 0}}}
-	aggs3 := AggregationsExpr{{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 1}}}
+	aggs1 := AggregationsExpr{{Agg: CountRowsSingleton, Col: 0}}
+	aggs2 := AggregationsExpr{{Agg: CountRowsSingleton, Col: 0}}
+	aggs3 := AggregationsExpr{{Agg: CountRowsSingleton, Col: 1}}
 	aggs4 := AggregationsExpr{
-		{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 1}},
-		{Agg: CountRowsSingleton, ColPrivate: ColPrivate{Col: 2}},
+		{Agg: CountRowsSingleton, Col: 1},
+		{Agg: CountRowsSingleton, Col: 2},
 	}
-	aggs5 := AggregationsExpr{{Agg: &CountRowsExpr{}, ColPrivate: ColPrivate{Col: 1}}}
+	aggs5 := AggregationsExpr{{Agg: &CountRowsExpr{}, Col: 1}}
 
 	int1 := &ConstExpr{Value: tree.NewDInt(10)}
 	int2 := &ConstExpr{Value: tree.NewDInt(20)}
@@ -121,39 +121,24 @@ func TestInterner(t *testing.T) {
 	}
 
 	wins1 := WindowsExpr{{
-		Function: RankSingleton,
-		WindowsItemPrivate: WindowsItemPrivate{
-			ColPrivate: ColPrivate{Col: 0},
-			Frame:      frame1,
-		},
+		Function:           RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame1},
 	}}
 	wins2 := WindowsExpr{{
-		Function: RankSingleton,
-		WindowsItemPrivate: WindowsItemPrivate{
-			ColPrivate: ColPrivate{Col: 0},
-			Frame:      frame1,
-		},
+		Function:           RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame1},
 	}}
 	wins3 := WindowsExpr{{
-		Function: &WindowFromOffsetExpr{Input: RankSingleton, Offset: int1},
-		WindowsItemPrivate: WindowsItemPrivate{
-			ColPrivate: ColPrivate{Col: 0},
-			Frame:      frame1,
-		},
+		Function:           &WindowFromOffsetExpr{Input: RankSingleton, Offset: int1},
+		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame1},
 	}}
 	wins4 := WindowsExpr{{
-		Function: &WindowFromOffsetExpr{Input: RankSingleton, Offset: int2},
-		WindowsItemPrivate: WindowsItemPrivate{
-			ColPrivate: ColPrivate{Col: 0},
-			Frame:      frame1,
-		},
+		Function:           &WindowFromOffsetExpr{Input: RankSingleton, Offset: int2},
+		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame1},
 	}}
 	wins5 := WindowsExpr{{
-		Function: RankSingleton,
-		WindowsItemPrivate: WindowsItemPrivate{
-			ColPrivate: ColPrivate{Col: 0},
-			Frame:      frame2,
-		},
+		Function:           RankSingleton,
+		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
 
 	type testVariation struct {

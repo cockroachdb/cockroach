@@ -136,6 +136,15 @@ func (_f *Factory) ConstructInnerJoinApply(
 	return _f.onConstructRelational(e)
 }
 
+// ConstructFiltersItem constructs an expression for the FiltersItem operator.
+func (_f *Factory) ConstructFiltersItem(
+	condition opt.ScalarExpr,
+	scalar *props.Scalar,
+) memo.FiltersItem {
+	item := memo.FiltersItem{Condition: condition, scalar: *scalar}
+	return item
+}
+
 // Replace enables an expression subtree to be rewritten under the control of
 // the caller. It passes each child of the given expression to the replace
 // callback. The caller can continue traversing the expression tree within the
@@ -205,7 +214,7 @@ func (f *Factory) replaceFiltersExpr(list memo.FiltersExpr, replace ReplaceFunc)
 				newList = make([]memo.FiltersItem, len(list))
 				copy(newList, list[:i])
 			}
-			newList[i].Condition = after
+			newList[i] = f.ConstructFiltersItem(after, &list[i].scalar)
 		} else if newList != nil {
 			newList[i] = list[i]
 		}
@@ -250,6 +259,7 @@ func (f *Factory) copyAndReplaceDefaultFiltersExpr(src memo.FiltersExpr, replace
 	dst = make(memo.FiltersExpr, len(src))
 	for i := range src {
 		dst[i].Condition = f.invokeReplace(src[i].Condition, replace).(opt.ScalarExpr)
+		f.mem.CheckExpr(&dst[i])
 	}
 	return dst
 }

@@ -590,7 +590,7 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 	for i := range val {
 		item := &val[i]
 		h.HashColList(item.Cols)
-		h.HashScalarExpr(item.Func)
+		h.HashScalarExpr(item.Fn)
 	}
 }
 
@@ -933,7 +933,7 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 		return false
 	}
 	for i := range l {
-		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
+		if !l[i].Cols.Equals(r[i].Cols) || l[i].Fn != r[i].Fn {
 			return false
 		}
 	}

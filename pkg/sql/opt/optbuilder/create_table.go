@@ -94,10 +94,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 			}
 			fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
 			scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
-			projections := memo.ProjectionsExpr{{
-				Element:    fn,
-				ColPrivate: memo.ColPrivate{Col: scopeCol.id}},
-			}
+			projections := memo.ProjectionsExpr{b.factory.ConstructProjectionsItem(fn, scopeCol.id)}
 			outCols := outScope.expr.Relational().OutputCols
 			input = b.factory.ConstructProject(outScope.expr, projections, outCols)
 		}
