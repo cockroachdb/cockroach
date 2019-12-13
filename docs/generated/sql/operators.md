@@ -414,6 +414,7 @@
 <table><thead>
 <tr><td><code>||</code></td><td>Return</td></tr>
 </thead><tbody>
+<tr><td>anyelement <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>||</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool[]</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>||</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool[]</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>||</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool[]</a></td></tr>
@@ -441,6 +442,7 @@
 <tr><td><a href="interval.html">interval[]</a> <code>||</code> <a href="interval.html">interval[]</a></td><td><a href="interval.html">interval[]</a></td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
+<tr><td><a href="string.html">string</a> <code>||</code> anyelement</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string[]</a></td><td><a href="string.html">string[]</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string[]</a></td></tr>

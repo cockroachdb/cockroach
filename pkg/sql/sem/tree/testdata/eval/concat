@@ -19,3 +19,26 @@ eval
 array['foo'] || '{a,b}'
 ----
 ARRAY['foo','a','b']
+
+
+# String || any; any || String
+
+eval
+'b' || (0x32)::char || (0x33)::char || 'c'
+----
+b56c
+
+eval
+3 || 'a' || 3
+----
+3a3
+
+eval
+3::oid || 'a' || 3::oid
+----
+3a3
+
+eval
+3.33 || 'a' || 3.33
+----
+3.33a3.33

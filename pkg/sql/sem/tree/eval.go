@@ -180,6 +180,7 @@ type BinOp struct {
 	RightType    *types.T
 	ReturnType   *types.T
 	NullableArgs bool
+	Preferred    bool
 	Fn           func(*EvalContext, Datum, Datum) (Datum, error)
 
 	types   TypeList
@@ -202,8 +203,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*BinOp) preferred() bool {
-	return false
+func (op *BinOp) preferred() bool {
+	return op.Preferred
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1407,8 +1408,29 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			LeftType:   types.String,
 			RightType:  types.String,
 			ReturnType: types.String,
+			// As type families of chars and strings are the same, and overload detection
+			// uses families as opposed to raw types for comparison, this can conflict
+			// with String || Any or Any || String from the below. As such, we choose
+			// to "prefer" String || String.
+			Preferred: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.String,
+			RightType:  types.Any,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(string(MustBeDString(left)) + right.String()), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Any,
+			RightType:  types.String,
+			ReturnType: types.String,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return NewDString(left.String() + string(MustBeDString(right))), nil
 			},
 		},
 		&BinOp{
