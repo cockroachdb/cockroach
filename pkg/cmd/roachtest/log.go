@@ -40,6 +40,8 @@ type loggerOption interface {
 
 type logPrefix string
 
+var _ logPrefix // silence unused lint
+
 func (p logPrefix) apply(cfg *loggerConfig) {
 	cfg.prefix = string(p)
 }
