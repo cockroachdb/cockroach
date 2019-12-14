@@ -80,6 +80,9 @@ type Metadata struct {
 	// values is the highest id for a Values clause that has been assigned.
 	values ValuesID
 
+	// withScan is the highest ID that has been assigned to a WithScan.
+	withScan WithScanID
+
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them. The objects are
 	// deduplicated: any name/object pair shows up at most once.
@@ -474,3 +477,15 @@ func (md *Metadata) AllViews() []cat.View {
 // WithID=0 is reserved to mean "unknown expression".
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
+
+// WithScanID uniquely identifies the usage of a WithScan within the scope of a
+// query.
+// See the comment for Metadata for more details on identifiers.
+type WithScanID uint64
+
+// NextWithScanID returns a fresh WithScanID which is guaranteed to never have
+// been previously allocated in this memo.
+func (md *Metadata) NextWithScanID() WithScanID {
+	md.withScan++
+	return md.withScan
+}
