@@ -136,7 +136,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramURL("SOME SQL HERE", flows)
+	json, url, err := GeneratePlanDiagramURL("SOME SQL HERE", flows, true /* showInputTypes */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/2","details":["SomeIndex@Table","Out: @1,@2"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["","@2+"]}],"core":{"title":"JoinReader/3","details":["primary@Table","Filter: @1+@2\u003c@3","Out: @3"]},"outputs":[],"stage":2},
 		    {"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 		  ],
 		  "edges":[
@@ -163,7 +163,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kkFLwzAUx-9-ivG_LmCbeMqpl4kTdbp50x5q8xiBLqlJCpPS7y5NZVvByWR6zHvv_36_PtrCv1eQWC3uZ5PV093kZracgcFYRQ_FhjzkC1IwcDAI5Ay1syV5b13fauPgXG0hEwZt6ib05ZyhtI4gWwQdKoLEc_FW0ZIKRe4yAYOiUOgqrl_ZDc2Nom0Wh8CwaIKcZCnLOPKOwTZhv9iHYk2QaccO4Onp8PTP4fx0OP9X-J5pnSJHakzL-BR5943hrdXmS1CMI7XTm8J97PSudRXI9YbTjL82SSLKTOy0xVFn_puDLcnX1ngaqRzbnPQfRGpNwwG8bVxJj86W8Y8cnouYiwVFPgxdMTzmJrbiUQ_D6Tlhfk5Y_Bi-GoWTLu8uPgMAAP__nLk4fw=="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ksFKw0AQhu8-RfmvHTDZ9bSnXCpW1GrrTXOI2aEE0mzc3UAl5N0lG2kbsFKpHndm_vm-DGnh3ksorBb3s8nq6W5yM1vOQKiM5odsww7qBTEIAgSJlFBbk7NzxvatNgzO9RYqIhRV3fi-nBJyYxmqhS98yVB4zt5KXnKm2V5GIGj2WVGG9Suz4XmleZuEIRAWjVeTJKZEIO0IpvH7xc5na4aKOzqAx6fD4z-Hi9Ph4l_he6axmi3rMQ2EREyRdt9I3pqi-nKU41Rti01mP3aG10Xp2faS00S8NlEk80TuzOVRbfGbmy3Z1aZyPFI5tjnqP4j1mocbONPYnB-tycNPOTwXIRcKmp0funJ4zKvQCnc9DMfnhMU5Yflj-GoUjrq0u_gMAAD__0JKOO8="
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, url.String())
 	}
@@ -359,7 +359,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		}},
 	}
 
-	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows)
+	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows, true /* showInputTypes */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,11 +375,11 @@ func TestPlanDiagramJoin(t *testing.T) {
 			"processors":[
 				{"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
-				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op/3","details":[]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[""]},{"title":"unordered","details":[""]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[]},
+				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[""]}],"core":{"title":"No-op/3","details":[]},"outputs":[]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/4","details":["primary@TableA","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}]},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/5","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
-				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2"]},"outputs":[]},
+				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[""]},{"title":"unordered","details":[""]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Merged columns: 2"]},"outputs":[]},
 				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader/7","details":["primary@TableB","Out: @2,@3,@5"]},"outputs":[{"title":"by hash","details":["@3,@2"]}]},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[]}
 			],
