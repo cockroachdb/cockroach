@@ -518,7 +518,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		mb.outScope = inScope.push()
 		mb.outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
 			Cols: opt.ColList{},
-			ID:   mb.md.NextValuesID(),
+			ID:   mb.md.NextUniqueID(),
 		})
 		return
 	}
