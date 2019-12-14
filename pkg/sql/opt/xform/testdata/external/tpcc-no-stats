@@ -202,7 +202,7 @@ insert "order"
                 ├── cost: 4.02224
                 ├── key: ()
                 ├── fd: ()-->(38-40)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
                 │    ├── mapping:
                 │    │    ├──  column3:11(int) => column3:38(int)
@@ -253,7 +253,7 @@ insert new_order
                 ├── cost: 4.02211
                 ├── key: ()
                 ├── fd: ()-->(15-17)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
                 │    ├── mapping:
                 │    │    ├──  column3:6(int) => column3:15(int)
@@ -786,7 +786,7 @@ insert order_line
       │         ├── cardinality: [0 - 6]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 24.03266
-      │         ├── with-scan &1
+      │         ├── with-scan &1 id=1
       │         │    ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
       │         │    ├── mapping:
       │         │    │    ├──  column3:13(int) => column3:30(int)
@@ -805,7 +805,7 @@ insert order_line
                 ├── cardinality: [0 - 6]
                 ├── stats: [rows=1e-10]
                 ├── cost: 25.244
-                ├── with-scan &1
+                ├── with-scan &1 id=2
                 │    ├── columns: column6:50(int!null) column5:51(int!null)
                 │    ├── mapping:
                 │    │    ├──  column6:16(int) => column6:50(int)
@@ -1135,7 +1135,7 @@ insert history
       │         ├── cost: 4.02224
       │         ├── key: ()
       │         ├── fd: ()-->(41-43)
-      │         ├── with-scan &1
+      │         ├── with-scan &1 id=1
       │         │    ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
       │         │    ├── mapping:
       │         │    │    ├──  column3:12(int) => column3:41(int)
@@ -1158,7 +1158,7 @@ insert history
                 ├── cost: 4.233
                 ├── key: ()
                 ├── fd: ()-->(55,56)
-                ├── with-scan &1
+                ├── with-scan &1 id=2
                 │    ├── columns: column5:55(int!null) column4:56(int!null)
                 │    ├── mapping:
                 │    │    ├──  column5:14(int) => column5:55(int)

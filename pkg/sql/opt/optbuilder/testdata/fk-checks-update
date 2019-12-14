@@ -25,7 +25,7 @@ update child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: column5:9(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column5:9(int!null)
                 │    └── mapping:
                 │         └──  column5:5(int) => column5:9(int)
@@ -63,11 +63,11 @@ update parent
                 │    │    ├── columns: p:8(int)
                 │    │    ├── left columns: p:8(int)
                 │    │    ├── right columns: column7:9(int)
-                │    │    ├── with-scan &1
+                │    │    ├── with-scan &1 id=1
                 │    │    │    ├── columns: p:8(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  parent.p:5(int) => p:8(int)
-                │    │    └── with-scan &1
+                │    │    └── with-scan &1 id=2
                 │    │         ├── columns: column7:9(int)
                 │    │         └── mapping:
                 │    │              └──  column7:7(int) => column7:9(int)
@@ -109,11 +109,11 @@ update child
                 │    │    ├── columns: c:6(int!null)
                 │    │    ├── left columns: c:6(int!null)
                 │    │    ├── right columns: column5:7(int)
-                │    │    ├── with-scan &1
+                │    │    ├── with-scan &1 id=1
                 │    │    │    ├── columns: c:6(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  child.c:3(int) => c:6(int)
-                │    │    └── with-scan &1
+                │    │    └── with-scan &1 id=2
                 │    │         ├── columns: column5:7(int!null)
                 │    │         └── mapping:
                 │    │              └──  column5:5(int) => column5:7(int)
@@ -146,7 +146,7 @@ update child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: column5:9(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column5:9(int!null)
                 │    └── mapping:
                 │         └──  column5:5(int) => column5:9(int)
@@ -172,7 +172,7 @@ update child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: p:8(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: p:8(int!null)
                 │    └── mapping:
                 │         └──  child.p:4(int) => p:8(int)
@@ -208,7 +208,7 @@ update child
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── anti-join (hash)
       │         ├── columns: column5:10(int)
-      │         ├── with-scan &1
+      │         ├── with-scan &1 id=1
       │         │    ├── columns: column5:10(int)
       │         │    └── mapping:
       │         │         └──  column5:5(int) => column5:10(int)
@@ -227,11 +227,11 @@ update child
                 │    │    ├── columns: c:11(int)
                 │    │    ├── left columns: c:11(int)
                 │    │    ├── right columns: column6:12(int)
-                │    │    ├── with-scan &1
+                │    │    ├── with-scan &1 id=2
                 │    │    │    ├── columns: c:11(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  child.c:3(int) => c:11(int)
-                │    │    └── with-scan &1
+                │    │    └── with-scan &1 id=3
                 │    │         ├── columns: column6:12(int)
                 │    │         └── mapping:
                 │    │              └──  column6:6(int) => column6:12(int)
@@ -268,7 +268,7 @@ update child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: column5:9(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column5:9(int!null)
                 │    └── mapping:
                 │         └──  column5:5(int) => column5:9(int)
@@ -302,7 +302,7 @@ update self
       └── f-k-checks-item: self(y) -> self(x)
            └── anti-join (hash)
                 ├── columns: column5:8(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column5:8(int!null)
                 │    └── mapping:
                 │         └──  column5:5(int) => column5:8(int)
@@ -338,11 +338,11 @@ update self
                 │    │    ├── columns: x:6(int!null)
                 │    │    ├── left columns: x:6(int!null)
                 │    │    ├── right columns: column5:7(int)
-                │    │    ├── with-scan &1
+                │    │    ├── with-scan &1 id=1
                 │    │    │    ├── columns: x:6(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  self.x:3(int) => x:6(int)
-                │    │    └── with-scan &1
+                │    │    └── with-scan &1 id=2
                 │    │         ├── columns: column5:7(int!null)
                 │    │         └── mapping:
                 │    │              └──  column5:5(int) => column5:7(int)
@@ -397,7 +397,7 @@ update fam
                 ├── columns: column13:16(int!null) d:17(int!null)
                 ├── select
                 │    ├── columns: column13:16(int!null) d:17(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column13:16(int!null) d:17(int)
                 │    │    └── mapping:
                 │    │         ├──  column13:13(int) => column13:16(int)
@@ -437,7 +437,7 @@ update fam
                 ├── columns: c:16(int!null) column13:17(int!null)
                 ├── select
                 │    ├── columns: c:16(int!null) column13:17(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: c:16(int) column13:17(int!null)
                 │    │    └── mapping:
                 │    │         ├──  fam.c:9(int) => c:16(int)

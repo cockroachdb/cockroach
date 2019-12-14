@@ -1440,7 +1440,7 @@ with &1 (t)
       ├── columns: x:6(bool!null)
       ├── stats: [rows=1.98e+20, distinct(6)=1, null(6)=0]
       ├── fd: ()-->(6)
-      ├── with-scan &1 (t)
+      ├── with-scan &1 (t) id=1
       │    ├── columns: x:6(bool)
       │    ├── mapping:
       │    │    └──  x:5(bool) => x:6(bool)

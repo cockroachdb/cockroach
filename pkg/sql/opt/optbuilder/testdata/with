@@ -28,7 +28,7 @@ with &1 (t)
            ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
            ├── scan x
            │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
-           ├── with-scan &1 (t)
+           ├── with-scan &1 (t) id=1
            │    ├── columns: a:6(int!null)
            │    └── mapping:
            │         └──  y.a:1(int) => a:6(int)
@@ -62,7 +62,7 @@ explain
                 ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
                 ├── scan x
                 │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
-                ├── with-scan &1 (t)
+                ├── with-scan &1 (t) id=1
                 │    ├── columns: a:6(int!null)
                 │    └── mapping:
                 │         └──  y.a:1(int) => a:6(int)
@@ -131,7 +131,7 @@ create-table
       │         │    ├── columns: x.a:3(int!null) b:4(int) x.rowid:5(int!null) a:6(int!null)
       │         │    ├── scan x
       │         │    │    └── columns: x.a:3(int) b:4(int) x.rowid:5(int!null)
-      │         │    ├── with-scan &1 (t)
+      │         │    ├── with-scan &1 (t) id=1
       │         │    │    ├── columns: a:6(int!null)
       │         │    │    └── mapping:
       │         │    │         └──  y.a:1(int) => a:6(int)
@@ -160,7 +160,7 @@ with &1 (t)
  │              └── lt [type=bool]
  │                   ├── variable: y.a [type=int]
  │                   └── const: 3 [type=int]
- └── with-scan &1 (t)
+ └── with-scan &1 (t) id=1
       ├── columns: a:3(int!null)
       └── mapping:
            └──  y.a:1(int) => a:3(int)
@@ -188,7 +188,7 @@ with &1 (t1)
       ├── columns: a:4(int!null)
       ├── select
       │    ├── columns: a:3(int!null)
-      │    ├── with-scan &1 (t1)
+      │    ├── with-scan &1 (t1) id=1
       │    │    ├── columns: a:3(int!null)
       │    │    └── mapping:
       │    │         └──  y.a:1(int) => a:3(int)
@@ -196,7 +196,7 @@ with &1 (t1)
       │         └── gt [type=bool]
       │              ├── variable: a [type=int]
       │              └── const: 1 [type=int]
-      └── with-scan &2 (t2)
+      └── with-scan &2 (t2) id=2
            ├── columns: a:4(int!null)
            └── mapping:
                 └──  a:3(int) => a:4(int)
@@ -224,7 +224,7 @@ with &1 (t1)
       ├── columns: a:5(int!null)
       ├── select
       │    ├── columns: a:3(int!null)
-      │    ├── with-scan &1 (t1)
+      │    ├── with-scan &1 (t1) id=1
       │    │    ├── columns: a:3(int!null)
       │    │    └── mapping:
       │    │         └──  y.a:1(int) => a:3(int)
@@ -236,7 +236,7 @@ with &1 (t1)
            ├── columns: a:5(int!null)
            ├── select
            │    ├── columns: a:4(int!null)
-           │    ├── with-scan &2 (t2)
+           │    ├── with-scan &2 (t2) id=2
            │    │    ├── columns: a:4(int!null)
            │    │    └── mapping:
            │    │         └──  a:3(int) => a:4(int)
@@ -244,7 +244,7 @@ with &1 (t1)
            │         └── eq [type=bool]
            │              ├── variable: a [type=int]
            │              └── const: 2 [type=int]
-           └── with-scan &3 (t3)
+           └── with-scan &3 (t3) id=3
                 ├── columns: a:5(int!null)
                 └── mapping:
                      └──  a:4(int) => a:5(int)
@@ -285,7 +285,7 @@ with &1 (t1)
            ├── columns: a:7(int!null)
            ├── select
            │    ├── columns: a:5(int!null)
-           │    ├── with-scan &1 (t1)
+           │    ├── with-scan &1 (t1) id=1
            │    │    ├── columns: a:5(int!null)
            │    │    └── mapping:
            │    │         └──  y.a:1(int) => a:5(int)
@@ -297,7 +297,7 @@ with &1 (t1)
                 ├── columns: a:7(int!null)
                 ├── select
                 │    ├── columns: a:6(int!null)
-                │    ├── with-scan &2 (t2)
+                │    ├── with-scan &2 (t2) id=2
                 │    │    ├── columns: a:6(int!null)
                 │    │    └── mapping:
                 │    │         └──  y.a:3(int) => a:6(int)
@@ -309,11 +309,11 @@ with &1 (t1)
                      ├── columns: a:7(int!null)
                      └── inner-join (hash)
                           ├── columns: a:7(int!null) a:8(int!null)
-                          ├── with-scan &3 (t3)
+                          ├── with-scan &3 (t3) id=3
                           │    ├── columns: a:7(int!null)
                           │    └── mapping:
                           │         └──  a:5(int) => a:7(int)
-                          ├── with-scan &4 (t4)
+                          ├── with-scan &4 (t4) id=4
                           │    ├── columns: a:8(int!null)
                           │    └── mapping:
                           │         └──  a:6(int) => a:8(int)
@@ -342,7 +342,7 @@ with &1 (t)
       │    │    └── tuple [type=tuple]
       │    └── projections
       │         └── false [type=bool]
-      └── with-scan &2 (t)
+      └── with-scan &2 (t) id=1
            ├── columns: bool:3(bool!null)
            └── mapping:
                 └──  bool:2(bool) => bool:3(bool)
@@ -372,7 +372,7 @@ with &1 (t1)
  │         └── true [type=bool]
  └── with &2 (t2)
       ├── columns: bool:3(bool!null)
-      ├── with-scan &1 (t1)
+      ├── with-scan &1 (t1) id=1
       │    ├── columns: bool:2(bool!null)
       │    └── mapping:
       │         └──  bool:1(bool) => bool:2(bool)
@@ -380,11 +380,11 @@ with &1 (t1)
            ├── columns: bool:3(bool!null)
            └── inner-join (hash)
                 ├── columns: bool:3(bool!null) bool:4(bool!null)
-                ├── with-scan &1 (t1)
+                ├── with-scan &1 (t1) id=2
                 │    ├── columns: bool:3(bool!null)
                 │    └── mapping:
                 │         └──  bool:1(bool) => bool:3(bool)
-                ├── with-scan &2 (t2)
+                ├── with-scan &2 (t2) id=3
                 │    ├── columns: bool:4(bool!null)
                 │    └── mapping:
                 │         └──  bool:2(bool) => bool:4(bool)
@@ -413,7 +413,7 @@ with &1 (t1)
       │         ├── columns: x.a:4(int!null) x.b:5(int!null) rowid:6(int!null) a:7(int!null) b:8(int!null)
       │         ├── scan x
       │         │    └── columns: x.a:4(int) x.b:5(int) rowid:6(int!null)
-      │         ├── with-scan &1 (t1)
+      │         ├── with-scan &1 (t1) id=1
       │         │    ├── columns: a:7(int) b:8(int)
       │         │    └── mapping:
       │         │         ├──  x.a:1(int) => a:7(int)
@@ -429,7 +429,7 @@ with &1 (t1)
            ├── columns: a:9(int!null) b:10(int!null)
            └── inner-join (hash)
                 ├── columns: a:9(int!null) b:10(int!null) x.a:11(int!null) x.b:12(int!null) rowid:13(int!null)
-                ├── with-scan &2 (t2)
+                ├── with-scan &2 (t2) id=2
                 │    ├── columns: a:9(int!null) b:10(int!null)
                 │    └── mapping:
                 │         ├──  x.a:4(int) => a:9(int)
@@ -460,7 +460,7 @@ with &1 (t)
  │    ├── columns: a:1(int)
  │    └── scan x
  │         └── columns: a:1(int) b:2(int) rowid:3(int!null)
- └── with-scan &1 (t)
+ └── with-scan &1 (t) id=1
       ├── columns: x:4(int)
       └── mapping:
            └──  a:1(int) => x:4(int)
@@ -478,7 +478,7 @@ with &1 (t)
  │    └── projections
  │         ├── true [type=bool]
  │         └── false [type=bool]
- └── with-scan &1 (t)
+ └── with-scan &1 (t) id=1
       ├── columns: a:3(bool!null) b:4(bool!null)
       └── mapping:
            ├──  a:1(bool) => a:3(bool)
@@ -497,7 +497,7 @@ with &1 (t)
  │    └── projections
  │         ├── true [type=bool]
  │         └── false [type=bool]
- └── with-scan &1 (t)
+ └── with-scan &1 (t) id=1
       ├── columns: b:3(bool!null) a:4(bool!null)
       └── mapping:
            ├──  a:1(bool) => b:3(bool)
@@ -521,7 +521,7 @@ with &1 (t)
            │    └── columns: y.a:4(int) y.rowid:5(int!null)
            └── filters
                 └── any: eq [type=bool]
-                     ├── with-scan &1 (t)
+                     ├── with-scan &1 (t) id=1
                      │    ├── columns: a:6(int)
                      │    └── mapping:
                      │         └──  x.a:1(int) => a:6(int)
@@ -545,7 +545,7 @@ with &1 (t)
            │    └── columns: y.a:4(int) y.rowid:5(int!null)
            └── filters
                 └── any: eq [type=bool]
-                     ├── with-scan &1 (t)
+                     ├── with-scan &1 (t) id=1
                      │    ├── columns: x:6(int)
                      │    └── mapping:
                      │         └──  x.a:1(int) => x:6(int)
@@ -576,7 +576,7 @@ with &1 (t)
            │    └── columns: x.a:1(int) b:2(int) x.rowid:3(int!null)
            └── filters
                 └── any: eq [type=bool]
-                     ├── with-scan &1 (t)
+                     ├── with-scan &1 (t) id=1
                      │    ├── columns: a:6(int!null)
                      │    └── mapping:
                      │         └──  y.a:4(int) => a:6(int)
@@ -598,7 +598,7 @@ with &1 (t)
  │    ├── columns: a:1(int)
  │    └── scan x
  │         └── columns: a:1(int) x.b:2(int) rowid:3(int!null)
- └── with-scan &1 (t)
+ └── with-scan &1 (t) id=1
       ├── columns: b:4(int)
       └── mapping:
            └──  a:1(int) => b:4(int)
@@ -630,7 +630,7 @@ with &1 (t)
       ├── columns: "?column?":5(int)
       ├── project
       │    ├── columns: "?column?":3(int)
-      │    ├── with-scan &1 (t)
+      │    ├── with-scan &1 (t) id=1
       │    │    ├── columns: x:2(int!null)
       │    │    └── mapping:
       │    │         └──  "?column?":1(int) => x:2(int)
@@ -640,7 +640,7 @@ with &1 (t)
       │              └── const: 10 [type=int]
       └── project
            ├── columns: "?column?":5(int)
-           ├── with-scan &2 (t)
+           ├── with-scan &2 (t) id=2
            │    ├── columns: x:4(int)
            │    └── mapping:
            │         └──  "?column?":3(int) => x:4(int)
@@ -670,17 +670,17 @@ with &1 (one)
       │    │    ├── columns: y.a:4(int)
       │    │    └── scan y
       │    │         └── columns: y.a:4(int) y.rowid:5(int!null)
-      │    └── with-scan &1 (one)
+      │    └── with-scan &1 (one) id=1
       │         ├── columns: u:6(int)
       │         └── mapping:
       │              └──  x.a:1(int) => u:6(int)
       └── inner-join (hash)
            ├── columns: u:8(int!null) v:9(int!null)
-           ├── with-scan &1 (one)
+           ├── with-scan &1 (one) id=2
            │    ├── columns: u:8(int)
            │    └── mapping:
            │         └──  x.a:1(int) => u:8(int)
-           ├── with-scan &2 (two)
+           ├── with-scan &2 (two) id=3
            │    ├── columns: v:9(int)
            │    └── mapping:
            │         └──  a:7(int) => v:9(int)
@@ -698,7 +698,7 @@ with &1 (foo)
  │    ├── columns: x.a:1(int)
  │    └── scan x
  │         └── columns: x.a:1(int) b:2(int) rowid:3(int!null)
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: a:4(int)
       └── mapping:
            └──  x.a:1(int) => a:4(int)
@@ -725,7 +725,7 @@ with &1 (t)
                 ├── columns: column9:9(int) column10:10(int) "?column?":8(int)
                 ├── project
                 │    ├── columns: "?column?":8(int)
-                │    ├── with-scan &1 (t)
+                │    ├── with-scan &1 (t) id=1
                 │    │    ├── columns: a:7(int)
                 │    │    └── mapping:
                 │    │         └──  x.a:1(int) => a:7(int)
@@ -762,7 +762,7 @@ with &1 (t)
                      └── subquery [type=int]
                           └── max1-row
                                ├── columns: a:10(int)
-                               └── with-scan &1 (t)
+                               └── with-scan &1 (t) id=1
                                     ├── columns: a:10(int)
                                     └── mapping:
                                          └──  x.a:1(int) => a:10(int)
@@ -791,7 +791,7 @@ with &1 (t)
                           └── subquery [type=int]
                                └── max1-row
                                     ├── columns: a:10(int)
-                                    └── with-scan &1 (t)
+                                    └── with-scan &1 (t) id=1
                                          ├── columns: a:10(int)
                                          └── mapping:
                                               └──  x.a:1(int) => a:10(int)
@@ -857,7 +857,7 @@ with &1 (t)
            │    └── columns: xy.x:12(int) y:13(int) z:14(timestamp) xy.rowid:15(int!null)
            └── filters
                 └── any: eq [type=bool]
-                     ├── with-scan &1 (t)
+                     ├── with-scan &1 (t) id=1
                      │    ├── columns: x:16(int!null)
                      │    └── mapping:
                      │         └──  xy.x:1(int) => x:16(int)
@@ -880,7 +880,7 @@ with &1 (cte)
  │              │    └── tuple [type=tuple]
  │              └── projections
  │                   └── const: 1 [type=int]
- └── with-scan &1 (cte)
+ └── with-scan &1 (cte) id=1
       ├── columns: tree:9(string) field:10(string) description:11(string) columns:12(string) ordering:13(string)
       └── mapping:
            ├──  tree:2(string) => tree:9(string)
@@ -914,7 +914,7 @@ with &2 (t)
  │         ├── columns: "?column?":4(int)
  │         ├── select
  │         │    ├── columns: n:3(int!null)
- │         │    ├── with-scan &1 (t)
+ │         │    ├── with-scan &1 (t) id=1
  │         │    │    ├── columns: n:3(int)
  │         │    │    └── mapping:
  │         │    │         └──  n:2(int) => n:3(int)
@@ -928,7 +928,7 @@ with &2 (t)
  │                   └── const: 1 [type=int]
  └── scalar-group-by
       ├── columns: sum:6(decimal)
-      ├── with-scan &2 (t)
+      ├── with-scan &2 (t) id=2
       │    ├── columns: n:5(int)
       │    └── mapping:
       │         └──  n:2(int) => n:5(int)
@@ -975,7 +975,7 @@ with &2 (included_parts)
  │              ├── columns: sub_part:8(string!null) part:9(string) quantity:10(int) p.part:11(string!null) p.sub_part:12(string) p.quantity:13(int) p.rowid:14(int!null)
  │              ├── inner-join (hash)
  │              │    ├── columns: sub_part:8(string) part:9(string) quantity:10(int) p.part:11(string) p.sub_part:12(string) p.quantity:13(int) p.rowid:14(int!null)
- │              │    ├── with-scan &1 (included_parts)
+ │              │    ├── with-scan &1 (included_parts) id=1
  │              │    │    ├── columns: sub_part:8(string) part:9(string) quantity:10(int)
  │              │    │    └── mapping:
  │              │    │         ├──  sub_part:5(string) => sub_part:8(string)
@@ -993,7 +993,7 @@ with &2 (included_parts)
       ├── grouping columns: sub_part:15(string)
       ├── project
       │    ├── columns: sub_part:15(string) quantity:17(int)
-      │    └── with-scan &2 (included_parts)
+      │    └── with-scan &2 (included_parts) id=2
       │         ├── columns: sub_part:15(string) part:16(string) quantity:17(int)
       │         └── mapping:
       │              ├──  sub_part:5(string) => sub_part:15(string)
@@ -1047,7 +1047,7 @@ with &2 (search_graph)
  │         │    │    ├── columns: g.id:13(int!null) g.link:14(int) g.data:15(string) id:16(int) link:17(int) data:18(string) depth:19(int) path:20(int[]) cycle:21(bool)
  │         │    │    ├── scan g
  │         │    │    │    └── columns: g.id:13(int!null) g.link:14(int) g.data:15(string)
- │         │    │    ├── with-scan &1 (search_graph)
+ │         │    │    ├── with-scan &1 (search_graph) id=1
  │         │    │    │    ├── columns: id:16(int) link:17(int) data:18(string) depth:19(int) path:20(int[]) cycle:21(bool)
  │         │    │    │    └── mapping:
  │         │    │    │         ├──  id:7(int) => id:16(int)
@@ -1074,7 +1074,7 @@ with &2 (search_graph)
  │              └── any-scalar: eq [type=bool]
  │                   ├── variable: g.id [type=int]
  │                   └── variable: path [type=int[]]
- └── with-scan &2 (search_graph)
+ └── with-scan &2 (search_graph) id=2
       ├── columns: id:25(int) link:26(int) data:27(string) depth:28(int) path:29(int[]) cycle:30(bool)
       └── mapping:
            ├──  id:7(int) => id:25(int)
@@ -1109,7 +1109,7 @@ with &2 (cte)
  │         ├── columns: "?column?":6(int) "?column?":7(int)
  │         ├── select
  │         │    ├── columns: a:4(int!null) b:5(int)
- │         │    ├── with-scan &1 (cte)
+ │         │    ├── with-scan &1 (cte) id=1
  │         │    │    ├── columns: a:4(int) b:5(int)
  │         │    │    └── mapping:
  │         │    │         ├──  a:2(int) => a:4(int)
@@ -1125,7 +1125,7 @@ with &2 (cte)
  │              └── plus [type=int]
  │                   ├── variable: b [type=int]
  │                   └── const: 10 [type=int]
- └── with-scan &2 (cte)
+ └── with-scan &2 (cte) id=2
       ├── columns: a:8(int) b:9(int)
       └── mapping:
            ├──  a:2(int) => a:8(int)
@@ -1157,7 +1157,7 @@ with &2 (cte)
  │         ├── columns: "?column?":7(int)
  │         ├── select
  │         │    ├── columns: a:5(int!null) b:6(int)
- │         │    ├── with-scan &1 (cte)
+ │         │    ├── with-scan &1 (cte) id=1
  │         │    │    ├── columns: a:5(int) b:6(int)
  │         │    │    └── mapping:
  │         │    │         ├──  a:3(int) => a:5(int)
@@ -1170,7 +1170,7 @@ with &2 (cte)
  │              └── plus [type=int]
  │                   ├── variable: a [type=int]
  │                   └── const: 1 [type=int]
- └── with-scan &2 (cte)
+ └── with-scan &2 (cte) id=2
       ├── columns: a:8(int) b:9(int)
       └── mapping:
            ├──  a:3(int) => a:8(int)
@@ -1191,7 +1191,7 @@ with &2 (cte)
  │    └── projections
  │         ├── const: 1 [type=int]
  │         └── const: 2 [type=int]
- └── with-scan &2 (cte)
+ └── with-scan &2 (cte) id=1
       ├── columns: a:3(int!null) b:4(int!null)
       └── mapping:
            ├──  "?column?":1(int) => a:3(int)
@@ -1225,7 +1225,7 @@ with &2 (cte)
  │         └── projections
  │              ├── const: 3 [type=int]
  │              └── const: 4 [type=int]
- └── with-scan &2 (cte)
+ └── with-scan &2 (cte) id=1
       ├── columns: a:9(int!null) b:10(int!null)
       └── mapping:
            ├──  "?column?":7(int) => a:9(int)
@@ -1277,7 +1277,7 @@ WITH RECURSIVE cte(a, b) AS (
 ----
 with &2 (foo)
  ├── columns: a:13(int) b:14(int)
- ├── with-scan &1 (cte)
+ ├── with-scan &1 (cte) id=1
  │    ├── columns: a:5(int) b:6(int)
  │    └── mapping:
  │         ├──  a:3(int) => a:5(int)
@@ -1300,12 +1300,12 @@ with &2 (foo)
       │         ├── columns: "?column?":11(int) "?column?":12(int)
       │         ├── inner-join (hash)
       │         │    ├── columns: a:7(int) b:8(int) a:9(int) b:10(int)
-      │         │    ├── with-scan &2 (foo)
+      │         │    ├── with-scan &2 (foo) id=2
       │         │    │    ├── columns: a:7(int) b:8(int)
       │         │    │    └── mapping:
       │         │    │         ├──  a:5(int) => a:7(int)
       │         │    │         └──  b:6(int) => b:8(int)
-      │         │    ├── with-scan &2 (foo)
+      │         │    ├── with-scan &2 (foo) id=3
       │         │    │    ├── columns: a:9(int) b:10(int)
       │         │    │    └── mapping:
       │         │    │         ├──  a:5(int) => a:9(int)
@@ -1318,7 +1318,7 @@ with &2 (foo)
       │              └── plus [type=int]
       │                   ├── variable: b [type=int]
       │                   └── variable: b [type=int]
-      └── with-scan &3 (cte)
+      └── with-scan &3 (cte) id=4
            ├── columns: a:13(int) b:14(int)
            └── mapping:
                 ├──  a:3(int) => a:13(int)
@@ -1364,7 +1364,7 @@ explain
       │              │         └── const: 1 [type=int]
       │              └── projections
       │                   └── function: unique_rowid [type=int]
-      └── with-scan &1 (foo)
+      └── with-scan &1 (foo) id=1
            ├── columns: a:5(int!null)
            └── mapping:
                 └──  y.a:1(int) => a:5(int)
@@ -1395,7 +1395,7 @@ with &1 (b)
            ├── columns: column6:6(int) w:5(int)
            ├── project
            │    ├── columns: w:5(int)
-           │    ├── with-scan &1 (b)
+           │    ├── with-scan &1 (b) id=1
            │    │    ├── columns: z:4(int!null)
            │    │    └── mapping:
            │    │         └──  column1:3(int) => z:4(int)

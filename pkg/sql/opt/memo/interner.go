@@ -471,6 +471,10 @@ func (h *hasher) HashWithID(val opt.WithID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashWithScanID(val opt.WithScanID) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashScanLimit(val ScanLimit) {
 	h.HashUint64(uint64(val))
 }
@@ -797,6 +801,10 @@ func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
 }
 
 func (h *hasher) IsWithIDEqual(l, r opt.WithID) bool {
+	return l == r
+}
+
+func (h *hasher) IsWithScanIDEqual(l, r opt.WithScanID) bool {
 	return l == r
 }
 

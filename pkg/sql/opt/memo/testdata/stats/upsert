@@ -116,7 +116,7 @@ with &1
       ├── columns: x:16(string!null) y:17(int!null) z:18(float)
       ├── stats: [rows=10, distinct(17)=1, null(17)=0]
       ├── fd: ()-->(17)
-      ├── with-scan &1
+      ├── with-scan &1 id=1
       │    ├── columns: x:16(string!null) y:17(int!null) z:18(float)
       │    ├── mapping:
       │    │    ├──  xyz.x:1(string) => x:16(string)

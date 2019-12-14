@@ -16,7 +16,7 @@ with &1 (foo)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: x:3(int!null) y:4(int)
       ├── mapping:
       │    ├──  xy.x:1(int) => x:3(int)
@@ -53,7 +53,7 @@ with &1 (foo)
  │         └── div [type=decimal, side-effects]
  │              ├── const: 1 [type=int]
  │              └── const: 0 [type=int]
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: "?column?":2(decimal)
       ├── mapping:
       │    └──  "?column?":1(decimal) => "?column?":2(decimal)
@@ -94,7 +94,7 @@ with &1 (foo)
       ├── fd: ()-->(3)
       ├── prune: (3)
       ├── cte-uses: map[1:1]
-      ├── with-scan &1 (foo)
+      ├── with-scan &1 (foo) id=1
       │    ├── columns: "?column?":2(int!null)
       │    ├── mapping:
       │    │    └──  "?column?":1(int) => "?column?":2(int)
@@ -139,7 +139,7 @@ with &1 (foo)
       ├── fd: ()-->(3)
       ├── prune: (3)
       ├── cte-uses: map[1:1]
-      ├── with-scan &1 (foo)
+      ├── with-scan &1 (foo) id=1
       │    ├── columns: int8:2(int)
       │    ├── mapping:
       │    │    └──  int8:1(int) => int8:2(int)

@@ -27,7 +27,7 @@ insert child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: column2:7(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column2:7(int!null)
                 │    └── mapping:
                 │         └──  column2:4(int) => column2:7(int)
@@ -60,7 +60,7 @@ insert child
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: y:8(int)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: y:8(int)
                 │    └── mapping:
                 │         └──  xy.y:4(int) => y:8(int)
@@ -101,7 +101,7 @@ insert child_nullable
                 ├── columns: column2:7(int!null)
                 ├── select
                 │    ├── columns: column2:7(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column2:7(int)
                 │    │    └── mapping:
                 │    │         └──  column2:4(int) => column2:7(int)
@@ -139,7 +139,7 @@ insert child_nullable
       └── f-k-checks-item: child_nullable(p) -> parent(p)
            └── anti-join (hash)
                 ├── columns: column2:7(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column2:7(int!null)
                 │    └── mapping:
                 │         └──  column2:4(int) => column2:7(int)
@@ -180,7 +180,7 @@ insert child_nullable_full
                 ├── columns: column2:7(int!null)
                 ├── select
                 │    ├── columns: column2:7(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column2:7(int)
                 │    │    └── mapping:
                 │    │         └──  column2:4(int) => column2:7(int)
@@ -236,7 +236,7 @@ insert multi_col_child
                 ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 ├── select
                 │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
                 │    │    └── mapping:
                 │    │         ├──  column2:6(int) => column2:13(int)
@@ -297,7 +297,7 @@ insert multi_col_child
                 ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 ├── select
                 │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
                 │    │    └── mapping:
                 │    │         ├──  column2:6(int) => column2:13(int)
@@ -346,7 +346,7 @@ insert multi_col_child
       └── f-k-checks-item: multi_col_child(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
                 ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 │    └── mapping:
                 │         ├──  column2:6(int) => column2:13(int)
@@ -401,7 +401,7 @@ insert multi_col_child_full
                 ├── columns: column2:13(int) column3:14(int) column4:15(int)
                 ├── select
                 │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=1
                 │    │    ├── columns: column2:13(int) column3:14(int) column4:15(int)
                 │    │    └── mapping:
                 │    │         ├──  column2:6(int) => column2:13(int)
@@ -462,7 +462,7 @@ insert multi_col_child_full
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
                 ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column2:13(int) column3:14(int) column4:15(int!null)
                 │    └── mapping:
                 │         ├──  column2:6(int) => column2:13(int)
@@ -504,7 +504,7 @@ insert multi_col_child_full
       └── f-k-checks-item: multi_col_child_full(p,q,r) -> multi_col_parent(p,q,r)
            └── anti-join (hash)
                 ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: column2:13(int!null) column3:14(int!null) column4:15(int!null)
                 │    └── mapping:
                 │         ├──  column2:6(int) => column2:13(int)
@@ -569,7 +569,7 @@ insert multi_ref_child
       │         ├── columns: column2:11(int!null)
       │         ├── select
       │         │    ├── columns: column2:11(int!null)
-      │         │    ├── with-scan &1
+      │         │    ├── with-scan &1 id=1
       │         │    │    ├── columns: column2:11(int)
       │         │    │    └── mapping:
       │         │    │         └──  column2:6(int) => column2:11(int)
@@ -588,7 +588,7 @@ insert multi_ref_child
                 ├── columns: column3:15(int!null) column4:16(int!null)
                 ├── select
                 │    ├── columns: column3:15(int!null) column4:16(int!null)
-                │    ├── with-scan &1
+                │    ├── with-scan &1 id=2
                 │    │    ├── columns: column3:15(int) column4:16(int)
                 │    │    └── mapping:
                 │    │         ├──  column3:7(int) => column3:15(int)

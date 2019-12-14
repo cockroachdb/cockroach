@@ -536,7 +536,7 @@ with &1
  └── with &2 (cte)
       ├── project
       │    ├── columns: b:15(int)
-      │    └── with-scan &1
+      │    └── with-scan &1 id=1
       │         ├── columns: a:14(int!null) b:15(int) c:16(int) d:17(int) e:18(int)
       │         └── mapping:
       │              ├──  abcde.a:1(int) => a:14(int)
@@ -698,7 +698,7 @@ with &1
  │                        └── const: 1 [type=int]
  └── project
       ├── columns: a:15(int!null) d:18(int)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:15(int!null) b:16(int) c:17(int) d:18(int) e:19(int!null)
            └── mapping:
                 ├──  abcde.a:1(int) => a:15(int)
@@ -1292,7 +1292,7 @@ with &1 (cte)
            │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
            │    └── filters
            │         └── exists [type=bool]
-           │              └── with-scan &1 (cte)
+           │              └── with-scan &1 (cte) id=1
            │                   ├── columns: x:16(string!null)
            │                   └── mapping:
            │                        └──  xyz.x:1(string) => x:16(string)
@@ -1332,7 +1332,7 @@ with &1 (a)
            │    │    └── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
            │    ├── max1-row
            │    │    ├── columns: y:17(int) y1:18(int)
-           │    │    └── with-scan &1 (a)
+           │    │    └── with-scan &1 (a) id=1
            │    │         ├── columns: y:17(int) y1:18(int)
            │    │         └── mapping:
            │    │              ├──  xyz.y:2(int) => y:17(int)

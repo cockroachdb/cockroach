@@ -40,7 +40,7 @@ delete parent
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
                 ├── columns: p:7(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: p:7(int!null)
                 │    └── mapping:
                 │         └──  parent.p:5(int) => p:7(int)
@@ -74,7 +74,7 @@ delete parent
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── semi-join (hash)
       │         ├── columns: p:7(int!null)
-      │         ├── with-scan &1
+      │         ├── with-scan &1 id=1
       │         │    ├── columns: p:7(int!null)
       │         │    └── mapping:
       │         │         └──  parent.p:5(int) => p:7(int)
@@ -87,7 +87,7 @@ delete parent
       └── f-k-checks-item: child2(p) -> parent(other)
            └── semi-join (hash)
                 ├── columns: other:10(int)
-                ├── with-scan &1
+                ├── with-scan &1 id=2
                 │    ├── columns: other:10(int)
                 │    └── mapping:
                 │         └──  parent.other:6(int) => other:10(int)
@@ -125,7 +125,7 @@ delete doubleparent
       └── f-k-checks-item: doublechild(p1,p2) -> doubleparent(p1,p2)
            └── semi-join (hash)
                 ├── columns: p1:7(int!null) p2:8(int!null)
-                ├── with-scan &1
+                ├── with-scan &1 id=1
                 │    ├── columns: p1:7(int!null) p2:8(int!null)
                 │    └── mapping:
                 │         ├──  doubleparent.p1:4(int) => p1:7(int)

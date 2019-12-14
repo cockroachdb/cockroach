@@ -32,7 +32,7 @@ with &1 (foo)
       ├── cost: 0.05
       ├── prune: (4)
       ├── cte-uses: map[1:2]
-      ├── with-scan &1 (foo)
+      ├── with-scan &1 (foo) id=1
       │    ├── columns: "?column?":2(int!null)
       │    ├── mapping:
       │    │    └──  "?column?":1(int) => "?column?":2(int)
@@ -43,7 +43,7 @@ with &1 (foo)
       │    ├── fd: ()-->(2)
       │    ├── prune: (2)
       │    └── cte-uses: map[1:1]
-      └── with-scan &1 (foo)
+      └── with-scan &1 (foo) id=2
            ├── columns: "?column?":3(int!null)
            ├── mapping:
            │    └──  "?column?":1(int) => "?column?":3(int)
@@ -181,7 +181,7 @@ with &2 (bar)
                 │    │         ├── fd: ()-->(3)
                 │    │         └── (1,) [type=tuple{int}]
                 │    └── subquery [type=int]
-                │         └── with-scan &2 (bar)
+                │         └── with-scan &2 (bar) id=2
                 │              ├── columns: "?column?":4(int!null)
                 │              ├── mapping:
                 │              │    └──  "?column?":2(int) => "?column?":4(int)
@@ -189,7 +189,7 @@ with &2 (bar)
                 │              ├── key: ()
                 │              └── fd: ()-->(4)
                 └── subquery [type=int]
-                     └── with-scan &2 (bar)
+                     └── with-scan &2 (bar) id=3
                           ├── columns: "?column?":5(int!null)
                           ├── mapping:
                           │    └──  "?column?":2(int) => "?column?":5(int)
@@ -228,7 +228,7 @@ with &2 (bar)
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(3)
       │    │    └── (1,) [type=tuple{int}]
-      │    ├── with-scan &2 (bar)
+      │    ├── with-scan &2 (bar) id=2
       │    │    ├── columns: "?column?":4(int!null)
       │    │    ├── mapping:
       │    │    │    └──  "?column?":2(int) => "?column?":4(int)
@@ -236,7 +236,7 @@ with &2 (bar)
       │    │    ├── key: ()
       │    │    └── fd: ()-->(4)
       │    └── filters (true)
-      ├── with-scan &2 (bar)
+      ├── with-scan &2 (bar) id=3
       │    ├── columns: "?column?":5(int!null)
       │    ├── mapping:
       │    │    └──  "?column?":2(int) => "?column?":5(int)
@@ -319,7 +319,7 @@ with &1 (foo)
            │    │    ├── prune: (3,4)
            │    │    ├── join-size: 2
            │    │    ├── cte-uses: map[1:1 2:1]
-           │    │    ├── with-scan &1 (foo)
+           │    │    ├── with-scan &1 (foo) id=1
            │    │    │    ├── columns: "?column?":3(int!null)
            │    │    │    ├── mapping:
            │    │    │    │    └──  "?column?":1(int) => "?column?":3(int)
@@ -330,7 +330,7 @@ with &1 (foo)
            │    │    │    ├── fd: ()-->(3)
            │    │    │    ├── prune: (3)
            │    │    │    └── cte-uses: map[1:1]
-           │    │    ├── with-scan &2 (bar)
+           │    │    ├── with-scan &2 (bar) id=2
            │    │    │    ├── columns: "?column?":4(int!null)
            │    │    │    ├── mapping:
            │    │    │    │    └──  "?column?":2(int) => "?column?":4(int)
@@ -342,7 +342,7 @@ with &1 (foo)
            │    │    │    ├── prune: (4)
            │    │    │    └── cte-uses: map[2:1]
            │    │    └── filters (true)
-           │    ├── with-scan &2 (bar)
+           │    ├── with-scan &2 (bar) id=3
            │    │    ├── columns: "?column?":5(int!null)
            │    │    ├── mapping:
            │    │    │    └──  "?column?":2(int) => "?column?":5(int)
@@ -354,7 +354,7 @@ with &1 (foo)
            │    │    ├── prune: (5)
            │    │    └── cte-uses: map[2:1]
            │    └── filters (true)
-           ├── with-scan &1 (foo)
+           ├── with-scan &1 (foo) id=4
            │    ├── columns: "?column?":6(int!null)
            │    ├── mapping:
            │    │    └──  "?column?":1(int) => "?column?":6(int)
@@ -427,7 +427,7 @@ with &1 (foo)
  │         ├── key: ()
  │         ├── fd: ()-->(6-10)
  │         └── (1, NULL, NULL, NULL, NULL) [type=tuple{int, int, float, string, jsonb}]
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: k:11(int!null) i:12(int) f:13(float) s:14(string) j:15(jsonb)
       ├── mapping:
       │    ├──  a.k:1(int) => k:11(int)
@@ -455,7 +455,7 @@ with &1 (foo)
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1 / 0,) [type=tuple{decimal}]
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: "?column?":2(decimal)
       ├── mapping:
       │    └──  "?column?":1(decimal) => "?column?":2(decimal)
@@ -498,3 +498,48 @@ values
  ├── key: ()
  ├── fd: ()-->(5)
  └── (12,) [type=tuple{int}]
+
+# Regression test for #43148: WithScans with no columns should still be
+# uniquely identifiable. Without this uniqueness, they can't be assigned
+# different required physical properties.
+norm
+WITH cte AS (SELECT * FROM a) (SELECT 1 FROM cte LIMIT 9) UNION (SELECT 1 FROM cte LIMIT 10)
+----
+with &1 (cte)
+ ├── columns: "?column?":18(int!null)
+ ├── cardinality: [0 - 19]
+ ├── key: (18)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── union
+      ├── columns: "?column?":18(int!null)
+      ├── left columns: "?column?":11(int)
+      ├── right columns: "?column?":17(int)
+      ├── cardinality: [0 - 19]
+      ├── key: (18)
+      ├── project
+      │    ├── columns: "?column?":11(int!null)
+      │    ├── cardinality: [0 - 9]
+      │    ├── fd: ()-->(11)
+      │    ├── limit
+      │    │    ├── cardinality: [0 - 9]
+      │    │    ├── with-scan &1 (cte) id=1
+      │    │    │    ├── mapping:
+      │    │    │    └── limit hint: 9.00
+      │    │    └── const: 9 [type=int]
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── project
+           ├── columns: "?column?":17(int!null)
+           ├── cardinality: [0 - 10]
+           ├── fd: ()-->(17)
+           ├── limit
+           │    ├── cardinality: [0 - 10]
+           │    ├── with-scan &1 (cte) id=2
+           │    │    ├── mapping:
+           │    │    └── limit hint: 10.00
+           │    └── const: 10 [type=int]
+           └── projections
+                └── const: 1 [type=int]

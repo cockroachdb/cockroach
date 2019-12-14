@@ -484,7 +484,7 @@ with &1
  │                        │    ├── variable: column8 [type=int]
  │                        │    └── variable: column9 [type=int]
  │                        └── const: 1 [type=int]
- └── with-scan &1
+ └── with-scan &1 id=1
       ├── columns: a:12(int!null) b:13(int) c:14(int!null) d:15(int) e:16(int!null)
       └── mapping:
            ├──  abcde.a:1(int) => a:12(int)
@@ -537,7 +537,7 @@ with &1 (a)
            ├── columns: column15:15(int) y:11(int) "?column?":12(int) column13:13(int!null) column14:14(int)
            ├── project
            │    ├── columns: column13:13(int!null) column14:14(int) y:11(int) "?column?":12(int)
-           │    ├── with-scan &1 (a)
+           │    ├── with-scan &1 (a) id=1
            │    │    ├── columns: y:11(int) "?column?":12(int)
            │    │    └── mapping:
            │    │         ├──  xyz.y:2(int) => y:11(int)
@@ -592,12 +592,12 @@ with &1 (a)
                 │    │    ├── columns: y:19(int) "?column?":20(int)
                 │    │    ├── left columns: y:15(int) "?column?":16(int)
                 │    │    ├── right columns: "?column?":17(int) y:18(int)
-                │    │    ├── with-scan &1 (a)
+                │    │    ├── with-scan &1 (a) id=1
                 │    │    │    ├── columns: y:15(int) "?column?":16(int)
                 │    │    │    └── mapping:
                 │    │    │         ├──  xyz.y:2(int) => y:15(int)
                 │    │    │         └──  "?column?":4(int) => "?column?":16(int)
-                │    │    └── with-scan &2 (b)
+                │    │    └── with-scan &2 (b) id=2
                 │    │         ├── columns: "?column?":17(int) y:18(int)
                 │    │         └── mapping:
                 │    │              ├──  "?column?":8(int) => "?column?":17(int)
@@ -650,7 +650,7 @@ with &1
  └── with &2 (cte)
       ├── project
       │    ├── columns: b:13(int)
-      │    └── with-scan &1
+      │    └── with-scan &1 id=1
       │         ├── columns: a:12(int!null) b:13(int) c:14(int!null) d:15(int) e:16(int!null)
       │         └── mapping:
       │              ├──  abcde.a:1(int) => a:12(int)
@@ -1030,7 +1030,7 @@ with &1
  │                        │    ├── variable: y [type=int]
  │                        │    └── variable: column11 [type=int]
  │                        └── const: 1 [type=int]
- └── with-scan &1
+ └── with-scan &1 id=1
       ├── columns: a:14(int!null) b:15(int) c:16(int!null) d:17(int) e:18(int)
       └── mapping:
            ├──  abcde.a:1(int) => a:14(int)

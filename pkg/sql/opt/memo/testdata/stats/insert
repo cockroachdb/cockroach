@@ -72,7 +72,7 @@ with &1
       ├── columns: x:8(string!null) y:9(int!null) z:10(float!null)
       ├── stats: [rows=69.4736842, distinct(10)=6.66666667, null(10)=0]
       ├── fd: ()-->(8)
-      ├── with-scan &1
+      ├── with-scan &1 id=1
       │    ├── columns: x:8(string!null) y:9(int!null) z:10(float)
       │    ├── mapping:
       │    │    ├──  xyz.x:1(string) => x:8(string)

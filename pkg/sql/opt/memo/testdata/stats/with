@@ -44,7 +44,7 @@ with &1 (foo)
  │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=500, null(2)=50, distinct(3)=500, null(3)=50]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
- └── with-scan &1 (foo)
+ └── with-scan &1 (foo) id=1
       ├── columns: x:4(int!null) y:5(int) s:6(string)
       ├── mapping:
       │    ├──  a.x:1(int) => x:4(int)
@@ -121,7 +121,7 @@ with &1 (t0)
            │    │    ├── cardinality: [0 - 2]
            │    │    ├── stats: [rows=2]
            │    │    ├── fd: ()-->(25)
-           │    │    ├── with-scan &1 (t0)
+           │    │    ├── with-scan &1 (t0) id=1
            │    │    │    ├── mapping:
            │    │    │    ├── cardinality: [1 - 2]
            │    │    │    └── stats: [rows=2]

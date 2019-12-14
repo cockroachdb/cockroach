@@ -83,7 +83,7 @@ with &1
  │         └── columns: x:1(int!null) y:2(int)
  └── project
       ├── columns: tree:10(string)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
            └── mapping:
                 ├──  tree:3(string) => tree:10(string)
@@ -109,7 +109,7 @@ with &1
  │              └── columns: x:1(int!null) y:2(int)
  └── project
       ├── columns: tree:10(string)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: tree:10(string) level:11(int) node_type:12(string) field:13(string) description:14(string) columns:15(string) ordering:16(string)
            └── mapping:
                 ├──  tree:3(string) => tree:10(string)
@@ -134,7 +134,7 @@ with &1
       ├── columns: json:8(string)
       └── select
            ├── columns: automatic:6(bool) url:7(string) json:8(string)
-           ├── with-scan &1
+           ├── with-scan &1 id=1
            │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
            │    └── mapping:
            │         ├──  automatic:3(bool) => automatic:6(bool)
@@ -158,7 +158,7 @@ with &1
       ├── columns: automatic:6(bool) url:7(string)
       └── select
            ├── columns: automatic:6(bool) url:7(string) json:8(string)
-           ├── with-scan &1
+           ├── with-scan &1 id=1
            │    ├── columns: automatic:6(bool) url:7(string) json:8(string)
            │    └── mapping:
            │         ├──  automatic:3(bool) => automatic:6(bool)

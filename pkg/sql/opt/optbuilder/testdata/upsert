@@ -451,7 +451,7 @@ sort
       │                        │    │    └── null [type=unknown]
       │                        │    └── variable: column7 [type=int]
       │                        └── variable: rowid [type=int]
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:19(int!null) b:20(int) c:21(int)
            └── mapping:
                 ├──  abc.a:1(int) => a:19(int)
@@ -1247,7 +1247,7 @@ with &1
  │                        │    │    └── null [type=unknown]
  │                        │    └── variable: column7 [type=int]
  │                        └── variable: rowid [type=int]
- └── with-scan &1
+ └── with-scan &1 id=1
       ├── columns: a:14(int!null) b:15(int!null) c:16(int)
       └── mapping:
            ├──  abc.a:1(int) => a:14(int)

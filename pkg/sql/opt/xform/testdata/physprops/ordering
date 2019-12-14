@@ -1186,7 +1186,7 @@ sort
       │         │    └── scan xyz
       │         │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │         └── const: 2 [type=int]
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
            └── mapping:
                 ├──  abc.a:1(int) => a:7(int)
@@ -1223,7 +1223,7 @@ sort
       │         ├── limit: 2
       │         ├── prune: (5)
       │         └── interesting orderings: (+6,+7)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
            ├── mapping:
            │    ├──  xyz.x:1(int) => x:9(int)
@@ -1271,7 +1271,7 @@ sort
            ├── cardinality: [0 - 2]
            ├── fd: (9)==(10), (10)==(9)
            ├── prune: (11)
-           ├── with-scan &1
+           ├── with-scan &1 id=1
            │    ├── columns: x:9(int!null) y:10(int!null) z:11(int!null)
            │    ├── mapping:
            │    │    ├──  xyz.x:1(int) => x:9(int)
@@ -1296,7 +1296,7 @@ with &1
  │    │    └──  z:6 => abc.c:3
  │    └── scan xyz
  │         └── columns: x:4(int!null) y:5(int!null) z:6(int!null)
- └── with-scan &1
+ └── with-scan &1 id=1
       ├── columns: a:7(int!null) b:8(int!null) c:9(int!null)
       └── mapping:
            ├──  abc.a:1(int) => a:7(int)
@@ -1331,7 +1331,7 @@ sort
       │              └── projections
       │                   ├── const: 1 [type=int]
       │                   └── const: 2 [type=int]
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:13(int!null) b:14(int!null) c:15(int) d:16(int)
            └── mapping:
                 ├──  abcd.a:1(int) => a:13(int)
@@ -1386,7 +1386,7 @@ sort
       │              │    └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
       │              └── projections
       │                   └── abcd.b + 1 [type=int, outer=(7)]
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
            ├── mapping:
            │    ├──  abcd.a:1(int) => a:12(int)
@@ -1452,7 +1452,7 @@ sort
            ├── cardinality: [0 - 10]
            ├── fd: (13)==(14), (14)==(13)
            ├── prune: (12,15)
-           ├── with-scan &1
+           ├── with-scan &1 id=1
            │    ├── columns: a:12(int) b:13(int) c:14(int) d:15(int)
            │    ├── mapping:
            │    │    ├──  abcd.a:1(int) => a:12(int)
@@ -1521,7 +1521,7 @@ sort
       │              ├── CASE WHEN abc.a IS NULL THEN x ELSE 10 END [type=int]
       │              ├── CASE WHEN abc.a IS NULL THEN y ELSE abc.b END [type=int]
       │              └── CASE WHEN abc.a IS NULL THEN z ELSE abc.c END [type=int]
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
            └── mapping:
                 ├──  abc.a:1(int) => a:14(int)
@@ -1548,7 +1548,7 @@ sort
       │         ├── fetch columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int)
       │         └── scan abcd
       │              └── columns: abcd.a:6(int) abcd.b:7(int) abcd.c:8(int) abcd.d:9(int) rowid:10(int!null)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
            └── mapping:
                 ├──  abcd.a:1(int) => a:11(int)
@@ -1592,7 +1592,7 @@ sort
       │              ├── fd: (10)-->(6-9)
       │              ├── prune: (6,7,9,10)
       │              └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
-      └── with-scan &1
+      └── with-scan &1 id=1
            ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
            ├── mapping:
            │    ├──  abcd.a:1(int) => a:11(int)
@@ -1647,7 +1647,7 @@ sort
            ├── cardinality: [0 - 10]
            ├── fd: (12)==(13), (13)==(12)
            ├── prune: (11,14)
-           ├── with-scan &1
+           ├── with-scan &1 id=1
            │    ├── columns: a:11(int) b:12(int) c:13(int) d:14(int)
            │    ├── mapping:
            │    │    ├──  abcd.a:1(int) => a:11(int)
