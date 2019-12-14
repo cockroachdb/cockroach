@@ -47,7 +47,7 @@ func TestSimplifyFilters(t *testing.T) {
 	// Filters expression evaluates to False if any operand is False.
 	vals := f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
 		Cols: opt.ColList{},
-		ID:   f.Metadata().NextValuesID(),
+		ID:   f.Metadata().NextUniqueID(),
 	})
 	filters := memo.FiltersExpr{{Condition: eq}, {Condition: memo.FalseSingleton}, {Condition: eq}}
 	sel := f.ConstructSelect(vals, filters)

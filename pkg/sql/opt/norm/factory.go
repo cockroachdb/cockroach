@@ -284,7 +284,7 @@ func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 func (f *Factory) ConstructZeroValues() memo.RelExpr {
 	return f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
 		Cols: opt.ColList{},
-		ID:   f.Metadata().NextValuesID(),
+		ID:   f.Metadata().NextUniqueID(),
 	})
 }
 

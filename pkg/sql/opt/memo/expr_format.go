@@ -215,7 +215,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *WithScanExpr:
-		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), t.ID)
+		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), t.With)
 		if t.Name != "" {
 			fmt.Fprintf(f.Buffer, " (%s)", t.Name)
 		}

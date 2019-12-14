@@ -88,11 +88,12 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				ID:           cte.id,
+				With:         cte.id,
 				Name:         string(cte.name.Alias),
 				InCols:       inCols,
 				OutCols:      outCols,
 				BindingProps: cte.bindingProps,
+				ID:           b.factory.Metadata().NextUniqueID(),
 			})
 
 			return outScope
@@ -170,11 +171,12 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			ID:           cte.id,
+			With:         cte.id,
 			Name:         string(cte.name.Alias),
 			InCols:       inCols,
 			OutCols:      outCols,
 			BindingProps: cte.bindingProps,
+			ID:           b.factory.Metadata().NextUniqueID(),
 		})
 
 		return outScope
@@ -903,7 +905,7 @@ func (b *Builder) buildFrom(from tree.From, inScope *scope) (outScope *scope) {
 		outScope = inScope.push()
 		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
 			Cols: opt.ColList{},
-			ID:   b.factory.Metadata().NextValuesID(),
+			ID:   b.factory.Metadata().NextUniqueID(),
 		})
 	}
 
