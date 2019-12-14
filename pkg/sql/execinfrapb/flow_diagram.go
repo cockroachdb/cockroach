@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
@@ -58,6 +59,17 @@ func colListStr(cols []uint32) string {
 			buf.WriteByte(',')
 		}
 		fmt.Fprintf(&buf, "@%d", c+1)
+	}
+	return buf.String()
+}
+
+func typeListStr(typs []sqltypes.T) string {
+	var buf bytes.Buffer
+	for i, typ := range typs {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "%s", typ.Name())
 	}
 	return buf.String()
 }
@@ -349,11 +361,12 @@ func (s *SampleAggregatorSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (is *InputSyncSpec) summary() (string, []string) {
+	typs := []string{typeListStr(is.ColumnTypes)}
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
-		return "unordered", []string{}
+		return "unordered", typs
 	case InputSyncSpec_ORDERED:
-		return "ordered", []string{is.Ordering.diagramString()}
+		return "ordered", append(typs, is.Ordering.diagramString())
 	default:
 		return "unknown", []string{}
 	}
