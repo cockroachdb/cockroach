@@ -728,7 +728,7 @@ func (r *Replica) AdminMerge(
 			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftDesc:      *origLeftDesc,
-				RightDesc:     &rightDesc,
+				RightDesc:     rightDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()

@@ -28631,7 +28631,6 @@ bool SubsumeRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // .cockroach.roachpb.RangeDescriptor right_desc = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
@@ -28679,7 +28678,6 @@ void SubsumeRequest::SerializeWithCachedSizes(
       2, this->_internal_left_desc(), output);
   }
 
-  // .cockroach.roachpb.RangeDescriptor right_desc = 3;
   if (this->has_right_desc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       3, this->_internal_right_desc(), output);
@@ -28708,7 +28706,6 @@ size_t SubsumeRequest::ByteSizeLong() const {
         *left_desc_);
   }
 
-  // .cockroach.roachpb.RangeDescriptor right_desc = 3;
   if (this->has_right_desc()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
