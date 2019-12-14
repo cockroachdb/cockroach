@@ -201,18 +201,15 @@ func truncateDatum(evalCtx *tree.EvalContext, d tree.Datum, maxBytes int) tree.D
 	case *tree.DString:
 		return tree.NewDString(truncateString(string(*t), maxBytes))
 
+	case *tree.DName:
+		return tree.NewDName(truncateString(string(*t), maxBytes))
+
 	case *tree.DCollatedString:
 		contents := truncateString(t.Contents, maxBytes)
 
 		// Note: this will end up being larger than maxBytes due to the key and
 		// locale, so this is just a best-effort attempt to limit the size.
 		return tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
-
-	case *tree.DOidWrapper:
-		return &tree.DOidWrapper{
-			Wrapped: truncateDatum(evalCtx, t.Wrapped, maxBytes),
-			Oid:     t.Oid,
-		}
 
 	default:
 		// It's not easy to truncate other types (e.g. Decimal).
@@ -251,15 +248,12 @@ func deepCopyDatum(evalCtx *tree.EvalContext, d tree.Datum) tree.Datum {
 	case *tree.DString:
 		return tree.NewDString(deepCopyString(string(*t)))
 
+	case *tree.DName:
+		return tree.NewDName(deepCopyString(string(*t)))
+
 	case *tree.DCollatedString:
 		contents := deepCopyString(t.Contents)
 		return tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
-
-	case *tree.DOidWrapper:
-		return &tree.DOidWrapper{
-			Wrapped: deepCopyDatum(evalCtx, t.Wrapped),
-			Oid:     t.Oid,
-		}
 
 	default:
 		// We do not collect stats on JSON, and other types do not require a deep

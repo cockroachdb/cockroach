@@ -1803,9 +1803,6 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 // collated string constant with the given locale.
 func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) opt.ScalarExpr {
 	datum := str.(*memo.ConstExpr).Value
-	if wrap, ok := datum.(*tree.DOidWrapper); ok {
-		datum = wrap.Wrapped
-	}
 
 	var value string
 	switch t := datum.(type) {

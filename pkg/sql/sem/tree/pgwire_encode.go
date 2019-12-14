@@ -37,6 +37,8 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 		case dNull:
 		case *DString:
 			pgwireFormatStringInTuple(&ctx.Buffer, string(*dv))
+		case *DName:
+			pgwireFormatStringInTuple(&ctx.Buffer, string(*dv))
 		case *DCollatedString:
 			pgwireFormatStringInTuple(&ctx.Buffer, dv.Contents)
 			// Bytes cannot use the default case because they will be incorrectly
@@ -110,6 +112,8 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		case dNull:
 			ctx.WriteString("NULL")
 		case *DString:
+			pgwireFormatStringInArray(&ctx.Buffer, string(*dv))
+		case *DName:
 			pgwireFormatStringInArray(&ctx.Buffer, string(*dv))
 		case *DCollatedString:
 			pgwireFormatStringInArray(&ctx.Buffer, dv.Contents)

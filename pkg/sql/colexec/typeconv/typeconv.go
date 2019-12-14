@@ -184,12 +184,6 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 		}
 	case types.StringFamily:
 		return func(datum tree.Datum) (interface{}, error) {
-			// Handle other STRING-related OID types, like oid.T_name.
-			wrapper, ok := datum.(*tree.DOidWrapper)
-			if ok {
-				datum = wrapper.Wrapped
-			}
-
 			d, ok := datum.(*tree.DString)
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))

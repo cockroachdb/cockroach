@@ -1717,13 +1717,13 @@ func (node *DJSON) String() string            { return AsString(node) }
 func (node *DUuid) String() string            { return AsString(node) }
 func (node *DIPAddr) String() string          { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
+func (node *DName) String() string            { return AsString(node) }
 func (node *DCollatedString) String() string  { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
-func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }

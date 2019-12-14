@@ -622,15 +622,11 @@ func ParseDInt(s string) (*DInt, error) {
 }
 
 // AsDInt attempts to retrieve a DInt from an Expr, returning a DInt and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInt wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDInt(e Expr) (DInt, bool) {
 	switch t := e.(type) {
 	case *DInt:
 		return *t, true
-	case *DOidWrapper:
-		return AsDInt(t.Wrapped)
 	}
 	return 0, false
 }
@@ -1078,15 +1074,11 @@ func NewDString(d string) *DString {
 }
 
 // AsDString attempts to retrieve a DString from an Expr, returning a DString and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DString wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDString(e Expr) (DString, bool) {
 	switch t := e.(type) {
 	case *DString:
 		return *t, true
-	case *DOidWrapper:
-		return AsDString(t.Wrapped)
 	}
 	return "", false
 }
@@ -1112,14 +1104,21 @@ func (d *DString) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := UnwrapDatum(ctx, other).(*DString)
-	if !ok {
+	fmt.Println("Hello", d, other)
+	var v string
+	unwrapped := UnwrapDatum(ctx, other)
+	switch t := unwrapped.(type) {
+	case *DName:
+		v = string(*t)
+	case *DString:
+		v = string(*t)
+	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < *v {
+	if string(*d) < v {
 		return -1
 	}
-	if *d > *v {
+	if string(*d) > v {
 		return 1
 	}
 	return 0
@@ -1158,7 +1157,7 @@ func (d *DString) Max(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DString) AmbiguousFormat() bool { return true }
+func (*DString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
@@ -1173,6 +1172,87 @@ func (d *DString) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+type DName string
+
+// ResolvedType implements the TypedExpr interface.
+func (*DName) ResolvedType() *types.T {
+	return types.Name
+}
+
+// Compare implements the Datum interface.
+func (d *DName) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	fmt.Println("Helloo", d, other)
+	var v string
+	unwrapped := UnwrapDatum(ctx, other)
+	switch t := unwrapped.(type) {
+	case *DName:
+		v = string(*t)
+	case *DString:
+		v = string(*t)
+	default:
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	if string(*d) < v {
+		return -1
+	}
+	if string(*d) > v {
+		return 1
+	}
+	return 0
+}
+
+// Prev implements the Datum interface.
+func (d *DName) Prev(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DName) Next(_ *EvalContext) (Datum, bool) {
+	return NewDName(string(roachpb.Key(*d).Next())), true
+}
+
+// IsMax implements the Datum interface.
+func (*DName) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DName) IsMin(_ *EvalContext) bool {
+	return len(*d) == 0
+}
+
+// Min implements the Datum interface.
+func (d *DName) Min(_ *EvalContext) (Datum, bool) {
+	return dEmptyString, true
+}
+
+// Max implements the Datum interface.
+func (d *DName) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DName) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DName) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtRawStrings) {
+		buf.WriteString(string(*d))
+	} else {
+		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DName) Size() uintptr {
+	return unsafe.Sizeof(d) + uintptr(len(*d))
 }
 
 // DCollatedString is the Datum for strings with a locale. The struct members
@@ -1518,15 +1598,11 @@ func NewDIPAddr(d DIPAddr) *DIPAddr {
 }
 
 // AsDIPAddr attempts to retrieve a *DIPAddr from an Expr, returning a *DIPAddr and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DIPAddr wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDIPAddr(e Expr) (DIPAddr, bool) {
 	switch t := e.(type) {
 	case *DIPAddr:
 		return *t, true
-	case *DOidWrapper:
-		return AsDIPAddr(t.Wrapped)
 	}
 	return DIPAddr{}, false
 }
@@ -2104,15 +2180,11 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 }
 
 // AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimestamp wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDTimestamp(e Expr) (DTimestamp, bool) {
 	switch t := e.(type) {
 	case *DTimestamp:
 		return *t, true
-	case *DOidWrapper:
-		return AsDTimestamp(t.Wrapped)
 	}
 	return DTimestamp{}, false
 }
@@ -2317,15 +2389,11 @@ func ParseDTimestampTZ(
 }
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
-// DTimestampTZ and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTimestamp wrapped by a *DOidWrapper is possible.
+// DTimestampTZ and a flag signifying whether the assertion was successful.
 func AsDTimestampTZ(e Expr) (DTimestampTZ, bool) {
 	switch t := e.(type) {
 	case *DTimestampTZ:
 		return *t, true
-	case *DOidWrapper:
-		return AsDTimestampTZ(t.Wrapped)
 	}
 	return DTimestampTZ{}, false
 }
@@ -2674,15 +2742,11 @@ func MakeDJSON(d interface{}) (Datum, error) {
 }
 
 // AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DJSON wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDJSON(e Expr) (*DJSON, bool) {
 	switch t := e.(type) {
 	case *DJSON:
 		return t, true
-	case *DOidWrapper:
-		return AsDJSON(t.Wrapped)
 	}
 	return nil, false
 }
@@ -2873,15 +2937,11 @@ func NewDTupleWithLen(typ *types.T, l int) *DTuple {
 }
 
 // AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTuple wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDTuple(e Expr) (*DTuple, bool) {
 	switch t := e.(type) {
 	case *DTuple:
 		return t, true
-	case *DOidWrapper:
-		return AsDTuple(t.Wrapped)
 	}
 	return nil, false
 }
@@ -3275,15 +3335,11 @@ func NewDArray(paramTyp *types.T) *DArray {
 }
 
 // AsDArray attempts to retrieve a *DArray from an Expr, returning a *DArray and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DArray wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDArray(e Expr) (*DArray, bool) {
 	switch t := e.(type) {
 	case *DArray:
 		return t, true
-	case *DOidWrapper:
-		return AsDArray(t.Wrapped)
 	}
 	return nil, false
 }
@@ -3500,15 +3556,11 @@ func NewDOid(d DInt) *DOid {
 }
 
 // AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DOid wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDOid(e Expr) (*DOid, bool) {
 	switch t := e.(type) {
 	case *DOid:
 		return t, true
-	case *DOidWrapper:
-		return AsDOid(t.Wrapped)
 	}
 	return NewDOid(0), false
 }
@@ -3625,58 +3677,10 @@ func (d *DOid) Min(ctx *EvalContext) (Datum, bool) {
 	return &DOid{*min.(*DInt), d.semanticType, ""}, ok
 }
 
-// DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
-// custom Oid values to be attached to the Datum and its types.T.
-// The reason the Datum type was introduced was to permit the introduction of Datum
-// types with new Object IDs while maintaining identical behavior to current Datum
-// types. Specifically, it obviates the need to define a new tree.Datum type for
-// each possible Oid value.
-//
-// Instead, DOidWrapper allows a standard Datum to be wrapped with a new Oid.
-// This approach provides two major advantages:
-// - performance of the existing Datum types are not affected because they
-//   do not need to have custom oid.Oids added to their structure.
-// - the introduction of new Datum aliases is straightforward and does not require
-//   additions to typing rules or type-dependent evaluation behavior.
-//
-// Types that currently benefit from DOidWrapper are:
-// - DName => DOidWrapper(*DString, oid.T_name)
-//
-type DOidWrapper struct {
-	Wrapped Datum
-	Oid     oid.Oid
-}
-
-// wrapWithOid wraps a Datum with a custom Oid.
-func wrapWithOid(d Datum, oid oid.Oid) Datum {
-	switch v := d.(type) {
-	case nil:
-		return nil
-	case *DInt:
-	case *DString:
-	case *DArray:
-	case dNull, *DOidWrapper:
-		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
-	default:
-		// Currently only *DInt, *DString, *DArray are hooked up to work with
-		// *DOidWrapper. To support another base Datum type, replace all type
-		// assertions to that type with calls to functions like AsDInt and
-		// MustBeDInt.
-		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
-	}
-	return &DOidWrapper{
-		Wrapped: d,
-		Oid:     oid,
-	}
-}
-
-// UnwrapDatum returns the base Datum type for a provided datum, stripping
-// an *DOidWrapper if present. This is useful for cases like type switches,
-// where type aliases should be ignored.
+// UnwrapDatum returns the base Datum type for a provided datum, stripping away
+// placeholders. This is useful for cases like type switches, where placeholders
+// should be ignored.
 func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
-	if w, ok := d.(*DOidWrapper); ok {
-		return w.Wrapped
-	}
 	if p, ok := d.(*Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
 		ret, err := p.Eval(evalCtx)
 		if err != nil {
@@ -3688,73 +3692,6 @@ func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
 		return ret
 	}
 	return d
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (d *DOidWrapper) ResolvedType() *types.T {
-	return types.OidToType[d.Oid]
-}
-
-// Compare implements the Datum interface.
-func (d *DOidWrapper) Compare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	if v, ok := other.(*DOidWrapper); ok {
-		return d.Wrapped.Compare(ctx, v.Wrapped)
-	}
-	return d.Wrapped.Compare(ctx, other)
-}
-
-// Prev implements the Datum interface.
-func (d *DOidWrapper) Prev(ctx *EvalContext) (Datum, bool) {
-	prev, ok := d.Wrapped.Prev(ctx)
-	return wrapWithOid(prev, d.Oid), ok
-}
-
-// Next implements the Datum interface.
-func (d *DOidWrapper) Next(ctx *EvalContext) (Datum, bool) {
-	next, ok := d.Wrapped.Next(ctx)
-	return wrapWithOid(next, d.Oid), ok
-}
-
-// IsMax implements the Datum interface.
-func (d *DOidWrapper) IsMax(ctx *EvalContext) bool {
-	return d.Wrapped.IsMax(ctx)
-}
-
-// IsMin implements the Datum interface.
-func (d *DOidWrapper) IsMin(ctx *EvalContext) bool {
-	return d.Wrapped.IsMin(ctx)
-}
-
-// Max implements the Datum interface.
-func (d *DOidWrapper) Max(ctx *EvalContext) (Datum, bool) {
-	max, ok := d.Wrapped.Max(ctx)
-	return wrapWithOid(max, d.Oid), ok
-}
-
-// Min implements the Datum interface.
-func (d *DOidWrapper) Min(ctx *EvalContext) (Datum, bool) {
-	min, ok := d.Wrapped.Min(ctx)
-	return wrapWithOid(min, d.Oid), ok
-}
-
-// AmbiguousFormat implements the Datum interface.
-func (d *DOidWrapper) AmbiguousFormat() bool {
-	return d.Wrapped.AmbiguousFormat()
-}
-
-// Format implements the NodeFormatter interface.
-func (d *DOidWrapper) Format(ctx *FmtCtx) {
-	// Custom formatting based on d.OID could go here.
-	ctx.FormatNode(d.Wrapped)
-}
-
-// Size implements the Datum interface.
-func (d *DOidWrapper) Size() uintptr {
-	return unsafe.Sizeof(*d) + d.Wrapped.Size()
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -3814,20 +3751,21 @@ func (d *Placeholder) Size() uintptr {
 	panic(errors.AssertionFailedf("shouldn't get called"))
 }
 
-// NewDNameFromDString is a helper routine to create a *DName (implemented as
-// a *DOidWrapper) initialized from an existing *DString.
+// NewDNameFromDString is a helper routine to create a *DName initialized from
+// an existing *DString.
 func NewDNameFromDString(d *DString) Datum {
-	return wrapWithOid(d, oid.T_name)
+	ret := DName(*d)
+	return &ret
 }
 
-// NewDName is a helper routine to create a *DName (implemented as a *DOidWrapper)
-// initialized from a string.
+// NewDName is a helper routine to create a *DName initialized from a string.
 func NewDName(d string) Datum {
-	return NewDNameFromDString(NewDString(d))
+	ret := DName(d)
+	return &ret
 }
 
 // NewDIntVectorFromDArray is a helper routine to create a *DIntVector
-// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+// initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	ret := new(DArray)
 	*ret = *d
@@ -3836,7 +3774,7 @@ func NewDIntVectorFromDArray(d *DArray) Datum {
 }
 
 // NewDOidVectorFromDArray is a helper routine to create a *DOidVector
-// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+// initialized from an existing *DArray.
 func NewDOidVectorFromDArray(d *DArray) Datum {
 	ret := new(DArray)
 	*ret = *d

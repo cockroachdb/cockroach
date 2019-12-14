@@ -3153,7 +3153,7 @@ func queryOidWithJoin(
 	switch d.(type) {
 	case *DOid:
 		queryCol = "oid"
-	case *DString:
+	case *DString, *DName:
 		queryCol = info.nameCol
 	default:
 		return nil, errors.AssertionFailedf("invalid argument to OID cast: %s", d)
@@ -3443,6 +3443,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DString:
 			s = string(*t)
+		case *DName:
+			s = string(*t)
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
@@ -3456,6 +3458,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		switch t.Family() {
 		case types.StringFamily:
 			if t.Oid() == oid.T_name {
+				fmt.Println("Converting a string to a name", s)
 				return NewDName(s), nil
 			}
 
@@ -4336,6 +4339,11 @@ func (t *DString) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *DName) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *DCollatedString) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
@@ -4362,11 +4370,6 @@ func (t *DArray) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DOid) Eval(_ *EvalContext) (Datum, error) {
-	return t, nil
-}
-
-// Eval implements the TypedExpr interface.
-func (t *DOidWrapper) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
