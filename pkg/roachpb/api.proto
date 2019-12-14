@@ -1563,10 +1563,7 @@ message SubsumeRequest {
   RangeDescriptor left_desc = 2 [(gogoproto.nullable) = false];
   // The range descriptor for the right-hand side of the merge. Should match
   // the range descriptor of the range evaluating this request.
-  // TODO(nvanbenschoten): make this field nullable once we can be sure
-  // that all users of SubsumeRequest will use it. The field will be sent
-  // by all 19.2 nodes, so it will be reliably non-null for 19.3 binaries.
-  RangeDescriptor right_desc = 3;
+  RangeDescriptor right_desc = 3 [(gogoproto.nullable) = false];
 }
 
 // SubsumeResponse is the response to a SubsumeRequest.

@@ -3399,7 +3399,7 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	getSnapArgs := roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: rhsDesc.StartKey.AsRawKey()},
 		LeftDesc:      *lhsDesc,
-		RightDesc:     rhsDesc,
+		RightDesc:     *rhsDesc,
 	}
 
 	// Subsume with an incorrect RightDesc should fail.
@@ -3407,7 +3407,7 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 		badRHSDesc := *rhsDesc
 		badRHSDesc.EndKey = badRHSDesc.EndKey.Next()
 		badArgs := getSnapArgs
-		badArgs.RightDesc = &badRHSDesc
+		badArgs.RightDesc = badRHSDesc
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &badArgs)
