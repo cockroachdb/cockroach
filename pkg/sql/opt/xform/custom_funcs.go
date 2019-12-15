@@ -961,6 +961,33 @@ func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
 	return p.Flags.Empty()
 }
 
+// CommuteJoinFlags returns a join private for the commuted join (where the left
+// and right sides are swapped). It adjusts any join flags that are specific to
+// one side.
+func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
+	if p.Flags.Empty() {
+		return p
+	}
+
+	// swap is a helper function which swaps the values of two (single-bit) flags.
+	swap := func(f, a, b memo.JoinFlags) memo.JoinFlags {
+		// If the bits are different, flip them both.
+		if f.Has(a) != f.Has(b) {
+			f ^= (a | b)
+		}
+		return f
+	}
+	f := p.Flags
+	f = swap(f, memo.AllowLookupJoinIntoLeft, memo.AllowLookupJoinIntoRight)
+	f = swap(f, memo.AllowHashJoinStoreLeft, memo.AllowHashJoinStoreRight)
+	if p.Flags == f {
+		return p
+	}
+	res := *p
+	res.Flags = f
+	return &res
+}
+
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
 	grp memo.RelExpr,
@@ -969,7 +996,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if joinPrivate.Flags.DisallowMergeJoin {
+	if !joinPrivate.Flags.Has(memo.AllowMergeJoin) {
 		return
 	}
 
@@ -990,15 +1017,12 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	orders := DeriveInterestingOrderings(left).Copy()
 	orders.RestrictToCols(leftEq.ToSet())
 
-	if joinPrivate.Flags.DisallowHashJoin {
-		// If we are using a hint, CommuteJoin won't run. Add the orderings
-		// from the right side.
-		rightOrders := DeriveInterestingOrderings(right).Copy()
-		rightOrders.RestrictToCols(leftEq.ToSet())
-		orders = append(orders, rightOrders...)
-
-		// Also append an arbitrary ordering (in case the interesting orderings
-		// don't result in any merge joins).
+	if !joinPrivate.Flags.Has(memo.AllowHashJoinStoreLeft) &&
+		!joinPrivate.Flags.Has(memo.AllowHashJoinStoreRight) {
+		// If we don't allow hash join, we must do our best to generate a merge
+		// join, even if it means sorting both sides. We append an arbitrary
+		// ordering, in case the interesting orderings don't result in any merge
+		// joins.
 		o := make(opt.Ordering, len(leftEq))
 		for i := range o {
 			o[i] = opt.MakeOrderingColumn(leftEq[i], false /* descending */)
@@ -1105,7 +1129,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if joinPrivate.Flags.DisallowLookupJoin {
+	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
 		return
 	}
 	md := c.e.mem.Metadata()
