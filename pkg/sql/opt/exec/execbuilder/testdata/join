@@ -587,21 +587,26 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·               distributed  false
-·               vectorized   true
-filter          ·            ·
- │              filter       ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
- └── hash-join  ·            ·
-      │         type         right outer
-      │         equality     (b) = (sq)
-      │         pred         n < 6
-      ├── scan  ·            ·
-      │         table        pairs@primary
-      │         spans        ALL
-      │         filter       a > 1
-      └── scan  ·            ·
-·               table        square@primary
-·               spans        /2-
+·                    distributed  false
+·                    vectorized   true
+render               ·            ·
+ │                   render 0     a
+ │                   render 1     b
+ │                   render 2     n
+ │                   render 3     sq
+ └── filter          ·            ·
+      │              filter       ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      └── hash-join  ·            ·
+           │         type         left outer
+           │         equality     (sq) = (b)
+           │         pred         n < 6
+           ├── scan  ·            ·
+           │         table        square@primary
+           │         spans        /2-
+           └── scan  ·            ·
+·                    table        pairs@primary
+·                    spans        ALL
+·                    filter       a > 1
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -799,13 +804,13 @@ render          ·            ·               (s, s, s)  ·
  │              render 1     s               ·          ·
  │              render 2     s               ·          ·
  └── hash-join  ·            ·               (s, s)     ·
-      │         type         right outer     ·          ·
+      │         type         left outer      ·          ·
       │         equality     (s) = (s)       ·          ·
       ├── scan  ·            ·               (s)        ·
-      │         table        str1@primary    ·          ·
+      │         table        str2@primary    ·          ·
       │         spans        ALL             ·          ·
       └── scan  ·            ·               (s)        ·
-·               table        str2@primary    ·          ·
+·               table        str1@primary    ·          ·
 ·               spans        ALL             ·          ·
 
 query TTTTT
@@ -838,15 +843,15 @@ render          ·                   ·                (a, s)        ·
  │              render 0            a                ·             ·
  │              render 1            COALESCE(s, s)   ·             ·
  └── hash-join  ·                   ·                (a, s, a, s)  ·
-      │         type                right outer      ·             ·
+      │         type                left outer       ·             ·
       │         equality            (a, s) = (a, s)  ·             ·
       │         left cols are key   ·                ·             ·
       │         right cols are key  ·                ·             ·
       ├── scan  ·                   ·                (a, s)        ·
-      │         table               str1@primary     ·             ·
+      │         table               str2@primary     ·             ·
       │         spans               ALL              ·             ·
       └── scan  ·                   ·                (a, s)        ·
-·               table               str2@primary     ·             ·
+·               table               str1@primary     ·             ·
 ·               spans               ALL              ·             ·
 
 
@@ -908,15 +913,15 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
-      │          type            right outer        ·                   ·
+ └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+      │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
-      │          table           xyu@primary        ·                   ·
+      ├── scan   ·               ·                  (x, y, v)           +x,+y
+      │          table           xyv@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
-·                table           xyv@primary        ·                   ·
+      └── scan   ·               ·                  (x, y, u)           +x,+y
+·                table           xyu@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
 query TTTTT
@@ -994,18 +999,25 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
- │          type            right outer        ·                   ·
- │          equality        (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
- │          table           xyu@primary        ·                   ·
- │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +x,+y
-·           table           xyv@primary        ·                   ·
-·           spans           ALL                ·                   ·
+·                distributed     false              ·                   ·
+·                vectorized      false              ·                   ·
+render           ·               ·                  (x, y, u, x, y, v)  ·
+ │               render 0        x                  ·                   ·
+ │               render 1        y                  ·                   ·
+ │               render 2        u                  ·                   ·
+ │               render 3        x                  ·                   ·
+ │               render 4        y                  ·                   ·
+ │               render 5        v                  ·                   ·
+ └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+      │          type            left outer         ·                   ·
+      │          equality        (x, y) = (x, y)    ·                   ·
+      │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
+      ├── scan   ·               ·                  (x, y, v)           +x,+y
+      │          table           xyv@primary        ·                   ·
+      │          spans           ALL                ·                   ·
+      └── scan   ·               ·                  (x, y, u)           +y
+·                table           xyu@primary        ·                   ·
+·                spans           /1-/1/10           ·                   ·
 
 
 # Test OUTER joins that are run in the distSQL merge joiner
@@ -1041,15 +1053,15 @@ render           ·               ·                  (x, y, u, v)        ·
  │               render 1        y                  ·                   ·
  │               render 2        u                  ·                   ·
  │               render 3        v                  ·                   ·
- └── merge-join  ·               ·                  (x, y, u, x, y, v)  ·
-      │          type            right outer        ·                   ·
+ └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+      │          type            left outer         ·                   ·
       │          equality        (x, y) = (x, y)    ·                   ·
       │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
-      ├── scan   ·               ·                  (x, y, u)           +x,+y
-      │          table           xyu@primary        ·                   ·
+      ├── scan   ·               ·                  (x, y, v)           +x,+y
+      │          table           xyv@primary        ·                   ·
       │          spans           /3-                ·                   ·
-      └── scan   ·               ·                  (x, y, v)           +x,+y
-·                table           xyv@primary        ·                   ·
+      └── scan   ·               ·                  (x, y, u)           +x,+y
+·                table           xyu@primary        ·                   ·
 ·                spans           /3-                ·                   ·
 
 query TTTTT
@@ -1094,18 +1106,25 @@ merge-join  ·               ·                  (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distributed     false              ·                   ·
-·           vectorized      false              ·                   ·
-merge-join  ·               ·                  (x, y, u, x, y, v)  ·
- │          type            right outer        ·                   ·
- │          equality        (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·               ·                  (x, y, u)           +y
- │          table           xyu@primary        ·                   ·
- │          spans           /1-/1/10           ·                   ·
- └── scan   ·               ·                  (x, y, v)           +x,+y
-·           table           xyv@primary        ·                   ·
-·           spans           ALL                ·                   ·
+·                distributed     false              ·                   ·
+·                vectorized      false              ·                   ·
+render           ·               ·                  (x, y, u, x, y, v)  ·
+ │               render 0        x                  ·                   ·
+ │               render 1        y                  ·                   ·
+ │               render 2        u                  ·                   ·
+ │               render 3        x                  ·                   ·
+ │               render 4        y                  ·                   ·
+ │               render 5        v                  ·                   ·
+ └── merge-join  ·               ·                  (x, y, v, x, y, u)  ·
+      │          type            left outer         ·                   ·
+      │          equality        (x, y) = (x, y)    ·                   ·
+      │          mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
+      ├── scan   ·               ·                  (x, y, v)           +x,+y
+      │          table           xyv@primary        ·                   ·
+      │          spans           ALL                ·                   ·
+      └── scan   ·               ·                  (x, y, u)           +y
+·                table           xyu@primary        ·                   ·
+·                spans           /1-/1/10           ·                   ·
 
 # Regression test for #20472: break up tuple inequalities.
 query TTTTT
@@ -1181,40 +1200,43 @@ merge-join  ·                   ·           (a, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distributed         false        ·       ·
-·                vectorized          true         ·       ·
-render           ·                   ·            (a)     ·
- │               render 0            a            ·       ·
- └── merge-join  ·                   ·            (a, a)  ·
-      │          type                right outer  ·       ·
-      │          equality            (a) = (a)    ·       ·
-      │          left cols are key   ·            ·       ·
-      │          right cols are key  ·            ·       ·
-      │          mergeJoinOrder      +"(a=a)"     ·       ·
-      ├── scan   ·                   ·            (a)     ·
-      │          table               l@primary    ·       ·
-      │          spans               /3-/3/#      ·       ·
-      └── scan   ·                   ·            (a)     ·
-·                table               r@primary    ·       ·
-·                spans               /3-/3/#      ·       ·
+·                distributed         false       ·       ·
+·                vectorized          true        ·       ·
+render           ·                   ·           (a)     ·
+ │               render 0            a           ·       ·
+ └── merge-join  ·                   ·           (a, a)  ·
+      │          type                left outer  ·       ·
+      │          equality            (a) = (a)   ·       ·
+      │          left cols are key   ·           ·       ·
+      │          right cols are key  ·           ·       ·
+      │          mergeJoinOrder      +"(a=a)"    ·       ·
+      ├── scan   ·                   ·           (a)     ·
+      │          table               r@primary   ·       ·
+      │          spans               /3-/3/#     ·       ·
+      └── scan   ·                   ·           (a)     ·
+·                table               l@primary   ·       ·
+·                spans               /3-/3/#     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-·           distributed         false        ·       ·
-·           vectorized          true         ·       ·
-merge-join  ·                   ·            (a, a)  ·
- │          type                right outer  ·       ·
- │          equality            (a) = (a)    ·       ·
- │          left cols are key   ·            ·       ·
- │          right cols are key  ·            ·       ·
- │          mergeJoinOrder      +"(a=a)"     ·       ·
- ├── scan   ·                   ·            (a)     ·
- │          table               l@primary    ·       ·
- │          spans               /3-/3/#      ·       ·
- └── scan   ·                   ·            (a)     ·
-·           table               r@primary    ·       ·
-·           spans               /3-/3/#      ·       ·
+·                distributed         false       ·       ·
+·                vectorized          true        ·       ·
+render           ·                   ·           (a, a)  ·
+ │               render 0            a           ·       ·
+ │               render 1            a           ·       ·
+ └── merge-join  ·                   ·           (a, a)  ·
+      │          type                left outer  ·       ·
+      │          equality            (a) = (a)   ·       ·
+      │          left cols are key   ·           ·       ·
+      │          right cols are key  ·           ·       ·
+      │          mergeJoinOrder      +"(a=a)"    ·       ·
+      ├── scan   ·                   ·           (a)     ·
+      │          table               r@primary   ·       ·
+      │          spans               /3-/3/#     ·       ·
+      └── scan   ·                   ·           (a)     ·
+·                table               l@primary   ·       ·
+·                spans               /3-/3/#     ·       ·
 
 # Regression tests for #21243
 statement ok

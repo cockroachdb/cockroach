@@ -697,32 +697,32 @@ SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY a
 sort
  ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
  ├── ordering: +1
- └── right-join (merge)
+ └── left-join (merge)
       ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
-      ├── left ordering: +1
-      ├── right ordering: +4
-      ├── scan abc
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      │    └── ordering: +1
+      ├── left ordering: +4
+      ├── right ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
+      ├── scan abc
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      │    └── ordering: +1
       └── filters (true)
 
 opt
 SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
 ----
-right-join (merge)
+left-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
- ├── left ordering: +1
- ├── right ordering: +4
+ ├── left ordering: +4
+ ├── right ordering: +1
  ├── ordering: +4
- ├── scan abc
- │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
- │    └── ordering: +1
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
  └── filters (true)
 
 opt
