@@ -79,14 +79,14 @@
 )
 
 # RejectNullsRightJoin is symmetric with RejectNullsLeftJoin. It reduces a
-# RightJoin operator to an InnerJoin operator (or a FullJoin to a LeftJoin) when
-# there is a null-rejecting filter on any column from the left side.
+# FullJoin operator to a LeftJoin when there is a null-rejecting filter on any
+# column from the left side.
 #
 # This rule is marked as high priority for the same reason as
 # RejectNullsLeftJoin.
 [RejectNullsRightJoin, Normalize, HighPriority]
 (Select
-    $input:(RightJoin | FullJoin
+    $input:(FullJoin
         $left:*
         $right:*
         $on:*
@@ -96,8 +96,7 @@
 )
 =>
 (Select
-    (ConstructNonRightJoin
-        (OpName $input)
+    (LeftJoin
         $left
         $right
         $on
