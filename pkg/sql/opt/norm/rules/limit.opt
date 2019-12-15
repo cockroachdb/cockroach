@@ -147,31 +147,3 @@ $input
     (Const $limit)
     $ordering
 )
-
-# PushLimitIntoRightJoin is symmetric with PushLimitIntoLeftJoin.
-[PushLimitIntoRightJoin, Normalize]
-(Limit
-    $input:(RightJoin
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
-    (Const $limit:*) & ^(LimitGeMaxRows $limit $right)
-    $ordering:* & (HasColsInOrdering $right $ordering)
-)
-=>
-(Limit
-    (RightJoin
-        $left
-        (Limit
-            $right
-            (Const $limit)
-            (PruneOrdering $ordering (OutputCols $right))
-        )
-        $on
-        $private
-    )
-    (Const $limit)
-    $ordering
-)

@@ -49,21 +49,6 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
-// ConstructNonRightJoin maps a right join to an inner join and a full join to a
-// left join when it can be proved that the left side of the join always
-// produces at least one row for every row on the right.
-func (c *CustomFuncs) ConstructNonRightJoin(
-	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
-) memo.RelExpr {
-	switch joinOp {
-	case opt.RightJoinOp:
-		return c.f.ConstructInnerJoin(left, right, on, private)
-	case opt.FullJoinOp:
-		return c.f.ConstructLeftJoin(left, right, on, private)
-	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
-}
-
 // SimplifyNotNullEquality simplifies an expression of the following form:
 //
 //   (Is | IsNot (Eq) (True | False | Null))
