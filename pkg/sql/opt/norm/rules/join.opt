@@ -2,6 +2,19 @@
 # join.opt contains normalization rules for Join operators.
 # =============================================================================
 
+# CommuteRightJoin converts a RightJoin to a LeftJoin with the left and right
+# inputs swapped. This allows other normalization rules to only worry about the
+# LeftJoin case.
+[CommuteRightJoin, Normalize, HighPriority]
+(RightJoin
+    $left:*
+    $right:*
+    $on:*
+    $private:*
+)
+=>
+(LeftJoin $right $left $on (CommuteJoinFlags $private))
+
 
 # SimplifyJoinFilters works like SimplifySelectFilters, except that it operates
 # on Join filters rather than Select filters.
@@ -105,7 +118,7 @@
 #       be ordered before PushFilterIntoJoinLeft (otherwise,
 #       PushFilterIntoJoinLeft might need to be applied multiple times).
 [MapFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -173,7 +186,7 @@
 #
 # See the MapEqualityConditions function for more details.
 [MapEqualityIntoJoinLeftAndRight, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | RightJoin |
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | 
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:* & ^(HasOuterCols $right)
@@ -189,10 +202,10 @@
 )
 
 # PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
-# join. This is possible in the case of InnerJoin and RightJoin, as long as the
-# condition has no dependencies on the right side of the join. Left and Full
-# joins are not eligible, since filtering left rows will change the number of
-# rows in the result for those types of joins:
+# join. This is possible in the case of InnerJoin, as long as the condition has
+# no dependencies on the right side of the join. Left and Full joins are not
+# eligible, since filtering left rows will change the number of rows in the
+# result for those types of joins:
 #
 #   -- A row with nulls on the right side is returned for a.x=1, a.y=2, b.x=1.
 #   SELECT * FROM a LEFT JOIN b ON a.x=b.x AND a.y < 0
@@ -211,7 +224,7 @@
 #
 # Citations: [1]
 [PushFilterIntoJoinLeft, Normalize]
-(InnerJoin | InnerJoinApply | RightJoin | SemiJoin | SemiJoinApply
+(InnerJoin | InnerJoinApply | SemiJoin | SemiJoinApply
     $left:* & ^(HasOuterCols $left)
     $right:*
     $on:[
@@ -279,21 +292,19 @@
     $private
 )
 
-# SimplifyRightJoinWithoutFilters reduces a RightJoin operator to an InnerJoin
-# operator (or a FullJoin to a LeftJoin) when it's known that the join's left
-# input never returns zero rows and when there's no join condition. The outer
-# join only populates the left side with NULL values when it would otherwise not
-# be present.
+# SimplifyRightJoinWithoutFilters reduces a FullJoin operator to a LeftJoin
+# operator when it's known that the join's left input never returns zero rows
+# and when there's no join condition. The outer join only populates the left
+# side with NULL values when it would otherwise not be present.
 [SimplifyRightJoinWithoutFilters, Normalize]
-(RightJoin | FullJoin
+(FullJoin
     $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:[]
     $private:*
 )
 =>
-(ConstructNonRightJoin
-    (OpName)
+(LeftJoin
     $left
     $right
     $on
@@ -333,21 +344,19 @@
     $private
 )
 
-# SimplifyRightJoinWithFilters reduces a RightJoin operator to an InnerJoin
-# operator (or a FullJoin to a LeftJoin) when it's known that every row in the
-# join's right input will match at least one row in the left input. This rule
-# is symmetric with SimplifyLeftJoinWithFilters; see that rule for more details
-# and examples.
+# SimplifyRightJoinWithFilters reduces a FullJoin operator to a LeftJoin
+# operator when it's known that every row in the join's right input will match
+# at least one row in the left input. This rule is symmetric with
+# SimplifyLeftJoinWithFilters; see that rule for more details and examples.
 [SimplifyRightJoinWithFilters, Normalize]
-(RightJoin | FullJoin
+(FullJoin
     $left:*
     $right:*
     $on:^[] & (JoinFiltersMatchAllLeftRows $right $left $on)
     $private:*
 )
 =>
-(ConstructNonRightJoin
-    (OpName)
+(LeftJoin
     $left
     $right
     $on

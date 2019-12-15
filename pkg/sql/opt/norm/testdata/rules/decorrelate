@@ -1157,13 +1157,10 @@ project
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── right-join (cross)
+      ├── left-join (cross)
       │    ├── columns: x:6(int) div:10(decimal)
       │    ├── outer: (2)
       │    ├── side-effects
-      │    ├── scan xy
-      │    │    ├── columns: x:6(int!null)
-      │    │    └── key: (6)
       │    ├── project
       │    │    ├── columns: div:10(decimal)
       │    │    ├── outer: (2)
@@ -1179,6 +1176,9 @@ project
       │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    └── projections
       │    │         └── u / 1.1 [type=decimal, outer=(8), side-effects]
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null)
+      │    │    └── key: (6)
       │    └── filters
       │         └── x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── filters (true)
@@ -4190,42 +4190,6 @@ project
       │    └── filters (true)
       └── filters
            └── x = ?column? [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
-
-# Can't hoist in a right join.
-opt expect-not=HoistJoinSubquery
-SELECT y FROM a RIGHT JOIN xy ON (SELECT k+1) = (SELECT x+1)
-----
-project
- ├── columns: y:7(int)
- └── right-join (cross)
-      ├── columns: k:1(int) x:6(int!null) y:7(int)
-      ├── key: (1,6)
-      ├── fd: (6)-->(7)
-      ├── scan a
-      │    ├── columns: k:1(int!null)
-      │    └── key: (1)
-      ├── scan xy
-      │    ├── columns: x:6(int!null) y:7(int)
-      │    ├── key: (6)
-      │    └── fd: (6)-->(7)
-      └── filters
-           └── eq [type=bool, outer=(1,6), correlated-subquery]
-                ├── subquery [type=int]
-                │    └── values
-                │         ├── columns: "?column?":8(int)
-                │         ├── outer: (1)
-                │         ├── cardinality: [1 - 1]
-                │         ├── key: ()
-                │         ├── fd: ()-->(8)
-                │         └── (k + 1,) [type=tuple{int}]
-                └── subquery [type=int]
-                     └── values
-                          ├── columns: "?column?":9(int)
-                          ├── outer: (6)
-                          ├── cardinality: [1 - 1]
-                          ├── key: ()
-                          ├── fd: ()-->(9)
-                          └── (x + 1,) [type=tuple{int}]
 
 # Hoist Exists in join filter disjunction.
 opt expect=HoistJoinSubquery

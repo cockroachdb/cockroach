@@ -535,10 +535,9 @@ project
  └── projections
       └── f + 1.1 [type=float, outer=(3)]
 
-# --------------------------------------------------
+# --------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
-#   + PushSelectCondRightIntoJoinLeftAndRight
-# --------------------------------------------------
+# --------------------------------------
 
 # Only the filters bound by the left side are mapped and pushed down.
 opt expect=PushSelectCondLeftIntoJoinLeftAndRight
@@ -613,41 +612,6 @@ anti-join (merge)
  │    ├── key: (6)
  │    └── ordering: +6
  └── filters (true)
-
-# Only the filters bound by the right side are mapped and pushed down.
-opt expect=PushSelectCondRightIntoJoinLeftAndRight
-SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x AND a.i=xy.y
-WHERE xy.x + xy.y > 5 AND (xy.x + a.i = 6 OR xy.x IS NULL) AND (xy.y % 2 = 0) AND xy.x >= 10
-----
-select
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join (lookup a)
- │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- │    ├── key columns: [6] = [1]
- │    ├── lookup columns are key
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── select
- │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    ├── constraint: /6: [/10 - ]
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
- │    │    └── filters
- │    │         ├── (x + y) > 5 [type=bool, outer=(6,7)]
- │    │         └── (y % 2) = 0 [type=bool, outer=(7)]
- │    └── filters
- │         ├── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │         ├── (k + i) > 5 [type=bool, outer=(1,2)]
- │         ├── (i % 2) = 0 [type=bool, outer=(2)]
- │         └── k >= 10 [type=bool, outer=(1), constraints=(/1: [/10 - ]; tight)]
- └── filters
-      └── ((x + i) = 6) OR (x IS NULL) [type=bool, outer=(2,6)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
@@ -743,23 +707,23 @@ SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join (merge)
+ ├── fd: (6)-->(7), (1)-->(2-5)
+ ├── left-join (merge)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- │    ├── left ordering: +1
- │    ├── right ordering: +6
+ │    ├── left ordering: +6
+ │    ├── right ordering: +1
  │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    ├── fd: (6)-->(7), (1)-->(2-5)
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-5)
+ │    │    └── ordering: +1
  │    └── filters (true)
  └── filters
       └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100])]
@@ -835,59 +799,6 @@ anti-join (lookup xy)
  │    └── filters
  │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  └── filters (true)
-
-# --------------------------------------------------
-# PushSelectIntoJoinRight
-# --------------------------------------------------
-opt expect=PushSelectIntoJoinRight
-SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k WHERE a.f=1.1
-----
-left-join (lookup xy)
- ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- ├── key columns: [3] = [1]
- ├── lookup columns are key
- ├── key: (1,3)
- ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
- ├── select
- │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
- │    ├── key: (3)
- │    ├── fd: ()-->(5), (3)-->(4,6,7)
- │    ├── scan a
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    └── fd: (3)-->(4-7)
- │    └── filters
- │         └── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- └── filters (true)
-
-opt expect=PushSelectIntoJoinRight
-SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k
-WHERE a.f=1.1 AND (a.i<xy.y OR xy.y IS NULL) AND (a.s='foo' OR a.s='bar')
-----
-select
- ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
- ├── key: (1,3)
- ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
- ├── left-join (lookup xy)
- │    ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
- │    ├── key columns: [3] = [1]
- │    ├── lookup columns are key
- │    ├── key: (1,3)
- │    ├── fd: ()-->(5), (1)-->(2), (3)-->(4,6,7)
- │    ├── select
- │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string!null) j:7(jsonb)
- │    │    ├── key: (3)
- │    │    ├── fd: ()-->(5), (3)-->(4,6,7)
- │    │    ├── scan a
- │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- │    │    │    ├── key: (3)
- │    │    │    └── fd: (3)-->(4-7)
- │    │    └── filters
- │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar'] [/'foo' - /'foo'])]
- │    └── filters (true)
- └── filters
-      └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
 
 # Don't push down conditions in case of LEFT JOIN.
 opt
@@ -1032,19 +943,19 @@ SELECT * FROM a RIGHT JOIN xy ON True WHERE a.k=xy.x OR a.k IS NULL
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join (cross)
+ ├── fd: (6)-->(7), (1)-->(2-5)
+ ├── left-join (cross)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-5), (6)-->(7)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
+ │    ├── fd: (6)-->(7), (1)-->(2-5)
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters (true)
  └── filters
       └── (k = x) OR (k IS NULL) [type=bool, outer=(1,6)]
@@ -1074,7 +985,7 @@ select
       └── ((k = x) OR (k IS NULL)) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # --------------------------------------------------
-# PushSelectIntoJoinLeft + PushSelectIntoJoinRight + MergeSelectInnerJoin
+# PushSelectIntoJoinLeft + MergeSelectInnerJoin
 # --------------------------------------------------
 opt
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 AND a.i<xy.y
