@@ -46,7 +46,7 @@ SELECT k, x FROM a INNER MERGE JOIN b ON k=x
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) x:5(int!null)
- ├── flags: no-lookup-join;no-hash-join
+ ├── flags: force merge join
  ├── left ordering: +1
  ├── right ordering: +5
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
@@ -76,7 +76,7 @@ SELECT k, x FROM b INNER LOOKUP JOIN a ON k=x
 ----
 inner-join (lookup a)
  ├── columns: k:4(int!null) x:1(int!null)
- ├── flags: no-merge-join;no-hash-join
+ ├── flags: force lookup join (into right side)
  ├── key columns: [1] = [4]
  ├── lookup columns are key
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
@@ -96,7 +96,7 @@ SELECT k, x FROM a INNER LOOKUP JOIN b ON k=x
 ----
 inner-join (hash)
  ├── columns: k:1(int!null) x:5(int!null)
- ├── flags: no-merge-join;no-hash-join
+ ├── flags: force lookup join (into right side)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(5)=99, null(5)=0]
  ├── cost: 1e+100
  ├── fd: (1)==(5), (5)==(1)

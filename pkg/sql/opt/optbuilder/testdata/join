@@ -3034,7 +3034,7 @@ project
  ├── columns: x:1(int!null) y:3(int!null)
  └── inner-join (hash)
       ├── columns: x:1(int!null) a.rowid:2(int!null) y:3(int!null) b.rowid:4(int!null)
-      ├── flags: no-lookup-join;no-hash-join
+      ├── flags: force merge join
       ├── scan a
       │    └── columns: x:1(int) a.rowid:2(int!null)
       ├── scan b
@@ -3056,7 +3056,7 @@ project
  ├── columns: x:1(int) y:3(int)
  └── full-join (hash)
       ├── columns: x:1(int) a.rowid:2(int) y:3(int) b.rowid:4(int)
-      ├── flags: no-lookup-join;no-merge-join
+      ├── flags: force hash join (store right side)
       ├── scan a
       │    └── columns: x:1(int) a.rowid:2(int!null)
       ├── scan b

@@ -482,9 +482,7 @@ func (h *hasher) HashScanFlags(val ScanFlags) {
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {
-	h.HashBool(val.DisallowHashJoin)
-	h.HashBool(val.DisallowMergeJoin)
-	h.HashBool(val.DisallowLookupJoin)
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
