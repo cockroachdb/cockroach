@@ -56,7 +56,7 @@ export function NavigationItem(props: NavigationItem) {
 NavigationItem.defaultProps = {
   isActive: false,
   disabled: false,
-}
+};
 
 SideNavigation.Item = NavigationItem;
 
