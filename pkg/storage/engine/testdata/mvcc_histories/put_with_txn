@@ -2,7 +2,7 @@ run ok
 with t=A k=k
   txn_begin ts=0,1
   put  v=v
-  get
+  get  ts=0,1
   get  ts=0,2
   get  ts=1
 ----
