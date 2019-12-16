@@ -12,7 +12,7 @@ import React from "react";
 import { connect } from "react-redux";
 import { Link, withRouter, WithRouterProps } from "react-router";
 
-import { SideNavigation } from "src/toolbox";
+import { SideNavigation } from "src/components";
 
 import "./navigation-bar.styl";
 
