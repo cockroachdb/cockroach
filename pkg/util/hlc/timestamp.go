@@ -13,7 +13,9 @@ package hlc
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -31,8 +33,60 @@ func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
 }
 
+// String implements the fmt.Formatter interface.
 func (t Timestamp) String() string {
-	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical)
+	// The following code was originally written as
+	//   fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical).
+	// The main problem with the original code was that it would put
+	// a negative sign in the middle (after the decimal point) if
+	// the value happened to be negative.
+	buf := make([]byte, 0, 12)
+	if t.WallTime == 0 {
+		// We simplify "0.000000000" to just "0" as this is a common case.
+		buf = append(buf, '0')
+	} else {
+		u := uint64(t.WallTime)
+		if t.WallTime < 0 {
+			u = -u
+			buf = append(buf, '-')
+		}
+
+		// Generate the decimal representation of the wall time.
+		// expressed in nanoseconds
+		timeS := strconv.FormatUint(u, 10)
+		if len(timeS) < 10 {
+			// If there's less than 10 digits in the representation,
+			// that means there's less than one second of time.
+			// In that case, print a leading zero (number of seconds).
+			buf = append(buf, '0')
+		} else {
+			// Output all the digits except the last 9.
+			buf = append(buf, []byte(timeS[:len(timeS)-9])...)
+		}
+		// Second-nanosecond separator.
+		buf = append(buf, '.')
+		// Now on to print the nanoseconds.
+		// We'll ignore all the digits except the last 9, since these
+		// were emitted above already.
+		sz := 9
+		if len(timeS) < sz {
+			// If there's less than 9 digits worth of nanoseconds, we'll use
+			// that.
+			sz = len(timeS)
+		}
+		// Pad the nanosecond part with zeroes on the left. This reduces
+		// to no zeroes at all if there were exactly 9 digits already.
+		const zeroes = "000000000"
+		buf = append(buf, zeroes[:9-sz]...)
+		// Output the nanoseconds.
+		buf = append(buf, timeS[len(timeS)-sz:]...)
+	}
+	// Finally, output the logical part.
+	buf = append(buf, ',')
+	buf = strconv.AppendInt(buf, int64(t.Logical), 10)
+	// Convert the byte array to a string without a copy. We follow the
+	// examples of strings.Builder here.
+	return *(*string)(unsafe.Pointer(&buf))
 }
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.

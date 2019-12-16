@@ -8,8 +8,8 @@ with t=A
   put         ts=1 k=k v=v
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
-meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0.000000000,0 seq=0} ts=0.000000002,1 del=false klen=12 vlen=6
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000002,1 min=0,0 seq=0} ts=0.000000002,1 del=false klen=12 vlen=6
 data: "k"/0.000000002,1 -> /BYTES/v
 
 # Put operation with earlier wall time. Will NOT be ignored.
@@ -20,8 +20,8 @@ with t=A
   put         ts=1 k=k v=v2
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=1} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
-meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=1} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}}
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=1} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}}
 data: "k"/0.000000002,1 -> /BYTES/v2
 
 # We're expecting v2 here.
@@ -40,8 +40,8 @@ with t=A
   put ts=1 k=k v=v2
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=2} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
-meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=2} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}{1 /BYTES/v2}}
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=2} ts=0.000000002,1 del=false klen=12 vlen=7 ih={{0 /BYTES/v}{1 /BYTES/v2}}
 data: "k"/0.000000002,1 -> /BYTES/v2
 
 # We're expecting v2 here.

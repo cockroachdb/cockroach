@@ -9,9 +9,9 @@ with t=A
     resolve_intent
 ----
 >> txn_begin ts=11 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 >> put v=abc k=a t=A
-meta: "a"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=8
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=8
 data: "a"/0.000000011,0 -> /BYTES/abc
 >> get k=a t=A
 get: "a" -> /BYTES/abc @0.000000011,0
@@ -42,7 +42,7 @@ with t=A
 ----
 get: "a" -> /BYTES/abc @0.000000011,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
 
 run trace ok
 with t=A
@@ -85,5 +85,5 @@ with t=A k=a
   txn_remove
 ----
 >> txn_begin ts=1 t=A k=a
-txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
+txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 >> txn_remove t=A k=a
