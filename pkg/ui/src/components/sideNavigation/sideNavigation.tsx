@@ -11,7 +11,7 @@
 import * as React from "react";
 import cn from "classnames";
 
-import { Text, TextTypes } from "src/toolbox";
+import { Text, TextTypes } from "src/components";
 
 import "./sideNavigation.styl";
 
