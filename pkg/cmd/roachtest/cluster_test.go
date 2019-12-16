@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,7 +148,7 @@ func TestClusterMonitor(t *testing.T) {
 
 		// If wait terminates, context gets canceled.
 		err := m.wait(`true`)
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Errorf(`expected context canceled, got: %+v`, err)
 		}
 	})
