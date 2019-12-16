@@ -354,6 +354,20 @@ func GetTableDescFromID(
 	return table, nil
 }
 
+// GetTableDescFromIDWithoutFkUpgrade reads a table descriptor from disk
+// with the ID passed in using an existing protogetter. However, note that
+// the foreign key representation upgrade path is not present in this function.
+func GetTableDescFromIDWithoutFkUpgrade(
+	ctx context.Context, protoGetter protoGetter, id ID,
+) (*TableDescriptor, error) {
+	table, err := getTableDescFromIDRaw(ctx, protoGetter, id)
+	if err != nil {
+		return nil, err
+	}
+	table.MaybeFillInWithoutFKUpgrade()
+	return table, nil
+}
+
 // getTableDescFromIDRaw retrieves the table descriptor for the table
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table. Note that it
@@ -817,6 +831,13 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 	return nil
 }
 
+// MaybeFillInWithoutFKUpgrade performs the same thing as MaybeFillInDescriptor but does
+// not apply the foreign key representation upgrade path to the table descriptor.
+func (desc *TableDescriptor) MaybeFillInWithoutFKUpgrade() {
+	desc.maybeUpgradeFormatVersion()
+	desc.Privileges.MaybeFixPrivileges(desc.ID)
+}
+
 // MapProtoGetter is a protoGetter that has a hard-coded map of keys to proto
 // messages.
 type MapProtoGetter struct {
@@ -973,14 +994,12 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				var forwardFK *ForeignKeyConstraint
 				for i := range otherTable.OutboundFKs {
 					otherFK := &otherTable.OutboundFKs[i]
-					// To find a match, we need to compare the reference's table id and
-					// index id, which are the only two available fields on backreferences
-					// in the old representation. Note that we have to compare the index id
-					// to the matching new forward reference's LegacyOriginIndex field,
-					// which although marked as Legacy, is populated every time we create
-					// a new-style fk during the duration of 19.2.
+					// To find a match, we find a foreign key reference that has the same
+					// referenced table ID, and that the index we point to is a valid
+					// index to satisfy the columns in the foreign key.
+					// TODO (rohany): I'm unsure about this... Could there be multiple FK's?
 					if otherFK.ReferencedTableID == desc.ID &&
-						otherFK.LegacyOriginIndex == ref.Index {
+						ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
 						break
@@ -2756,13 +2775,6 @@ func (desc *TableDescriptor) FindFKForBackRef(
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
 		if fk.ReferencedTableID == referencedTableID && fk.Name == backref.Name {
-			if fk.LegacyReferencedIndex != backref.LegacyReferencedIndex ||
-				fk.LegacyOriginIndex != backref.LegacyOriginIndex {
-				return nil, errors.AssertionFailedf("fk found for backref %s but pinned indexes were different: "+
-					"%d != %d || %d != %d", fk.Name, fk.LegacyOriginIndex, backref.LegacyOriginIndex,
-					fk.LegacyReferencedIndex, backref.LegacyReferencedIndex)
-			}
-
 			return fk, nil
 		}
 	}
