@@ -159,6 +159,9 @@ func registerSQLSmith(r *testRegistry) {
 			default:
 			}
 			stmt := smither.Generate()
+			if i%1000 == 0 {
+				t.Status("Statement is ", stmt)
+			}
 			err := func() error {
 				done := make(chan error, 1)
 				go func(context.Context) {
