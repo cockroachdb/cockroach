@@ -171,6 +171,10 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
+	// DontPushOnWriteIntentError will propagate a write intent error immediately
+	// instead of utilizing the intent resolver to try to push the corresponding
+	// transaction.
+	DontPushOnWriteIntentError bool
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the txn wait queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.

@@ -538,9 +538,9 @@ func CountLeases(
 // a version of the table descriptor. A tableVersionState with the
 // expiration time set to expiration is returned.
 //
-// This returns an error when Replica.requestCanProceed() returns an
-// error when the expiration timestamp is less than the storage layer
-// GC threshold.
+// This returns an error when Replica.checkTSAboveGCThresholdRLocked()
+// returns an error when the expiration timestamp is less than the storage
+// layer GC threshold.
 func (s LeaseStore) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
 ) (*tableVersionState, error) {
