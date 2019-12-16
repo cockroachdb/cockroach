@@ -262,7 +262,7 @@ func (c *CustomFuncs) HoistValuesSubquery(
 
 	values := c.f.ConstructValues(newRows, &memo.ValuesPrivate{
 		Cols: private.Cols,
-		ID:   c.f.Metadata().NextValuesID(),
+		ID:   c.f.Metadata().NextUniqueID(),
 	})
 	join := c.f.ConstructInnerJoinApply(hoister.input(), values, memo.TrueFilter, memo.EmptyJoinPrivate)
 	outCols := values.Relational().OutputCols
@@ -690,7 +690,7 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExp
 func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
 	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
 		Cols: opt.ColList{},
-		ID:   c.f.Metadata().NextValuesID(),
+		ID:   c.f.Metadata().NextUniqueID(),
 	})
 }
 

@@ -77,8 +77,8 @@ type Metadata struct {
 	// sequences stores information about each metadata sequence, indexed by SequenceID.
 	sequences []cat.Sequence
 
-	// values is the highest id for a Values clause that has been assigned.
-	values ValuesID
+	// currUniqueID is the highest UniqueID that has been assigned.
+	currUniqueID UniqueID
 
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them. The objects are
@@ -446,17 +446,19 @@ func (md *Metadata) AllSequences() []cat.Sequence {
 	return md.sequences
 }
 
-// ValuesID uniquely identifies the usage of a values clause within the scope of a
-// query.
+// UniqueID should be used to disambiguate multiple uses of an expression
+// within the scope of a query. For example, a UniqueID field should be
+// added to an expression type if two instances of that type might otherwise
+// be indistinguishable based on the values of their other fields.
 //
 // See the comment for Metadata for more details on identifiers.
-type ValuesID uint64
+type UniqueID uint64
 
-// NextValuesID returns a fresh ValuesID which is guaranteed to never have been
-// allocated prior in this memo.
-func (md *Metadata) NextValuesID() ValuesID {
-	md.values++
-	return md.values
+// NextUniqueID returns a fresh UniqueID which is guaranteed to never have been
+// previously allocated in this memo.
+func (md *Metadata) NextUniqueID() UniqueID {
+	md.currUniqueID++
+	return md.currUniqueID
 }
 
 // AddView adds a new reference to a view used by the query.

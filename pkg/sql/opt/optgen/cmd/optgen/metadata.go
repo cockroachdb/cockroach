@@ -149,7 +149,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"TableID":        {fullName: "opt.TableID", passByVal: true},
 		"SchemaID":       {fullName: "opt.SchemaID", passByVal: true},
 		"SequenceID":     {fullName: "opt.SequenceID", passByVal: true},
-		"ValuesID":       {fullName: "opt.ValuesID", passByVal: true},
+		"UniqueID":       {fullName: "opt.UniqueID", passByVal: true},
 		"WithID":         {fullName: "opt.WithID", passByVal: true},
 		"Ordering":       {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice": {fullName: "physical.OrderingChoice", passByVal: true},
