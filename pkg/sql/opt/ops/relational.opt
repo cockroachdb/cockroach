@@ -142,7 +142,7 @@ define ValuesPrivate {
     # Values expressions which appear in different places in the query. In most
     # cases the column set is sufficient to do this, but various rules make it
     # possible to construct Values expressions with no columns.
-    ID ValuesID
+    ID UniqueID
 }
 
 # Select filters rows from its input result set, based on the boolean filter
@@ -845,7 +845,8 @@ define WithScan {
 
 [Private]
 define WithScanPrivate {
-    ID WithID
+    # With identifies the CTE to scan.
+    With WithID
 
     # BindingProps stores the relational properties of the referenced expression.
     BindingProps RelPropsPtr
@@ -864,6 +865,12 @@ define WithScanPrivate {
     # the same tree, so we maintain a mapping from the columns returned from
     # the referenced expression to the referencing expression.
     OutCols ColList
+
+    # ID is a memo-unique identifier which distinguishes between identical
+    # WithScan expressions which appear in different places in the query. In
+    # most cases the column set is sufficient to do this, but various rules make
+    # it possible to construct WithScan expressions with no columns.
+    ID UniqueID
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:

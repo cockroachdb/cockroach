@@ -121,7 +121,7 @@ func (b *Builder) buildValuesClause(
 	colList := colsToColList(outScope.cols)
 	outScope.expr = b.factory.ConstructValues(tuples, &memo.ValuesPrivate{
 		Cols: colList,
-		ID:   b.factory.Metadata().NextValuesID(),
+		ID:   b.factory.Metadata().NextUniqueID(),
 	})
 	return outScope
 }

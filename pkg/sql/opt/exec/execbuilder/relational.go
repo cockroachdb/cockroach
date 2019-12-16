@@ -1505,20 +1505,20 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 }
 
 func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
-	id := withScan.ID
+	withID := withScan.With
 	var e *builtWithExpr
 	for i := range b.withExprs {
-		if b.withExprs[i].id == id {
+		if b.withExprs[i].id == withID {
 			e = &b.withExprs[i]
 			break
 		}
 	}
 	if e == nil {
-		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", id))
+		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", withID))
 	}
 
 	var label bytes.Buffer
-	fmt.Fprintf(&label, "buffer %d", withScan.ID)
+	fmt.Fprintf(&label, "buffer %d", withScan.With)
 	if withScan.Name != "" {
 		fmt.Fprintf(&label, " (%s)", withScan.Name)
 	}

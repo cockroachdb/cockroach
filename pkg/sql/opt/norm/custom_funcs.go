@@ -1166,7 +1166,7 @@ func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	}
 	return c.f.ConstructValues(memo.EmptyScalarListExpr, &memo.ValuesPrivate{
 		Cols: colList,
-		ID:   c.mem.Metadata().NextValuesID(),
+		ID:   c.mem.Metadata().NextUniqueID(),
 	})
 }
 
@@ -1951,7 +1951,7 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	replace = func(nd opt.Expr) opt.Expr {
 		switch t := nd.(type) {
 		case *memo.WithScanExpr:
-			if t.ID == priv.ID {
+			if t.With == priv.ID {
 				// TODO(justin): it might be worth carefully walking the tree and
 				// renaming variables as we do this replacement so that this projection
 				// is unnecessary (assuming there's at most one reference to the
@@ -2008,7 +2008,7 @@ func (c *CustomFuncs) deriveWithUses(r opt.Expr) map[opt.WithID]int {
 	var result map[opt.WithID]int
 	switch e := r.(type) {
 	case *memo.WithScanExpr:
-		result = map[opt.WithID]int{e.ID: 1}
+		result = map[opt.WithID]int{e.With: 1}
 	default:
 		for i, n := 0, r.ChildCount(); i < n; i++ {
 			for id, useCount := range c.WithUses(r.Child(i)) {

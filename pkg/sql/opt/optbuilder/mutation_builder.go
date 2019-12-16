@@ -1351,10 +1351,11 @@ func (mb *mutationBuilder) projectOrdinals(
 		inCols[i] = mb.outScope.cols[ords[i]].id
 	}
 	out := mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		ID:           mb.withID,
+		With:         mb.withID,
 		InCols:       inCols,
 		OutCols:      outCols,
 		BindingProps: mb.outScope.expr.Relational(),
+		ID:           mb.b.factory.Metadata().NextUniqueID(),
 	})
 	return out, outCols
 }
@@ -1372,10 +1373,11 @@ func (mb *mutationBuilder) makeFKInputScan(
 		outCols[i] = mb.md.AddColumn(c.Alias, c.Type)
 	}
 	scan = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
-		ID:           mb.withID,
+		With:         mb.withID,
 		InCols:       inputCols,
 		OutCols:      outCols,
 		BindingProps: mb.outScope.expr.Relational(),
+		ID:           mb.b.factory.Metadata().NextUniqueID(),
 	})
 	return scan, outCols
 }

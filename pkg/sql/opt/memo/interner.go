@@ -463,7 +463,7 @@ func (h *hasher) HashSequenceID(val opt.SequenceID) {
 	h.HashUint64(uint64(val))
 }
 
-func (h *hasher) HashValuesID(val opt.ValuesID) {
+func (h *hasher) HashUniqueID(val opt.UniqueID) {
 	h.HashUint64(uint64(val))
 }
 
@@ -790,7 +790,7 @@ func (h *hasher) IsSequenceIDEqual(l, r opt.SequenceID) bool {
 	return l == r
 }
 
-func (h *hasher) IsValuesIDEqual(l, r opt.ValuesID) bool {
+func (h *hasher) IsUniqueIDEqual(l, r opt.UniqueID) bool {
 	return l == r
 }
 
