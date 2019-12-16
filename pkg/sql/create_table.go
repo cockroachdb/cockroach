@@ -498,9 +498,21 @@ func ResolveFK(
 		}
 	}
 
+	// Verify we are not writing a constraint over the same name.
+	// This check is done in Verify(), but we must do it earlier
+	// or else we can hit other checks that break things with
+	// undesired error codes, e.g. #42858.
+	// It may be removable after #37255 is complete.
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	if err != nil {
+		return err
+	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name)
+	}
+	if _, ok := constraintInfo[constraintName]; ok {
+		return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", d.Name)
 	}
 
 	targetColIDs := make(sqlbase.ColumnIDs, len(targetCols))

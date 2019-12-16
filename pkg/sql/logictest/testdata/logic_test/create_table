@@ -1,0 +1,10 @@
+subtest regression_42858
+
+statement ok
+CREATE TABLE TEST2 (COL1 SERIAL PRIMARY KEY, COL2 INT8)
+
+statement error pq: duplicate constraint name: "duplicate_name"
+CREATE TABLE TEST1 (COL1 SERIAL PRIMARY KEY, COL2 INT8, COL3 INT8, CONSTRAINT duplicate_name FOREIGN KEY (col2) REFERENCES TEST2(COL1), CONSTRAINT duplicate_name FOREIGN KEY (col3) REFERENCES TEST2(COL1))
+
+statement ok
+DROP TABLE TEST2
