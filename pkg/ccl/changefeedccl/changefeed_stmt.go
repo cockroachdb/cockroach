@@ -263,7 +263,7 @@ func changefeedPlanHook(
 		if _, err := getEncoder(details.Opts); err != nil {
 			return err
 		}
-		if isCloudStorageSink(parsedSink) {
+		if isCloudStorageSink(parsedSink) || isPubsubSink(parsedSink) {
 			details.Opts[optKeyInValue] = ``
 		}
 

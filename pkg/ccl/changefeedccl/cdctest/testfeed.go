@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
+	"gocloud.dev/pubsub"
 )
 
 // TestFeedFactory is an interface to create changefeeds.
@@ -79,6 +80,93 @@ type TestFeed interface {
 	// Close shuts down the changefeed and releases resources.
 	Close() error
 }
+
+type pubsubFeedFactory struct {
+	s       serverutils.TestServerInterface
+	db      *gosql.DB
+	flushCh chan struct{}
+}
+
+// MakePubsubFeedFactory returns a TestFeedFactory implementation using the cloud
+// storage sink.
+func MakePubsubFeedFactory(
+	s serverutils.TestServerInterface, db *gosql.DB, flushCh chan struct{},
+) TestFeedFactory {
+	return &pubsubFeedFactory{s: s, db: db, flushCh: flushCh}
+}
+
+type pubsubFeed struct {
+	jobFeed
+	sub *pubsub.Subscription
+}
+
+func (p *pubsubFeed) Partitions() []string {
+	return []string{""}
+}
+
+func (p *pubsubFeed) Next() (*TestFeedMessage, error) {
+	m, err := p.sub.Receive(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	var tfm *TestFeedMessage
+	if topic, ok := m.Metadata["topic"]; ok {
+		k, v, err := extractKeyFromJSONValue(m.Body)
+		if err != nil {
+			return nil, err
+		}
+		tfm = &TestFeedMessage{
+			Key:   k,
+			Value: v,
+			Topic: topic,
+		}
+	} else {
+		tfm = &TestFeedMessage{
+			Resolved: m.Body,
+		}
+	}
+	m.Ack()
+	return tfm, nil
+}
+
+func (p pubsubFeed) Close() error {
+	return p.sub.Shutdown(context.TODO())
+}
+
+var _ TestFeed = (*pubsubFeed)(nil)
+
+func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+	if createStmt.SinkURI != nil {
+		return nil, errors.Errorf(`unexpected sink provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
+	}
+	sinkURI := `mem://todo`
+	createStmt.SinkURI = tree.NewStrVal(sinkURI)
+	pf := &pubsubFeed{
+		jobFeed: jobFeed{
+			db:      p.db,
+			flushCh: p.flushCh,
+		},
+	}
+	if err := p.db.QueryRow(createStmt.String(), args...).Scan(&pf.JobID); err != nil {
+		return nil, err
+	}
+	pf.sub, err = pubsub.OpenSubscription(context.TODO(), sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	return pf, nil
+}
+
+func (p pubsubFeedFactory) Server() serverutils.TestServerInterface {
+	return p.s
+}
+
+var _ TestFeedFactory = (*pubsubFeedFactory)(nil)
 
 type sinklessFeedFactory struct {
 	s    serverutils.TestServerInterface
