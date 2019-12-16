@@ -1345,15 +1345,19 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		return nil
 	}
 
-	// Install a hook to observe when a get request for a special key,
+	// Install a hook to observe when a get or a put request for a special key,
 	// rhsSentinel, acquires latches and begins evaluating.
-	const getConcurrency = 10
+	const reqConcurrency = 10
 	rhsSentinel := roachpb.Key("rhs-sentinel")
-	getAcquiredLatch := make(chan struct{}, getConcurrency)
+	reqAcquiredLatch := make(chan struct{}, reqConcurrency)
 	storeCfg.TestingKnobs.TestingLatchFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
-			if get := r.GetGet(); get != nil && get.RequestHeader.Key.Equal(rhsSentinel) {
-				getAcquiredLatch <- struct{}{}
+			req := r.GetInner()
+			switch req.Method() {
+			case roachpb.Get, roachpb.Put:
+				if req.Header().Key.Equal(rhsSentinel) {
+					reqAcquiredLatch <- struct{}{}
+				}
 			}
 		}
 		return nil
@@ -1422,10 +1426,10 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Send several get requests to the the RHS. The first of these to arrive will
-	// acquire the lease; the remaining requests will wait for that lease
-	// acquisition to complete. Then all requests should block waiting for the
-	// Subsume request to complete. By sending several of these requests in
+	// Send several get and put requests to the the RHS. The first of these to
+	// arrive will acquire the lease; the remaining requests will wait for that
+	// lease acquisition to complete. Then all requests should block waiting for
+	// the Subsume request to complete. By sending several of these requests in
 	// parallel, we attempt to trigger a race where a request could slip through
 	// on the replica between when the new lease is installed and when the
 	// mergeComplete channel is installed.
@@ -1440,8 +1444,8 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	//
 	// This race has since been fixed by installing the mergeComplete channel
 	// before the new lease.
-	getErrs := make(chan error)
-	for i := 0; i < getConcurrency; i++ {
+	reqErrs := make(chan error)
+	for i := 0; i < reqConcurrency; i++ {
 		go func(i int) {
 			// For this test to have a shot at triggering a race, this log message
 			// must be interleaved with the "new range lease" message, like so:
@@ -1453,21 +1457,28 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 			// When this test was written, it would always produce the above
 			// interleaving, and successfully trigger the race when run with the race
 			// detector enabled about 50% of the time.
-			log.Infof(ctx, "starting get %d", i)
+			log.Infof(ctx, "starting req %d", i)
+			var req roachpb.Request
+			if i%2 == 0 {
+				req = getArgs(rhsSentinel)
+			} else {
+				req = putArgs(rhsSentinel, []byte(fmt.Sprintf("val%d", i)))
+			}
 			_, pErr := client.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
 				RangeID: rhsDesc.RangeID,
-			}, getArgs(rhsSentinel))
-			getErrs <- pErr.GoError()
+			}, req)
+			reqErrs <- pErr.GoError()
 		}(i)
 		time.Sleep(time.Millisecond)
 	}
 
-	// Wait for the get requests to acquire latches, which is as far as they can
-	// get while the merge is in progress. Then wait a little bit longer. This
-	// tests that the requests really do get stuck waiting for the merge to
-	// complete without depending too heavily on implementation details.
-	for i := 0; i < getConcurrency; i++ {
-		<-getAcquiredLatch
+	// Wait for the get and put requests to acquire latches, which is as far as
+	// they can get while the merge is in progress. Then wait a little bit
+	// longer. This tests that the requests really do get stuck waiting for the
+	// merge to complete without depending too heavily on implementation
+	// details.
+	for i := 0; i < reqConcurrency; i++ {
+		<-reqAcquiredLatch
 	}
 	time.Sleep(50 * time.Millisecond)
 
@@ -1478,10 +1489,10 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Because the merge completed successfully, r2 has ceased to exist. We
-	// therefore *must* see a RangeNotFound error from every pending get request.
-	// Anything else is a consistency error (or a bug in the test).
-	for i := 0; i < getConcurrency; i++ {
-		if err := <-getErrs; !testutils.IsError(err, "r2 was not found") {
+	// therefore *must* see a RangeNotFound error from every pending get and put
+	// request. Anything else is a consistency error (or a bug in the test).
+	for i := 0; i < reqConcurrency; i++ {
+		if err := <-reqErrs; !testutils.IsError(err, "r2 was not found") {
 			t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
 		}
 	}

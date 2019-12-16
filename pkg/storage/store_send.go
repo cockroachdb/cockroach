@@ -14,13 +14,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 // Send fetches a range based on the header's replica, assembles method, args &
@@ -165,208 +164,86 @@ func (s *Store) Send(
 		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 
-	var cleanupAfterWriteIntentError func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta)
-	defer func() {
-		if cleanupAfterWriteIntentError != nil {
-			// This request wrote an intent only if there was no error, the request
-			// is transactional, the transaction is not yet finalized, and the request
-			// wasn't read-only.
-			if pErr == nil && ba.Txn != nil && !br.Txn.Status.IsFinalized() && !ba.IsReadOnly() {
-				cleanupAfterWriteIntentError(nil, &br.Txn.TxnMeta)
-			} else {
-				cleanupAfterWriteIntentError(nil, nil)
-			}
-		}
-	}()
+	// Get range and add command to the range for execution.
+	repl, err := s.GetReplica(ba.RangeID)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	if !repl.IsInitialized() {
+		repl.mu.RLock()
+		replicaID := repl.mu.replicaID
+		repl.mu.RUnlock()
 
-	// Add the command to the range for execution; exit retry loop on success.
-	for {
-		// Exit loop if context has been canceled or timed out.
-		if err := ctx.Err(); err != nil {
-			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Store.Send"))
-		}
+		// If we have an uninitialized copy of the range, then we are
+		// probably a valid member of the range, we're just in the
+		// process of getting our snapshot. If we returned
+		// RangeNotFoundError, the client would invalidate its cache,
+		// but we can be smarter: the replica that caused our
+		// uninitialized replica to be created is most likely the
+		// leader.
+		return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+			RangeID:     ba.RangeID,
+			LeaseHolder: repl.creatingReplica,
+			// The replica doesn't have a range descriptor yet, so we have to build
+			// a ReplicaDescriptor manually.
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    repl.store.nodeDesc.NodeID,
+				StoreID:   repl.store.StoreID(),
+				ReplicaID: replicaID,
+			},
+		})
+	}
 
-		// Get range and add command to the range for execution.
-		repl, err := s.GetReplica(ba.RangeID)
+	br, pErr = repl.Send(ctx, ba)
+	if pErr == nil {
+		return br, nil
+	}
+
+	// Augment error if necessary and return.
+	switch t := pErr.GetDetail().(type) {
+	case *roachpb.RangeKeyMismatchError:
+		// On a RangeKeyMismatchError where the batch didn't even overlap
+		// the start of the mismatched Range, try to suggest a more suitable
+		// Range from this Store.
+		rSpan, err := keys.Range(ba.Requests)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
-		if !repl.IsInitialized() {
-			repl.mu.RLock()
-			replicaID := repl.mu.replicaID
-			repl.mu.RUnlock()
-
-			// If we have an uninitialized copy of the range, then we are
-			// probably a valid member of the range, we're just in the
-			// process of getting our snapshot. If we returned
-			// RangeNotFoundError, the client would invalidate its cache,
-			// but we can be smarter: the replica that caused our
-			// uninitialized replica to be created is most likely the
-			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
-				RangeID:     ba.RangeID,
-				LeaseHolder: repl.creatingReplica,
-				// The replica doesn't have a range descriptor yet, so we have to build
-				// a ReplicaDescriptor manually.
-				Replica: roachpb.ReplicaDescriptor{
-					NodeID:    repl.store.nodeDesc.NodeID,
-					StoreID:   repl.store.StoreID(),
-					ReplicaID: replicaID,
-				},
-			})
+		if !t.MismatchedRange.ContainsKey(rSpan.Key) {
+			if r2 := s.LookupReplica(rSpan.Key); r2 != nil {
+				// Only return the correct range descriptor as a hint
+				// if we know the current lease holder for that range, which
+				// indicates that our knowledge is not stale.
+				if l, _ := r2.GetLease(); r2.IsLeaseValid(l, s.Clock().Now()) {
+					t.SuggestedRange = r2.Desc()
+				}
+			}
 		}
-
-		// If necessary, the request may need to wait in the txn wait queue,
-		// pending updates to the target transaction for either PushTxn or
-		// QueryTxn requests.
-		if br, pErr = s.maybeWaitForPushee(ctx, &ba, repl); br != nil || pErr != nil {
-			return br, pErr
-		}
-		br, pErr = repl.Send(ctx, ba)
-		if pErr == nil {
-			return br, nil
-		}
-
-		// Handle push txn failures and write intent conflicts locally and
-		// retry. Other errors are returned to caller.
-		switch t := pErr.GetDetail().(type) {
-		case *roachpb.TransactionPushError:
-			// On a transaction push error, retry immediately if doing so will
-			// enqueue into the txnWaitQueue in order to await further updates to
-			// the unpushed txn's status. We check ShouldPushImmediately to avoid
-			// retrying non-queueable PushTxnRequests (see #18191).
-			dontRetry := s.cfg.TestingKnobs.DontRetryPushTxnFailures
-			if !dontRetry && ba.IsSinglePushTxnRequest() {
-				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-				dontRetry = txnwait.ShouldPushImmediately(pushReq)
-			}
-			if dontRetry {
-				// If we're not retrying on push txn failures return a txn retry error
-				// after the first failure to guarantee a retry.
-				if ba.Txn != nil {
-					err := roachpb.NewTransactionRetryError(
-						roachpb.RETRY_REASON_UNKNOWN, "DontRetryPushTxnFailures testing knob")
-					return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
-				}
-				return nil, pErr
-			}
-
-			// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and
-			// retry the command.
-			repl.txnWaitQueue.Enqueue(&t.PusheeTxn)
-			pErr = nil
-
-		case *roachpb.IndeterminateCommitError:
-			if s.cfg.TestingKnobs.DontRecoverIndeterminateCommits {
-				return nil, pErr
-			}
-			// On an indeterminate commit error, attempt to recover and finalize
-			// the stuck transaction. Retry immediately if successful.
-			if _, err := s.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
-				// Do not propagate ambiguous results; assume success and retry original op.
-				if _, ok := err.(*roachpb.AmbiguousResultError); !ok {
-					// Preserve the error index.
-					index := pErr.Index
-					pErr = roachpb.NewError(err)
-					pErr.Index = index
-					return nil, pErr
-				}
-			}
-			// We've recovered the transaction that blocked the push; retry command.
-			pErr = nil
-
-		case *roachpb.WriteIntentError:
-			// Process and resolve write intent error. We do this here because
-			// this is the code path with the requesting client waiting.
-			if pErr.Index != nil {
-				var pushType roachpb.PushTxnType
-				if ba.IsWrite() {
-					pushType = roachpb.PUSH_ABORT
-				} else {
-					pushType = roachpb.PUSH_TIMESTAMP
-				}
-
-				index := pErr.Index
-				args := ba.Requests[index.Index].GetInner()
-				// Make a copy of the header for the upcoming push; we will update
-				// the timestamp.
-				h := ba.Header
-				if h.Txn != nil {
-					// We must push at least to h.Timestamp, but in fact we want to
-					// go all the way up to a timestamp which was taken off the HLC
-					// after our operation started. This allows us to not have to
-					// restart for uncertainty as we come back and read.
-					obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
-					if !ok {
-						// This was set earlier in this method, so it's
-						// completely unexpected to not be found now.
-						log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
-					}
-					h.Timestamp.Forward(obsTS)
-					// We are going to hand the header (and thus the transaction proto)
-					// to the RPC framework, after which it must not be changed (since
-					// that could race). Since the subsequent execution of the original
-					// request might mutate the transaction, make a copy here.
-					//
-					// See #9130.
-					h.Txn = h.Txn.Clone()
-				}
-				// Handle the case where we get more than one write intent error;
-				// we need to cleanup the previous attempt to handle it to allow
-				// any other pusher queued up behind this RPC to proceed.
-				if cleanupAfterWriteIntentError != nil {
-					cleanupAfterWriteIntentError(t, nil)
-				}
-				if cleanupAfterWriteIntentError, pErr =
-					s.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
-					// Do not propagate ambiguous results; assume success and retry original op.
-					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
-						// Preserve the error index.
-						pErr.Index = index
-						return nil, pErr
-					}
-					pErr = nil
-				}
-				// We've resolved the write intent; retry command.
-			}
-
-		case *roachpb.MergeInProgressError:
-			// A merge was in progress. We need to retry the command after the merge
-			// completes, as signaled by the closing of the replica's mergeComplete
-			// channel. Note that the merge may have already completed, in which case
-			// its mergeComplete channel will be nil.
-			mergeCompleteCh := repl.getMergeCompleteCh()
-			if mergeCompleteCh != nil {
-				select {
-				case <-mergeCompleteCh:
-					// Merge complete. Retry the command.
-				case <-ctx.Done():
-					return nil, roachpb.NewError(errors.Wrap(ctx.Err(), "aborted during merge"))
-				case <-s.stopper.ShouldQuiesce():
-					return nil, roachpb.NewError(&roachpb.NodeUnavailableError{})
-				}
-			}
-			pErr = nil
-		}
-
-		if pErr != nil {
-			return nil, pErr
-		}
+	case *roachpb.RaftGroupDeletedError:
+		// This error needs to be converted appropriately so that clients
+		// will retry.
+		err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+		pErr = roachpb.NewError(err)
 	}
+	return nil, pErr
 }
 
 // maybeWaitForPushee potentially diverts the incoming request to
 // the txnwait.Queue, where it will wait for updates to the target
 // transaction.
-func (s *Store) maybeWaitForPushee(
-	ctx context.Context, ba *roachpb.BatchRequest, repl *Replica,
+// TODO(nvanbenschoten): Move this method.
+func (r *Replica) maybeWaitForPushee(
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If this is a push txn request, check the push queue first, which
 	// may cause this request to wait and either return a successful push
 	// txn response or else allow this request to proceed.
 	if ba.IsSinglePushTxnRequest() {
+		if r.store.cfg.TestingKnobs.DontRetryPushTxnFailures {
+			return nil, nil
+		}
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		pushResp, pErr := repl.txnWaitQueue.MaybeWaitForPush(repl.AnnotateCtx(ctx), repl, pushReq)
+		pushResp, pErr := r.txnWaitQueue.MaybeWaitForPush(ctx, r, pushReq)
 		// Copy the request in anticipation of setting the force arg and
 		// updating the Now timestamp (see below).
 		pushReqCopy := *pushReq
@@ -386,7 +263,7 @@ func (s *Store) maybeWaitForPushee(
 		// request may have been waiting to push the txn. If we don't
 		// move the timestamp forward to the current time, we may fail
 		// to push a txn which has expired.
-		now := s.Clock().Now()
+		now := r.Clock().Now()
 		ba.Timestamp.Forward(now)
 		ba.Requests = nil
 		ba.Add(&pushReqCopy)
@@ -394,7 +271,7 @@ func (s *Store) maybeWaitForPushee(
 		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.
 		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
-		pErr := repl.txnWaitQueue.MaybeWaitForQuery(repl.AnnotateCtx(ctx), repl, queryReq)
+		pErr := r.txnWaitQueue.MaybeWaitForQuery(ctx, r, queryReq)
 		if pErr != nil {
 			return nil, pErr
 		}

@@ -65,48 +65,11 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
-	lease roachpb.Lease,
+	lease *roachpb.Lease,
 	ba *roachpb.BatchRequest,
 	spans *spanset.SpanSet,
 	ec endCmds,
 ) (_ chan proposalResult, _ func(), _ int64, pErr *roachpb.Error) {
-	// Guarantee we release the latches that we acquired if we never make
-	// it to passing responsibility to a proposal. This is wrapped to
-	// delay pErr evaluation to its value when returning.
-	defer func() {
-		// No-op if we move ec into proposal.ec.
-		ec.done(ba, nil /* br */, pErr)
-	}()
-
-	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
-	r.mu.RLock()
-	if !r.mu.destroyStatus.IsAlive() {
-		err := r.mu.destroyStatus.err
-		r.mu.RUnlock()
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-	r.mu.RUnlock()
-
-	rSpan, err := keys.Range(ba.Requests)
-	if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-
-	// Checking the context just before proposing can help avoid ambiguous errors.
-	if err := ctx.Err(); err != nil {
-		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
-		log.Warning(ctx, errStr)
-		return nil, nil, 0, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
-	}
-
-	// Only need to check that the request is in bounds at proposal time, not at
-	// application time, because the spanlatch manager will synchronize all
-	// requests (notably EndTransaction with SplitTrigger) that may cause this
-	// condition to change.
-	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, spans)
 	log.Event(proposal.ctx, "evaluated request")
@@ -195,6 +158,7 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
 		return nil, nil, 0, roachpb.NewError(err)

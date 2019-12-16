@@ -134,13 +134,13 @@ func (r *Replica) RangeFeed(
 	}
 	ctx := r.AnnotateCtx(stream.Context())
 
-	var rspan roachpb.RSpan
+	var rSpan roachpb.RSpan
 	var err error
-	rspan.Key, err = keys.Addr(args.Span.Key)
+	rSpan.Key, err = keys.Addr(args.Span.Key)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	rspan.EndKey, err = keys.Addr(args.Span.EndKey)
+	rSpan.EndKey, err = keys.Addr(args.Span.EndKey)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -192,17 +192,9 @@ func (r *Replica) RangeFeed(
 	// critical-section as the registration is established. This ensures that
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
-	if err := r.requestCanProceed(rspan, checkTS); err != nil {
+	if err := r.checkExecutionCanProceedForRangeFeed(rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		return roachpb.NewError(err)
-	}
-
-	// Ensure that the range does not require an expiration-based lease. If it
-	// does, it will never get closed timestamp updates and the rangefeed will
-	// never be able to advance its resolved timestamp.
-	if r.requiresExpiringLease() {
-		r.raftMu.Unlock()
-		return roachpb.NewErrorf("expiration-based leases are incompatible with rangefeeds")
 	}
 
 	// Register the stream with a catch-up iterator.
@@ -227,7 +219,7 @@ func (r *Replica) RangeFeed(
 		iterSemRelease = nil
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rspan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, errC,
 	)
 	r.raftMu.Unlock()
 

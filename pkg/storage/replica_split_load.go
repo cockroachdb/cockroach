@@ -10,7 +10,14 @@
 
 package storage
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
@@ -37,4 +44,20 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
+}
+
+// recordBatchForLoadBasedSplitting records the batch's spans to be considered
+// for load based splitting.
+func (r *Replica) recordBatchForLoadBasedSplitting(
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+) {
+	if !r.SplitByLoadEnabled() {
+		return
+	}
+	shouldInitSplit := r.loadBasedSplitter.Record(timeutil.Now(), len(ba.Requests), func() roachpb.Span {
+		return spans.BoundarySpan(spanset.SpanGlobal)
+	})
+	if shouldInitSplit {
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+	}
 }

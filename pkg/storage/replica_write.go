@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -60,47 +61,20 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, lg *spanlatch.Guard,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
-	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// NB: must be performed before collecting request spans.
-	ba, err := maybeStripInFlightWrites(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	spans, err := r.collectSpans(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	var ec endCmds
-	if !ba.IsLeaseRequest() {
-		// Acquire latches to prevent overlapping commands from executing until
-		// this command completes. Note that this must be done before getting
-		// the max timestamp for the key(s), as timestamp cache is only updated
-		// after preceding commands have been run to successful completion.
-		log.Event(ctx, "acquire latches")
-		var err error
-		ec, err = r.beginCmds(ctx, ba, spans)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-	}
-
-	// Guarantee we release the latches that we just acquired if we never make
-	// it to passing responsibility to evalAndPropose. This is wrapped to delay
+	// Guarantee we release the provided latches if we never make it to
+	// passing responsibility to evalAndPropose. This is wrapped to delay
 	// pErr evaluation to its value when returning.
+	ec := endCmds{repl: r, lg: lg}
 	defer func() {
 		// No-op if we move ec into evalAndPropose.
 		ec.done(ba, br, pErr)
 	}()
 
+	// Determine the lease under which to evaluate the write.
 	var lease roachpb.Lease
 	var status storagepb.LeaseStatus
 	// For lease commands, use the provided previous lease for verification.
@@ -115,6 +89,15 @@ func (r *Replica) executeWriteBatch(
 		lease = status.Lease
 	}
 	r.limitTxnMaxTimestamp(ctx, ba, status)
+
+	// Verify that the batch can be executed.
+	// NB: we only need to check that the request is in the Range's key bounds
+	// at proposal time, not at application time, because the spanlatch manager
+	// will synchronize all requests (notably EndTransaction with SplitTrigger)
+	// that may cause this condition to change.
+	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
@@ -141,12 +124,17 @@ func (r *Replica) executeWriteBatch(
 			}
 		}()
 	}
-
 	log.Event(ctx, "applied timestamp cache")
+
+	// Checking the context just before proposing can help avoid ambiguous errors.
+	if err := ctx.Err(); err != nil {
+		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
+		return nil, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
+	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is the
 	// responsibility of Raft, so move the endCmds into evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, spans, ec.move())
+	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, &lease, ba, spans, ec.move())
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
