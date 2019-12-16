@@ -49,10 +49,8 @@ func TestTimestampNext(t *testing.T) {
 		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
 		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
 	}
-	for i, c := range testCases {
-		if next := c.ts.Next(); next != c.expNext {
-			t.Errorf("%d: expected %s; got %s", i, c.expNext, next)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expNext, c.ts.Next())
 	}
 }
 
@@ -64,10 +62,8 @@ func TestTimestampPrev(t *testing.T) {
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
 	}
-	for i, c := range testCases {
-		if prev := c.ts.Prev(); prev != c.expPrev {
-			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expPrev, c.ts.Prev())
 	}
 }
 
@@ -80,10 +76,8 @@ func TestTimestampFloorPrev(t *testing.T) {
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, 0)},
 	}
-	for i, c := range testCases {
-		if prev := c.ts.FloorPrev(); prev != c.expPrev {
-			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
 	}
 }
 
@@ -96,10 +90,8 @@ func TestAsOfSystemTime(t *testing.T) {
 		{makeTS(145, 123), "145.0000000123"},
 		{makeTS(145, 1123456789), "145.1123456789"},
 	}
-	for i, c := range testCases {
-		if exp := c.ts.AsOfSystemTime(); exp != c.exp {
-			t.Errorf("%d: expected %s; got %s", i, c.exp, exp)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.exp, c.ts.AsOfSystemTime())
 	}
 }
 
