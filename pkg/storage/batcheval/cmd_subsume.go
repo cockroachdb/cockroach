@@ -28,19 +28,18 @@ func init() {
 }
 
 func declareKeysSubsume(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	_ *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
 	// that it conflicts with any other command because every command must declare
 	// at least one addressable key. It does not, in fact, write any keys.
 	//
-	// TODO(nvanbenschoten): Remove this nil check when SubsumeRequest.RightDesc
-	// has completed its migration.
+	// We use the key bounds from the range descriptor in the request instead
+	// of the current range descriptor. Either would be fine because we verify
+	// that these match during the evaluation of the Subsume request.
 	args := req.(*roachpb.SubsumeRequest)
-	if args.RightDesc != nil {
-		desc = args.RightDesc
-	}
+	desc := args.RightDesc
 	spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
@@ -93,14 +92,10 @@ func Subsume(
 	// Verify that the Subsume request was sent to the correct range and that
 	// the range's bounds have not changed during the merge transaction.
 	desc := cArgs.EvalCtx.Desc()
-	// TODO(nvanbenschoten): Remove this nil check when SubsumeRequest.RightDesc
-	// has completed its migration.
-	if args.RightDesc != nil {
-		if !bytes.Equal(desc.StartKey, args.RightDesc.StartKey) ||
-			!bytes.Equal(desc.EndKey, args.RightDesc.EndKey) {
-			return result.Result{}, errors.Errorf("RHS range bounds do not match: %s != %s",
-				args.RightDesc, desc)
-		}
+	if !bytes.Equal(desc.StartKey, args.RightDesc.StartKey) ||
+		!bytes.Equal(desc.EndKey, args.RightDesc.EndKey) {
+		return result.Result{}, errors.Errorf("RHS range bounds do not match: %s != %s",
+			args.RightDesc, desc)
 	}
 
 	// Sanity check that the requesting range is our left neighbor. The ordering
