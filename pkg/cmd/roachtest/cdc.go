@@ -636,6 +636,7 @@ func (k kafkaManager) basePath() string {
 }
 
 func (k kafkaManager) install(ctx context.Context) {
+	k.c.status("installing kafka")
 	folder := k.basePath()
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz -C `+folder)
