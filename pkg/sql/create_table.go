@@ -427,6 +427,19 @@ func ResolveFK(
 		originColumnIDs[i] = col.ID
 	}
 
+	// Verify we are not writing a constraint over the same name.
+	// This check is done in Verify(), but we must do it earlier
+	// or else we can hit other checks that break things with
+	// undesired error codes, e.g. #42858.
+	// It may be removable after #37255 is complete.
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, ok := constraintInfo[string(d.Name)]; ok {
+		return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", d.Name)
+	}
+
 	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return err
