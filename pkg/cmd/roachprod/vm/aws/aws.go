@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -264,7 +265,46 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			return p.runInstance(capName, placement, opts)
 		})
 	}
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	return p.waitForIPs(names, regions)
+}
+
+// waitForIPs waits until AWS reports both internal and external IP addresses
+// for all newly created VMs. If we did not wait for these IPs then attempts to
+// list the new VMs after the creation might find VMs without an external IP.
+// We do a bad job at higher layers detecting this lack of IP which can lead to
+// commands hanging indefinitely.
+func (p *Provider) waitForIPs(names []string, regions []string) error {
+	waitForIPRetry := retry.Start(retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     500 * time.Millisecond,
+		MaxRetries:     120, // wait a bit less than 90s for IPs
+	})
+	makeNameSet := func() map[string]struct{} {
+		m := make(map[string]struct{}, len(names))
+		for _, n := range names {
+			m[n] = struct{}{}
+		}
+		return m
+	}
+	for waitForIPRetry.Next() {
+		vms, err := p.listRegions(regions)
+		if err != nil {
+			return err
+		}
+		nameSet := makeNameSet()
+		for _, vm := range vms {
+			if vm.PublicIP != "" && vm.PrivateIP != "" {
+				delete(nameSet, vm.Name)
+			}
+		}
+		if len(nameSet) == 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("failed to retrieve IPs for all vms")
 }
 
 // Delete is part of vm.Provider.
@@ -397,7 +437,10 @@ func (p *Provider) List() (vm.List, error) {
 	if err != nil {
 		return nil, err
 	}
+	return p.listRegions(regions)
+}
 
+func (p *Provider) listRegions(regions []string) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
 	var g errgroup.Group
