@@ -1232,8 +1232,11 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	// Get the other tables whose foreign key backreferences need to be removed.
 	// We make a call to PublishMultiple to handle the situation to add Foreign Key backreferences.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
+	// Get the tables that reference this one, that depend on an index being rewritten.
+	var referencingFKsToRewrite map[sqlbase.ID]struct{}
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+		referencingFKsToRewrite = make(map[sqlbase.ID]struct{})
 
 		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
@@ -1253,16 +1256,48 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 					fksByBackrefTable[constraint.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[constraint.ForeignKey.ReferencedTableID], constraint)
 				}
 			}
+			// Collect tables whose foreign key references might have been affected by this
+			// primary key swap.
+			// TODO (rohany): This code can be deleted once foreign keys no longer need
+			//  to maintain the LegacyOriginIndex and LegacyReferencedIndex fields.
+			if constraint := mutation.GetPrimaryKeySwap(); constraint != nil {
+				rewrittenIndexes := map[sqlbase.IndexID]struct{}{}
+				rewrittenIndexes[constraint.OldPrimaryIndexId] = struct{}{}
+				for _, id := range constraint.OldIndexes {
+					rewrittenIndexes[id] = struct{}{}
+				}
+				for i := range desc.InboundFKs {
+					ref := &desc.InboundFKs[i]
+					// If we have a FK pointing into this table, then we have to modify that table's
+					// backreference to this table.
+					if _, ok := rewrittenIndexes[ref.LegacyReferencedIndex]; ok && ref.OriginTableID != desc.ID {
+						referencingFKsToRewrite[ref.OriginTableID] = struct{}{}
+					}
+				}
+				for i := range desc.OutboundFKs {
+					ref := &desc.OutboundFKs[i]
+					// If we point to another table using a rewritten index, we have to modify that
+					// table's backreference to this table.
+					if _, ok := rewrittenIndexes[ref.LegacyOriginIndex]; ok && ref.ReferencedTableID != desc.ID {
+						referencingFKsToRewrite[ref.ReferencedTableID] = struct{}{}
+					}
+				}
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
+	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1+len(referencingFKsToRewrite))
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
+	}
+	for id := range referencingFKsToRewrite {
+		if _, ok := fksByBackrefTable[id]; !ok {
+			tableIDsToUpdate = append(tableIDsToUpdate, id)
+		}
 	}
 
 	update := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
@@ -1313,33 +1348,82 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
 					fn()
 				}
+
+				// Update all foreign key relationships that might have been affected
+				// by the primary key swap mutation.
+				// TODO (rohany): This code can be deleted once foreign keys no longer need
+				//  to maintain the LegacyOriginIndex and LegacyReferencedIndex fields.
+				{
+					// Construct a mapping of old index ID to new index ID.
+					indexForwardMap := map[sqlbase.IndexID]sqlbase.IndexID{}
+					for j := range pkSwap.OldIndexes {
+						indexForwardMap[pkSwap.OldIndexes[j]] = pkSwap.NewIndexes[j]
+					}
+					indexForwardMap[pkSwap.OldPrimaryIndexId] = pkSwap.OldPrimaryIndexCopyId
+
+					// Need to update:
+					// 1. On scDesc, all outbound FK's which had an origin index rewritten
+					// 2. All descriptors with an inbound FK who's origin index was rewritten
+					// 3. On scDesc, all inbound FK's which had a referenced index rewritten
+					// 4. All descriptors with an outbound FK who's referenced index was rewritten
+					findFKInList := func(fks []sqlbase.ForeignKeyConstraint, name string) *sqlbase.ForeignKeyConstraint {
+						for j := range fks {
+							fk := &fks[j]
+							if fk.Name == name {
+								return fk
+							}
+						}
+						return nil
+					}
+					for j := range scDesc.OutboundFKs {
+						fk := &scDesc.OutboundFKs[j]
+						if newID, ok := indexForwardMap[fk.LegacyOriginIndex]; ok {
+							fk.LegacyOriginIndex = newID
+							referenced := descs[fk.ReferencedTableID]
+							referencedFK := findFKInList(referenced.InboundFKs, fk.Name)
+							referencedFK.LegacyOriginIndex = newID
+						}
+					}
+					for j := range scDesc.InboundFKs {
+						fk := &scDesc.InboundFKs[j]
+						if newID, ok := indexForwardMap[fk.LegacyReferencedIndex]; ok {
+							fk.LegacyReferencedIndex = newID
+							origin := descs[fk.OriginTableID]
+							originFK := findFKInList(origin.OutboundFKs, fk.Name)
+							originFK.LegacyReferencedIndex = newID
+						}
+					}
+				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
-				mutationID := scDesc.ClusterVersion.NextMutationID
-				span := scDesc.PrimaryIndexSpan()
-				var spanList []jobspb.ResumeSpanList
-				for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
-					spanList = append(spanList,
-						jobspb.ResumeSpanList{
-							ResumeSpans: roachpb.Spans{span},
-						},
-					)
+				{
+					mutationID := scDesc.ClusterVersion.NextMutationID
+					span := scDesc.PrimaryIndexSpan()
+					var spanList []jobspb.ResumeSpanList
+					for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
+						spanList = append(spanList,
+							jobspb.ResumeSpanList{
+								ResumeSpans: roachpb.Spans{span},
+							},
+						)
+					}
+					jobRecord := jobs.Record{
+						Description:   fmt.Sprintf("Cleanup job for '%s'", sc.job.Payload().Description),
+						Username:      sc.job.Payload().Username,
+						DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
+						Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
+						Progress:      jobspb.SchemaChangeProgress{},
+					}
+					job := sc.jobRegistry.NewJob(jobRecord)
+					if err := job.Created(ctx); err != nil {
+						return err
+					}
+					scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+						MutationID: mutationID,
+						JobID:      *job.ID(),
+					})
 				}
-				jobRecord := jobs.Record{
-					Description:   fmt.Sprintf("Cleanup job for '%s'", sc.job.Payload().Description),
-					Username:      sc.job.Payload().Username,
-					DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
-					Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-					Progress:      jobspb.SchemaChangeProgress{},
-				}
-				job := sc.jobRegistry.NewJob(jobRecord)
-				if err := job.Created(ctx); err != nil {
-					return err
-				}
-				scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
-					MutationID: mutationID,
-					JobID:      *job.ID(),
-				})
 			}
 			i++
 		}

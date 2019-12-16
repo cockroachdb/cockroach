@@ -386,18 +386,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return errors.New("unable to perform primary key change on tables with multiple column families")
 			}
 
-			// TODO (rohany,solongordon): Until it is clear how to handle foreign keys, disallow primary key changes
-			//  that are referenced by other tables through foreign key relationships.
-			if len(n.tableDesc.InboundFKs) > 0 || len(n.tableDesc.OutboundFKs) > 0 {
-				return errors.New(
-					"unable to perform primary key change on tables that are referenced by FK relationships")
-			}
-
 			// TODO (rohany): gate this behind a flag so it doesn't happen all the time.
 			// Create a new index that indexes everything the old primary index does, but doesn't store anything.
 			// TODO (rohany): is there an easier way of checking if the existing primary index was the
 			//  automatically created one?
-			if len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+			primaryKeyNeededForFK := false
+			for j := range n.tableDesc.InboundFKs {
+				if n.tableDesc.InboundFKs[j].LegacyReferencedIndex == n.tableDesc.PrimaryIndex.ID {
+					primaryKeyNeededForFK = true
+					break
+				}
+			}
+			for j := range n.tableDesc.OutboundFKs {
+				if n.tableDesc.OutboundFKs[j].LegacyOriginIndex == n.tableDesc.PrimaryIndex.ID {
+					primaryKeyNeededForFK = true
+					break
+				}
+			}
+			var oldPrimaryIndexCopyID sqlbase.IndexID
+			if (len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid") || primaryKeyNeededForFK {
 				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
 				name := "old_primary_key"
 				for try := 1; nameExists(name); try++ {
@@ -409,6 +416,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 					return err
 				}
+				oldPrimaryIndexCopyID = oldPrimaryIndexCopy.ID
 			}
 
 			// We have to rewrite all indexes that either:
@@ -460,9 +468,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			swapArgs := &sqlbase.PrimaryKeySwap{
-				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
-				NewIndexes:        newIndexIDs,
-				OldIndexes:        oldIndexIDs,
+				OldPrimaryIndexId:     n.tableDesc.PrimaryIndex.ID,
+				OldPrimaryIndexCopyId: oldPrimaryIndexCopyID,
+				NewPrimaryIndexId:     newPrimaryIndexDesc.ID,
+				NewIndexes:            newIndexIDs,
+				OldIndexes:            oldIndexIDs,
 			}
 			n.tableDesc.AddPrimaryKeySwapMutation(swapArgs)
 

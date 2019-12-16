@@ -2574,6 +2574,120 @@ INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3);
 	}
 }
 
+func TestPrimaryKeyChangeWithForeignKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Set up a table that references multiple tables, as well as is referenced by multiple tables to test
+	// all of the cases that the primary key swap has to address.
+	if _, err := sqlDB.Exec(`
+SET enable_primary_key_changes = true;
+CREATE DATABASE t;
+CREATE TABLE t.t1 (x INT PRIMARY KEY, y INT NOT NULL, z INT, w INT, INDEX (y), INDEX (z), UNIQUE INDEX (w));
+CREATE TABLE t.t2 (y INT, UNIQUE INDEX (y));
+CREATE TABLE t.t3 (z INT, UNIQUE INDEX (z));
+CREATE TABLE t.t4 (w INT, INDEX (w));
+CREATE TABLE t.t5 (x INT, INDEX (x));
+INSERT INTO t.t1 VALUES (1, 1, 1, 1);
+INSERT INTO t.t2 VALUES (1);
+INSERT INTO t.t3 VALUES (1);
+INSERT INTO t.t4 VALUES (1);
+INSERT INTO t.t5 VALUES (1);
+ALTER TABLE t.t1 ADD CONSTRAINT fk1 FOREIGN KEY (y) REFERENCES t.t2(y);
+ALTER TABLE t.t1 ADD CONSTRAINT fk2 FOREIGN KEY (z) REFERENCES t.t3(z);
+ALTER TABLE t.t4 ADD CONSTRAINT fk3 FOREIGN KEY (w) REFERENCES t.t1(w);
+ALTER TABLE t.t5 ADD CONSTRAINT fk4 FOREIGN KEY (x) REFERENCES t.t1(x);
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+ALTER TABLE t.t1 ALTER PRIMARY KEY USING COLUMNS (y)
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Use our own accessor function because the default getIndexByID function looks in the mutations list.
+	indexByIDExists := func(desc *sqlbase.TableDescriptor, id sqlbase.IndexID) error {
+		if desc.PrimaryIndex.ID == id {
+			return nil
+		}
+		for i := range desc.Indexes {
+			if desc.Indexes[i].ID == id {
+				return nil
+			}
+		}
+		return errors.Errorf("expected to find index with ID %d", id)
+	}
+	// Use our own accessor because the default one only looks at OutboundFK's.
+	findFKInList := func(fks []sqlbase.ForeignKeyConstraint, name string) *sqlbase.ForeignKeyConstraint {
+		for j := range fks {
+			fk := &fks[j]
+			if fk.Name == name {
+				return fk
+			}
+		}
+		return nil
+	}
+	// Verify that all of the index ID's in the foreign key constraints point to existing indexes.
+	for _, tbl := range []string{"t1", "t2", "t3", "t4", "t5"} {
+		desc := sqlbase.GetTableDescriptor(kvDB, "t", tbl)
+		for i := range desc.InboundFKs {
+			ref := &desc.InboundFKs[i]
+			if err := indexByIDExists(desc, ref.LegacyReferencedIndex); err != nil {
+				t.Errorf("error at table %s: %+v", tbl, err)
+			}
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				originTbl, err := sqlbase.GetTableDescFromID(ctx, txn, ref.OriginTableID)
+				if err != nil {
+					return err
+				}
+				originRef := findFKInList(originTbl.OutboundFKs, ref.Name)
+				err = indexByIDExists(originTbl, originRef.LegacyOriginIndex)
+				if err != nil {
+					return errors.Errorf("error at table %s: %+v", originTbl.Name, err)
+				}
+				return nil
+			}); err != nil {
+				t.Error(err)
+				t.Errorf("error at table %s: %+v", tbl, err)
+			}
+		}
+		for i := range desc.OutboundFKs {
+			ref := &desc.OutboundFKs[i]
+			if err := indexByIDExists(desc, ref.LegacyOriginIndex); err != nil {
+				t.Errorf("error at table %s: %+v", tbl, err)
+			}
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				referencedTbl, err := sqlbase.GetTableDescFromID(ctx, txn, ref.ReferencedTableID)
+				if err != nil {
+					return err
+				}
+				referencedRef := findFKInList(referencedTbl.InboundFKs, ref.Name)
+				err = indexByIDExists(referencedTbl, referencedRef.LegacyReferencedIndex)
+				if err != nil {
+					return errors.Errorf("error at table %s: %+v", referencedTbl.Name, err)
+				}
+				return nil
+			}); err != nil {
+				t.Errorf("error at table %s: %+v", tbl, err)
+			}
+		}
+	}
+	// Ensure that we can insert into all the tables and the FK constraints are checked.
+	if _, err := sqlDB.Exec(`
+INSERT INTO t.t2 VALUES (5);
+INSERT INTO t.t3 VALUES (6);
+INSERT INTO t.t1 VALUES (7, 5, 6, 8);
+INSERT INTO t.t4 VALUES (8);
+INSERT INTO t.t5 VALUES (7);
+`); err != nil {
+		t.Error(err)
+	}
+}
+
 // Test CRUD operations can read NULL values for NOT NULL columns
 // in the middle of a column backfill.
 func TestCRUDWhileColumnBackfill(t *testing.T) {

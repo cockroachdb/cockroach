@@ -433,6 +433,14 @@ message PrimaryKeySwap {
   option (gogoproto.equal) = true;
   // new_primary_index_id is the ID of the new primary index for the table.
   optional uint32 new_primary_index_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // old_primary_index_id is the ID of the old primary index for the table.
+  optional uint32 old_primary_index_id = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // old_primary_index_copy_id is the ID of the copy of the old primary index that was rewritten
+  // as part of the primary key change process. If a copy of the old primary was decided to not
+  // be needed, then this field contains the zero value.
+  // TODO (rohany): This field can be removed once the LegacyOriginIndex and LegacyReferencedIndex
+  //  fields on the ForeignKeyConstraint are removed.
+  optional uint32 old_primary_index_copy_id = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
   // swapped out with the i'th index in new_indexes.
   repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
