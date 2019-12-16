@@ -2782,18 +2782,15 @@ func mvccResolveWriteIntent(
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
 	// and create new with proper timestamp-encoded key) if timestamp changed.
 	//
-	// We also use the commit path when the intent is being collapsed,
-	// to ensure the intent meta gets deleted and the stats updated.
-	if commit || pushed || (rolledBackVal != nil) {
+	// If the intent has disappeared in mvccMaybeRewriteIntentHistory, we skip
+	// this block and fall down to the intent/value deletion code path.
+	if (commit || pushed || rolledBackVal != nil) && !collapsedIntent {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
-		// Note that commit takes precedence over {updated, collapsed}Intent; as in,
-		// if we're committing, we don't care whether mvccMaybeRewriteIntentHistory
-		// updated the intent or collapsed it.
 		if pushed || (rolledBackVal != nil && !commit) {
 			// Keep existing intent if we're updating it. We keep the
 			// existing metadata instead of using the supplied intent meta
@@ -2810,11 +2807,9 @@ func mvccResolveWriteIntent(
 		}
 
 		// If we're moving the intent's timestamp, adjust stats and
-		// rewrite it.  However this work needs not be done if the intent
-		// was collapsed (mvccMaybeRewriteIntentHistory already rewrote
-		// the key at the correct timestamp and adjusted the stats).
+		// rewrite it.
 		var prevValSize int64
-		if buf.newMeta.Timestamp != meta.Timestamp && !collapsedIntent {
+		if buf.newMeta.Timestamp != meta.Timestamp {
 			oldKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
 
@@ -2947,7 +2942,7 @@ func mvccResolveWriteIntent(
 // The cleared return value, when true, indicates that
 // all the writes in the intent are ignored and the intent should
 // not be considered to exist any more.
-// The updated return value, when true, indicates that the intent was updated
+// The updatedVal, when non-nil, indicates that the intent was updated
 // and should be overwritten in engine.
 func mvccMaybeRewriteIntentHistory(
 	ctx context.Context,
@@ -2974,11 +2969,7 @@ func mvccMaybeRewriteIntentHistory(
 	// If i < 0, we don't have an intent any more: everything
 	// has been rolled back.
 	if i < 0 {
-		err := engine.Clear(latestKey)
-		// For stats recomputation in the caller, flatten the
-		// value size so there's nothing left attributed to this intent.
-		meta.ValBytes = 0
-		return true, nil, err
+		return true, nil, nil
 	}
 
 	// Otherwise, we place back the write at that history entry
