@@ -540,13 +540,13 @@ func TestRegistrationString(t *testing.T) {
 			r: registration{
 				span: roachpb.Span{Key: roachpb.Key("a")},
 			},
-			exp: `[a @ 0.000000000,0+]`,
+			exp: `[a @ 0,0+]`,
 		},
 		{
 			r: registration{span: roachpb.Span{
 				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
-			exp: `[{a-c} @ 0.000000000,0+]`,
+			exp: `[{a-c} @ 0,0+]`,
 		},
 		{
 			r: registration{

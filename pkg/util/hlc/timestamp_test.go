@@ -13,6 +13,8 @@ package hlc
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func makeTS(walltime int64, logical int32) Timestamp {
@@ -98,5 +100,25 @@ func TestAsOfSystemTime(t *testing.T) {
 		if exp := c.ts.AsOfSystemTime(); exp != c.exp {
 			t.Errorf("%d: expected %s; got %s", i, c.exp, exp)
 		}
+	}
+}
+
+func TestTimestampString(t *testing.T) {
+	testCases := []struct {
+		ts  Timestamp
+		exp string
+	}{
+		{makeTS(0, 0), "0,0"},
+		{makeTS(1, 0), "0.000000001,0"},
+		{makeTS(-1, 0), "-0.000000001,0"},
+		{makeTS(123, 0), "0.000000123,0"},
+		{makeTS(-123, 0), "-0.000000123,0"},
+		{makeTS(1234567890, 0), "1.234567890,0"},
+		{makeTS(-1234567890, 0), "-1.234567890,0"},
+		{makeTS(6661234567890, 0), "6661.234567890,0"},
+		{makeTS(-6661234567890, 0), "-6661.234567890,0"},
+	}
+	for _, c := range testCases {
+		assert.Equal(t, c.exp, c.ts.String())
 	}
 }

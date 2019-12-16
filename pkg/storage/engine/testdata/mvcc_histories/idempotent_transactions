@@ -7,8 +7,8 @@ with t=a k=a
   put v=first
 ----
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=10
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=10
 data: "a"/0.000000011,0 -> /BYTES/first
 
 # Lay down an intent without increasing the sequence but with a different value.
@@ -18,7 +18,7 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=10
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=10
 data: "a"/0.000000011,0 -> /BYTES/first
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
 
@@ -34,10 +34,10 @@ with t=a k=a
   txn_step
   check_intent
 ----
-meta: "a" -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 nih=1
+meta: "a" -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 nih=1
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 
 run error
@@ -47,8 +47,8 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=-1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=-1} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
 error: (*withstack.withStack:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
 
@@ -67,10 +67,10 @@ inc: current value = 1
 inc: current value = 1
 inc: current value = 1
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
-meta: "i"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=2} ts=0.000000011,0 del=false klen=12 vlen=6
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} ts=0.000000011,0 del=false klen=12 vlen=6
 data: "i"/0.000000011,0 -> /INT/1
 
 run ok
@@ -89,8 +89,8 @@ inc: current value = 1
 inc: current value = 1
 inc: current value = 1
 >> at end:
-txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
+txn: "a" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=2} rw=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=1} ts=0.000000011,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}}
 data: "a"/0.000000011,0 -> /BYTES/second
-meta: "i"/0.000000000,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0.000000000,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
+meta: "i"/0,0 -> txn={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=3} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{2 /INT/1}}
 data: "i"/0.000000011,0 -> /INT/2
