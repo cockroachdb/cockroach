@@ -13325,7 +13325,6 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::RangeDescriptor* mutable_left_desc();
   void set_allocated_left_desc(::cockroach::roachpb::RangeDescriptor* left_desc);
 
-  // .cockroach.roachpb.RangeDescriptor right_desc = 3;
   bool has_right_desc() const;
   void clear_right_desc();
   static const int kRightDescFieldNumber = 3;
@@ -28057,7 +28056,6 @@ inline void SubsumeRequest::set_allocated_left_desc(::cockroach::roachpb::RangeD
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SubsumeRequest.left_desc)
 }
 
-// .cockroach.roachpb.RangeDescriptor right_desc = 3;
 inline bool SubsumeRequest::has_right_desc() const {
   return this != internal_default_instance() && right_desc_ != NULL;
 }
