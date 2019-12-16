@@ -1,0 +1,8 @@
+# LogicTest: local-mixed-19.2-20.1
+
+statement error pq: index "fk1_auto_index_fk1" is in use as a foreign key constraint
+CREATE TABLE fk1 (x INT);
+CREATE TABLE fk2 (x INT PRIMARY KEY);
+ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+CREATE INDEX i ON fk1 (x);
+DROP INDEX fk1_auto_index_fk1

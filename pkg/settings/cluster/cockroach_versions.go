@@ -53,6 +53,7 @@ const (
 	VersionProtectedTimestamps
 	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
+	VersionNoExplicitForeignKeyIndexIDs
 
 	// Add new versions here (step one of two).
 )
@@ -367,6 +368,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 8},
+	},
+	{
+		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
+		//
+		// It represents the migration away from using explicit index IDs in foreign
+		// key constraints, and instead allows all places that need these IDs to select
+		// an appropriate index to uphold the foreign key relationship.
+		Key:     VersionNoExplicitForeignKeyIndexIDs,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
