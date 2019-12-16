@@ -331,9 +331,42 @@ func initArrayToArrayConcatenation() {
 	}
 }
 
+// initNonArrayToNonArrayConcatenation initializes string + nonarrayelement
+// and nonarrayelement + string concatenation.
+func initNonArrayToNonArrayConcatenation() {
+	addConcat := func(leftType, rightType *types.T) {
+		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+			LeftType:     leftType,
+			RightType:    rightType,
+			ReturnType:   types.String,
+			NullableArgs: false,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				if _, ok := left.(*DString); ok {
+					return NewDString(string(MustBeDString(left)) + right.String()), nil
+				}
+				if _, ok := right.(*DString); ok {
+					return NewDString(left.String() + string(MustBeDString(right))), nil
+				}
+				return nil, errors.New("neither LHS or RHS matched DString")
+			},
+		})
+	}
+
+	// We allow tuple + string concatenation, as well as any scalar types.
+	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
+		// Do not re-add String+String or String+Bytes, as they already exist
+		// and have predefined correct behavior.
+		if t != types.String && t != types.Bytes {
+			addConcat(t, types.String)
+			addConcat(types.String, t)
+		}
+	}
+}
+
 func init() {
 	initArrayElementConcatenation()
 	initArrayToArrayConcatenation()
+	initNonArrayToNonArrayConcatenation()
 }
 
 func init() {
@@ -1402,6 +1435,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
+	// NOTE: additional ops for Concat are added at init time in the init() function.
 	Concat: {
 		&BinOp{
 			LeftType:   types.String,
