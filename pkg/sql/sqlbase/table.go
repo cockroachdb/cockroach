@@ -416,6 +416,18 @@ func (desc *TableDescriptor) collectConstraintInfo(
 	return info, nil
 }
 
+// IsValidOriginIndex returns whether the index can serve as an origin index for a foreign
+// key constraint with the provided set of originColIDs.
+func (idx *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
+	return ColumnIDs(idx.ColumnIDs).HasPrefix(originColIDs)
+}
+
+// IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
+// key constraint with the provided set of referencedColumnIDs.
+func (idx *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
+	return idx.Unique && ColumnIDs(idx.ColumnIDs).Equals(referencedColIDs)
+}
+
 // FindFKReferencedIndex finds the first index in the supplied referencedTable
 // that can satisfy a foreign key of the supplied column ids.
 func FindFKReferencedIndex(
@@ -423,13 +435,14 @@ func FindFKReferencedIndex(
 ) (*IndexDescriptor, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
-	if ColumnIDs(referencedTable.PrimaryIndex.ColumnIDs).Equals(referencedColIDs) {
+	if referencedTable.PrimaryIndex.IsValidReferencedIndex(referencedColIDs) {
 		return &referencedTable.PrimaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
-	for _, idx := range referencedTable.Indexes {
-		if idx.Unique && ColumnIDs(idx.ColumnIDs).Equals(referencedColIDs) {
-			return &idx, nil
+	for i := range referencedTable.Indexes {
+		idx := &referencedTable.Indexes[i]
+		if idx.IsValidReferencedIndex(referencedColIDs) {
+			return idx, nil
 		}
 	}
 	return nil, pgerror.Newf(
@@ -446,13 +459,14 @@ func FindFKOriginIndex(
 ) (*IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
-	if ColumnIDs(originTable.PrimaryIndex.ColumnIDs).HasPrefix(originColIDs) {
+	if originTable.PrimaryIndex.IsValidOriginIndex(originColIDs) {
 		return &originTable.PrimaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	for _, idx := range originTable.Indexes {
-		if ColumnIDs(idx.ColumnIDs).HasPrefix(originColIDs) {
-			return &idx, nil
+	for i := range originTable.Indexes {
+		idx := &originTable.Indexes[i]
+		if idx.IsValidOriginIndex(originColIDs) {
+			return idx, nil
 		}
 	}
 	return nil, pgerror.Newf(

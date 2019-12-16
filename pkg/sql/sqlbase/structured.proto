@@ -93,13 +93,17 @@ message ForeignKeyConstraint {
   // fields on the index that they use. In versions 19.2 and later, we preserve
   // the semantics of the older FKs which were tied to indexes by specifying
   // the index as a field on this proto, since the migration process to have
-  // top-level FK fields on the table descriptor requires two releases. In 20.1,
-  // when all 19.2 nodes will be correctly handling the new FK representation,
-  // we will perform a migration to upgrade all table descriptors.
-  optional uint32 legacy_origin_index = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  // top-level FK fields on the table descriptor requires two releases.
+  // In 20.1, these fields are no longer read, but must continue to be written
+  // to maintain compatibility in mixed 19.2/20.1 clusters. In 20.2 these fields
+  // can _finally_ be removed.
+  // * When using the foreign key constraint, do not read from these fields! *
+  optional uint32 legacy_origin_index = 10
+    [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
   // LegacyReferencedIndex is the ID of the index used for the FK on the
   // referenced side. See the comment for LegacyOriginIndex.
-  optional uint32 legacy_referenced_index = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional uint32 legacy_referenced_index = 11
+    [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID", deprecated = true];
   // These fields were used for the 19.1 -> 19.2 foreign key migration.
   reserved 12, 13;
 }

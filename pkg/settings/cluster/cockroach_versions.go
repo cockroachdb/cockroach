@@ -55,6 +55,7 @@ const (
 	VersionAuthLocalAndTrustRejectMethods
 	VersionPrimaryKeyColumnsOutOfFamilyZero
 	VersionRootPassword
+	VersionNoExplicitForeignKeyIndexIDs
 
 	// Add new versions here (step one of two).
 )
@@ -387,6 +388,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// different nodes (which is poor UX).
 		Key:     VersionRootPassword,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 10},
+	},
+	{
+		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
+		//
+		// It represents the migration away from using explicit index IDs in foreign
+		// key constraints, and instead allows all places that need these IDs to select
+		// an appropriate index to uphold the foreign key relationship.
+		Key:     VersionNoExplicitForeignKeyIndexIDs,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
 	},
 
 	// Add new versions here (step two of two).

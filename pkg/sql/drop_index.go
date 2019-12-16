@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -165,14 +166,63 @@ func (p *planner) dropIndexByName(
 	// state consistent with the removal of the reference on the other table
 	// involved in the FK, in case of rollbacks (#38733).
 
+	// TODO (rohany): switching all the checks from checking the legacy ID's to
+	//  checking if the index has a prefix of the columns needed for the foreign
+	//  key might result in some false positives for this index while it is in
+	//  a mixed version cluster, but we have to remove all reads of the legacy
+	//  explicit index fields.
+
+	// Construct a list of all the remaining indexes, so that we can see if there
+	// is another index that could replace the one we are deleting for a given
+	// foreign key constraint.
+	remainingIndexes := make([]*sqlbase.IndexDescriptor, 0, len(tableDesc.Indexes)+1)
+	remainingIndexes = append(remainingIndexes, &tableDesc.PrimaryIndex)
+	for i := range tableDesc.Indexes {
+		index := &tableDesc.Indexes[i]
+		if index.ID != idx.ID {
+			remainingIndexes = append(remainingIndexes, index)
+		}
+	}
+
+	// indexHasReplacementCandidate runs isValidIndex on each index in remainingIndexes and returns
+	// true if at least one index satisfies isValidIndex.
+	indexHasReplacementCandidate := func(isValidIndex func(*sqlbase.IndexDescriptor) bool) bool {
+		foundReplacement := false
+		for _, index := range remainingIndexes {
+			if isValidIndex(index) {
+				foundReplacement = true
+				break
+			}
+		}
+		return foundReplacement
+	}
+	// If we aren't at the cluster version where we have removed explicit foreign key IDs
+	// from the foreign key descriptors, fall back to the existing drop index logic.
+	// That means we pretend that we can never find replacements for any indexes.
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNoExplicitForeignKeyIndexIDs) {
+		indexHasReplacementCandidate = func(func(*sqlbase.IndexDescriptor) bool) bool {
+			return false
+		}
+	}
+
 	// Check for foreign key mutations referencing this index.
 	for _, m := range tableDesc.Mutations {
 		if c := m.GetConstraint(); c != nil &&
 			c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
-			c.ForeignKey.LegacyOriginIndex == idx.ID {
+			// If the index being deleted could be used as a index for this outbound
+			// foreign key mutation, then make sure that we have another index that
+			// could be used for this mutation.
+			idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs) &&
+			!indexHasReplacementCandidate(func(idx *sqlbase.IndexDescriptor) bool {
+				return idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs)
+			}) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"referencing constraint %q in the middle of being added, try again later", c.ForeignKey.Name)
 		}
+	}
+
+	if err := p.MaybeUpgradeDependentOldForeignKeyVersionTables(ctx, tableDesc); err != nil {
+		return err
 	}
 
 	// Index for updating the FK slices in place when removing FKs.
@@ -181,13 +231,19 @@ func (p *planner) dropIndexByName(
 		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
 		sliceIdx++
 		fk := &tableDesc.OutboundFKs[i]
-		if fk.LegacyOriginIndex == idx.ID {
-			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
-				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-			}
-			sliceIdx--
-			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
-				return err
+		canReplace := func(idx *sqlbase.IndexDescriptor) bool {
+			return idx.IsValidOriginIndex(fk.OriginColumnIDs)
+		}
+		// The index being deleted could be used as the origin index for this foreign key.
+		if idx.IsValidOriginIndex(fk.OriginColumnIDs) {
+			if !indexHasReplacementCandidate(canReplace) {
+				if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+					return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+				}
+				sliceIdx--
+				if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -198,14 +254,22 @@ func (p *planner) dropIndexByName(
 		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
 		sliceIdx++
 		fk := &tableDesc.InboundFKs[i]
-		if fk.LegacyReferencedIndex == idx.ID {
-			err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior)
-			if err != nil {
-				return err
-			}
-			sliceIdx--
-			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
-				return err
+		canReplace := func(idx *sqlbase.IndexDescriptor) bool {
+			return idx.IsValidReferencedIndex(fk.ReferencedColumnIDs)
+		}
+		// The index being deleted could potentially be the referenced index for this fk.
+		if idx.IsValidReferencedIndex(fk.ReferencedColumnIDs) {
+			// If we haven't found a replacement candidate for this foreign key, then
+			// we need a cascade to delete this index.
+			if !indexHasReplacementCandidate(canReplace) {
+				// If we found haven't found a replacement, then we check that the drop behavior is cascade.
+				if err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior); err != nil {
+					return err
+				}
+				sliceIdx--
+				if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+					return err
+				}
 			}
 		}
 	}
