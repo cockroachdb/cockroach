@@ -307,6 +307,8 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return bool(*d), nil
 	case *tree.DString:
 		return string(*d), nil
+	case *tree.DName:
+		return string(*d), nil
 	case *tree.DBytes:
 		return string(*d), nil
 	case *tree.DDate, *tree.DTime:

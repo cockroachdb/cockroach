@@ -1079,6 +1079,8 @@ func AsDString(e Expr) (DString, bool) {
 	switch t := e.(type) {
 	case *DString:
 		return *t, true
+	case *DName:
+		return DString(*t), true
 	}
 	return "", false
 }
@@ -1104,7 +1106,6 @@ func (d *DString) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	fmt.Println("Hello", d, other)
 	var v string
 	unwrapped := UnwrapDatum(ctx, other)
 	switch t := unwrapped.(type) {
@@ -1187,7 +1188,6 @@ func (d *DName) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	fmt.Println("Helloo", d, other)
 	var v string
 	unwrapped := UnwrapDatum(ctx, other)
 	switch t := unwrapped.(type) {

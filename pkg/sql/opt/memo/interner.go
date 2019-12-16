@@ -349,6 +349,8 @@ func (h *hasher) HashDatum(val tree.Datum) {
 		h.HashFloat64(float64(*t))
 	case *tree.DString:
 		h.HashString(string(*t))
+	case *tree.DName:
+		h.HashString(string(*t))
 	case *tree.DBytes:
 		h.HashBytes([]byte(*t))
 	case *tree.DDate:
@@ -682,6 +684,10 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		}
 	case *tree.DString:
 		if rt, ok := r.(*tree.DString); ok {
+			return h.IsStringEqual(string(*lt), string(*rt))
+		}
+	case *tree.DName:
+		if rt, ok := r.(*tree.DName); ok {
 			return h.IsStringEqual(string(*lt), string(*rt))
 		}
 	case *tree.DBytes:

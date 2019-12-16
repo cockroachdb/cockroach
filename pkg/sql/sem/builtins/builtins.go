@@ -2937,6 +2937,8 @@ may increase either contention or retry errors, or both.`,
 				switch t := args[0].(type) {
 				case *tree.DString:
 					collation = "default"
+				case *tree.DName:
+					collation = "default"
 				case *tree.DCollatedString:
 					collation = t.Locale
 				default:
