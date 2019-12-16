@@ -99,9 +99,10 @@ type pebbleMVCCScanner struct {
 	// Max number of keys to return.
 	maxKeys int64
 	// Transaction epoch and sequence number.
-	txn         *roachpb.Transaction
-	txnEpoch    enginepb.TxnEpoch
-	txnSequence enginepb.TxnSeq
+	txn               *roachpb.Transaction
+	txnEpoch          enginepb.TxnEpoch
+	txnSequence       enginepb.TxnSeq
+	txnIgnoredSeqNums []enginepb.IgnoredSeqNumRange
 	// Metadata object for unmarshalling intents.
 	meta enginepb.MVCCMetadata
 	// Bools copied over from MVCC{Scan,Get}Options. See the comment on the
@@ -139,6 +140,7 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction) {
 		p.txn = txn
 		p.txnEpoch = txn.Epoch
 		p.txnSequence = txn.Sequence
+		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
 		p.checkUncertainty = p.ts.Less(txn.MaxTimestamp)
 	}
 }
@@ -215,10 +217,19 @@ func (p *pebbleMVCCScanner) getFromIntentHistory() bool {
 	upIdx := sort.Search(len(intentHistory), func(i int) bool {
 		return intentHistory[i].Sequence > p.txnSequence
 	})
+	// If the candidate intent has a sequence number that is ignored by this txn,
+	// iterate backward along the sorted intent history until we come across an
+	// intent which isn't ignored.
+	//
+	// TODO(itsbilal): Explore if this iteration can be improved through binary
+	// search.
+	for upIdx > 0 && enginepb.TxnSeqIsIgnored(p.meta.IntentHistory[upIdx-1].Sequence, p.txnIgnoredSeqNums) {
+		upIdx--
+	}
 	if upIdx == 0 {
 		// It is possible that no intent exists such that the sequence is less
-		// than the read sequence. In this case, we cannot read a value from the
-		// intent history.
+		// than the read sequence, and is not ignored by this transaction.
+		// In this case, we cannot read a value from the intent history.
 		return false
 	}
 	intent := p.meta.IntentHistory[upIdx-1]
@@ -350,7 +361,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	}
 
 	if p.txnEpoch == p.meta.Txn.Epoch {
-		if p.txnSequence >= p.meta.Txn.Sequence {
+		if p.txnSequence >= p.meta.Txn.Sequence && !enginepb.TxnSeqIsIgnored(p.meta.Txn.Sequence, p.txnIgnoredSeqNums) {
 			// 8. We're reading our own txn's intent at an equal or higher sequence.
 			// Note that we read at the intent timestamp, not at our read timestamp
 			// as the intent timestamp may have been pushed forward by another
