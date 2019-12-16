@@ -35,10 +35,6 @@ type aliasedTableRef struct {
 
 type tableRefs []*tableRef
 
-func (t tableRefs) Pop() (*tableRef, tableRefs) {
-	return t[0], t[1:]
-}
-
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
 	if s.db == nil {
