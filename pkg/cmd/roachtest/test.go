@@ -237,6 +237,9 @@ func (t *test) Skip(msg string, details string) {
 // Fatal marks the test as failed, prints the args to t.l, and calls
 // runtime.GoExit(). It can be called multiple times.
 //
+// If the only argument is an error, it is formatted by "%+v", so it will show
+// stack traces and such.
+//
 // ATTENTION: Since this calls runtime.GoExit(), it should only be called from a
 // test's closure. The test runner itself should never call this.
 func (t *test) Fatal(args ...interface{}) {
@@ -266,10 +269,24 @@ func FatalIfErr(t *test, err error) {
 }
 
 func (t *test) printAndFail(skip int, args ...interface{}) {
-	t.failWithMsg(t.decorate(skip+1, fmt.Sprint(args...)))
+	var msg string
+	if len(args) == 1 {
+		// If we were passed only an error, then format it with "%+v" in order to
+		// get any stack traces.
+		if err, ok := args[0].(error); ok {
+			msg = fmt.Sprintf("%+v", err)
+		}
+	}
+	if msg == "" {
+		msg = fmt.Sprint(args...)
+	}
+	t.failWithMsg(t.decorate(skip+1, msg))
 }
 
 func (t *test) printfAndFail(skip int, format string, args ...interface{}) {
+	if format == "" {
+		panic(fmt.Sprintf("invalid empty format. args: %s", args))
+	}
 	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
 }
 
