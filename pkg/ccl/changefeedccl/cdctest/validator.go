@@ -232,7 +232,11 @@ func (v *fingerprintValidator) NoteRow(
 }
 
 // applyRowUpdate applies the update represented by `row` to the scratch table.
-func (v *fingerprintValidator) applyRowUpdate(row validatorRow) error {
+func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
+	defer func() {
+		_err = errors.Wrap(_err, "fingerprintValidator failed")
+	}()
+
 	txn, err := v.sqlDB.Begin()
 	if err != nil {
 		return err
