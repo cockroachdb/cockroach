@@ -237,12 +237,7 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		_err = errors.Wrap(_err, "fingerprintValidator failed")
 	}()
 
-	txn, err := v.sqlDB.Begin()
-	if err != nil {
-		return err
-	}
 	var args []interface{}
-
 	var primaryKeyDatums []interface{}
 	if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
 		return err
@@ -298,28 +293,19 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 				fmt.Sprintf(`key %s did not match expected key %s for value %s`,
 					row.key, primaryKeyJSON, row.value))
 		}
-
-		if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
-			return err
-		}
 	} else {
 		// DELETE
 		fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
 		for i, datum := range primaryKeyDatums {
 			if len(args) != 0 {
-				stmtBuf.WriteString(`,`)
+				stmtBuf.WriteString(` AND `)
 			}
 			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
 			args = append(args, datum)
 		}
-		if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
-			return err
-		}
 	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
+	_, err := v.sqlDB.Exec(stmtBuf.String(), args...)
+	return err
 }
 
 // NoteResolved implements the Validator interface.
