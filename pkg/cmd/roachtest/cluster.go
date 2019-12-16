@@ -785,9 +785,12 @@ func (p clusterReusePolicyOption) apply(spec *clusterSpec) {
 //
 // A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name   string
-	tag    string
-	spec   clusterSpec
+	name string
+	tag  string
+	spec clusterSpec
+	// status is used to communicate the test's status. The callback is a noop
+	// until the cluster is passed to a test, at which point it's hooked up to
+	// test.Status().
 	status func(...interface{})
 	t      testI
 	// r is the registry tracking this cluster. Destroying the cluster will
