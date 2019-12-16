@@ -20,8 +20,8 @@ with t=A
   del   k=a
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000033,0 wto=false max=0.000000000,0
-meta: "a"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0.000000000,0 seq=0} ts=0.000000044,1 del=true klen=12 vlen=0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000033,0 wto=false max=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} ts=0.000000044,1 del=true klen=12 vlen=0
 data: "a"/0.000000044,1 -> /<empty>
 data: "a"/0.000000044,0 -> /BYTES/abc
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000033,0 too old; wrote at 0.000000044,1

@@ -21,10 +21,10 @@ merge k=a v=def ts=22
 merge k=a v=ghi ts=22
 ----
 >> merge k=a v=def ts=22
-meta: "a"/0.000000000,0 -> txn={<nil>} ts=0.000000000,0 del=false klen=0 vlen=0 raw=/BYTES/def
+meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/def
 data: "a"/0.000000011,0 -> /BYTES/abc
 >> merge k=a v=ghi ts=22
-meta: "a"/0.000000000,0 -> txn={<nil>} ts=0.000000000,0 del=false klen=0 vlen=0 raw=/BYTES/defghi
+meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/defghi
 data: "a"/0.000000011,0 -> /BYTES/abc
 
 # After a merge, only the data in the intent is every used.
@@ -34,6 +34,6 @@ with t=A
   txn_begin ts=33
   get k=a
 ----
-get: "a" -> /BYTES/defghi @0.000000000,0
+get: "a" -> /BYTES/defghi @0,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0.000000000,0 seq=0} rw=true stat=PENDING rts=0.000000033,0 wto=false max=0.000000000,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000033,0 min=0,0 seq=0} rw=true stat=PENDING rts=0.000000033,0 wto=false max=0,0

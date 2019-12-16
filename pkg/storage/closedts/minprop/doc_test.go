@@ -79,8 +79,8 @@ func Example() {
 	// Output:
 	// The newly initialized tracker has a zero closed timestamp:
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 0
 	//       |             1 e 1
@@ -88,10 +88,10 @@ func Example() {
 	// ---------------------------------------------------------> time
 	//
 	// A first command arrives on range 12 (though the range isn't known yet to the Tracker).
-	// All commands initially start out on the right. The command has its timestamp forwarded to 0.000000000,2 .
+	// All commands initially start out on the right. The command has its timestamp forwarded to 0,2 .
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 1
 	//       |             1 e 1
@@ -100,8 +100,8 @@ func Example() {
 	//
 	// Two more commands arrive, on r1 and r12.
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 3
 	//       |             1 e 1
@@ -110,8 +110,8 @@ func Example() {
 	//
 	// The command on r1 finishes evaluating at Lease Applied Index 10 and lets the Tracker know.
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 2
 	//       |             1 e 1
@@ -121,8 +121,8 @@ func Example() {
 	//
 	// The command on r12 also finishes quickly, at LAI 77.
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 1
 	//       |             1 e 1
@@ -132,11 +132,11 @@ func Example() {
 	// ---------------------------------------------------------> time
 	//
 	// The system closes out a timestamp (registering 1000 as the next timestamp to close out).
-	// No problem: nothing is tracked on the left side; returns: 0.000000000,1 and map[]
+	// No problem: nothing is tracked on the left side; returns: 0,1 and map[]
 	// Note how the items on the right have moved to the left, as they are relevant for the
 	// next call to Close.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
@@ -148,9 +148,9 @@ func Example() {
 	//
 	// Nothing happens for a while until the system tries to close out the next timestamp.
 	// However, the very first proposal is still tracked and blocks progress.
-	// The call returns a no-op in the form 0.000000000,1 map[] .
+	// The call returns a no-op in the form 0,1 map[] .
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
@@ -163,7 +163,7 @@ func Example() {
 	// A new command gets tracked on r12 (and is forwarded to 1.000000000,1 (if necessary).
 	// It terminates quickly, leaving an MLAI entry of 78 behind.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
@@ -178,7 +178,7 @@ func Example() {
 	// Note that the right now tracks a smaller value of 78. Consumers have to keep the
 	// maximum they've seen.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             0 # 0
