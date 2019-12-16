@@ -386,8 +386,8 @@ func ExampleTracker_Close_epochChange() {
 	// Output:
 	// The newly initialized tracker has a zero closed timestamp:
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 0
 	//       |             1 e 1
@@ -395,11 +395,11 @@ func ExampleTracker_Close_epochChange() {
 	// ---------------------------------------------------------> time
 	//
 	// A first command arrives on range 1 (though the range isn't known yet to the Tracker).
-	// All commands initially start out on the right. The command has its timestamp forwarded to 0.000000000,2 .
+	// All commands initially start out on the right. The command has its timestamp forwarded to 0,2 .
 	// The command finished quickly and is released in epoch 1.
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 0
 	//       |             1 e 1
@@ -409,8 +409,8 @@ func ExampleTracker_Close_epochChange() {
 	//
 	// Another proposal arrives on range 2 but does not complete before the next call to Close().
 	//
-	//   closed=0.000000000,0
-	//       |            next=0.000000000,1
+	//   closed=0,0
+	//       |            next=0,1
 	//       |          left | right
 	//       |             0 # 1
 	//       |             1 e 1
@@ -419,10 +419,10 @@ func ExampleTracker_Close_epochChange() {
 	// ---------------------------------------------------------> time
 	//
 	// The system closes out a timestamp expecting liveness epoch 2 (registering 1.000000000,0 as the next timestamp to close out).
-	// The Close() call fails due to the liveness epoch mismatch between the expected current epoch and the tracked data, returning 0.000000000,0 map[] false
+	// The Close() call fails due to the liveness epoch mismatch between the expected current epoch and the tracked data, returning 0,0 map[] false
 	// The Close() call evicts the tracked range 1 LAI.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
@@ -432,7 +432,7 @@ func ExampleTracker_Close_epochChange() {
 	//
 	// The proposal on range 2 is released in epoch 2.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             0 # 0
@@ -444,7 +444,7 @@ func ExampleTracker_Close_epochChange() {
 	// Another proposal arrives on range 1 and quickly finishes with LAI 2 but is still in epoch 1 and is not tracked.
 	// Meanwhile a proposal arrives on range 2 and quickly finishes with LAI 2 in epoch 2.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             0 # 0
@@ -457,7 +457,7 @@ func ExampleTracker_Close_epochChange() {
 	// A new proposal arrives on range 1 and quickly finishes with LAI 2 in epoch 3.
 	// This new epoch evicts the data on the right side corresponding to epoch 2.
 	//
-	//   closed=0.000000000,1
+	//   closed=0,1
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             0 # 0
