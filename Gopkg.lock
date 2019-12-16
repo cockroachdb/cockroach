@@ -472,7 +472,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:82e014177667982413bc45aefda0df2aaca5da4476f288a777223ce834786ddd"
+  digest = "1:b855ea620ec2d70523f9e9d759c4b6027172dcc175fc38ff7eb84df2108ec976"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -495,7 +495,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "382a403837cb2edfc5d60d4a4476e61c17ac435e"
+  revision = "6e7f8f25b680d399865811b668424c94334bd2ef"
 
 [[projects]]
   branch = "master"
