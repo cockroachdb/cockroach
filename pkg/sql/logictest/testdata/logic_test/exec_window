@@ -13,16 +13,6 @@ INSERT INTO t VALUES
 statement ok
 SET vectorize=experimental_always
 
-# Test that non-default window frames are not supported.
-statement error window functions with non-default window frames are not supported
-SELECT rank() OVER (ROWS UNBOUNDED PRECEDING) FROM t
-
-statement error window functions with non-default window frames are not supported
-SELECT rank() OVER (RANGE CURRENT ROW) FROM t
-
-statement error window functions with non-default window frames are not supported
-SELECT rank() OVER (ORDER BY a RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) FROM t
-
 # We sort the output on all queries to get deterministic results.
 query III
 SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY a, b

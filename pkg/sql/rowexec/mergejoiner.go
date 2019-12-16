@@ -29,7 +29,7 @@ import (
 //
 // It is guaranteed that the results preserve this ordering.
 type mergeJoiner struct {
-	execinfra.JoinerBase
+	joinerBase
 
 	cancelChecker *sqlbase.CancelChecker
 
@@ -45,6 +45,7 @@ type mergeJoiner struct {
 
 var _ execinfra.Processor = &mergeJoiner{}
 var _ execinfra.RowSource = &mergeJoiner{}
+var _ execinfra.OpNode = &mergeJoiner{}
 
 const mergeJoinerProcName = "merge joiner"
 
@@ -73,12 +74,12 @@ func newMergeJoiner(
 	}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
-		m.leftSource = execinfra.NewInputStatCollector(m.leftSource)
-		m.rightSource = execinfra.NewInputStatCollector(m.rightSource)
+		m.leftSource = newInputStatCollector(m.leftSource)
+		m.rightSource = newInputStatCollector(m.rightSource)
 		m.FinishTrace = m.outputStatsToTrace
 	}
 
-	if err := m.JoinerBase.Init(
+	if err := m.joinerBase.init(
 		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		execinfra.ProcStateOpts{
@@ -153,19 +154,19 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 				// We have unprocessed rows from the right-side batch.
 				ridx := m.rightIdx
 				m.rightIdx++
-				renderedRow, err := m.Render(lrow, m.rightRows[ridx])
+				renderedRow, err := m.render(lrow, m.rightRows[ridx])
 				if err != nil {
 					return nil, &execinfrapb.ProducerMetadata{Err: err}
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
-					if m.JoinType == sqlbase.LeftAntiJoin || m.JoinType == sqlbase.ExceptAllJoin {
+					if m.joinType == sqlbase.LeftAntiJoin || m.joinType == sqlbase.ExceptAllJoin {
 						break
 					}
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
-					if m.JoinType == sqlbase.LeftSemiJoin || m.JoinType == sqlbase.IntersectAllJoin {
+					if m.joinType == sqlbase.LeftSemiJoin || m.joinType == sqlbase.IntersectAllJoin {
 						// Semi-joins and INTERSECT ALL only need to know if there is at
 						// least one match, so can skip the rest of the right rows.
 						m.rightIdx = len(m.rightRows)
@@ -188,15 +189,15 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 			// For INTERSECT ALL and EXCEPT ALL, adjust rightIdx to skip all
 			// previously matched rows on the next right-side iteration, since we
 			// don't want to match them again.
-			if m.JoinType.IsSetOpJoin() {
+			if m.joinType.IsSetOpJoin() {
 				m.rightIdx = m.leftIdx
 			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
 			// a left outer join, full outer join, anti join, or EXCEPT ALL, emit an
 			// unmatched left-side row.
-			if m.matchedRightCount == 0 && execinfra.ShouldEmitUnmatchedRow(execinfra.LeftSide, m.JoinType) {
-				return m.RenderUnmatchedRow(lrow, execinfra.LeftSide), nil
+			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
+				return m.renderUnmatchedRow(lrow, leftSide), nil
 			}
 
 			m.matchedRightCount = 0
@@ -211,7 +212,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 				if m.matchedRight.Contains(ridx) {
 					continue
 				}
-				return m.RenderUnmatchedRow(m.rightRows[ridx], execinfra.RightSide), nil
+				return m.renderUnmatchedRow(m.rightRows[ridx], rightSide), nil
 			}
 
 			m.matchedRight = util.FastIntSet{}
@@ -232,7 +233,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 		}
 
 		// Prepare for processing the next batch.
-		m.emitUnmatchedRight = execinfra.ShouldEmitUnmatchedRow(execinfra.RightSide, m.JoinType)
+		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
 		m.leftIdx, m.rightIdx = 0, 0
 	}
 }
@@ -264,7 +265,7 @@ func (mjs *MergeJoinerStats) Stats() map[string]string {
 	for k, v := range rightInputStatsMap {
 		statsMap[k] = v
 	}
-	statsMap[mergeJoinerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
+	statsMap[mergeJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
 	return statsMap
 }
 
@@ -274,17 +275,17 @@ func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
 		mjs.LeftInputStats.StatsForQueryPlan("left "),
 		mjs.RightInputStats.StatsForQueryPlan("right ")...,
 	)
-	return append(stats, fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
+	return append(stats, fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
 }
 
 // outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
 // fail silently if the mergeJoiner is not collecting stats.
 func (m *mergeJoiner) outputStatsToTrace() {
-	lis, ok := execinfra.GetInputStats(m.FlowCtx, m.leftSource)
+	lis, ok := getInputStats(m.FlowCtx, m.leftSource)
 	if !ok {
 		return
 	}
-	ris, ok := execinfra.GetInputStats(m.FlowCtx, m.rightSource)
+	ris, ok := getInputStats(m.FlowCtx, m.rightSource)
 	if !ok {
 		return
 	}
@@ -297,5 +298,28 @@ func (m *mergeJoiner) outputStatsToTrace() {
 				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
 			},
 		)
+	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (m *mergeJoiner) ChildCount(verbose bool) int {
+	return 2
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (m *mergeJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := m.leftSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("left input to mergeJoiner is not an execinfra.OpNode")
+	case 1:
+		if n, ok := m.rightSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("right input to mergeJoiner is not an execinfra.OpNode")
+	default:
+		panic(fmt.Sprintf("invalid index %d", nth))
 	}
 }

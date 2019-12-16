@@ -648,7 +648,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					dist, err := NewDistinct(&flowCtxTableReader, 0, &specDistinct, tr, &postDistinct, nil)
+					dist, err := newDistinct(&flowCtxTableReader, 0, &specDistinct, tr, &postDistinct, nil)
 					if err != nil {
 						b.Fatal(err)
 					}

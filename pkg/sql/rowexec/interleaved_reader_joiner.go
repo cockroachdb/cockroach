@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -50,7 +51,7 @@ type tableInfo struct {
 // filters the rows, performs a merge join with equality constraints.
 // See docs/RFCS/20171025_interleaved_table_joins.md
 type interleavedReaderJoiner struct {
-	execinfra.JoinerBase
+	joinerBase
 
 	// runningState represents the state of the processor. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
@@ -74,8 +75,8 @@ type interleavedReaderJoiner struct {
 	// These are required for OUTER joins where the ancestor need to be
 	// emitted regardless.
 	ancestorJoined     bool
-	ancestorJoinSide   execinfra.JoinSide
-	descendantJoinSide execinfra.JoinSide
+	ancestorJoinSide   joinSide
+	descendantJoinSide joinSide
 	unmatchedChild     sqlbase.EncDatumRow
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
@@ -108,7 +109,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.Pr
 		case irjReading:
 			irj.runningState, row, meta = irj.nextRow()
 		case irjUnmatchedChild:
-			rendered := irj.RenderUnmatchedRow(irj.unmatchedChild, irj.descendantJoinSide)
+			rendered := irj.renderUnmatchedRow(irj.unmatchedChild, irj.descendantJoinSide)
 			row = irj.ProcessRowHelper(rendered)
 			irj.unmatchedChild = nil
 			irj.runningState = irjReading
@@ -232,7 +233,7 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	// equality columns.
 	// Try to join/render and emit.
 	if cmp == 0 {
-		renderedRow, err := irj.Render(lrow, rrow)
+		renderedRow, err := irj.render(lrow, rrow)
 		if err != nil {
 			irj.MoveToDraining(err)
 			return irjStateUnknown, nil, irj.DrainHelper()
@@ -255,7 +256,7 @@ func (irj *interleavedReaderJoiner) nextRow() (
 	newState := irjReading
 	// Set the unmatched child if necessary (we'll pick it up again after we emit
 	// the ancestor).
-	if execinfra.ShouldEmitUnmatchedRow(irj.descendantJoinSide, irj.JoinType) {
+	if shouldEmitUnmatchedRow(irj.descendantJoinSide, irj.joinType) {
 		irj.unmatchedChild = row
 		newState = irjUnmatchedChild
 	}
@@ -269,7 +270,9 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ execinfra.Processor = &interleavedReaderJoiner{}
+var _ execinfra.RowSource = &interleavedReaderJoiner{}
 var _ execinfrapb.MetadataSource = &interleavedReaderJoiner{}
+var _ execinfra.OpNode = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
@@ -287,7 +290,7 @@ func newInterleavedReaderJoiner(
 	telemetry.Inc(sqltelemetry.InterleavedTableJoinCounter)
 
 	// TODO(richardwu): We can relax this to < 2 (i.e. permit 2+ tables).
-	// This will require modifying JoinerBase init logic.
+	// This will require modifying joinerBase init logic.
 	if len(spec.Tables) != 2 {
 		return nil, errors.AssertionFailedf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
 	}
@@ -348,11 +351,11 @@ func newInterleavedReaderJoiner(
 
 	allSpans, _ = roachpb.MergeSpans(allSpans)
 
-	ancestorJoinSide := execinfra.LeftSide
-	descendantJoinSide := execinfra.RightSide
+	ancestorJoinSide := leftSide
+	descendantJoinSide := rightSide
 	if ancestorTablePos == 1 {
-		ancestorJoinSide = execinfra.RightSide
-		descendantJoinSide = execinfra.LeftSide
+		ancestorJoinSide = rightSide
+		descendantJoinSide = leftSide
 	}
 
 	irj := &interleavedReaderJoiner{
@@ -372,7 +375,7 @@ func newInterleavedReaderJoiner(
 	irj.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	// TODO(richardwu): Generalize this to 2+ tables.
-	if err := irj.JoinerBase.Init(
+	if err := irj.joinerBase.init(
 		irj,
 		flowCtx,
 		processorID,
@@ -459,12 +462,22 @@ func (irj *interleavedReaderJoiner) maybeUnmatchedAncestor() sqlbase.EncDatumRow
 	// We first try to emit the previous ancestor row if it
 	// was never joined with a child row.
 	if irj.ancestorRow != nil && !irj.ancestorJoined {
-		if !execinfra.ShouldEmitUnmatchedRow(irj.ancestorJoinSide, irj.JoinType) {
+		if !shouldEmitUnmatchedRow(irj.ancestorJoinSide, irj.joinType) {
 			return nil
 		}
 
-		rendered := irj.RenderUnmatchedRow(irj.ancestorRow, irj.ancestorJoinSide)
+		rendered := irj.renderUnmatchedRow(irj.ancestorRow, irj.ancestorJoinSide)
 		return irj.ProcessRowHelper(rendered)
 	}
 	return nil
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (irj *interleavedReaderJoiner) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (irj *interleavedReaderJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

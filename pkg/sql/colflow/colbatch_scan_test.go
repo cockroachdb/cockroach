@@ -81,6 +81,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				res, err := colexec.NewColOperator(
 					ctx, &flowCtx, &spec, nil /* inputs */, testMemAcc,
 					true, /* useStreamingMemAccountForBuffering */
+					nil,  /* processorConstructor */
 				)
 				if err != nil {
 					b.Fatal(err)

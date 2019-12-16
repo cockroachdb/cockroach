@@ -13,20 +13,19 @@ package rowexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// TestInputStatCollector verifies that an InputStatCollector correctly collects
+// TestInputStatCollector verifies that an inputStatCollector correctly collects
 // stats from an input.
 func TestInputStatCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numRows = 100
 
-	isc := execinfra.NewInputStatCollector(
+	isc := newInputStatCollector(
 		distsqlutils.NewRowBuffer(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, 1), distsqlutils.RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {

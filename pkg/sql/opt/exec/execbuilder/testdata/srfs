@@ -6,7 +6,7 @@ query TTT
 EXPLAIN SELECT * FROM generate_series(1, 3)
 ----
 ·              distributed  false
-·              vectorized   false
+·              vectorized   true
 project set    ·            ·
  └── emptyrow  ·            ·
 
@@ -26,7 +26,7 @@ query TTT
 EXPLAIN SELECT * FROM ROWS FROM (cos(1))
 ----
 ·              distributed  false
-·              vectorized   false
+·              vectorized   true
 project set    ·            ·
  └── emptyrow  ·            ·
 
@@ -34,7 +34,7 @@ query TTT
 EXPLAIN SELECT generate_series(1, 3)
 ----
 ·              distributed  false
-·              vectorized   false
+·              vectorized   true
 project set    ·            ·
  └── emptyrow  ·            ·
 
@@ -45,7 +45,7 @@ query TTT
 EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
 ----
 ·              distributed  false
-·              vectorized   false
+·              vectorized   true
 project set    ·            ·
  └── emptyrow  ·            ·
 
@@ -142,7 +142,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
 ·                           distributed  false                    ·                        ·
-·                           vectorized   false                    ·                        ·
+·                           vectorized   true                     ·                        ·
 render                      ·            ·                        (generate_series)        ·
  │                          render 0     generate_series          ·                        ·
  └── project set            ·            ·                        (x, z, generate_series)  ·
@@ -164,7 +164,7 @@ EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
 ·                     distributed         false                                    ·                                                           ·
-·                     vectorized          false                                    ·                                                           ·
+·                     vectorized          true                                     ·                                                           ·
 render                ·                   ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
  │                    render 0            generate_subscripts                      ·                                                           ·
  │                    render 1            generate_series                          ·                                                           ·
@@ -192,7 +192,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
 ·                                distributed   false                                 ·                     ·
-·                                vectorized    false                                 ·                     ·
+·                                vectorized    true                                  ·                     ·
 root                             ·             ·                                     (generate_series)     ·
  ├── render                      ·             ·                                     (generate_series)     ·
  │    │                          render 0      generate_series                       ·                     ·
@@ -247,7 +247,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 0))
 ----
 ·              distributed  false  ·       ·
-·              vectorized   false  ·       ·
+·              vectorized   true   ·       ·
 project set    ·            ·      ("if")  ·
  │             render 0     1      ·       ·
  └── emptyrow  ·            ·      ()      ·

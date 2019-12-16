@@ -27,8 +27,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// Distinct is the physical processor implementation of the DISTINCT relational operator.
-type Distinct struct {
+// distinct is the physical processor implementation of the DISTINCT relational operator.
+type distinct struct {
 	execinfra.ProcessorBase
 
 	input            execinfra.RowSource
@@ -44,24 +44,26 @@ type Distinct struct {
 	scratch          []byte
 }
 
-// SortedDistinct is a specialized distinct that can be used when all of the
+// sortedDistinct is a specialized distinct that can be used when all of the
 // distinct columns are also ordered.
-type SortedDistinct struct {
-	Distinct
+type sortedDistinct struct {
+	distinct
 }
 
-var _ execinfra.Processor = &Distinct{}
-var _ execinfra.RowSource = &Distinct{}
+var _ execinfra.Processor = &distinct{}
+var _ execinfra.RowSource = &distinct{}
+var _ execinfra.OpNode = &distinct{}
 
 const distinctProcName = "distinct"
 
-var _ execinfra.Processor = &SortedDistinct{}
-var _ execinfra.RowSource = &SortedDistinct{}
+var _ execinfra.Processor = &sortedDistinct{}
+var _ execinfra.RowSource = &sortedDistinct{}
+var _ execinfra.OpNode = &sortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
-// NewDistinct instantiates a new Distinct processor.
-func NewDistinct(
+// newDistinct instantiates a new Distinct processor.
+func newDistinct(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.DistinctSpec,
@@ -91,7 +93,7 @@ func NewDistinct(
 
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
-	d := &Distinct{
+	d := &distinct{
 		input:        input,
 		orderedCols:  spec.OrderedColumns,
 		distinctCols: distinctCols,
@@ -102,13 +104,13 @@ func NewDistinct(
 	var returnProcessor execinfra.RowSourcedProcessor = d
 	if allSorted {
 		// We can use the faster sortedDistinct processor.
-		sd := &SortedDistinct{
-			Distinct: *d,
+		sd := &sortedDistinct{
+			distinct: *d,
 		}
 		// Set d to the new distinct copy for further initialization.
 		// TODO(asubiotto): We should have a distinctBase, rather than making a copy
 		// of a distinct processor.
-		d = &sd.Distinct
+		d = &sd.distinct
 		returnProcessor = sd
 	}
 
@@ -127,7 +129,7 @@ func NewDistinct(
 	d.haveLastGroupKey = false
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		d.input = execinfra.NewInputStatCollector(d.input)
+		d.input = newInputStatCollector(d.input)
 		d.FinishTrace = d.outputStatsToTrace
 	}
 
@@ -135,18 +137,18 @@ func NewDistinct(
 }
 
 // Start is part of the RowSource interface.
-func (d *Distinct) Start(ctx context.Context) context.Context {
+func (d *distinct) Start(ctx context.Context) context.Context {
 	d.input.Start(ctx)
 	return d.StartInternal(ctx, distinctProcName)
 }
 
 // Start is part of the RowSource interface.
-func (d *SortedDistinct) Start(ctx context.Context) context.Context {
+func (d *sortedDistinct) Start(ctx context.Context) context.Context {
 	d.input.Start(ctx)
 	return d.StartInternal(ctx, sortedDistinctProcName)
 }
 
-func (d *Distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
+func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if !d.haveLastGroupKey {
 		return false, nil
 	}
@@ -163,7 +165,7 @@ func (d *Distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 
 // encode appends the encoding of non-ordered columns, which we use as a key in
 // our 'seen' set.
-func (d *Distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
+func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
 	var err error
 	for i, datum := range row {
 		// Ignore columns that are not in the distinctCols, as if we are
@@ -188,7 +190,7 @@ func (d *Distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 	return appendTo, nil
 }
 
-func (d *Distinct) close() {
+func (d *distinct) close() {
 	if d.InternalClose() {
 		d.memAcc.Close(d.Ctx)
 		d.MemMonitor.Stop(d.Ctx)
@@ -196,7 +198,7 @@ func (d *Distinct) close() {
 }
 
 // Next is part of the RowSource interface.
-func (d *Distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (d *distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -264,7 +266,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 //
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
-func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -297,7 +299,7 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetad
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (d *Distinct) ConsumerClosed() {
+func (d *distinct) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	d.close()
 }
@@ -309,7 +311,7 @@ const distinctTagPrefix = "distinct."
 // Stats implements the SpanStats interface.
 func (ds *DistinctStats) Stats() map[string]string {
 	inputStatsMap := ds.InputStats.Stats(distinctTagPrefix)
-	inputStatsMap[distinctTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
+	inputStatsMap[distinctTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ds.MaxAllocatedMem)
 	return inputStatsMap
 }
 
@@ -317,14 +319,14 @@ func (ds *DistinctStats) Stats() map[string]string {
 func (ds *DistinctStats) StatsForQueryPlan() []string {
 	return append(
 		ds.InputStats.StatsForQueryPlan(""),
-		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
 	)
 }
 
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
-func (d *Distinct) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(d.FlowCtx, d.input)
+func (d *distinct) outputStatsToTrace() {
+	is, ok := getInputStats(d.FlowCtx, d.input)
 	if !ok {
 		return
 	}
@@ -333,4 +335,20 @@ func (d *Distinct) outputStatsToTrace() {
 			sp, &DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
 		)
 	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (d *distinct) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (d *distinct) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := d.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to distinct is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
