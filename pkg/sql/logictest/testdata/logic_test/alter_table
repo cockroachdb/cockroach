@@ -1010,3 +1010,20 @@ SHOW CONSTRAINTS FROM t
 ----
 t  check_a   CHECK  CHECK  ((a < 100))  true
 t  check_a1  CHECK  CHECK  ((a < 16))   true
+
+subtest regression_42858
+
+statement ok
+CREATE TABLE TEST2 (COL1 SERIAL PRIMARY KEY, COL2 INT8)
+
+statement ok
+CREATE TABLE TEST1 (COL1 SERIAL PRIMARY KEY, COL2 INT8, COL3 INT8)
+
+statement ok
+ALTER TABLE TEST1 ADD CONSTRAINT duplicate_name FOREIGN KEY (COL2) REFERENCES TEST2 (COL1)
+
+statement error pq: duplicate constraint name: "duplicate_name"
+ALTER TABLE TEST1 ADD CONSTRAINT duplicate_name FOREIGN KEY (COL3) REFERENCES TEST2 (COL1)
+
+statement ok
+DROP TABLE test1; DROP TABLE test2
