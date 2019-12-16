@@ -1073,11 +1073,12 @@ func (c *cascader) cascadeAll(
 			if err != nil {
 				return err
 			}
-			referencedIndex, err := elem.table.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
+			// TODO (rohany): should this and the below be cached in creation of the cascader?
+			referencedIndex, err := sqlbase.FindFKReferencedIndex(elem.table.TableDesc(), ref.ReferencedColumnIDs)
 			if err != nil {
 				return err
 			}
-			referencingIndex, err := referencingTable.Desc.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
+			referencingIndex, err := sqlbase.FindFKOriginIndex(referencingTable.Desc.TableDesc(), ref.OriginColumnIDs)
 			if err != nil {
 				return err
 			}

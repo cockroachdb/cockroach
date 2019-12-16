@@ -540,11 +540,11 @@ func ResolveFK(
 	var legacyOriginIndexID sqlbase.IndexID
 	// Search for an index on the origin table that matches. If one doesn't exist,
 	// we create one automatically if the table to alter is new or empty.
-	originIdx, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs)
+	originIndex, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs)
 	if err == nil {
-		// If there was no error, we found a suitable index.
-		legacyOriginIndexID = originIdx.ID
-	} else {
+		legacyOriginIndexID = originIndex.ID
+	}
+	if err != nil {
 		// No existing suitable index was found.
 		if ts == NonEmptyTable {
 			var colNames bytes.Buffer
@@ -570,11 +570,10 @@ func ResolveFK(
 		legacyOriginIndexID = id
 	}
 
-	referencedIdx, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
+	referencedIndex, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
 	if err != nil {
 		return err
 	}
-	legacyReferencedIndexID := referencedIdx.ID
 
 	var validity sqlbase.ConstraintValidity
 	if ts != NewTable {
@@ -596,7 +595,7 @@ func ResolveFK(
 		OnUpdate:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
 		Match:                 sqlbase.CompositeKeyMatchMethodValue[d.Match],
 		LegacyOriginIndex:     legacyOriginIndexID,
-		LegacyReferencedIndex: legacyReferencedIndexID,
+		LegacyReferencedIndex: referencedIndex.ID,
 	}
 
 	if ts == NewTable {

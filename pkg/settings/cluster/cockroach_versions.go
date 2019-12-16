@@ -51,6 +51,7 @@ const (
 	VersionSecondaryIndexColumnFamilies
 	VersionNamespaceTableWithSchemas
 	VersionProtectedTimestamps
+	VersionNoExplicitForeignKeyIndexIDs
 
 	// Add new versions here (step one of two).
 
@@ -349,6 +350,15 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// schema.
 		Key:     VersionProtectedTimestamps,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 6},
+	},
+	{
+		// VersionNoExplicitForeignKeyIndexIDs is https://github.com/cockroachdb/cockroach/pull/43332.
+		//
+		// It represents the migration away from using explicit index IDs in foreign
+		// key constraints, and instead allows all places that need these IDs to select
+		// an appropriate index to uphold the foreign key relationship.
+		Key:     VersionNoExplicitForeignKeyIndexIDs,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
 	},
 
 	// Add new versions here (step two of two).
