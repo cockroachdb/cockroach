@@ -211,3 +211,73 @@ query IIII
 SELECT * FROM child@i
 ----
 1 2 3 4
+
+subtest foreign_keys
+
+# Test primary key changes on tables with inbound and outbound FK's.
+statement ok
+CREATE TABLE fk1 (x INT NOT NULL);
+CREATE TABLE fk2 (x INT NOT NULL, UNIQUE INDEX i (x));
+ALTER TABLE fk1 ADD CONSTRAINT fk FOREIGN KEY (x) REFERENCES fk2(x);
+INSERT INTO fk2 VALUES (1);
+INSERT INTO fk1 VALUES (1)
+
+statement ok
+ALTER TABLE fk1 ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+INSERT INTO fk2 VALUES (2);
+INSERT INTO fk1 VALUES (2)
+
+statement ok
+ALTER TABLE fk2 ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+INSERT INTO fk2 VALUES (3);
+INSERT INTO fk1 VALUES (3)
+
+# Test some self-referencing foreign keys.
+statement ok
+CREATE TABLE self (a INT PRIMARY KEY, x INT, y INT, z INT, w INT NOT NULL,
+  INDEX (x), UNIQUE INDEX (y), INDEX (z));
+INSERT INTO self VALUES (1, 1, 1, 1, 1);
+ALTER TABLE self ADD CONSTRAINT fk1 FOREIGN KEY (z) REFERENCES self (y);
+ALTER TABLE self ADD CONSTRAINT fk2 FOREIGN KEY (x) REFERENCES self (y);
+
+statement ok
+ALTER TABLE self ALTER PRIMARY KEY USING COLUMNS (w)
+
+statement ok
+INSERT INTO self VALUES (2, 1, 2, 1, 2);
+INSERT INTO self VALUES (3, 2, 3, 2, 3)
+
+# Set up a bunch of foreign key references pointing into and out of a table.
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL, z INT, w INT, INDEX (y), INDEX (z), UNIQUE INDEX (w));
+CREATE TABLE t2 (y INT, UNIQUE INDEX (y));
+CREATE TABLE t3 (z INT, UNIQUE INDEX (z));
+CREATE TABLE t4 (w INT, INDEX (w));
+CREATE TABLE t5 (x INT, INDEX (x));
+INSERT INTO t1 VALUES (1, 1, 1, 1);
+INSERT INTO t2 VALUES (1);
+INSERT INTO t3 VALUES (1);
+INSERT INTO t4 VALUES (1);
+INSERT INTO t5 VALUES (1);
+ALTER TABLE t1 ADD CONSTRAINT fk1 FOREIGN KEY (y) REFERENCES t2(y);
+ALTER TABLE t1 ADD CONSTRAINT fk2 FOREIGN KEY (z) REFERENCES t3(z);
+ALTER TABLE t4 ADD CONSTRAINT fk3 FOREIGN KEY (w) REFERENCES t1(w);
+ALTER TABLE t5 ADD CONSTRAINT fk4 FOREIGN KEY (x) REFERENCES t1(x);
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement ok
+INSERT INTO t2 VALUES (5);
+INSERT INTO t3 VALUES (6);
+INSERT INTO t1 VALUES (7, 5, 6, 8);
+INSERT INTO t4 VALUES (8);
+INSERT INTO t5 VALUES (7)
+
+statement error insert on table "t1" violates foreign key constraint "fk1"
+INSERT INTO t1 VALUES (100, 100, 100, 100)
+
+statement error insert on table "t4" violates foreign key constraint "fk3"
+INSERT INTO t4 VALUES (101)
