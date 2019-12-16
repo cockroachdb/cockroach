@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -2289,9 +2290,6 @@ func BenchmarkImport(b *testing.B) {
 }
 
 func BenchmarkConvertRecord(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
 	ctx := context.TODO()
 
 	tpchLineItemDataRows := [][]string{
@@ -2340,13 +2338,14 @@ func BenchmarkConvertRecord(b *testing.B) {
 	}
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
 	recordCh := make(chan csvRecord)
-	kvCh := make(chan []roachpb.KeyValue)
+	kvCh := make(chan row.KVBatch)
 	group := errgroup.Group{}
 
 	// no-op drain kvs channel.
@@ -2355,19 +2354,28 @@ func BenchmarkConvertRecord(b *testing.B) {
 		}
 	}()
 
-	c := &csvInputReader{recordCh: recordCh, tableDesc: tableDesc.TableDesc()}
+	c := &csvInputReader{
+		evalCtx:   &evalCtx,
+		kvCh:      kvCh,
+		recordCh:  recordCh,
+		tableDesc: tableDesc.TableDesc(),
+	}
 	// start up workers.
-	for i := 0; i < runtime.NumCPU(); i++ {
+	numWorkers := runtime.NumCPU()
+	for i := 0; i < numWorkers; i++ {
+		workerID := i
 		group.Go(func() error {
-			return c.convertRecordWorker(ctx, i)
+			return c.convertRecordWorker(ctx, workerID)
 		})
 	}
 	const batchSize = 500
 
+	minEmitted := make([]int64, numWorkers)
 	batch := csvRecord{
-		file:      "some/path/to/some/file/of/csv/data.tbl",
-		rowOffset: 1,
-		r:         make([][]string, 0, batchSize),
+		file:       "some/path/to/some/file/of/csv/data.tbl",
+		rowOffset:  1,
+		r:          make([][]string, 0, batchSize),
+		minEmitted: &minEmitted,
 	}
 
 	b.ResetTimer()
@@ -2376,6 +2384,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 			recordCh <- batch
 			batch.r = make([][]string, 0, batchSize)
 			batch.rowOffset = int64(i)
+			minEmitted = make([]int64, numWorkers)
 		}
 
 		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
