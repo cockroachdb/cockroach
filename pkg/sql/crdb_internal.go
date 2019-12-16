@@ -1686,13 +1686,21 @@ CREATE TABLE crdb_internal.backward_dependencies (
 
 				for i := range table.OutboundFKs {
 					fk := &table.OutboundFKs[i]
+					refTbl, err := p.Tables().getTableVersionByID(ctx, p.txn, fk.ReferencedTableID, tree.ObjectLookupFlags{})
+					if err != nil {
+						return err
+					}
+					refIdx, err := sqlbase.FindFKReferencedIndex(refTbl.TableDesc(), fk.ReferencedColumnIDs)
+					if err != nil {
+						return err
+					}
 					if err := addRow(
 						tableID, tableName,
 						tree.DNull,
 						tree.DNull,
 						tree.NewDInt(tree.DInt(fk.ReferencedTableID)),
 						fkDep,
-						tree.NewDInt(tree.DInt(fk.LegacyReferencedIndex)),
+						tree.NewDInt(tree.DInt(refIdx.ID)),
 						tree.NewDString(fk.Name),
 						tree.DNull,
 					); err != nil {

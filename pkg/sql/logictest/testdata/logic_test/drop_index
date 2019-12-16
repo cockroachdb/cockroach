@@ -265,3 +265,52 @@ DROP INDEX tu_a_key
 
 statement ok
 DROP INDEX tu_a
+
+# Test that we have more relaxed restrictions on dropping indexes referenced by fks.
+subtest fk_drop
+
+# Ensure that we can drop an index used by a foreign key if there is another
+# index that can take its place.
+statement ok
+CREATE TABLE fk1 (x INT);
+CREATE TABLE fk2 (x INT PRIMARY KEY);
+ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+CREATE INDEX i ON fk1 (x);
+DROP INDEX fk1_auto_index_fk1
+
+statement error pq: index "i" is in use as a foreign key constraint
+DROP INDEX fk1@i
+
+# Ensure that DROP INDEX CASCADE does not delete the foreign key when
+# there is another index that can satisfy the foreign key constraint.
+statement ok
+DROP TABLE fk1;
+DROP TABLE fk2;
+CREATE TABLE fk1 (x int);
+CREATE TABLE fk2 (x int PRIMARY KEY);
+CREATE INDEX i ON fk1 (x);
+CREATE INDEX i2 ON fk1 (x);
+ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+DROP INDEX fk1@i CASCADE
+
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE fk1 (
+     x INT8 NULL,
+     CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2(x),
+     INDEX i2 (x ASC),
+     FAMILY "primary" (x, rowid)
+)
+
+# Ensure that now the cascade deletes the foreign key constraint.
+statement ok
+DROP INDEX fk1@i2 CASCADE
+
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE fk1 (
+     x INT8 NULL,
+     FAMILY "primary" (x, rowid)
+)

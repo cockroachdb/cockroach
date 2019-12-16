@@ -86,6 +86,19 @@ func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
 	return true
 }
 
+// Equals returns true if the input list contains exactly the same elements as this list.
+func (c ColumnIDs) Equals(input ColumnIDs) bool {
+	if len(c) != len(input) {
+		return false
+	}
+	for i := range c {
+		if c[i] != input[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
@@ -342,7 +355,7 @@ func GetDatabaseDescFromID(
 func GetTableDescFromID(
 	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*TableDescriptor, error) {
-	table, err := getTableDescFromIDRaw(ctx, protoGetter, id)
+	table, err := GetTableDescFromIDRaw(ctx, protoGetter, id)
 	if err != nil {
 		return nil, err
 	}
@@ -354,13 +367,13 @@ func GetTableDescFromID(
 	return table, nil
 }
 
-// getTableDescFromIDRaw retrieves the table descriptor for the table
+// GetTableDescFromIDRaw retrieves the table descriptor for the table
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table. Note that it
 // does not "fill in" the descriptor, which performs various upgrade steps for
 // migrations and is *required* before ordinary presentation to other code. This
 // method is for internal use only and shouldn't get exposed.
-func getTableDescFromIDRaw(
+func GetTableDescFromIDRaw(
 	ctx context.Context, protoGetter protoGetter, id ID,
 ) (*TableDescriptor, error) {
 	desc := &Descriptor{}
@@ -817,6 +830,13 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 	return nil
 }
 
+// MaybeFillInWithoutFKUpgrade performs the same thing as MaybeFillInDescriptor but does
+// not apply the foreign key representation upgrade path to the table descriptor.
+func (desc *TableDescriptor) MaybeFillInWithoutFKUpgrade() {
+	desc.maybeUpgradeFormatVersion()
+	desc.Privileges.MaybeFixPrivileges(desc.ID)
+}
+
 // MapProtoGetter is a protoGetter that has a hard-coded map of keys to proto
 // messages.
 type MapProtoGetter struct {
@@ -906,7 +926,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	if idx.ForeignKey.IsSet() {
 		ref := &idx.ForeignKey
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			tbl, err := GetTableDescFromIDRaw(ctx, protoGetter, ref.Table)
 			if err != nil {
 				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
@@ -945,7 +965,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	for refIdx := range idx.ReferencedBy {
 		ref := &(idx.ReferencedBy[refIdx])
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, ref.Table)
+			tbl, err := GetTableDescFromIDRaw(ctx, protoGetter, ref.Table)
 			if err != nil {
 				if err == ErrDescriptorNotFound && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
@@ -973,14 +993,12 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				var forwardFK *ForeignKeyConstraint
 				for i := range otherTable.OutboundFKs {
 					otherFK := &otherTable.OutboundFKs[i]
-					// To find a match, we need to compare the reference's table id and
-					// index id, which are the only two available fields on backreferences
-					// in the old representation. Note that we have to compare the index id
-					// to the matching new forward reference's LegacyOriginIndex field,
-					// which although marked as Legacy, is populated every time we create
-					// a new-style fk during the duration of 19.2.
+					// To find a match, we find a foreign key reference that has the same
+					// referenced table ID, and that the index we point to is a valid
+					// index to satisfy the columns in the foreign key.
+					// TODO (rohany): I'm unsure about this... Could there be multiple FK's?
 					if otherFK.ReferencedTableID == desc.ID &&
-						otherFK.LegacyOriginIndex == ref.Index {
+						ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
 						break
@@ -2756,13 +2774,6 @@ func (desc *TableDescriptor) FindFKForBackRef(
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
 		if fk.ReferencedTableID == referencedTableID && fk.Name == backref.Name {
-			if fk.LegacyReferencedIndex != backref.LegacyReferencedIndex ||
-				fk.LegacyOriginIndex != backref.LegacyOriginIndex {
-				return nil, errors.AssertionFailedf("fk found for backref %s but pinned indexes were different: "+
-					"%d != %d || %d != %d", fk.Name, fk.LegacyOriginIndex, backref.LegacyOriginIndex,
-					fk.LegacyReferencedIndex, backref.LegacyReferencedIndex)
-			}
-
 			return fk, nil
 		}
 	}
