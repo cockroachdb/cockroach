@@ -2768,11 +2768,29 @@ func mvccResolveWriteIntent(
 	// testing.
 	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
 	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.WriteTimestamp)
+	collapsedIntent := false
+	var rolledBackVal []byte
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+
+	// Handle partial txn rollbacks. If the current txn sequence
+	// is part of a rolled back (ignored) seqnum range, we're going
+	// to erase that MVCC write and reveal the previous value.
+	// If _all_ the writes get removed in this way, the intent
+	// "collapses" and should be considered empty (i.e. can be removed altogether).
+	// If only part of the intent history was rolled back, but the intent still
+	// remains, updatedIntent is set to true.
+	if len(intent.IgnoredSeqNums) > 0 {
+		collapsedIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, engine, intent.IgnoredSeqNums, meta, latestKey)
+		if err != nil {
+			return false, err
+		}
+	}
 
 	// There's nothing to do if meta's epoch is greater than or equal txn's
 	// epoch and the state is still in progress but the intent was not pushed
-	// to a larger timestamp.
-	if inProgress && !pushed {
+	// to a larger timestamp, and if the rollback code did not modify or collapse
+	// the intent.
+	if inProgress && !pushed && rolledBackVal == nil && !collapsedIntent {
 		return false, nil
 	}
 
@@ -2783,29 +2801,18 @@ func mvccResolveWriteIntent(
 	//
 	// We also use the commit path when the intent is being collapsed,
 	// to ensure the intent meta gets deleted and the stats updated.
-	if commit || pushed {
-		// Handle partial txn rollbacks. If the current txn sequence
-		// is part of a rolled back (ignored) seqnum range, we're going
-		// to erase that MVCC write and reveal the previous value.
-		// If _all_ the writes get removed in this way, the intent
-		// "collapses" and should be considered empty (i.e. can be removed altogether).
-		collapsedIntent := false
-		latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
-		if len(intent.IgnoredSeqNums) > 0 {
-			collapsedIntent, err = mvccMaybeRewriteIntentHistory(ctx, engine, intent.IgnoredSeqNums, meta, latestKey)
-			if err != nil {
-				return false, err
-			}
-		}
-
+	if commit || pushed || (rolledBackVal != nil) {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
-		if pushed {
-			// Keep existing intent if we're pushing timestamp. We keep the
+		// Note that commit takes precedence over {updated, collapsed}Intent; as in,
+		// if we're committing, we don't care whether mvccMaybeRewriteIntentHistory
+		// updated the intent or collapsed it.
+		if pushed || (rolledBackVal != nil && !commit) {
+			// Keep existing intent if we're updating it. We keep the
 			// existing metadata instead of using the supplied intent meta
 			// to avoid overwriting a newer epoch (see comments above). The
 			// pusher's job isn't to do anything to update the intent but
@@ -2835,7 +2842,16 @@ func mvccResolveWriteIntent(
 			} else if !valid || !iter.UnsafeKey().Equal(oldKey) {
 				return false, errors.Errorf("existing intent value missing: %s", oldKey)
 			}
-			if err = engine.Put(newKey, iter.UnsafeValue()); err != nil {
+			value := iter.UnsafeValue()
+			// Special case: If mvccMaybeRewriteIntentHistory rolled back to a value
+			// in the intent history and wrote that at oldKey, iter would not be able
+			// to "see" the value since it was created before that value was written
+			// to the engine. In this case, reuse the value returned by
+			// mvccMaybeRewriteIntentHistory.
+			if rolledBackVal != nil {
+				value = rolledBackVal
+			}
+			if err = engine.Put(newKey, value); err != nil {
 				return false, err
 			}
 			if err = engine.Clear(oldKey); err != nil {
@@ -2891,7 +2907,6 @@ func mvccResolveWriteIntent(
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the intent value.
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 	if err := engine.Clear(latestKey); err != nil {
 		return false, err
 	}
@@ -2949,17 +2964,19 @@ func mvccResolveWriteIntent(
 // The cleared return value, when true, indicates that
 // all the writes in the intent are ignored and the intent should
 // not be considered to exist any more.
+// The updated return value, when true, indicates that the intent was updated
+// and should be overwritten in engine.
 func mvccMaybeRewriteIntentHistory(
 	ctx context.Context,
 	engine ReadWriter,
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
 	meta *enginepb.MVCCMetadata,
 	latestKey MVCCKey,
-) (cleared bool, err error) {
+) (cleared bool, updatedVal []byte, err error) {
 	if !enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, ignoredSeqNums) {
 		// The latest write was not ignored. Nothing to do here.  We'll
 		// proceed with the intent as usual.
-		return false, nil
+		return false, nil, nil
 	}
 	// Find the latest historical write before that that was not
 	// ignored.
@@ -2978,7 +2995,7 @@ func mvccMaybeRewriteIntentHistory(
 		// For stats recomputation in the caller, flatten the
 		// value size so there's nothing left attributed to this intent.
 		meta.ValBytes = 0
-		return true, err
+		return true, nil, err
 	}
 
 	// Otherwise, we place back the write at that history entry
@@ -2991,7 +3008,7 @@ func mvccMaybeRewriteIntentHistory(
 	// And also overwrite whatever was there in storage.
 	err = engine.Put(latestKey, restoredVal)
 
-	return false, err
+	return false, restoredVal, err
 }
 
 // IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing
