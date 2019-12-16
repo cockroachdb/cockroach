@@ -388,7 +388,8 @@ func (desc *TableDescriptor) collectConstraintInfo(
 
 	for _, c := range desc.AllActiveAndInactiveChecks() {
 		if _, ok := info[c.Name]; ok {
-			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint name: %q", c.Name)
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
 		// Constraints in the Validating state are considered Unvalidated for this purpose
