@@ -68,7 +68,7 @@ func BenchmarkStreamingReadFile(b *testing.B) {
 		localExternalDir:  localExternalDir,
 		remoteExternalDir: remoteExternalDir,
 		blobClient:        blobClient,
-		fileSize:          1 << 30, // 1 GB
+		fileSize:          129 * 1 << 10, // 129 K
 		fileName:          "test/largefile.csv",
 	}
 	benchmarkStreamingReadFile(b, params)
@@ -119,7 +119,7 @@ func BenchmarkStreamingWriteFile(b *testing.B) {
 		localExternalDir:  localExternalDir,
 		remoteExternalDir: remoteExternalDir,
 		blobClient:        blobClient,
-		fileSize:          1 << 30, // 1 GB
+		fileSize:          129 * 1 << 10, // 129 K
 		fileName:          "test/largefile.csv",
 	}
 	benchmarkStreamingWriteFile(b, params)
