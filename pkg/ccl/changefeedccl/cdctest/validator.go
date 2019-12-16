@@ -351,12 +351,7 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		_err = errors.Wrap(_err, "fingerprintValidator failed")
 	}()
 
-	txn, err := v.sqlDB.Begin()
-	if err != nil {
-		return err
-	}
 	var args []interface{}
-
 	var primaryKeyDatums []interface{}
 	if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
 		return err
@@ -423,13 +418,8 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			args = append(args, datum)
 		}
 	}
-	if _, err := txn.Exec(stmtBuf.String(), args...); err != nil {
-		return err
-	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
+	_, err := v.sqlDB.Exec(stmtBuf.String(), args...)
+	return err
 }
 
 // NoteResolved implements the Validator interface.
