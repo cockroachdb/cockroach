@@ -138,8 +138,8 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	cArgs.Args = &roachpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
-	const expForUnknown = `cannot replace lease repl=(n0,s0):? seq=0 start=0.000000000,0 exp=<nil> ` +
-		`with repl=(n0,s0):? seq=0 start=0.000000000,0 exp=<nil>: ` +
+	const expForUnknown = `cannot replace lease repl=(n0,s0):? seq=0 start=0,0 exp=<nil> ` +
+		`with repl=(n0,s0):? seq=0 start=0,0 exp=<nil>: ` +
 		`replica (n0,s0):? not found in r0:{-} [(n1,s1):1, (n2,s2):2LEARNER, next=0, gen=0?]`
 	require.EqualError(t, err, expForUnknown)
 
@@ -150,8 +150,8 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
-	const expForLearner = `cannot replace lease repl=(n0,s0):? seq=0 start=0.000000000,0 exp=<nil> ` +
-		`with repl=(n2,s2):2LEARNER seq=0 start=0.000000000,0 exp=<nil>: ` +
+	const expForLearner = `cannot replace lease repl=(n0,s0):? seq=0 start=0,0 exp=<nil> ` +
+		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
 		`replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }

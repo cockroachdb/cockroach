@@ -126,9 +126,8 @@ func ExampleSingleStorage() {
 	// Output:
 	// The empty storage renders as below:
 	// +--+---------------------+----------------------+----------------------+----------------------+
-	//         0.000000000,0         0.000000000,0          0.000000000,0          0.000000000,0
-	//      age=0s (target ≤0s)   age=0s (target ≤10s)   age=0s (target ≤20s)   age=0s (target ≤40s)
-	//            epoch=0               epoch=0                epoch=0                epoch=0
+	//      0,0 age=0s (target     0,0 age=0s (target     0,0 age=0s (target     0,0 age=0s (target
+	//         ≤0s) epoch=0          ≤10s) epoch=0          ≤20s) epoch=0          ≤40s) epoch=0
 	// +--+---------------------+----------------------+----------------------+----------------------+
 	// +--+---------------------+----------------------+----------------------+----------------------+
 	//
@@ -139,8 +138,8 @@ func ExampleSingleStorage() {
 	//
 	// the result is:
 	// +----+---------------------+------------------------+------------------------+------------------------+
-	//          123.000000000,0     0.000000000,0 age=2m3s   0.000000000,0 age=2m3s   0.000000000,0 age=2m3s
-	//        age=0s (target ≤0s)   (target ≤10s) epoch=0    (target ≤20s) epoch=0    (target ≤40s) epoch=0
+	//          123.000000000,0      0,0 age=2m3s (target     0,0 age=2m3s (target     0,0 age=2m3s (target
+	//        age=0s (target ≤0s)       ≤10s) epoch=0            ≤20s) epoch=0            ≤40s) epoch=0
 	//              epoch=0
 	// +----+---------------------+------------------------+------------------------+------------------------+
 	//   r1                  1000
@@ -158,8 +157,8 @@ func ExampleSingleStorage() {
 	// The remaining buckets are unchanged. The best we could do is
 	// give them identical copies of the second, but that's nonsense.
 	// +----+---------------------+----------------------+------------------------+------------------------+
-	//          125.000000000,0       123.000000000,0      0.000000000,0 age=2m5s   0.000000000,0 age=2m5s
-	//        age=0s (target ≤0s)   age=2s (target ≤10s)   (target ≤20s) epoch=0    (target ≤40s) epoch=0
+	//          125.000000000,0       123.000000000,0       0,0 age=2m5s (target     0,0 age=2m5s (target
+	//        age=0s (target ≤0s)   age=2s (target ≤10s)       ≤20s) epoch=0            ≤40s) epoch=0
 	//              epoch=0               epoch=0
 	// +----+---------------------+----------------------+------------------------+------------------------+
 	//   r1                  1001                   1000
@@ -176,8 +175,8 @@ func ExampleSingleStorage() {
 	// older than 10s. Note also how the first bucket ignores the
 	// downgrade for r1; these can occur in practice.
 	// +----+---------------------+-----------------------+-------------------------+-------------------------+
-	//          133.000000000,0        123.000000000,0      0.000000000,0 age=2m13s   0.000000000,0 age=2m13s
-	//        age=0s (target ≤0s)   age=10s (target ≤10s)    (target ≤20s) epoch=0     (target ≤40s) epoch=0
+	//          133.000000000,0        123.000000000,0       0,0 age=2m13s (target     0,0 age=2m13s (target
+	//        age=0s (target ≤0s)   age=10s (target ≤10s)        ≤20s) epoch=0             ≤40s) epoch=0
 	//              epoch=0                epoch=0
 	// +----+---------------------+-----------------------+-------------------------+-------------------------+
 	//   r1                  1001                    1000
@@ -192,8 +191,8 @@ func ExampleSingleStorage() {
 	//
 	// Consequently we now see the third bucket fill up.
 	// +----+---------------------+-------------------------+-------------------------+---------------------------+
-	//          133.500000000,0         133.000000000,0           123.000000000,0       0.000000000,0 age=2m13.5s
-	//        age=0s (target ≤0s)   age=500ms (target ≤10s)   age=10.5s (target ≤20s)     (target ≤40s) epoch=0
+	//          133.500000000,0         133.000000000,0           123.000000000,0        0,0 age=2m13.5s (target
+	//        age=0s (target ≤0s)   age=500ms (target ≤10s)   age=10.5s (target ≤20s)         ≤40s) epoch=0
 	//              epoch=0                 epoch=0                   epoch=0
 	// +----+---------------------+-------------------------+-------------------------+---------------------------+
 	//   r1                  1001                      1001                      1000
@@ -244,9 +243,8 @@ func ExampleSingleStorage() {
 	//
 	// Finally, when the storage is cleared, all buckets are reset.
 	// +--+---------------------+----------------------+----------------------+----------------------+
-	//         0.000000000,0         0.000000000,0          0.000000000,0          0.000000000,0
-	//      age=0s (target ≤0s)   age=0s (target ≤10s)   age=0s (target ≤20s)   age=0s (target ≤40s)
-	//            epoch=0               epoch=0                epoch=0                epoch=0
+	//      0,0 age=0s (target     0,0 age=0s (target     0,0 age=0s (target     0,0 age=0s (target
+	//         ≤0s) epoch=0          ≤10s) epoch=0          ≤20s) epoch=0          ≤40s) epoch=0
 	// +--+---------------------+----------------------+----------------------+----------------------+
 	// +--+---------------------+----------------------+----------------------+----------------------+
 }
@@ -303,9 +301,9 @@ func ExampleMultiStorage_epoch() {
 	//
 	// ***** n1 *****
 	// +----+---------------------+----------------------+
-	//           1.000000000,0         0.000000000,0
-	//        age=0s (target ≤0s)   age=1s (target ≤1ms)
-	//             epoch=10               epoch=0
+	//           1.000000000,0       0,0 age=1s (target
+	//        age=0s (target ≤0s)      ≤1ms) epoch=0
+	//             epoch=10
 	// +----+---------------------+----------------------+
 	//   r9                    17
 	// +----+---------------------+----------------------+

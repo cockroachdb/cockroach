@@ -14,7 +14,7 @@ put k=k v=v2 ts=0,1
 >> at end:
 data: "k"/0.000000001,2 -> /BYTES/v2
 data: "k"/0.000000001,1 -> /BYTES/v
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000000,1 too old; wrote at 0.000000001,2
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0,1 too old; wrote at 0.000000001,2
 
 # Earlier logical time.
 

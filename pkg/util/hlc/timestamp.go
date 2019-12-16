@@ -13,9 +13,12 @@ package hlc
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/knz/go-ilog10"
 )
 
 // Timestamp constant values.
@@ -31,8 +34,36 @@ func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
 }
 
+// String implements the fmt.Formatter interface.
 func (t Timestamp) String() string {
-	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical)
+	// The following code was originally written as
+	//   fmt.Sprintf("%d.%09d,%d", t.WallTime/1e9, t.WallTime%1e9, t.Logical).
+	// The main problem with the original code was that it would put
+	// a negative sign in the middle (after the decimal point) if
+	// the value happened to be negative.
+	buf := make([]byte, 0, 20)
+
+	w := t.WallTime
+	if w == 0 {
+		buf = append(buf, '0')
+	} else {
+		if w < 0 {
+			w = -w
+			buf = append(buf, '-')
+		}
+
+		s, ns := uint64(w/1e9), uint64(w%1e9)
+		buf = strconv.AppendUint(buf, s, 10)
+		buf = append(buf, '.')
+
+		const zeroes = "000000000"
+		buf = append(buf, zeroes[:9-ilog10.NumUint32DecimalDigits(uint32(ns))]...)
+		buf = strconv.AppendUint(buf, ns, 10)
+	}
+	buf = append(buf, ',')
+	buf = strconv.AppendInt(buf, int64(t.Logical), 10)
+
+	return *(*string)(unsafe.Pointer(&buf))
 }
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.
