@@ -9,11 +9,15 @@
 // licenses/APL.txt.
 
 import * as React from "react";
+import cn from "classnames";
+
+import "./badge.styl";
 
 export interface BadgeProps {
+  text: string;
   size?: "small" | "medium" | "large";
   status?: "success" | "danger" | "default" | "info" | "warning";
-  tag?: boolean;
+  tag?: boolean; // TODO (koorosh): Tag behaviour isn't implemented yet.
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }
@@ -24,11 +28,16 @@ Badge.defaultProps = {
   tag: false,
 };
 
-export function Badge(_props: BadgeProps) {
-  // const { size, status, tag } = props;
+export function Badge(props: BadgeProps) {
+  const { size, status, icon, iconPosition, text } = props;
+  const classes = cn("badge", `badge--size-${size}`, `badge--status-${status}`);
+  const iconClasses = cn("badge__icon", `badge__icon--position-${iconPosition || "left"}`);
   return (
-    <div className="badge">
-
+    <div className={classes}>
+      { icon && <div className={iconClasses}>{icon}</div> }
+      <div className="badge__text">
+        { text }
+      </div>
     </div>
   );
 }
