@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -2354,8 +2353,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
 		log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
-		log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
-			s.engine.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))
+		log.Infof(ctx, "%s", s.engine.GetCompactionStats())
 	}
 	return nil
 }
