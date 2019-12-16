@@ -499,9 +499,27 @@ func ResolveFK(
 		}
 	}
 
+	// Verify we are not writing a constraint over the same name.
+	// This check is done in Verify(), but we must do it earlier
+	// or else we can hit other checks that break things with
+	// undesired error codes, e.g. #42858.
+	// It may be removable after #37255 is complete.
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
+	if err != nil {
+		return err
+	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name)
+	} else {
+		// Only do this check if constraint name is not empty.
+		// Otherwise, the more helpful error message of
+		// "cannot be used by multiple foreign key constraints"
+		// is hidden.
+		// TODO(#38850): revisit this.
+		if _, ok := constraintInfo[constraintName]; ok {
+			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
+		}
 	}
 
 	targetColIDs := make(sqlbase.ColumnIDs, len(targetCols))
