@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -487,7 +488,10 @@ func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
 
 // GetCompactionStats implements the Engine interface.
 func (p *Pebble) GetCompactionStats() string {
-	return p.db.Metrics().String()
+	// NB: The initial blank line matches the formatting used by RocksDB and
+	// ensures that compaction stats display will not contain the log prefix
+	// (this method is only used for logging purposes).
+	return "\n" + p.db.Metrics().String()
 }
 
 // GetTickersAndHistograms implements the Engine interface.
@@ -879,6 +883,8 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 			sstables = append(sstables, info)
 		}
 	}
+
+	sort.Sort(sstables)
 	return sstables
 }
 
