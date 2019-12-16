@@ -112,7 +112,7 @@ func (c *CustomFuncs) CanMapJoinOpEqualities(
 	equivReps := equivFD.EquivReps()
 
 	for col, ok := equivReps.Next(0); ok; col, ok = equivReps.Next(col + 1) {
-		if c.canMapJoinOpEquivalenceGroup(filters, col, leftCols, rightCols) {
+		if c.canMapJoinOpEquivalenceGroup(filters, col, leftCols, rightCols, equivFD) {
 			return true
 		}
 	}
@@ -131,9 +131,12 @@ func (c *CustomFuncs) CanMapJoinOpEqualities(
 // equality conditions in filters that connect the two groups. If so,
 // canMapJoinOpEquivalenceGroup returns true.
 func (c *CustomFuncs) canMapJoinOpEquivalenceGroup(
-	filters memo.FiltersExpr, col opt.ColumnID, leftCols, rightCols opt.ColSet,
+	filters memo.FiltersExpr,
+	col opt.ColumnID,
+	leftCols, rightCols opt.ColSet,
+	equivFD props.FuncDepSet,
 ) bool {
-	eqCols := c.GetEquivColsWithEquivType(col, filters)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
 
 	// To map equality conditions, the equivalent columns must intersect
 	// both sides and must be fully bound by both sides.
@@ -175,8 +178,8 @@ func (c *CustomFuncs) MapJoinOpEqualities(
 
 	newFilters := filters
 	equivReps.ForEach(func(col opt.ColumnID) {
-		if c.canMapJoinOpEquivalenceGroup(newFilters, col, leftCols, rightCols) {
-			newFilters = c.mapJoinOpEquivalenceGroup(newFilters, col, leftCols, rightCols)
+		if c.canMapJoinOpEquivalenceGroup(newFilters, col, leftCols, rightCols, equivFD) {
+			newFilters = c.mapJoinOpEquivalenceGroup(newFilters, col, leftCols, rightCols, equivFD)
 		}
 	})
 
@@ -207,9 +210,12 @@ func (c *CustomFuncs) MapJoinOpEqualities(
 //   SELECT * FROM a, b WHERE a.x = a.y AND b.x = b.y AND a.x = b.x
 //
 func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
-	filters memo.FiltersExpr, col opt.ColumnID, leftCols, rightCols opt.ColSet,
+	filters memo.FiltersExpr,
+	col opt.ColumnID,
+	leftCols, rightCols opt.ColSet,
+	equivFD props.FuncDepSet,
 ) memo.FiltersExpr {
-	eqCols := c.GetEquivColsWithEquivType(col, filters)
+	eqCols := c.GetEquivColsWithEquivType(col, equivFD)
 
 	// First remove all the equality conditions for this equivalence group.
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
@@ -285,10 +291,10 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 //
 // If src has a correlated subquery, CanMapJoinOpFilter returns false.
 func (c *CustomFuncs) CanMapJoinOpFilter(
-	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+	src *memo.FiltersItem, dstCols opt.ColSet, equivFD props.FuncDepSet,
 ) bool {
 	// Fast path if src is already bound by dst.
-	if c.IsBoundBy(src, c.OutputCols(dst)) {
+	if c.IsBoundBy(src, dstCols) {
 		return true
 	}
 
@@ -300,8 +306,8 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
 	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(i, filters)
-		if !eqCols.Intersects(c.OutputCols(dst)) {
+		eqCols := c.GetEquivColsWithEquivType(i, equivFD)
+		if !eqCols.Intersects(dstCols) {
 			return false
 		}
 	}
@@ -332,10 +338,10 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 // equality predicate a.x = b.x, because it would just return the tautology
 // b.x = b.x.
 func (c *CustomFuncs) MapJoinOpFilter(
-	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+	src *memo.FiltersItem, dstCols opt.ColSet, equivFD props.FuncDepSet,
 ) opt.ScalarExpr {
 	// Fast path if src is already bound by dst.
-	if c.IsBoundBy(src, c.OutputCols(dst)) {
+	if c.IsBoundBy(src, dstCols) {
 		return src.Condition
 	}
 
@@ -344,8 +350,8 @@ func (c *CustomFuncs) MapJoinOpFilter(
 	var colMap util.FastIntMap
 	outerCols := src.ScalarProps(c.mem).OuterCols
 	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
-		eqCols := c.GetEquivColsWithEquivType(srcCol, filters)
-		eqCols.IntersectionWith(c.OutputCols(dst))
+		eqCols := c.GetEquivColsWithEquivType(srcCol, equivFD)
+		eqCols.IntersectionWith(dstCols)
 		if eqCols.Contains(srcCol) {
 			colMap.Set(int(srcCol), int(srcCol))
 		} else {
@@ -353,7 +359,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 			if !ok {
 				panic(errors.AssertionFailedf(
 					"MapJoinOpFilter called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
-					src, dst,
+					src, dstCols,
 				))
 			}
 			colMap.Set(int(srcCol), int(dstCol))
@@ -412,7 +418,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 // TODO(rytaft): In the future, we may want to allow the mapping if the
 // filter involves a comparison operator, such as x < 5.
 func (c *CustomFuncs) GetEquivColsWithEquivType(
-	col opt.ColumnID, filters memo.FiltersExpr,
+	col opt.ColumnID, equivFD props.FuncDepSet,
 ) opt.ColSet {
 	var res opt.ColSet
 	colType := c.f.Metadata().ColumnMeta(col).Type
@@ -425,10 +431,6 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	}
 
 	// Compute all equivalent columns.
-	var equivFD props.FuncDepSet
-	for i := range filters {
-		equivFD.AddEquivFrom(&filters[i].ScalarProps(c.mem).FuncDeps)
-	}
 	eqCols := equivFD.ComputeEquivGroup(col)
 
 	eqCols.ForEach(func(i opt.ColumnID) {
@@ -440,6 +442,19 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 	})
 
 	return res
+}
+
+// GetEquivFD gets a FuncDepSet with all equivalence dependencies from
+// filters, left and right.
+func (c *CustomFuncs) GetEquivFD(
+	filters memo.FiltersExpr, left, right memo.RelExpr,
+) (equivFD props.FuncDepSet) {
+	for i := range filters {
+		equivFD.AddEquivFrom(&filters[i].ScalarProps(c.mem).FuncDeps)
+	}
+	equivFD.AddEquivFrom(&left.Relational().FuncDeps)
+	equivFD.AddEquivFrom(&right.Relational().FuncDeps)
+	return equivFD
 }
 
 // eqConditionsToColMap returns a map of left columns to right columns
