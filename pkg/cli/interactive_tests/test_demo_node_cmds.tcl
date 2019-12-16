@@ -1,8 +1,21 @@
 #! /usr/bin/env expect -f
 
-# disabled until solution found in #42634
-
 source [file join [file dirname $argv0] common.tcl]
+
+# Try eexpect, but if snappy failure occurs, end the test and fail
+# gracefully -- something is up with the CI setup.
+# See #42634 for details.
+proc expect_allow_snappy_failure {text} {
+  expect {
+    $text {}
+    "Decompressor is not installed for grpc-encoding \"snappy\"" {
+      report "snappy was not found; aborting the test"
+      end_test
+      exit 0
+    }
+    timeout { handle_timeout $text }
+  }
+}
 
 start_test "Check \\demo_node commands work as expected"
 # Start a demo with 5 nodes.
@@ -35,7 +48,7 @@ eexpect "node 2 is already running"
 
 # Shut down a separate node.
 send "\\demo_node shutdown 3\r"
-eexpect "node 3 has been shutdown"
+expect_allow_snappy_failure "node 3 has been shutdown"
 
 send "select node_id, draining, decommissioning from crdb_internal.gossip_liveness ORDER BY node_id;\r"
 eexpect "1 |  false   |      false"
