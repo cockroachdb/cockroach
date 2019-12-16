@@ -59,7 +59,7 @@ template <bool reverse> class mvccScanner {
         txn_epoch_(txn.epoch),
         txn_sequence_(txn.sequence),
         txn_max_timestamp_(txn.max_timestamp),
-		txn_ignored_seqnums_(txn.ignored_seqnums),
+        txn_ignored_seqnums_(txn.ignored_seqnums),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
         check_uncertainty_(timestamp < txn.max_timestamp),
@@ -225,14 +225,14 @@ template <bool reverse> class mvccScanner {
         // (partially rolled back). We'll check this next. If it is,
         // we'll try the previous sequence in the intent history.
         if (seqNumIsIgnored(intent_pos->sequence())) {
-            // This entry was part of an ignored range. Iterate back in intent
-            // history to the previous sequence, and check if that one
-            // is ignored.
-            up--;
+           // This entry was part of an ignored range. Iterate back in intent
+           // history to the previous sequence, and check if that one is
+           // ignored.
+           up--;
            continue;
         }
-        // This history entry has not been ignored, so we're going to
-        // select this version.
+        // This history entry has not been ignored, so we're going to select
+        // this version.
         intent = *intent_pos;
         break;
     }
