@@ -17,7 +17,7 @@ export interface BadgeProps {
   text: string;
   size?: "small" | "medium" | "large";
   status?: "success" | "danger" | "default" | "info" | "warning";
-  tag?: boolean; // TODO (koorosh): Tag behaviour isn't implemented yet.
+  tag?: boolean; // TODO (koorosh): Tag behavior isn't implemented yet.
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }
