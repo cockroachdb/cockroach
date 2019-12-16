@@ -5,7 +5,7 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
 tree    field        description
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 query TTT colnames
@@ -13,7 +13,7 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
 tree    field        description
 ·       distributed  false
-·       vectorized   false
+·       vectorized   true
 norows  ·            ·
 
 query TTT colnames
@@ -504,7 +504,7 @@ query TTT
 EXPLAIN SELECT DISTINCT v FROM t
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 distinct   ·            ·
  │         distinct on  v
  └── scan  ·            ·
@@ -515,7 +515,7 @@ query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 ·                    distributed  false
-·                    vectorized   false
+·                    vectorized   true
 limit                ·            ·
  │                   offset       1
  └── limit           ·            ·
@@ -623,7 +623,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 ·            distributed  false     ·               ·
-·            vectorized   false     ·               ·
+·            vectorized   true      ·               ·
 render       ·            ·         (z int, v int)  ·
  │           render 0     (z)[int]  ·               ·
  │           render 1     (v)[int]  ·               ·

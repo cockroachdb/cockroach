@@ -65,7 +65,7 @@ const (
 // hashJoiner performs a hash join. There is no guarantee on the output
 // ordering.
 type hashJoiner struct {
-	execinfra.JoinerBase
+	joinerBase
 
 	runningState hashJoinerState
 
@@ -85,7 +85,7 @@ type hashJoiner struct {
 
 	// storedSide is set by the initial buffering phase and indicates which
 	// stream we store fully and build the hashRowContainer from.
-	storedSide execinfra.JoinSide
+	storedSide joinSide
 
 	// nullEquality indicates that NULL = NULL should be considered true. Used for
 	// INTERSECT and EXCEPT.
@@ -95,7 +95,7 @@ type hashJoiner struct {
 	storedRows     rowcontainer.HashRowContainer
 
 	// Used by tests to force a storedSide.
-	forcedStoredSide *execinfra.JoinSide
+	forcedStoredSide *joinSide
 
 	// probingRowState is state used when hjProbingRow.
 	probingRowState struct {
@@ -124,6 +124,7 @@ type hashJoiner struct {
 
 var _ execinfra.Processor = &hashJoiner{}
 var _ execinfra.RowSource = &hashJoiner{}
+var _ execinfra.OpNode = &hashJoiner{}
 
 const hashJoinerProcName = "hash joiner"
 
@@ -146,7 +147,7 @@ func newHashJoiner(
 	if spec.MergedColumns {
 		numMergedColumns = len(spec.LeftEqColumns)
 	}
-	if err := h.JoinerBase.Init(
+	if err := h.joinerBase.init(
 		h,
 		flowCtx,
 		processorID,
@@ -194,19 +195,19 @@ func newHashJoiner(
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		h.leftSource = execinfra.NewInputStatCollector(h.leftSource)
-		h.rightSource = execinfra.NewInputStatCollector(h.rightSource)
+		h.leftSource = newInputStatCollector(h.leftSource)
+		h.rightSource = newInputStatCollector(h.rightSource)
 		h.FinishTrace = h.outputStatsToTrace
 	}
 
-	h.rows[execinfra.LeftSide].InitWithMon(
+	h.rows[leftSide].InitWithMon(
 		nil /* ordering */, h.leftSource.OutputTypes(), h.EvalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
-	h.rows[execinfra.RightSide].InitWithMon(
+	h.rows[rightSide].InitWithMon(
 		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor, 0, /* rowCapacity */
 	)
 
-	if h.JoinType == sqlbase.IntersectAllJoin || h.JoinType == sqlbase.ExceptAllJoin {
+	if h.joinType == sqlbase.IntersectAllJoin || h.joinType == sqlbase.ExceptAllJoin {
 		h.nullEquality = true
 	}
 
@@ -266,7 +267,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 	// hashJoiner and performs initialization before a transition to
 	// hjConsumingStoredSide.
 	setStoredSideTransition := func(
-		side execinfra.JoinSide,
+		side joinSide,
 	) (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		h.storedSide = side
 		if err := h.initStoredRows(); err != nil {
@@ -281,19 +282,19 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 	}
 
 	for {
-		leftUsage := h.rows[execinfra.LeftSide].MemUsage()
-		rightUsage := h.rows[execinfra.RightSide].MemUsage()
+		leftUsage := h.rows[leftSide].MemUsage()
+		rightUsage := h.rows[rightSide].MemUsage()
 
 		if leftUsage >= h.initialBufferSize && rightUsage >= h.initialBufferSize {
 			// Both sides have reached the buffer size limit. Move on to storing and
 			// fully consuming the right side.
 			log.VEventf(h.Ctx, 1, "buffer phase found no short stream with buffer size %d", h.initialBufferSize)
-			return setStoredSideTransition(execinfra.RightSide)
+			return setStoredSideTransition(rightSide)
 		}
 
-		side := execinfra.RightSide
+		side := rightSide
 		if leftUsage < rightUsage {
-			side = execinfra.LeftSide
+			side = leftSide
 		}
 
 		row, meta, emitDirectly, err := h.receiveNext(side)
@@ -314,9 +315,9 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 			// This side has been fully consumed, it is the shortest side.
 			// If storedSide is empty, we might be able to short-circuit.
 			if h.rows[side].Len() == 0 &&
-				(h.JoinType == sqlbase.InnerJoin ||
-					(h.JoinType == sqlbase.LeftOuterJoin && side == execinfra.LeftSide) ||
-					(h.JoinType == sqlbase.RightOuterJoin && side == execinfra.RightSide)) {
+				(h.joinType == sqlbase.InnerJoin ||
+					(h.joinType == sqlbase.LeftOuterJoin && side == leftSide) ||
+					(h.joinType == sqlbase.RightOuterJoin && side == rightSide)) {
 				h.MoveToDraining(nil /* err */)
 				return hjStateUnknown, nil, h.DrainHelper()
 			}
@@ -412,7 +413,7 @@ func (h *hashJoiner) readProbeSide() (
 	sqlbase.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
-	side := execinfra.OtherSide(h.storedSide)
+	side := otherSide(h.storedSide)
 
 	var row sqlbase.EncDatumRow
 	// First process the rows that were already buffered.
@@ -441,7 +442,7 @@ func (h *hashJoiner) readProbeSide() (
 			// The probe side has been fully consumed. Move on to hjEmittingUnmatched
 			// if unmatched rows on the stored side need to be emitted, otherwise
 			// finish.
-			if execinfra.ShouldEmitUnmatchedRow(h.storedSide, h.JoinType) {
+			if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
 				i := h.storedRows.NewUnmarkedIterator(h.Ctx)
 				i.Rewind()
 				h.emittingUnmatchedState.iter = i
@@ -457,7 +458,7 @@ func (h *hashJoiner) readProbeSide() (
 	h.probingRowState.row = row
 	h.probingRowState.matched = false
 	if h.probingRowState.iter == nil {
-		i, err := h.storedRows.NewBucketIterator(h.Ctx, row, h.EqCols[side])
+		i, err := h.storedRows.NewBucketIterator(h.Ctx, row, h.eqCols[side])
 		if err != nil {
 			h.MoveToDraining(err)
 			return hjStateUnknown, nil, h.DrainHelper()
@@ -491,7 +492,7 @@ func (h *hashJoiner) probeRow() (
 		}
 		// If not, this probe row is unmatched. Check if it needs to be emitted.
 		if renderedRow, shouldEmit := h.shouldEmitUnmatched(
-			h.probingRowState.row, execinfra.OtherSide(h.storedSide),
+			h.probingRowState.row, otherSide(h.storedSide),
 		); shouldEmit {
 			return hjReadingProbeSide, renderedRow, nil
 		}
@@ -512,10 +513,10 @@ func (h *hashJoiner) probeRow() (
 	defer i.Next()
 
 	var renderedRow sqlbase.EncDatumRow
-	if h.storedSide == execinfra.RightSide {
-		renderedRow, err = h.Render(row, otherRow)
+	if h.storedSide == rightSide {
+		renderedRow, err = h.render(row, otherRow)
 	} else {
-		renderedRow, err = h.Render(otherRow, row)
+		renderedRow, err = h.render(otherRow, row)
 	}
 	if err != nil {
 		h.MoveToDraining(err)
@@ -528,8 +529,8 @@ func (h *hashJoiner) probeRow() (
 	}
 
 	h.probingRowState.matched = true
-	shouldEmit := h.JoinType != sqlbase.LeftAntiJoin && h.JoinType != sqlbase.ExceptAllJoin
-	if shouldMark(h.storedSide, h.JoinType) {
+	shouldEmit := h.joinType != sqlbase.LeftAntiJoin && h.joinType != sqlbase.ExceptAllJoin
+	if shouldMark(h.storedSide, h.joinType) {
 		// Matched rows are marked on the stored side for 2 reasons.
 		// 1: For outer joins, anti joins, and EXCEPT ALL to iterate through
 		// the unmarked rows.
@@ -541,7 +542,7 @@ func (h *hashJoiner) probeRow() (
 		// side, but our containers do not support that today).
 		// TODO(peter): figure out a way to reduce this special casing below.
 		if i.IsMarked(h.Ctx) {
-			switch h.JoinType {
+			switch h.joinType {
 			case sqlbase.LeftSemiJoin:
 				shouldEmit = false
 			case sqlbase.IntersectAllJoin:
@@ -559,11 +560,11 @@ func (h *hashJoiner) probeRow() (
 		}
 	}
 	nextState := hjProbingRow
-	if shouldShortCircuit(h.storedSide, h.JoinType) {
+	if shouldShortCircuit(h.storedSide, h.joinType) {
 		nextState = hjReadingProbeSide
 	}
 	if shouldEmit {
-		if h.JoinType == sqlbase.IntersectAllJoin {
+		if h.joinType == sqlbase.IntersectAllJoin {
 			// We found a match, so we are done with this row.
 			return hjReadingProbeSide, renderedRow, nil
 		}
@@ -600,17 +601,17 @@ func (h *hashJoiner) emitUnmatched() (
 	}
 	defer i.Next()
 
-	return hjEmittingUnmatched, h.RenderUnmatchedRow(row, h.storedSide), nil
+	return hjEmittingUnmatched, h.renderUnmatchedRow(row, h.storedSide), nil
 }
 
 func (h *hashJoiner) close() {
 	if h.InternalClose() {
 		// We need to close only memRowContainer of the probe side because the
 		// stored side container will be closed by closing h.storedRows.
-		if h.storedSide == execinfra.RightSide {
-			h.rows[execinfra.LeftSide].Close(h.Ctx)
+		if h.storedSide == rightSide {
+			h.rows[leftSide].Close(h.Ctx)
 		} else {
-			h.rows[execinfra.RightSide].Close(h.Ctx)
+			h.rows[rightSide].Close(h.Ctx)
 		}
 		if h.storedRows != nil {
 			h.storedRows.Close(h.Ctx)
@@ -639,10 +640,10 @@ func (h *hashJoiner) close() {
 // case, a rendered row and true is returned, notifying the caller that the
 // returned row may be emitted directly.
 func (h *hashJoiner) receiveNext(
-	side execinfra.JoinSide,
+	side joinSide,
 ) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata, bool, error) {
 	source := h.leftSource
-	if side == execinfra.RightSide {
+	if side == rightSide {
 		source = h.rightSource
 	}
 	for {
@@ -699,7 +700,7 @@ func (h *hashJoiner) receiveNext(
 		//    | NULL |  52  |
 		//    | NULL |  52  |
 		hasNull := false
-		for _, c := range h.EqCols[side] {
+		for _, c := range h.eqCols[side] {
 			if row[c].IsNull() {
 				hasNull = true
 				break
@@ -724,12 +725,12 @@ func (h *hashJoiner) receiveNext(
 // match. If this is the case, a rendered row ready for emitting is returned as
 // well.
 func (h *hashJoiner) shouldEmitUnmatched(
-	row sqlbase.EncDatumRow, side execinfra.JoinSide,
+	row sqlbase.EncDatumRow, side joinSide,
 ) (sqlbase.EncDatumRow, bool) {
-	if !execinfra.ShouldEmitUnmatchedRow(side, h.JoinType) {
+	if !shouldEmitUnmatchedRow(side, h.joinType) {
 		return nil, false
 	}
-	return h.RenderUnmatchedRow(row, side), true
+	return h.renderUnmatchedRow(row, side), true
 }
 
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
@@ -749,9 +750,9 @@ func (h *hashJoiner) initStoredRows() error {
 	}
 	return h.storedRows.Init(
 		h.Ctx,
-		shouldMark(h.storedSide, h.JoinType),
+		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].Types(),
-		h.EqCols[h.storedSide],
+		h.eqCols[h.storedSide],
 		h.nullEquality,
 	)
 }
@@ -770,8 +771,8 @@ func (hjs *HashJoinerStats) Stats() map[string]string {
 		statsMap[k] = v
 	}
 	statsMap[hashJoinerTagPrefix+"stored_side"] = hjs.StoredSide
-	statsMap[hashJoinerTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
-	statsMap[hashJoinerTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
+	statsMap[hashJoinerTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedMem)
+	statsMap[hashJoinerTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(hjs.MaxAllocatedDisk)
 	return statsMap
 }
 
@@ -782,19 +783,19 @@ func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
 	return append(
 		leftInputStats,
 		fmt.Sprintf("stored side: %s", hjs.StoredSide),
-		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
 	)
 }
 
 // outputStatsToTrace outputs the collected hashJoiner stats to the trace. Will
 // fail silently if the hashJoiner is not collecting stats.
 func (h *hashJoiner) outputStatsToTrace() {
-	lis, ok := execinfra.GetInputStats(h.FlowCtx, h.leftSource)
+	lis, ok := getInputStats(h.FlowCtx, h.leftSource)
 	if !ok {
 		return
 	}
-	ris, ok := execinfra.GetInputStats(h.FlowCtx, h.rightSource)
+	ris, ok := getInputStats(h.FlowCtx, h.rightSource)
 	if !ok {
 		return
 	}
@@ -813,17 +814,17 @@ func (h *hashJoiner) outputStatsToTrace() {
 }
 
 // Some types of joins need to mark rows that matched.
-func shouldMark(storedSide execinfra.JoinSide, joinType sqlbase.JoinType) bool {
+func shouldMark(storedSide joinSide, joinType sqlbase.JoinType) bool {
 	switch {
-	case joinType == sqlbase.LeftSemiJoin && storedSide == execinfra.LeftSide:
+	case joinType == sqlbase.LeftSemiJoin && storedSide == leftSide:
 		return true
-	case joinType == sqlbase.LeftAntiJoin && storedSide == execinfra.LeftSide:
+	case joinType == sqlbase.LeftAntiJoin && storedSide == leftSide:
 		return true
 	case joinType == sqlbase.ExceptAllJoin:
 		return true
 	case joinType == sqlbase.IntersectAllJoin:
 		return true
-	case execinfra.ShouldEmitUnmatchedRow(storedSide, joinType):
+	case shouldEmitUnmatchedRow(storedSide, joinType):
 		return true
 	default:
 		return false
@@ -833,13 +834,36 @@ func shouldMark(storedSide execinfra.JoinSide, joinType sqlbase.JoinType) bool {
 // Some types of joins only need to know of the existence of a matching row in
 // the storedSide, depending on the storedSide, and don't need to know all the
 // rows. These can 'short circuit' to avoid iterating through them all.
-func shouldShortCircuit(storedSide execinfra.JoinSide, joinType sqlbase.JoinType) bool {
+func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
 	switch joinType {
 	case sqlbase.LeftSemiJoin:
-		return storedSide == execinfra.RightSide
+		return storedSide == rightSide
 	case sqlbase.ExceptAllJoin:
 		return true
 	default:
 		return false
+	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (h *hashJoiner) ChildCount(verbose bool) int {
+	return 2
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (h *hashJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := h.leftSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("left input to hashJoiner is not an execinfra.OpNode")
+	case 1:
+		if n, ok := h.rightSource.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("right input to hashJoiner is not an execinfra.OpNode")
+	default:
+		panic(fmt.Sprintf("invalid index %d", nth))
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -710,6 +711,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		result, err := colexec.NewColOperator(
 			ctx, flowCtx, pspec, inputs, s.newStreamingMemAccount(flowCtx),
 			false, /* useStreamingMemAccountForBuffering */
+			rowexec.NewProcessor,
 		)
 		// Even when err is non-nil, it is possible that the buffering memory
 		// monitor and account have been created, so we always want to accumulate
@@ -958,4 +960,19 @@ func SupportsVectorized(
 		return leaves, vecErr
 	}
 	return leaves, err
+}
+
+// VectorizeAlwaysException is an object that returns whether or not execution
+// should continue if vectorize=experimental_always and an error occurred when
+// setting up the vectorized flow. Consider the case in which
+// vectorize=experimental_always. The user must be able to unset this session
+// variable without getting an error.
+type VectorizeAlwaysException interface {
+	// IsException returns whether this object should be an exception to the rule
+	// that an inability to run this node in a vectorized flow should produce an
+	// error.
+	// TODO(asubiotto): This is the cleanest way I can think of to not error out
+	// on SET statements when running with vectorize = experimental_always. If
+	// there is a better way, we should get rid of this interface.
+	IsException() bool
 }

@@ -54,7 +54,7 @@ func (s *sorterBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		input = execinfra.NewInputStatCollector(input)
+		input = newInputStatCollector(input)
 		s.FinishTrace = s.outputStatsToTrace
 	}
 
@@ -147,8 +147,8 @@ const sorterTagPrefix = "sorter."
 // Stats implements the SpanStats interface.
 func (ss *SorterStats) Stats() map[string]string {
 	statsMap := ss.InputStats.Stats(sorterTagPrefix)
-	statsMap[sorterTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
-	statsMap[sorterTagPrefix+execinfra.MaxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
+	statsMap[sorterTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedMem)
+	statsMap[sorterTagPrefix+MaxDiskTagSuffix] = humanizeutil.IBytes(ss.MaxAllocatedDisk)
 	return statsMap
 }
 
@@ -156,15 +156,15 @@ func (ss *SorterStats) Stats() map[string]string {
 func (ss *SorterStats) StatsForQueryPlan() []string {
 	return append(
 		ss.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", execinfra.MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
+		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
 	)
 }
 
 // outputStatsToTrace outputs the collected sorter stats to the trace. Will fail
 // silently if stats are not being collected.
 func (s *sorterBase) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(s.FlowCtx, s.input)
+	is, ok := getInputStats(s.FlowCtx, s.input)
 	if !ok {
 		return
 	}

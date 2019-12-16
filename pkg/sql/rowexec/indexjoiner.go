@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package rowexec
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -26,18 +27,18 @@ import (
 
 const indexJoinerBatchSize = 10000
 
-// IndexJoiner performs a join between a secondary index, the `input`, and the
+// indexJoiner performs a join between a secondary index, the `input`, and the
 // primary index of the same table, `desc`, to retrieve columns which are not
 // stored in the secondary index.
-type IndexJoiner struct {
-	ProcessorBase
+type indexJoiner struct {
+	execinfra.ProcessorBase
 
-	input RowSource
+	input execinfra.RowSource
 	desc  sqlbase.TableDescriptor
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
-	// IndexJoiner to wrap the fetcher with a stat collector when necessary.
-	fetcher RowFetcher
+	// indexJoiner to wrap the fetcher with a stat collector when necessary.
+	fetcher rowFetcher
 	// fetcherReady indicates that we have started an index scan and there are
 	// potentially more rows to retrieve.
 	fetcherReady bool
@@ -56,26 +57,26 @@ type IndexJoiner struct {
 	alloc sqlbase.DatumAlloc
 }
 
-var _ Processor = &IndexJoiner{}
-var _ RowSource = &IndexJoiner{}
-var _ execinfrapb.MetadataSource = &IndexJoiner{}
-var _ OpNode = &IndexJoiner{}
+var _ execinfra.Processor = &indexJoiner{}
+var _ execinfra.RowSource = &indexJoiner{}
+var _ execinfrapb.MetadataSource = &indexJoiner{}
+var _ execinfra.OpNode = &indexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
-// NewIndexJoiner returns a new IndexJoiner.
-func NewIndexJoiner(
-	flowCtx *FlowCtx,
+// newIndexJoiner returns a new indexJoiner.
+func newIndexJoiner(
+	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.JoinReaderSpec,
-	input RowSource,
+	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
-	output RowReceiver,
-) (RowSourcedProcessor, error) {
+	output execinfra.RowReceiver,
+) (execinfra.RowSourcedProcessor, error) {
 	if spec.IndexIdx != 0 {
 		return nil, errors.Errorf("index join must be against primary index")
 	}
-	ij := &IndexJoiner{
+	ij := &indexJoiner{
 		input:     input,
 		desc:      spec.Table,
 		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
@@ -90,8 +91,8 @@ func NewIndexJoiner(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		ProcStateOpts{
-			InputsToDrain: []RowSource{ij.input},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 				ij.InternalClose()
 				return ij.generateMeta(ctx)
@@ -101,7 +102,7 @@ func NewIndexJoiner(
 		return nil, err
 	}
 	var fetcher row.Fetcher
-	if _, _, err := InitRowFetcher(
+	if _, _, err := initRowFetcher(
 		&fetcher,
 		&ij.desc,
 		0, /* primary index */
@@ -117,8 +118,8 @@ func NewIndexJoiner(
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		// Enable stats collection.
-		ij.input = NewInputStatCollector(ij.input)
-		ij.fetcher = NewRowFetcherStatCollector(&fetcher)
+		ij.input = newInputStatCollector(ij.input)
+		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.FinishTrace = ij.outputStatsToTrace
 	} else {
 		ij.fetcher = &fetcher
@@ -134,19 +135,19 @@ func NewIndexJoiner(
 }
 
 // SetBatchSize sets the desired batch size. It should only be used in tests.
-func (ij *IndexJoiner) SetBatchSize(batchSize int) {
+func (ij *indexJoiner) SetBatchSize(batchSize int) {
 	ij.batchSize = batchSize
 }
 
 // Start is part of the RowSource interface.
-func (ij *IndexJoiner) Start(ctx context.Context) context.Context {
+func (ij *indexJoiner) Start(ctx context.Context) context.Context {
 	ij.input.Start(ctx)
 	return ij.StartInternal(ctx, indexJoinerProcName)
 }
 
 // Next is part of the RowSource interface.
-func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	for ij.State == StateRunning {
+func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for ij.State == execinfra.StateRunning {
 		if !ij.fetcherReady {
 			// Retrieve a batch of rows from the input.
 			for len(ij.spans) < ij.batchSize {
@@ -199,12 +200,12 @@ func (ij *IndexJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (ij *IndexJoiner) ConsumerClosed() {
+func (ij *indexJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ij.InternalClose()
 }
 
-func (ij *IndexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
+func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
 	numKeyCols := len(ij.desc.PrimaryIndex.ColumnIDs)
 	if len(row) < numKeyCols {
 		return roachpb.Span{}, errors.Errorf(
@@ -220,7 +221,7 @@ func (ij *IndexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 		&ij.desc.PrimaryIndex, &ij.alloc)
 }
 
-func (ij *IndexJoiner) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
+func (ij *indexJoiner) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roachpb.Spans {
 	// we are always looking up a single row, because we are always
 	// looking up a full primary key
 	if len(ij.neededFamilies) > 0 &&
@@ -230,14 +231,14 @@ func (ij *IndexJoiner) maybeSplitSpanIntoSeparateFamilies(span roachpb.Span) roa
 	return roachpb.Spans{span}
 }
 
-// outputStatsToTrace outputs the collected IndexJoiner stats to the trace. Will
-// fail silently if the IndexJoiner is not collecting stats.
-func (ij *IndexJoiner) outputStatsToTrace() {
-	is, ok := GetInputStats(ij.FlowCtx, ij.input)
+// outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will
+// fail silently if the indexJoiner is not collecting stats.
+func (ij *indexJoiner) outputStatsToTrace() {
+	is, ok := getInputStats(ij.FlowCtx, ij.input)
 	if !ok {
 		return
 	}
-	ils, ok := GetFetcherInputStats(ij.FlowCtx, ij.fetcher)
+	ils, ok := getFetcherInputStats(ij.FlowCtx, ij.fetcher)
 	if !ok {
 		return
 	}
@@ -250,30 +251,30 @@ func (ij *IndexJoiner) outputStatsToTrace() {
 	}
 }
 
-func (ij *IndexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if meta := GetTxnCoordMeta(ctx, ij.FlowCtx.Txn); meta != nil {
+func (ij *indexJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	if meta := execinfra.GetTxnCoordMeta(ctx, ij.FlowCtx.Txn); meta != nil {
 		return []execinfrapb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (ij *IndexJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (ij *indexJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return ij.generateMeta(ctx)
 }
 
-// ChildCount is part of the OpNode interface.
-func (ij *IndexJoiner) ChildCount(verbose bool) int {
+// ChildCount is part of the execinfra.OpNode interface.
+func (ij *indexJoiner) ChildCount(verbose bool) int {
 	return 1
 }
 
-// Child is part of the OpNode interface.
-func (ij *IndexJoiner) Child(nth int, verbose bool) OpNode {
+// Child is part of the execinfra.OpNode interface.
+func (ij *indexJoiner) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
-		if n, ok := ij.input.(OpNode); ok {
+		if n, ok := ij.input.(execinfra.OpNode); ok {
 			return n
 		}
-		panic("input to IndexJoiner is not an OpNode")
+		panic("input to indexJoiner is not an execinfra.OpNode")
 	}
 	panic(fmt.Sprintf("invalid index %d", nth))
 }

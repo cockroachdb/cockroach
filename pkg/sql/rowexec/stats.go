@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package rowexec
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,30 +26,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// InputStatCollector wraps a RowSource and collects stats from it.
-type InputStatCollector struct {
-	RowSource
+// inputStatCollector wraps an execinfra.RowSource and collects stats from it.
+type inputStatCollector struct {
+	execinfra.RowSource
 	InputStats
 }
 
-var _ RowSource = &InputStatCollector{}
-var _ OpNode = &InputStatCollector{}
+var _ execinfra.RowSource = &inputStatCollector{}
+var _ execinfra.OpNode = &inputStatCollector{}
 
-// NewInputStatCollector creates a new InputStatCollector that wraps the given
+// newInputStatCollector creates a new inputStatCollector that wraps the given
 // input.
-func NewInputStatCollector(input RowSource) *InputStatCollector {
-	return &InputStatCollector{RowSource: input}
+func newInputStatCollector(input execinfra.RowSource) *inputStatCollector {
+	return &inputStatCollector{RowSource: input}
 }
 
 // ChildCount is part of the OpNode interface.
-func (isc *InputStatCollector) ChildCount(verbose bool) int {
+func (isc *inputStatCollector) ChildCount(verbose bool) int {
 	return 1
 }
 
 // Child is part of the OpNode interface.
-func (isc *InputStatCollector) Child(nth int, verbose bool) OpNode {
+func (isc *inputStatCollector) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
-		return isc.RowSource.(OpNode)
+		return isc.RowSource.(execinfra.OpNode)
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
@@ -57,7 +58,7 @@ func (isc *InputStatCollector) Child(nth int, verbose bool) OpNode {
 
 // Next implements the RowSource interface. It calls Next on the embedded
 // RowSource and collects stats.
-func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (isc *inputStatCollector) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	start := timeutil.Now()
 	row, meta := isc.RowSource.Next()
 	if row != nil {
@@ -74,8 +75,8 @@ const (
 	MaxMemoryTagSuffix = "mem.max"
 	// MaxDiskTagSuffix is the tag suffix for the max disk used stat.
 	MaxDiskTagSuffix = "disk.max"
-	// BytesReadTagSuffix is the tag suffix for the bytes read stat.
-	BytesReadTagSuffix = "bytes.read"
+	// bytesReadTagSuffix is the tag suffix for the bytes read stat.
+	bytesReadTagSuffix = "bytes.read"
 )
 
 // Stats is a utility method that returns a map of the InputStats` stats to
@@ -94,8 +95,8 @@ const (
 	MaxMemoryQueryPlanSuffix = "max memory used"
 	// MaxDiskQueryPlanSuffix is the tag suffix for the max disk used.
 	MaxDiskQueryPlanSuffix = "max disk used"
-	// BytesReadQueryPlanSuffix is the tag suffix for the bytes read.
-	BytesReadQueryPlanSuffix = "bytes read"
+	// bytesReadQueryPlanSuffix is the tag suffix for the bytes read.
+	bytesReadQueryPlanSuffix = "bytes read"
 )
 
 // StatsForQueryPlan is a utility method that returns a list of the InputStats'
@@ -114,25 +115,25 @@ func (is InputStats) RoundStallTime() time.Duration {
 	return is.StallTime.Round(time.Microsecond)
 }
 
-// RowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
+// rowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
 //
 // Only row.Fetcher methods that collect stats are overridden.
-type RowFetcherStatCollector struct {
+type rowFetcherStatCollector struct {
 	*row.Fetcher
 	// stats contains the collected stats.
 	stats              InputStats
 	startScanStallTime time.Duration
 }
 
-var _ RowFetcher = &RowFetcherStatCollector{}
+var _ rowFetcher = &rowFetcherStatCollector{}
 
-// NewRowFetcherStatCollector returns a new RowFetcherStatCollector.
-func NewRowFetcherStatCollector(f *row.Fetcher) *RowFetcherStatCollector {
-	return &RowFetcherStatCollector{Fetcher: f}
+// newRowFetcherStatCollector returns a new rowFetcherStatCollector.
+func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
+	return &rowFetcherStatCollector{Fetcher: f}
 }
 
-// NextRow is part of the RowFetcher interface.
-func (c *RowFetcherStatCollector) NextRow(
+// NextRow is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) NextRow(
 	ctx context.Context,
 ) (sqlbase.EncDatumRow, *sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
 	start := timeutil.Now()
@@ -144,8 +145,8 @@ func (c *RowFetcherStatCollector) NextRow(
 	return row, t, i, err
 }
 
-// StartScan is part of the RowFetcher interface.
-func (c *RowFetcherStatCollector) StartScan(
+// StartScan is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	txn *client.Txn,
 	spans roachpb.Spans,
@@ -159,8 +160,8 @@ func (c *RowFetcherStatCollector) StartScan(
 	return err
 }
 
-// StartInconsistentScan is part of the RowFetcher interface.
-func (c *RowFetcherStatCollector) StartInconsistentScan(
+// StartInconsistentScan is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) StartInconsistentScan(
 	ctx context.Context,
 	db *client.DB,
 	initialTimestamp hlc.Timestamp,
@@ -176,4 +177,37 @@ func (c *RowFetcherStatCollector) StartInconsistentScan(
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
+}
+
+// getInputStats is a utility function to check whether the given input is
+// collecting stats, returning true and the stats if so. If false is returned,
+// the input is not collecting stats.
+func getInputStats(flowCtx *execinfra.FlowCtx, input execinfra.RowSource) (InputStats, bool) {
+	isc, ok := input.(*inputStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	return getStatsInner(flowCtx, isc.InputStats), true
+}
+
+func getStatsInner(flowCtx *execinfra.FlowCtx, stats InputStats) InputStats {
+	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
+		stats.StallTime = 0
+	}
+	return stats
+}
+
+// getFetcherInputStats is a utility function to check whether the given input
+// is collecting row fetcher stats, returning true and the stats if so. If
+// false is returned, the input is not collecting row fetcher stats.
+func getFetcherInputStats(flowCtx *execinfra.FlowCtx, f rowFetcher) (InputStats, bool) {
+	rfsc, ok := f.(*rowFetcherStatCollector)
+	if !ok {
+		return InputStats{}, false
+	}
+	// Add row fetcher start scan stall time to Next() stall time.
+	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
+		rfsc.stats.StallTime += rfsc.startScanStallTime
+	}
+	return getStatsInner(flowCtx, rfsc.stats), true
 }

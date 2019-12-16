@@ -558,7 +558,7 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
             └ *colexec.hashJoinEqOp
               ├ *colexec.hashJoinEqOp
               │ ├ *colexec.colBatchScan
-              │ └ *execinfra.JoinReader
+              │ └ *rowexec.joinReader
               │   └ *colexec.mergeJoinInnerOp
               │     ├ *colexec.colBatchScan
               │     └ *colexec.selEQBytesBytesConstOp
@@ -586,7 +586,7 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
     └ *colexec.topKSorter
       └ *colexec.orderedAggregator
         └ *colexec.hashGrouper
-          └ *execinfra.JoinReader
+          └ *rowexec.joinReader
             └ *colexec.hashJoinEqOp
               ├ *colexec.selLTInt64Int64ConstOp
               │ └ *colexec.colBatchScan
@@ -603,7 +603,7 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
     └ *colexec.orderedAggregator
       └ *colexec.hashGrouper
         └ *colexec.hashJoinEqOp
-          ├ *execinfra.IndexJoiner
+          ├ *rowexec.indexJoiner
           │ └ *colexec.colBatchScan
           └ *colexec.selLTInt64Int64Op
             └ *colexec.colBatchScan
@@ -623,12 +623,12 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
               ├ *colexec.hashJoinEqOp
               │ ├ *colexec.hashJoinEqOp
               │ │ ├ *colexec.colBatchScan
-              │ │ └ *execinfra.JoinReader
+              │ │ └ *rowexec.joinReader
               │ │   └ *colexec.hashJoinEqOp
               │ │     ├ *colexec.colBatchScan
               │ │     └ *colexec.selEQBytesBytesConstOp
               │ │       └ *colexec.colBatchScan
-              │ └ *execinfra.IndexJoiner
+              │ └ *rowexec.indexJoiner
               │   └ *colexec.colBatchScan
               └ *colexec.colBatchScan
 
@@ -641,7 +641,7 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
   └ *colexec.orderedAggregator
     └ *colexec.oneShotOp
       └ *colexec.distinctChainOps
-        └ *execinfra.IndexJoiner
+        └ *rowexec.indexJoiner
           └ *colexec.colBatchScan
 
 # Query 7
@@ -658,9 +658,9 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
             └ *colexec.defaultBuiltinFuncOperator
               └ *colexec.constBytesOp
                 └ *colexec.hashJoinEqOp
-                  ├ *execinfra.JoinReader
-                  │ └ *execinfra.JoinReader
-                  │   └ *execinfra.JoinReader
+                  ├ *rowexec.joinReader
+                  │ └ *rowexec.joinReader
+                  │   └ *rowexec.joinReader
                   │     └ *colexec.caseOp
                   │       ├ *colexec.bufferOp
                   │       │ └ *colexec.hashJoinEqOp
@@ -702,7 +702,7 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
             │           │ │ ├ *colexec.colBatchScan
             │           │ │ └ *colexec.hashJoinEqOp
             │           │ │   ├ *colexec.hashJoinEqOp
-            │           │ │   │ ├ *execinfra.JoinReader
+            │           │ │   │ ├ *rowexec.joinReader
             │           │ │   │ │ └ *colexec.mergeJoinInnerOp
             │           │ │   │ │   ├ *colexec.selEQBytesBytesConstOp
             │           │ │   │ │   │ └ *colexec.colBatchScan
@@ -728,10 +728,10 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
   └ *colexec.sortOp
     └ *colexec.orderedAggregator
       └ *colexec.hashGrouper
-        └ *execinfra.JoinReader
+        └ *rowexec.joinReader
           └ *colexec.hashJoinEqOp
             ├ *colexec.hashJoinEqOp
-            │ ├ *execinfra.JoinReader
+            │ ├ *rowexec.joinReader
             │ │ └ *colexec.hashJoinEqOp
             │ │   ├ *colexec.colBatchScan
             │ │   └ *colexec.colBatchScan
@@ -748,11 +748,11 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
     └ *colexec.topKSorter
       └ *colexec.orderedAggregator
         └ *colexec.hashGrouper
-          └ *execinfra.JoinReader
+          └ *rowexec.joinReader
             └ *colexec.hashJoinEqOp
               ├ *colexec.hashJoinEqOp
               │ ├ *colexec.colBatchScan
-              │ └ *execinfra.IndexJoiner
+              │ └ *rowexec.indexJoiner
               │   └ *colexec.colBatchScan
               └ *colexec.colBatchScan
 
@@ -768,15 +768,23 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
         └ *colexec.constNullOp
           └ *colexec.orderedAggregator
             └ *colexec.hashGrouper
-              └ *execinfra.JoinReader
-                └ *execinfra.JoinReader
-                  └ *execinfra.JoinReader
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *rowexec.joinReader
                     └ *colexec.selEQBytesBytesConstOp
                       └ *colexec.colBatchScan
 
 # Query 12
-query error unable to vectorize execution plan: sum on int cols not supported
+query T
 EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o_orderpriority = '2-HIGH' THEN 1 ELSE 0 END) AS high_line_count, sum(CASE WHEN o_orderpriority <> '1-URGENT' AND o_orderpriority <> '2-HIGH' THEN 1 ELSE 0 END) AS low_line_count FROM orders, lineitem WHERE o_orderkey = l_orderkey AND l_shipmode IN ('MAIL', 'SHIP') AND l_commitdate < l_receiptdate AND l_shipdate < l_commitdate AND l_receiptdate >= DATE '1994-01-01' AND l_receiptdate < DATE '1994-01-01' + INTERVAL '1' YEAR GROUP BY l_shipmode ORDER BY l_shipmode
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *rowexec.hashAggregator
+      └ *rowexec.joinReader
+        └ *rowexec.indexJoiner
+          └ *colexec.colBatchScan
 
 # Query 13
 query T
@@ -811,7 +819,7 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
                   ├ *colexec.bufferOp
                   │ └ *colexec.hashJoinEqOp
                   │   ├ *colexec.colBatchScan
-                  │   └ *execinfra.IndexJoiner
+                  │   └ *rowexec.indexJoiner
                   │     └ *colexec.colBatchScan
                   ├ *colexec.projMultFloat64Float64Op
                   │ └ *colexec.projMinusFloat64ConstFloat64Op
@@ -826,8 +834,22 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
 #-- CREATE VIEW revenue0 (supplier_no, total_revenue) AS SELECT l_suppkey, sum(l_extendedprice * (1 - l_discount)) FROM lineitem WHERE l_shipdate >= DATE '1996-01-01' AND l_shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH GROUP BY l_suppkey; SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM supplier, revenue0 WHERE s_suppkey = supplier_no AND total_revenue = ( SELECT max(total_revenue) FROM revenue0) ORDER BY s_suppkey; DROP VIEW revenue0
 
 # Query 16
-query error distinct aggregation not supported
+query T
 EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supplier_cnt FROM partsupp, part WHERE p_partkey = ps_partkey AND p_brand <> 'Brand#45' AND p_type NOT LIKE 'MEDIUM POLISHED%' AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9) AND ps_suppkey NOT IN ( SELECT s_suppkey FROM supplier WHERE s_comment LIKE '%Customer%Complaints%') GROUP BY p_brand, p_type, p_size ORDER BY supplier_cnt DESC, p_brand, p_type, p_size
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *rowexec.hashAggregator
+      └ *colexec.hashJoinEqOp
+        ├ *colexec.mergeJoinLeftAntiOp
+        │ ├ *colexec.colBatchScan
+        │ └ *colexec.selRegexpBytesBytesConstOp
+        │   └ *colexec.colBatchScan
+        └ *colexec.selectInOpInt64
+          └ *colexec.selNotPrefixBytesBytesConstOp
+            └ *colexec.selNEBytesBytesConstOp
+              └ *colexec.colBatchScan
 
 # Query 17
 query T
@@ -839,13 +861,13 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
     └ *colexec.orderedAggregator
       └ *colexec.oneShotOp
         └ *colexec.distinctChainOps
-          └ *execinfra.JoinReader
-            └ *execinfra.JoinReader
+          └ *rowexec.joinReader
+            └ *rowexec.joinReader
               └ *colexec.projMultFloat64Float64ConstOp
                 └ *colexec.orderedAggregator
                   └ *colexec.distinctChainOps
-                    └ *execinfra.JoinReader
-                      └ *execinfra.JoinReader
+                    └ *rowexec.joinReader
+                      └ *rowexec.joinReader
                         └ *colexec.selEQBytesBytesConstOp
                           └ *colexec.selEQBytesBytesConstOp
                             └ *colexec.colBatchScan
@@ -941,7 +963,7 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
       │   │   └ *colexec.orderedAggregator
       │   │     └ *colexec.hashGrouper
       │   │       └ *colexec.hashJoinEqOp
-      │   │         ├ *execinfra.IndexJoiner
+      │   │         ├ *rowexec.indexJoiner
       │   │         │ └ *colexec.colBatchScan
       │   │         └ *colexec.colBatchScan
       │   └ *colexec.selPrefixBytesBytesConstOp
@@ -950,8 +972,28 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
         └ *colexec.colBatchScan
 
 # Query 21
-query error can't plan non-inner hash join with on expressions
+query T
 EXPLAIN (VEC) SELECT s_name, count(*) AS numwait FROM supplier, lineitem l1, orders, nation WHERE s_suppkey = l1.l_suppkey AND o_orderkey = l1.l_orderkey AND o_orderstatus = 'F' AND l1.l_receiptDATE > l1.l_commitdate AND EXISTS ( SELECT * FROM lineitem l2 WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey) AND NOT EXISTS ( SELECT * FROM lineitem l3 WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptDATE > l3.l_commitdate) AND s_nationkey = n_nationkey AND n_name = 'SAUDI ARABIA' GROUP BY s_name ORDER BY numwait DESC, s_name LIMIT 100
+----
+│
+└ Node 1
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.orderedAggregator
+        └ *colexec.hashGrouper
+          └ *rowexec.joinReader
+            └ *colexec.hashJoinEqOp
+              ├ *rowexec.hashJoiner
+              │ ├ *colexec.mergeJoinLeftAntiWithOnExprOp
+              │ │ ├ *colexec.selGTInt64Int64Op
+              │ │ │ └ *colexec.colBatchScan
+              │ │ └ *colexec.selGTInt64Int64Op
+              │ │   └ *colexec.colBatchScan
+              │ └ *colexec.colBatchScan
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *colexec.selEQBytesBytesConstOp
+                    └ *colexec.colBatchScan
 
 # Query 22
 query T
@@ -962,7 +1004,7 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
   └ *colexec.sortOp
     └ *colexec.orderedAggregator
       └ *colexec.hashGrouper
-        └ *execinfra.JoinReader
+        └ *rowexec.joinReader
           └ *colexec.selGTFloat64Float64Op
             └ *colexec.castOpNullAny
               └ *colexec.constNullOp

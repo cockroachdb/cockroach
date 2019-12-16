@@ -37,46 +37,48 @@ func checkNumIn(inputs []Operator, numIn int) error {
 	return nil
 }
 
-// wrapRowSource, given an input Operator, integrates toWrap into a columnar
+// wrapRowSources, given input Operators, integrates toWrap into a columnar
 // execution flow and returns toWrap's output as an Operator.
-func wrapRowSource(
+func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input Operator,
-	inputTypes []types.T,
+	inputs []Operator,
+	inputTypes [][]types.T,
 	acc *mon.BoundAccount,
-	newToWrap func(execinfra.RowSource) (execinfra.RowSource, error),
+	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 ) (*Columnarizer, error) {
 	var (
-		toWrapInput execinfra.RowSource
+		toWrapInputs []execinfra.RowSource
 		// TODO(asubiotto): Plumb proper processorIDs once we have stats.
 		processorID int32
 	)
-	// Optimization: if the input is a Columnarizer, its input is necessarily a
-	// distsql.RowSource, so remove the unnecessary conversion.
-	if c, ok := input.(*Columnarizer); ok {
-		// TODO(asubiotto): We might need to do some extra work to remove references
-		// to this operator (e.g. streamIDToOp).
-		toWrapInput = c.input
-	} else {
-		var err error
-		toWrapInput, err = NewMaterializer(
-			flowCtx,
-			processorID,
-			input,
-			inputTypes,
-			&execinfrapb.PostProcessSpec{},
-			nil, /* output */
-			nil, /* metadataSourcesQueue */
-			nil, /* outputStatsToTrace */
-			nil, /* cancelFlow */
-		)
-		if err != nil {
-			return nil, err
+	for i, input := range inputs {
+		// Optimization: if the input is a Columnarizer, its input is necessarily a
+		// execinfra.RowSource, so remove the unnecessary conversion.
+		if c, ok := input.(*Columnarizer); ok {
+			// TODO(asubiotto): We might need to do some extra work to remove references
+			// to this operator (e.g. streamIDToOp).
+			toWrapInputs = append(toWrapInputs, c.input)
+		} else {
+			toWrapInput, err := NewMaterializer(
+				flowCtx,
+				processorID,
+				input,
+				inputTypes[i],
+				&execinfrapb.PostProcessSpec{},
+				nil, /* output */
+				nil, /* metadataSourcesQueue */
+				nil, /* outputStatsToTrace */
+				nil, /* cancelFlow */
+			)
+			if err != nil {
+				return nil, err
+			}
+			toWrapInputs = append(toWrapInputs, toWrapInput)
 		}
 	}
 
-	toWrap, err := newToWrap(toWrapInput)
+	toWrap, err := newToWrap(toWrapInputs)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +237,124 @@ func createJoiner(
 	return err
 }
 
+// isSupported checks whether we have a columnar operator equivalent to a
+// processor described by spec. Note that it doesn't perform any other checks
+// (like validity of the number of inputs).
+func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
+	core := spec.Core
+
+	switch {
+	case core.Noop != nil:
+		return true, nil
+
+	case core.TableReader != nil:
+		if core.TableReader.IsCheck {
+			return false, errors.Newf("scrub table reader is unsupported in vectorized")
+		}
+		return true, nil
+
+	case core.Aggregator != nil:
+		aggSpec := core.Aggregator
+		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
+		for i, agg := range aggSpec.Aggregations {
+			if agg.Distinct {
+				return false, errors.Newf("distinct aggregation not supported")
+			}
+			if agg.FilterColIdx != nil {
+				return false, errors.Newf("filtering aggregation not supported")
+			}
+			if len(agg.Arguments) > 0 {
+				return false, errors.Newf("aggregates with arguments not supported")
+			}
+			aggTyps[i] = make([]types.T, len(agg.ColIdx))
+			for j, colIdx := range agg.ColIdx {
+				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
+			}
+			switch agg.Func {
+			case execinfrapb.AggregatorSpec_SUM:
+				switch aggTyps[i][0].Family() {
+				case types.IntFamily:
+					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
+					// at the end, mod issues with overflow. Perhaps to avoid the overflow
+					// issues, at first, we could plan SUM for all types besides Int64.
+					return false, errors.Newf("sum on int cols not supported (use sum_int)")
+				}
+			case execinfrapb.AggregatorSpec_SUM_INT:
+				// TODO(yuzefovich): support this case through vectorize.
+				if aggTyps[i][0].Width() != 64 {
+					return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
+				}
+			}
+		}
+		return true, nil
+
+	case core.Distinct != nil:
+		var orderedCols util.FastIntSet
+		for _, col := range core.Distinct.OrderedColumns {
+			orderedCols.Add(int(col))
+		}
+		for _, col := range core.Distinct.DistinctColumns {
+			if !orderedCols.Contains(int(col)) {
+				return false, errors.Newf("unsorted distinct not supported")
+			}
+		}
+		return true, nil
+
+	case core.Ordinality != nil:
+		return true, nil
+
+	case core.HashJoiner != nil:
+		if !core.HashJoiner.OnExpr.Empty() &&
+			core.HashJoiner.Type != sqlbase.JoinType_INNER {
+			return false, errors.Newf("can't plan non-inner hash join with on expressions")
+		}
+		if core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
+			return false, errors.Newf("LEFT ANTI hash join is unsupported")
+		}
+		return true, nil
+
+	case core.MergeJoiner != nil:
+		if !core.MergeJoiner.OnExpr.Empty() {
+			switch core.MergeJoiner.Type {
+			case sqlbase.JoinType_INNER, sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+			default:
+				return false, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
+			}
+		}
+		return true, nil
+
+	case core.Sorter != nil:
+		return true, nil
+
+	case core.Windower != nil:
+		if len(core.Windower.WindowFns) != 1 {
+			return false, errors.Newf("only a single window function is currently supported")
+		}
+		wf := core.Windower.WindowFns[0]
+		if wf.Frame != nil &&
+			(wf.Frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE ||
+				wf.Frame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
+				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_CURRENT_ROW)) {
+			return false, errors.Newf("window functions with non-default window frames are not supported")
+		}
+		if wf.Func.AggregateFunc != nil {
+			return false, errors.Newf("aggregate functions used as window functions are not supported")
+		}
+
+		switch *wf.Func.WindowFunc {
+		case execinfrapb.WindowerSpec_ROW_NUMBER:
+		case execinfrapb.WindowerSpec_RANK:
+		case execinfrapb.WindowerSpec_DENSE_RANK:
+		default:
+			return false, errors.Newf("window function %s is not supported", wf.String())
+		}
+		return true, nil
+
+	default:
+		return false, errors.Newf("unsupported processor core %q", core)
+	}
+}
+
 // NewColOperator creates a new columnar operator according to the given spec.
 // useStreamingMemAccountForBuffering specifies whether to use
 // streamingMemAccount when creating buffering operators and should only be set
@@ -246,6 +366,7 @@ func NewColOperator(
 	inputs []Operator,
 	streamingMemAccount *mon.BoundAccount,
 	useStreamingMemAccountForBuffering bool,
+	processorConstructor execinfra.ProcessorConstructor,
 ) (result NewColOperatorResult, err error) {
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -260,527 +381,499 @@ func NewColOperator(
 	// order to determine whether the resulting chain of operators is streaming,
 	// it is sufficient to look only at the "core" operator.
 	result.IsStreaming = false
-	switch {
-	case core.Noop != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-		result.Op, result.IsStreaming = NewNoop(inputs[0]), true
-		result.ColumnTypes = spec.Input[0].ColumnTypes
-	case core.TableReader != nil:
-		if err := checkNumIn(inputs, 0); err != nil {
-			return result, err
-		}
-		if core.TableReader.IsCheck {
-			return result, errors.Newf("scrub table reader is unsupported in vectorized")
-		}
-		var scanOp *colBatchScan
-		scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
-		if err != nil {
-			return result, err
-		}
-		result.Op, result.IsStreaming = scanOp, true
-		result.MetadataSources = append(result.MetadataSources, scanOp)
-		// colBatchScan is wrapped with a cancel checker below, so we need to
-		// log its creation separately.
-		log.VEventf(ctx, 1, "made op %T\n", result.Op)
 
-		// We want to check for cancellation once per input batch, and wrapping
-		// only colBatchScan with a CancelChecker allows us to do just that.
-		// It's sufficient for most of the operators since they are extremely fast.
-		// However, some of the long-running operators (for example, sorter) are
-		// still responsible for doing the cancellation check on their own while
-		// performing long operations.
-		result.Op = NewCancelChecker(result.Op)
-		returnMutations := core.TableReader.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-		result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
-	case core.Aggregator != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
+	supported, err := isSupported(spec)
+	if !supported {
+		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
+		// around a planNode) because it creates complications, and a flow with
+		// such processor probably will not benefit from the vectorization.
+		if core.LocalPlanNode != nil {
+			return result, errors.Newf("core.LocalPlanNode is not supported")
 		}
-		aggSpec := core.Aggregator
-		if len(aggSpec.Aggregations) == 0 {
-			// We can get an aggregator when no aggregate functions are present if
-			// HAVING clause is present, for example, with a query as follows:
-			// SELECT 1 FROM t HAVING true. In this case, we plan a special operator
-			// that outputs a batch of length 1 without actual columns once and then
-			// zero-length batches. The actual "data" will be added by projections
-			// below.
-			// TODO(solon): The distsql plan for this case includes a TableReader, so
-			// we end up creating an orphaned colBatchScan. We should avoid that.
-			// Ideally the optimizer would not plan a scan in this unusual case.
-			result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, streamingMemAccount)), true, nil
-			// We make ColumnTypes non-nil so that sanity check doesn't panic.
-			result.ColumnTypes = make([]types.T, 0)
-			break
+		// We also do not wrap MetadataTest{Sender,Receiver} because of the way
+		// metadata is propagated through the vectorized flow - it is drained at
+		// the flow shutdown unlike these test processors expect.
+		if core.MetadataTestSender != nil {
+			return result, errors.Newf("core.MetadataTestSender is not supported")
 		}
-		if len(aggSpec.GroupCols) == 0 &&
-			len(aggSpec.Aggregations) == 1 &&
-			aggSpec.Aggregations[0].FilterColIdx == nil &&
-			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
-			!aggSpec.Aggregations[0].Distinct {
-			result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
-			result.ColumnTypes = []types.T{*types.Int}
-			break
+		if core.MetadataTestReceiver != nil {
+			return result, errors.Newf("core.MetadataTestReceiver is not supported")
 		}
 
-		var groupCols, orderedCols util.FastIntSet
-
-		for _, col := range aggSpec.OrderedGroupCols {
-			orderedCols.Add(int(col))
-		}
-
-		needHash := false
-		for _, col := range aggSpec.GroupCols {
-			if !orderedCols.Contains(int(col)) {
-				needHash = true
-			}
-			groupCols.Add(int(col))
-		}
-		if !orderedCols.SubsetOf(groupCols) {
-			return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
-		}
-
-		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
-		aggCols := make([][]uint32, len(aggSpec.Aggregations))
-		aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		result.ColumnTypes = make([]types.T, len(aggSpec.Aggregations))
-		for i, agg := range aggSpec.Aggregations {
-			if agg.Distinct {
-				return result, errors.Newf("distinct aggregation not supported")
-			}
-			if agg.FilterColIdx != nil {
-				return result, errors.Newf("filtering aggregation not supported")
-			}
-			if len(agg.Arguments) > 0 {
-				return result, errors.Newf("aggregates with arguments not supported")
-			}
-			aggTyps[i] = make([]types.T, len(agg.ColIdx))
-			for j, colIdx := range agg.ColIdx {
-				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
-			}
-			aggCols[i] = agg.ColIdx
-			aggFns[i] = agg.Func
-			switch agg.Func {
-			case execinfrapb.AggregatorSpec_SUM:
-				switch aggTyps[i][0].Family() {
-				case types.IntFamily:
-					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
-					// at the end, mod issues with overflow. Perhaps to avoid the overflow
-					// issues, at first, we could plan SUM for all types besides Int64.
-					return result, errors.Newf("sum on int cols not supported (use sum_int)")
-				}
-			case execinfrapb.AggregatorSpec_SUM_INT:
-				// TODO(yuzefovich): support this case through vectorize.
-				if aggTyps[i][0].Width() != 64 {
-					return result, errors.Newf("sum_int is only supported on Int64 through vectorized")
-				}
-			}
-			_, retType, err := execinfrapb.GetAggregateInfo(agg.Func, aggTyps[i]...)
-			if err != nil {
-				return result, err
-			}
-			result.ColumnTypes[i] = *retType
-		}
-		var typs []coltypes.T
-		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		if err != nil {
-			return result, err
-		}
-		if needHash {
-			hashAggregatorMemAccount := streamingMemAccount
-			if !useStreamingMemAccountForBuffering {
-				hashAggregatorMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "hash-aggregator-limited",
-				)
-			}
-			result.Op, err = NewHashAggregator(
-				NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
-				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
-			)
-		} else {
-			result.Op, err = NewOrderedAggregator(
-				NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
-				aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
-			)
-			result.IsStreaming = true
-		}
-
-	case core.Distinct != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-
-		var distinctCols, orderedCols util.FastIntSet
-
-		for _, col := range core.Distinct.OrderedColumns {
-			orderedCols.Add(int(col))
-		}
-		for _, col := range core.Distinct.DistinctColumns {
-			if !orderedCols.Contains(int(col)) {
-				return result, errors.Newf("unsorted distinct not supported")
-			}
-			distinctCols.Add(int(col))
-		}
-		if !orderedCols.SubsetOf(distinctCols) {
-			return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
-		}
-
-		result.ColumnTypes = spec.Input[0].ColumnTypes
-		var typs []coltypes.T
-		typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
-		if err != nil {
-			return result, err
-		}
-		result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
-		result.IsStreaming = true
-
-	case core.Ordinality != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-		result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true
-
-	case core.HashJoiner != nil:
-		createHashJoinerWithOnExprPlanning := func(
-			result *NewColOperatorResult,
-			leftTypes, rightTypes []coltypes.T,
-			leftOutCols, rightOutCols []uint32,
-		) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
-			var (
-				onExpr         *execinfrapb.Expression
-				onExprPlanning filterPlanningState
-			)
-			if !core.HashJoiner.OnExpr.Empty() {
-				if core.HashJoiner.Type != sqlbase.JoinType_INNER {
-					return onExpr, onExprPlanning, leftOutCols, rightOutCols, errors.Newf("can't plan non-inner hash join with on expressions")
-				}
-				onExpr = &core.HashJoiner.OnExpr
-				onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
-				leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
-					*onExpr, leftOutCols, rightOutCols,
-				)
-				if err != nil {
-					return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
-				}
-			}
-
-			hashJoinerMemAccount := streamingMemAccount
-			if !useStreamingMemAccountForBuffering {
-				hashJoinerMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "hash-joiner-limited",
-				)
-			}
-			result.Op, err = NewEqHashJoinerOp(
-				NewAllocator(ctx, hashJoinerMemAccount),
-				inputs[0],
-				inputs[1],
-				core.HashJoiner.LeftEqColumns,
-				core.HashJoiner.RightEqColumns,
-				leftOutCols,
-				rightOutCols,
-				leftTypes,
-				rightTypes,
-				core.HashJoiner.RightEqColumnsAreKey,
-				core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
-				core.HashJoiner.Type,
-			)
-			return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
-		}
-
-		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
-			core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
+		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
+		var (
+			c          *Columnarizer
+			inputTypes [][]types.T
 		)
 
-	case core.MergeJoiner != nil:
-		if core.MergeJoiner.Type.IsSetOpJoin() {
-			return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
-		}
-		// Merge joiner is a streaming operator when equality columns form a key
-		// for both of the inputs.
-		result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
-
-		createMergeJoinerWithOnExprPlanning := func(
-			result *NewColOperatorResult,
-			leftTypes, rightTypes []coltypes.T,
-			leftOutCols, rightOutCols []uint32,
-		) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
-			var (
-				onExpr            *execinfrapb.Expression
-				onExprPlanning    filterPlanningState
-				filterOnlyOnLeft  bool
-				filterConstructor func(Operator) (Operator, error)
-			)
-			if !core.MergeJoiner.OnExpr.Empty() {
-				// At the moment, we want to be on the conservative side and not run
-				// queries with ON expressions when vectorize=auto, so we say that the
-				// merge join is not streaming which will reject running such a query
-				// through vectorized engine with 'auto' setting.
-				// TODO(yuzefovich): remove this when we're confident in ON expression
-				// support.
-				result.IsStreaming = false
-
-				onExpr = &core.MergeJoiner.OnExpr
-				onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
-				switch core.MergeJoiner.Type {
-				case sqlbase.JoinType_INNER:
-					leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
-						*onExpr, leftOutCols, rightOutCols,
-					)
-				case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
-					filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
-					filterConstructor = func(op Operator) (Operator, error) {
-						r := NewColOperatorResult{
-							Op:          op,
-							ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
-						}
-						// We don't need to specify indexVarMap because the filter will be
-						// run alongside the merge joiner, and it will have access to all
-						// of the columns from both sides.
-						err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, streamingMemAccount)
-						return r.Op, err
-					}
-				default:
-					return onExpr, onExprPlanning, leftOutCols, rightOutCols, errors.Errorf("can only plan INNER, LEFT SEMI, and LEFT ANTI merge joins with ON expressions")
-				}
-			}
-			if err != nil {
-				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
-			}
-
-			mergeJoinerMemAccount := streamingMemAccount
-			if !result.IsStreaming && !useStreamingMemAccountForBuffering {
-				// Whether the merge joiner is streaming is already set above.
-				mergeJoinerMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "merge-joiner-limited",
-				)
-			}
-			result.Op, err = NewMergeJoinOp(
-				NewAllocator(ctx, mergeJoinerMemAccount),
-				core.MergeJoiner.Type,
-				inputs[0],
-				inputs[1],
-				leftOutCols,
-				rightOutCols,
-				leftTypes,
-				rightTypes,
-				core.MergeJoiner.LeftOrdering.Columns,
-				core.MergeJoiner.RightOrdering.Columns,
-				filterConstructor,
-				filterOnlyOnLeft,
-			)
-			return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+		for _, input := range spec.Input {
+			inputTypes = append(inputTypes, input.ColumnTypes)
 		}
 
-		err = createJoiner(
-			ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
-			core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
-		)
-
-	case core.JoinReader != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-
-		var c *Columnarizer
-		c, err = wrapRowSource(
+		c, err = wrapRowSources(
 			ctx,
 			flowCtx,
-			inputs[0],
-			spec.Input[0].ColumnTypes,
+			inputs,
+			inputTypes,
 			streamingMemAccount,
-			func(input execinfra.RowSource) (execinfra.RowSource, error) {
-				var (
-					jr  execinfra.RowSource
-					err error
+			func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
+				// We provide a slice with a single nil as 'outputs' parameter because
+				// all processors expect a single output. Passing nil is ok here
+				// because when wrapping the processor, the materializer will be its
+				// output, and it will be set up in wrapRowSources.
+				proc, err := processorConstructor(
+					ctx, flowCtx, spec.ProcessorID, core, post, inputs,
+					[]execinfra.RowReceiver{nil}, /* outputs */
+					nil,                          /* localProcessors */
 				)
-				// The lookup and index joiners need to be passed the post-process specs,
-				// since they inspect them to figure out information about needed columns.
-				// This means that we'll let those processors do any renders or filters,
-				// which isn't ideal. We could improve this.
-				if len(core.JoinReader.LookupColumns) == 0 {
-					jr, err = execinfra.NewIndexJoiner(
-						flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
-					)
-				} else {
-					jr, err = execinfra.NewJoinReader(
-						flowCtx, spec.ProcessorID, core.JoinReader, input, post, nil, /* output */
-					)
-				}
-				post = &execinfrapb.PostProcessSpec{}
 				if err != nil {
 					return nil, err
 				}
-				result.ColumnTypes = jr.OutputTypes()
-				return jr, nil
+				var (
+					rs execinfra.RowSource
+					ok bool
+				)
+				if rs, ok = proc.(execinfra.RowSource); !ok {
+					return nil, errors.Newf(
+						"processor %s is not an execinfra.RowSource", core.String(),
+					)
+				}
+				// The wrapped processors need to be passed the post-process specs,
+				// since they inspect them to figure out information about needed
+				// columns. This means that we'll let those processors do any renders
+				// or filters, which isn't ideal. We could improve this.
+				post = &execinfrapb.PostProcessSpec{}
+				result.ColumnTypes = rs.OutputTypes()
+				return rs, nil
 			},
 		)
+
+		// We say that the wrapped processor is "streaming" because it is not a
+		// buffering operator (even if it is a buffering processor). This is not a
+		// problem for memory accounting because each processor does that on its
+		// own, so the used memory will be accounted for.
 		result.Op, result.IsStreaming = c, true
 		result.MetadataSources = append(result.MetadataSources, c)
-
-	case core.Sorter != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-		input := inputs[0]
-		var inputTypes []coltypes.T
-		inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		if err != nil {
-			return result, err
-		}
-		orderingCols := core.Sorter.OutputOrdering.Columns
-		matchLen := core.Sorter.OrderingMatchLen
-		if matchLen > 0 {
-			// The input is already partially ordered. Use a chunks sorter to avoid
-			// loading all the rows into memory.
-			var sortChunksMemAccount *mon.BoundAccount
-			if useStreamingMemAccountForBuffering {
-				sortChunksMemAccount = streamingMemAccount
-			} else {
-				sortChunksMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "sort-chunks-limited",
-				)
+	} else {
+		switch {
+		case core.Noop != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
 			}
-			result.Op, err = NewSortChunks(
-				NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
-				orderingCols, int(matchLen),
-			)
-		} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
-			// There is a limit specified with no post-process filter, so we know
-			// exactly how many rows the sorter should output. Choose a top K sorter,
-			// which uses a heap to avoid storing more rows than necessary.
-			k := uint16(post.Limit + post.Offset)
-			result.Op = NewTopKSorter(
-				NewAllocator(ctx, streamingMemAccount), input, inputTypes,
-				orderingCols, k,
-			)
-			result.IsStreaming = true
-		} else {
-			// No optimizations possible. Default to the standard sort operator.
-			var sorterMemAccount *mon.BoundAccount
-			if useStreamingMemAccountForBuffering {
-				sorterMemAccount = streamingMemAccount
-			} else {
-				sorterMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "sort-all-limited",
-				)
+			result.Op, result.IsStreaming = NewNoop(inputs[0]), true
+			result.ColumnTypes = spec.Input[0].ColumnTypes
+		case core.TableReader != nil:
+			if err := checkNumIn(inputs, 0); err != nil {
+				return result, err
 			}
-			inMemorySorter, err := NewSorter(
-				NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
-			)
+			var scanOp *colBatchScan
+			scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
 			if err != nil {
 				return result, err
 			}
-			var diskSpillerMemAccount *mon.BoundAccount
-			if useStreamingMemAccountForBuffering {
-				diskSpillerMemAccount = streamingMemAccount
-			} else {
-				diskSpillerMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "disk-spiller-sort-all-limited",
-				)
-			}
-			diskSpillerAllocator := NewAllocator(ctx, diskSpillerMemAccount)
-			result.Op = newOneInputDiskSpiller(
-				diskSpillerAllocator,
-				input, inMemorySorter.(bufferingInMemoryOperator),
-				func(input Operator) Operator {
-					return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
-				})
-		}
-		result.ColumnTypes = spec.Input[0].ColumnTypes
+			result.Op, result.IsStreaming = scanOp, true
+			result.MetadataSources = append(result.MetadataSources, scanOp)
+			// colBatchScan is wrapped with a cancel checker below, so we need to
+			// log its creation separately.
+			log.VEventf(ctx, 1, "made op %T\n", result.Op)
 
-	case core.Windower != nil:
-		if err := checkNumIn(inputs, 1); err != nil {
-			return result, err
-		}
-		if len(core.Windower.WindowFns) != 1 {
-			return result, errors.Newf("only a single window function is currently supported")
-		}
-		wf := core.Windower.WindowFns[0]
-		if wf.Frame != nil &&
-			(wf.Frame.Mode != execinfrapb.WindowerSpec_Frame_RANGE ||
-				wf.Frame.Bounds.Start.BoundType != execinfrapb.WindowerSpec_Frame_UNBOUNDED_PRECEDING ||
-				(wf.Frame.Bounds.End != nil && wf.Frame.Bounds.End.BoundType != execinfrapb.WindowerSpec_Frame_CURRENT_ROW)) {
-			return result, errors.Newf("window functions with non-default window frames are not supported")
-		}
-		if wf.Func.AggregateFunc != nil {
-			return result, errors.Newf("aggregate functions used as window functions are not supported")
-		}
-
-		input := inputs[0]
-		var typs []coltypes.T
-		typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		if err != nil {
-			return result, err
-		}
-		tempPartitionColOffset, partitionColIdx := 0, -1
-		if len(core.Windower.PartitionBy) > 0 {
-			// TODO(yuzefovich): add support for hashing partitioner (probably by
-			// leveraging hash routers once we can distribute). The decision about
-			// which kind of partitioner to use should come from the optimizer.
-			windowSortingPartitionerMemAccount := streamingMemAccount
-			if !useStreamingMemAccountForBuffering {
-				windowSortingPartitionerMemAccount = result.createBufferingMemAccount(
-					ctx, flowCtx, "window-sorting-partitioner-limited",
-				)
+			// We want to check for cancellation once per input batch, and wrapping
+			// only colBatchScan with a CancelChecker allows us to do just that.
+			// It's sufficient for most of the operators since they are extremely fast.
+			// However, some of the long-running operators (for example, sorter) are
+			// still responsible for doing the cancellation check on their own while
+			// performing long operations.
+			result.Op = NewCancelChecker(result.Op)
+			returnMutations := core.TableReader.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+			result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
+		case core.Aggregator != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
 			}
-			input, err = NewWindowSortingPartitioner(
-				NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
-				core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
-			)
-			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
-		} else {
-			if len(wf.Ordering.Columns) > 0 {
-				windowSorterMemAccount := streamingMemAccount
+			aggSpec := core.Aggregator
+			if len(aggSpec.Aggregations) == 0 {
+				// We can get an aggregator when no aggregate functions are present if
+				// HAVING clause is present, for example, with a query as follows:
+				// SELECT 1 FROM t HAVING true. In this case, we plan a special operator
+				// that outputs a batch of length 1 without actual columns once and then
+				// zero-length batches. The actual "data" will be added by projections
+				// below.
+				// TODO(solon): The distsql plan for this case includes a TableReader, so
+				// we end up creating an orphaned colBatchScan. We should avoid that.
+				// Ideally the optimizer would not plan a scan in this unusual case.
+				result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(NewAllocator(ctx, streamingMemAccount)), true, nil
+				// We make ColumnTypes non-nil so that sanity check doesn't panic.
+				result.ColumnTypes = make([]types.T, 0)
+				break
+			}
+			if len(aggSpec.GroupCols) == 0 &&
+				len(aggSpec.Aggregations) == 1 &&
+				aggSpec.Aggregations[0].FilterColIdx == nil &&
+				aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
+				!aggSpec.Aggregations[0].Distinct {
+				result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
+				result.ColumnTypes = []types.T{*types.Int}
+				break
+			}
+
+			var groupCols, orderedCols util.FastIntSet
+
+			for _, col := range aggSpec.OrderedGroupCols {
+				orderedCols.Add(int(col))
+			}
+
+			needHash := false
+			for _, col := range aggSpec.GroupCols {
+				if !orderedCols.Contains(int(col)) {
+					needHash = true
+				}
+				groupCols.Add(int(col))
+			}
+			if !orderedCols.SubsetOf(groupCols) {
+				return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+			}
+
+			aggTyps := make([][]types.T, len(aggSpec.Aggregations))
+			aggCols := make([][]uint32, len(aggSpec.Aggregations))
+			aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
+			result.ColumnTypes = make([]types.T, len(aggSpec.Aggregations))
+			for i, agg := range aggSpec.Aggregations {
+				aggTyps[i] = make([]types.T, len(agg.ColIdx))
+				for j, colIdx := range agg.ColIdx {
+					aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
+				}
+				aggCols[i] = agg.ColIdx
+				aggFns[i] = agg.Func
+				_, retType, err := execinfrapb.GetAggregateInfo(agg.Func, aggTyps[i]...)
+				if err != nil {
+					return result, err
+				}
+				result.ColumnTypes[i] = *retType
+			}
+			var typs []coltypes.T
+			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			if err != nil {
+				return result, err
+			}
+			if needHash {
+				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					windowSorterMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, "window-sorter-limited",
+					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator-limited")
+				}
+				result.Op, err = NewHashAggregator(
+					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
+					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				)
+			} else {
+				result.Op, err = NewOrderedAggregator(
+					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
+					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				)
+				result.IsStreaming = true
+			}
+
+		case core.Distinct != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
+			}
+
+			var distinctCols, orderedCols util.FastIntSet
+
+			for _, col := range core.Distinct.OrderedColumns {
+				orderedCols.Add(int(col))
+			}
+			for _, col := range core.Distinct.DistinctColumns {
+				distinctCols.Add(int(col))
+			}
+			if !orderedCols.SubsetOf(distinctCols) {
+				return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+			}
+
+			result.ColumnTypes = spec.Input[0].ColumnTypes
+			var typs []coltypes.T
+			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
+			if err != nil {
+				return result, err
+			}
+			result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+			result.IsStreaming = true
+
+		case core.Ordinality != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
+			}
+			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true
+
+		case core.HashJoiner != nil:
+			createHashJoinerWithOnExprPlanning := func(
+				result *NewColOperatorResult,
+				leftTypes, rightTypes []coltypes.T,
+				leftOutCols, rightOutCols []uint32,
+			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
+				var (
+					onExpr         *execinfrapb.Expression
+					onExprPlanning filterPlanningState
+				)
+				if !core.HashJoiner.OnExpr.Empty() {
+					onExpr = &core.HashJoiner.OnExpr
+					onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
+					leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
+						*onExpr, leftOutCols, rightOutCols,
+					)
+					if err != nil {
+						return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+					}
+				}
+
+				hashJoinerMemAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					hashJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner-limited")
+				}
+				result.Op, err = NewEqHashJoinerOp(
+					NewAllocator(ctx, hashJoinerMemAccount),
+					inputs[0],
+					inputs[1],
+					core.HashJoiner.LeftEqColumns,
+					core.HashJoiner.RightEqColumns,
+					leftOutCols,
+					rightOutCols,
+					leftTypes,
+					rightTypes,
+					core.HashJoiner.RightEqColumnsAreKey,
+					core.HashJoiner.LeftEqColumnsAreKey || core.HashJoiner.RightEqColumnsAreKey,
+					core.HashJoiner.Type,
+				)
+				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+			}
+
+			err = createJoiner(
+				ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
+				core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
+			)
+
+		case core.MergeJoiner != nil:
+			if core.MergeJoiner.Type.IsSetOpJoin() {
+				return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
+			}
+			// Merge joiner is a streaming operator when equality columns form a key
+			// for both of the inputs.
+			result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
+
+			createMergeJoinerWithOnExprPlanning := func(
+				result *NewColOperatorResult,
+				leftTypes, rightTypes []coltypes.T,
+				leftOutCols, rightOutCols []uint32,
+			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
+				var (
+					onExpr            *execinfrapb.Expression
+					onExprPlanning    filterPlanningState
+					filterOnlyOnLeft  bool
+					filterConstructor func(Operator) (Operator, error)
+				)
+				if !core.MergeJoiner.OnExpr.Empty() {
+					// At the moment, we want to be on the conservative side and not run
+					// queries with ON expressions when vectorize=auto, so we say that the
+					// merge join is not streaming which will reject running such a query
+					// through vectorized engine with 'auto' setting.
+					// TODO(yuzefovich): remove this when we're confident in ON expression
+					// support.
+					result.IsStreaming = false
+
+					onExpr = &core.MergeJoiner.OnExpr
+					onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
+					switch core.MergeJoiner.Type {
+					case sqlbase.JoinType_INNER:
+						leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
+							*onExpr, leftOutCols, rightOutCols,
+						)
+					case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+						filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
+						filterConstructor = func(op Operator) (Operator, error) {
+							r := NewColOperatorResult{
+								Op:          op,
+								ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
+							}
+							// We don't need to specify indexVarMap because the filter will be
+							// run alongside the merge joiner, and it will have access to all
+							// of the columns from both sides.
+							err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, streamingMemAccount)
+							return r.Op, err
+						}
+					}
+				}
+				if err != nil {
+					return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+				}
+
+				mergeJoinerMemAccount := streamingMemAccount
+				if !result.IsStreaming && !useStreamingMemAccountForBuffering {
+					// Whether the merge joiner is streaming is already set above.
+					mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner-limited")
+				}
+				result.Op, err = NewMergeJoinOp(
+					NewAllocator(ctx, mergeJoinerMemAccount),
+					core.MergeJoiner.Type,
+					inputs[0],
+					inputs[1],
+					leftOutCols,
+					rightOutCols,
+					leftTypes,
+					rightTypes,
+					core.MergeJoiner.LeftOrdering.Columns,
+					core.MergeJoiner.RightOrdering.Columns,
+					filterConstructor,
+					filterOnlyOnLeft,
+				)
+				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+			}
+
+			err = createJoiner(
+				ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
+				core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
+			)
+
+		case core.Sorter != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
+			}
+			input := inputs[0]
+			var inputTypes []coltypes.T
+			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			if err != nil {
+				return result, err
+			}
+			orderingCols := core.Sorter.OutputOrdering.Columns
+			matchLen := core.Sorter.OrderingMatchLen
+			if matchLen > 0 {
+				// The input is already partially ordered. Use a chunks sorter to avoid
+				// loading all the rows into memory.
+				var sortChunksMemAccount *mon.BoundAccount
+				if useStreamingMemAccountForBuffering {
+					sortChunksMemAccount = streamingMemAccount
+				} else {
+					sortChunksMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks-limited")
+				}
+				result.Op, err = NewSortChunks(
+					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
+					orderingCols, int(matchLen),
+				)
+			} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
+				// There is a limit specified with no post-process filter, so we know
+				// exactly how many rows the sorter should output. Choose a top K sorter,
+				// which uses a heap to avoid storing more rows than necessary.
+				k := uint16(post.Limit + post.Offset)
+				result.Op = NewTopKSorter(
+					NewAllocator(ctx, streamingMemAccount), input, inputTypes,
+					orderingCols, k,
+				)
+				result.IsStreaming = true
+			} else {
+				// No optimizations possible. Default to the standard sort operator.
+				var sorterMemAccount *mon.BoundAccount
+				if useStreamingMemAccountForBuffering {
+					sorterMemAccount = streamingMemAccount
+				} else {
+					sorterMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, "sort-all-limited",
 					)
 				}
-				input, err = NewSorter(
-					NewAllocator(ctx, windowSorterMemAccount), input, typs,
-					wf.Ordering.Columns,
+				inMemorySorter, err := NewSorter(
+					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
 				)
+				if err != nil {
+					return result, err
+				}
+				var diskSpillerMemAccount *mon.BoundAccount
+				if useStreamingMemAccountForBuffering {
+					diskSpillerMemAccount = streamingMemAccount
+				} else {
+					diskSpillerMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, "disk-spiller-sort-all-limited",
+					)
+				}
+				diskSpillerAllocator := NewAllocator(ctx, diskSpillerMemAccount)
+				result.Op = newOneInputDiskSpiller(
+					diskSpillerAllocator,
+					input, inMemorySorter.(bufferingInMemoryOperator),
+					func(input Operator) Operator {
+						return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
+					})
 			}
-			// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
-			// omitted, the window function operator is actually streaming.
-		}
-		if err != nil {
-			return result, err
-		}
+			result.ColumnTypes = spec.Input[0].ColumnTypes
 
-		orderingCols := make([]uint32, len(wf.Ordering.Columns))
-		for i, col := range wf.Ordering.Columns {
-			orderingCols[i] = col.ColIdx
-		}
-		switch *wf.Func.WindowFunc {
-		case execinfrapb.WindowerSpec_ROW_NUMBER:
-			result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
-		case execinfrapb.WindowerSpec_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
-		case execinfrapb.WindowerSpec_DENSE_RANK:
-			result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+		case core.Windower != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return result, err
+			}
+			wf := core.Windower.WindowFns[0]
+			input := inputs[0]
+			var typs []coltypes.T
+			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			if err != nil {
+				return result, err
+			}
+			tempPartitionColOffset, partitionColIdx := 0, -1
+			if len(core.Windower.PartitionBy) > 0 {
+				// TODO(yuzefovich): add support for hashing partitioner (probably by
+				// leveraging hash routers once we can distribute). The decision about
+				// which kind of partitioner to use should come from the optimizer.
+				windowSortingPartitionerMemAccount := streamingMemAccount
+				if !useStreamingMemAccountForBuffering {
+					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner-limited")
+				}
+				input, err = NewWindowSortingPartitioner(
+					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
+					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+				)
+				tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
+			} else {
+				if len(wf.Ordering.Columns) > 0 {
+					windowSorterMemAccount := streamingMemAccount
+					if !useStreamingMemAccountForBuffering {
+						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter-limited")
+					}
+					input, err = NewSorter(
+						NewAllocator(ctx, windowSorterMemAccount), input, typs,
+						wf.Ordering.Columns,
+					)
+				}
+				// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
+				// omitted, the window function operator is actually streaming.
+			}
+			if err != nil {
+				return result, err
+			}
+
+			orderingCols := make([]uint32, len(wf.Ordering.Columns))
+			for i, col := range wf.Ordering.Columns {
+				orderingCols[i] = col.ColIdx
+			}
+			switch *wf.Func.WindowFunc {
+			case execinfrapb.WindowerSpec_ROW_NUMBER:
+				result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			case execinfrapb.WindowerSpec_RANK:
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			case execinfrapb.WindowerSpec_DENSE_RANK:
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+			}
+
+			if partitionColIdx != -1 {
+				// Window partitioner will append a temporary column to the batch which
+				// we want to project out.
+				projection := make([]uint32, 0, wf.OutputColIdx+1)
+				for i := uint32(0); i < wf.OutputColIdx; i++ {
+					projection = append(projection, i)
+				}
+				projection = append(projection, wf.OutputColIdx+1)
+				result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+1), projection)
+			}
+
+			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
+
 		default:
-			return result, errors.Newf("window function %s is not supported", wf.String())
+			return result, errors.Newf("unsupported processor core %q", core)
 		}
-
-		if partitionColIdx != -1 {
-			// Window partitioner will append a temporary column to the batch which
-			// we want to project out.
-			projection := make([]uint32, 0, wf.OutputColIdx+1)
-			for i := uint32(0); i < wf.OutputColIdx; i++ {
-				projection = append(projection, i)
-			}
-			projection = append(projection, wf.OutputColIdx+1)
-			result.Op = NewSimpleProjectOp(result.Op, int(wf.OutputColIdx+1), projection)
-		}
-
-		result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-
-	default:
-		return result, errors.Newf("unsupported processor core %q", core)
 	}
 
 	if err != nil {

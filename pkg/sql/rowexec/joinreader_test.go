@@ -426,7 +426,7 @@ func TestJoinReader(t *testing.T) {
 				in := distsqlutils.NewRowBuffer(c.inputTypes, encRows, distsqlutils.RowBufferArgs{})
 
 				out := &distsqlutils.RowBuffer{}
-				jr, err := execinfra.NewJoinReader(
+				jr, err := newJoinReader(
 					&flowCtx,
 					0, /* processorID */
 					&execinfrapb.JoinReaderSpec{
@@ -445,7 +445,7 @@ func TestJoinReader(t *testing.T) {
 				}
 
 				// Set a lower batch size to force multiple batches.
-				jr.(*execinfra.JoinReader).SetBatchSize(3 /* batchSize */)
+				jr.(*joinReader).SetBatchSize(3 /* batchSize */)
 
 				jr.Run(ctx)
 
@@ -538,7 +538,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	}
 
 	out := &distsqlutils.RowBuffer{}
-	jr, err := execinfra.NewJoinReader(
+	jr, err := newJoinReader(
 		&flowCtx,
 		0, /* processorID */
 		&execinfrapb.JoinReaderSpec{
@@ -571,7 +571,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		count++
 	}
 	require.Equal(t, numRows, count)
-	require.True(t, jr.(*execinfra.JoinReader).Spilled())
+	require.True(t, jr.(*joinReader).Spilled())
 }
 
 // TestJoinReaderDrain tests various scenarios in which a joinReader's consumer
@@ -640,7 +640,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
-		jr, err := execinfra.NewJoinReader(
+		jr, err := newJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -661,7 +661,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
-		jr, err := execinfra.NewJoinReader(
+		jr, err := newJoinReader(
 			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
 		)
 		if err != nil {
@@ -745,7 +745,7 @@ func BenchmarkJoinReader(b *testing.B) {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
 			for i := 0; i < b.N; i++ {
-				jr, err := execinfra.NewJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
 				if err != nil {
 					b.Fatal(err)
 				}

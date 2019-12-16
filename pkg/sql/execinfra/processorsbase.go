@@ -325,6 +325,21 @@ func (h *ProcOutputHelper) consumerClosed() {
 	h.rowIdx = h.maxRowIdx
 }
 
+// ProcessorConstructor is a function that creates a Processor. It is
+// abstracted away so that we could create mixed flows (i.e. a vectorized flow
+// with wrapped processors) without bringing a dependency on sql/rowexec
+// package into sql/colexec package.
+type ProcessorConstructor func(
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	processorID int32,
+	core *execinfrapb.ProcessorCoreUnion,
+	post *execinfrapb.PostProcessSpec,
+	inputs []RowSource,
+	outputs []RowReceiver,
+	localProcessors []LocalProcessor,
+) (Processor, error)
+
 // ProcessorBase is supposed to be embedded by Processors. It provides
 // facilities for dealing with filtering and projection (through a
 // ProcOutputHelper) and for implementing the RowSource interface (draining,
@@ -866,39 +881,6 @@ func NewLimitedMonitor(
 	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return &limitedMon
-}
-
-// GetInputStats is a utility function to check whether the given input is
-// collecting stats, returning true and the stats if so. If false is returned,
-// the input is not collecting stats.
-func GetInputStats(flowCtx *FlowCtx, input RowSource) (InputStats, bool) {
-	isc, ok := input.(*InputStatCollector)
-	if !ok {
-		return InputStats{}, false
-	}
-	return getStatsInner(flowCtx, isc.InputStats), true
-}
-
-func getStatsInner(flowCtx *FlowCtx, stats InputStats) InputStats {
-	if flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		stats.StallTime = 0
-	}
-	return stats
-}
-
-// GetFetcherInputStats is a utility function to check whether the given input
-// is collecting row fetcher stats, returning true and the stats if so. If
-// false is returned, the input is not collecting row fetcher stats.
-func GetFetcherInputStats(flowCtx *FlowCtx, f RowFetcher) (InputStats, bool) {
-	rfsc, ok := f.(*RowFetcherStatCollector)
-	if !ok {
-		return InputStats{}, false
-	}
-	// Add row fetcher start scan stall time to Next() stall time.
-	if !flowCtx.Cfg.TestingKnobs.DeterministicStats {
-		rfsc.stats.StallTime += rfsc.startScanStallTime
-	}
-	return getStatsInner(flowCtx, rfsc.stats), true
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with

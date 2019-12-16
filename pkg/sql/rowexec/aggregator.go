@@ -95,7 +95,7 @@ func (ag *aggregatorBase) init(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		input = execinfra.NewInputStatCollector(input)
+		input = newInputStatCollector(input)
 		ag.FinishTrace = ag.outputStatsToTrace
 	}
 	ag.input = input
@@ -183,7 +183,7 @@ const aggregatorTagPrefix = "aggregator."
 // Stats implements the SpanStats interface.
 func (as *AggregatorStats) Stats() map[string]string {
 	inputStatsMap := as.InputStats.Stats(aggregatorTagPrefix)
-	inputStatsMap[aggregatorTagPrefix+execinfra.MaxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
+	inputStatsMap[aggregatorTagPrefix+MaxMemoryTagSuffix] = humanizeutil.IBytes(as.MaxAllocatedMem)
 	return inputStatsMap
 }
 
@@ -191,12 +191,12 @@ func (as *AggregatorStats) Stats() map[string]string {
 func (as *AggregatorStats) StatsForQueryPlan() []string {
 	return append(
 		as.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", execinfra.MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)),
 	)
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {
-	is, ok := execinfra.GetInputStats(ag.FlowCtx, ag.input)
+	is, ok := getInputStats(ag.FlowCtx, ag.input)
 	if !ok {
 		return
 	}
@@ -209,6 +209,22 @@ func (ag *aggregatorBase) outputStatsToTrace() {
 			},
 		)
 	}
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (ag *aggregatorBase) ChildCount(verbose bool) int {
+	return 1
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (ag *aggregatorBase) Child(nth int, verbose bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := ag.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to aggregatorBase is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
 // hashAggregator is a specialization of aggregatorBase that must keep track of
@@ -234,11 +250,13 @@ type orderedAggregator struct {
 
 var _ execinfra.Processor = &hashAggregator{}
 var _ execinfra.RowSource = &hashAggregator{}
+var _ execinfra.OpNode = &hashAggregator{}
 
 const hashAggregatorProcName = "hash aggregator"
 
 var _ execinfra.Processor = &orderedAggregator{}
 var _ execinfra.RowSource = &orderedAggregator{}
+var _ execinfra.OpNode = &orderedAggregator{}
 
 const orderedAggregatorProcName = "ordered aggregator"
 
