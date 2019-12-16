@@ -166,7 +166,7 @@ delete xy
 opt expect=DecorrelateProjectSet
 SELECT generate_series(0, 5) FROM xy
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: generate_series:3(int)
  ├── side-effects
  ├── scan xy
@@ -195,7 +195,7 @@ semi-join-apply
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: generate_series:8(int)
  │    ├── outer: (1,2)
  │    ├── side-effects
@@ -219,7 +219,7 @@ semi-join-apply
 opt expect=DecorrelateProjectSet
 SELECT generate_series(0, (SELECT generate_series(1,0) FROM xy)) FROM uv
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: generate_series:6(int)
  ├── side-effects
  ├── scan uv
@@ -240,7 +240,7 @@ inner-join (hash)
  │                        ├── side-effects
  │                        ├── key: ()
  │                        ├── fd: ()-->(5)
- │                        └── inner-join (hash)
+ │                        └── inner-join (cross)
  │                             ├── columns: generate_series:5(int)
  │                             ├── side-effects
  │                             ├── scan xy
@@ -329,14 +329,14 @@ project
       │    ├── project
       │    │    ├── columns: ntile_1_arg1:11(int) u:1(int!null) v:2(int) x:3(int!null) i:6(int)
       │    │    ├── fd: (1)-->(2,11)
-      │    │    ├── inner-join (hash)
+      │    │    ├── inner-join (cross)
       │    │    │    ├── columns: u:1(int!null) v:2(int) x:3(int!null) i:6(int)
       │    │    │    ├── fd: (1)-->(2)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: u:1(int!null) v:2(int)
       │    │    │    │    ├── key: (1)
       │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    ├── inner-join (hash)
+      │    │    │    ├── inner-join (cross)
       │    │    │    │    ├── columns: x:3(int!null) i:6(int)
       │    │    │    │    ├── scan xy
       │    │    │    │    │    ├── columns: x:3(int!null)
@@ -406,7 +406,7 @@ project
  └── window partition=(8) ordering=+3 opt(1,8)
       ├── columns: column1:1(int!null) i:3(int) row_number:7(int) rownum:8(int!null)
       ├── fd: (8)-->(1)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: column1:1(int!null) i:3(int) rownum:8(int!null)
       │    ├── fd: (8)-->(1)
       │    ├── select
@@ -624,7 +624,7 @@ project
       ├── project
       │    ├── columns: avg_1_filter:9(bool) u:1(int!null) v:2(int) i:4(int) f:5(float)
       │    ├── fd: (1)-->(2,9)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: u:1(int!null) v:2(int) i:4(int) f:5(float)
       │    │    ├── fd: (1)-->(2)
       │    │    ├── scan uv
@@ -825,7 +825,7 @@ semi-join-apply
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── semi-join (hash)
+ ├── semi-join (cross)
  │    ├── columns: x:6(int!null)
  │    ├── outer: (4)
  │    ├── key: (6)
@@ -1105,11 +1105,11 @@ distinct-on
       ├── project
       │    ├── columns: div:10(decimal) k:1(int!null) x:6(int!null)
       │    ├── side-effects
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: k:1(int!null) i:2(int!null) x:6(int!null) u:8(int!null)
       │    │    ├── key: (1,6,8)
       │    │    ├── fd: ()-->(2)
-      │    │    ├── inner-join (hash)
+      │    │    ├── inner-join (cross)
       │    │    │    ├── columns: k:1(int!null) i:2(int!null) u:8(int!null)
       │    │    │    ├── key: (1,8)
       │    │    │    ├── fd: ()-->(2)
@@ -1157,7 +1157,7 @@ project
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── right-join (hash)
+      ├── right-join (cross)
       │    ├── columns: x:6(int) div:10(decimal)
       │    ├── outer: (2)
       │    ├── side-effects
@@ -1513,7 +1513,7 @@ semi-join-apply
  │    └── key: (1)
  ├── project
  │    ├── outer: (1)
- │    └── inner-join (hash)
+ │    └── inner-join (cross)
  │         ├── columns: uv2.u:10(int!null)
  │         ├── outer: (1)
  │         ├── fd: ()-->(10)
@@ -1522,7 +1522,7 @@ semi-join-apply
  │         │    ├── columns: uv2.u:10(int!null)
  │         │    ├── grouping columns: uv2.u:10(int!null)
  │         │    ├── key: (10)
- │         │    └── inner-join (hash)
+ │         │    └── inner-join (cross)
  │         │         ├── columns: uv2.u:10(int!null)
  │         │         ├── scan uv
  │         │         ├── scan uv2
@@ -1607,7 +1607,7 @@ project
       │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) k:5(int) i:6(int)
       │    ├── key: (1,3,5)
       │    ├── fd: (1)-->(2), (3)-->(4), (5)-->(6)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
       │    │    ├── key: (1,3)
       │    │    ├── fd: (1)-->(2), (3)-->(4)
@@ -1654,10 +1654,10 @@ group-by
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int)
  │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
  │    │    │    │    ├── scan uv
@@ -1721,10 +1721,10 @@ group-by
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,9)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (1,6,9)-->(2-5,10)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int)
  │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
  │    │    │    │    ├── scan uv
@@ -1962,11 +1962,11 @@ group-by
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null) v:9(int)
  │    │    ├── key: (1,6,8)
  │    │    ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9), (1,6,9)-->(2-5,8)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int!null) v:9(int)
  │    │    │    ├── key: (1,6,8)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9)
- │    │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) u:8(int!null) v:9(int)
  │    │    │    │    ├── key: (1,8)
  │    │    │    │    ├── fd: ()-->(2), (8)-->(9), (1)-->(3-5)
@@ -2118,11 +2118,11 @@ with &1 (w0)
       │    │    │         │         │    │    │    ├── outer: (6)
       │    │    │         │         │    │    │    ├── key: (14,21,28,35,60)
       │    │    │         │         │    │    │    ├── fd: ()-->(25), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
-      │    │    │         │         │    │    │    ├── inner-join (hash)
+      │    │    │         │         │    │    │    ├── inner-join (cross)
       │    │    │         │         │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
       │    │    │         │         │    │    │    │    ├── key: (14,21,28,35)
       │    │    │         │         │    │    │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31)
-      │    │    │         │         │    │    │    │    ├── inner-join (hash)
+      │    │    │         │         │    │    │    │    ├── inner-join (cross)
       │    │    │         │         │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
       │    │    │         │         │    │    │    │    │    ├── key: (21,35)
       │    │    │         │         │    │    │    │    │    ├── fd: (35)-->(29,31), (21)-->(19)
@@ -2135,7 +2135,7 @@ with &1 (w0)
       │    │    │         │         │    │    │    │    │    │    ├── key: (21)
       │    │    │         │         │    │    │    │    │    │    └── fd: (21)-->(19)
       │    │    │         │         │    │    │    │    │    └── filters (true)
-      │    │    │         │         │    │    │    │    ├── inner-join (hash)
+      │    │    │         │         │    │    │    │    ├── inner-join (cross)
       │    │    │         │         │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null)
       │    │    │         │         │    │    │    │    │    ├── key: (14,28)
       │    │    │         │         │    │    │    │    │    ├── fd: ()-->(25), (28)-->(26)
@@ -2219,10 +2219,10 @@ group-by
  │    │    ├── grouping columns: k:1(int!null) x:6(int!null)
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11)
- │    │    ├── left-join (hash)
+ │    │    ├── left-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) canary:12(bool)
  │    │    │    ├── fd: (1)-->(2-5), ()~~>(12)
- │    │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
  │    │    │    │    ├── key: (1,6)
  │    │    │    │    ├── fd: (1)-->(2-5)
@@ -2390,7 +2390,7 @@ project
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
  │    ├── fd: ()~~>(10), (1)-->(10,11)
- │    ├── left-join (hash)
+ │    ├── left-join (cross)
  │    │    ├── columns: k:1(int!null) i:2(int) y:7(int) canary:10(bool)
  │    │    ├── fd: (1)-->(2), ()~~>(10)
  │    │    ├── scan a
@@ -2430,7 +2430,7 @@ project
  │    │    ├── columns: k:1(int!null) i:2(int) y:7(int)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +7
- │    │    └── left-join (hash)
+ │    │    └── left-join (cross)
  │    │         ├── columns: k:1(int!null) i:2(int) y:7(int)
  │    │         ├── fd: (1)-->(2)
  │    │         ├── scan a
@@ -2493,7 +2493,7 @@ project
       │    │    │    ├── outer: (1)
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: (6)-->(7,10)
-      │    │    │    ├── left-join (hash)
+      │    │    │    ├── left-join (cross)
       │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int)
       │    │    │    │    ├── outer: (1)
       │    │    │    │    ├── key: (6,8)
@@ -2669,7 +2669,7 @@ group-by
  │    │    ├── grouping columns: x:1(int!null) k:3(int!null)
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) i:9(int!null) f:10(float!null) column14:14(float!null)
  │    │    │    ├── fd: (1)-->(2), (2)-->(14), (3)-->(4), (10)==(14), (14)==(10)
  │    │    │    ├── inner-join (hash)
@@ -2734,7 +2734,7 @@ group-by
  │    │    ├── grouping columns: x:1(int!null) f:5(float!null)
  │    │    ├── key: (1,5)
  │    │    ├── fd: (1)-->(2), (1,5)-->(2,4)
- │    │    ├── inner-join (hash)
+ │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1(int!null) y:2(int!null) i:4(int) f:5(float!null)
  │    │    │    ├── fd: (1)-->(2)
  │    │    │    ├── scan xy
@@ -2775,7 +2775,7 @@ project
       │    ├── columns: computed:10(int) k:1(int!null) x:6(int!null)
       │    ├── key: (1,6)
       │    ├── fd: (1)-->(10)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: k:1(int!null) i:2(int!null) x:6(int!null) u:8(int!null)
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
@@ -4171,7 +4171,7 @@ project
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── inner-join (hash)
+      ├── inner-join (cross)
       │    ├── columns: x:6(int!null) y:7(int) "?column?":8(int)
       │    ├── outer: (1)
       │    ├── key: (6)
@@ -4197,7 +4197,7 @@ SELECT y FROM a RIGHT JOIN xy ON (SELECT k+1) = (SELECT x+1)
 ----
 project
  ├── columns: y:7(int)
- └── right-join (hash)
+ └── right-join (cross)
       ├── columns: k:1(int) x:6(int!null) y:7(int)
       ├── key: (1,6)
       ├── fd: (6)-->(7)
@@ -4233,7 +4233,7 @@ SELECT s, x FROM a INNER JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 ----
 project
  ├── columns: s:4(string) x:6(int!null)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: k:1(int!null) s:4(string) x:6(int!null) exists:12(bool)
       ├── key: (1,6)
       ├── fd: (1)-->(4), (6)-->(12)
@@ -4298,7 +4298,7 @@ project
       │    │    │    ├── columns: k:1(int!null) i:2(int) j:5(jsonb) x:6(int!null) y:7(int) u:8(int) v:9(int) notnull:10(bool)
       │    │    │    ├── key: (1,6,8)
       │    │    │    ├── fd: (1)-->(2,5), (6)-->(7), (8)-->(9), (9)~~>(10), (1,6,8)-->(10)
-      │    │    │    ├── inner-join (hash)
+      │    │    │    ├── inner-join (cross)
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) j:5(jsonb) x:6(int!null) y:7(int)
       │    │    │    │    ├── key: (1,6)
       │    │    │    │    ├── fd: (1)-->(2,5), (6)-->(7)
@@ -4369,7 +4369,7 @@ project
  │    │              ├── outer: (1,2)
  │    │              ├── cardinality: [3 - 3]
  │    │              ├── fd: ()-->(6,7)
- │    │              ├── inner-join (hash)
+ │    │              ├── inner-join (cross)
  │    │              │    ├── columns: r:6(int) s:7(int)
  │    │              │    ├── outer: (1,2)
  │    │              │    ├── cardinality: [1 - 1]
@@ -4433,7 +4433,7 @@ project
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── left-join (cross)
  │    │    │    │    │    ├── columns: true:9(bool)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [1 - 1]
@@ -4511,7 +4511,7 @@ project
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── left-join (cross)
  │    │    │    │    │    ├── columns: notnull:9(bool)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [1 - 1]
@@ -5056,7 +5056,7 @@ project
 opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
-semi-join (hash)
+semi-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb)
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -5083,7 +5083,7 @@ semi-join (hash)
 opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FROM xy)
 ----
-semi-join (hash)
+semi-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
@@ -5187,7 +5187,7 @@ inner-join (hash)
 opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i NOT IN (SELECT y FROM xy)
 ----
-anti-join (hash)
+anti-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
@@ -5205,7 +5205,7 @@ anti-join (hash)
 opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE k > 1 AND k < 5 AND i > ALL(SELECT y FROM xy)
 ----
-anti-join (hash)
+anti-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 3]
  ├── key: (1)
@@ -5225,11 +5225,11 @@ anti-join (hash)
 opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i < ALL(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
-anti-join (hash)
+anti-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── anti-join (hash)
+ ├── anti-join (cross)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
@@ -5292,7 +5292,7 @@ inner-join (hash)
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- ├── anti-join (hash)
+ ├── anti-join (cross)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
@@ -5321,7 +5321,7 @@ project
       ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int!null)
       ├── key: (1)
       ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
-      ├── anti-join (hash)
+      ├── anti-join (cross)
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5)

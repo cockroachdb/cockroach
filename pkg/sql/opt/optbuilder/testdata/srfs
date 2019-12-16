@@ -796,9 +796,9 @@ SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) c:4(int)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
  │    ├── project-set
  │    │    ├── columns: upper:1(string)
@@ -904,7 +904,7 @@ project
                 │              ├── columns: generate_subscripts:7(int)
                 │              └── project-set
                 │                   ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
-                │                   ├── inner-join (hash)
+                │                   ├── inner-join (cross)
                 │                   │    ├── columns: a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
                 │                   │    ├── scan t
                 │                   │    │    └── columns: a:3(string) t.rowid:4(int!null)

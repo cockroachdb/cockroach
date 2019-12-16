@@ -246,7 +246,7 @@ inner-join (hash)
 norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE i >= 5 AND i < 10) AS a, xy WHERE i >= 5
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -269,7 +269,7 @@ inner-join (hash)
 norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5) AS a, xy WHERE i >= 5
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -293,7 +293,7 @@ norm expect=ConsolidateSelectFilters
 SELECT * FROM (SELECT * FROM a WHERE i < 10 AND i >= 5 AND i IN (0, 2, 4, 6, 8, 10, 12)) AS a, xy
 WHERE i >= 5 AND i < 10
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -351,7 +351,7 @@ inner-join (hash)
  │    │    │    └── ('y', 'y') [type=tuple{string, string}]
  │    │    └── filters
  │    │         └── column1 = column2 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- │    ├── inner-join (hash)
+ │    ├── inner-join (cross)
  │    │    ├── columns: column1:3(string!null) column1:4(string!null)
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── fd: ()-->(3,4)
@@ -706,7 +706,7 @@ select
 norm expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON True WHERE a.i=100 AND $1>'2000-01-01T1:00:00'
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── has-placeholder
  ├── key: (1,6)
@@ -1009,7 +1009,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── left-join (hash)
+ ├── left-join (cross)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -1033,7 +1033,7 @@ select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── right-join (hash)
+ ├── right-join (cross)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -1057,7 +1057,7 @@ select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
- ├── full-join (hash)
+ ├── full-join (cross)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)

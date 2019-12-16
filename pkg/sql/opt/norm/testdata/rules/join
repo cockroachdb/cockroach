@@ -25,7 +25,7 @@ CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 opt
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -56,7 +56,7 @@ values
 opt expect=DetectJoinContradiction
 SELECT * FROM a LEFT JOIN b ON i=5 AND k IN () AND s='foo'
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1)
  ├── fd: (1)-->(2-7), ()~~>(6,7)
@@ -74,7 +74,7 @@ left-join (hash)
 opt expect=DetectJoinContradiction
 SELECT * FROM a FULL JOIN b ON i=5 AND k IN () AND s='foo'
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -744,7 +744,7 @@ project
       │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
       │    ├── key: (1)
       │    └── fd: (1)-->(2-5)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: x:6(int!null) y:7(int) "?column?":10(int)
       │    ├── outer: (1)
       │    ├── key: (6)
@@ -802,7 +802,7 @@ inner-join (hash)
 opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM a INNER JOIN b ON b.y=b.x AND a.k=a.i AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
  ├── key: (1,6)
  ├── fd: (1)-->(3-5), (1)==(2), (2)==(1), (6)==(7), (7)==(6)
@@ -862,7 +862,7 @@ project
  │    │              ├── columns: b.x:4(int!null) k:8(int!null)
  │    │              ├── outer: (1)
  │    │              ├── fd: (4)==(8), (8)==(4)
- │    │              ├── full-join (hash)
+ │    │              ├── full-join (cross)
  │    │              │    ├── columns: b.x:4(int)
  │    │              │    ├── outer: (1)
  │    │              │    ├── scan b
@@ -916,7 +916,7 @@ project
  │    │              ├── columns: k:4(int!null) b.x:9(int!null)
  │    │              ├── outer: (1)
  │    │              ├── fd: (4)==(9), (9)==(4)
- │    │              ├── full-join (hash)
+ │    │              ├── full-join (cross)
  │    │              │    ├── columns: b.x:9(int)
  │    │              │    ├── outer: (1)
  │    │              │    ├── scan b
@@ -952,7 +952,7 @@ CREATE TABLE t2 (b TIMESTAMPTZ)
 opt
 SELECT * FROM t1, t2 WHERE a = b AND age(b, TIMESTAMPTZ '2017-01-01') > INTERVAL '1 day'
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: a:1(date!null) b:3(timestamptz!null)
  ├── side-effects
  ├── fd: (1)==(3), (3)==(1)
@@ -1013,10 +1013,10 @@ project
  │         │    │    │    │    ├── columns: k:1(int!null) s:4(string)
  │         │    │    │    │    ├── key: (1)
  │         │    │    │    │    └── fd: (1)-->(4)
- │         │    │    │    ├── inner-join (hash)
+ │         │    │    │    ├── inner-join (cross)
  │         │    │    │    │    ├── columns: xy.x:6(int!null) u:8(int!null)
  │         │    │    │    │    ├── outer: (4)
- │         │    │    │    │    ├── inner-join (hash)
+ │         │    │    │    │    ├── inner-join (cross)
  │         │    │    │    │    │    ├── columns: u:8(int!null)
  │         │    │    │    │    │    ├── outer: (4)
  │         │    │    │    │    │    ├── select
@@ -1404,7 +1404,7 @@ semi-join-apply
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- ├── anti-join (hash)
+ ├── anti-join (cross)
  │    ├── columns: k:3(int!null) s:6(string!null)
  │    ├── outer: (2)
  │    ├── key: (3)
@@ -1437,7 +1437,7 @@ semi-join-apply
 opt expect=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a LEFT JOIN (SELECT count(*) FROM b) ON True
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) count:8(int)
  ├── key: (1)
  ├── fd: ()-->(8), (1)-->(2-5)
@@ -1459,7 +1459,7 @@ inner-join (hash)
 opt expect=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a FULL JOIN (SELECT count(*) FROM b) ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
  ├── cardinality: [1 - ]
  ├── key: (1)
@@ -1527,7 +1527,7 @@ project
 opt expect-not=SimplifyLeftJoinWithoutFilters
 SELECT * FROM a RIGHT JOIN (SELECT count(*) FROM b) ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
  ├── cardinality: [1 - ]
  ├── key: (1)
@@ -1552,7 +1552,7 @@ right-join (hash)
 opt expect=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) RIGHT JOIN a ON True
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: count:3(int) k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  ├── key: (4)
  ├── fd: ()-->(3), (4)-->(5-8)
@@ -1574,7 +1574,7 @@ inner-join (hash)
 opt expect=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
@@ -1597,7 +1597,7 @@ right-join (hash)
 opt expect-not=SimplifyRightJoinWithoutFilters
 SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: count:3(int) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
  ├── cardinality: [1 - ]
  ├── key: (4)
@@ -1856,7 +1856,7 @@ left-join (merge)
 opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k<a2.k
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) k:6(int) i:7(int) f:8(float) s:9(string) j:10(jsonb)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
@@ -1935,7 +1935,7 @@ full-join (hash)
 opt expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
 SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.f
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) k:6(int) i:7(int) f:8(float) s:9(string) j:10(jsonb)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
@@ -1982,7 +1982,7 @@ full-join (hash)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) k:8(int) i:9(int) f:10(float) s:11(string) j:12(jsonb)
  ├── key: (1,6,8)
  ├── fd: (1)-->(2-5), (6)-->(7), (8)-->(9-12)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb) x:6(int!null) y:7(int)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
@@ -2011,7 +2011,7 @@ right-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) k:6(int) i:7(int) f:8(float) s:9(string) j:10(jsonb) x:11(int) y:12(int)
  ├── key: (1,6,11)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (11)-->(12)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb) x:11(int!null) y:12(int)
  │    ├── key: (6,11)
  │    ├── fd: (6)-->(7-10), (11)-->(12)
@@ -2290,7 +2290,7 @@ inner-join (hash)
 norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS False
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -2317,7 +2317,7 @@ values
 norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS NOT True
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -2353,7 +2353,7 @@ inner-join (hash)
 norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS NOT Null
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -2414,7 +2414,7 @@ inner-join (hash)
 norm expect-not=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.y) IS True AND (a.i=b.x) IS False
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
@@ -2674,7 +2674,7 @@ full-join (merge)
 opt expect-not=ExtractJoinEqualities
 SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
@@ -2692,7 +2692,7 @@ full-join (hash)
 opt expect-not=ExtractJoinEqualities
 SELECT * FROM xy FULL OUTER JOIN uv ON 1=u+v
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
@@ -2722,7 +2722,7 @@ project
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: u:3(int!null) v:4(int) k:5(int)
       │    ├── outer: (1)
       │    ├── key: (3)

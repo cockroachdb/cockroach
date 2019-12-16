@@ -117,7 +117,7 @@ sort
       │    ├── columns: attrelid:1(oid!null) attname:2(string!null) atttypid:3(oid!null) attnum:6(int!null) atttypmod:9(int!null) attnotnull:13(bool!null) attisdropped:15(bool!null) attcollation:18(oid!null) adrelid:23(oid) adnum:24(int) adbin:25(string) c.oid:27(oid) c.collname:28(string) t.oid:34(oid) typcollation:61(oid)
       │    ├── key: (1,6,23,24,27,34)
       │    ├── fd: ()-->(15), (1,6)-->(2,3,9,13,18), (1,2)-->(3,6,9,13,18), (23,24)-->(25), (27)-->(28), (34)-->(61)
-      │    ├── inner-join (hash)
+      │    ├── inner-join (cross)
       │    │    ├── columns: c.oid:27(oid!null) c.collname:28(string!null) t.oid:34(oid!null) typcollation:61(oid!null)
       │    │    ├── key: (27,34)
       │    │    ├── fd: (27)-->(28), (34)-->(61)

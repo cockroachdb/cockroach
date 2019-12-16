@@ -7,7 +7,7 @@ ON CATALOG_NAME=TABLE_CATALOG AND SCHEMA_NAME=TABLE_SCHEMA
 project
  ├── columns: catalog_name:1(string) sql_path:4(string)
  ├── prune: (1,4)
- └── left-join (hash)
+ └── left-join (cross)
       ├── columns: catalog_name:1(string) schema_name:2(string!null) default_character_set_name:3(string) sql_path:4(string) table_catalog:5(string) table_schema:6(string) table_name:7(string) table_type:8(string) is_insertable_into:9(string) version:10(int)
       ├── fd: ()-->(2)
       ├── reject-nulls: (5-10)

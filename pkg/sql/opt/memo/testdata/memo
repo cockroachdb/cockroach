@@ -31,7 +31,7 @@ limit
  │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
  │         │    ├── key: (1,3)
  │         │    ├── fd: (1)-->(2), (3)-->(4)
- │         │    ├── inner-join (hash)
+ │         │    ├── inner-join (cross)
  │         │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:3(string!null) z:4(decimal!null)
  │         │    │    ├── key: (1,3)
  │         │    │    ├── fd: (1)-->(2), (3)-->(4)

@@ -204,7 +204,7 @@ select
 opt expect=InlineJoinConstantsLeft
 SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: one:1(int!null) k:2(int) i:3(int) f:4(float) s:5(string) j:6(jsonb)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -226,7 +226,7 @@ left-join (hash)
 opt expect=InlineJoinConstantsRight
 SELECT * FROM a RIGHT JOIN (SELECT 1 AS one) ON k=one
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
@@ -360,7 +360,7 @@ project
 opt expect=PushSelectIntoInlinableProject
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE expr > i*i)
 ----
-semi-join (hash)
+semi-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
@@ -589,7 +589,7 @@ project
  │    ├── grouping columns: rownum:13(int!null)
  │    ├── key: (13)
  │    ├── fd: (13)-->(11)
- │    ├── left-join (hash)
+ │    ├── left-join (cross)
  │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
  │    │    ├── fd: (13)-->(6), ()~~>(10)
  │    │    ├── ordinality
