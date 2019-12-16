@@ -1120,6 +1120,103 @@ inner-join (merge)
                 │         └── const: 5 [type=int]
                 └── variable: k [type=int]
 
+# Regression test for #43039. Use transitive equalities for filter inference.
+norm expect=PushFilterIntoJoinLeftAndRight
+SELECT
+    *
+FROM
+    a
+    JOIN b ON a.k = b.x
+    JOIN c ON b.x = c.x
+    JOIN d ON c.x = d.x
+    JOIN xy ON d.x = xy.x
+WHERE
+    a.k = 3;
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int) x:8(int!null) y:9(int!null) z:10(int!null) x:11(int!null) y:12(int!null) z:13(int!null) x:14(int!null) y:15(int)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-15)
+ ├── inner-join (hash)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) c.x:8(int!null) c.y:9(int!null) c.z:10(int!null) d.x:11(int!null) d.y:12(int!null) d.z:13(int!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-13)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int) c.x:8(int!null) c.y:9(int!null) c.z:10(int!null)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-10)
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) b.x:6(int!null) b.y:7(int)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(1-7)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(1-5)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    └── filters
+ │    │    │    │         └── k = 3 [type=bool, outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(6,7)
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    │    │    │    │    ├── key: (6)
+ │    │    │    │    │    └── fd: (6)-->(7)
+ │    │    │    │    └── filters
+ │    │    │    │         └── b.x = 3 [type=bool, outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
+ │    │    │    └── filters
+ │    │    │         └── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │    ├── select
+ │    │    │    ├── columns: c.x:8(int!null) c.y:9(int!null) c.z:10(int!null)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8-10)
+ │    │    │    ├── scan c
+ │    │    │    │    ├── columns: c.x:8(int!null) c.y:9(int!null) c.z:10(int!null)
+ │    │    │    │    ├── key: (8)
+ │    │    │    │    └── fd: (8)-->(9,10)
+ │    │    │    └── filters
+ │    │    │         └── c.x = 3 [type=bool, outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
+ │    │    └── filters
+ │    │         └── b.x = c.x [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │    ├── select
+ │    │    ├── columns: d.x:11(int!null) d.y:12(int!null) d.z:13(int!null)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(11-13)
+ │    │    ├── scan d
+ │    │    │    ├── columns: d.x:11(int!null) d.y:12(int!null) d.z:13(int!null)
+ │    │    │    ├── key: (11)
+ │    │    │    └── fd: (11)-->(12,13)
+ │    │    └── filters
+ │    │         └── d.x = 3 [type=bool, outer=(11), constraints=(/11: [/3 - /3]; tight), fd=()-->(11)]
+ │    └── filters
+ │         └── c.x = d.x [type=bool, outer=(8,11), constraints=(/8: (/NULL - ]; /11: (/NULL - ]), fd=(8)==(11), (11)==(8)]
+ ├── select
+ │    ├── columns: xy.x:14(int!null) xy.y:15(int)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(14,15)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:14(int!null) xy.y:15(int)
+ │    │    ├── key: (14)
+ │    │    └── fd: (14)-->(15)
+ │    └── filters
+ │         └── xy.x = 3 [type=bool, outer=(14), constraints=(/14: [/3 - /3]; tight), fd=()-->(14)]
+ └── filters
+      └── d.x = xy.x [type=bool, outer=(11,14), constraints=(/11: (/NULL - ]; /14: (/NULL - ]), fd=(11)==(14), (14)==(11)]
+
 # ---------------------------------
 # MapEqualityIntoJoinLeftAndRight
 # ---------------------------------

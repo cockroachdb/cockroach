@@ -170,7 +170,11 @@
         ...
         $item:(FiltersItem $condition:*) &
             (IsBoundBy $item (OutputCols $left)) &
-            (CanMapJoinOpFilter $on $item $right)
+            (CanMapJoinOpFilter
+                $item
+                $rightCols:(OutputCols $right)
+                $equivFD:(GetEquivFD $on $left $right)
+            )
         ...
     ]
 )
@@ -183,7 +187,7 @@
         )
         (Select
             $right
-            [ (FiltersItem (MapJoinOpFilter $on $item $right)) ]
+            [ (FiltersItem (MapJoinOpFilter $item $rightCols $equivFD)) ]
         )
         $on
         $private
@@ -210,7 +214,11 @@
         ...
         $item:(FiltersItem $condition:*) &
             (IsBoundBy $item (OutputCols $right)) &
-            (CanMapJoinOpFilter $on $item $left)
+            (CanMapJoinOpFilter
+                $item
+                $leftCols:(OutputCols $left)
+                $equivFD:(GetEquivFD $on $left $right)
+            )
         ...
     ]
 )
@@ -219,7 +227,7 @@
     ((OpName $input)
         (Select
             $left
-            [ (FiltersItem (MapJoinOpFilter $on $item $left)) ]
+            [ (FiltersItem (MapJoinOpFilter $item $leftCols $equivFD)) ]
         )
         (Select
             $right
