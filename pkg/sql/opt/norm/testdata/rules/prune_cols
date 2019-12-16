@@ -752,7 +752,7 @@ SELECT a.k+1 AS r, xy.* FROM a FULL JOIN xy ON True
 project
  ├── columns: r:7(int) x:5(int) y:6(int)
  ├── fd: (5)-->(6)
- ├── full-join (hash)
+ ├── full-join (cross)
  │    ├── columns: k:1(int) x:5(int) y:6(int)
  │    ├── key: (1,5)
  │    ├── fd: (5)-->(6)
@@ -771,7 +771,7 @@ project
 opt expect=PruneJoinLeftCols
 SELECT xy.* FROM a, xy
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:5(int!null) y:6(int)
  ├── fd: (5)-->(6)
  ├── scan a
@@ -833,7 +833,7 @@ project
  ├── columns: k:1(int!null) x:7(int!null) y:8(int!null)
  ├── key: (1,7)
  ├── fd: (7)-->(8)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: k:1(int!null) i:2(int!null) x:5(int!null) x:7(int!null) y:8(int!null)
       ├── key: (5,7)
       ├── fd: (1)-->(2), (1)==(5), (5)==(1), (7)-->(8)
@@ -1064,7 +1064,7 @@ SELECT xy.*, a.k+1 AS r FROM xy FULL JOIN a ON True
 project
  ├── columns: x:1(int) y:2(int) r:7(int)
  ├── fd: (1)-->(2)
- ├── full-join (hash)
+ ├── full-join (cross)
  │    ├── columns: x:1(int) y:2(int) k:3(int)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2)
@@ -1083,7 +1083,7 @@ project
 opt expect=PruneJoinRightCols
 SELECT xy.* FROM xy, a
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(int)
  ├── fd: (1)-->(2)
  ├── scan xy
@@ -1145,7 +1145,7 @@ project
  ├── columns: k:3(int!null) x:1(int!null) y:2(int!null)
  ├── key: (1,3)
  ├── fd: (1)-->(2)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int!null) k:3(int!null) x:7(int!null) y:8(int!null)
       ├── key: (1,7)
       ├── fd: (1)-->(2), (7)-->(8), (3)==(7), (7)==(3)
@@ -1183,7 +1183,7 @@ SELECT 1 r FROM a,xy
 project
  ├── columns: r:7(int!null)
  ├── fd: ()-->(7)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── scan a
  │    ├── scan xy
  │    └── filters (true)
@@ -1975,7 +1975,7 @@ upsert a
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,15)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
@@ -2026,7 +2026,7 @@ upsert a
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(5-12,14-17)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: column1:5(int!null) column2:6(string!null) column7:7(int) column8:8(float) k:9(int) i:10(int) f:11(float) s:12(string)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
@@ -2068,7 +2068,7 @@ upsert "family"
  │    └──  column2:7 => b:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── left-join (hash)
+ └── left-join (cross)
       ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int) a:9(int) b:10(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
@@ -2120,7 +2120,7 @@ project
            ├── cardinality: [1 - 1]
            ├── key: ()
            ├── fd: ()-->(6-11,13-15,17,19,21)
-           ├── left-join (hash)
+           ├── left-join (cross)
            │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) c:13(int) d:14(int) e:15(int)
            │    ├── cardinality: [1 - 1]
            │    ├── key: ()
@@ -2167,7 +2167,7 @@ upsert "family"
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-11,13,14,20)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
@@ -2210,7 +2210,7 @@ upsert mutation
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-14,17)
-      ├── left-join (hash)
+      ├── left-join (cross)
       │    ├── columns: column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
@@ -2479,7 +2479,7 @@ with &2
  │              │    └── fd: (26)-->(19-21), (19)~~>(20,21,26)
  │              └── projections
  │                   └── returning_test.a + 1 [type=int, outer=(19)]
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: a:9(int) b:10(int) a:31(int) b:32(int)
       ├── project
       │    ├── columns: a:9(int) b:10(int)
@@ -2546,7 +2546,7 @@ project
            ├── side-effects
            ├── key: ()
            ├── fd: ()-->(9-16,21,23-25,30)
-           ├── left-join (hash)
+           ├── left-join (cross)
            │    ├── columns: column1:9(int!null) column2:10(int!null) column3:11(string!null) column12:12(int) column13:13(int) a:14(int) b:15(int) c:16(string) rowid:21(int)
            │    ├── cardinality: [1 - 1]
            │    ├── side-effects
@@ -2784,7 +2784,7 @@ semi-join-apply
  │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── semi-join (hash)
+ ├── semi-join (cross)
  │    ├── columns: "family".a:6(int!null)
  │    ├── outer: (1)
  │    ├── key: (6)
@@ -2823,7 +2823,7 @@ anti-join-apply
  │    ├── columns: abcde.a:1(int!null) abcde.b:2(int) abcde.c:3(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3), (2,3)~~>(1)
- ├── semi-join (hash)
+ ├── semi-join (cross)
  │    ├── columns: "family".a:6(int!null)
  │    ├── outer: (1)
  │    ├── key: (6)
@@ -3022,7 +3022,7 @@ WHERE
 project
  ├── columns: "?column?":12(unknown)
  ├── fd: ()-->(12)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: u:7(bool!null)
  │    ├── scan table41772
  │    ├── union-all

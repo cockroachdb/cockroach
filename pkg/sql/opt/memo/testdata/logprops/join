@@ -184,7 +184,7 @@ project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1,2)
       │         ├── prune: (6)
-      │         └── inner-join (hash)
+      │         └── inner-join (cross)
       │              ├── columns: v:6(int!null) m:8(int!null)
       │              ├── outer: (1,2)
       │              ├── fd: ()-->(8)
@@ -420,7 +420,7 @@ semi-join-apply
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- ├── semi-join (hash)
+ ├── semi-join (cross)
  │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
  │    ├── fd: ()-->(6)
@@ -508,7 +508,7 @@ project
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-6)
  ├── interesting orderings: (+1) (-3,+4,+1)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── key: (1,7)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -532,7 +532,7 @@ project
 build
 SELECT * FROM xysd, xysd AS xysd
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(6-8), (7,8)~~>(5,6)
@@ -570,7 +570,7 @@ select
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── filters
       └── exists [type=bool, outer=(1-3), correlated-subquery]
-           └── inner-join (hash)
+           └── inner-join (cross)
                 ├── columns: x:5(int) y:6(int)
                 ├── outer: (1-3)
                 ├── cardinality: [0 - 1]
@@ -618,7 +618,7 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: count_rows:5(int!null)
       ├── cardinality: [0 - 1]
       ├── key: ()
@@ -751,7 +751,7 @@ anti-join-apply
 build
 SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: column1:1(int!null) u:2(int) v:3(int!null)
  ├── cardinality: [0 - 4]
  ├── prune: (1-3)
@@ -786,7 +786,7 @@ inner-join (hash)
 build
 SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON True
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: column1:1(int!null) u:2(int) v:3(int)
  ├── cardinality: [3 - 6]
  ├── prune: (1-3)
@@ -824,7 +824,7 @@ left-join (hash)
 build
 SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: u:1(int) v:2(int) column1:4(int!null)
  ├── cardinality: [3 - 6]
  ├── prune: (1,2,4)
@@ -862,7 +862,7 @@ right-join (hash)
 build
 SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON True
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [2 - 4]
  ├── prune: (1,2)
@@ -890,7 +890,7 @@ full-join (hash)
 build
 SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a.column1=b.column1
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [2 - 4]
  ├── prune: (1,2)
@@ -919,7 +919,7 @@ full-join (hash)
 build
 SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
  ├── cardinality: [2 - ]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -947,7 +947,7 @@ full-join (hash)
 build
 SELECT * FROM (SELECT * FROM xysd LIMIT 1) FULL JOIN (SELECT * FROM xysd LIMIT 1) ON True
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -992,7 +992,7 @@ full-join (hash)
 build
 SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
@@ -1032,7 +1032,7 @@ left-join (hash)
 build
 SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) ON True
 ----
-left-join (hash)
+left-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
@@ -1080,7 +1080,7 @@ left-join (hash)
 build
 SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) RIGHT JOIN xysd ON u IS NOT NULL
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
@@ -1120,7 +1120,7 @@ right-join (hash)
 build
 SELECT * FROM (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP BY u) RIGHT JOIN xysd ON True
 ----
-right-join (hash)
+right-join (cross)
  ├── columns: u:1(int) sum:4(decimal) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
  ├── key: (1,5)
  ├── fd: (1)-->(4), (5)-->(6-8), (7,8)~~>(5,6)
@@ -1168,7 +1168,7 @@ right-join (hash)
 build
 SELECT * FROM xysd FULL JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT NULL
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) sum:8(decimal)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
@@ -1208,7 +1208,7 @@ full-join (hash)
 build
 SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) FULL JOIN xysd ON u IS NOT NULL
 ----
-full-join (hash)
+full-join (cross)
  ├── columns: u:1(int) sum:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)

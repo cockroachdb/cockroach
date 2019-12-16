@@ -7,11 +7,11 @@ SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3), upper('ghi')) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) upper:4(string) c:5(int)
  ├── side-effects
  ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=90, distinct(3)=7, null(3)=1, distinct(4)=1, null(4)=90, distinct(5)=7, null(5)=1]
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int) upper:4(string)
  │    ├── side-effects
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=9, distinct(3)=7, null(3)=0.1, distinct(4)=1, null(4)=9]
@@ -65,7 +65,7 @@ distinct-on
  ├── side-effects
  ├── stats: [rows=7, distinct(1,2)=7, null(1,2)=0.1]
  ├── key: (1,2)
- └── inner-join (hash)
+ └── inner-join (cross)
       ├── columns: upper:1(string) generate_series:2(int)
       ├── side-effects
       ├── stats: [rows=10, distinct(1,2)=7, null(1,2)=0.1]
