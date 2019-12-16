@@ -197,7 +197,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v19.2.1
+        image: cockroachdb/cockroach:v19.2.2
         imagePullPolicy: IfNotPresent
         # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
         # to remove the requests and limits sections. If you didn't, you'll need to change these to
