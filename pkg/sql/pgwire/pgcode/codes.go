@@ -222,6 +222,7 @@ const (
 	InvalidSchemaDefinition            = "42P15"
 	InvalidTableDefinition             = "42P16"
 	InvalidObjectDefinition            = "42P17"
+	FileAlreadyExists                  = "42C01"
 	// Class 44 - WITH CHECK OPTION Violation
 	WithCheckOptionViolation = "44000"
 	// Class 53 - Insufficient Resources
