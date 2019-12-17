@@ -12225,13 +12225,13 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	prev, _ := batcheval.LookupCommand(roachpb.Put)
 
 	mockPut := func(
-		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+		ctx context.Context, readWriter engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 	) (result.Result, error) {
 		args := cArgs.Args.(*roachpb.PutRequest)
 		ms := cArgs.Stats
 		ms.ContainsEstimates += containsEstimatesDelta
 		ts := cArgs.Header.Timestamp
-		return result.Result{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, cArgs.Header.Txn)
+		return result.Result{}, engine.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, cArgs.Header.Txn)
 	}
 
 	batcheval.UnregisterCommand(roachpb.Put)

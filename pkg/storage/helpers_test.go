@@ -421,7 +421,7 @@ func SetMockAddSSTable() (undo func()) {
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
-		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+		ctx context.Context, _ engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
