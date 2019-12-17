@@ -1646,7 +1646,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
 	}
-	if cmd.Stmt.Table.TableName == fileUploadTable {
+	if table := cmd.Stmt.Table; table.Table() == fileUploadTable && table.Schema() == crdbInternalName {
 		cm, err = newFileUploadMachine(cmd.Conn, cmd.Stmt, ex.server.cfg, resetPlanner)
 	} else {
 		cm, err = newCopyMachine(

@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -130,21 +132,25 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
-func (c *sqlConn) getServerMetadata() (version, clusterID string, err error) {
+func (c *sqlConn) getServerMetadata() (
+	nodeID roachpb.NodeID,
+	version, clusterID string,
+	err error,
+) {
 	// Retrieve the node ID and server build info.
 	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
 	if err == driver.ErrBadConn {
-		return "", "", err
+		return 0, "", "", err
 	}
 	if err != nil {
-		return "", "", err
+		return 0, "", "", err
 	}
 	defer func() { _ = rows.Close() }()
 
 	// Read the node_build_info table as an array of strings.
 	rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
 	if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
-		return "", "", errors.New("incorrect data while retrieving the server version")
+		return 0, "", "", errors.New("incorrect data while retrieving the server version")
 	}
 
 	// Extract the version fields from the query results.
@@ -159,6 +165,11 @@ func (c *sqlConn) getServerMetadata() (version, clusterID string, err error) {
 			c.serverBuild = row[2]
 		case "Organization":
 			c.clusterOrganization = row[2]
+			id, err := strconv.Atoi(row[0])
+			if err != nil {
+				return 0, "", "", errors.New("incorrect data while retrieving node id")
+			}
+			nodeID = roachpb.NodeID(id)
 
 			// Fields for v1.0 compatibility.
 		case "Distribution":
@@ -181,7 +192,7 @@ func (c *sqlConn) getServerMetadata() (version, clusterID string, err error) {
 		c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 			v10fields[0], version, v10fields[2], v10fields[3], v10fields[4])
 	}
-	return version, clusterID, nil
+	return nodeID, version, clusterID, nil
 }
 
 // checkServerMetadata reports the server version and cluster ID
@@ -195,7 +206,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		return nil
 	}
 
-	newServerVersion, newClusterID, err := c.getServerMetadata()
+	_, newServerVersion, newClusterID, err := c.getServerMetadata()
 	if err == driver.ErrBadConn {
 		return err
 	}
@@ -257,7 +268,7 @@ func (c *sqlConn) checkServerMetadata() error {
 // requireServerVersion returns an error if the version of the connected server
 // is not at least the given version.
 func (c *sqlConn) requireServerVersion(required *version.Version) error {
-	versionString, _, err := c.getServerMetadata()
+	_, versionString, _, err := c.getServerMetadata()
 	if err != nil {
 		return err
 	}
