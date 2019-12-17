@@ -102,7 +102,10 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	flags tree.DatabaseListFlags,
 ) (TableNames, error) {
 	ok, schemaID, err := a.IsValidSchema(ctx, txn, dbDesc.ID, scName)
-	if !ok || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		if flags.Required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), "")
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.TableNamePrefix))

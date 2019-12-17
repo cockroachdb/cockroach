@@ -367,14 +367,14 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		// n2-class GCP machines cannot be requested with only 1 SSD;
-		// minimum number of actual SSDs is 2.
+		// n2-class and c2-class GCP machines cannot be requested with only 1
+		// SSD; minimum number of actual SSDs is 2.
 		// TODO(pbardea): This is more general for machine types that
 		// come in different sizes.
 		// See: https://cloud.google.com/compute/docs/disks/
-		n2MachineTypes := regexp.MustCompile("^n2-.+-16")
+		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
 		if n2MachineTypes.MatchString(p.opts.MachineType) && p.opts.SSDCount < 2 {
-			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
+			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
 			p.opts.SSDCount = 2
 		}
 		for i := 0; i < p.opts.SSDCount; i++ {

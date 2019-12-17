@@ -194,16 +194,6 @@ func (i *rocksDBMapIterator) Next() {
 	i.iter.Next()
 }
 
-// Key implements the SortedDiskMapIterator interface.
-func (i *rocksDBMapIterator) Key() []byte {
-	return i.iter.Key().Key[len(i.prefix):]
-}
-
-// Value implements the SortedDiskMapIterator interface.
-func (i *rocksDBMapIterator) Value() []byte {
-	return i.iter.Value()
-}
-
 // UnsafeKey implements the SortedDiskMapIterator interface.
 func (i *rocksDBMapIterator) UnsafeKey() []byte {
 	return i.iter.UnsafeKey().Key[len(i.prefix):]
@@ -394,24 +384,6 @@ func (i *pebbleMapIterator) Valid() (bool, error) {
 // Next implements the SortedDiskMapIterator interface.
 func (i *pebbleMapIterator) Next() {
 	i.iter.Next()
-}
-
-// Key implements the SortedDiskMapIterator interface.
-func (i *pebbleMapIterator) Key() []byte {
-	unsafeKey := i.UnsafeKey()
-	safeKey := make([]byte, len(unsafeKey))
-	copy(safeKey, unsafeKey)
-
-	return safeKey
-}
-
-// Value implements the SortedDiskMapIterator interface.
-func (i *pebbleMapIterator) Value() []byte {
-	unsafeValue := i.iter.Value()
-	safeValue := make([]byte, len(unsafeValue))
-	copy(safeValue, unsafeValue)
-
-	return safeValue
 }
 
 // UnsafeKey implements the SortedDiskMapIterator interface.
