@@ -444,29 +444,29 @@ SELECT id FROM current_time_test WHERE
 > '1ms'::interval ORDER BY id ASC
 ----
 
-# TODO(otan): this is flaky. Failure can be reproduced with:
-#  make test PKG=./sql/logictest TESTS='TestLogic/local/time/current_time_tests' TESTFLAGS=-v
-
 # test that current_time is correct in different timezones.
+statement ok
+set time zone +3
 
-# statement ok
-# set time zone +3
-# 
-# statement ok
-# create table current_time_tzset_test (id integer, a time, b time)
-# 
-# statement ok
-# insert into current_time_tzset_test (id, a) values (1, current_time)
-# 
-# statement ok
-# set time zone 0
-# 
-# statement ok
-# update current_time_tzset_test set b = current_time
-# 
-# # a was written at an interval 3 hours ahead, and should persist that way.
-# # make sure they're roughly 3 hours apart.
-# query I
-# select id from current_time_tzset_test WHERE interval '2h59m' < a - b and a - b < interval '3h'
-# ----
-# 1
+statement ok
+create table current_time_tzset_test (id integer, a time, b time)
+
+statement ok
+insert into current_time_tzset_test (id, a) values (1, current_time)
+
+statement ok
+set time zone 0
+
+statement ok
+update current_time_tzset_test set b = current_time
+
+# a was written at an interval 3 hours ahead, and should persist that way.
+# make sure they're roughly 3 hours apart.
+# note time can overflow and result in negative duration,
+# so test both 3 hour and -21 hour cases.
+query I
+select id from current_time_tzset_test WHERE
+  ((a - b) BETWEEN interval '2hr 59m' and interval '3h') OR
+  ((a - b) BETWEEN interval '-21hr -1m' and interval '-21hr')
+----
+1
