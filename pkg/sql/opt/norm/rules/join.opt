@@ -65,8 +65,12 @@
         ...
         $item:* &
             ^(FiltersItem (Eq (Variable) (Variable))) &
-            (CanMapJoinOpFilter $on $item $left) &
-            (CanMapJoinOpFilter $on $item $right)
+            (CanMapJoinOpFilter
+                $item
+                $leftCols:(OutputCols $left)
+                $equivFD:(GetEquivFD $on $left $right)
+            ) &
+            (CanMapJoinOpFilter $item $rightCols:(OutputCols $right) $equivFD)
         ...
     ]
     $private:*
@@ -75,11 +79,11 @@
 ((OpName)
     (Select
         $left
-        [ (FiltersItem (MapJoinOpFilter $on $item $left)) ]
+        [ (FiltersItem (MapJoinOpFilter $item $leftCols $equivFD)) ]
     )
     (Select
         $right
-        [ (FiltersItem (MapJoinOpFilter $on $item $right)) ]
+        [ (FiltersItem (MapJoinOpFilter $item $rightCols $equivFD)) ]
     )
     (RemoveFiltersItem $on $item)
     $private
@@ -108,8 +112,8 @@
         ...
         $item:* &
             ^(FiltersItem (Eq (Variable) (Variable))) &
-            ^(IsBoundBy $item (OutputCols $left)) &
-            (CanMapJoinOpFilter $on $item $left)
+            ^(IsBoundBy $item $leftCols:(OutputCols $left)) &
+            (CanMapJoinOpFilter $item $leftCols $equivFD:(GetEquivFD $on $left $right))
         ...
     ]
     $private:*
@@ -118,7 +122,7 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpFilter $on $item $left))
+    (ReplaceFiltersItem $on $item (MapJoinOpFilter $item $leftCols $equivFD))
     $private
 )
 
@@ -134,8 +138,8 @@
         ...
         $item:* &
             ^(FiltersItem (Eq (Variable) (Variable))) &
-            ^(IsBoundBy $item (OutputCols $right)) &
-            (CanMapJoinOpFilter $on $item $right)
+            ^(IsBoundBy $item $rightCols:(OutputCols $right)) &
+            (CanMapJoinOpFilter $item $rightCols $equivFD:(GetEquivFD $on $left $right))
         ...
     ]
     $private:*
@@ -144,7 +148,7 @@
 ((OpName)
     $left
     $right
-    (ReplaceFiltersItem $on $item (MapJoinOpFilter $on $item $right))
+    (ReplaceFiltersItem $on $item (MapJoinOpFilter $item $rightCols $equivFD))
     $private
 )
 
