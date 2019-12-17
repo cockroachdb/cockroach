@@ -384,7 +384,7 @@ func (b *Builder) buildScalar(
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(scalar)
 		} else {
-			panic(unimplementedWithIssueDetailf(34848, fmt.Sprintf("%T", scalar), "not yet implemented: scalar expression: %T", scalar))
+			panic(pgerror.Unimplemented(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 		}
 	}
 

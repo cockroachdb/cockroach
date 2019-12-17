@@ -185,7 +185,7 @@ SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a": "b"}
 
-statement error pgcode 0A000 can't order by column type JSONB.*\nHINT.*32706
+statement error pgcode 0A000 can't order by column type JSONB.*\nHINT.*35706
 SELECT bar FROM foo ORDER BY bar
 
 statement error pgcode 0A000 column k is of type JSONB and thus is not indexable
