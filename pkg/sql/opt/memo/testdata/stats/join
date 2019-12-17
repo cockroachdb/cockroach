@@ -513,18 +513,18 @@ project
       ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=399.903879]
       ├── key: (2)
       ├── fd: (2)-->(8)
-      ├── right-join (hash)
+      ├── left-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:5(int) v:6(int!null)
       │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=399.903879, null(2)=6666.66667]
       │    ├── fd: (1)-->(2)
+      │    ├── scan uv
+      │    │    ├── columns: u:5(int) v:6(int!null)
+      │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    ├── scan uv
-      │    │    ├── columns: u:5(int) v:6(int!null)
-      │    │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
       │    └── filters
       │         ├── x = u [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + v) = 5 [type=bool, outer=(2,6)]
@@ -1041,18 +1041,12 @@ values
 norm
 SELECT * FROM (SELECT 1 WHERE false) RIGHT JOIN (SELECT 1) ON true
 ----
-right-join (cross)
+left-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
  ├── values
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
@@ -1060,23 +1054,23 @@ right-join (cross)
  │    ├── key: ()
  │    ├── fd: ()-->(2)
  │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
  └── filters (true)
 
 norm
 SELECT * FROM (SELECT 1 WHERE false) FULL JOIN (SELECT 1) ON true
 ----
-right-join (cross)
+left-join (cross)
  ├── columns: "?column?":1(int) "?column?":2(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)
- ├── values
- │    ├── columns: "?column?":1(int!null)
- │    ├── cardinality: [0 - 0]
- │    ├── stats: [rows=0]
- │    ├── key: ()
- │    └── fd: ()-->(1)
  ├── values
  │    ├── columns: "?column?":2(int!null)
  │    ├── cardinality: [1 - 1]
@@ -1084,6 +1078,12 @@ right-join (cross)
  │    ├── key: ()
  │    ├── fd: ()-->(2)
  │    └── (1,) [type=tuple{int}]
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
  └── filters (true)
 
 norm
@@ -1095,18 +1095,18 @@ inner-join (cross)
  ├── stats: [rows=2]
  ├── fd: ()-->(1)
  ├── values
+ │    ├── columns: column1:2(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── (1,) [type=tuple{int}]
+ │    └── (2,) [type=tuple{int}]
+ ├── values
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
- ├── values
- │    ├── columns: column1:2(int!null)
- │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2]
- │    ├── (1,) [type=tuple{int}]
- │    └── (2,) [type=tuple{int}]
  └── filters (true)
 
 exec-ddl
