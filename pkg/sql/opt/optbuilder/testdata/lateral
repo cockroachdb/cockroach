@@ -13,11 +13,11 @@ CREATE TABLE z (c INT PRIMARY KEY)
 build
 SELECT * FROM x, y, z
 ----
-inner-join (hash)
+inner-join (cross)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  ├── scan x
  │    └── columns: a:1(int!null)
- ├── inner-join (hash)
+ ├── inner-join (cross)
  │    ├── columns: b:2(int!null) c:3(int!null)
  │    ├── scan y
  │    │    └── columns: b:2(int!null)
@@ -94,7 +94,7 @@ project
                 ├── columns: y.b:3(int!null)
                 └── project
                      ├── columns: y.b:3(int!null)
-                     └── inner-join (hash)
+                     └── inner-join (cross)
                           ├── columns: c:2(int!null) y.b:3(int!null)
                           ├── scan z
                           │    └── columns: c:2(int!null)

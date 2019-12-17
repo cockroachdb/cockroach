@@ -1373,7 +1373,7 @@ project
  │    │    │    │    │    ├── cardinality: [1 - ]
  │    │    │    │    │    ├── fd: (31)==(34), (34)==(31)
  │    │    │    │    │    ├── ordering: +32 opt(30) [actual: +32]
- │    │    │    │    │    └── left-join (hash)
+ │    │    │    │    │    └── left-join (cross)
  │    │    │    │    │         ├── columns: inhrelid:30(oid) inhparent:31(oid) inhseqno:32(int4) c.oid:34(oid) c.relname:35(name)
  │    │    │    │    │         ├── outer: (1)
  │    │    │    │    │         ├── cardinality: [1 - ]

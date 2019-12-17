@@ -15,7 +15,7 @@ EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 ·                   distributed  false
 ·                   vectorized   false
-hash-join           ·            ·
+cross-join          ·            ·
  │                  type         cross
  ├── project set    ·            ·
  │    └── emptyrow  ·            ·
@@ -65,9 +65,9 @@ render                        ·            ·                      (a, b, gener
  │                            render 1     b                      ·                                         ·
  │                            render 2     generate_series        ·                                         ·
  │                            render 3     generate_series        ·                                         ·
- └── hash-join                ·            ·                      (b, generate_series, generate_series, a)  ·
+ └── cross-join               ·            ·                      (b, generate_series, generate_series, a)  ·
       │                       type         cross                  ·                                         ·
-      ├── hash-join           ·            ·                      (b, generate_series, generate_series)     ·
+      ├── cross-join          ·            ·                      (b, generate_series, generate_series)     ·
       │    │                  type         cross                  ·                                         ·
       │    ├── scan           ·            ·                      (b)                                       ·
       │    │                  table        u@primary              ·                                         ·
@@ -147,7 +147,7 @@ render                      ·            ·                        (generate_se
  │                          render 0     generate_series          ·                        ·
  └── project set            ·            ·                        (x, z, generate_series)  ·
       │                     render 0     generate_series(@1, @2)  ·                        ·
-      └── hash-join         ·            ·                        (x, z)                   ·
+      └── cross-join        ·            ·                        (x, z)                   ·
            │                type         semi                     ·                        ·
            │                pred         z < generate_series      ·                        ·
            ├── scan         ·            ·                        (x, z)                   ·
