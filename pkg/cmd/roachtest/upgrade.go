@@ -578,12 +578,56 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		}
 	}()
 
+	setupEnsureObjectAccess := func() {
+		// setupEnsureObjectAccess creates a db/table the first time, before
+		// the upgrade sequence starts. This is done to create the db/table without
+		// relying on "if not exists" modifier.
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		_, err := db.Exec(fmt.Sprintf("create database persistent_db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(fmt.Sprintf("create table persistent_db.persistent_table(a int)")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ensureObjectAccess := func() {
+		// run the setup function to create a db with one table before the upgrade
+		// sequence begins. After each step, we should be able to successfully select
+		// from the objects using their FQNs. Prevents bugs such as #43141, where
+		// databases created before the migration were inaccessible after the
+		// migration.
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+		var cv string
+		if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := db.Query(fmt.Sprintf("select * from persistent_db.persistent_table"))
+		if err != nil {
+			t.Fatalf(
+				"expected querying a table created before upgrade to succeed in version %s, got %s",
+				cv, err)
+		}
+		_, err = db.Query(fmt.Sprintf("show tables from persistent_db"))
+		if err != nil {
+			t.Fatalf(
+				"expected querying show tables on a database created before upgrade to succeed in version %s, got %s",
+				cv, err)
+		}
+		t.l.Printf("%s: querying a table/db created before upgrade works as expected\n", cv)
+	}
+
 	for _, node := range nodes {
 		checkNode(node, baseVersion)
 	}
-
+	setupEnsureObjectAccess()
 	for _, step := range steps {
 		step.run()
+		ensureObjectAccess()
 		for _, feature := range features {
 			testFeature(feature)
 		}

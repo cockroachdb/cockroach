@@ -164,7 +164,8 @@ func LookupObjectID(
 	// exist in the deprecated system.namespace in the case of mixed version clusters.
 	// TODO(whomever): This can be removed in 20.2.
 
-	// This fallback logic is only required if the table is under the public schema.
+	// This fallback logic is only required if the table is under the public schema
+	// or we are resolving a database.
 	// Without this check, we can run into the following problem:
 	// - Persistent table `t` was created before the cluster upgrade, so it is
 	// present in both the old & new system.namespace table.
@@ -172,7 +173,7 @@ func LookupObjectID(
 	// valid temporary schema.
 	// - If this session explicitly accesses `pg_temp.t`, it should fail -- but
 	// without this check, `pg_temp.t` will return the permanent table instead.
-	if parentSchemaID != keys.PublicSchemaID {
+	if parentSchemaID != keys.PublicSchemaID && parentSchemaID != keys.RootNamespaceID {
 		return false, InvalidID, nil
 	}
 
