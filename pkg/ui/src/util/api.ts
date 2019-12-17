@@ -107,6 +107,9 @@ export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.D
 export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
 export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.EnqueueRangeResponse;
 
+export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
+export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -353,4 +356,8 @@ export function getDataDistribution(timeout?: moment.Duration): Promise<DataDist
 
 export function enqueueRange(req: EnqueueRangeRequestMessage, timeout?: moment.Duration): Promise<EnqueueRangeResponseMessage> {
   return timeoutFetch(serverpb.EnqueueRangeResponse, `${API_PREFIX}/enqueue_range`, req as any, timeout);
+}
+
+export function getAllMetricMetadata(_req: MetricMetadataRequestMessage = null, timeout?: moment.Duration): Promise<MetricMetadataResponseMessage> {
+  return timeoutFetch(serverpb.MetricMetadataResponse, `${API_PREFIX}/metricmetadata`, null, timeout);
 }
