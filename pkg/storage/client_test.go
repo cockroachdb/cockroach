@@ -1555,8 +1555,10 @@ func TestSortRangeDescByAge(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), eng)
+func verifyRangeStats(
+	reader engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
+) error {
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
 		return err
 	}
@@ -1569,9 +1571,9 @@ func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb
 }
 
 func verifyRecomputedStats(
-	eng engine.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
+	reader engine.Reader, d *roachpb.RangeDescriptor, expMS enginepb.MVCCStats, nowNanos int64,
 ) error {
-	if ms, err := rditer.ComputeStatsForRange(d, eng, nowNanos); err != nil {
+	if ms, err := rditer.ComputeStatsForRange(d, reader, nowNanos); err != nil {
 		return err
 	} else if expMS != ms {
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
@@ -1580,12 +1582,12 @@ func verifyRecomputedStats(
 }
 
 func waitForTombstone(
-	t *testing.T, eng engine.Reader, rangeID roachpb.RangeID,
+	t *testing.T, reader engine.Reader, rangeID roachpb.RangeID,
 ) (tombstone roachpb.RaftTombstone) {
 	testutils.SucceedsSoon(t, func() error {
 		tombstoneKey := keys.RaftTombstoneKey(rangeID)
 		ok, err := engine.MVCCGetProto(
-			context.TODO(), eng, tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
+			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 		)
 		if err != nil {
 			t.Fatalf("failed to read tombstone: %v", err)

@@ -196,13 +196,13 @@ func TestExportGCThreshold(t *testing.T) {
 }
 
 // exportUsingGoIterator uses the legacy implementation of export, and is used
-// as ana oracle to check the correctness of the new C++ implementation.
+// as an oracle to check the correctness of the new C++ implementation.
 func exportUsingGoIterator(
 	filter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	startKey, endKey roachpb.Key,
 	enableTimeBoundIteratorOptimization bool,
-	batch engine.Reader,
+	reader engine.Reader,
 ) ([]byte, error) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
@@ -230,7 +230,7 @@ func exportUsingGoIterator(
 		io.MaxTimestampHint = endTime
 		io.MinTimestampHint = startTime.Next()
 	}
-	iter := engine.NewMVCCIncrementalIterator(batch, engine.MVCCIncrementalIterOptions{
+	iter := engine.NewMVCCIncrementalIterator(reader, engine.MVCCIncrementalIterOptions{
 		IterOptions: io,
 		StartTime:   startTime,
 		EndTime:     endTime,

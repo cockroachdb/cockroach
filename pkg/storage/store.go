@@ -1109,22 +1109,22 @@ func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
 }
 
-// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such as
-// RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in principle exist at any
-// RangeID, and this helper efficiently discovers all the keys of the desired type (as specified by
-// the supplied `keyFn`) and, for each key-value pair discovered, unmarshals it into `msg` and then
-// invokes `f`.
+// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
+// as RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in
+// principle exist at any RangeID, and this helper efficiently discovers all the
+// keys of the desired type (as specified by the supplied `keyFn`) and, for each
+// key-value pair discovered, unmarshals it into `msg` and then invokes `f`.
 //
 // Iteration stops on the first error (and will pass through that error).
 func IterateIDPrefixKeys(
 	ctx context.Context,
-	eng engine.Reader,
+	reader engine.Reader,
 	keyFn func(roachpb.RangeID) roachpb.Key,
 	msg protoutil.Message,
 	f func(_ roachpb.RangeID) (more bool, _ error),
 ) error {
 	rangeID := roachpb.RangeID(1)
-	iter := eng.NewIterator(engine.IterOptions{
+	iter := reader.NewIterator(engine.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
 	})
 	defer iter.Close()
@@ -1170,7 +1170,7 @@ func IterateIDPrefixKeys(
 		}
 
 		ok, err := engine.MVCCGetProto(
-			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, msg, engine.MVCCGetOptions{})
+			ctx, reader, unsafeKey.Key, hlc.Timestamp{}, msg, engine.MVCCGetOptions{})
 		if err != nil {
 			return err
 		}
@@ -1190,7 +1190,7 @@ func IterateIDPrefixKeys(
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
 func IterateRangeDescriptors(
-	ctx context.Context, eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
+	ctx context.Context, reader engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
@@ -1219,7 +1219,7 @@ func IterateRangeDescriptors(
 		return fn(desc)
 	}
 
-	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp,
+	_, err := engine.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
 		engine.MVCCScanOptions{Inconsistent: true}, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)

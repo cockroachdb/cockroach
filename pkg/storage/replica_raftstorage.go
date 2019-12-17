@@ -264,16 +264,16 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 func term(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	eng engine.Reader,
+	reader engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	i uint64,
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
+	ents, err := entries(ctx, rsl, reader, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
-		ts, _, err := rsl.LoadRaftTruncatedState(ctx, eng)
+		ts, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 		if err != nil {
 			return 0, err
 		}
@@ -691,7 +691,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // range.
 func clearRangeData(
 	desc *roachpb.RangeDescriptor,
-	eng engine.Reader,
+	reader engine.Reader,
 	writer engine.Writer,
 	rangeIDLocalOnly bool,
 	mustClearRange bool,
@@ -704,7 +704,7 @@ func clearRangeData(
 	}
 	var clearRangeFn func(engine.Reader, engine.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
-		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
+		clearRangeFn = func(reader engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
 			return writer.ClearRange(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end))
 		}
 	} else {
@@ -712,7 +712,7 @@ func clearRangeData(
 	}
 
 	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(eng, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
+		if err := clearRangeFn(reader, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
 			return err
 		}
 	}
