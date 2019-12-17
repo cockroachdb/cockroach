@@ -144,7 +144,7 @@ func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
 	if caseInsensitive {
 		op = ILike
 	}
-	likeFn, _ := CmpOps[op].lookupImpl(types.String, types.String)
+	likeFn, _ := CmpOps[op].LookupImpl(types.String, types.String)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
 			if _, err := likeFn.Fn(ctx, NewDString("test"), NewDString(p)); err != nil {

@@ -302,11 +302,14 @@ var compareOps = [...]tree.ComparisonOperator{
 }
 
 func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ, ok := s.pickAnyType(typ)
-	if !ok {
+	if f := typ.Family(); f != types.BoolFamily && f != types.AnyFamily {
 		return nil, false
 	}
+	typ = s.randScalarType()
 	op := compareOps[s.rnd.Intn(len(compareOps))]
+	if _, ok := tree.CmpOps[op].LookupImpl(typ, typ); !ok {
+		return nil, false
+	}
 	if s.vectorizable && (op == tree.IsDistinctFrom || op == tree.IsNotDistinctFrom) {
 		return nil, false
 	}
