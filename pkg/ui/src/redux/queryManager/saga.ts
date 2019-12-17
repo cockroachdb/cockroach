@@ -34,7 +34,7 @@ export const DEFAULT_RETRY_DELAY = moment.duration(2, "s");
  * query will refresh as long as there is at least one auto_refresh() action
  * that has not been canceled by a stop_auto_refresh().
  */
-interface ManagedQuery {
+export interface ManagedQuery {
     // A string ID that distinguishes this query from all other queries.
     id: string;
     // The interval at which this query should be refreshed if it is being

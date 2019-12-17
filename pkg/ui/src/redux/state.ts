@@ -16,16 +16,19 @@ import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
+import { CachedQueryResultState, cachedQueryResultReducer } from "./cachedQuery";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
+import { queryManagerSaga} from "./queryManager/saga";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
+    cachedQueries: CachedQueryResultState;
     hover: HoverState;
     localSettings: LocalSettingsState;
     metrics: MetricsState;
@@ -44,6 +47,7 @@ export function createAdminUIStore() {
   const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
       cachedData: apiReducersReducer,
+      cachedQueries: cachedQueryResultReducer,
       hover: hoverReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
@@ -73,6 +77,7 @@ export function createAdminUIStore() {
   );
 
   sagaMiddleware.run(queryMetricsSaga);
+  sagaMiddleware.run(queryManagerSaga);
   return s;
 }
 
