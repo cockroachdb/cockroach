@@ -169,7 +169,7 @@ func registerSQLSmith(r *testRegistry) {
 					// TODO(yuzefovich): once #41335 is implemented, go back to using a
 					// context with timeout.
 					_, err := conn.Exec(stmt)
-					if err != nil {
+					if err == nil {
 						logStmt(stmt)
 					}
 					done <- err
