@@ -40,8 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -2151,7 +2151,7 @@ func (m *monitor) WaitE() error {
 		return errors.New("already failed")
 	}
 
-	return m.wait(roachprod, "monitor", m.nodes)
+	return errors.Wrap(m.wait(roachprod, "monitor", m.nodes), "monitor failure")
 }
 
 func (m *monitor) Wait() {
@@ -2204,8 +2204,12 @@ func (m *monitor) wait(args ...string) error {
 			m.cancel()
 			wg.Done()
 		}()
-		setErr(m.g.Wait())
+		setErr(errors.Wrap(m.g.Wait(), "monitor task failed"))
 	}()
+
+	setMonitorCmdErr := func(err error) {
+		setErr(errors.Wrap(err, "monitor command failure"))
+	}
 
 	// 2. The second goroutine forks/execs the monitoring command.
 	pipeR, pipeW := io.Pipe()
@@ -2221,7 +2225,7 @@ func (m *monitor) wait(args ...string) error {
 
 		monL, err := m.l.ChildLogger(`MONITOR`)
 		if err != nil {
-			setErr(err)
+			setMonitorCmdErr(err)
 			return
 		}
 		defer monL.close()
@@ -2233,7 +2237,7 @@ func (m *monitor) wait(args ...string) error {
 			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
 				// to the context being canceled. Any other error is an actual error.
-				setErr(err)
+				setMonitorCmdErr(err)
 				return
 			}
 		}

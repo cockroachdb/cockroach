@@ -132,7 +132,7 @@ $input
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
 # comparisons can be negated except for the JSON comparisons.
 [NegateComparison, Normalize]
-(Not $input:(Comparison $left:* $right:*) & ^(Contains|JsonExists|JsonSomeExists|JsonAllExists))
+(Not $input:(Comparison $left:* $right:*) & ^(Contains|JsonExists|JsonSomeExists|JsonAllExists|Overlaps))
 =>
 (NegateComparison (OpName $input) $left $right)
 
