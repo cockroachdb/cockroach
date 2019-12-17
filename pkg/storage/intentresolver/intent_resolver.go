@@ -426,11 +426,10 @@ func (ir *IntentResolver) MaybePushTransactions(
 			RequestHeader: roachpb.RequestHeader{
 				Key: pushTxn.Key,
 			},
-			PusherTxn:       pusherTxn,
-			PusheeTxn:       pushTxn,
-			PushTo:          h.Timestamp.Next(),
-			InclusivePushTo: true,
-			PushType:        pushType,
+			PusherTxn: pusherTxn,
+			PusheeTxn: pushTxn,
+			PushTo:    h.Timestamp.Next(),
+			PushType:  pushType,
 		})
 	}
 	err := ir.db.Run(ctx, b)
@@ -690,9 +689,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					PusherTxn: roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{Priority: enginepb.MaxTxnPriority},
 					},
-					PusheeTxn:       txn.TxnMeta,
-					PushType:        roachpb.PUSH_ABORT,
-					InclusivePushTo: true,
+					PusheeTxn: txn.TxnMeta,
+					PushType:  roachpb.PUSH_ABORT,
 				})
 				pushed = true
 				if err := ir.db.Run(ctx, b); err != nil {
