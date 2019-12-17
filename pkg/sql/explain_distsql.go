@@ -26,6 +26,7 @@ import (
 type explainDistSQLNode struct {
 	optColumnsSlot
 
+	options       *tree.ExplainOptions
 	plan          planNode
 	subqueryPlans []subquery
 
@@ -126,7 +127,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows)
+	showInputTypes := n.options.Flags.Contains(tree.ExplainFlagTypes)
+	diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
 	if err != nil {
 		return err
 	}
