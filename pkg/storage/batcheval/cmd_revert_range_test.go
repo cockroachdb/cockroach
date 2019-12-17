@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func hashRange(t *testing.T, eng engine.Reader, start, end roachpb.Key) []byte {
+func hashRange(t *testing.T, reader engine.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	if err := eng.Iterate(start, end,
+	if err := reader.Iterate(start, end,
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			h.Write(kv.Key.Key)
 			h.Write(kv.Value)
@@ -41,9 +41,9 @@ func hashRange(t *testing.T, eng engine.Reader, start, end roachpb.Key) []byte {
 	return h.Sum(nil)
 }
 
-func getStats(t *testing.T, batch engine.Reader) enginepb.MVCCStats {
+func getStats(t *testing.T, reader engine.Reader) enginepb.MVCCStats {
 	t.Helper()
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := reader.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	s, err := engine.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
 	if err != nil {

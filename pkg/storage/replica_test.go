@@ -6024,8 +6024,10 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), eng)
+func verifyRangeStats(
+	reader engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
+) error {
+	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
 		return err
 	}
