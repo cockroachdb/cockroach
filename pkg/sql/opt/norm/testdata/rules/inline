@@ -15,7 +15,7 @@ CREATE TABLE computed (a INT PRIMARY KEY, b INT, c INT AS (a+b+1) STORED)
 # --------------------------------------------------
 
 # Inline constants from Project expression.
-opt expect=InlineProjectConstants
+norm expect=InlineProjectConstants
 UPDATE computed SET a=1, b=2
 ----
 update computed
@@ -41,7 +41,7 @@ update computed
            └── const: 2 [type=int]
 
 # Inline constants from Values expression.
-opt expect=InlineProjectConstants
+norm expect=InlineProjectConstants
 SELECT one+two+three+four FROM (VALUES (1, $1:::int, 2, $2:::int)) AS t(one, two, three, four)
 ----
 project
@@ -62,7 +62,7 @@ project
 
 # Multiple constant columns, multiple refs to each, interspersed with other
 # columns.
-opt expect=InlineProjectConstants
+norm expect=InlineProjectConstants
 SELECT one+two, x, one*two, y FROM (SELECT x, 1 AS one, y, 2 AS two FROM xy)
 ----
 project
@@ -79,7 +79,7 @@ project
 
 # Constant column reference within correlated subquery (which becomes
 # uncorrelated as a result).
-opt expect=InlineProjectConstants
+norm expect=InlineProjectConstants
 SELECT EXISTS(SELECT * FROM a WHERE k=one AND i=two) FROM (VALUES (1, 2)) AS t(one, two)
 ----
 values
@@ -96,15 +96,14 @@ values
                 ├── fd: ()-->(3-7)
                 ├── scan a
                 │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
-                │    ├── constraint: /3: [/1 - /1]
-                │    ├── cardinality: [0 - 1]
-                │    ├── key: ()
-                │    └── fd: ()-->(3-7)
+                │    ├── key: (3)
+                │    └── fd: (3)-->(4-7)
                 └── filters
+                     ├── k = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
                      └── i = 2 [type=bool, outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
 
 # Do not inline constants from Values expression with multiple rows.
-opt expect-not=InlineProjectConstants
+norm expect-not=InlineProjectConstants
 SELECT one+two FROM (VALUES (1, 2), (3, 4)) AS t(one, two)
 ----
 project
@@ -123,7 +122,7 @@ project
 # --------------------------------------------------
 
 # Inline constants from Project expression.
-opt expect=InlineSelectConstants
+norm expect=InlineSelectConstants
 SELECT * FROM (SELECT 1 AS one from xy) WHERE one > 0
 ----
 project
@@ -134,7 +133,7 @@ project
       └── const: 1 [type=int]
 
 # Inline constants from Values expression.
-opt expect=InlineSelectConstants
+norm expect=InlineSelectConstants
 SELECT *
 FROM (VALUES ($1:::int, 1, $2:::float, 2)) AS t(one, two, three, four)
 WHERE one = two OR three = four
@@ -157,7 +156,7 @@ select
 
 # Multiple constant columns, multiple refs to each, interspersed with other
 # columns.
-opt expect=InlineSelectConstants
+norm expect=InlineSelectConstants
 SELECT * FROM (SELECT x, 1 AS one, y, 2 AS two FROM xy) WHERE x=one AND y=two
 ----
 project
@@ -172,18 +171,17 @@ project
  │    ├── fd: ()-->(1,2)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    ├── constraint: /1: [/1 - /1]
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(1,2)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
  │    └── filters
+ │         ├── x = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  │         └── y = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
  └── projections
       ├── const: 1 [type=int]
       └── const: 2 [type=int]
 
 # Do not inline constants from Values expression with multiple rows.
-opt expect-not=InlineSelectConstants
+norm expect-not=InlineSelectConstants
 SELECT * FROM (VALUES (1, 2), (3, 4)) AS t(one, two) WHERE one=two
 ----
 select
@@ -201,7 +199,7 @@ select
 # --------------------------------------------------
 # InlineJoinConstantsLeft + InlineJoinConstantsRight
 # --------------------------------------------------
-opt expect=InlineJoinConstantsLeft
+norm expect=InlineJoinConstantsLeft
 SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
 ----
 left-join (cross)
@@ -215,15 +213,20 @@ left-join (cross)
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1,) [type=tuple{int}]
- ├── scan a
+ ├── select
  │    ├── columns: k:2(int!null) i:3(int) f:4(float) s:5(string) j:6(jsonb)
- │    ├── constraint: /2: [/1 - /1]
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    └── fd: ()-->(2-6)
+ │    ├── fd: ()-->(2-6)
+ │    ├── scan a
+ │    │    ├── columns: k:2(int!null) i:3(int) f:4(float) s:5(string) j:6(jsonb)
+ │    │    ├── key: (2)
+ │    │    └── fd: (2)-->(3-6)
+ │    └── filters
+ │         └── k = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── filters (true)
 
-opt expect=InlineJoinConstantsRight
+norm expect=InlineJoinConstantsRight
 SELECT * FROM a FULL JOIN (SELECT 1 AS one) ON k=one
 ----
 full-join (cross)
@@ -244,7 +247,7 @@ full-join (cross)
  └── filters
       └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
-opt expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
+norm expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
 SELECT * FROM (SELECT 1 AS one) INNER JOIN (SELECT 2 AS two) ON one=two
 ----
 values
@@ -254,7 +257,7 @@ values
  └── fd: ()-->(1,2)
 
 # Constant column exists in input, but is not referenced.
-opt expect-not=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
+norm expect-not=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
 SELECT * FROM a INNER JOIN (SELECT 1 AS one, y FROM xy) ON k=y
 ----
 inner-join (hash)
@@ -279,7 +282,7 @@ inner-join (hash)
 # --------------------------------------------------
 
 # Inline comparison.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k=1 AS expr FROM a) a WHERE expr IS NULL
 ----
 project
@@ -296,7 +299,7 @@ project
       └── k = 1 [type=bool, outer=(1)]
 
 # Inline arithmetic.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
@@ -313,20 +316,24 @@ project
       └── (k * 2) + 1 [type=int, outer=(1)]
 
 # Inline boolean logic.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT NOT(k>1 AND k<=5) AS expr FROM a) a WHERE expr
 ----
 project
  ├── columns: expr:6(bool)
- ├── scan a
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [ - /1] [/6 - ]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k <= 1) OR (k > 5) [type=bool, outer=(1), constraints=(/1: (/NULL - /1] [/6 - ])]
  └── projections
       └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
 
 # Inline constants.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT (f IS NULL OR f != 10.5) AS expr FROM a) a WHERE expr
 ----
 project
@@ -341,7 +348,7 @@ project
       └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
 # Reference the expression to inline multiple times.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT f+1 AS expr FROM a) a WHERE expr=expr
 ----
 project
@@ -356,7 +363,7 @@ project
       └── f + 1.0 [type=float, outer=(3)]
 
 # Use outer references in both inlined expression and in referencing expression.
-opt expect=PushSelectIntoInlinableProject
+norm expect=PushSelectIntoInlinableProject
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT (x-i) AS expr FROM xy) WHERE expr > i*i)
 ----
 semi-join (cross)
@@ -479,7 +486,7 @@ project
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
@@ -494,7 +501,7 @@ project
 
 # Multiple synthesized column references to same inner passthrough column
 # (should still inline).
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT x+1, x+2, y1+2 FROM (SELECT x, y+1 AS y1 FROM xy)
 ----
 project
@@ -510,7 +517,7 @@ project
 
 # Synthesized and passthrough references to same inner passthrough column
 # (should still inline).
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT x+y1 FROM (SELECT x, y+1 AS y1 FROM xy) ORDER BY x
 ----
 project
@@ -527,7 +534,7 @@ project
       └── x + (y + 1) [type=int, outer=(1,2)]
 
 # Inline multiple expressions.
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
@@ -541,7 +548,7 @@ project
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
 
 # Don't inline when there are multiple references.
-opt expect-not=InlineProjectInProject
+norm expect-not=InlineProjectInProject
 SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -558,7 +565,7 @@ project
       └── expr * 2 [type=int, outer=(6)]
 
 # Uncorrelated subquery should not block inlining.
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -569,16 +576,29 @@ project
  │    └── key: (1)
  └── projections
       ├── exists [type=bool, subquery]
-      │    └── scan xy
+      │    └── limit
       │         ├── columns: x:7(int!null) y:8(int)
-      │         ├── constraint: /7: [/1 - /2]
-      │         ├── limit: 1
+      │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         └── fd: ()-->(7,8)
+      │         ├── fd: ()-->(7,8)
+      │         ├── select
+      │         │    ├── columns: x:7(int!null) y:8(int)
+      │         │    ├── cardinality: [0 - 2]
+      │         │    ├── key: (7)
+      │         │    ├── fd: (7)-->(8)
+      │         │    ├── limit hint: 1.00
+      │         │    ├── scan xy
+      │         │    │    ├── columns: x:7(int!null) y:8(int)
+      │         │    │    ├── key: (7)
+      │         │    │    ├── fd: (7)-->(8)
+      │         │    │    └── limit hint: 1.00
+      │         │    └── filters
+      │         │         └── (x = 1) OR (x = 2) [type=bool, outer=(7), constraints=(/7: [/1 - /1] [/2 - /2])]
+      │         └── const: 1 [type=int]
       └── (k + 1) * 2 [type=int, outer=(1)]
 
 # Correlated subquery should be hoisted as usual.
-opt expect=InlineProjectInProject
+norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
@@ -617,14 +637,18 @@ project
       └── true_agg IS NOT NULL [type=bool, outer=(11)]
 
 # After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
-opt
+norm
 SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
 ----
 project
  ├── columns: c:6(int)
- ├── scan a
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [/1 - ]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── k > 0 [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
  └── projections
       └── k + 2 [type=int, outer=(1)]

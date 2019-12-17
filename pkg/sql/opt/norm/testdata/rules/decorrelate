@@ -17,48 +17,42 @@ CREATE TABLE cd (c INT PRIMARY KEY, d INT NOT NULL)
 # --------------------------------------------------
 # DecorrelateJoin
 # --------------------------------------------------
-opt expect=DecorrelateJoin
+norm expect=DecorrelateJoin
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 ----
-semi-join (merge)
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-5)
  ├── scan xy
  │    ├── columns: x:6(int!null)
- │    ├── key: (6)
- │    └── ordering: +6
- └── filters (true)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
-opt expect=DecorrelateJoin
+norm expect=DecorrelateJoin
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
 ----
-anti-join (merge)
+anti-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-5)
  ├── scan xy
  │    ├── columns: x:6(int!null)
- │    ├── key: (6)
- │    └── ordering: +6
- └── filters (true)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Decorrelate UPDATE statement.
-opt expect=DecorrelateJoin
+norm expect=DecorrelateJoin
 UPDATE xy SET (x, y)=(SELECT * FROM uv WHERE u=x)
 ----
 update xy
@@ -69,26 +63,23 @@ update xy
  │    └──  v:6 => y:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── left-join (merge)
+ └── left-join (hash)
       ├── columns: x:3(int!null) y:4(int) u:5(int) v:6(int)
-      ├── left ordering: +3
-      ├── right ordering: +5
       ├── key: (3,5)
       ├── fd: (3)-->(4), (5)-->(6)
       ├── scan xy
       │    ├── columns: x:3(int!null) y:4(int)
       │    ├── key: (3)
-      │    ├── fd: (3)-->(4)
-      │    └── ordering: +3
+      │    └── fd: (3)-->(4)
       ├── scan uv
       │    ├── columns: u:5(int!null) v:6(int)
       │    ├── key: (5)
-      │    ├── fd: (5)-->(6)
-      │    └── ordering: +5
-      └── filters (true)
+      │    └── fd: (5)-->(6)
+      └── filters
+           └── u = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 # Decorrelate INSERT..ON CONFLICT statement.
-opt expect=DecorrelateJoin
+norm expect=DecorrelateJoin
 INSERT INTO xy VALUES (1,2), (3,4)
 ON CONFLICT (x) DO UPDATE SET (x, y)=(SELECT * FROM uv WHERE u=excluded.x)
 RETURNING *
@@ -112,16 +103,12 @@ upsert xy
       ├── columns: upsert_x:9(int) upsert_y:10(int) column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
       ├── cardinality: [2 - ]
       ├── fd: (5)-->(6)
-      ├── left-join (lookup uv)
+      ├── left-join (hash)
       │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int) u:7(int) v:8(int)
-      │    ├── key columns: [3] = [7]
-      │    ├── lookup columns are key
       │    ├── cardinality: [2 - ]
       │    ├── fd: (5)-->(6), (7)-->(8)
-      │    ├── left-join (lookup xy)
+      │    ├── left-join (hash)
       │    │    ├── columns: column1:3(int!null) column2:4(int!null) x:5(int) y:6(int)
-      │    │    ├── key columns: [3] = [5]
-      │    │    ├── lookup columns are key
       │    │    ├── cardinality: [2 - ]
       │    │    ├── fd: (5)-->(6)
       │    │    ├── values
@@ -129,14 +116,24 @@ upsert xy
       │    │    │    ├── cardinality: [2 - 2]
       │    │    │    ├── (1, 2) [type=tuple{int, int}]
       │    │    │    └── (3, 4) [type=tuple{int, int}]
-      │    │    └── filters (true)
-      │    └── filters (true)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5(int!null) y:6(int)
+      │    │    │    ├── key: (5)
+      │    │    │    └── fd: (5)-->(6)
+      │    │    └── filters
+      │    │         └── column1 = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+      │    ├── scan uv
+      │    │    ├── columns: u:7(int!null) v:8(int)
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8)
+      │    └── filters
+      │         └── u = column1 [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
       └── projections
            ├── CASE WHEN x IS NULL THEN column1 ELSE u END [type=int, outer=(3,5,7)]
            └── CASE WHEN x IS NULL THEN column2 ELSE v END [type=int, outer=(4,5,8)]
 
 # Decorrelate DELETE statement.
-opt expect=DecorrelateJoin
+norm expect=DecorrelateJoin
 DELETE FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
 ----
 delete xy
@@ -144,26 +141,23 @@ delete xy
  ├── fetch columns: x:3(int)
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── semi-join (merge)
+ └── semi-join (hash)
       ├── columns: x:3(int!null)
-      ├── left ordering: +3
-      ├── right ordering: +5
       ├── key: (3)
       ├── scan xy
       │    ├── columns: x:3(int!null)
-      │    ├── key: (3)
-      │    └── ordering: +3
+      │    └── key: (3)
       ├── scan uv
       │    ├── columns: u:5(int!null)
-      │    ├── key: (5)
-      │    └── ordering: +5
-      └── filters (true)
+      │    └── key: (5)
+      └── filters
+           └── u = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 # --------------------------------------------------
 # DecorrelateProjectSet
 # --------------------------------------------------
 
-opt expect=DecorrelateProjectSet
+norm expect=DecorrelateProjectSet
 SELECT generate_series(0, 5) FROM xy
 ----
 inner-join (cross)
@@ -183,7 +177,7 @@ inner-join (cross)
  │              └── const: 5 [type=int]
  └── filters (true)
 
-opt expect=DecorrelateProjectSet
+norm expect=DecorrelateProjectSet
 SELECT * FROM a WHERE i IN (SELECT generate_series(k, i) FROM xy)
 ----
 semi-join-apply
@@ -216,7 +210,7 @@ semi-join-apply
  └── filters
       └── i = generate_series [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
-opt expect=DecorrelateProjectSet
+norm expect=DecorrelateProjectSet
 SELECT generate_series(0, (SELECT generate_series(1,0) FROM xy)) FROM uv
 ----
 inner-join (cross)
@@ -645,7 +639,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateSelect
 # --------------------------------------------------
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 ----
 semi-join-apply
@@ -665,7 +659,7 @@ semi-join-apply
  └── filters
       └── column1 = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 ----
 anti-join-apply
@@ -688,7 +682,7 @@ anti-join-apply
 # Attempt to decorrelate query by pulling up outer select. But since limit query
 # cannot be decorrelated, push the outer select back down again (and make sure
 # potential rule cycle is detected and handled).
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (SELECT * FROM xy WHERE y=k LIMIT 1) WHERE y=10)
 ----
 semi-join-apply
@@ -720,7 +714,7 @@ semi-join-apply
       └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
 
 # Same as previous, but using anti-join.
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (SELECT * FROM xy WHERE y=k LIMIT 1) WHERE y=10)
 ----
 anti-join-apply
@@ -752,7 +746,7 @@ anti-join-apply
       └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
 
 # Decorrelate Select with reference to outer column and no limit.
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE (SELECT x FROM xy WHERE x=i) > 100
 ----
 project
@@ -773,15 +767,19 @@ project
       │    │    └── fd: (1)-->(2-5)
       │    └── filters
       │         └── i > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
-      ├── scan xy
+      ├── select
       │    ├── columns: x:6(int!null)
-      │    ├── constraint: /6: [/101 - ]
-      │    └── key: (6)
+      │    ├── key: (6)
+      │    ├── scan xy
+      │    │    ├── columns: x:6(int!null)
+      │    │    └── key: (6)
+      │    └── filters
+      │         └── x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
       └── filters
            └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Decorrelate Select with LeftJoinApply.
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE (SELECT x FROM (SELECT * FROM xy LIMIT 1) WHERE k=x) > 100
 ----
 project
@@ -789,30 +787,43 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── inner-join (lookup a)
+ └── inner-join (hash)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
-      ├── key columns: [6] = [1]
-      ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-6)
+      ├── select
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    └── filters
+      │         └── k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
       ├── select
       │    ├── columns: x:6(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6)
-      │    ├── scan xy
+      │    ├── limit
       │    │    ├── columns: x:6(int!null)
-      │    │    ├── limit: 1
+      │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    └── fd: ()-->(6)
+      │    │    ├── fd: ()-->(6)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6(int!null)
+      │    │    │    ├── key: (6)
+      │    │    │    └── limit hint: 1.00
+      │    │    └── const: 1 [type=int]
       │    └── filters
       │         └── x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
       └── filters
-           └── k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
+           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
-opt expect=TryDecorrelateSelect
+norm expect=TryDecorrelateSelect
 SELECT *
 FROM a
 WHERE EXISTS(SELECT * FROM xy WHERE x=k AND EXISTS(SELECT * FROM uv WHERE u=10 AND s='foo'))
@@ -832,12 +843,16 @@ semi-join-apply
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null)
  │    │    └── key: (6)
- │    ├── scan uv
+ │    ├── select
  │    │    ├── columns: u:8(int!null)
- │    │    ├── constraint: /8: [/10 - /10]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(8)
+ │    │    ├── fd: ()-->(8)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:8(int!null)
+ │    │    │    └── key: (8)
+ │    │    └── filters
+ │    │         └── u = 10 [type=bool, outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
  │    └── filters
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  └── filters
@@ -853,7 +868,7 @@ semi-join-apply
 # --------------------------------------------------
 
 # Left join caused by correlated ANY clause.
-opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -861,40 +876,33 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(10)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(9)
- │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
- │    │    │    ├── key: (1)
- │    │    │    └── ordering: +1
+ │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(9)
- │    │    │    ├── ordering: +6
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
  │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    ├── ordering: +6
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    │    └── ordering: +6
+ │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    └── filters
  │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
- │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool]
@@ -902,7 +910,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Left join caused by zero or one cardinality subquery.
-opt expect=TryDecorrelateProjectSelect
+norm expect=TryDecorrelateProjectSelect
 SELECT * FROM a WHERE (SELECT y+1 AS r FROM (SELECT * FROM xy LIMIT 1) WHERE x=k) > 10
 ----
 project
@@ -910,29 +918,38 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── inner-join (lookup a)
+ └── inner-join (hash)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
-      ├── key columns: [6] = [1]
-      ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
       ├── select
       │    ├── columns: x:6(int!null) y:7(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6,7)
-      │    ├── scan xy
+      │    ├── limit
       │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    ├── limit: 1
+      │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    └── fd: ()-->(6,7)
+      │    │    ├── fd: ()-->(6,7)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: (6)-->(7)
+      │    │    │    └── limit hint: 1.00
+      │    │    └── const: 1 [type=int]
       │    └── filters
       │         └── y > 9 [type=bool, outer=(7), constraints=(/7: [/10 - ]; tight)]
-      └── filters (true)
+      └── filters
+           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Any clause with constant.
-opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -940,40 +957,33 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(10)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) x:6(int) notnull:9(bool)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(9)
- │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
- │    │    │    ├── key: (1)
- │    │    │    └── ordering: +1
+ │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(9)
- │    │    │    ├── ordering: +6
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
  │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    ├── ordering: +6
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    │    └── ordering: +6
+ │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    └── filters
  │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    └── projections
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
- │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool]
@@ -981,7 +991,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Any clause with variable.
-opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT i=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -989,34 +999,28 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,10)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) i:2(int) x:6(int) y:7(int) notnull:9(bool)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(2), (6)-->(7), (7)~~>(9), (1,6)-->(9)
- │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(2)
- │    │    │    └── ordering: +1
+ │    │    │    └── fd: (1)-->(2)
  │    │    ├── project
  │    │    │    ├── columns: notnull:9(bool) x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(7), (7)-->(9)
- │    │    │    ├── ordering: +6
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
- │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    └── ordering: +6
+ │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── filters
+ │    │         ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── (i = y) IS NOT false [type=bool, outer=(2,7)]
  │    └── aggregations
  │         ├── bool-or [type=bool, outer=(9)]
@@ -1027,7 +1031,7 @@ project
       └── CASE WHEN bool_or AND (i IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(2,10)]
 
 # Any clause with more complex expression that must be cached.
-opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
 SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -1036,44 +1040,37 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(9,11)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) x:6(int) y:7(int) scalar:9(decimal) notnull:10(bool)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
- │    │    ├── ordering: +1
  │    │    ├── project
  │    │    │    ├── columns: scalar:9(decimal) k:1(int!null)
  │    │    │    ├── side-effects
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(9)
- │    │    │    ├── ordering: +1
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: (1)-->(2)
- │    │    │    │    └── ordering: +1
+ │    │    │    │    └── fd: (1)-->(2)
  │    │    │    └── projections
  │    │    │         └── (i * i) / 5 [type=decimal, outer=(2), side-effects]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10(bool) x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(7), (7)-->(10)
- │    │    │    ├── ordering: +6
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
- │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    └── ordering: +6
+ │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── filters
+ │    │         ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── (scalar = y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations
  │         ├── bool-or [type=bool, outer=(10)]
@@ -1086,7 +1083,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProject
 # --------------------------------------------------
-opt expect=TryDecorrelateProject
+norm expect=TryDecorrelateProject
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -1109,27 +1106,26 @@ distinct-on
       │    │    ├── columns: k:1(int!null) i:2(int!null) x:6(int!null) u:8(int!null)
       │    │    ├── key: (1,6,8)
       │    │    ├── fd: ()-->(2)
-      │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: k:1(int!null) i:2(int!null) u:8(int!null)
-      │    │    │    ├── key: (1,8)
+      │    │    ├── select
+      │    │    │    ├── columns: k:1(int!null) i:2(int!null)
+      │    │    │    ├── key: (1)
       │    │    │    ├── fd: ()-->(2)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2)
+      │    │    │    └── filters
+      │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: x:6(int!null) u:8(int!null)
+      │    │    │    ├── key: (6,8)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:6(int!null)
+      │    │    │    │    └── key: (6)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    └── key: (8)
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: k:1(int!null) i:2(int!null)
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: ()-->(2)
-      │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    │    └── filters
-      │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    │    └── filters (true)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6(int!null)
-      │    │    │    └── key: (6)
       │    │    └── filters (true)
       │    └── projections
       │         └── u / 1.1 [type=decimal, outer=(8), side-effects]
@@ -1137,7 +1133,7 @@ distinct-on
            └── x = div [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
 
 # Don't hoist Project operator in right join case.
-opt
+norm
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -1186,7 +1182,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProjectSelect
 # --------------------------------------------------
-opt
+norm
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -1229,7 +1225,7 @@ project
       └── filters (true)
 
 # Don't decorrelate FULL JOIN case.
-opt
+norm
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -1274,7 +1270,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProjectInnerJoin
 # --------------------------------------------------
-opt expect=TryDecorrelateProjectInnerJoin
+norm expect=TryDecorrelateProjectInnerJoin
 SELECT (SELECT sum(y + v) FROM xy, uv WHERE x=u AND x=k) FROM a
 ----
 project
@@ -1282,46 +1278,37 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) sum:11(decimal)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── key: (1)
  │    ├── fd: (1)-->(11)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) x:6(int) column10:10(int)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── key: (1,6)
  │    │    ├── fd: (6)-->(10)
- │    │    ├── ordering: +1
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null)
- │    │    │    ├── key: (1)
- │    │    │    └── ordering: +1
+ │    │    │    └── key: (1)
  │    │    ├── project
  │    │    │    ├── columns: column10:10(int) x:6(int!null)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(10)
- │    │    │    ├── ordering: +6
- │    │    │    ├── inner-join (merge)
+ │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int!null) v:9(int)
- │    │    │    │    ├── left ordering: +6
- │    │    │    │    ├── right ordering: +8
  │    │    │    │    ├── key: (8)
  │    │    │    │    ├── fd: (6)-->(7), (8)-->(9), (6)==(8), (8)==(6)
- │    │    │    │    ├── ordering: +(6|8) [actual: +6]
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    │    └── ordering: +6
+ │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    ├── scan uv
  │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
  │    │    │    │    │    ├── key: (8)
- │    │    │    │    │    ├── fd: (8)-->(9)
- │    │    │    │    │    └── ordering: +8
- │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── fd: (8)-->(9)
+ │    │    │    │    └── filters
+ │    │    │    │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │    │    │    └── projections
  │    │    │         └── y + v [type=int, outer=(7,9)]
- │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
  │         └── sum [type=decimal, outer=(10)]
  │              └── variable: column10 [type=int]
@@ -1332,77 +1319,65 @@ project
 # TryDecorrelateInnerJoin
 # --------------------------------------------------
 # Semi-join as outer.
-opt expect=TryDecorrelateInnerJoin
+norm expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE EXISTS
 (
     SELECT * FROM xy INNER JOIN uv ON x=u AND x=k
 )
 ----
-semi-join (merge)
+semi-join (hash)
  ├── columns: k:1(int!null)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── key: (1)
- │    └── ordering: +1
- ├── inner-join (merge)
+ │    └── key: (1)
+ ├── inner-join (hash)
  │    ├── columns: x:6(int!null) u:8(int!null)
- │    ├── left ordering: +6
- │    ├── right ordering: +8
  │    ├── key: (8)
  │    ├── fd: (6)==(8), (8)==(6)
- │    ├── ordering: +(6|8) [actual: +6]
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null)
- │    │    ├── key: (6)
- │    │    └── ordering: +6
+ │    │    └── key: (6)
  │    ├── scan uv
  │    │    ├── columns: u:8(int!null)
- │    │    ├── key: (8)
- │    │    └── ordering: +8
- │    └── filters (true)
- └── filters (true)
+ │    │    └── key: (8)
+ │    └── filters
+ │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Anti-join as outer.
-opt expect=TryDecorrelateInnerJoin
+norm expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE NOT EXISTS
 (
     SELECT * FROM xy INNER JOIN uv ON x=u AND x=k
 )
 ----
-anti-join (merge)
+anti-join (hash)
  ├── columns: k:1(int!null)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── key: (1)
- │    └── ordering: +1
- ├── inner-join (merge)
+ │    └── key: (1)
+ ├── inner-join (hash)
  │    ├── columns: x:6(int!null) u:8(int!null)
- │    ├── left ordering: +6
- │    ├── right ordering: +8
  │    ├── key: (8)
  │    ├── fd: (6)==(8), (8)==(6)
- │    ├── ordering: +(6|8) [actual: +6]
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null)
- │    │    ├── key: (6)
- │    │    └── ordering: +6
+ │    │    └── key: (6)
  │    ├── scan uv
  │    │    ├── columns: u:8(int!null)
- │    │    ├── key: (8)
- │    │    └── ordering: +8
- │    └── filters (true)
- └── filters (true)
+ │    │    └── key: (8)
+ │    └── filters
+ │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Right-join as outer.
-opt expect=TryDecorrelateInnerJoin
+norm expect=TryDecorrelateInnerJoin
 SELECT k FROM a
 WHERE
 (
@@ -1422,37 +1397,29 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) count_rows:10(int)
       │    ├── grouping columns: k:1(int!null)
-      │    ├── internal-ordering: +1
       │    ├── key: (1)
       │    ├── fd: (1)-->(10)
-      │    ├── left-join (merge)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) x:6(int) u:8(int)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +6
       │    │    ├── key: (1,8)
       │    │    ├── fd: (6)==(8), (8)==(6)
-      │    │    ├── ordering: +1
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null)
-      │    │    │    ├── key: (1)
-      │    │    │    └── ordering: +1
-      │    │    ├── inner-join (merge)
+      │    │    │    └── key: (1)
+      │    │    ├── inner-join (hash)
       │    │    │    ├── columns: x:6(int!null) u:8(int!null)
-      │    │    │    ├── left ordering: +6
-      │    │    │    ├── right ordering: +8
       │    │    │    ├── key: (8)
       │    │    │    ├── fd: (6)==(8), (8)==(6)
-      │    │    │    ├── ordering: +(6|8) [actual: +6]
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:6(int!null)
-      │    │    │    │    ├── key: (6)
-      │    │    │    │    └── ordering: +6
+      │    │    │    │    └── key: (6)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: u:8(int!null)
-      │    │    │    │    ├── key: (8)
-      │    │    │    │    └── ordering: +8
-      │    │    │    └── filters (true)
-      │    │    └── filters (true)
+      │    │    │    │    └── key: (8)
+      │    │    │    └── filters
+      │    │    │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+      │    │    └── filters
+      │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │    └── aggregations
       │         └── count [type=int, outer=(6)]
       │              └── variable: x [type=int]
@@ -1460,7 +1427,7 @@ project
            └── count_rows IS DISTINCT FROM 1 [type=bool, outer=(10), constraints=(/10: [ - /0] [/2 - ]; tight)]
 
 # Can't decorrelate left-join as inner.
-opt
+norm
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -1473,26 +1440,23 @@ semi-join-apply
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- ├── left-join (merge)
+ ├── left-join (hash)
  │    ├── columns: x:6(int!null) u:8(int)
- │    ├── left ordering: +6
- │    ├── right ordering: +8
  │    ├── outer: (1)
  │    ├── key: (6,8)
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null)
- │    │    ├── key: (6)
- │    │    └── ordering: +6
+ │    │    └── key: (6)
  │    ├── scan uv
  │    │    ├── columns: u:8(int!null)
- │    │    ├── key: (8)
- │    │    └── ordering: +8
+ │    │    └── key: (8)
  │    └── filters
+ │         ├── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
  │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── filters (true)
 
 # Can't decorrelate semi-join as inner.
-opt
+norm
 SELECT k
 FROM a
 WHERE EXISTS
@@ -1511,32 +1475,24 @@ semi-join-apply
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- ├── project
+ ├── semi-join (cross)
  │    ├── outer: (1)
- │    └── inner-join (cross)
- │         ├── columns: uv2.u:10(int!null)
- │         ├── outer: (1)
- │         ├── fd: ()-->(10)
- │         ├── scan xy
- │         ├── distinct-on
- │         │    ├── columns: uv2.u:10(int!null)
- │         │    ├── grouping columns: uv2.u:10(int!null)
- │         │    ├── key: (10)
- │         │    └── inner-join (cross)
- │         │         ├── columns: uv2.u:10(int!null)
- │         │         ├── scan uv
- │         │         ├── scan uv2
- │         │         │    ├── columns: uv2.u:10(int!null)
- │         │         │    └── key: (10)
- │         │         └── filters (true)
- │         └── filters
- │              └── uv2.u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    ├── scan xy
+ │    ├── inner-join (cross)
+ │    │    ├── columns: uv2.u:10(int!null)
+ │    │    ├── scan uv
+ │    │    ├── scan uv2
+ │    │    │    ├── columns: uv2.u:10(int!null)
+ │    │    │    └── key: (10)
+ │    │    └── filters (true)
+ │    └── filters
+ │         └── uv2.u = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  └── filters (true)
 
 # --------------------------------------------------
 # TryDecorrelateInnerLeftJoin
 # --------------------------------------------------
-opt expect=TryDecorrelateInnerLeftJoin
+norm expect=TryDecorrelateInnerLeftJoin
 SELECT *
 FROM (VALUES (1), (2)) AS v(v1)
 WHERE EXISTS(
@@ -1582,16 +1538,19 @@ semi-join-apply
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(11)
- │    │    ├── scan uv
- │    │    │    ├── limit: 1
- │    │    │    └── key: ()
+ │    │    ├── limit
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── scan uv
+ │    │    │    │    └── limit hint: 1.00
+ │    │    │    └── const: 1 [type=int]
  │    │    └── projections
  │    │         └── variable: column1 [type=int, outer=(1)]
  │    └── filters
  │         └── x = v1 [type=bool, outer=(7,11), constraints=(/7: (/NULL - ]; /11: (/NULL - ]), fd=(7)==(11), (11)==(7)]
  └── filters (true)
 
-opt expect=TryDecorrelateInnerLeftJoin
+norm expect=TryDecorrelateInnerLeftJoin
 SELECT *
 FROM xy, uv
 WHERE (SELECT i FROM a WHERE k=x) IS DISTINCT FROM u
@@ -1632,7 +1591,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateGroupBy
 # --------------------------------------------------
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1657,25 +1616,24 @@ group-by
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    ├── key: (1)
  │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    └── filters
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: x:6(int!null) v:9(int)
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── scan uv
  │    │    │    │    │    └── columns: v:9(int)
- │    │    │    │    ├── select
- │    │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    └── fd: (1)-->(2-5)
- │    │    │    │    │    └── filters
- │    │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
  │    │    │    │    └── filters (true)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:6(int!null)
- │    │    │    │    └── key: (6)
  │    │    │    └── filters (true)
  │    │    └── aggregations
  │    │         ├── count-rows [type=int]
@@ -1699,7 +1657,7 @@ group-by
       └── const-agg [type=jsonb, outer=(5)]
            └── variable: j [type=jsonb]
 
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1724,25 +1682,24 @@ group-by
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) v:9(int)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    ├── key: (1)
  │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    └── filters
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: x:6(int!null) v:9(int)
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── scan uv
  │    │    │    │    │    └── columns: v:9(int)
- │    │    │    │    ├── select
- │    │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    └── fd: (1)-->(2-5)
- │    │    │    │    │    └── filters
- │    │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
  │    │    │    │    └── filters (true)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:6(int!null)
- │    │    │    │    └── key: (6)
  │    │    │    └── filters (true)
  │    │    └── aggregations
  │    │         ├── count [type=int, outer=(9)]
@@ -1769,7 +1726,7 @@ group-by
            └── variable: j [type=jsonb]
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
@@ -1791,36 +1748,32 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) k:5(int!null) i:6(int!null)
       │    │    ├── key: (3)
       │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4,5), (4)==(1,5), (5)-->(6), (5)==(1,4)
-      │    │    ├── scan uv
-      │    │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
       │    │    │    ├── key: (3)
-      │    │    │    └── fd: (3)-->(4)
-      │    │    ├── inner-join (merge)
-      │    │    │    ├── columns: x:1(int!null) y:2(int) k:5(int!null) i:6(int!null)
-      │    │    │    ├── left ordering: +1
-      │    │    │    ├── right ordering: +5
-      │    │    │    ├── key: (5)
-      │    │    │    ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      │    │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2)
-      │    │    │    │    └── ordering: +1
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │    │    │    └── fd: (1)-->(2)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    │    │    ├── key: (3)
+      │    │    │    │    └── fd: (3)-->(4)
+      │    │    │    └── filters
+      │    │    │         └── x = v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │    ├── select
+      │    │    │    ├── columns: k:5(int!null) i:6(int!null)
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: (5)-->(6)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:5(int!null) i:6(int)
       │    │    │    │    ├── key: (5)
-      │    │    │    │    ├── fd: (5)-->(6)
-      │    │    │    │    ├── ordering: +5
-      │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:5(int!null) i:6(int)
-      │    │    │    │    │    ├── key: (5)
-      │    │    │    │    │    ├── fd: (5)-->(6)
-      │    │    │    │    │    └── ordering: +5
-      │    │    │    │    └── filters
-      │    │    │    │         └── i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │    │    │    └── filters (true)
+      │    │    │    │    └── fd: (5)-->(6)
+      │    │    │    └── filters
+      │    │    │         └── i IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters
-      │    │         └── x = v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │         └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    └── aggregations
       │         ├── max [type=int, outer=(6)]
       │         │    └── variable: i [type=int]
@@ -1835,7 +1788,7 @@ project
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
 # IS DISTINCT FROM to retain left join.
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
@@ -1853,14 +1806,10 @@ project
       │    ├── grouping columns: u:3(int!null)
       │    ├── key: (3)
       │    ├── fd: (1)-->(2), (3)-->(1,2,4,10), (1)==(4), (4)==(1)
-      │    ├── right-join (hash)
+      │    ├── left-join (hash)
       │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) k:5(int) i:6(int)
       │    │    ├── key: (3,5)
       │    │    ├── fd: (1)-->(2), (3)-->(4), (1)==(4), (4)==(1), (5)-->(6)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:5(int!null) i:6(int)
-      │    │    │    ├── key: (5)
-      │    │    │    └── fd: (5)-->(6)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
       │    │    │    ├── key: (3)
@@ -1875,6 +1824,10 @@ project
       │    │    │    │    └── fd: (3)-->(4)
       │    │    │    └── filters
       │    │    │         └── x = v [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:5(int!null) i:6(int)
+      │    │    │    ├── key: (5)
+      │    │    │    └── fd: (5)-->(6)
       │    │    └── filters
       │    │         └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    └── aggregations
@@ -1890,7 +1843,7 @@ project
            └── u IS DISTINCT FROM max [type=bool, outer=(3,10)]
 
 # Synthesize key when one is not present.
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM
 (
@@ -1920,11 +1873,17 @@ project
  │    │    │    │    ├── fd: (10)-->(2)
  │    │    │    │    └── scan xy
  │    │    │    │         └── columns: y:2(int)
- │    │    │    ├── scan a
+ │    │    │    ├── limit
  │    │    │    │    ├── columns: k:4(int!null) s:7(string)
- │    │    │    │    ├── limit: 1
+ │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    └── fd: ()-->(4,7)
+ │    │    │    │    ├── fd: ()-->(4,7)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:4(int!null) s:7(string)
+ │    │    │    │    │    ├── key: (4)
+ │    │    │    │    │    ├── fd: (4)-->(7)
+ │    │    │    │    │    └── limit hint: 1.00
+ │    │    │    │    └── const: 1 [type=int]
  │    │    │    └── filters
  │    │    │         └── k = y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
  │    │    └── aggregations
@@ -1938,7 +1897,7 @@ project
       └── const: 'foo' [type=string]
 
 # Decorrelate DistinctOn.
-opt expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -1966,28 +1925,28 @@ group-by
  │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int!null) v:9(int)
  │    │    │    ├── key: (1,6,8)
  │    │    │    ├── fd: ()-->(2), (1)-->(3-5), (8)-->(9)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    └── filters
+ │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
  │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) u:8(int!null) v:9(int)
- │    │    │    │    ├── key: (1,8)
- │    │    │    │    ├── fd: ()-->(2), (8)-->(9), (1)-->(3-5)
+ │    │    │    │    ├── columns: x:6(int!null) u:8(int!null) v:9(int)
+ │    │    │    │    ├── key: (6,8)
+ │    │    │    │    ├── fd: (8)-->(9)
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │    │    │    │    └── key: (6)
  │    │    │    │    ├── scan uv
  │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
  │    │    │    │    │    ├── key: (8)
  │    │    │    │    │    └── fd: (8)-->(9)
- │    │    │    │    ├── select
- │    │    │    │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: ()-->(2), (1)-->(3-5)
- │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    └── fd: (1)-->(2-5)
- │    │    │    │    │    └── filters
- │    │    │    │    │         └── i = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
  │    │    │    │    └── filters (true)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:6(int!null)
- │    │    │    │    └── key: (6)
  │    │    │    └── filters (true)
  │    │    └── aggregations
  │    │         ├── first-agg [type=int, outer=(8)]
@@ -2026,7 +1985,7 @@ CREATE TABLE tab_orig (
 )
 ----
 
-opt expect=TryDecorrelateGroupBy disable=InlineWith
+norm expect=TryDecorrelateGroupBy disable=InlineWith
 SELECT
   NULL
 FROM
@@ -2093,101 +2052,84 @@ with &1 (w0)
       │    │    │         ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int!null) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) t5._decimal:54(int!null)
       │    │    │         ├── outer: (6)
       │    │    │         ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (14,21,28,35)-->(19,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (19)==(54), (54)==(19)
-      │    │    │         ├── project
-      │    │    │         │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int) t4._timestamptz:45(timestamptz)
+      │    │    │         ├── inner-join (hash)
+      │    │    │         │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null)
       │    │    │         │    ├── outer: (6)
-      │    │    │         │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
-      │    │    │         │    └── select
-      │    │    │         │         ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool!null) t4._int8:44(int) t4._timestamptz:45(timestamptz) rownum:60(int!null)
-      │    │    │         │         ├── outer: (6)
-      │    │    │         │         ├── key: (14,21,28,35,60)
-      │    │    │         │         ├── fd: ()-->(25), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (14,21,28,35,60)-->(19,26,29,31,41,44,45)
-      │    │    │         │         ├── group-by
-      │    │    │         │         │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool) t4._int8:44(int) t4._timestamptz:45(timestamptz) rownum:60(int!null)
-      │    │    │         │         │    ├── grouping columns: tab_orig.rowid:14(int!null) t1.rowid:21(int!null) t2.rowid:28(int!null) t3.rowid:35(int!null) rownum:60(int!null)
-      │    │    │         │         │    ├── outer: (6)
-      │    │    │         │         │    ├── key: (14,21,28,35,60)
-      │    │    │         │         │    ├── fd: ()-->(25), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29), (14,21,28,35,60)-->(19,25,26,29,31,41,44,45)
-      │    │    │         │         │    ├── project
-      │    │    │         │         │    │    ├── columns: true:40(bool!null) tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) rownum:60(int!null)
-      │    │    │         │         │    │    ├── outer: (6)
-      │    │    │         │         │    │    ├── key: (14,21,28,35,60)
-      │    │    │         │         │    │    ├── fd: ()-->(25,40), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
-      │    │    │         │         │    │    ├── inner-join (hash)
-      │    │    │         │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int!null) t3._timestamptz:31(timestamptz!null) t3.rowid:35(int!null) t4._int8:44(int!null) t4._timestamptz:45(timestamptz!null) rownum:60(int!null)
-      │    │    │         │         │    │    │    ├── outer: (6)
-      │    │    │         │         │    │    │    ├── key: (14,21,28,35,60)
-      │    │    │         │         │    │    │    ├── fd: ()-->(25), (60)-->(44,45), (21)-->(19), (28)-->(26), (35)-->(29,31), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
-      │    │    │         │         │    │    │    ├── inner-join (cross)
-      │    │    │         │         │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │         │    │    │    │    ├── key: (14,21,28,35)
-      │    │    │         │         │    │    │    │    ├── fd: ()-->(25), (21)-->(19), (28)-->(26), (35)-->(29,31)
-      │    │    │         │         │    │    │    │    ├── inner-join (cross)
-      │    │    │         │         │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │         │    │    │    │    │    ├── key: (21,35)
-      │    │    │         │         │    │    │    │    │    ├── fd: (35)-->(29,31), (21)-->(19)
-      │    │    │         │         │    │    │    │    │    ├── scan t3
-      │    │    │         │         │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
-      │    │    │         │         │    │    │    │    │    │    ├── key: (35)
-      │    │    │         │         │    │    │    │    │    │    └── fd: (35)-->(29,31)
-      │    │    │         │         │    │    │    │    │    ├── scan t1
-      │    │    │         │         │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null)
-      │    │    │         │         │    │    │    │    │    │    ├── key: (21)
-      │    │    │         │         │    │    │    │    │    │    └── fd: (21)-->(19)
-      │    │    │         │         │    │    │    │    │    └── filters (true)
-      │    │    │         │         │    │    │    │    ├── inner-join (cross)
-      │    │    │         │         │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null)
-      │    │    │         │         │    │    │    │    │    ├── key: (14,28)
-      │    │    │         │         │    │    │    │    │    ├── fd: ()-->(25), (28)-->(26)
-      │    │    │         │         │    │    │    │    │    ├── scan tab_orig
-      │    │    │         │         │    │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
-      │    │    │         │         │    │    │    │    │    │    └── key: (14)
-      │    │    │         │         │    │    │    │    │    ├── select
-      │    │    │         │         │    │    │    │    │    │    ├── columns: t2._bool:25(bool!null) t2._decimal:26(int) t2.rowid:28(int!null)
-      │    │    │         │         │    │    │    │    │    │    ├── key: (28)
-      │    │    │         │         │    │    │    │    │    │    ├── fd: ()-->(25), (28)-->(26)
-      │    │    │         │         │    │    │    │    │    │    ├── scan t2
-      │    │    │         │         │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
-      │    │    │         │         │    │    │    │    │    │    │    ├── key: (28)
-      │    │    │         │         │    │    │    │    │    │    │    └── fd: (28)-->(25,26)
-      │    │    │         │         │    │    │    │    │    │    └── filters
-      │    │    │         │         │    │    │    │    │    │         └── variable: t2._bool [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
-      │    │    │         │         │    │    │    │    │    └── filters (true)
-      │    │    │         │         │    │    │    │    └── filters (true)
-      │    │    │         │         │    │    │    ├── ordinality
-      │    │    │         │         │    │    │    │    ├── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz) rownum:60(int!null)
-      │    │    │         │         │    │    │    │    ├── key: (60)
-      │    │    │         │         │    │    │    │    ├── fd: (60)-->(44,45)
-      │    │    │         │         │    │    │    │    └── scan t4
-      │    │    │         │         │    │    │    │         └── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz)
-      │    │    │         │         │    │    │    └── filters
-      │    │    │         │         │    │    │         ├── t0._string = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
-      │    │    │         │         │    │    │         ├── t3._timestamptz = t4._timestamptz [type=bool, outer=(31,45), constraints=(/31: (/NULL - ]; /45: (/NULL - ]), fd=(31)==(45), (45)==(31)]
-      │    │    │         │         │    │    │         └── t3._int2 = t4._int8 [type=bool, outer=(29,44), constraints=(/29: (/NULL - ]; /44: (/NULL - ]), fd=(29)==(44), (44)==(29)]
-      │    │    │         │         │    │    └── projections
-      │    │    │         │         │    │         └── true [type=bool]
-      │    │    │         │         │    └── aggregations
-      │    │    │         │         │         ├── const-not-null-agg [type=bool, outer=(40)]
-      │    │    │         │         │         │    └── variable: true [type=bool]
-      │    │    │         │         │         ├── const-agg [type=bool, outer=(25)]
-      │    │    │         │         │         │    └── variable: t2._bool [type=bool]
-      │    │    │         │         │         ├── const-agg [type=int, outer=(26)]
-      │    │    │         │         │         │    └── variable: t2._decimal [type=int]
-      │    │    │         │         │         ├── const-agg [type=int, outer=(29)]
-      │    │    │         │         │         │    └── variable: t3._int2 [type=int]
-      │    │    │         │         │         ├── const-agg [type=timestamptz, outer=(31)]
-      │    │    │         │         │         │    └── variable: t3._timestamptz [type=timestamptz]
-      │    │    │         │         │         ├── const-agg [type=int, outer=(19)]
-      │    │    │         │         │         │    └── variable: t1._decimal [type=int]
-      │    │    │         │         │         ├── const-agg [type=int, outer=(44)]
-      │    │    │         │         │         │    └── variable: t4._int8 [type=int]
-      │    │    │         │         │         └── const-agg [type=timestamptz, outer=(45)]
-      │    │    │         │         │              └── variable: t4._timestamptz [type=timestamptz]
-      │    │    │         │         └── filters
-      │    │    │         │              └── true_agg IS NOT NULL [type=bool, outer=(41), constraints=(/41: (/NULL - ]; tight)]
+      │    │    │         │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41), (31)==(45), (45)==(31), (29)==(44), (44)==(29)
+      │    │    │         │    ├── select
+      │    │    │         │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool!null)
+      │    │    │         │    │    ├── outer: (6)
+      │    │    │         │    │    ├── key: (14,21,28,35)
+      │    │    │         │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41)
+      │    │    │         │    │    ├── group-by
+      │    │    │         │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null) true_agg:41(bool)
+      │    │    │         │    │    │    ├── grouping columns: tab_orig.rowid:14(int!null) t1.rowid:21(int!null) t2.rowid:28(int!null) t3.rowid:35(int!null)
+      │    │    │         │    │    │    ├── outer: (6)
+      │    │    │         │    │    │    ├── key: (14,21,28,35)
+      │    │    │         │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31), (14,21,28,35)-->(19,25,26,29,31,41)
+      │    │    │         │    │    │    ├── project
+      │    │    │         │    │    │    │    ├── columns: true:40(bool!null) tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    ├── outer: (6)
+      │    │    │         │    │    │    │    ├── key: (14,21,28,35)
+      │    │    │         │    │    │    │    ├── fd: ()-->(40), (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    ├── inner-join (cross)
+      │    │    │         │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null) t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    ├── outer: (6)
+      │    │    │         │    │    │    │    │    ├── key: (14,21,28,35)
+      │    │    │         │    │    │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    │    ├── scan tab_orig
+      │    │    │         │    │    │    │    │    │    ├── columns: tab_orig.rowid:14(int!null)
+      │    │    │         │    │    │    │    │    │    └── key: (14)
+      │    │    │         │    │    │    │    │    ├── inner-join (cross)
+      │    │    │         │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null) t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    │    ├── key: (21,28,35)
+      │    │    │         │    │    │    │    │    │    ├── fd: (21)-->(19), (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    │    │    ├── scan t1
+      │    │    │         │    │    │    │    │    │    │    ├── columns: t1._decimal:19(int) t1.rowid:21(int!null)
+      │    │    │         │    │    │    │    │    │    │    ├── key: (21)
+      │    │    │         │    │    │    │    │    │    │    └── fd: (21)-->(19)
+      │    │    │         │    │    │    │    │    │    ├── inner-join (cross)
+      │    │    │         │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null) t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    │    │    ├── key: (28,35)
+      │    │    │         │    │    │    │    │    │    │    ├── fd: (28)-->(25,26), (35)-->(29,31)
+      │    │    │         │    │    │    │    │    │    │    ├── scan t2
+      │    │    │         │    │    │    │    │    │    │    │    ├── columns: t2._bool:25(bool) t2._decimal:26(int) t2.rowid:28(int!null)
+      │    │    │         │    │    │    │    │    │    │    │    ├── key: (28)
+      │    │    │         │    │    │    │    │    │    │    │    └── fd: (28)-->(25,26)
+      │    │    │         │    │    │    │    │    │    │    ├── scan t3
+      │    │    │         │    │    │    │    │    │    │    │    ├── columns: t3._int2:29(int) t3._timestamptz:31(timestamptz) t3.rowid:35(int!null)
+      │    │    │         │    │    │    │    │    │    │    │    ├── key: (35)
+      │    │    │         │    │    │    │    │    │    │    │    └── fd: (35)-->(29,31)
+      │    │    │         │    │    │    │    │    │    │    └── filters (true)
+      │    │    │         │    │    │    │    │    │    └── filters (true)
+      │    │    │         │    │    │    │    │    └── filters
+      │    │    │         │    │    │    │    │         └── t0._string = 1 [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      │    │    │         │    │    │    │    └── projections
+      │    │    │         │    │    │    │         └── true [type=bool]
+      │    │    │         │    │    │    └── aggregations
+      │    │    │         │    │    │         ├── const-not-null-agg [type=bool, outer=(40)]
+      │    │    │         │    │    │         │    └── variable: true [type=bool]
+      │    │    │         │    │    │         ├── const-agg [type=bool, outer=(25)]
+      │    │    │         │    │    │         │    └── variable: t2._bool [type=bool]
+      │    │    │         │    │    │         ├── const-agg [type=int, outer=(26)]
+      │    │    │         │    │    │         │    └── variable: t2._decimal [type=int]
+      │    │    │         │    │    │         ├── const-agg [type=int, outer=(29)]
+      │    │    │         │    │    │         │    └── variable: t3._int2 [type=int]
+      │    │    │         │    │    │         ├── const-agg [type=timestamptz, outer=(31)]
+      │    │    │         │    │    │         │    └── variable: t3._timestamptz [type=timestamptz]
+      │    │    │         │    │    │         └── const-agg [type=int, outer=(19)]
+      │    │    │         │    │    │              └── variable: t1._decimal [type=int]
+      │    │    │         │    │    └── filters
+      │    │    │         │    │         └── true_agg IS NOT NULL [type=bool, outer=(41), constraints=(/41: (/NULL - ]; tight)]
+      │    │    │         │    ├── scan t4
+      │    │    │         │    │    └── columns: t4._int8:44(int) t4._timestamptz:45(timestamptz)
+      │    │    │         │    └── filters
+      │    │    │         │         ├── t3._timestamptz = t4._timestamptz [type=bool, outer=(31,45), constraints=(/31: (/NULL - ]; /45: (/NULL - ]), fd=(31)==(45), (45)==(31)]
+      │    │    │         │         └── t3._int2 = t4._int8 [type=bool, outer=(29,44), constraints=(/29: (/NULL - ]; /44: (/NULL - ]), fd=(29)==(44), (44)==(29)]
       │    │    │         ├── scan t5
       │    │    │         │    └── columns: t5._decimal:54(int)
       │    │    │         └── filters
+      │    │    │              ├── variable: t2._bool [type=bool, outer=(25), constraints=(/25: [/true - /true]; tight), fd=()-->(25)]
       │    │    │              └── t1._decimal = t5._decimal [type=bool, outer=(19,54), constraints=(/19: (/NULL - ]; /54: (/NULL - ]), fd=(19)==(54), (54)==(19)]
       │    │    └── const: 66 [type=int]
       │    └── filters (true)
@@ -2197,7 +2139,7 @@ with &1 (w0)
 # --------------------------------------------------
 # TryDecorrelateScalarGroupBy
 # --------------------------------------------------
-opt expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy
 SELECT *
 FROM a
 WHERE EXISTS
@@ -2266,7 +2208,7 @@ group-by
            └── variable: j [type=jsonb]
 
 # Synthesize key when one is not present.
-opt expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy
 SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT max(y) FROM xy WHERE x=i)
 ----
 project
@@ -2315,7 +2257,7 @@ project
 
 # With an aggregate that can't ignore nulls. xy.y = a.k rejects nulls, so
 # there's no canary column to be synthesized.
-opt expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy
 SELECT k, (SELECT array_agg(xy.y) FROM xy WHERE xy.y = a.k) FROM a
 ----
 project
@@ -2453,7 +2395,7 @@ project
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.
-opt expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy
 SELECT *
 FROM a
 WHERE
@@ -2647,7 +2589,7 @@ project
 # --------------------------------------------------
 
 # Right input of SemiJoin is GroupBy.
-opt expect=TryDecorrelateSemiJoin
+norm expect=TryDecorrelateSemiJoin
 SELECT *
 FROM xy
 WHERE EXISTS
@@ -2669,35 +2611,35 @@ group-by
  │    │    ├── grouping columns: x:1(int!null) k:3(int!null)
  │    │    ├── key: (1,3)
  │    │    ├── fd: (1)-->(2), (3)-->(4), (1,3)-->(2,4,13)
- │    │    ├── inner-join (cross)
+ │    │    ├── inner-join (hash)
  │    │    │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) i:9(int!null) f:10(float!null) column14:14(float!null)
  │    │    │    ├── fd: (1)-->(2), (2)-->(14), (3)-->(4), (10)==(14), (14)==(10)
- │    │    │    ├── inner-join (hash)
- │    │    │    │    ├── columns: x:1(int!null) y:2(int) i:9(int!null) f:10(float!null) column14:14(float!null)
- │    │    │    │    ├── fd: (1)-->(2), (2)-->(14), (10)==(14), (14)==(10)
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column14:14(float) x:1(int!null) y:2(int)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column14:14(float) x:1(int!null) y:2(int)
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2), (2)-->(14)
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: (1)-->(2), (2)-->(14)
- │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    └── fd: (1)-->(2)
- │    │    │    │    │    └── projections
- │    │    │    │    │         └── y::FLOAT8 [type=float, outer=(2)]
+ │    │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    │    └── projections
+ │    │    │    │         └── y::FLOAT8 [type=float, outer=(2)]
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: k:3(int!null) i:4(int) i:9(int!null) f:10(float)
+ │    │    │    │    ├── fd: (3)-->(4)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
+ │    │    │    │    │    ├── key: (3)
+ │    │    │    │    │    └── fd: (3)-->(4)
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: i:9(int!null) f:10(float)
  │    │    │    │    │    ├── scan a
  │    │    │    │    │    │    └── columns: i:9(int) f:10(float)
  │    │    │    │    │    └── filters
  │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(9), constraints=(/9: (/NULL - ]; tight)]
- │    │    │    │    └── filters
- │    │    │    │         └── column14 = f [type=bool, outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
- │    │    │    ├── scan a
- │    │    │    │    ├── columns: k:3(int!null) i:4(int)
- │    │    │    │    ├── key: (3)
- │    │    │    │    └── fd: (3)-->(4)
- │    │    │    └── filters (true)
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters
+ │    │    │         └── column14 = f [type=bool, outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
  │    │    └── aggregations
  │    │         ├── max [type=int, outer=(9)]
  │    │         │    └── variable: i [type=int]
@@ -2712,7 +2654,7 @@ group-by
            └── variable: y [type=int]
 
 # Right input of SemiJoin is DistinctOn.
-opt expect=TryDecorrelateSemiJoin
+norm expect=TryDecorrelateSemiJoin
 SELECT *
 FROM xy
 WHERE EXISTS
@@ -2757,7 +2699,7 @@ group-by
            └── variable: y [type=int]
 
 # Right input of SemiJoin is Project.
-opt expect=TryDecorrelateSemiJoin
+norm expect=TryDecorrelateSemiJoin
 SELECT k FROM a
 WHERE EXISTS
 (
@@ -2775,34 +2717,33 @@ project
       │    ├── columns: computed:10(int) k:1(int!null) x:6(int!null)
       │    ├── key: (1,6)
       │    ├── fd: (1)-->(10)
-      │    ├── inner-join (cross)
+      │    ├── inner-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int!null) x:6(int!null) u:8(int!null)
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6(int!null)
-      │    │    │    └── key: (6)
-      │    │    ├── inner-join (hash)
-      │    │    │    ├── columns: k:1(int!null) i:2(int!null) u:8(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null) i:2(int)
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2), (2)==(8), (8)==(2)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: x:6(int!null) u:8(int!null)
+      │    │    │    ├── key: (6,8)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:6(int!null)
+      │    │    │    │    └── key: (6)
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: u:8(int!null)
       │    │    │    │    └── key: (8)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    └── filters
-      │    │    │         └── u = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │    │    └── filters (true)
+      │    │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── u = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       │    └── projections
       │         └── COALESCE(u, 10) [type=int, outer=(8)]
       └── filters
            └── x = computed [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
 
 # Right input of SemiJoin is ProjectSet.
-opt expect=TryDecorrelateSemiJoin
+norm expect=TryDecorrelateSemiJoin
 SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10), generate_series(y, 10))
 ----
 group-by
@@ -2835,7 +2776,7 @@ group-by
 # --------------------------------------------------
 
 # With inner join.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT *
 FROM a
 WHERE EXISTS
@@ -2846,43 +2787,32 @@ WHERE EXISTS
     ON x=u
 )
 ----
-project
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── inner-join (hash)
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-5), (2)==(9), (9)==(2)
-      ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-5)
-      ├── distinct-on
-      │    ├── columns: v:9(int)
-      │    ├── grouping columns: v:9(int)
-      │    ├── key: (9)
-      │    └── inner-join (merge)
-      │         ├── columns: x:6(int!null) u:8(int!null) v:9(int)
-      │         ├── left ordering: +6
-      │         ├── right ordering: +8
-      │         ├── key: (8)
-      │         ├── fd: (8)-->(9), (6)==(8), (8)==(6)
-      │         ├── scan xy
-      │         │    ├── columns: x:6(int!null)
-      │         │    ├── key: (6)
-      │         │    └── ordering: +6
-      │         ├── scan uv
-      │         │    ├── columns: u:8(int!null) v:9(int)
-      │         │    ├── key: (8)
-      │         │    ├── fd: (8)-->(9)
-      │         │    └── ordering: +8
-      │         └── filters (true)
-      └── filters
-           └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── inner-join (hash)
+ │    ├── columns: x:6(int!null) u:8(int!null) v:9(int)
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9), (6)==(8), (8)==(6)
+ │    ├── scan xy
+ │    │    ├── columns: x:6(int!null)
+ │    │    └── key: (6)
+ │    ├── scan uv
+ │    │    ├── columns: u:8(int!null) v:9(int)
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ └── filters
+      └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 
 # With left join.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT (SELECT x FROM xy WHERE y=i LIMIT 1) FROM a
 ----
 project
@@ -2915,7 +2845,7 @@ project
       └── variable: xy.x [type=int, outer=(6)]
 
 # With multiple limited queries.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT * FROM a WHERE (SELECT x FROM xy WHERE y=i LIMIT 1)=k AND (SELECT u FROM uv WHERE v=i LIMIT 1)=k
 ----
 project
@@ -2931,14 +2861,10 @@ project
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,8)
-      │    ├── right-join (hash)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) u:8(int) v:9(int)
       │    │    ├── key: (1,8)
       │    │    ├── fd: (1)-->(2-5), (1)==(6), (6)==(1), (8)-->(9)
-      │    │    ├── scan uv
-      │    │    │    ├── columns: u:8(int!null) v:9(int)
-      │    │    │    ├── key: (8)
-      │    │    │    └── fd: (8)-->(9)
       │    │    ├── select
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
       │    │    │    ├── key: (1)
@@ -2975,6 +2901,10 @@ project
       │    │    │    │              └── variable: x [type=int]
       │    │    │    └── filters
       │    │    │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:8(int!null) v:9(int)
+      │    │    │    ├── key: (8)
+      │    │    │    └── fd: (8)-->(9)
       │    │    └── filters
       │    │         └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
       │    └── aggregations
@@ -2992,7 +2922,7 @@ project
            └── k = u [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # With nested limited queries.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT *
 FROM a
 WHERE
@@ -3074,7 +3004,7 @@ project
            └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # With inner join + ORDER BY.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT
 (
     SELECT v
@@ -3099,23 +3029,20 @@ project
  │    │    ├── scan xy
  │    │    │    ├── columns: x:1(int!null)
  │    │    │    └── key: (1)
- │    │    ├── inner-join (merge)
+ │    │    ├── inner-join (hash)
  │    │    │    ├── columns: u:3(int!null) uv.v:4(int) k:5(int!null) i:6(int)
- │    │    │    ├── left ordering: +3
- │    │    │    ├── right ordering: +5
  │    │    │    ├── key: (5)
  │    │    │    ├── fd: (3)-->(4), (5)-->(6), (3)==(5), (5)==(3)
  │    │    │    ├── scan uv
  │    │    │    │    ├── columns: u:3(int!null) uv.v:4(int)
  │    │    │    │    ├── key: (3)
- │    │    │    │    ├── fd: (3)-->(4)
- │    │    │    │    └── ordering: +3
+ │    │    │    │    └── fd: (3)-->(4)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:5(int!null) i:6(int)
  │    │    │    │    ├── key: (5)
- │    │    │    │    ├── fd: (5)-->(6)
- │    │    │    │    └── ordering: +5
- │    │    │    └── filters (true)
+ │    │    │    │    └── fd: (5)-->(6)
+ │    │    │    └── filters
+ │    │    │         └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
  │    │    └── filters
  │    │         └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
@@ -3125,7 +3052,7 @@ project
       └── variable: uv.v [type=int, outer=(4)]
 
 # With left join + ORDER BY.
-opt expect=TryDecorrelateLimitOne
+norm expect=TryDecorrelateLimitOne
 SELECT * FROM xy WHERE (SELECT k FROM a WHERE i=y ORDER BY f,s LIMIT 1)=x
 ----
 project
@@ -3172,34 +3099,29 @@ project
 # --------------------------------------------------
 # HoistSelectExists
 # --------------------------------------------------
-opt expect=HoistSelectExists
+norm expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
 ----
-semi-join (merge)
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-5)
  ├── scan xy
  │    ├── columns: x:6(int!null)
- │    ├── key: (6)
- │    └── ordering: +6
- └── filters (true)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Ensure that EXISTS is hoisted even when it is one of several conjuncts.
-opt expect=HoistSelectExists
+norm expect=HoistSelectExists
 SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
-semi-join (lookup xy)
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── key columns: [1] = [6]
- ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
@@ -3213,10 +3135,14 @@ semi-join (lookup xy)
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- └── filters (true)
+ ├── scan xy
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Multiple Exists operators in same Select list.
-opt expect=HoistSelectExists
+norm expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND EXISTS(SELECT * FROM xy WHERE x=i)
 ----
 semi-join (hash)
@@ -3243,7 +3169,7 @@ semi-join (hash)
       └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Don't hoist uncorrelated subqueries.
-opt expect-not=HoistSelectExists
+norm expect-not=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy)
 ----
 select
@@ -3256,75 +3182,70 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       └── exists [type=bool, subquery]
-           └── scan xy
+           └── limit
                 ├── columns: x:6(int!null) y:7(int)
-                ├── limit: 1
+                ├── cardinality: [0 - 1]
                 ├── key: ()
-                └── fd: ()-->(6,7)
+                ├── fd: ()-->(6,7)
+                ├── scan xy
+                │    ├── columns: x:6(int!null) y:7(int)
+                │    ├── key: (6)
+                │    ├── fd: (6)-->(7)
+                │    └── limit hint: 1.00
+                └── const: 1 [type=int]
 
 # Hoist nested EXISTS.
-opt expect=HoistSelectExists
+norm expect=HoistSelectExists
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE EXISTS (SELECT * FROM uv WHERE x=u) AND x=k)
 ----
-semi-join (merge)
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
- ├── semi-join (merge)
+ │    └── fd: (1)-->(2-5)
+ ├── semi-join (hash)
  │    ├── columns: x:6(int!null)
- │    ├── left ordering: +6
- │    ├── right ordering: +8
  │    ├── key: (6)
- │    ├── ordering: +6
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null)
- │    │    ├── key: (6)
- │    │    └── ordering: +6
+ │    │    └── key: (6)
  │    ├── scan uv
  │    │    ├── columns: u:8(int!null)
- │    │    ├── key: (8)
- │    │    └── ordering: +8
- │    └── filters (true)
- └── filters (true)
+ │    │    └── key: (8)
+ │    └── filters
+ │         └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
 # HoistSelectNotExists
 # --------------------------------------------------
-opt expect=HoistSelectNotExists
+norm expect=HoistSelectNotExists
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
 ----
-anti-join (merge)
+anti-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-5)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-5)
  ├── scan xy
  │    ├── columns: x:6(int!null)
- │    ├── key: (6)
- │    └── ordering: +6
- └── filters (true)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
-opt expect=HoistSelectNotExists
+norm expect=HoistSelectNotExists
 SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
-anti-join (lookup xy)
+anti-join (hash)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── key columns: [1] = [6]
- ├── lookup columns are key
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
@@ -3338,18 +3259,20 @@ anti-join (lookup xy)
  │    └── filters
  │         ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  │         └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- └── filters (true)
+ ├── scan xy
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Multiple Not Exists operators in same Select list.
-opt expect=HoistSelectNotExists
+norm expect=HoistSelectNotExists
 SELECT *
 FROM a
 WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
-anti-join (lookup xy)
+anti-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key columns: [1] = [6]
- ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)
@@ -3365,10 +3288,14 @@ anti-join (lookup xy)
  │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- └── filters (true)
+ ├── scan xy
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Don't hoist uncorrelated subqueries.
-opt expect-not=HoistSelectNotExists
+norm expect-not=HoistSelectNotExists
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy)
 ----
 select
@@ -3382,22 +3309,26 @@ select
  └── filters
       └── not [type=bool, subquery]
            └── exists [type=bool]
-                └── scan xy
+                └── limit
                      ├── columns: x:6(int!null) y:7(int)
-                     ├── limit: 1
+                     ├── cardinality: [0 - 1]
                      ├── key: ()
-                     └── fd: ()-->(6,7)
+                     ├── fd: ()-->(6,7)
+                     ├── scan xy
+                     │    ├── columns: x:6(int!null) y:7(int)
+                     │    ├── key: (6)
+                     │    ├── fd: (6)-->(7)
+                     │    └── limit hint: 1.00
+                     └── const: 1 [type=int]
 
 # --------------------------------------------------
 # HoistSelectExists + HoistSelectNotExists
 # --------------------------------------------------
-opt expect=(HoistSelectExists,HoistSelectNotExists)
+norm expect=(HoistSelectExists,HoistSelectNotExists)
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
-semi-join (lookup xy)
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key columns: [1] = [6]
- ├── lookup columns are key
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── anti-join (hash)
@@ -3413,12 +3344,16 @@ semi-join (lookup xy)
  │    │    └── key: (8)
  │    └── filters
  │         └── x = i [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
- └── filters (true)
+ ├── scan xy
+ │    ├── columns: x:6(int!null)
+ │    └── key: (6)
+ └── filters
+      └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
 # HoistSelectSubquery
 # --------------------------------------------------
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
 project
@@ -3460,7 +3395,7 @@ project
            └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
-opt expect=HoistSelectSubquery disable=InlineConstVar
+norm expect=HoistSelectSubquery disable=InlineConstVar
 SELECT *
 FROM a
 WHERE k=10 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i AND (SELECT x FROM xy LIMIT 1) = 100
@@ -3480,10 +3415,8 @@ project
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(1-5,7)
-      │    ├── left-join (merge)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +7
       │    │    ├── fd: ()-->(1-5), ()~~>(7)
       │    │    ├── limit hint: 1.00
       │    │    ├── select
@@ -3493,18 +3426,22 @@ project
       │    │    │    ├── fd: ()-->(1-5)
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    │    │    ├── constraint: /1: [/10 - /10]
-      │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    └── fd: ()-->(1-5)
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2-5)
       │    │    │    └── filters
+      │    │    │         ├── k = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
       │    │    │         └── eq [type=bool, subquery]
       │    │    │              ├── subquery [type=int]
-      │    │    │              │    └── scan xy
+      │    │    │              │    └── limit
       │    │    │              │         ├── columns: x:8(int!null)
-      │    │    │              │         ├── limit: 1
+      │    │    │              │         ├── cardinality: [0 - 1]
       │    │    │              │         ├── key: ()
-      │    │    │              │         └── fd: ()-->(8)
+      │    │    │              │         ├── fd: ()-->(8)
+      │    │    │              │         ├── scan xy
+      │    │    │              │         │    ├── columns: x:8(int!null)
+      │    │    │              │         │    ├── key: (8)
+      │    │    │              │         │    └── limit hint: 1.00
+      │    │    │              │         └── const: 1 [type=int]
       │    │    │              └── const: 100 [type=int]
       │    │    ├── select
       │    │    │    ├── columns: y:7(int!null)
@@ -3515,19 +3452,25 @@ project
       │    │    │         ├── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
       │    │    │         └── eq [type=bool, subquery]
       │    │    │              ├── subquery [type=int]
-      │    │    │              │    └── scan xy
+      │    │    │              │    └── limit
       │    │    │              │         ├── columns: x:8(int!null)
-      │    │    │              │         ├── limit: 1
+      │    │    │              │         ├── cardinality: [0 - 1]
       │    │    │              │         ├── key: ()
-      │    │    │              │         └── fd: ()-->(8)
+      │    │    │              │         ├── fd: ()-->(8)
+      │    │    │              │         ├── scan xy
+      │    │    │              │         │    ├── columns: x:8(int!null)
+      │    │    │              │         │    ├── key: (8)
+      │    │    │              │         │    └── limit hint: 1.00
+      │    │    │              │         └── const: 1 [type=int]
       │    │    │              └── const: 100 [type=int]
-      │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │    └── const: 1 [type=int]
       └── filters
            └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Multiple correlated subqueries.
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a
 WHERE (SELECT count(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
@@ -3544,11 +3487,9 @@ project
       │    ├── grouping columns: k:1(int!null)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,10)
-      │    ├── right-join (hash)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int!null) y:10(int)
       │    │    ├── fd: (1)-->(2-5,8)
-      │    │    ├── scan xy
-      │    │    │    └── columns: y:10(int)
       │    │    ├── select
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int!null)
       │    │    │    ├── key: (1)
@@ -3582,6 +3523,8 @@ project
       │    │    │    │              └── variable: j [type=jsonb]
       │    │    │    └── filters
       │    │    │         └── count_rows > 0 [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    │    ├── scan xy
+      │    │    │    └── columns: y:10(int)
       │    │    └── filters
       │    │         └── y = k [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
@@ -3600,7 +3543,7 @@ project
 
 # Subquery nested below interesting scalar operators like cast, function, tuple,
 # or, etc).
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE (0, length((SELECT count(*) FROM uv WHERE k=u)::string)) > (0, 1) OR i=1
 ----
 project
@@ -3614,26 +3557,21 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count_rows:8(int)
       │    ├── grouping columns: k:1(int!null)
-      │    ├── internal-ordering: +1
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,8)
-      │    ├── left-join (merge)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) u:6(int)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +6
       │    │    ├── key: (1,6)
       │    │    ├── fd: (1)-->(2-5)
-      │    │    ├── ordering: +1
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    └── ordering: +1
+      │    │    │    └── fd: (1)-->(2-5)
       │    │    ├── scan uv
       │    │    │    ├── columns: u:6(int!null)
-      │    │    │    ├── key: (6)
-      │    │    │    └── ordering: +6
-      │    │    └── filters (true)
+      │    │    │    └── key: (6)
+      │    │    └── filters
+      │    │         └── k = u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │    └── aggregations
       │         ├── count [type=int, outer=(6)]
       │         │    └── variable: u [type=int]
@@ -3649,7 +3587,7 @@ project
            └── ((0, length(count_rows::STRING)) > (0, 1)) OR (i = 1) [type=bool, outer=(2,8)]
 
 # Exists within a disjunction.
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE i=1 OR EXISTS(SELECT * FROM xy WHERE y=i)
 ----
 project
@@ -3696,7 +3634,7 @@ project
            └── (i = 1) OR (true_agg IS NOT NULL) [type=bool, outer=(2,9)]
 
 # Any with IS NULL.
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy WHERE x=k)) IS NULL
 ----
 project
@@ -3714,34 +3652,28 @@ project
       │    ├── group-by
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) bool_or:9(bool)
       │    │    ├── grouping columns: k:1(int!null)
-      │    │    ├── internal-ordering: +1
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-5,9)
-      │    │    ├── left-join (merge)
+      │    │    ├── left-join (hash)
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int) notnull:8(bool)
-      │    │    │    ├── left ordering: +1
-      │    │    │    ├── right ordering: +6
       │    │    │    ├── key: (1,6)
       │    │    │    ├── fd: (1)-->(2-5), (6)-->(7), (7)~~>(8), (1,6)-->(8)
-      │    │    │    ├── ordering: +1
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    │    └── ordering: +1
+      │    │    │    │    └── fd: (1)-->(2-5)
       │    │    │    ├── project
       │    │    │    │    ├── columns: notnull:8(bool) x:6(int!null) y:7(int)
       │    │    │    │    ├── key: (6)
       │    │    │    │    ├── fd: (6)-->(7), (7)-->(8)
-      │    │    │    │    ├── ordering: +6
       │    │    │    │    ├── scan xy
       │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    │    │    ├── key: (6)
-      │    │    │    │    │    ├── fd: (6)-->(7)
-      │    │    │    │    │    └── ordering: +6
+      │    │    │    │    │    └── fd: (6)-->(7)
       │    │    │    │    └── projections
       │    │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
       │    │    │    └── filters
+      │    │    │         ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │    │    │         └── (i = y) IS NOT false [type=bool, outer=(2,7)]
       │    │    └── aggregations
       │    │         ├── bool-or [type=bool, outer=(8)]
@@ -3760,7 +3692,7 @@ project
            └── case IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
 # Any with uncorrelated subquery (should not be hoisted).
-opt
+norm
 SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy)) IS NULL
 ----
 select
@@ -3780,7 +3712,7 @@ select
            └── null [type=unknown]
 
 # ALL with non-trivial expression on left.
-opt
+norm
 SELECT i*i/100 < ALL(SELECT y FROM xy WHERE x=k) AS r, s FROM a
 ----
 project
@@ -3789,44 +3721,37 @@ project
  ├── group-by
  │    ├── columns: k:1(int!null) s:4(string) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
- │    ├── internal-ordering: +1
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,9,11)
- │    ├── left-join (merge)
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) s:4(string) x:6(int) y:7(int) scalar:9(decimal) notnull:10(bool)
- │    │    ├── left ordering: +1
- │    │    ├── right ordering: +6
  │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(4,9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
- │    │    ├── ordering: +1
  │    │    ├── project
  │    │    │    ├── columns: scalar:9(decimal) k:1(int!null) s:4(string)
  │    │    │    ├── side-effects
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(4,9)
- │    │    │    ├── ordering: +1
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: (1)-->(2,4)
- │    │    │    │    └── ordering: +1
+ │    │    │    │    └── fd: (1)-->(2,4)
  │    │    │    └── projections
  │    │    │         └── (i * i) / 100 [type=decimal, outer=(2), side-effects]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10(bool) x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: (6)-->(7), (7)-->(10)
- │    │    │    ├── ordering: +6
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    ├── key: (6)
- │    │    │    │    ├── fd: (6)-->(7)
- │    │    │    │    └── ordering: +6
+ │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
  │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
  │    │    └── filters
+ │    │         ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── (scalar >= y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations
  │         ├── bool-or [type=bool, outer=(10)]
@@ -3840,7 +3765,7 @@ project
 
 # Regress issue #32270: Panic when expression contains both correlated and
 # uncorrelated subquery.
-opt expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE EXISTS(SELECT * FROM xy) OR EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 project
@@ -3854,33 +3779,27 @@ project
       ├── group-by
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) true_agg:11(bool)
       │    ├── grouping columns: k:1(int!null)
-      │    ├── internal-ordering: +1
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5,11)
-      │    ├── left-join (merge)
+      │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:8(int) true:10(bool)
-      │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +8
       │    │    ├── key: (1,8)
       │    │    ├── fd: (1)-->(2-5), ()~~>(10), (1,8)-->(10)
-      │    │    ├── ordering: +1
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    └── ordering: +1
+      │    │    │    └── fd: (1)-->(2-5)
       │    │    ├── project
       │    │    │    ├── columns: true:10(bool!null) x:8(int!null)
       │    │    │    ├── key: (8)
       │    │    │    ├── fd: ()-->(10)
-      │    │    │    ├── ordering: +8 opt(10) [actual: +8]
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:8(int!null)
-      │    │    │    │    ├── key: (8)
-      │    │    │    │    └── ordering: +8
+      │    │    │    │    └── key: (8)
       │    │    │    └── projections
       │    │    │         └── true [type=bool]
-      │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── x = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │    └── aggregations
       │         ├── const-not-null-agg [type=bool, outer=(10)]
       │         │    └── variable: true [type=bool]
@@ -3895,40 +3814,43 @@ project
       └── filters
            └── or [type=bool, outer=(11), subquery]
                 ├── exists [type=bool]
-                │    └── scan xy
+                │    └── limit
                 │         ├── columns: x:6(int!null) y:7(int)
-                │         ├── limit: 1
+                │         ├── cardinality: [0 - 1]
                 │         ├── key: ()
-                │         └── fd: ()-->(6,7)
+                │         ├── fd: ()-->(6,7)
+                │         ├── scan xy
+                │         │    ├── columns: x:6(int!null) y:7(int)
+                │         │    ├── key: (6)
+                │         │    ├── fd: (6)-->(7)
+                │         │    └── limit hint: 1.00
+                │         └── const: 1 [type=int]
                 └── true_agg IS NOT NULL [type=bool]
 
 # --------------------------------------------------
 # HoistProjectSubquery
 # --------------------------------------------------
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT (SELECT x FROM xy WHERE x=k) FROM a
 ----
 project
  ├── columns: x:8(int)
- ├── left-join (merge)
+ ├── left-join (hash)
  │    ├── columns: k:1(int!null) xy.x:6(int)
- │    ├── left ordering: +1
- │    ├── right ordering: +6
  │    ├── key: (1,6)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
- │    │    ├── key: (1)
- │    │    └── ordering: +1
+ │    │    └── key: (1)
  │    ├── scan xy
  │    │    ├── columns: xy.x:6(int!null)
- │    │    ├── key: (6)
- │    │    └── ordering: +6
- │    └── filters (true)
+ │    │    └── key: (6)
+ │    └── filters
+ │         └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── projections
       └── variable: xy.x [type=int, outer=(6)]
 
 # Mixed correlated and uncorrelated subqueries.
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT
     5 AS a,
     (SELECT x FROM xy WHERE x=k),
@@ -3948,20 +3870,17 @@ project
  │    ├── fd: (1,6)-->(16)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1(int!null) xy.x:6(int) xy.y:15(int)
- │    │    ├── left-join (merge)
+ │    │    ├── left-join (hash)
  │    │    │    ├── columns: k:1(int!null) xy.x:6(int)
- │    │    │    ├── left ordering: +1
- │    │    │    ├── right ordering: +6
  │    │    │    ├── key: (1,6)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1(int!null)
- │    │    │    │    ├── key: (1)
- │    │    │    │    └── ordering: +1
+ │    │    │    │    └── key: (1)
  │    │    │    ├── scan xy
  │    │    │    │    ├── columns: xy.x:6(int!null)
- │    │    │    │    ├── key: (6)
- │    │    │    │    └── ordering: +6
- │    │    │    └── filters (true)
+ │    │    │    │    └── key: (6)
+ │    │    │    └── filters
+ │    │    │         └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    ├── scan xy
  │    │    │    └── columns: xy.y:15(int)
  │    │    └── filters
@@ -3973,25 +3892,35 @@ project
       ├── const: 5 [type=int]
       ├── variable: xy.x [type=int, outer=(6)]
       ├── subquery [type=int, subquery]
-      │    └── scan xy
+      │    └── limit
       │         ├── columns: xy.y:9(int)
-      │         ├── limit: 1
+      │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         └── fd: ()-->(9)
+      │         ├── fd: ()-->(9)
+      │         ├── scan xy
+      │         │    ├── columns: xy.y:9(int)
+      │         │    └── limit hint: 1.00
+      │         └── const: 1 [type=int]
       ├── any: eq [type=bool, subquery]
       │    ├── scan xy
       │    │    └── columns: xy.y:11(int)
       │    └── const: 5 [type=int]
       ├── exists [type=bool, subquery]
-      │    └── scan xy
+      │    └── limit
       │         ├── columns: xy.x:12(int!null) xy.y:13(int)
-      │         ├── limit: 1
+      │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         └── fd: ()-->(12,13)
+      │         ├── fd: ()-->(12,13)
+      │         ├── scan xy
+      │         │    ├── columns: xy.x:12(int!null) xy.y:13(int)
+      │         │    ├── key: (12)
+      │         │    ├── fd: (12)-->(13)
+      │         │    └── limit hint: 1.00
+      │         └── const: 1 [type=int]
       └── variable: count_rows [type=int, outer=(16)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT max((SELECT y FROM xy WHERE y=i)) FROM a
 ----
 scalar-group-by
@@ -4027,7 +3956,7 @@ scalar-group-by
            └── variable: column8 [type=int]
 
 # Exists in projection list.
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 ----
 project
@@ -4062,7 +3991,7 @@ project
       └── true_agg IS NOT NULL [type=bool, outer=(10)]
 
 # Any in projection list.
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT 5 < ANY(SELECT y FROM xy WHERE y=i) AS r FROM a
 ----
 project
@@ -4101,7 +4030,7 @@ project
       └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 
 # Correlated subquery nested in uncorrelated subquery.
-opt expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
 values
@@ -4116,10 +4045,24 @@ values
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(2,7,9,12)
-                ├── right-join (hash)
+                ├── left-join (hash)
                 │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
                 │    ├── fd: ()-->(2,12), ()~~>(9)
                 │    ├── limit hint: 1.00
+                │    ├── ordinality
+                │    │    ├── columns: i:2(int) rownum:12(int!null)
+                │    │    ├── cardinality: [0 - 1]
+                │    │    ├── key: ()
+                │    │    ├── fd: ()-->(2,12)
+                │    │    └── limit
+                │    │         ├── columns: i:2(int)
+                │    │         ├── cardinality: [0 - 1]
+                │    │         ├── key: ()
+                │    │         ├── fd: ()-->(2)
+                │    │         ├── scan a
+                │    │         │    ├── columns: i:2(int)
+                │    │         │    └── limit hint: 1.00
+                │    │         └── const: 1 [type=int]
                 │    ├── project
                 │    │    ├── columns: true:9(bool!null) y:7(int)
                 │    │    ├── fd: ()-->(9)
@@ -4127,22 +4070,12 @@ values
                 │    │    │    └── columns: y:7(int)
                 │    │    └── projections
                 │    │         └── true [type=bool]
-                │    ├── ordinality
-                │    │    ├── columns: i:2(int) rownum:12(int!null)
-                │    │    ├── cardinality: [0 - 1]
-                │    │    ├── key: ()
-                │    │    ├── fd: ()-->(2,12)
-                │    │    └── scan a
-                │    │         ├── columns: i:2(int)
-                │    │         ├── limit: 1
-                │    │         ├── key: ()
-                │    │         └── fd: ()-->(2)
                 │    └── filters
                 │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
                 └── const: 1 [type=int]
 
 # Don't hoist uncorrelated subquery.
-opt
+norm
 SELECT i < ANY(SELECT y FROM xy) AS r FROM a
 ----
 project
@@ -4158,7 +4091,7 @@ project
 # --------------------------------------------------
 # HoistJoinSubquery
 # --------------------------------------------------
-opt expect=HoistJoinSubquery
+norm expect=HoistJoinSubquery
 SELECT i, y FROM a INNER JOIN xy ON (SELECT k+1) = x
 ----
 project
@@ -4192,7 +4125,7 @@ project
            └── x = ?column? [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Hoist Exists in join filter disjunction.
-opt expect=HoistJoinSubquery
+norm expect=HoistJoinSubquery
 SELECT s, x FROM a INNER JOIN xy ON EXISTS(SELECT * FROM uv WHERE u=y) OR k=x
 ----
 project
@@ -4242,7 +4175,7 @@ project
            └── exists OR (k = x) [type=bool, outer=(1,6,12)]
 
 # Any in Join filter disjunction.
-opt expect=HoistJoinSubquery
+norm expect=HoistJoinSubquery
 SELECT j, y FROM a INNER JOIN xy ON x IN (SELECT v FROM uv WHERE u=y AND v=i) OR x IS NULL
 ----
 project
@@ -4305,7 +4238,7 @@ project
 # --------------------------------------------------
 # HoistValuesSubquery
 # --------------------------------------------------
-opt expect=HoistValuesSubquery
+norm expect=HoistValuesSubquery
 SELECT (VALUES ((SELECT i+1 AS r)), (10), ((SELECT k+1 AS s))) FROM a
 ----
 project
@@ -4367,7 +4300,7 @@ project
       └── variable: column1 [type=int, outer=(8)]
 
 # Exists in values row.
-opt expect=HoistValuesSubquery
+norm expect=HoistValuesSubquery
 SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
@@ -4445,7 +4378,7 @@ project
       └── variable: column1 [type=bool, outer=(8)]
 
 # Any in values row.
-opt expect=HoistValuesSubquery
+norm expect=HoistValuesSubquery
 SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
@@ -4527,7 +4460,7 @@ project
 # ---------------------------------------------------
 # HoistProjectSetSubquery + TryDecorrelateProjectSet
 # ---------------------------------------------------
-opt expect=HoistProjectSetSubquery
+norm expect=HoistProjectSetSubquery
 SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
 ----
 project
@@ -4538,29 +4471,26 @@ project
       ├── side-effects
       ├── project
       │    ├── columns: v:4(int)
-      │    └── left-join (merge)
+      │    └── left-join (hash)
       │         ├── columns: x:1(int!null) u:3(int) v:4(int)
-      │         ├── left ordering: +1
-      │         ├── right ordering: +3
       │         ├── key: (1,3)
       │         ├── fd: (3)-->(4)
       │         ├── scan xy
       │         │    ├── columns: x:1(int!null)
-      │         │    ├── key: (1)
-      │         │    └── ordering: +1
+      │         │    └── key: (1)
       │         ├── scan uv
       │         │    ├── columns: u:3(int!null) v:4(int)
       │         │    ├── key: (3)
-      │         │    ├── fd: (3)-->(4)
-      │         │    └── ordering: +3
-      │         └── filters (true)
+      │         │    └── fd: (3)-->(4)
+      │         └── filters
+      │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── zip
            └── function: generate_series [type=int, outer=(4), side-effects]
                 ├── const: 1 [type=int]
                 └── variable: v [type=int]
 
 # Zip correlation within EXISTS.
-opt expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
+norm expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
 ----
 group-by
@@ -4576,23 +4506,20 @@ group-by
  │    ├── project
  │    │    ├── columns: x:1(int!null) y:2(int) v:4(int)
  │    │    ├── fd: (1)-->(2)
- │    │    └── left-join (merge)
+ │    │    └── left-join (hash)
  │    │         ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
- │    │         ├── left ordering: +1
- │    │         ├── right ordering: +3
  │    │         ├── key: (1,3)
  │    │         ├── fd: (1)-->(2), (3)-->(4)
  │    │         ├── scan xy
  │    │         │    ├── columns: x:1(int!null) y:2(int)
  │    │         │    ├── key: (1)
- │    │         │    ├── fd: (1)-->(2)
- │    │         │    └── ordering: +1
+ │    │         │    └── fd: (1)-->(2)
  │    │         ├── scan uv
  │    │         │    ├── columns: u:3(int!null) v:4(int)
  │    │         │    ├── key: (3)
- │    │         │    ├── fd: (3)-->(4)
- │    │         │    └── ordering: +3
- │    │         └── filters (true)
+ │    │         │    └── fd: (3)-->(4)
+ │    │         └── filters
+ │    │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  │    └── zip
  │         └── function: generate_series [type=int, outer=(4), side-effects]
  │              ├── const: 1 [type=int]
@@ -4602,7 +4529,7 @@ group-by
            └── variable: y [type=int]
 
 # Function contains multiple subqueries in arguments.
-opt expect=HoistProjectSetSubquery
+norm expect=HoistProjectSetSubquery
 SELECT generate_series((select y FROM xy WHERE x=k), (SELECT v FROM uv WHERE u=k)) FROM a
 ----
 project
@@ -4613,42 +4540,36 @@ project
       ├── side-effects
       ├── project
       │    ├── columns: y:7(int) v:9(int)
-      │    └── left-join (merge)
+      │    └── left-join (hash)
       │         ├── columns: k:1(int!null) x:6(int) y:7(int) u:8(int) v:9(int)
-      │         ├── left ordering: +1
-      │         ├── right ordering: +8
       │         ├── key: (1,6,8)
       │         ├── fd: (6)-->(7), (8)-->(9)
-      │         ├── left-join (merge)
+      │         ├── left-join (hash)
       │         │    ├── columns: k:1(int!null) x:6(int) y:7(int)
-      │         │    ├── left ordering: +1
-      │         │    ├── right ordering: +6
       │         │    ├── key: (1,6)
       │         │    ├── fd: (6)-->(7)
-      │         │    ├── ordering: +1
       │         │    ├── scan a
       │         │    │    ├── columns: k:1(int!null)
-      │         │    │    ├── key: (1)
-      │         │    │    └── ordering: +1
+      │         │    │    └── key: (1)
       │         │    ├── scan xy
       │         │    │    ├── columns: x:6(int!null) y:7(int)
       │         │    │    ├── key: (6)
-      │         │    │    ├── fd: (6)-->(7)
-      │         │    │    └── ordering: +6
-      │         │    └── filters (true)
+      │         │    │    └── fd: (6)-->(7)
+      │         │    └── filters
+      │         │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │         ├── scan uv
       │         │    ├── columns: u:8(int!null) v:9(int)
       │         │    ├── key: (8)
-      │         │    ├── fd: (8)-->(9)
-      │         │    └── ordering: +8
-      │         └── filters (true)
+      │         │    └── fd: (8)-->(9)
+      │         └── filters
+      │              └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       └── zip
            └── function: generate_series [type=int, outer=(7,9), side-effects]
                 ├── variable: y [type=int]
                 └── variable: v [type=int]
 
 # Multiple functions.
-opt expect=HoistProjectSetSubquery
+norm expect=HoistProjectSetSubquery
 SELECT
     generate_series(1, (SELECT v FROM uv WHERE u=k)),
     information_schema._pg_expandarray(ARRAY[(SELECT x FROM xy WHERE x=k)])
@@ -4662,34 +4583,28 @@ project
  │    ├── side-effects
  │    ├── project
  │    │    ├── columns: v:7(int) xy.x:9(int)
- │    │    └── left-join (merge)
+ │    │    └── left-join (hash)
  │    │         ├── columns: k:1(int!null) u:6(int) v:7(int) xy.x:9(int)
- │    │         ├── left ordering: +1
- │    │         ├── right ordering: +9
  │    │         ├── key: (1,6,9)
  │    │         ├── fd: (6)-->(7)
- │    │         ├── left-join (merge)
+ │    │         ├── left-join (hash)
  │    │         │    ├── columns: k:1(int!null) u:6(int) v:7(int)
- │    │         │    ├── left ordering: +1
- │    │         │    ├── right ordering: +6
  │    │         │    ├── key: (1,6)
  │    │         │    ├── fd: (6)-->(7)
- │    │         │    ├── ordering: +1
  │    │         │    ├── scan a
  │    │         │    │    ├── columns: k:1(int!null)
- │    │         │    │    ├── key: (1)
- │    │         │    │    └── ordering: +1
+ │    │         │    │    └── key: (1)
  │    │         │    ├── scan uv
  │    │         │    │    ├── columns: u:6(int!null) v:7(int)
  │    │         │    │    ├── key: (6)
- │    │         │    │    ├── fd: (6)-->(7)
- │    │         │    │    └── ordering: +6
- │    │         │    └── filters (true)
+ │    │         │    │    └── fd: (6)-->(7)
+ │    │         │    └── filters
+ │    │         │         └── u = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         ├── scan xy
  │    │         │    ├── columns: xy.x:9(int!null)
- │    │         │    ├── key: (9)
- │    │         │    └── ordering: +9
- │    │         └── filters (true)
+ │    │         │    └── key: (9)
+ │    │         └── filters
+ │    │              └── xy.x = k [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    └── zip
  │         ├── function: generate_series [type=int, outer=(7), side-effects]
  │         │    ├── const: 1 [type=int]
@@ -4699,7 +4614,7 @@ project
  └── projections
       └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
 
-opt expect=HoistProjectSetSubquery
+norm expect=HoistProjectSetSubquery
 SELECT a, generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
@@ -4734,7 +4649,7 @@ project
                 ├── const: 1 [type=int]
                 └── variable: a [type=int]
 
-opt expect=HoistProjectSetSubquery
+norm expect=HoistProjectSetSubquery
 SELECT a, generate_series(1, (SELECT a)), generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
@@ -4800,7 +4715,7 @@ CREATE TABLE articles (
 ----
 
 # Regression test for #31706.
-opt expect=(TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
+norm expect=(TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
 SELECT a0.id, a0.body, a0.description, a0.title, a0.slug, a0.tag_list, a0.user_id, a0.created_at, a0.updated_at
     FROM articles AS a0
    WHERE EXISTS(SELECT * FROM unnest(a0.tag_list) AS tag WHERE tag = 'dragons')
@@ -4866,7 +4781,7 @@ limit
  └── const: 10 [type=int]
 
 # TODO(justin): figure out how to get this to decorrelate again.
-opt
+norm
 SELECT * FROM articles, xy WHERE EXISTS(
   SELECT * FROM ROWS FROM (generate_series(x, id), length(title), upper(title), unnest(tag_list))
 )
@@ -4955,7 +4870,7 @@ project
       └── filters
            └── true_agg IS NOT NULL [type=bool, outer=(17), constraints=(/17: (/NULL - ]; tight)]
 
-opt expect=TryDecorrelateProjectSet
+norm expect=TryDecorrelateProjectSet
 SELECT id FROM articles WHERE title = ANY(
   SELECT unnest FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
 )
@@ -4992,32 +4907,24 @@ distinct-on
 # --------------------------------------------------
 # NormalizeSelectAnyFilter + NormalizeJoinAnyFilter
 # --------------------------------------------------
-opt expect=NormalizeSelectAnyFilter
+norm expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE i IN (SELECT y FROM xy)
 ----
-project
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── inner-join (hash)
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) y:7(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
-      ├── scan a
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-5)
-      ├── distinct-on
-      │    ├── columns: y:7(int)
-      │    ├── grouping columns: y:7(int)
-      │    ├── key: (7)
-      │    └── scan xy
-      │         └── columns: y:7(int)
-      └── filters
-           └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    └── columns: y:7(int)
+ └── filters
+      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Any is one of several conjuncts.
-opt expect=NormalizeSelectAnyFilter
+norm expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
 semi-join (cross)
@@ -5032,11 +4939,10 @@ semi-join (cross)
  │    ├── fd: ()-->(1-5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── constraint: /1: [/10 - /10]
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    └── fd: ()-->(1-5)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters
+ │         ├── k = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan xy
  │    └── columns: y:7(int)
@@ -5044,44 +4950,36 @@ semi-join (cross)
       └── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple ANY conjuncts.
-opt expect=NormalizeSelectAnyFilter
+norm expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FROM xy)
 ----
 semi-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── project
+ ├── semi-join (hash)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    └── inner-join (hash)
- │         ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string!null) j:5(jsonb) y:10(string!null)
- │         ├── key: (1)
- │         ├── fd: (1)-->(2-5), (4)==(10), (10)==(4)
- │         ├── scan a
- │         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │         │    ├── key: (1)
- │         │    └── fd: (1)-->(2-5)
- │         ├── distinct-on
- │         │    ├── columns: y:10(string)
- │         │    ├── grouping columns: y:10(string)
- │         │    ├── key: (10)
- │         │    └── project
- │         │         ├── columns: y:10(string)
- │         │         ├── scan xy
- │         │         │    └── columns: xy.y:9(int)
- │         │         └── projections
- │         │              └── xy.y::STRING [type=string, outer=(9)]
- │         └── filters
- │              └── s = y [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    ├── project
+ │    │    ├── columns: y:10(string)
+ │    │    ├── scan xy
+ │    │    │    └── columns: xy.y:9(int)
+ │    │    └── projections
+ │    │         └── xy.y::STRING [type=string, outer=(9)]
+ │    └── filters
+ │         └── s = y [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
  ├── scan xy
  │    └── columns: xy.y:7(int)
  └── filters
       └── i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
-opt expect=NormalizeSelectAnyFilter
+norm expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE 5 IN (SELECT y FROM xy)
 ----
 select
@@ -5111,33 +5009,25 @@ select
                 └── const: 1 [type=int]
 
 # ANY in Join On condition.
-opt expect=NormalizeJoinAnyFilter
+norm expect=NormalizeJoinAnyFilter
 SELECT * FROM a INNER JOIN xy ON i IN (SELECT v FROM uv) AND k=x
 ----
 inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
- ├── project
+ ├── semi-join (hash)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    └── inner-join (hash)
- │         ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) v:9(int!null)
- │         ├── key: (1)
- │         ├── fd: (1)-->(2-5), (2)==(9), (9)==(2)
- │         ├── scan a
- │         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │         │    ├── key: (1)
- │         │    └── fd: (1)-->(2-5)
- │         ├── distinct-on
- │         │    ├── columns: v:9(int)
- │         │    ├── grouping columns: v:9(int)
- │         │    ├── key: (9)
- │         │    └── scan uv
- │         │         └── columns: v:9(int)
- │         └── filters
- │              └── i = v [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    ├── scan uv
+ │    │    └── columns: v:9(int)
+ │    └── filters
+ │         └── i = v [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
@@ -5148,7 +5038,7 @@ inner-join (hash)
 # --------------------------------------------------
 # NormalizeSelectNotAnyFilter + NormalizeJoinNotAnyFilter
 # --------------------------------------------------
-opt expect=NormalizeSelectNotAnyFilter
+norm expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i NOT IN (SELECT y FROM xy)
 ----
 anti-join (cross)
@@ -5166,7 +5056,7 @@ anti-join (cross)
 
 # NOT ANY is one of several conjuncts. Note that i > ALL(...) gets mapped to
 # NOT i <= ANY(...) by optbuilder.
-opt expect=NormalizeSelectNotAnyFilter
+norm expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE k > 1 AND k < 5 AND i > ALL(SELECT y FROM xy)
 ----
 anti-join (cross)
@@ -5174,19 +5064,24 @@ anti-join (cross)
  ├── cardinality: [0 - 3]
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- ├── scan a
+ ├── select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/2 - /4]
  │    ├── cardinality: [0 - 3]
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── (k > 1) AND (k < 5) [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
  ├── scan xy
  │    └── columns: y:7(int)
  └── filters
       └── (i <= y) IS NOT false [type=bool, outer=(2,7)]
 
 # Multiple NOT ANY conjuncts.
-opt expect=NormalizeSelectNotAnyFilter
+norm expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i < ALL(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
 anti-join (cross)
@@ -5215,7 +5110,7 @@ anti-join (cross)
       └── (i >= xy.y) IS NOT false [type=bool, outer=(2,7)]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
-opt expect=NormalizeSelectNotAnyFilter
+norm expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE 5 NOT IN (SELECT y FROM xy)
 ----
 select
@@ -5245,17 +5140,13 @@ select
                      └── const: 1 [type=int]
 
 # NOT ANY in Join On condition.
-opt expect=NormalizeJoinNotAnyFilter
+norm expect=NormalizeJoinNotAnyFilter
 SELECT * FROM a INNER JOIN xy ON i NOT IN (SELECT v FROM uv) AND k=x
 ----
 inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
  ├── anti-join (cross)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -5268,44 +5159,40 @@ inner-join (hash)
  │    │    └── columns: v:9(int)
  │    └── filters
  │         └── (i = v) IS NOT false [type=bool, outer=(2,9)]
+ ├── scan xy
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
  └── filters
       └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
 # NormalizeSelectAnyFilter + NormalizeSelectNotAnyFilter
 # --------------------------------------------------
-opt expect=(NormalizeSelectAnyFilter,NormalizeSelectNotAnyFilter)
+norm expect=(NormalizeSelectAnyFilter,NormalizeSelectNotAnyFilter)
 SELECT * FROM a WHERE i = ANY(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
-project
+semi-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── inner-join (hash)
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2-5), (2)==(7), (7)==(2)
-      ├── anti-join (cross)
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5)
-      │    ├── scan a
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-5)
-      │    ├── project
-      │    │    ├── columns: y:10(string)
-      │    │    ├── scan xy
-      │    │    │    └── columns: xy.y:9(int)
-      │    │    └── projections
-      │    │         └── xy.y::STRING [type=string, outer=(9)]
-      │    └── filters
-      │         └── (s = y) IS NOT false [type=bool, outer=(4,10)]
-      ├── distinct-on
-      │    ├── columns: xy.y:7(int)
-      │    ├── grouping columns: xy.y:7(int)
-      │    ├── key: (7)
-      │    └── scan xy
-      │         └── columns: xy.y:7(int)
-      └── filters
-           └── i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ ├── anti-join (cross)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    ├── project
+ │    │    ├── columns: y:10(string)
+ │    │    ├── scan xy
+ │    │    │    └── columns: xy.y:9(int)
+ │    │    └── projections
+ │    │         └── xy.y::STRING [type=string, outer=(9)]
+ │    └── filters
+ │         └── (s = y) IS NOT false [type=bool, outer=(4,10)]
+ ├── scan xy
+ │    └── columns: xy.y:7(int)
+ └── filters
+      └── i = xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]

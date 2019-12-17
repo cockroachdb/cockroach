@@ -7,7 +7,7 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL, t TIME)
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt expect=(FoldPlusZero,FoldZeroPlus)
+norm expect=(FoldPlusZero,FoldZeroPlus)
 SELECT
     (a.i + a.i) + 0 AS r, 0 + (a.i + a.i) AS s,
     (a.f + a.f) + 0 AS t, 0 + (a.f + a.f) AS u,
@@ -28,7 +28,7 @@ project
 
 
 # Regression test for #35113.
-opt expect=FoldPlusZero
+norm expect=FoldPlusZero
 SELECT i + 0::decimal FROM a
 ----
 project
@@ -38,7 +38,7 @@ project
  └── projections
       └── i::DECIMAL [type=decimal, outer=(2)]
 
-opt expect=FoldZeroPlus
+norm expect=FoldZeroPlus
 SELECT 0::decimal + i FROM a
 ----
 project
@@ -53,7 +53,7 @@ project
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt expect=FoldMinusZero
+norm expect=FoldMinusZero
 SELECT
     (a.i + a.i) - 0 AS r,
     (a.f + a.f) - 0 AS s,
@@ -70,7 +70,7 @@ project
       └── d + d [type=decimal, outer=(4)]
 
 # Regression test for #35113.
-opt expect=FoldMinusZero
+norm expect=FoldMinusZero
 SELECT i - 0::decimal FROM a
 ----
 project
@@ -81,7 +81,7 @@ project
       └── i::DECIMAL [type=decimal, outer=(2)]
 
 # Regression test for #35612.
-opt expect-not=FoldMinusZero
+norm expect-not=FoldMinusZero
 SELECT '[123]'::jsonb - 0
 ----
 values
@@ -96,7 +96,7 @@ values
 # --------------------------------------------------
 
 # Add columns to prevent NormalizeVar from swapping left and right.
-opt expect=(FoldMultOne,FoldOneMult)
+norm expect=(FoldMultOne,FoldOneMult)
 SELECT
     (a.i + a.i) * 1 AS r, 1 * (a.i + a.i) AS s,
     (a.f + a.f) * 1 AS t, 1 * (a.f + a.f) AS u,
@@ -116,7 +116,7 @@ project
       └── d + d [type=decimal, outer=(4)]
 
 # Regression test for #35113.
-opt expect=FoldMultOne
+norm expect=FoldMultOne
 SELECT i * 1::decimal FROM a
 ----
 project
@@ -126,7 +126,7 @@ project
  └── projections
       └── i::DECIMAL [type=decimal, outer=(2)]
 
-opt expect=FoldOneMult
+norm expect=FoldOneMult
 SELECT 1::decimal * i FROM a
 ----
 project
@@ -140,7 +140,7 @@ project
 # FoldDivOne
 # --------------------------------------------------
 
-opt expect=FoldDivOne
+norm expect=FoldDivOne
 SELECT
     a.i / 1 AS r,
     a.f / 1 AS s,
@@ -157,7 +157,7 @@ project
       └── variable: d [type=decimal, outer=(4)]
 
 # Regression test for #35113.
-opt expect=FoldDivOne
+norm expect=FoldDivOne
 SELECT i / 1::decimal FROM a
 ----
 project
@@ -167,7 +167,7 @@ project
  └── projections
       └── i::DECIMAL [type=decimal, outer=(2)]
 
-opt expect=FoldDivOne
+norm expect=FoldDivOne
 SELECT i / 1::int8 FROM a
 ----
 project
@@ -180,7 +180,7 @@ project
 # --------------------------------------------------
 # InvertMinus
 # --------------------------------------------------
-opt expect=InvertMinus
+norm expect=InvertMinus
 SELECT
     -(a.f - a.f) AS r,
     -(a.d - a.i) AS s,
@@ -199,7 +199,7 @@ project
 # --------------------------------------------------
 # EliminateUnaryMinus
 # --------------------------------------------------
-opt expect=EliminateUnaryMinus
+norm expect=EliminateUnaryMinus
 SELECT -(-a.i::int) AS r FROM a
 ----
 project
