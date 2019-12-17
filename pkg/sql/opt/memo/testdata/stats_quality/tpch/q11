@@ -71,6 +71,7 @@ sort
       │    │    │    ├── save-table-name: q11_lookup_join_5
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:6(int!null) s_nationkey:9(int!null) n_nationkey:13(int!null) n_name:14(char!null)
       │    │    │    ├── key columns: [1 2] = [1 2]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(2)=399.934613, null(2)=0, distinct(3)=9536.12259, null(3)=0, distinct(4)=27589.3232, null(4)=0, distinct(6)=399.934613, null(6)=0, distinct(9)=1, null(9)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(3,4)=31617.9161, null(3,4)=0]
       │    │    │    ├── key: (1,6)
       │    │    │    ├── fd: ()-->(14), (1,2)-->(3,4), (6)-->(9), (9)==(13), (13)==(9), (2)==(6), (6)==(2)
@@ -138,6 +139,7 @@ sort
                           │    │    │    ├── save-table-name: q11_lookup_join_13
                           │    │    │    ├── columns: ps_suppkey:20(int!null) ps_availqty:21(int!null) ps_supplycost:22(float!null) s_suppkey:24(int!null) s_nationkey:27(int!null) n_nationkey:31(int!null) n_name:32(char!null)
                           │    │    │    ├── key columns: [19 20] = [19 20]
+                          │    │    │    ├── lookup columns are key
                           │    │    │    ├── stats: [rows=32258.0645, distinct(20)=399.934613, null(20)=0, distinct(21)=9536.12259, null(21)=0, distinct(22)=27589.3232, null(22)=0, distinct(24)=399.934613, null(24)=0, distinct(27)=1, null(27)=0, distinct(31)=1, null(31)=0, distinct(32)=1, null(32)=0, distinct(21,22)=31617.9161, null(21,22)=0]
                           │    │    │    ├── fd: ()-->(32), (24)-->(27), (27)==(31), (31)==(27), (20)==(24), (24)==(20)
                           │    │    │    ├── inner-join (lookup partsupp@ps_sk)

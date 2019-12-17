@@ -70,6 +70,7 @@ sort
       │    │    ├── save-table-name: q12_lookup_join_4
       │    │    ├── columns: o_orderkey:1(int!null) o_orderpriority:6(char!null) l_orderkey:10(int!null) l_shipdate:20(date!null) l_commitdate:21(date!null) l_receiptdate:22(date!null) l_shipmode:24(char!null)
       │    │    ├── key columns: [10] = [1]
+      │    │    ├── lookup columns are key
       │    │    ├── stats: [rows=29822.8417, distinct(1)=29606.4627, null(1)=0, distinct(6)=5, null(6)=0, distinct(10)=29606.4627, null(10)=0, distinct(20)=2525.98116, null(20)=0, distinct(21)=2465.9862, null(21)=0, distinct(22)=365, null(22)=0, distinct(24)=2, null(24)=0]
       │    │    ├── fd: (1)-->(6), (1)==(10), (10)==(1)
       │    │    ├── select

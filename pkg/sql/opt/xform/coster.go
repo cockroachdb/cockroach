@@ -401,6 +401,14 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	// Since the matching rows in the table may not all be in the same range, this
 	// counts as random I/O.
 	perLookupCost := memo.Cost(randIOCostFactor)
+	if !join.LookupColsAreTableKey {
+		// If the lookup columns don't form a key, execution will have to limit
+		// KV batches which prevents running requests to multiple nodes in parallel.
+		// An experiment on a 4 node cluster with a table with 100k rows split into
+		// 100 ranges showed that a "non-parallel" lookup join is about 5 times
+		// slower.
+		perLookupCost *= 5
+	}
 	cost := memo.Cost(leftRowCount) * perLookupCost
 
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the

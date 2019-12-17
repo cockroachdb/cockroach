@@ -1111,6 +1111,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	if joinPrivate.Flags.DisallowLookupJoin {
 		return
 	}
+	md := c.e.mem.Metadata()
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
@@ -1199,6 +1200,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			continue
 		}
 
+		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
+		// A lookup join will drop any input row which contains NULLs, so a lax key
+		// is sufficient.
+		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightSideCols.ToSet())
+
 		// Construct the projections for the constant columns.
 		if needProjection {
 			lookupJoin.Input = c.e.f.ConstructProject(input, projections, input.Relational().OutputCols)
@@ -1282,6 +1288,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+		indexJoin.LookupColsAreTableKey = true
 
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
@@ -1622,6 +1629,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			indexJoin.Index = cat.PrimaryIndex
 			indexJoin.KeyCols = pkCols
 			indexJoin.Cols = scanPrivate.Cols
+			indexJoin.LookupColsAreTableKey = true
 
 			// Create the LookupJoin for the index join in the same group as the
 			// original select.
@@ -1809,6 +1817,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		indexJoin.Index = cat.PrimaryIndex
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols
+		indexJoin.LookupColsAreTableKey = true
 
 		// Create the LookupJoin for the index join in the same group as the
 		// original select.
