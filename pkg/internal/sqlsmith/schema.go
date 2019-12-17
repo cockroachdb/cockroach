@@ -277,7 +277,11 @@ func extractIndexes(
 `, t.TableName.Table(), idx))
 			var isInverted bool
 			if err = row.Scan(&isInverted); err != nil {
-				return nil, err
+				// We got an error which likely indicates that 'is_inverted' column is
+				// not present in crdb_internal.table_indexes vtable (probably because
+				// we're running 19.2 version). We will use a heuristic to determine
+				// whether the index is inverted.
+				isInverted = strings.Contains(strings.ToLower(idx.String()), "jsonb")
 			}
 			indexes[idx].Inverted = isInverted
 		}
