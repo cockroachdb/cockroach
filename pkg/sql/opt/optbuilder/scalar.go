@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -402,7 +403,7 @@ func (b *Builder) buildScalar(
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(scalar)
 		} else {
-			panic(unimplementedWithIssueDetailf(34848, fmt.Sprintf("%T", scalar), "not yet implemented: scalar expression: %T", scalar))
+			panic(unimplemented.Newf(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 		}
 	}
 
