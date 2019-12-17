@@ -1790,7 +1790,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		tableDesc.State = sqlbase.TableDescriptor_DROP
 		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tbl.ParentID, tbl.Name)
 		if err != nil {
-			return nil
+			return errors.Wrap(err, "dropping tables")
 		}
 		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 		if err != nil {
