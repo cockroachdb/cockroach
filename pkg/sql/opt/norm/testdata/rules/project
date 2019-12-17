@@ -11,7 +11,7 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT)
 # --------------------------------------------------
 
 # Same order, same names.
-opt expect=EliminateProject
+norm expect=EliminateProject
 SELECT x, y FROM a
 ----
 scan a
@@ -20,7 +20,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Different order, aliased names.
-opt expect=EliminateProject
+norm expect=EliminateProject
 SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
@@ -29,7 +29,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Reordered, duplicate, aliased columns.
-opt expect=EliminateProject
+norm expect=EliminateProject
 SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
@@ -38,7 +38,7 @@ scan a
  └── fd: (1)-->(2)
 
 # Added column (projection should not be eliminated).
-opt expect-not=EliminateProject
+norm expect-not=EliminateProject
 SELECT *, 1 r FROM a
 ----
 project
@@ -57,32 +57,29 @@ project
 # --------------------------------------------------
 
 # Inner project has no synthesized columns.
-opt expect=MergeProjects
+norm expect=MergeProjects
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
  ├── columns: r:7(int)
- ├── inner-join (merge)
+ ├── inner-join (hash)
  │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
- │    ├── left ordering: +1
- │    ├── right ordering: +5
  │    ├── key: (5)
  │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) y:2(int)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2)
- │    │    └── ordering: +1
+ │    │    └── fd: (1)-->(2)
  │    ├── scan b
  │    │    ├── columns: b.x:5(int!null)
- │    │    ├── key: (5)
- │    │    └── ordering: +5
- │    └── filters (true)
+ │    │    └── key: (5)
+ │    └── filters
+ │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
       └── y + 1 [type=int, outer=(2)]
 
 # Outer and inner projections have synthesized columns.
-opt expect=MergeProjects
+norm expect=MergeProjects
 SELECT y1, f+1 FROM (SELECT y+1 AS y1, f FROM a)
 ----
 project
@@ -94,7 +91,7 @@ project
       └── y + 1 [type=int, outer=(2)]
 
 # Multiple synthesized columns in both outer and inner projections.
-opt expect=MergeProjects
+norm expect=MergeProjects
 SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
 ----
 project
@@ -110,7 +107,7 @@ project
       └── x * 2 [type=int, outer=(1)]
 
 # Outer project selects subset of inner columns.
-opt expect=MergeProjects
+norm expect=MergeProjects
 SELECT y1 FROM (SELECT y+1 AS y1, f*2 AS f2 FROM a)
 ----
 project
@@ -121,7 +118,7 @@ project
       └── y + 1 [type=int, outer=(2)]
 
 # Don't merge, since outer depends on inner.
-opt expect-not=MergeProjects
+norm expect-not=MergeProjects
 SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
 ----
 project
@@ -138,7 +135,7 @@ project
       └── y1 / 2 [type=decimal, outer=(5), side-effects]
 
 # Discard all inner columns.
-opt expect=MergeProjects
+norm expect=MergeProjects
 SELECT 1 r FROM (SELECT y+1, x FROM a) a
 ----
 project
@@ -152,7 +149,7 @@ project
 # MergeProjectWithValues
 # --------------------------------------------------
 
-opt expect=MergeProjectWithValues
+norm expect=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2))
 ----
 values
@@ -163,7 +160,7 @@ values
  └── (1, 3) [type=tuple{int, int}]
 
 # Only passthrough columns.
-opt expect=MergeProjectWithValues
+norm expect=MergeProjectWithValues
 SELECT column1, column3 FROM (VALUES (1, 2, 3))
 ----
 values
@@ -174,7 +171,7 @@ values
  └── (1, 3) [type=tuple{int, int}]
 
 # Only synthesized columns.
-opt expect=MergeProjectWithValues
+norm expect=MergeProjectWithValues
 SELECT 4, 5 FROM (VALUES (1, 2, 3))
 ----
 values
@@ -185,7 +182,7 @@ values
  └── (4, 5) [type=tuple{int, int}]
 
 # Don't trigger rule when there is more than one Values row.
-opt expect-not=MergeProjectWithValues
+norm expect-not=MergeProjectWithValues
 SELECT column1, 3 FROM (VALUES (1, 2), (1, 4))
 ----
 project
@@ -201,7 +198,7 @@ project
       └── const: 3 [type=int]
 
 # Don't trigger rule when Project column depends on Values column.
-opt expect-not=MergeProjectWithValues
+norm expect-not=MergeProjectWithValues
 SELECT column1+1, 3 FROM (VALUES ($1::int, $2::int))
 ----
 project

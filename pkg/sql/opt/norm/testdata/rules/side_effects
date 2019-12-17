@@ -13,7 +13,7 @@ CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
 
 # Don't allow ORDER BY column to be eliminated if it has a side effect.
-opt
+norm
 SELECT * FROM a ORDER BY length('foo'), random()+1.0
 ----
 sort
@@ -35,7 +35,7 @@ sort
            └── random() + 1.0 [type=float, side-effects]
 
 # Don't allow GROUP BY column to be eliminated if it has a side effect.
-opt
+norm
 SELECT avg(f) FROM a WHERE i=5 GROUP BY i+(random()*10)::int, i+1
 ----
 project
@@ -64,20 +64,18 @@ project
                 └── variable: f [type=float]
 
 # Allow elimination of side effecting expressions during column pruning.
-opt
+norm
 SELECT i FROM (SELECT i, nextval('foo') FROM a)
 ----
 scan a
  └── columns: i:2(int)
 
 # Allow duplication of side effecting expressions during predicate pushdown.
-opt
+norm
 SELECT * FROM a INNER JOIN xy ON k=x WHERE k=random()
 ----
-inner-join (merge)
+inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── left ordering: +1
- ├── right ordering: +6
  ├── side-effects
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
@@ -86,12 +84,10 @@ inner-join (merge)
  │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
- │    ├── ordering: +1
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2-5)
- │    │    └── ordering: +1
+ │    │    └── fd: (1)-->(2-5)
  │    └── filters
  │         └── k = random() [type=bool, outer=(1), side-effects, constraints=(/1: (/NULL - ])]
  ├── select
@@ -99,18 +95,17 @@ inner-join (merge)
  │    ├── side-effects
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
- │    ├── ordering: +6
  │    ├── scan xy
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
- │    │    ├── fd: (6)-->(7)
- │    │    └── ordering: +6
+ │    │    └── fd: (6)-->(7)
  │    └── filters
  │         └── x = random() [type=bool, outer=(6), side-effects, constraints=(/6: (/NULL - ])]
- └── filters (true)
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Decorrelate CASE WHEN branch if there are no side effects.
-opt
+norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT 1) ELSE 5 END FROM a
 ----
 project
@@ -130,7 +125,7 @@ project
       └── CASE WHEN i < 0 THEN y ELSE 5 END [type=int, outer=(2,7)]
 
 # Decorrelate CASE ELSE branch if there are no side effects.
-opt
+norm
 SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i LIMIT 1) END)=k
 ----
 project
@@ -158,7 +153,7 @@ project
            └── k = CASE WHEN i < 0 THEN 5 ELSE y END [type=bool, outer=(1,2,7), constraints=(/1: (/NULL - ])]
 
 # Don't decorrelate CASE WHEN branch if there are side effects.
-opt
+norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) ELSE 5 END FROM a
 ----
 project
@@ -202,7 +197,7 @@ project
            └── const: 5 [type=int]
 
 # Don't decorrelate CASE ELSE branch if there are side effects.
-opt
+norm
 SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i AND 5/y>1) END)=k
 ----
 select

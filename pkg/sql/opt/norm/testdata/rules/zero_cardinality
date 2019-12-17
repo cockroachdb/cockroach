@@ -6,7 +6,7 @@ CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
 # SimplifyZeroCardinalityGroup
 # --------------------------------------------------
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT k FROM b WHERE false
 ----
 values
@@ -15,7 +15,7 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (VALUES (1) OFFSET 1)
 ----
 values
@@ -24,7 +24,7 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b INNER JOIN b b2 ON False
 ----
 values
@@ -33,7 +33,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-10)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM b LIMIT 0
 ----
 values
@@ -42,7 +42,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE i=1) WHERE False
 ----
 values
@@ -51,7 +51,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
 ----
 values
@@ -60,7 +60,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-opt expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
 ----
 values
@@ -69,7 +69,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-opt
+norm
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project

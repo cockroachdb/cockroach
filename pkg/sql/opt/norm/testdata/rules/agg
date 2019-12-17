@@ -6,7 +6,7 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
 # EliminateAggDistinct
 # --------------------------------------------------
 
-opt expect=EliminateAggDistinct
+norm expect=EliminateAggDistinct
 SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f) FROM a
 ----
 scalar-group-by
@@ -31,7 +31,7 @@ scalar-group-by
            └── variable: column9 [type=bool]
 
 # The rule should not apply to these aggregations.
-opt expect-not=EliminateAggDistinct
+norm expect-not=EliminateAggDistinct
 SELECT
     count(DISTINCT i),
     sum(DISTINCT i),
