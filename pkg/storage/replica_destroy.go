@@ -199,7 +199,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, eng engine.Writer, externalNextReplicaID roachpb.ReplicaID,
+	ctx context.Context, writer engine.Writer, externalNextReplicaID roachpb.ReplicaID,
 ) error {
 	r.mu.Lock()
 	nextReplicaID := r.mu.state.Desc.NextReplicaID
@@ -216,6 +216,6 @@ func (r *Replica) setTombstoneKey(
 		NextReplicaID: nextReplicaID,
 	}
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
-	return engine.MVCCBlindPutProto(ctx, eng, nil, tombstoneKey,
+	return engine.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
 		hlc.Timestamp{}, tombstone, nil)
 }

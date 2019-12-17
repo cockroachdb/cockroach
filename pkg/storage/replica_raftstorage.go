@@ -591,7 +591,7 @@ func snapshot(
 // engine.ReadWriter must be passed in.
 func (r *Replica) append(
 	ctx context.Context,
-	eng engine.Writer,
+	writer engine.Writer,
 	prevLastIndex uint64,
 	prevLastTerm uint64,
 	prevRaftLogSize int64,
@@ -612,13 +612,13 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = engine.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
-			// We type assert eng to also be an engine.Reader only in the case where
-			// we're replacing existing entries.
-			eng, ok := eng.(engine.ReadWriter)
+			// We type assert `writer` to also be an engine.ReadWriter only in
+			// the case where we're replacing existing entries.
+			eng, ok := writer.(engine.ReadWriter)
 			if !ok {
-				return 0, 0, 0, errors.Errorf("expected eng to be a engine.ReadWriter when overwriting log entries")
+				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
 			err = engine.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
@@ -631,11 +631,11 @@ func (r *Replica) append(
 	lastTerm := entries[len(entries)-1].Term
 	// Delete any previously appended log entries which never committed.
 	if prevLastIndex > 0 {
-		// We type assert eng to also be an engine.Reader only in the case where
-		// we're deleting existing entries.
-		eng, ok := eng.(engine.ReadWriter)
+		// We type assert `writer` to also be an engine.ReadWriter only in the
+		// case where we're deleting existing entries.
+		eng, ok := writer.(engine.ReadWriter)
 		if !ok {
-			return 0, 0, 0, errors.Errorf("expected eng to be a engine.ReadWriter when deleting log entries")
+			panic("expected writer to be a engine.ReadWriter when deleting log entries")
 		}
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
