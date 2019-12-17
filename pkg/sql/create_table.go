@@ -63,13 +63,12 @@ type createTableRun struct {
 
 func (n *createTableNode) startExec(params runParams) error {
 	isTemporary := n.n.Temporary
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
 
+	// By default, all tables are created in the `public` schema.
+	schemaID := sqlbase.ID(keys.PublicSchemaID)
 	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
 		params.ExecCfg().Settings, n.dbDesc.ID, n.n.Table.Table())
 
-	// If a user specifies the pg_temp schema, even without the TEMPORARY keyword,
-	// a temporary table should be created.
 	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
 			return unimplemented.NewWithIssuef(5807,
@@ -91,12 +90,13 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table())
 	}
-	key := tKey.Key()
-	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
+
+	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, n.dbDesc.ID, schemaID, n.n.Table.Table())
+	if err == nil && exists {
 		if n.n.IfNotExists {
 			return nil
 		}
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlbase.NewRelationAlreadyExistsError(n.n.Table.Table())
 	} else if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
-		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
+		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
