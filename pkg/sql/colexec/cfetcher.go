@@ -713,7 +713,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					}
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
-					remainingBytes, err = colencoding.SkipTableKey(
+					remainingBytes, err = sqlbase.SkipTableKey(
 						&rf.table.cols[colIdx].Type,
 						remainingBytes,
 						// Extra columns are always stored in ascending order.
