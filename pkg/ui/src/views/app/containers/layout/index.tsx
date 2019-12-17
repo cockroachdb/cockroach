@@ -70,7 +70,7 @@ class Layout extends React.Component<LayoutProps & RouterState, {}> {
           </div>
           <div className="layout-panel__navigation-bar">
             <TabNavigation>
-              <Text textType={TextTypes.Heading2}>{clusterName || clusterId}</Text>
+              <Text textType={TextTypes.Heading2}>{clusterName || `Cluster id: ${clusterId || ""}`}</Text>
               <Badge text={clusterVersion} />
             </TabNavigation>
           </div>
