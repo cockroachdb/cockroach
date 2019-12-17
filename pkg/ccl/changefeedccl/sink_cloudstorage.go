@@ -324,10 +324,10 @@ func (s *cloudStorageSink) flushFile(
 	fileID := s.fileID
 	s.fileID++
 	// Pad file ID to maintain lexical ordering among files from the same sink.
-	// Note that we use `-` here to delimit the filename because we want
-	// `%d.RESOLVED` files to lexicographically succeed data files that have the
-	// same timestamp. This works because ascii `-` < ascii '.'.
-	filename := fmt.Sprintf(`%s-%s-%d-%d-%d-%08d%s`, s.dataFileTs,
+	// Ditto for schema ID. Note that we use `-` here to delimit the filename
+	// because we want `%d.RESOLVED` files to lexicographically succeed data files
+	// that have the same timestamp. This works because ascii `-` < ascii '.'.
+	filename := fmt.Sprintf(`%s-%s-%08d-%d-%d-%08d%s`, s.dataFileTs,
 		key.Topic, key.SchemaID, s.nodeID, s.sinkID, fileID, s.ext)
 	return s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes()))
 }
