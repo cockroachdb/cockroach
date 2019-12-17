@@ -15103,7 +15103,6 @@ const int PushTxnRequest::kHeaderFieldNumber;
 const int PushTxnRequest::kPusherTxnFieldNumber;
 const int PushTxnRequest::kPusheeTxnFieldNumber;
 const int PushTxnRequest::kPushToFieldNumber;
-const int PushTxnRequest::kInclusivePushToFieldNumber;
 const int PushTxnRequest::kPushTypeFieldNumber;
 const int PushTxnRequest::kForceFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -15289,20 +15288,6 @@ bool PushTxnRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // bool inclusive_push_to = 9;
-      case 9: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &inclusive_push_to_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -15360,11 +15345,6 @@ void PushTxnRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->force(), output);
   }
 
-  // bool inclusive_push_to = 9;
-  if (this->inclusive_push_to() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(9, this->inclusive_push_to(), output);
-  }
-
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.PushTxnRequest)
@@ -15406,11 +15386,6 @@ size_t PushTxnRequest::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->push_type());
   }
 
-  // bool inclusive_push_to = 9;
-  if (this->inclusive_push_to() != 0) {
-    total_size += 1 + 1;
-  }
-
   // bool force = 7;
   if (this->force() != 0) {
     total_size += 1 + 1;
@@ -15448,9 +15423,6 @@ void PushTxnRequest::MergeFrom(const PushTxnRequest& from) {
   if (from.push_type() != 0) {
     set_push_type(from.push_type());
   }
-  if (from.inclusive_push_to() != 0) {
-    set_inclusive_push_to(from.inclusive_push_to());
-  }
   if (from.force() != 0) {
     set_force(from.force());
   }
@@ -15478,7 +15450,6 @@ void PushTxnRequest::InternalSwap(PushTxnRequest* other) {
   swap(pushee_txn_, other->pushee_txn_);
   swap(push_to_, other->push_to_);
   swap(push_type_, other->push_type_);
-  swap(inclusive_push_to_, other->inclusive_push_to_);
   swap(force_, other->force_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
