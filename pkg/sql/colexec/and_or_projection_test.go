@@ -207,11 +207,13 @@ func TestAndOrOps(t *testing.T) {
 								RenderExprs: []execinfrapb.Expression{{Expr: fmt.Sprintf("@1 %s @2", test.operation)}},
 							},
 						}
-						result, err := NewColOperator(
-							ctx, flowCtx, spec, input, testMemAcc,
-							true, /* useStreamingMemAccountForBuffering */
-							nil,  /* processorConstructor */
-						)
+						args := NewColOperatorArgs{
+							Spec:                               spec,
+							Inputs:                             input,
+							StreamingMemAccount:                testMemAcc,
+							UseStreamingMemAccountForBuffering: true,
+						}
+						result, err := NewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
@@ -276,11 +278,13 @@ func benchmarkLogicalProjOp(
 		},
 	}
 
-	result, err := NewColOperator(
-		ctx, flowCtx, spec, []Operator{input}, testMemAcc,
-		true, /* useStreamingMemAccountForBuffering */
-		nil,  /* processorConstructor */
-	)
+	args := NewColOperatorArgs{
+		Spec:                               spec,
+		Inputs:                             []Operator{input},
+		StreamingMemAccount:                testMemAcc,
+		UseStreamingMemAccountForBuffering: true,
+	}
+	result, err := NewColOperator(ctx, flowCtx, args)
 	if err != nil {
 		b.Fatal(err)
 	}
