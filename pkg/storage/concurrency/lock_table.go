@@ -2,10 +2,12 @@ package concurrency
 
 import (
 	"container/list"
-	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -13,93 +15,124 @@ import (
 	"github.com/google/btree"
 )
 
-
-// Request doesn't belong in this file.
 type Request interface {
-	context() context.Context
-	// nil when not a transactional request. Is there any "ID" for such a request that one can use?
-	txn() *uuid.UUID
+	// nil when not a transactional request.
 	txnMeta() *enginepb.TxnMeta
 	spans() *spanset.SpanSet
 	// Equal to the Span.Timestamp in all of the spans in the SpanSet.
 	ts() hlc.Timestamp
-	header() roachpb.Header
 }
 
-// lockTable provides locks and associated queues that are used to implement turn-taking at the
-// level of individual requests. Requests associated with a transaction can hold a lock beyond the
-// lifetime of a request, which allows subsequent requests from the same transaction to not have to
-// wait their turn. If a request needs to wait its turn, it enters one or more queues. The logic
-// in these queues is not concerned with the bigger picture of transaction prioritization and
-// whether it is fair to wait for the lock holder, or whether this waiting will result in deadlock
-// -- these queues simply externalize facts about this waiting as events that can be listened
-// to and used by external code to make decisions like whether a transaction holding the lock should be
-// pushed, aborted etc. Those external decisions will of course eventually impact the state in the
-// lockTable, but the lockTable is ignorant of those external complexities. Note that the turn-taking
-// use of lockTable applies also to requests that have no intention of acquiring locks (specifically,
-// readers). Also, once a lock is acquired there are no guarantees of what versions the
-// lock holder may find when actually examining the MVCC data -- it may find that there are already
-// writes greater than the timestamp the lock holder wants to write at: the lockTable is only about
-// turn-taking and locking.
+// A guard that is returned to the request the first time it calls lockTable.scanAndEnqueue() and
+// used in later calls to scanAndEnqueue() and done().
+// After a call to scanAndEnqueue() (which is made while holding latches), the caller must first
+// call requestGuard.startWaiting() and if it returns true release the latches and continue
+// interacting with the requestGuard. If startWaiting() returns false, the request can proceed
+// to evaluation.
 //
-// There is a 2x2 matrix of lock types:
-// - Exclusive or Shared
-// - Replicated or Unreplicated
-// The current code only implements exclusive-replicated and exclusive-unreplicated but we first
-// briefly discuss all of these to set the stage for future changes.
-// The current write intents are exclusive-replicated and the locks we need for SFU are
-// exclusive-unreplicated. Exclusive locks are taken by writers or prospective writers and
-// block all other writers. An exclusive lock also has a timestamp, and only blocks readers that are
-// reading above that timestamp. Shared locks are taken by readers who want to block all writers,
-// both below and above their read timestamp. Preventing writes below their read timestamps is
-// already accomplished using the ts cache, which does not require writers to queue since queueing
-// is not going to accomplish anything (the write can never happen at that timestamp). The
-// lockTable is intended to complement the ts cache, in that any reader that acquired a shared lock
-// when evaluating its request also updated the ts cache with the corresponding ts. So ideally a shared
-// lock held by a group of txns with timestamps ts1, ts2, ...tsn, would only block writers trying to
-// write at a ts > max(ts1...tsn). Writers writing below that max timestamp would be allowed to proceed
-// since they will immediately discover the ts cache to be blocking their writes (though this is not
-// required for correctness, and only for fairness) and will start pushing themselves (without
-// wasting unnecessary time waiting in a queue). A similar situation arises with exclusive locks: an
-// exclusive lock at ts2 should not block a writer that is trying to write at ts1 < ts2 -- this
-// writer may want to push itself above ts2 immediately, and it that push fails it hasn't wasted
-// time waiting in a queue. Both of these behaviors are left to the
-// external event listeners. In the first case, the listener will note that a shared lock is held at
-// a timestamp higher than what it is trying to write to, and it can decide to immediately push
-// itself (while not losing its turn in the queue -- the next call to scanAndEnqueue for that
-// request may use a higher ts). In the second case, the listener can decide between pushing the
-// lock holder or pushing itself. So the lockTable queueing semantics become simple: lock conflicts
-// always cause queueing. One also needs to consider what happens when the lock holder or queued
-// request is pushed: a pushed queued request (read or write) will continue to conflict with the
-// lock holder; a pushed lock holder (exclusive lock) may no longer conflict with a waiting reader.
+// Waiting logic: The interface hides the queues that the request is waiting on, and the request's
+// position in the queue. One of the reasons for this hiding is that queues are not FIFO since a
+// request that did not wait on a queue for key k in a preceding call to scanAndEnqueue() (because
+// k was not locked and there was no queue) may need to wait on the queue in a later call to
+// scanAndEnqueue(). So sequencing of requests arriving at the lockTable is partially decided
+// by a sequence number assigned to a request when it first called scanAndEnqueue() and queues are
+// ordered by this sequence number.
+// However the sequencing is not fully described by the sequence numbers -- a request R1 encountering
+// contention over some keys in its span does not prevent a request R2 that has a
+// higher sequence number and overlapping span to proceed if R2 does not encounter contention.
+// If we did not desire such concurrency, the existing latches would be sufficient for sequencing
+// and could be held until the request was able to evaluate.
 //
-// The previous discussion made a distinction between readers/writers and exclusive/shared locks.
-// This is because a reader does not necessarily want to acquire a shared lock but still needs to
-// be sequenced here. The lockTable requires each request specify its txnID (if any), the spans
-// it is interested in, whether it is a reader or (prospective) writer of those spans, and the ts
-// for its reads or writes. All operations on the lockTable require that the corresponding span
-// latches are held. The expected usage is as follows.
+// The interface exposes an abstracted version of the waiting logic in a way that the request that
+// starts waiting is considered waiting for at most one other request or transaction. This is exposed
+// as a series of state transitions where the transitions are notified via newState() and the current
+// state can be read using currentState().
+// - The waitFor* states provide information on who the request is waiting for. The
+//   waitForDistinguished state is a sub-case -- a distinguished waiter is responsible for taking extra
+//   actions e.g. pushing the transaction it is waiting for. The implementation ensures that if
+//   there are multiple requests in waitFor state waiting on the same transaction at least one will
+//   be a distinguished waiter.
+// - The doneWaiting state is used to indicate that the request should make another call to
+//   scanAndEnqueue() (that next call is more likely to return a requestGuard that returns false from
+//   startWaiting()).
+// - The waitElsewhere state is a rare state that is used when the lockTable is under memory
+//   pressure and is clearing its internal queue state. Like the waitFor* states, it informs the
+//   request who it is waiting for so that deadlock detection works. However, sequencing information
+//   inside the lockTable is discarded and a later call to scanAndEnqueue() should use a nil
+//   requestGuard.
+type requestGuard interface {
+	startWaiting() bool
+	newState() <-chan struct{}
+	currentState() queueState
+}
+
+type stateType int
+
+const (
+	waitForDistinguished stateType = iota
+	waitFor
+	doneWaiting
+	waitElsewhere
+)
+
+type queueState struct {
+	stateType stateType
+
+	// Populated for waitFor* and waitElsewhere type, and represents who the request is waiting for.
+	txn    *enginepb.TxnMeta // nil for a non-transaction
+	ts     hlc.Timestamp
+	access spanset.SpanAccess // Currently only SpanReadWrite.
+}
+
+// Request evaluation usage (rough):
 //
-// Request evaluation:
-// var handle queueHandle  // accumulates all the queues this request is in.
+// g = nil
 // for {
-//   acquire all span latches for req.spans()
-//   // Discovers all locks and queues in req.spans() and queues itself where necessary.
-//   handle, err := lockTable.scanAndEnqueue(..., handle)
+//   acquire all latches for req.spans()
+//   // Discovers "all" locks and queues in req.spans() and queues itself where necessary.
+//   g, err := lockTable.scanAndEnqueue(..., g)
 //   releasedLatches := false
-//   for handle.shouldWait() {
+//   if g.startWaiting() {
 //     // Either there is a lock held by some other txn for which this request has queued, or
 //     // there isn't a lock but this request is not at the front of the queue so needs to wait
 //     // its turn.
 //     release all span latches
 //     releasedLatches = true
+//   }
+//   var timer *time.Timer
+//   retryScan = false
+//   for {
 //     select {
-//     case c <- handle.newEvents:
-//       events := dequeueQueuedEvents();
-//       // Act on dequeued events: deadlock detection, pushing other txns etc. Some of these
-//       // may cause other txns to release their locks or alter the ts of their locks, which
-//       // would make handle.shouldWait() false.
-//     }
+//     case c <- g.newState():
+//       state := g.currentState();
+//       // Act on state: deadlock detection, pushing other txns etc.
+//       if event.eventType == doneWaiting {
+//         break
+//       }
+//       if event.eventType == waitFor {
+//          if timer == nil {
+//            // create timer for placing oneself in txn wait queue
+//            timer = NewTimer(...)
+//          }
+//          continue
+//       }
+//       if event.eventType == waitForDistinguished {
+//          Do blocking push // when returns will likely be doneWaiting but not guaranteed.
+//          continue
+//       }
+//       if event.eventType == waitElsewhere {
+//         g = nil
+//         Do blocking call to put oneself in txn wait queue for txn mentioned in state
+//         break
+//       }
+//     case <- timer.C: // need to put oneself in txn wait queue
+//       timer = nil
+//       Do blocking call to put oneself in txn wait queue for txn mentioned in state
+//       // When return continue waiting on this handle.
+//       continue
+//     case deadline or cancellation:
+//       lockTable.done(g)
+//       return
 //   }
 //   if releasedLatches {
 //     // Have to reacquire latches and repeat in case some other request slipped ahead and
@@ -107,543 +140,881 @@ type Request interface {
 //     // on that key).
 //     continue
 //   }
-//   // "Evaluate" request.
-//   // This may call lockTable.acquireLock() if wants to lock something for later requests in this
-//   // transaction.
-//   // Given the current reality of intents intermingled in the MVCC key space the evaluation may
-//   // discover an intent from another txn and will call lockTable.addDiscoveredExclusiveLock(),
-//   // release the latches and continue. See more discussion about this below.
+//   // "Evaluate" request while holding latches
+//   ...
+//   if found an exclusive-replicated lock {
+//      lockTable.addDiscoveredExclusiveReplicatedLock(...)
+//      release latches
+//      continue
+//   }
+//   // May call lockTable.acquireExclusiveUnreplicatedLocks() if wants to lock something for
+//   // later requests in this transaction.
+//   // May call lockTable.exclusiveReplicatedLockAcquired() if placed a write intent and it
+//   // has been applied to the state machine.
+//
 //   if doneWithEvaluation {
 //     lockTable.done(handle)  // Does not release locks.
 //   }
 // }
 //
 // Transaction is done:
-// call lockTable.releaseLocks(...)
+//  call releaseExclusiveUnreplicatedLocks(), exclusiveReplicatedLocksReleased()
 //
 // Transaction is pushed and holds some locks:
-// call lockTable.changeLocksTs()
-//
-//
-// Current Reality: (a) only exclusive locks, (b) exclusive-replicated locks are
-// intermingled with data so their presence it sometimes hidden from the lockTable.
-//
-// Due to (a) we simplify the queueing for readers: all waiting readers are pooled together, and
-// this pool is not ordered with the other waiting writers. When the lock is released, all the readers
-// in the pool are notified that they have reached the "front" of the queue.
-// If a request (with some reads) is in the front of all of its queues it will immediately try to
-// acquire the span latches and call scanAndEnqueue() again -- if the locks (for the reads) are not
-// held it can proceed with evaluation (it will not acquire locks for those reads of course).
-// It is possible that when the lock was released there was a waiting writer that also
-// reached the "front" of the real queue. It will need to compete with these readers in grabbing the
-// span latches. If it does so before the readers, it can proceed to evaluation and acquire locks.
-// If it loses the race it has to wait for the readers to give up their span latches by which time
-// they may have updated the ts cache. So there is a race which can cause unfairness. We could make
-// this fair by ordering these pools of readers in the queue too, but that has 2 consequences:
-// - The event notifications that tell the writer who it is waiting on (for external actions like
-//   deadlock detection) need to list all the readers that the writer is waiting on. We will
-//   eventually need to do this when we have shared locks but skip it for simplicity.
-// - Not explicitly putting reads in the queue also means writers do not need to wait for them. For,
-//   example consider the case of request r1 that wants to read keys k1 and k2, and request r2 that
-//   wants to write k1. Say r1 arrived before r2, and both k1 and k2 are locked so r1 needs to wait.
-//   Then r2 arrives and is also waiting. When k1 is released, r1 being in the pool of waiting
-//   readers does not stop r2 from proceeding. In general, fairness comes at the cost of reduced
-//   concurrency.
-// Note that when we introduce shared locks we may want to start distinguishing between read accesses
-// that are SpanReadOnly and SpanReadWithSharedLock in that only the latter would participate in a
-// queue.
-//
-// (b) has one necessary consequence and other consequences of convenience. The necessary one is
-// that an exclusive-replicated lock held by a different transaction may be discovered during
-// evaluation. This is handled by calling addDiscoveredExclusiveLock() and getting back in the
-// queue. The convenience is not to deal with
-// any persistent state updates for such locks and related MVCC value cleanup in the lockTable
-// interface. During evaluation, after an intent is proposed by external code, it should call
-// lockTable.acquireLock() to inform the lockTable (it can release the latches after informing the
-// lockTable). During intent cleanup, after the persistent
-// state changes have applied, lockTable.releaseLocks() should be called to inform the lockTable.
-// This also implies that the current lockTable implementation does not need to track which
-// exclusive locks are replicated and which are unreplicated (the calling code knows the difference).
-// After the future change to segregate the replicated lock table we will be do the intent proposal
-// for exclusive-replicated locks as part of acquireLock() and do intent cleanup as part of
-// releaseLocks() -- both the acquire and release codes will make the non-persistent state updates
-// without waiting for replication to complete. The early release reduces the contention footprint.
-// And the early acquire allows the span latches to be released earlier which means txns can
-// discover earlier that they are doing something that requires pushing themselves or the current
-// lock holder.
-
-type eventType int
-const (
-	// Event types corresponding to each queue, where the queue is identified by queueEvent.key.
-	//
-	// A waiting requester in a queue is interested in who it is waiting for. It is either the current lock
-	// holder, or if the lock is not held, the requester at the head of the queue (since the requester
-	// at the head may be waiting on other queues, so cannot proceed yet). For each queue it is in,
-	// the first event identifies who it is initially waiting for and subsequent events identify
-	// changes. Finally, it is informed that it is at the front of the queue and the lock is not held.
-	// So the stream of events for a queue is: (frontUpdated)+, atFront.
-	//
-	// Events for a queue may be collapsed if not dequeued since only the latest one is interesting.
-	//
-	// It is possible after a repeat call to scanAndEnqueue() that a request that had reached the
-	// front of a queue is no longer at the front -- this currently can only happen for reads.
-	frontUpdated eventType = iota
-	atFront
-)
-
-type queueEvent struct {
-	key roachpb.Key
-	eventType eventType
-
-	// Populated for frontUpdated type.
-	txn *enginepb.TxnMeta  // nil for a non-transaction
-	ts hlc.Timestamp
-	access spanset.SpanAccess  // Currently only SpanReadWrite.
-}
-
-// queueHandle is used to poll whether the request shouldWait() (initially and every time some
-// events are dequeued). The newEvents() channel is a channel with buffer length of 1 that serves
-// as a signal. The implementation of queueHandle will update the list of events that are waiting
-// to be processed and then do a non-blocking write to the channel. The client of queueHandle
-// should select on this channel and when signalled, dequeue all the waiting events.
-type queueHandle interface {
-	shouldWait() bool
-	newEvents() <-chan struct{}
-	dequeueQueueEvents() []queueEvent
-}
-
-// The minimal information needed to adjust an existing lock (if the transaction has been pushed),
-// or release an existing lock. The txnID and access are just for error checking that the caller
-// is indeed the lock holder.
-type lock struct {
-	key roachpb.Key
-	txnID *uuid.UUID
-	access spanset.SpanAccess
-}
-
-// TODO: proper comments.
-// See usage comment earlier. scanAndEnqueue(), acquireLock() must be called while
-// holding the span latches. queueHandle methods are ok to call after releasing latches.
-// acquireLock() must be called after queueHandle.shouldWait() is false.
+//  call lockTable.changeLocksTs()
 type lockTable interface {
-	// Used to find locks and queues to add the request to. If the returned queueHandle.shouldWait()
-	// returns false, proceed to evaluation without releasing latches else release the latches and
-	// continue interacting with queueHandle until queueHandle.shouldWait() becomes false or the
-	// request is cancelled.
-	scanAndEnqueue(ctx context.Context, req Request, h queueHandle) (queueHandle, error)
+	// Used to find locks and queues to add the request to. If !requestGuard.startWaiting() on the
+	// returned requestGuard, proceed to evaluation without releasing latches. Else release the latches and
+	// continue interacting with requestGuard. When done waiting on requestGuard, latches need
+	// to be reacquired, the next call scanAndEnqueue() should reuse the requestGuard so that the
+	// lockTable can fairly order this request that has already waited in case it needs to be added
+	// to new queues.
+	scanAndEnqueue(req Request, guard requestGuard) (requestGuard, error)
+
 	// Request is done with all the queues it is in, whether it evaluated or not. This causes it
 	// to be removed from all the queues. Does not release any locks.
-	done(ctx context.Context, h queueHandle) error
+	done(guard requestGuard) error
+
+	// Lock "upgrade":
+	// - already hold an exclusive-unreplicated lock and then acquire an exclusive-replicated lock:
+	//   lock table may choose to remember the former since harmless -- we expect both release methods
+	//   below to be called.
+	// - hold an exclusive-replicated lock but lock table does not know about it. It lets the same
+	//   transaction acquire an exclusive-unreplicated lock -- this is also harmless.
+	//
+	// Locks can only be acquired/released for transactional requests.
+
+	// Exclusive-unreplicated locks.
+	//
 	// Must be called in evaluation phase before calling done().
-	// Must be holding latches. Acquiring a lock that is already held is a noop.
-	// Two cases this will be called:
-	// - SFU, for an exclusive-unreplicated lock.
-	// - Normal write path, for an exclusive-replicated lock: intent is proposed and this is added.
-	//
-	// access must be SpanReadWrite since don't yet support shared locks.
-	acquireLock(key roachpb.Key, access spanset.SpanAccess, req Request) error
-	// Changes the lock timestamps for a transaction that is pushed. This can permit some readers
-	// to proceed.
-	changeLocksTs(locks []lock, ts hlc.Timestamp) error
-	// Can be called during evaluation or after. If during evaluation do not try to reacquire
-	// the lock during the same evaluation.
-	// Two cases this will be called:
-	// - SFU and there was never an intent.
-	// - SFU and Normal write: there was an intent and it has been resolved.
-	//
-	// If releaseLocks will only be called when transaction is committing or aborting should one have
-	// a method that takes only the txnID (in case we don't know which locks it has acquired in the
-	// past)?
-	releaseLocks(locks []lock) error
+	// Must be holding latches. Acquiring a lock that is already held is a noop (including the case
+	// where the caller already holds an exclusive-replicated lock). This call is used for SFU.
+	acquireExclusiveUnreplicatedLocks(keys []roachpb.Key, guard requestGuard) error
 
+	// Can be called during request evaluation or after. If during evaluation do not try to reacquire
+	// the lock during the same evaluation (it makes the lockTable implementation more complicated).
+	// Note that spans can be wider than the actual keys on which locks were acquired, and it is ok
+	// if no locks are found.
+	releaseExclusiveUnreplicatedLocks(txnID *uuid.UUID, spans *spanset.SpanSet) error
+
+	// Exclusive-replicated locks. These will be cleaner in the future with the segregated lock table.
+	//
 	// An exclusive lock held by a different transaction was discovered when reading the MVCC keys.
-	// Add it here so that future lock attempts see it. This should only ever happen at a new
-	// leaseholder when an intent was applied during a previous lease.
-	// Note that the requester will get back in the queue for this lock after calling this. But it
-	// is possible that eventually the requester aborts and we are left holding state for a (long held)
-	// exclusive lock with no queue. In general, if we are concerned about the memory overhead of
-	// tracking exclusive locks that have no queued requests we can change the acquireLock interface
-	// to tell the lockTable about which locks are exclusive-replicated and tell it again when the
-	// corresponding intent has been applied -- at that point the lockTable could GC these locks
-	// since the persistent state will allow it to discover them again when there is contention.
-	addDiscoveredExclusiveLock(key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp) error
+	// Adds the lock and enqueues this requester.
+	addDiscoveredExclusiveReplicatedLock(
+		key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp, guard requestGuard) error
+
+	// Called after the intent has been committed to the replicated state machine by this request.
+	exclusiveReplicatedLockAcquired(key roachpb.Key, guard requestGuard) error
+
+	// This will be called after the intent removal has been applied to the replicated state machine.
+	exclusiveReplicatedLocksReleased(txnID *uuid.UUID, spans *spanset.SpanSet) error
+
+	// Changes the lock timestamps for a transaction that is pushed. This can permit some readers
+	// to proceed. The spans include both the ones for exclusive-replicated and unreplicated locks.
+	// For exclusive-replicated this is informational in that it can be used to change the state of
+	// queues (the source of truth in the state machine has already been updated), while for
+	// unreplicated locks the lockTable is responsible for the source of truth.
+	changeLocksTs(txnID *uuid.UUID, ts hlc.Timestamp, replicated bool, spans *spanset.SpanSet) error
 }
 
-// TODO: add synchronization. Add code comments.
+// Implementation
+// TODO(sbhola):
+// - synchronization
+// - fmt.Errorf strings
+// - implementation of persistence functions
+// - refactoring to reduce code duplication in behavior for replicated and unreplicated locks
+//   in lockTableImpl functions.
+// - define proto to store as the persistent lock value for the unreplicated locks. The code below
+//   uses txnMeta since we only have exclusive locks but we should make it future-proof. And the use
+//   of WriteTimestamp is probably wrong.
+// - Clarify whether queues need to be preserved when ranges split or merged (not if requests are
+//   specific to a particular replica and need to be reissued). Add a ClearPersistentState()
+//   function to lockTable when it is no longer the leaseholder for the replica.
 
-// When a requester is in a queue, the requester's queueHandleImpl maintains this state.
-type requesterQueueState struct {
-	// The access it desires.
-	access spanset.SpanAccess
-	// The element containing the queueHandleImpl in the lockState.writersQueue or lockState.readersList.
-	elem *list.Element // non-nil
-	// Is this requester still waiting for someone ahead of it in the queue. Always true for a
-	// reader since when it is no longer waiting it is removed from lockState.readersList. Is true
-	// for a writer until it reaches the front of the queue and the lock is not held (so it is
-	// the writer's turn).
-	waiting bool
-	// The index in queueHandleImpl.events for the latest event for this queue for this requester.
-	// -1 if no event is waiting
-	latestEventIndex int
+type lockTableImpl struct {
+	nextSeqNum uint64
+	// Containers for lockState structs
+	locks [spanset.NumSpanScope]btree.BTree
+	// To read/write persistent state of exclusive-unreplicated locks -- used to initialize lockState
+	// for such locks.
+	engine engine.Engine
+
+	// For constraining memory consumption.
+	numInMemLocks   int
+	numQueueEntries int
 }
 
-// Implementation of queueHandle.
-type queueHandleImpl struct {
-	// Information about this request.
-	txn *enginepb.TxnMeta
-	ts hlc.Timestamp
+var _ lockTable = &lockTableImpl{}
 
-	// State for each queue it is in
-	queueStates map[string]*requesterQueueState
-
-	// The events that have not been delivered yet.
-	events []queueEvent
-	signal chan struct{}
+// Persistence methods that use lockTableImpl.engine.
+// TODO: write TxnMeta, hlc.Timestamp, SpanAccess for the exclusive lock as the lock state.
+// Can one assume that TxnMeta.WriteTimestamp is the timestamp?
+func (t *lockTableImpl) getLockIterator(startKey roachpb.Key, endKey roachpb.Key) engine.SimpleIterator {
+	// TODO: transform startKey, endKey to lock table key space and call engine.NewIterator()
+	return nil
 }
-var _ queueHandle = &queueHandleImpl{}
-
-func (h *queueHandleImpl) shouldWait() bool {
-	for _, v := range h.queueStates {
-		if v.waiting {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *queueHandleImpl) newEvents() <-chan struct{} {
-	return h.signal
-}
-
-func (h *queueHandleImpl) dequeueQueueEvents() []queueEvent {
-	rv := append([]queueEvent(nil), h.events...)
-	h.events = h.events[:0]
-	for _, v := range h.queueStates {
-		v.latestEventIndex = -1
-	}
-	return rv
-}
-
-func (h *queueHandleImpl) addEvent(event queueEvent) error {
-	s := h.queueStates[string(event.key)]
-	if !s.waiting {
-		return fmt.Errorf("logic error")
-	}
-	if s.latestEventIndex == -1 {
-		s.latestEventIndex = len(h.events)
-		h.events = append(h.events, event)
-	} else {
-		h.events[s.latestEventIndex] = event
-	}
-	if event.eventType == atFront {
-		s.waiting = false
-	}
-	select {
-	case h.signal <- struct{}{}:
-	}
+func (t *lockTableImpl) tryGetLock(key roachpb.Key) *enginepb.TxnMeta {
+	// TODO: transform key to the lock table key space and ...
 	return nil
 }
 
-func (h *queueHandleImpl) addedToQueue(key roachpb.Key, access spanset.SpanAccess, elem *list.Element, initialEvent queueEvent) {
-	if h.queueStates == nil {
-		h.queueStates = make(map[string]*requesterQueueState)
-	}
-	if h.signal == nil {
-		h.signal = make(chan struct{}, 1)
-	}
-	s := &requesterQueueState{access: access, elem: elem, waiting: true, latestEventIndex: len(h.events)}
-	h.queueStates[string(key)] = s
-	h.events = append(h.events, initialEvent)
+func lockKeyToMVCC(key roachpb.Key) engine.MVCCKey {
+	// TODO
+	return engine.MVCCKey{}
+}
+
+func mvccKeyToLockKey(mvccKey engine.MVCCKey) roachpb.Key {
+	// TODO
+	return nil
 }
 
 // Per lock state in lockTableImpl.
 // Invariants:
-// - Lock is held: Both writersQueue and readersList may be non-empty. The holder is not in the queues.
-// - Lock is not held: readersList must be empty. The writersQueue must not be empty since unheld
-//   locks with no one queued will disappear from the lock table. The first entry
-//   in that queue is being given a chance to acquire the lock.
+// - Lock is held: replicatedHeld || unreplicatedHeld.
+// - Lock is reserved when reservedFor != nil: such a lock is not held.
+// - The txn holding the lock does not have a request in the queue.
+// - The request reserving the lock is not in the queue.
+// - A lockState that has an empty queue is removed from memory. We do not bother keeping track of
+//   a reserved lockState with no queue since it is similar to a key for which a request did not
+//   encounter any contention.
 type lockState struct {
 	key roachpb.Key
-	held bool
+	ss  spanset.SpanScope
+
+	// Both can be true.
+	replicatedHeld  bool
+	unreplictedHeld bool
+
 	// Holder info. SpanAccess is known to be SpanReadWrite.
 	txn *enginepb.TxnMeta
-	ts hlc.Timestamp
-	// Contain *queueHandleImpls. Whenever state changes here need to go through them and add events.
-	//
-	// Waiting writers. If !held, the first writer may be evaluating or waiting to reach the front
-	// of all the queues it is in.
-	writersQueue *list.List
-	// Waiting readers. Removed from here when notified that at the front.
-	readersList *list.List
+	ts  hlc.Timestamp
+
+	// If not held, can be reserved for a read-write request. A reservation prevents conflicting requests
+	// with higher seqNums from proceeding, but requests with smaller seqNums will either break the
+	// reservation (if a read-write request) or ignore it (if read-only request).
+	reservedFor *requestGuardImpl
+
+	// Contains *queuedGuard. When a lock transitions to !held, all the readers at the front of the
+	// queue are removed. If there is a writer after the readers it is given the reservation and also
+	// removed from the queue.
+	queue *list.List
 }
 
-type lockTableImpl struct {
-	// An ordered set of lockStates.
-	locks btree.BTree
+func (l *lockState) Less(i btree.Item) bool {
+	return l.key.Compare(i.(*lockState).key) < 0
 }
-var _ lockTable = &lockTableImpl{}
 
-func (t *lockTableImpl) scanAndEnqueue(ctx context.Context, req Request, h queueHandle) (queueHandle, error) {
-	handle := h.(*queueHandleImpl)
-	if handle == nil {
-		handle = &queueHandleImpl{txn: req.txnMeta(), ts: req.ts()}
+func (l *lockState) tryActiveWait(g *requestGuardImpl, sa spanset.SpanAccess) bool {
+	if (l.replicatedHeld || l.unreplictedHeld) && g.txn != nil && l.txn.ID == g.txn.ID {
+		return false
+	}
+	if l.reservedFor == g {
+		return false
+	}
+	var txn *enginepb.TxnMeta
+	var ts hlc.Timestamp
+	if l.replicatedHeld || l.unreplictedHeld {
+		txn = l.txn
+		ts = l.ts
 	} else {
-		// Only allowed to advance. So if waiting in queue will continue to conflict with lock holder.
-		handle.ts = req.ts()
-	}
-	var addedToQueues bool
-	for {
-		// TODO: iteration over btree in the range of the request.
-
-		// Discovered a lock.
-		var lockState *lockState  // the discovered lock
-		var access spanset.SpanAccess  // the desired access to this key
-		// Does it already hold the lock.
-		if lockState.held && lockState.txn != nil && req.txn() != nil && *req.txn() == lockState.txn.ID {
-			continue
+		if l.reservedFor.seqNum > g.seqNum {
+			if sa == spanset.SpanReadWrite {
+				// Break reservation.
+				qg := &queuedGuard{guard: l.reservedFor, sa: spanset.SpanReadWrite, active: false, distinguished: false}
+				l.queue.PushFront(qg)
+				l.reservedFor = g
+			}
+			// Else read-only. Don't need to wait on reservation -- either tryActiveWait() is happening
+			// while holding latches so the request with the reservation is not evaluating, or latches
+			// have been dropped in which case there will be another call to tryActiveWait() with latches
+			// held before evaluating this request.
+			return false
 		}
-		// Does not hold lock, so check if already in the queue.
-		if handle.queueStates != nil {
-			s := handle.queueStates[string(lockState.key)]
-			if s != nil {
-				// Nothing to do.
-				continue
+		txn = l.reservedFor.txn // may be nil
+		ts = l.reservedFor.ts
+	}
+	var qg *queuedGuard
+	if _, ok := g.locks[l]; ok {
+		// Already in queue.
+		for e := l.queue.Front(); e != nil; e = e.Next() {
+			if e.Value.(*queuedGuard).guard == g {
+				qg = e.Value.(*queuedGuard)
+				break
 			}
 		}
-		// Does not hold lock and not in the queue. Two cases:
-		// - Read: if lock is not held or compatible with holder, proceed, else add to readersList.
-		// - Write: add to writersList.
-		if access == spanset.SpanReadOnly && (!lockState.held || req.ts().Less(lockState.ts)) {
-			continue
+		if qg == nil || qg.active {
+			panic("")
 		}
-		addedToQueues = true
-		initialEvent := &queueEvent{key: lockState.key, eventType: frontUpdated, access: spanset.SpanReadWrite}
-		if lockState.held {
-			initialEvent.txn = lockState.txn
-			initialEvent.ts = lockState.ts
-		} else {
-			frontHandle := lockState.writersQueue.Front().Value.(queueHandleImpl)
-			initialEvent.txn = frontHandle.txn
-			initialEvent.ts = frontHandle.ts
+		qg.active = true
+	} else {
+		// Not in queue, so compute the position in the queue.
+		smallestTS := ts
+		var e *list.Element
+		for e = l.queue.Front(); e != nil; e = e.Next() {
+			qqg := e.Value.(*queuedGuard)
+			if qqg.guard == g {
+				panic("")
+			}
+			if qqg.guard.seqNum > g.seqNum {
+				break
+			}
+			if qqg.sa == spanset.SpanReadWrite && qqg.guard.ts.Less(smallestTS) {
+				smallestTS = qqg.guard.ts
+			}
 		}
-		if access == spanset.SpanReadOnly {
-			if lockState.readersList == nil {
-				lockState.readersList = list.New()
-			}
-			elem := lockState.readersList.PushBack(handle)
-			handle.addedToQueue(lockState.key, spanset.SpanReadOnly, elem, *initialEvent)
-		} else {
-			if lockState.writersQueue == nil {
-				lockState.writersQueue = list.New()
-			}
-			elem := lockState.writersQueue.PushBack(handle)
-			handle.addedToQueue(lockState.key, spanset.SpanReadWrite, elem, *initialEvent)
+		// If reading may not need to wait if everyone ahead in the queue is not contending.
+		if sa == spanset.SpanReadOnly && g.ts.Less(smallestTS) {
+			return false
+		}
+		qg = &queuedGuard{guard: g, sa: sa, active: false, distinguished: false}
+		l.queue.InsertBefore(qg, e)
+		g.locks[l] = struct{}{}
+	}
+	// Request is in queue and qg is its entry in the queue.
+	g.key = l.key
+	g.startWait = true
+	// Decide whether qg should be distinguished.
+	distinguished := true
+	for e := l.queue.Front(); e != nil; e = e.Next() {
+		qqg := e.Value.(*queuedGuard)
+		if qqg.active && qqg.distinguished {
+			distinguished = false
+			break
 		}
 	}
-	if addedToQueues {
-		select {
-		case handle.signal <- struct{}{}:
-		}
+	qg.distinguished = distinguished
+	stateType := waitFor
+	if distinguished {
+		stateType = waitForDistinguished
 	}
-	return handle, nil
+	qg.guard.state = queueState{
+		stateType: stateType,
+		txn:       txn,
+		ts:        ts,
+		access:    spanset.SpanReadWrite,
+	}
+	select {
+	case qg.guard.signal <- struct{}{}:
+	}
+	return true
 }
 
-func (t *lockTableImpl) done(ctx context.Context, h queueHandle) error {
-	handle := h.(*queueHandleImpl)
-	for k, v := range handle.queueStates {
-		// TODO: find lockState in btree using k
-		var lockState *lockState
-		if v.access == spanset.SpanReadOnly {
-			if !v.waiting {
-				return fmt.Errorf("readers in the list are always waiting")
-			}
-			if !lockState.held {
-				return fmt.Errorf("not held locks should not have any waiting readers")
-			}
-			lockState.readersList.Remove(v.elem)
-			continue
-		}
-		// Write
-		if !v.waiting {
-			// Must be in the front of the queue
-			if lockState.writersQueue.Front() != v.elem {
-				return fmt.Errorf("")
-			}
-			// Lock must not be held.
-			if lockState.held {
-				return fmt.Errorf("")
-			}
-			// Lock is not held. There must not be any waiting readers.
-			if lockState.readersList.Len() != 0 {
-				return fmt.Errorf("")
-			}
-			lockState.writersQueue.Remove(v.elem)
-			// There may be waiting writers.
-			if lockState.writersQueue.Len() > 0 {
-				// There is a new front of the queue.
-				frontHandle := lockState.writersQueue.Front().Value.(*queueHandleImpl)
-				v2 := frontHandle.queueStates[k]
-				// Tell this new front that it is no longer waiting.
-				v2.waiting = false
-				roachKey := roachpb.Key(k)
-				frontHandle.addEvent(queueEvent{key: roachKey, eventType: atFront})
-
-				waiters := lockState.writersQueue.Front().Next()
-				if waiters != nil {
-					// The front request may no longer be waiting if !frontHandle.shouldWait().
-					// Ideally we could delay informing those that
-					// are behind it since it may evaluate and deadlock detection etc. may not be needed.
-					// But this is tricky since this request that is no longer waiting will reacquire
-					// spanlatches and then call scanAndEnqueue() again which may cause it to wait. So we
-					// do the simple thing and inform others.
-					frontEvent := queueEvent{
-						key:       roachKey,
-						eventType: frontUpdated,
-						txn:       frontHandle.txn,
-						ts:        frontHandle.ts,
-						access:    spanset.SpanReadWrite,
-					}
-					for ; waiters != nil; waiters = waiters.Next() {
-						waiters.Value.(queueHandleImpl).addEvent(frontEvent)
-					}
-				}
-			}
-		} else {
-			// Must not be the front of the queue. Just remove it.
-			lockState.writersQueue.Remove(v.elem)
-		}
+func (l *lockState) acquireLock(replicated bool, g *requestGuardImpl) error {
+	// If already held, confirm that held by self.
+	if l.txn != nil && l.txn.ID != g.txn.ID {
+		return fmt.Errorf("")
 	}
+	// If not already held, must have reserved (otherwise lockState would not exist).
+	if !l.unreplictedHeld && !l.replicatedHeld && l.reservedFor != g {
+		return fmt.Errorf("")
+	}
+	if replicated {
+		l.replicatedHeld = true
+	} else {
+		l.unreplictedHeld = true
+	}
+	l.txn = g.txn
+	l.ts = g.ts
+	l.reservedFor = nil
+	delete(g.locks, l)
 	return nil
 }
 
-func (t *lockTableImpl) acquireLock(key roachpb.Key, access spanset.SpanAccess, req Request) error {
-	if access != spanset.SpanReadWrite {
-		return fmt.Errorf("only support exclusive locks")
+func discoveredLock(
+	key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp, g *requestGuardImpl, sa spanset.SpanAccess) *lockState {
+	l := &lockState{
+		key:             key,
+		replicatedHeld:  true,
+		unreplictedHeld: false,
+		txn:             txn,
+		ts:              ts,
+		queue:           list.New(),
 	}
-	return t.acquireExclusiveLockInternal(key, req.txnMeta(), req.ts())
+	qg := &queuedGuard{
+		guard:         g,
+		sa:            sa,
+		active:        false,
+		distinguished: false,
+	}
+	l.queue.PushBack(qg)
+	g.locks[l] = struct{}{}
+	return l
 }
 
-func (t *lockTableImpl) changeLocksTs(locks []lock, ts hlc.Timestamp) error {
-	for _, l := range locks {
-		if l.access != spanset.SpanReadWrite {
-			return fmt.Errorf("")
-		}
-		// TODO: find lockState in btree using l.key
-		var state *lockState
-		if !state.held {
-			return fmt.Errorf("")
-		}
-		if ts.Less(state.ts) {
-			return fmt.Errorf("cannot decrease lock ts")
-		}
-		state.ts = ts
-		eventFront := queueEvent{
-			key: state.key,
-			eventType: atFront,
-		}
-		eventFrontUpdated := queueEvent{
-			key:       state.key,
-			eventType: frontUpdated,
-			txn:       state.txn,
-			ts:        state.ts,
-			access:    spanset.SpanReadWrite,
-		}
-		// Scan through all waiting readers to see if any can stop waiting.
-		for l := state.readersList.Front(); l != nil; l = l.Next() {
-			h := l.Value.(*queueHandleImpl)
-			if ts.Less(h.ts) {
-				qState := h.queueStates[string(state.key)]
-				h.addEvent(eventFront)
-				state.readersList.Remove(qState.elem)
-				delete(h.queueStates, string(state.key))
+func (l *lockState) releaseLock(replicated bool, txnID *uuid.UUID) (gc bool, err error) {
+	if *txnID != l.txn.ID {
+		return false, fmt.Errorf("")
+	}
+	if replicated {
+		l.replicatedHeld = false
+	} else {
+		l.unreplictedHeld = false
+	}
+	if l.replicatedHeld || l.unreplictedHeld {
+		return false, nil
+	}
+	// Lock is released.
+	l.txn = nil
+	l.ts = hlc.Timestamp{}
+	gc = l.lockIsFree()
+	return gc, nil
+}
+
+func (l *lockState) changeLockTs(ts hlc.Timestamp) (gc bool, err error) {
+	if ts.Less(l.ts) {
+		return false, fmt.Errorf("")
+	}
+	l.ts = ts
+	smallestTS := l.ts
+	makeNewDistinguished := false
+	for e := l.queue.Front(); e != nil; {
+		qg := e.Value.(*queuedGuard)
+		curr := e
+		e = e.Next()
+		if qg.sa == spanset.SpanReadWrite {
+			if qg.guard.ts.Less(smallestTS) {
+				smallestTS = qg.guard.ts
+			}
+		} else {
+			if qg.guard.ts.Less(smallestTS) {
+				l.queue.Remove(curr)
+				if qg.distinguished {
+					makeNewDistinguished = true
+				}
+				delete(qg.guard.locks, l)
+				_, _ = qg.guard.table.findNextLockAfter(qg.guard)
 			} else {
-				h.addEvent(eventFrontUpdated)
-			}
-		}
-		for l := state.writersQueue.Front(); l != nil; l = l.Next() {
-			h := l.Value.(*queueHandleImpl)
-			h.addEvent(eventFrontUpdated)
-		}
-	}
-	return nil
-}
-
-func (t *lockTableImpl) releaseLocks(locks []lock) error {
-	for _, l := range locks {
-		if l.access != spanset.SpanReadWrite {
-			return fmt.Errorf("")
-		}
-		// TODO: find lockState in btree using l.key
-		var state *lockState
-		if !state.held {
-			return fmt.Errorf("")
-		}
-		// TODO: more error checking.
-
-		event := queueEvent{
-			key: state.key,
-			eventType: atFront,
-		}
-		// Scan through all waiting readers and tell them to stop waiting.
-		for l := state.readersList.Front(); l != nil; l = l.Next() {
-			h := l.Value.(*queueHandleImpl)
-			qState := h.queueStates[string(state.key)]
-			h.addEvent(event)
-			state.readersList.Remove(qState.elem)
-			delete(h.queueStates, string(state.key))
-		}
-		// If there is a waiting writer tell it to stop waiting.
-		l := state.writersQueue.Front()
-		if l != nil {
-			h := l.Value.(*queueHandleImpl)
-			h.addEvent(event)
-			waiters := l.Next()
-			if waiters != nil {
-				frontEvent := queueEvent{
-					key:       state.key,
-					eventType: frontUpdated,
-					txn:       h.txn,
-					ts:        h.ts,
-					access:    spanset.SpanReadWrite,
-				}
-				for ; waiters != nil; waiters = waiters.Next() {
-					waiters.Value.(queueHandleImpl).addEvent(frontEvent)
-				}
+				break
 			}
 		}
 	}
-	return nil
-}
-
-func (t *lockTableImpl) addDiscoveredExclusiveLock(key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp) error {
-	return t.acquireExclusiveLockInternal(key, txn, ts)
-}
-
-func (t *lockTableImpl) acquireExclusiveLockInternal(key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp) error {
-	// TODO: find lockState in btree using key.
-	var state *lockState
-	if state == nil {
-		state = &lockState{
-			key:          key,
-			held:         true,
-			txn:          txn,
-			ts:           ts,
+	for e := l.queue.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		if qg.active {
+			if makeNewDistinguished {
+				qg.distinguished = true
+				makeNewDistinguished = false
+			}
+			if qg.distinguished {
+				qg.guard.state.stateType = waitForDistinguished
+			}
+			qg.guard.state.ts = l.ts
+			select {
+			case qg.guard.signal <- struct{}{}:
+			}
 		}
-		// TODO: insert into btree
-		return nil
 	}
-	if state.held {
-		// Already held. Assume acquired by the same request or a previous request in the same txn.
-		// TODO: do better error checking.
-		return nil
+	return l.queue.Len() == 0, nil
+}
+
+func (l *lockState) requestDone(g *requestGuardImpl) (gc bool, err error) {
+	if l.reservedFor == g {
+		l.reservedFor = nil
+		if l.replicatedHeld || l.unreplictedHeld {
+			panic("")
+		}
+		gc := l.lockIsFree()
+		return gc, nil
 	}
-	state.held = true
-	// Must have been at the front of the queue. TODO: do some error checking of txn ids.
-	handle := state.writersQueue.Front().Value.(*queueHandleImpl)
-	state.txn = handle.txn
-	state.ts = handle.ts
-	// Remove from the front of the queue.
-	state.writersQueue.Remove(state.writersQueue.Front())
-	delete(handle.queueStates, string(state.key))
+	// TODO: may be able to unblock readers behind g that were waiting only because of g.
+	for e := l.queue.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		if qg.guard == g {
+			l.queue.Remove(e)
+			break
+		}
+	}
+	return l.queue.Len() == 0, nil
+}
+
+func (l *lockState) lockIsFree() bool {
+	smallestTS := hlc.MaxTimestamp
+	first := true
+	makeNewDistinguished := false
+	for e := l.queue.Front(); e != nil; {
+		qg := e.Value.(*queuedGuard)
+		curr := e
+		e = e.Next()
+		if qg.sa == spanset.SpanReadWrite {
+			if qg.guard.ts.Less(smallestTS) {
+				smallestTS = qg.guard.ts
+			}
+			if first {
+				l.reservedFor = qg.guard
+				l.queue.Remove(curr)
+				first = false
+				if qg.distinguished {
+					makeNewDistinguished = true
+				}
+				_, _ = qg.guard.table.findNextLockAfter(qg.guard)
+			}
+		} else {
+			if qg.guard.ts.Less(smallestTS) {
+				l.queue.Remove(curr)
+				if qg.distinguished {
+					makeNewDistinguished = true
+				}
+				delete(qg.guard.locks, l)
+				_, _ = qg.guard.table.findNextLockAfter(qg.guard)
+			} else {
+				break
+			}
+		}
+	}
+	for e := l.queue.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		if qg.active {
+			if makeNewDistinguished {
+				qg.distinguished = true
+				makeNewDistinguished = false
+			}
+			stateType := waitFor
+			if qg.distinguished {
+				stateType = waitForDistinguished
+			}
+			qg.guard.state = queueState{
+				stateType: stateType,
+				txn:       l.reservedFor.txn,
+				ts:        l.reservedFor.ts,
+				access:    spanset.SpanReadWrite,
+			}
+			select {
+			case qg.guard.signal <- struct{}{}:
+			}
+		}
+	}
+
+	return l.queue.Len() == 0
+}
+
+type queuedGuard struct {
+	guard         *requestGuardImpl
+	sa            spanset.SpanAccess
+	active        bool
+	distinguished bool
+}
+
+// Implementation of requestGuard.
+type requestGuardImpl struct {
+	seqNum uint64
+
+	// Information about this request.
+	txn   *enginepb.TxnMeta
+	ts    hlc.Timestamp
+	spans *spanset.SpanSet
+
+	table *lockTableImpl
+
+	startWait bool
+	// State for the queue where the request is actively waiting.
+	sa    spanset.SpanAccess
+	ss    spanset.SpanScope
+	index int
+
+	key    roachpb.Key
+	state  queueState
+	signal chan struct{}
+
+	// locks that are reserved or in the queue.
+	locks map[*lockState]struct{}
+}
+
+var _ requestGuard = &requestGuardImpl{}
+
+func (g *requestGuardImpl) startWaiting() bool {
+	return g.startWait
+}
+
+func (g *requestGuardImpl) newState() <-chan struct{} {
+	return g.signal
+}
+func (g *requestGuardImpl) currentState() queueState {
+	return g.state
+}
+
+func (t *lockTableImpl) scanAndEnqueue(req Request, guard requestGuard) (requestGuard, error) {
+	var g *requestGuardImpl
+	if guard == nil {
+		g = &requestGuardImpl{
+			seqNum: t.nextSeqNum,
+			txn:    req.txnMeta(),
+			ts:     req.ts(),
+			spans:  req.spans(),
+			table:  t,
+			index:  -1,
+			signal: make(chan struct{}),
+			locks:  make(map[*lockState]struct{}),
+		}
+	} else {
+		g = guard.(*requestGuardImpl)
+		g.index = -1
+		g.sa = spanset.SpanAccess(0)
+		g.ss = spanset.SpanScope(0)
+		g.startWait = false
+	}
+	found, err := t.findNextLockAfter(g)
+	if err != nil {
+		return g, err
+	}
+	g.startWait = found
+	return g, nil
+}
+
+func (t *lockTableImpl) done(guard requestGuard) error {
+	g := guard.(*requestGuardImpl)
+	var err error
+	for l, _ := range g.locks {
+		gc, err2 := l.requestDone(g)
+		err = firstError(err, err2)
+		if gc {
+			t.locks[l.ss].Delete(l)
+		}
+	}
+	return err
+}
+
+func (t *lockTableImpl) acquireExclusiveUnreplicatedLocks(lockKeys []roachpb.Key, guard requestGuard) error {
+	// TODO: fix error handling such that if return an error, no locks should have been acquired.
+	g := guard.(*requestGuardImpl)
+	b := t.engine.NewWriteOnlyBatch()
+	valBytes, err := protoutil.Marshal(g.txn)
+	if err != nil {
+		return err
+	}
+	for _, k := range lockKeys {
+		ss := spanset.SpanGlobal
+		if keys.IsLocal(k) {
+			ss = spanset.SpanLocal
+		}
+		i := t.locks[ss].Get(&lockState{key: k})
+		if i != nil {
+			l := i.(*lockState)
+			if err := l.acquireLock(false, g); err != nil {
+				return err
+			}
+		}
+		if err := b.Put(lockKeyToMVCC(k), valBytes); err != nil {
+			return err
+		}
+	}
+	return b.Commit(false)
+}
+
+func (t *lockTableImpl) releaseExclusiveUnreplicatedLocks(
+	txnID *uuid.UUID, spans *spanset.SpanSet) error {
+	// TODO: change ordering so that persistent state changes happen before in-memory changes.
+	var err error
+	var batch engine.Batch
+	for ss := spanset.SpanScope(0); ss < spanset.NumSpanScope; ss++ {
+		spans := spans.GetSpans(spanset.SpanReadWrite, ss)
+		locks := t.locks[ss]
+		releaseFunc := func(i btree.Item) bool {
+			l := i.(*lockState)
+			if !l.unreplictedHeld {
+				err = firstError(err, fmt.Errorf(""))
+				return true
+			}
+			if l.txn == nil || *txnID != l.txn.ID {
+				return true
+			}
+			gc, err2 := l.releaseLock(false, txnID)
+			if err2 != nil {
+				err = firstError(err, err2)
+			}
+			if gc {
+				t.locks[ss].Delete(l)
+			}
+			return true
+		}
+		for _, s := range spans {
+			if len(s.EndKey) > 0 {
+				locks.AscendRange(&lockState{key: s.Key}, &lockState{key: s.EndKey}, releaseFunc)
+				iter := t.getLockIterator(s.Key, s.EndKey)
+				for {
+					if ok, err2 := iter.Valid(); err2 != nil {
+						err = firstError(err, err2)
+						break
+					} else if !ok {
+						break
+					}
+					var txn *enginepb.TxnMeta
+					if err2 := protoutil.Unmarshal(iter.UnsafeValue(), txn); err2 != nil {
+						err = firstError(err, err2)
+						continue
+					}
+					if txn.ID == *txnID {
+						if batch == nil {
+							batch = t.engine.NewWriteOnlyBatch()
+						}
+						batch.Clear(iter.UnsafeKey())
+					}
+					iter.Next()
+				}
+			} else {
+				if i := locks.Get(&lockState{key: s.Key}); i != nil {
+					releaseFunc(i)
+				}
+				if txn := t.tryGetLock(s.Key); txn != nil && txn.ID == *txnID {
+					if batch == nil {
+						batch = t.engine.NewWriteOnlyBatch()
+					}
+					batch.Clear(lockKeyToMVCC(s.Key))
+				}
+			}
+		}
+	}
+	if batch != nil {
+		if err2 := batch.Commit(false); err2 != nil {
+			err = firstError(err, err2)
+		}
+	}
+	return err
+}
+
+func (t *lockTableImpl) addDiscoveredExclusiveReplicatedLock(
+	key roachpb.Key, txn *enginepb.TxnMeta, ts hlc.Timestamp, guard requestGuard) error {
+	g := guard.(*requestGuardImpl)
+	ss := spanset.SpanGlobal
+	if keys.IsLocal(key) {
+		ss = spanset.SpanLocal // TODO: can replicated locks be acquired on local keys?
+	}
+	if i := t.locks[ss].Get(&lockState{key: key}); i != nil {
+		return fmt.Errorf("")
+	}
+	l := discoveredLock(key, txn, ts, g, spanset.SpanReadWrite)
+	t.locks[ss].ReplaceOrInsert(l)
 	return nil
+}
+
+func (t *lockTableImpl) exclusiveReplicatedLockAcquired(key roachpb.Key, guard requestGuard) error {
+	g := guard.(*requestGuardImpl)
+	ss := spanset.SpanGlobal
+	if keys.IsLocal(key) {
+		ss = spanset.SpanLocal // TODO: can replicated locks be acquired on local keys?
+	}
+	i := t.locks[ss].Get(&lockState{key: key})
+	if i == nil {
+		return nil
+	}
+	l := i.(*lockState)
+	if err := l.acquireLock(true, g); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *lockTableImpl) exclusiveReplicatedLocksReleased(
+	txnID *uuid.UUID, spans *spanset.SpanSet) error {
+	var err error
+	for ss := spanset.SpanScope(0); ss < spanset.NumSpanScope; ss++ {
+		spans := spans.GetSpans(spanset.SpanReadWrite, ss)
+		locks := t.locks[ss]
+		releasedFunc := func(i btree.Item) bool {
+			l := i.(*lockState)
+			if !l.replicatedHeld {
+				err = firstError(err, fmt.Errorf(""))
+				return true
+			}
+			if l.txn == nil || *txnID != l.txn.ID {
+				return true
+			}
+			gc, err2 := l.releaseLock(true, txnID)
+			if err2 != nil {
+				err = firstError(err, err2)
+			}
+			if gc {
+				t.locks[ss].Delete(l)
+			}
+			return true
+		}
+		for _, s := range spans {
+			if len(s.EndKey) > 0 {
+				locks.AscendRange(&lockState{key: s.Key}, &lockState{key: s.EndKey}, releasedFunc)
+			} else {
+				if i := locks.Get(&lockState{key: s.Key}); i != nil {
+					releasedFunc(i)
+				}
+			}
+		}
+	}
+	return err
+}
+
+func (t *lockTableImpl) changeLocksTs(
+	txnID *uuid.UUID, ts hlc.Timestamp, replicated bool, spans *spanset.SpanSet) error {
+	var err error
+	var batch engine.Batch
+	if !replicated {
+		batch = t.engine.NewWriteOnlyBatch()
+	}
+	// TODO: change ordering such that persistent state changes happen before in-memory changes.
+	for ss := spanset.SpanScope(0); ss < spanset.NumSpanScope; ss++ {
+		spans := spans.GetSpans(spanset.SpanReadWrite, ss)
+		locks := t.locks[ss]
+		changeFunc := func(i btree.Item) bool {
+			l := i.(*lockState)
+			if (replicated && !l.replicatedHeld) || (!replicated && !l.unreplictedHeld) {
+				err = firstError(err, fmt.Errorf(""))
+				return true
+			}
+			if l.txn == nil || l.txn.ID != *txnID {
+				return true
+			}
+			gc, err2 := l.changeLockTs(ts)
+			if err2 != nil {
+				err = firstError(err, err2)
+			}
+			if gc {
+				t.locks[ss].Delete(l)
+			}
+			return true
+		}
+		for _, s := range spans {
+			if len(s.EndKey) > 0 {
+				locks.AscendRange(&lockState{key: s.Key}, &lockState{key: s.EndKey}, changeFunc)
+				if replicated {
+					continue
+				}
+				iter := t.getLockIterator(s.Key, s.EndKey)
+				for {
+					if ok, err2 := iter.Valid(); err2 != nil {
+						err = firstError(err, err2)
+						break
+					} else if !ok {
+						break
+					}
+					var txn *enginepb.TxnMeta
+					if err2 := protoutil.Unmarshal(iter.UnsafeValue(), txn); err2 != nil {
+						err = firstError(err, err2)
+						continue
+					}
+					if txn.ID == *txnID {
+						txn.WriteTimestamp = ts
+						bytes, err2 := protoutil.Marshal(txn)
+						if err2 != nil {
+							err = firstError(err, err2)
+						} else {
+							batch.Put(iter.UnsafeKey(), bytes)
+						}
+					}
+					iter.Next()
+				}
+			} else {
+				if i := locks.Get(&lockState{key: s.Key}); i != nil {
+					changeFunc(i)
+				}
+				if replicated {
+					continue
+				}
+				if txn := t.tryGetLock(s.Key); txn != nil && txn.ID == *txnID {
+					txn.WriteTimestamp = ts
+					bytes, err2 := protoutil.Marshal(txn)
+					if err2 != nil {
+						err = firstError(err, err2)
+					} else {
+						batch.Put(lockKeyToMVCC(s.Key), bytes)
+					}
+				}
+			}
+		}
+	}
+	if batch != nil {
+		if err2 := batch.Commit(false); err2 != nil {
+			err = firstError(err, err2)
+		}
+	}
+	return err
+}
+
+func stepToNextSpan(g *requestGuardImpl) *spanset.Span {
+	spans := g.spans.GetSpans(g.sa, g.ss)
+	g.index++
+	for g.index == len(spans) {
+		// Step to next in (sa, ss).
+		g.ss++
+		if g.ss == spanset.NumSpanScope {
+			g.ss = spanset.SpanScope(0)
+			g.sa++
+		}
+		if g.sa == spanset.NumSpanAccess {
+			return nil
+		}
+		spans = g.spans.GetSpans(g.sa, g.ss)
+		g.index = 0
+	}
+	span := &g.spans.GetSpans(g.sa, g.ss)[g.index]
+	g.key = span.Key
+	return span
+}
+
+func (t *lockTableImpl) findNextLockAfter(g *requestGuardImpl) (found bool, err error) {
+	spans := g.spans.GetSpans(g.sa, g.ss)
+	var span *spanset.Span
+	if g.index == -1 || len(spans[g.index].EndKey) == 0 {
+		span = stepToNextSpan(g)
+	} else {
+		span = &spans[g.index]
+	}
+	for span != nil {
+		if len(span.EndKey) == 0 {
+			if i := t.locks[g.ss].Get(&lockState{key: span.Key}); i != nil {
+				l := i.(*lockState)
+				if l.tryActiveWait(g, g.sa) {
+					return true, nil
+				}
+			} else if txn := t.tryGetLock(span.Key); txn != nil && (g.txn == nil || txn.ID != g.txn.ID) {
+				l := &lockState{key: span.Key, unreplictedHeld: true, txn: txn, ts: txn.WriteTimestamp, queue: list.New()}
+				if l.tryActiveWait(g, g.sa) {
+					t.locks[g.ss].ReplaceOrInsert(l)
+					return true, nil
+				}
+			}
+		} else {
+			iter := t.getLockIterator(g.key, span.EndKey)
+			firstKey := g.key
+			for {
+				if ok, err := iter.Valid(); err != nil {
+					return false, err
+				} else if !ok {
+					break
+				}
+				var txn *enginepb.TxnMeta
+				if err := protoutil.Unmarshal(iter.UnsafeValue(), txn); err != nil {
+					return false, err
+				}
+				if g.txn == nil || txn.ID != g.txn.ID {
+					// Candidate to wait. But there may be an earlier replicated lock.
+					lastKey := mvccKeyToLockKey(iter.UnsafeKey())
+					found := false
+					t.locks[g.ss].AscendRange(&lockState{key: firstKey}, &lockState{key: lastKey}, func(i btree.Item) bool {
+						l := i.(*lockState)
+						if l.tryActiveWait(g, g.sa) {
+							found = true
+							return false
+						}
+						return true
+					})
+					if found {
+						return true, nil
+					}
+					firstKey = lastKey
+					l := &lockState{key: lastKey, unreplictedHeld: true, txn: txn, ts: txn.WriteTimestamp, queue: list.New()}
+					if l.tryActiveWait(g, g.sa) {
+						return true, nil
+					}
+				}
+				iter.Next()
+			}
+		}
+		span = stepToNextSpan(g)
+	}
+	return false, nil
+}
+
+func firstError(err0, err1 error) error {
+	if err0 != nil {
+		return err0
+	}
+	return err1
 }
