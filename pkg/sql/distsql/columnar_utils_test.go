@@ -87,11 +87,13 @@ func verifyColOperator(
 		columnarizers[i] = c
 	}
 
-	result, err := colexec.NewColOperator(
-		ctx, flowCtx, pspec, columnarizers, &acc,
-		true, /* useStreamingMemAccountForBuffering */
-		nil,  /* processorConstructor */
-	)
+	args := colexec.NewColOperatorArgs{
+		Spec:                               pspec,
+		Inputs:                             columnarizers,
+		StreamingMemAccount:                &acc,
+		UseStreamingMemAccountForBuffering: true,
+	}
+	result, err := colexec.NewColOperator(ctx, flowCtx, args)
 	if err != nil {
 		return err
 	}

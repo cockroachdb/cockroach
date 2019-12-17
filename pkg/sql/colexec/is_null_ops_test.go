@@ -99,11 +99,13 @@ func TestIsNullProjOp(t *testing.T) {
 						},
 					},
 				}
-				result, err := NewColOperator(
-					ctx, flowCtx, spec, input, testMemAcc,
-					true, /* useStreamingMemAccountForBuffering */
-					nil,  /* processorConstructor */
-				)
+				args := NewColOperatorArgs{
+					Spec:                               spec,
+					Inputs:                             input,
+					StreamingMemAccount:                testMemAcc,
+					UseStreamingMemAccountForBuffering: true,
+				}
+				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
 				}
@@ -187,11 +189,13 @@ func TestIsNullSelOp(t *testing.T) {
 						Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", selExpr)},
 					},
 				}
-				result, err := NewColOperator(
-					ctx, flowCtx, spec, input, testMemAcc,
-					true, /* useStreamingMemAccountForBuffering */
-					nil,  /* processorConstructor */
-				)
+				args := NewColOperatorArgs{
+					Spec:                               spec,
+					Inputs:                             input,
+					StreamingMemAccount:                testMemAcc,
+					UseStreamingMemAccountForBuffering: true,
+				}
+				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
 				}

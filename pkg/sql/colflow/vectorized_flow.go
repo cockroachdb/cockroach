@@ -708,11 +708,13 @@ func (s *vectorizedFlowCreator) setupFlow(
 			inputs = append(inputs, input)
 		}
 
-		result, err := colexec.NewColOperator(
-			ctx, flowCtx, pspec, inputs, s.newStreamingMemAccount(flowCtx),
-			false, /* useStreamingMemAccountForBuffering */
-			rowexec.NewProcessor,
-		)
+		args := colexec.NewColOperatorArgs{
+			Spec:                 pspec,
+			Inputs:               inputs,
+			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
+			ProcessorConstructor: rowexec.NewProcessor,
+		}
+		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
 		// monitor and account have been created, so we always want to accumulate
 		// them for a proper cleanup.
