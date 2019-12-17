@@ -25,7 +25,7 @@ import {
   saveUIData, loadUIData, isInFlight, UIDataState, UIDataStatus,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
-import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
+import { singleVersionSelector, versionsSelector } from "src/redux/nodes";
 import { AdminUIState } from "./state";
 import * as docsURL from "src/util/docs";
 
@@ -106,23 +106,6 @@ export function setInstructionsBoxCollapsed(collapsed: boolean) {
 ////////////////////////////////////////
 export const staggeredVersionDismissedSetting = new LocalSetting(
   "staggered_version_dismissed", localSettingsSelector, false,
-);
-
-export const versionsSelector = createSelector(
-  nodeStatusesSelector,
-  livenessByNodeIDSelector,
-  (nodeStatuses, livenessStatusByNodeID) =>
-    _.chain(nodeStatuses)
-      // Ignore nodes for which we don't have any build info.
-      .filter((status) => !!status.build_info )
-      // Exclude this node if it's known to be decommissioning.
-      .filter((status) => !status.desc ||
-                          !livenessStatusByNodeID[status.desc.node_id] ||
-                          !livenessStatusByNodeID[status.desc.node_id].decommissioning)
-      // Collect the surviving nodes' build tags.
-      .map((status) => status.build_info.tag)
-      .uniq()
-      .value(),
 );
 
 /**
@@ -280,18 +263,6 @@ export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
-  },
-);
-
-// Select the current build version of the cluster, returning undefined if the
-// cluster's version is currently staggered.
-const singleVersionSelector = createSelector(
-  versionsSelector,
-  (builds) => {
-    if (!builds || builds.length !== 1) {
-      return undefined;
-    }
-    return builds[0];
   },
 );
 

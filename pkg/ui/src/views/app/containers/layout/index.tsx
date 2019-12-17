@@ -17,7 +17,7 @@ import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
-import { clusterIdSelector, clusterInfoSelector } from "src/redux/nodes";
+import { clusterIdSelector, clusterNameSelector, singleVersionSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
 import {
@@ -89,10 +89,9 @@ class Layout extends React.Component<LayoutProps & RouterState, {}> {
 }
 
 const mapStateToProps = (state: AdminUIState) => {
-  const { clusterName, clusterVersion } = clusterInfoSelector(state);
   return {
-    clusterName,
-    clusterVersion,
+    clusterName: clusterNameSelector(state),
+    clusterVersion: singleVersionSelector(state),
     clusterId: clusterIdSelector(state),
   };
 };
