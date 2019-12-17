@@ -36,7 +36,7 @@ var ErrExists = errors.New("protected timestamp record already exists")
 // It exists to abstract interaction with subsystem.
 type Provider interface {
 	Storage
-	Tracker
+	Cache
 	Verifier
 
 	Start(context.Context, *stop.Stopper) error
@@ -97,18 +97,28 @@ type Storage interface {
 	GetState(context.Context, *client.Txn) (ptpb.State, error)
 }
 
-// Tracker is used in the storage package to determine a safe timestamp for
+// Iterator iterates records in a cache until wantMore is false or all Records
+// in the requested range have been seen.
+type Iterator func(*ptpb.Record) (wantMore bool)
+
+// Cache is used in the storage package to determine a safe timestamp for
 // garbage collection of expired data. A storage.Replica can remove data when
-// it has a proof from the Tracker that there was no Record providing
+// it has a proof from the Cache that there was no Record providing
 // protection. For example, a Replica which determines that it is not protected
 // by any Records at a given asOf can move its GC threshold up to that
 // timestamp less its GC TTL.
-type Tracker interface {
+type Cache interface {
 
-	// ProtectedBy calls the passed function for each record which overlaps the
-	// provided Span. The return value is the MVCC timestamp at which this set of
-	// records is known to be valid.
-	ProtectedBy(context.Context, roachpb.Span, func(*ptpb.Record)) (asOf hlc.Timestamp)
+	// Iterate examines the records with spans which overlap with [from, to).
+	// Nil values for from or to are equivalent to Key{}.
+	Iterate(_ context.Context, from, to roachpb.Key, it Iterator) (asOf hlc.Timestamp)
+
+	// QueryRecord determines whether a Record with the provided ID exists in
+	// the Cache state and returns the timestamp corresponding to that state.
+	QueryRecord(_ context.Context, id uuid.UUID) (exists bool, asOf hlc.Timestamp)
+
+	// Refresh forces the cache to update to at least asOf.
+	Refresh(_ context.Context, asOf hlc.Timestamp) error
 }
 
 // Verifier provides a mechanism to verify that a created Record will certainly
@@ -121,17 +131,27 @@ type Verifier interface {
 	Verify(context.Context, uuid.UUID) error
 }
 
-// ClockTracker returns a tracker which always returns the current time and no
-// records. This is often useful in testing where you want a tracker which
-// protects nothing and is always up-to-date.
-func ClockTracker(c *hlc.Clock) Tracker {
-	return (*clockTracker)(c)
+// EmptyCache returns a Cache which always returns the current time and no
+// records. This is often useful in testing where you want a cache which
+// holds nothing and is always up-to-date.
+func EmptyCache(c *hlc.Clock) Cache {
+	return (*emptyCache)(c)
 }
 
-type clockTracker hlc.Clock
+type emptyCache hlc.Clock
 
-func (t *clockTracker) ProtectedBy(
-	context.Context, roachpb.Span, func(*ptpb.Record),
+func (c *emptyCache) Iterate(
+	_ context.Context, from, to roachpb.Key, it Iterator,
 ) (asOf hlc.Timestamp) {
-	return (*hlc.Clock)(t).Now()
+	return (*hlc.Clock)(c).Now()
+}
+
+func (c *emptyCache) QueryRecord(
+	_ context.Context, id uuid.UUID,
+) (exists bool, asOf hlc.Timestamp) {
+	return false, (*hlc.Clock)(c).Now()
+}
+
+func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
+	return nil
 }
