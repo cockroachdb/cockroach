@@ -1,8 +1,8 @@
 - Feature Name: GC Protected Timestamps
-- Status: draft
+- Status: in progress
 - Start Date: 2019-10-09
 - Authors: Andrew Werner
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: #41806
 - Cockroach Issue: (one or more # from the issue tracker)
 
 # Summary
@@ -168,8 +168,7 @@ GC TTLs are defined in
 [Zone Configurations](https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html).
 Leaseholders decide whether to run GC based based on a heuristic which estimates
 how much garbage would be collected if GC were to run (see 
-[this
-comment](https://github.com/cockroachdb/cockroach/blob/cc439f0a319031d4dc70de35243f376aed6f3d9f/pkg/storage/gc_queue.go#L188-L264)).
+[this comment](https://github.com/cockroachdb/cockroach/blob/cc439f0a319031d4dc70de35243f376aed6f3d9f/pkg/storage/gc_queue.go#L188-L264)).
 set the GC Threshold
 to the node's current reading of its clock less the GC TTL. Adapting this
 heuristic to protected timestamps is an open issue in this RFC. The naive
@@ -306,8 +305,6 @@ When running GC the replica will have the following information:
       run GC. We could alternatively assume that the longer GC TTL will be used.
   * The current time (`hlc.Clock.Now()`).
   * The current lease.
-  * A minimum protectedts state timestamp the leaseholder has promised a
-    verifying client.
   
 There's a large amount of complexity which arises when we think about
 modifying the GC heuristics to be compatible with the idea of a protected
@@ -335,7 +332,6 @@ upheld on the leaseholder replica in order to run GC at all.
     * The current GC Threshold is before `tp`
     * The leaseholder will not attempt to change the GC Threshold until its 
        view of the protected timestamp state is at least at `tw`.
-
 
 If these conditions are met then is safe to set the GC Threshold to the time at
 which the protected timestamp state was last read less the GC TTL. There's an
@@ -374,19 +370,18 @@ with the spans in questions and either determine that the data has been GC'd or
 ensure that GC will not run until the relevant protection record has been
 read.
 
-In order to implement this functionality we augment the volatile state on the
-leaseholder to include a set of timestamps and records which that leaseholder
-has promised to wait for before it will run GC. In each verification request we
-send both the ID we are verifying and a timestamp at which we know the record
-with that ID to be alive. We'll call these records promises. The leaseholder is
-free to remove promises from its volatile state if it encounters the record with
-the ID which was verified or if it reads the protected timestamp state after the
-timestamp at which the record was known to be alive. If the timestamp at which
-the record was known to be alive has passed and the record is not found, then
-the leaseholder knows that the record must have been removed in the meantime. A
-leaseholder may not run GC if it has any promises.
+In order to implement this functionality we must ensure that every leaseholder
+for every range covered by the request has refreshed its cache state to be
+up-to-date enough to see the record being verified. When a verification request
+comes in to a Replica, that replica will invoke `Cache.Refresh` with the hlc
+timestamp at which the record is known to be alive as well as the ID of the
+record being validated. If the `Record` with the corresponding ID exists in the
+cached state then the request can return without an error. If the record does
+not exist then the cache will be refreshed to at least the specified timestamp.
+At this point if the record does not exist then we know that it has been
+deleted and thus verification will fail.
 
-Just modifying the in-memory state of the leaseholder is made safe by the added
+Just verifying the cache state of the leaseholder is made safe by the added
 condition that GC can only be run if the start time of the lease is before the
 last read from the protected timestamp state. In this way we ensure that if the
 lease were to move to a new node that the protected timestamp state would be
@@ -566,7 +561,7 @@ type Storage interface {
   MarkVerified(context.Context, *client.Txn, uuid.UUID) error
 
   // Get retrieves the record at with the specified UUID as well as the MVCC
-  // timestamp at which it was written.	If no corresponding record exists
+  // timestamp at which it was written. If no corresponding record exists
   // ErrNotFound is returned.
   //
   // Get exists to work in coordination with AdminEnsureProtectedRequests 
@@ -593,20 +588,32 @@ type Storage interface {
 ```
 
 The `storage` package will interact with the `protectedts` subsystem through the
-following `Tracker` interface. The tracker is implemented on top of `Storage`
+following `Cache` interface. The cache is implemented on top of `Storage`
 and additionally encapsulated polling logic.
 
 ```go
-// Tracker will be used in the storage package to determine a safe
-// timestamp for garbage collection.
-type Tracker interface {
+// Iterator iterates records in a cache until wantMore is false or all Records
+// in the requested range have been seen.
+type Iterator func(*ptpb.Record) (wantMore bool)
 
-  // ProtectedBy calls the passed function for each record which overlaps the
-  // pass Span. The return value is the MVCC timestamp at which this set of
-  // records is known to be valid.
-  ProtectedBy(
-    context.Context, roachpb.Span, func(*ptpb.Record),
-  ) (asOf hlc.Timestamp)
+// Cache is used in the storage package to determine a safe timestamp for
+// garbage collection of expired data. A storage.Replica can remove data when
+// it has a proof from the Cache that there was no Record providing
+// protection. For example, a Replica which determines that it is not protected
+// by any Records at a given asOf can move its GC threshold up to that
+// timestamp less its GC TTL.
+type Cache interface {
+
+    // Iterate examines the records between which cover any spans which overlap
+    // with [from, to).
+    Iterate(_ context.Context, from, to roachpb.Key, it Iterator) (asOf hlc.Timestamp)
+    
+    // QueryRecord determines whether a Record with the provided ID exists in
+    // the Cache state and returns the timestamp corresponding to that state.
+    QueryRecord(_ context.Context, id uuid.UUID) (exists bool, asOf hlc.Timestamp)
+
+    // Refresh forces the cache to update to at least asOf.
+    Refresh(_ context.Context, asOf hlc.Timestamp) error
 }
 ```
 
@@ -639,7 +646,7 @@ storage/protectedts           - Exports symbols for consumption by clients.
 storage/protectedts/ptpb      - Protocol buffer definitions used in interfaces.
 storage/protectedts/ptstorage - Implements protectedts.Storage on top of an 
                                 InternalExecutor.
-storage/protectedts/pttracker - Implements protectedts.Tracker on top of
+storage/protectedts/ptcache   - Implements protectedts.Cache on top of
                                 protectedts.Storage and Gossip.
 storage/protectedts/ptverify  - Provides business logic to verify the application
                                 state of a record.
@@ -692,14 +699,14 @@ was deemed unnecessarily complicated. The downside is that the spans will be
 stored as encoded protocol buffers and thus we'll need a `crdb_internal` system
 table to decode them.
 
-### Implementation of `Tracker`
+### Implementation of `Cache`
 
-The tracker which is utilized by the `storage` package wraps a provider and
+The cache which is utilized by the `storage` package wraps a provider and
 will periodically poll the state from the catalog based on a cluster setting.
 The polling mechanism will initialize on node startup by reading the entire
 state and observing the timestamp at which it read the data. Later attempts will
 begin by just retrieving the metadata and only retrieving the full state when
-the version changes. Internally the tracker can use a data structure like an
+the version changes. Internally the cache can use a data structure like an
 interval tree to make answering queries cheap.
 
 In order to reduce the contention on the meta key, instead of having every node
@@ -712,10 +719,10 @@ version remains, the other nodes will just update their timestamp.
 
 The conditions to achieve safety were outlined in the above guide-level
 description. The `storage.Store` will be augmented to hold a handle to a 
-`protectedts.Tracker`. In the GC queue that tracker will be consulted to
+`protectedts.Cache`. In the GC queue that cache will be consulted to
 determine whether the `Replica` in question is covered by a protected timestamp.
-Additionally the lease as well as protected promise state will be consulted to
-ensure the requirements to run GC are met.
+Additionally the lease will be consulted to ensure the requirements to run GC
+are met.
 
 The GC queue will now use the timestamp at which it last read the `protectedts`
 state as "now" to provide the invariant that data which was protected prior to
