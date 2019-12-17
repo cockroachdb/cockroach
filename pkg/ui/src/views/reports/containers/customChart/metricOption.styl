@@ -8,13 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require "~styl/base/palette.styl"
+
+$dropdown-max-width = 500px
+
 .metric-option
-  max-width 500px
+  max-width $dropdown-max-width
 
 .metric-option__label
-  color #394455
+  color $text-color
 
 .metric-option__description
-  color #7e89a9
+  color $secondary-text-color
   font-size 12px
   text-overflow ellipsis
