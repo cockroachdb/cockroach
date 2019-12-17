@@ -346,10 +346,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// Make a new index that is suitable to be a primary index.
-			baseName, name := "new_primary_key", "new_primary_key"
-			for try := 1; nameExists(name); try++ {
-				name = fmt.Sprintf("%s_%d", baseName, try)
-			}
+			name := generateUniqueConstraintName(
+				"new_primary_key",
+				nameExists,
+			)
 			newPrimaryIndexDesc := &sqlbase.IndexDescriptor{
 				Name:              name,
 				Unique:            true,
@@ -398,10 +398,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			//  automatically created one?
 			if len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
 				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
-				baseName, name := "old_primary_key", "old_primary_key"
-				for try := 1; nameExists(name); try++ {
-					name = fmt.Sprintf("%s_%d", baseName, try)
-				}
+				name := generateUniqueConstraintName(
+					"old_primary_key",
+					nameExists,
+				)
 				oldPrimaryIndexCopy.Name = name
 				oldPrimaryIndexCopy.StoreColumnIDs = nil
 				oldPrimaryIndexCopy.StoreColumnNames = nil

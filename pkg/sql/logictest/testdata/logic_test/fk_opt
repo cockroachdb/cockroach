@@ -173,16 +173,6 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(int\) does not match foreign key "customers"."email" \(string\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
-statement error column "product" cannot be used by multiple foreign key constraints
-CREATE TABLE orders (
-  id INT PRIMARY KEY,
-  product STRING REFERENCES products,
-  customer INT CONSTRAINT valid_customer REFERENCES customers (id),
-  CONSTRAINT fk FOREIGN KEY (product) REFERENCES products,
-  INDEX (product),
-  INDEX (customer)
-)
-
 statement ok
 CREATE TABLE orders (
   id INT,
@@ -199,9 +189,6 @@ ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
 statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE NO ACTION
-
-statement error column "product" cannot be used by multiple foreign key constraints
-ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
 
 statement ok
 ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
@@ -1490,54 +1477,6 @@ statement ok
 DROP TABLE a, no_default_table, no_default_table_on_update, no_default_table_ref2_default_on_delete,
 no_default_table_ref2_default_on_update, no_default_table_ref1_default_on_delete,
 no_default_table_ref1_default_on_update
-
-# Test that no column can have more than 1 FK constraint
-subtest column_uniqueness
-
-statement ok
-CREATE TABLE t (a INT, b INT, c INT, INDEX (a, b), INDEX (b, c))
-
-statement ok
-CREATE TABLE t2 (x INT, y INT, z INT, w INT, UNIQUE INDEX (x, y), UNIQUE INDEX (z, w))
-
-statement ok
-ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t2 (x, y)
-
-statement error column "b" cannot be used by multiple foreign key constraints
-ALTER TABLE t ADD FOREIGN KEY (b, c) REFERENCES t2 (z, w)
-
-statement ok
-DROP TABLE t, t2
-
-# Also test the case where one of the FKs is on the primary key
-statement ok
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b), INDEX (b, c))
-
-statement ok
-CREATE TABLE t2 (x INT, y INT, z INT, w INT, UNIQUE INDEX (x, y), UNIQUE INDEX (z, w))
-
-statement ok
-ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t2 (x, y)
-
-statement error column "b" cannot be used by multiple foreign key constraints
-ALTER TABLE t ADD FOREIGN KEY (b, c) REFERENCES t2 (z, w)
-
-statement ok
-DROP TABLE t, t2
-
-subtest 24664
-
-statement ok
-CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a), UNIQUE INDEX (a, b))
-
-statement ok
-ALTER TABLE t ADD FOREIGN KEY (a) REFERENCES t (a)
-
-statement error column "a" cannot be used by multiple foreign key constraints
-ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t (a, b)
-
-statement ok
-DROP TABLE t
 
 subtest unvalidated_fk_plan
 
@@ -2935,3 +2874,510 @@ user root
 
 statement ok
 COMMIT
+
+subtest foreign_key_multiple_output_columns
+
+# Create a recursive table: messages refs good_users refs users.
+# Sometimes, messages refs users directly.
+
+statement ok
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE good_users (
+  id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  id2 INTEGER UNIQUE
+)
+
+statement ok
+CREATE SEQUENCE message_seq START 1 INCREMENT 1
+
+statement ok
+CREATE TABLE messages (
+  message_id INT PRIMARY KEY DEFAULT nextval('message_seq'),
+  user_id_1 integer REFERENCES good_users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  user_id_2 integer REFERENCES good_users(id) ON DELETE CASCADE ON UPDATE CASCADE, -- this is recursive through good_users
+  text string
+)
+
+# Add the same foreign key twice onto user.
+statement ok
+ALTER TABLE messages ADD FOREIGN KEY (user_id_1) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+
+statement ok
+ALTER TABLE messages ADD FOREIGN KEY (user_id_1) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+
+# Insert some rows
+statement ok
+INSERT INTO users(id) VALUES (1), (2), (3)
+
+statement ok
+INSERT INTO good_users(id, id2) VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+INSERT INTO messages (user_id_1, user_id_2, text) VALUES
+  (1, 2, 'hi jordan'),
+  (2, 1, 'hi oliver'),
+  (1, 2, 'you are a good user jordan'),
+  (1, 3, 'you are a good user too rohan'),
+  (3, 1, 'lucy is a good user')
+
+query error 999.*good_users
+INSERT INTO messages (user_id_1, user_id_2, text) VALUES
+  (999, 1, 'you are a bad user')
+
+# Now try and update the user_id.
+statement ok
+update users set id = id * 10
+
+# See that it propagates.
+query I
+SELECT * FROM users ORDER BY id ASC
+----
+10
+20
+30
+
+query II
+SELECT * FROM good_users ORDER BY id ASC
+----
+10  10
+20  20
+30  30
+
+query IIIT
+SELECT * FROM messages ORDER BY message_id ASC
+----
+1  10  20  hi jordan
+2  20  10  hi oliver
+3  10  20  you are a good user jordan
+4  10  30  you are a good user too rohan
+5  30  10  lucy is a good user
+
+# Delete from users should work as well
+statement ok
+DELETE FROM users WHERE id = 30
+
+# See that it propagates.
+query I
+SELECT * FROM users ORDER BY id ASC
+----
+10
+20
+
+query II
+SELECT * FROM good_users ORDER BY id ASC
+----
+10  10
+20  20
+
+query IIIT
+SELECT * FROM messages ORDER BY message_id ASC
+----
+1  10  20  hi jordan
+2  20  10  hi oliver
+3  10  20  you are a good user jordan
+
+# Add a foreign key on id2, which is a different column.
+# This one is restrictive on updates and deletes.
+statement ok
+ALTER TABLE messages ADD FOREIGN KEY (user_id_1) REFERENCES good_users(id2)
+
+statement ok
+ALTER TABLE good_users ADD FOREIGN KEY (id2) REFERENCES users(id)
+
+# Updating should no longer work, since we have a restrict.
+statement error value \[2000\] not found in good_users@good_users_id2_key \[id2\]
+UPDATE users SET id = id * 100 WHERE id = 20
+
+# Insert some more stuff -- make sure it still behaves as expected.
+statement ok
+INSERT INTO users VALUES (40)
+
+statement ok
+INSERT INTO good_users VALUES (40, 40)
+
+statement ok
+INSERT INTO messages (user_id_1, user_id_2, text) VALUES
+  (10, 40, 'oh hi mark'),
+  (40, 10, 'youre tearing me apart lisa!')
+
+query error 999.*good_users
+INSERT INTO messages (user_id_1, user_id_2, text) VALUES
+  (999, 40, 'johnny is my best friend')
+
+# And sanity check everything.
+query IIIT
+SELECT * FROM messages ORDER BY message_id ASC
+----
+1  10  20  hi jordan
+2  20  10  hi oliver
+3  10  20  you are a good user jordan
+7  10  40  oh hi mark
+8  40  10  youre tearing me apart lisa!
+
+# Delete should still be okay since the cascade from id1 should "win".
+statement ok
+DELETE FROM users WHERE id = 20
+
+query IIIT
+SELECT * FROM messages ORDER BY message_id ASC
+----
+7  10  40  oh hi mark
+8  40  10  youre tearing me apart lisa!
+
+# Drop everything.
+statement ok
+DROP TABLE users CASCADE
+
+statement ok
+DROP TABLE good_users CASCADE
+
+statement ok
+DROP TABLE messages
+
+# Test conflicting foreign keys ON DELETE and ON UPDATE - some known corner cases.
+# SET NULL/SET DEFAULT/CASCADE have priority and are evaluated in order, followed
+# by RESTRICT/NO ACTION.
+
+#
+# ON DELETE
+#
+
+statement ok
+CREATE TABLE t1 (a INT PRIMARY KEY); CREATE TABLE t2 (a INT DEFAULT 1)
+
+# 'ON DELETE NO ACTION', followed by 'ON DELETE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE NO ACTION', followed by 'ON DELETE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE RESTRICT', followed by 'ON DELETE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE RESTRICT', followed by 'ON DELETE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE CASCADE', followed by 'ON DELETE SET DEFAULT'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE CASCADE', followed by 'ON DELETE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE SET DEFAULT', followed by 'ON DELETE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement error value \[1\] not found in t1@primary \[a\]
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+123
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE SET DEFAULT', followed by 'ON DELETE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement error value \[1\] not found in t1@primary \[a\]
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+123
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON DELETE SET NULL', followed by 'ON DELETE SET DEFAULT'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NULL; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DEFAULT
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+DELETE FROM t1 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+statement ok
+DROP TABLE t2 CASCADE; DROP TABLE t1 CASCADE
+
+#
+# ON UPDATE
+#
+
+statement ok
+CREATE TABLE t1 (a INT PRIMARY KEY); CREATE TABLE t2 (a INT DEFAULT 1)
+
+# 'ON UPDATE NO ACTION', followed by 'ON UPDATE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE NO ACTION', followed by 'ON UPDATE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE NO ACTION; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+2
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE RESTRICT', followed by 'ON UPDATE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE RESTRICT', followed by 'ON UPDATE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE RESTRICT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+2
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE CASCADE', followed by 'ON UPDATE SET DEFAULT'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+2
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE CASCADE', followed by 'ON UPDATE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+2
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE CASCADE'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE CASCADE
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement error value \[1\] not found in t1@primary \[a\]
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+123
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE SET NULL'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement error value \[1\] not found in t1@primary \[a\]
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+123
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+# 'ON UPDATE SET NULL', followed by 'ON UPDATE SET DEFAULT'
+statement ok
+ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET NULL; ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON UPDATE SET DEFAULT
+
+statement ok
+insert into t1 values (123); insert into t2 values (123)
+
+statement ok
+UPDATE t1 SET a = 2 WHERE a = 123
+
+query I
+SELECT * FROM t2
+----
+NULL
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE TABLE t2; TRUNCATE TABLE t1
+
+statement ok
+DROP TABLE t2 CASCADE; DROP TABLE t1 CASCADE
