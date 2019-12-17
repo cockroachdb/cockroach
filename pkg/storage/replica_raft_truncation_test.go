@@ -85,11 +85,16 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					Term:  term,
 				}
 
-				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, eng)
+				batch := eng.NewBatch()
+				defer batch.Close()
+				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, batch)
 				if err != nil {
 					return err.Error()
 				}
 				fmt.Fprintf(&buf, "apply: %t\n", apply)
+				if apply {
+					batch.Commit(true)
+				}
 
 				for _, key := range []roachpb.Key{
 					keys.RaftTruncatedStateLegacyKey(rangeID),

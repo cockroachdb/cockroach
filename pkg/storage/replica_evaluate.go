@@ -36,7 +36,7 @@ import (
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	batch engine.ReadWriter, origReqs []roachpb.RequestUnion, distinctSpans bool,
+	reader engine.Reader, origReqs []roachpb.RequestUnion, distinctSpans bool,
 ) []roachpb.RequestUnion {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
@@ -84,7 +84,7 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := batch.NewIterator(engine.IterOptions{
+	iter := reader.NewIterator(engine.IterOptions{
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),
@@ -135,10 +135,14 @@ func optimizePuts(
 // evaluateBatch evaluates a batch request by splitting it up into its
 // individual commands, passing them to evaluateCommand, and combining
 // the results.
+//
+// TODO(irfansharif): We should tease out usages of `engine.Batch` in proposer
+// evaluated KV code-paths that are currently masked under `engine.ReadWriter`,
+// and only accept the more specific interface.
 func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -158,7 +162,7 @@ func evaluateBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && !readOnly {
-		baReqs = optimizePuts(batch, baReqs, baHeader.DistinctSpans)
+		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
 	}
 
 	// Create a clone of the transaction to store the new txn state produced on
@@ -186,7 +190,7 @@ func evaluateBatch(
 			singleAbort := ba.IsSingleEndTransactionRequest() &&
 				!baReqs[0].GetInner().(*roachpb.EndTransactionRequest).Commit
 			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
-				if pErr := checkIfTxnAborted(ctx, rec, batch, *baHeader.Txn); pErr != nil {
+				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
 			}
@@ -259,7 +263,7 @@ func evaluateBatch(
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.
 		reply := br.Responses[index].GetInner()
-		curResult, pErr := evaluateCommand(ctx, idKey, index, batch, rec, ms, baHeader, maxKeys, args, reply)
+		curResult, pErr := evaluateCommand(ctx, idKey, index, readWriter, rec, ms, baHeader, maxKeys, args, reply)
 
 		if err := result.MergeAndDestroy(curResult); err != nil {
 			// TODO(tschottdorf): see whether we really need to pass nontrivial
@@ -381,7 +385,7 @@ func evaluateCommand(
 	ctx context.Context,
 	raftCmdID storagebase.CmdIDKey,
 	index int,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
@@ -416,7 +420,7 @@ func evaluateCommand(
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
-		pd, err = cmd.Eval(ctx, batch, cArgs, reply)
+		pd, err = cmd.Eval(ctx, readWriter, cArgs, reply)
 	} else {
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
