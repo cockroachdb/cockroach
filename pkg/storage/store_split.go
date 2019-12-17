@@ -27,7 +27,7 @@ import (
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
 func splitPreApply(
-	ctx context.Context, eng engine.ReadWriter, split roachpb.SplitTrigger, r *Replica,
+	ctx context.Context, readWriter engine.ReadWriter, split roachpb.SplitTrigger, r *Replica,
 ) {
 	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
 	// less than or equal to the replica we're about to initialize.
@@ -77,19 +77,19 @@ func splitPreApply(
 		// Rather than specifically deleting around the data we want to preserve
 		// we read the HardState to preserve it, clear everything and write back
 		// the HardState and tombstone.
-		hs, err := rightRepl.raftMu.stateLoader.LoadHardState(ctx, eng)
+		hs, err := rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
 		if err != nil {
 			log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 		}
 		const rangeIDLocalOnly = false
 		const mustUseClearRange = false
-		if err := clearRangeData(&split.RightDesc, eng, eng, rangeIDLocalOnly, mustUseClearRange); err != nil {
+		if err := clearRangeData(&split.RightDesc, readWriter, readWriter, rangeIDLocalOnly, mustUseClearRange); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
-		if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, eng, hs); err != nil {
+		if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
 			log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 		}
-		if err := r.setTombstoneKey(ctx, eng, r.minReplicaID()); err != nil {
+		if err := r.setTombstoneKey(ctx, readWriter, r.minReplicaID()); err != nil {
 			log.Fatalf(ctx, "failed to set tombstone for removed rhs: %v", err)
 		}
 		return
@@ -99,7 +99,7 @@ func splitPreApply(
 	// replica is initialized (combining it with existing or default
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, eng); err != nil {
+	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatal(ctx, err)
 	}
 }
