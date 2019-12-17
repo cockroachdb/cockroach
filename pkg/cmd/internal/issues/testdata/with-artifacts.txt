@@ -16,7 +16,7 @@ Parameters:
 
 Artifacts: [/kv/splits/nodes=3/quiesce=true](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=artifacts#/kv/splits/nodes=3/quiesce=true)
 ```
-make stressrace TESTS=kv/splits/nodes=3/quiesce=true PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS=-timeout 5m' 2>&1
+make stressrace TESTS=kv/splits/nodes=3/quiesce=true PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
 ```
 
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
