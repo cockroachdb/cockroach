@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1261,7 +1262,13 @@ func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, err
 // GetCompactionStats returns the internal RocksDB compaction stats. See
 // https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
 func (r *RocksDB) GetCompactionStats() string {
-	return cStringToGoString(C.DBGetCompactionStats(r.rdb))
+	s := cStringToGoString(C.DBGetCompactionStats(r.rdb)) +
+		"estimated_pending_compaction_bytes: "
+	stats, err := r.GetStats()
+	if err != nil {
+		return s + err.Error()
+	}
+	return s + humanizeutil.IBytes(stats.PendingCompactionBytesEstimate)
 }
 
 // GetEnvStats returns stats for the RocksDB env. This may include encryption stats.
