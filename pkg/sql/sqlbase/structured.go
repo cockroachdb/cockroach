@@ -947,13 +947,12 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			}
 			// There are two cases. Either the other table is old (not upgraded yet),
 			// or it's new (already upgraded).
-			var inFK ForeignKeyConstraint
 			if !originIndex.ForeignKey.IsSet() {
 				// The other table has either no foreign key, indicating a corrupt
 				// reference, or the other table was upgraded. Assume the second for now.
 				// If we also find no matching reference in the new-style foreign keys,
 				// that indicates a corrupt reference.
-				var forwardFK *ForeignKeyConstraint
+				found := false
 				for i := range otherTable.OutboundFKs {
 					otherFK := &otherTable.OutboundFKs[i]
 					// To find a match, we need to compare the reference's table id and
@@ -965,49 +964,54 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					if otherFK.ReferencedTableID == desc.ID &&
 						otherFK.LegacyOriginIndex == ref.Index {
 						// Found a match.
-						forwardFK = otherFK
-						break
+						// TODO(otan after PTO): write tests.
+						desc.InboundFKs = append(
+							desc.InboundFKs,
+							ForeignKeyConstraint{
+								OriginTableID:         ref.Table,
+								OriginColumnIDs:       otherFK.OriginColumnIDs,
+								ReferencedTableID:     desc.ID,
+								ReferencedColumnIDs:   otherFK.ReferencedColumnIDs,
+								Name:                  otherFK.Name,
+								Validity:              otherFK.Validity,
+								OnDelete:              otherFK.OnDelete,
+								OnUpdate:              otherFK.OnUpdate,
+								Match:                 otherFK.Match,
+								LegacyOriginIndex:     originIndex.ID,
+								LegacyReferencedIndex: idx.ID,
+							},
+						)
+						found = true
 					}
 				}
-				if forwardFK == nil {
+				if !found {
 					// Corrupted foreign key - there was no forward reference for the back
 					// reference.
 					return false, errors.AssertionFailedf(
 						"error finding foreign key on table %d for backref %+v",
 						otherTable.ID, ref)
 				}
-				inFK = ForeignKeyConstraint{
-					OriginTableID:         ref.Table,
-					OriginColumnIDs:       forwardFK.OriginColumnIDs,
-					ReferencedTableID:     desc.ID,
-					ReferencedColumnIDs:   forwardFK.ReferencedColumnIDs,
-					Name:                  forwardFK.Name,
-					Validity:              forwardFK.Validity,
-					OnDelete:              forwardFK.OnDelete,
-					OnUpdate:              forwardFK.OnUpdate,
-					Match:                 forwardFK.Match,
-					LegacyOriginIndex:     originIndex.ID,
-					LegacyReferencedIndex: idx.ID,
-				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
 				// foreign key.
 				numCols := originIndex.ForeignKey.SharedPrefixLen
-				inFK = ForeignKeyConstraint{
-					OriginTableID:         ref.Table,
-					OriginColumnIDs:       originIndex.ColumnIDs[:numCols],
-					ReferencedTableID:     desc.ID,
-					ReferencedColumnIDs:   idx.ColumnIDs[:numCols],
-					Name:                  originIndex.ForeignKey.Name,
-					Validity:              originIndex.ForeignKey.Validity,
-					OnDelete:              originIndex.ForeignKey.OnDelete,
-					OnUpdate:              originIndex.ForeignKey.OnUpdate,
-					Match:                 originIndex.ForeignKey.Match,
-					LegacyOriginIndex:     originIndex.ID,
-					LegacyReferencedIndex: idx.ID,
-				}
+				desc.InboundFKs = append(
+					desc.InboundFKs,
+					ForeignKeyConstraint{
+						OriginTableID:         ref.Table,
+						OriginColumnIDs:       originIndex.ColumnIDs[:numCols],
+						ReferencedTableID:     desc.ID,
+						ReferencedColumnIDs:   idx.ColumnIDs[:numCols],
+						Name:                  originIndex.ForeignKey.Name,
+						Validity:              originIndex.ForeignKey.Validity,
+						OnDelete:              originIndex.ForeignKey.OnDelete,
+						OnUpdate:              originIndex.ForeignKey.OnUpdate,
+						Match:                 originIndex.ForeignKey.Match,
+						LegacyOriginIndex:     originIndex.ID,
+						LegacyReferencedIndex: idx.ID,
+					},
+				)
 			}
-			desc.InboundFKs = append(desc.InboundFKs, inFK)
 		}
 		changed = true
 	}

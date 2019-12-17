@@ -511,12 +511,17 @@ func ResolveFK(
 	constraintName := string(d.Name)
 	if constraintName == "" {
 		constraintName = fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name)
+		// If the name already exists, we try append a digit at the end and see if that exists.
+		// We do this until we find one that is available.
+		_, nameExists := constraintInfo[constraintName]
+		nextNum := 1
+		for nameExists {
+			constraintName = fmt.Sprintf("fk_%s_ref_%s%d", string(d.FromCols[0]), target.Name, nextNum)
+
+			nextNum += 1
+			_, nameExists = constraintInfo[constraintName]
+		}
 	} else {
-		// Only do this check if constraint name is not empty.
-		// Otherwise, the more helpful error message of
-		// "cannot be used by multiple foreign key constraints"
-		// is hidden.
-		// TODO(#38850): revisit this.
 		if _, ok := constraintInfo[constraintName]; ok {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
@@ -625,23 +630,12 @@ func ResolveFK(
 		tbl.AddForeignKeyMutation(&ref, sqlbase.DescriptorMutation_ADD)
 	}
 
-	// Multiple FKs from the same column would potentially result in ambiguous or
-	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
-	// TODO(jordan,lucy): can we lift this restriction?
-	colsInFKs := make(map[sqlbase.ColumnID]struct{})
-
 	fks := tbl.AllActiveAndInactiveForeignKeys()
 	for _, fk := range fks {
 		for _, id := range fk.OriginColumnIDs {
-			if _, ok := colsInFKs[id]; ok {
-				col, err := tbl.FindColumnByID(id)
-				if err != nil {
-					return errors.AssertionFailedf("trying to add foreign key for column %d that doesn't exist", id)
-				}
-				return pgerror.Newf(pgcode.ForeignKeyViolation,
-					"column %q cannot be used by multiple foreign key constraints", col.Name)
+			if _, err := tbl.FindColumnByID(id); err != nil {
+				return errors.AssertionFailedf("trying to add foreign key for column %d that doesn't exist", id)
 			}
-			colsInFKs[id] = struct{}{}
 		}
 	}
 
