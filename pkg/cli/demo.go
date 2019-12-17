@@ -39,6 +39,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/encoding"
 )
 
 var demoCmd = &cobra.Command{
@@ -181,6 +182,7 @@ func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
 
 	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
 	if err != nil {
+		fmt.Printf("failed to grab admin client!\n")
 		return err
 	}
 	defer finish()
@@ -191,6 +193,8 @@ func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
 	}
 
 	if err := doShutdown(ctx, adminClient, onModes); err != nil {
+		fmt.Printf("failed to perform shutdown client!\n")
+		fmt.Printf("is snappy installed? %s\n", encoding.GetCompressor("snappy"))
 		return err
 	}
 	c.servers[nodeIndex] = nil
@@ -401,24 +405,6 @@ func setupTransientCluster(
 		}
 
 		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-		// Ensure we close all sticky stores we've created.
-		for _, store := range args.StoreSpecs {
-			if store.StickyInMemoryEngineID != "" {
-				engineID := store.StickyInMemoryEngineID
-				c.stopper.AddCloser(stop.CloserFn(func() {
-					if err := server.CloseStickyInMemEngine(engineID); err != nil {
-						// Something else may have already closed the sticky store.
-						// Since we are closer, it doesn't really matter.
-						log.Warningf(
-							ctx,
-							"could not close sticky in-memory store %s: %+v",
-							engineID,
-							err,
-						)
-					}
-				}))
-			}
-		}
 	}
 
 	c.servers = servers
