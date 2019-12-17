@@ -29,33 +29,12 @@ func registerTPCHVec(r *testRegistry) {
 		numRunsPerQuery = 3
 	)
 
-	var vecOnQueriesToSkip = map[int]string{
-		2:  "incorrect: #41108",
-		12: "unsupported: sum_int #38845",
-		15: "unsupported: create view",
-		16: "unsupported: distinct aggregation #39242",
-		21: "unsupported: non-inner hash join with ON expression #38018",
+	var queriesToSkip = map[int]string{
 		// TODO(yuzefovich): remove this once we have disk spilling.
-		1:  "needs disk spilling",
-		3:  "needs disk spilling",
-		4:  "needs disk spilling",
+		5:  "needs disk spilling",
 		8:  "needs disk spilling",
-		9:  "needs disk spilling",
 		19: "needs disk spilling",
 	}
-	var vecOffQueriesToSkip = map[int]string{
-		12: "the query is skipped by tpch workload",
-		// TODO(yuzefovich): remove this once we're not skipping these queries with
-		// vec on.
-		1:  "skipped with vec on",
-		2:  "skipped with vec on",
-		3:  "skipped with vec on",
-		4:  "skipped with vec on",
-		8:  "skipped with vec on",
-		9:  "skipped with vec on",
-		19: "skipped with vec on",
-	}
-
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
 			"nation", "region", "part", "supplier",
@@ -74,6 +53,13 @@ CREATE DATABASE tpch;
 RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
 `
 		if _, err := conn.Exec(setup); err != nil {
+			t.Fatal(err)
+		}
+
+		// TODO(yuzefovich): remove this once we have disk spilling.
+		workmem := "2GiB"
+		t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
+		if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -100,10 +86,6 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				if _, err := conn.Exec(count); err != nil {
 					t.Fatal(err)
 				}
-			}
-			queriesToSkip := vecOffQueriesToSkip
-			if vectorize {
-				queriesToSkip = vecOnQueriesToSkip
 			}
 			var queriesToRun string
 			for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
@@ -156,11 +138,11 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 			}
 			parseOutput(workloadOutput, timeByQueryNum[configIdx])
 		}
-		t.Status("comparing the runtimes (only median values for each query are compared)")
+		// TODO(yuzefovich): remove the note when disk spilling is in place.
+		t.Status("comparing the runtimes (only median values for each query are compared).\n" +
+			"NOTE: the comparison might not be fair because vec ON doesn't spill to disk")
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			if _, skipped := vecOnQueriesToSkip[queryNum]; skipped {
-				continue
-			} else if _, skipped := vecOffQueriesToSkip[queryNum]; skipped {
+			if _, skipped := queriesToSkip[queryNum]; skipped {
 				continue
 			}
 			findMedian := func(times []float64) float64 {

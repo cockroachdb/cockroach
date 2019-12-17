@@ -194,10 +194,8 @@ func TestEval(t *testing.T) {
 			require.NoError(t, err)
 
 			batchesReturned := 0
-			result, err := colexec.NewColOperator(
-				ctx,
-				flowCtx,
-				&execinfrapb.ProcessorSpec{
+			args := colexec.NewColOperatorArgs{
+				Spec: &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{
 						Type:        execinfrapb.InputSyncSpec_UNORDERED,
 						ColumnTypes: inputTyps,
@@ -209,7 +207,7 @@ func TestEval(t *testing.T) {
 						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
 					},
 				},
-				[]colexec.Operator{
+				Inputs: []colexec.Operator{
 					&colexec.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							// It doesn't matter what types we create the input batch with.
@@ -224,10 +222,10 @@ func TestEval(t *testing.T) {
 						},
 					},
 				},
-				&acc,
-				true, /* useStreamingMemAccountForBuffering */
-				nil,  /* processorConstructor */
-			)
+				StreamingMemAccount:                &acc,
+				UseStreamingMemAccountForBuffering: true,
+			}
+			result, err := colexec.NewColOperator(ctx, flowCtx, args)
 			if testutils.IsError(err, "unable to columnarize") {
 				// Skip this test as execution is not supported by the vectorized
 				// engine.

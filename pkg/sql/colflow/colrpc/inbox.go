@@ -281,10 +281,8 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	// after Next returns a zero-length batch during normal execution.
 	if err := i.maybeInitLocked(ctx); err != nil {
 		// An error occurred while initializing the Inbox and is likely caused by
-		// the connection issues. We propagate the error as a "non-vectorized
-		// panic" so that the whole stack trace is not printed out (as an
-		// unexpected vectorized error) and the sentry issue is not reported.
-		execerror.NonVectorizedPanic(err)
+		// the connection issues. It is expected that such an error can occur.
+		execerror.VectorizedExpectedInternalPanic(err)
 	}
 
 	for {

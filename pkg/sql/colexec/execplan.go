@@ -86,6 +86,19 @@ func wrapRowSources(
 	return NewColumnarizer(ctx, NewAllocator(ctx, acc), flowCtx, processorID, toWrap)
 }
 
+// NewColOperatorArgs is a helper struct that encompasses all of the input
+// arguments to NewColOperator call.
+type NewColOperatorArgs struct {
+	Spec                *execinfrapb.ProcessorSpec
+	Inputs              []Operator
+	StreamingMemAccount *mon.BoundAccount
+	// UseStreamingMemAccountForBuffering specifies whether to use
+	// StreamingMemAccount when creating buffering operators and should only be
+	// set to 'true' in tests.
+	UseStreamingMemAccountForBuffering bool
+	ProcessorConstructor               execinfra.ProcessorConstructor
+}
+
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
@@ -124,9 +137,7 @@ func createJoiner(
 	ctx context.Context,
 	result *NewColOperatorResult,
 	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.ProcessorSpec,
-	inputs []Operator,
-	acc *mon.BoundAccount,
+	args NewColOperatorArgs,
 	planningState *joinerPlanningState,
 	joinType sqlbase.JoinType,
 	createJoinOpWithOnExprPlanning func(
@@ -135,6 +146,10 @@ func createJoiner(
 		leftOutCols, rightOutCols []uint32,
 	) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error),
 ) error {
+	spec := args.Spec
+	inputs := args.Inputs
+	acc := args.StreamingMemAccount
+
 	var err error
 	if err = checkNumIn(inputs, 2); err != nil {
 		return err
@@ -356,18 +371,15 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 }
 
 // NewColOperator creates a new columnar operator according to the given spec.
-// useStreamingMemAccountForBuffering specifies whether to use
-// streamingMemAccount when creating buffering operators and should only be set
-// to 'true' in tests.
 func NewColOperator(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.ProcessorSpec,
-	inputs []Operator,
-	streamingMemAccount *mon.BoundAccount,
-	useStreamingMemAccountForBuffering bool,
-	processorConstructor execinfra.ProcessorConstructor,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
 ) (result NewColOperatorResult, err error) {
+	spec := args.Spec
+	inputs := args.Inputs
+	streamingMemAccount := args.StreamingMemAccount
+	useStreamingMemAccountForBuffering := args.UseStreamingMemAccountForBuffering
+	processorConstructor := args.ProcessorConstructor
+
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
 	core := &spec.Core
@@ -648,7 +660,7 @@ func NewColOperator(
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
+				ctx, &result, flowCtx, args, &planningState,
 				core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
 			)
 
@@ -729,7 +741,7 @@ func NewColOperator(
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, spec, inputs, streamingMemAccount, &planningState,
+				ctx, &result, flowCtx, args, &planningState,
 				core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
 			)
 
