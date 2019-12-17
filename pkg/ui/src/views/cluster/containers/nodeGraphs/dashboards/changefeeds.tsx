@@ -44,5 +44,11 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.changefeed.flush_nanos" title="Flush Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
+
+    <LineGraph title="Changefeed Restarts" sources={storeSources}>
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric name="cr.node.changefeed.error_retries" title="Retryable Errors" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
   ];
 }
