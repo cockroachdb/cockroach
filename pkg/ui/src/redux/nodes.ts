@@ -310,24 +310,17 @@ export function selectNodesSummaryValid(state: AdminUIState) {
   return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
 }
 
-interface ClusterDetails {
-  clusterName: string;
-  clusterVersion: string;
-}
-
 /*
- * clusterInfoSelector returns the information about cluster which is a part
- * of metadata on nodes of current cluster.
+ * clusterNameSelector returns the name of cluster which has to be the same for every node in the cluster.
+ * - That is why it is safe to get first non empty cluster name.
+ * - Empty cluster name is possible in case `DisableClusterNameVerification` flag is used (see pkg/base/config.go:176).
  */
-export const clusterInfoSelector = createSelector(
+export const clusterNameSelector = createSelector(
   nodeStatusesSelector,
   livenessStatusByNodeIDSelector,
-  (nodeStatuses, livenessStatusByNodeID): ClusterDetails => {
+  (nodeStatuses, livenessStatusByNodeID): string => {
     if (_.isUndefined(nodeStatuses) || _.isEmpty(livenessStatusByNodeID)) {
-      return {
-        clusterVersion: undefined,
-        clusterName: undefined,
-      };
+      return undefined;
     }
     const liveNodesOnCluster = nodeStatuses.filter(
       nodeStatus => livenessStatusByNodeID[nodeStatus.desc.node_id] === LivenessStatus.LIVE);
@@ -337,13 +330,41 @@ export const clusterInfoSelector = createSelector(
       .uniqBy(node => node.desc.cluster_name)
       .value();
 
-    const nodesWithUniqClusterVersions = _.uniqBy(liveNodesOnCluster, node => node.desc.ServerVersion);
-    const { major_val, minor_val, patch, unstable } = nodesWithUniqClusterVersions[0].desc.ServerVersion;
-    return {
-      clusterName: nodesWithUniqClusterNames.length > 0 ? nodesWithUniqClusterNames[0].desc.cluster_name : undefined,
-      clusterVersion: [major_val, minor_val, patch, unstable].join("."),
-    };
+    if (_.isEmpty(nodesWithUniqClusterNames)) {
+      return undefined;
+    } else {
+      return _.head(nodesWithUniqClusterNames).desc.cluster_name;
+    }
   });
+
+export const versionsSelector = createSelector(
+  nodeStatusesSelector,
+  livenessByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) =>
+    _.chain(nodeStatuses)
+      // Ignore nodes for which we don't have any build info.
+      .filter((status) => !!status.build_info )
+      // Exclude this node if it's known to be decommissioning.
+      .filter((status) => !status.desc ||
+        !livenessStatusByNodeID[status.desc.node_id] ||
+        !livenessStatusByNodeID[status.desc.node_id].decommissioning)
+      // Collect the surviving nodes' build tags.
+      .map((status) => status.build_info.tag)
+      .uniq()
+      .value(),
+);
+
+// Select the current build version of the cluster, returning undefined if the
+// cluster's version is currently staggered.
+export const singleVersionSelector = createSelector(
+  versionsSelector,
+  (builds) => {
+    if (!builds || builds.length !== 1) {
+      return undefined;
+    }
+    return builds[0];
+  },
+);
 
 /**
  * partitionedStatuses divides the list of node statuses into "live" and "dead".
