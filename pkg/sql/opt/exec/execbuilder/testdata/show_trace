@@ -291,14 +291,15 @@ CREATE TABLE t (a INT PRIMARY KEY)
 statement ok
 SET tracing = on; SELECT * FROM t; SET tracing = off
 
-query III colnames
-SELECT DISTINCT node_id, store_id, replica_id
-  FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION]
-----
-node_id  store_id  replica_id
-1        1         26
-1        1         6
-1        1         29
+# Temporarily disabled flaky test (#43043).
+# query III colnames
+# SELECT DISTINCT node_id, store_id, replica_id
+#   FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION]
+# ----
+# node_id  store_id  replica_id
+# 1        1         26
+# 1        1         6
+# 1        1         29
 
 subtest system_table_lookup
 
