@@ -21,11 +21,11 @@ import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
-  versionsSelector,
   staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
   disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
+import { versionsSelector } from "src/redux/nodes";
 import {
   VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY,
   setUIDataKey, isInFlight,
