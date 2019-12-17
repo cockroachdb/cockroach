@@ -11,16 +11,34 @@
 import React from "react";
 import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
+import { connect } from "react-redux";
 
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
-import { GlobalNavigation, CockroachLabsLockupIcon, Left, Right, TabNavigation, Text, TextTypes } from "src/components";
+import { clusterIdSelector, clusterInfoSelector } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
+import {
+  GlobalNavigation,
+  CockroachLabsLockupIcon,
+  Left,
+  Right,
+  TabNavigation,
+  Text,
+  TextTypes,
+  Badge,
+} from "src/components";
 
 import "./layout.styl";
 import "./layoutPanel.styl";
+
+export interface LayoutProps {
+  clusterName: string;
+  clusterVersion: string;
+  clusterId: string;
+}
 
 /**
  * Defines the main layout of all admin ui pages. This includes static
@@ -28,8 +46,9 @@ import "./layoutPanel.styl";
  *
  * Individual pages provide their content via react-router.
  */
-export default class extends React.Component<RouterState, {}> {
+class Layout extends React.Component<LayoutProps & RouterState, {}> {
   render() {
+    const { clusterName, clusterVersion, clusterId } = this.props;
     return (
       <RequireLogin>
         <Helmet
@@ -51,13 +70,8 @@ export default class extends React.Component<RouterState, {}> {
           </div>
           <div className="layout-panel__navigation-bar">
             <TabNavigation>
-              <Text textType={TextTypes.Heading2}>Cluster - 01</Text>
-              <Text
-                textType={TextTypes.Body}
-                disabled
-              >
-                Cockroach version 19.2 / 12 regions / 54 machines
-              </Text>
+              <Text textType={TextTypes.Heading2}>{clusterName || clusterId}</Text>
+              <Badge text={clusterVersion} />
             </TabNavigation>
           </div>
           <div className="layout-panel__body">
@@ -73,3 +87,14 @@ export default class extends React.Component<RouterState, {}> {
     );
   }
 }
+
+const mapStateToProps = (state: AdminUIState) => {
+  const { clusterName, clusterVersion } = clusterInfoSelector(state);
+  return {
+    clusterName,
+    clusterVersion,
+    clusterId: clusterIdSelector(state),
+  };
+};
+
+export default connect(mapStateToProps)(Layout);
