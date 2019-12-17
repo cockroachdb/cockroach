@@ -17,6 +17,7 @@
 ((OpName) $right $left $on (CommuteJoinFlags $private))
 
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
+# This is symmetric with the CommuteRightJoin normalization rule.
 [CommuteLeftJoin, Explore]
 (LeftJoin
     $left:*
@@ -26,17 +27,6 @@
 )
 =>
 (RightJoin $right $left $on (CommuteJoinFlags $private))
-
-# CommuteRightJoin creates a Join with the left and right inputs swapped.
-[CommuteRightJoin, Explore]
-(RightJoin
-    $left:*
-    $right:*
-    $on:*
-    $private:*
-)
-=>
-(LeftJoin $right $left $on (CommuteJoinFlags $private))
 
 # CommuteSemiJoin generates an InnerJoin that is equivalent to the SemiJoin.
 # SemiJoins impose a partial order on the joining tables. We can convert a

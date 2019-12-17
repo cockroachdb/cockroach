@@ -721,30 +721,6 @@ left-join (merge)
  └── filters
       └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
-# Columns only used by on condition, right join
-opt expect=PruneJoinLeftCols
-SELECT xy.* FROM a RIGHT JOIN xy ON a.k=xy.x
-----
-project
- ├── columns: x:5(int!null) y:6(int)
- ├── fd: (5)-->(6)
- └── right-join (merge)
-      ├── columns: k:1(int) x:5(int!null) y:6(int)
-      ├── left ordering: +1
-      ├── right ordering: +5
-      ├── key: (1,5)
-      ├── fd: (5)-->(6)
-      ├── scan a
-      │    ├── columns: k:1(int!null)
-      │    ├── key: (1)
-      │    └── ordering: +1
-      ├── scan xy
-      │    ├── columns: x:5(int!null) y:6(int)
-      │    ├── key: (5)
-      │    ├── fd: (5)-->(6)
-      │    └── ordering: +5
-      └── filters (true)
-
 # Columns needed only by projection, full join.
 opt expect=PruneJoinLeftCols
 SELECT a.k+1 AS r, xy.* FROM a FULL JOIN xy ON True
@@ -1032,30 +1008,6 @@ left-join (merge)
  │    └── filters
  │         └── i < k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
  └── filters (true)
-
-# Columns only used by on condition, right join
-opt expect=PruneJoinRightCols
-SELECT xy.* FROM xy RIGHT JOIN a ON xy.x=a.k
-----
-project
- ├── columns: x:1(int) y:2(int)
- ├── fd: (1)-->(2)
- └── right-join (merge)
-      ├── columns: x:1(int) y:2(int) k:3(int!null)
-      ├── left ordering: +1
-      ├── right ordering: +3
-      ├── key: (1,3)
-      ├── fd: (1)-->(2)
-      ├── scan xy
-      │    ├── columns: x:1(int!null) y:2(int)
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2)
-      │    └── ordering: +1
-      ├── scan a
-      │    ├── columns: k:3(int!null)
-      │    ├── key: (3)
-      │    └── ordering: +3
-      └── filters (true)
 
 # Columns needed only by projection, full join.
 opt expect=PruneJoinRightCols

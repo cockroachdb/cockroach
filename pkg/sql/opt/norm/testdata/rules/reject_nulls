@@ -37,7 +37,7 @@ SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
 right-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
  ├── key: (1,5)
- ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── fd: (5)-->(6), (1)-->(2-4)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
@@ -118,33 +118,14 @@ inner-join (merge)
  │    └── ordering: +5
  └── filters (true)
 
-# Right-join operator.
-opt expect=RejectNullsRightJoin
-SELECT * FROM a RIGHT JOIN xy ON true WHERE a.k > xy.y
-----
-inner-join (cross)
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int!null)
- ├── key: (1,5)
- ├── fd: (1)-->(2-4), (5)-->(6)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
- ├── scan xy
- │    ├── columns: x:5(int!null) y:6(int)
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
- └── filters
-      └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-
 # Full-join operator.
-opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
+opt expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
 ----
 inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
  ├── key: (1,5)
- ├── fd: (1)-->(2-4), (5)-->(6)
+ ├── fd: (5)-->(6), (1)-->(2-4)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)

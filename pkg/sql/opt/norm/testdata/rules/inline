@@ -224,26 +224,25 @@ left-join (cross)
  └── filters (true)
 
 opt expect=InlineJoinConstantsRight
-SELECT * FROM a RIGHT JOIN (SELECT 1 AS one) ON k=one
+SELECT * FROM a FULL JOIN (SELECT 1 AS one) ON k=one
 ----
-right-join (cross)
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int!null)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1-6)
+full-join (cross)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int)
+ ├── cardinality: [1 - ]
+ ├── key: (1)
+ ├── fd: (1)-->(2-6), ()~~>(6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/1 - /1]
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    └── fd: ()-->(1-5)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
  ├── values
  │    ├── columns: one:6(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6)
  │    └── (1,) [type=tuple{int}]
- └── filters (true)
+ └── filters
+      └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 opt expect=(InlineJoinConstantsLeft,InlineJoinConstantsRight)
 SELECT * FROM (SELECT 1 AS one) INNER JOIN (SELECT 2 AS two) ON one=two

@@ -2088,3 +2088,30 @@ func (c *CustomFuncs) deriveWithUses(r opt.Expr) map[opt.WithID]int {
 
 	return result
 }
+
+// CommuteJoinFlags returns a join private for the commuted join (where the left
+// and right sides are swapped). It adjusts any join flags that are specific to
+// one side.
+func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
+	if p.Flags.Empty() {
+		return p
+	}
+
+	// swap is a helper function which swaps the values of two (single-bit) flags.
+	swap := func(f, a, b memo.JoinFlags) memo.JoinFlags {
+		// If the bits are different, flip them both.
+		if f.Has(a) != f.Has(b) {
+			f ^= (a | b)
+		}
+		return f
+	}
+	f := p.Flags
+	f = swap(f, memo.AllowLookupJoinIntoLeft, memo.AllowLookupJoinIntoRight)
+	f = swap(f, memo.AllowHashJoinStoreLeft, memo.AllowHashJoinStoreRight)
+	if p.Flags == f {
+		return p
+	}
+	res := *p
+	res.Flags = f
+	return &res
+}

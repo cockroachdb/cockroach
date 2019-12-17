@@ -159,8 +159,7 @@
 # the right side.
 [PushSelectCondLeftIntoJoinLeftAndRight, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
-            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
@@ -195,50 +194,6 @@
     (RemoveFiltersItem $filters $item)
 )
 
-# PushSelectCondRightIntoJoinLeftAndRight is symmetric with
-# PushSelectCondLeftIntoJoinLeftAndRight. It applies to the case when a
-# condition bound by the right side of a join can be mapped to the left side
-# using equality columns from the ON condition of the join. It pushes the
-# original filter to the right side, and the mapped filter to the left side.
-# See the comments above PushSelectCondLeftIntoJoinLeftAndRight for more
-# details.
-[PushSelectCondRightIntoJoinLeftAndRight, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
-    $filters:[
-        ...
-        $item:(FiltersItem $condition:*) &
-            (IsBoundBy $item (OutputCols $right)) &
-            (CanMapJoinOpFilter
-                $item
-                $leftCols:(OutputCols $left)
-                $equivFD:(GetEquivFD $on $left $right)
-            )
-        ...
-    ]
-)
-=>
-(Select
-    ((OpName $input)
-        (Select
-            $left
-            [ (FiltersItem (MapJoinOpFilter $item $leftCols $equivFD)) ]
-        )
-        (Select
-            $right
-            [ (FiltersItem $condition) ]
-        )
-        $on
-        $private
-    )
-    (RemoveFiltersItem $filters $item)
-)
-
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
 # an input Join. This is possible in the case of InnerJoin, LeftJoin, SemiJoin,
 # and AntiJoin, as long as the condition has no dependencies on the right side
@@ -255,8 +210,7 @@
 # Citations: [1]
 [PushSelectIntoJoinLeft, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
-            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $input:(LeftJoin | LeftJoinApply | SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
@@ -280,37 +234,6 @@
         $private
     )
     (ExtractUnboundConditions $filters $leftCols)
-)
-
-# PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
-# Select filter conditions into the right side of an input Join rather than
-# into the left side. See that rule's comments for more details.
-[PushSelectIntoJoinRight, Normalize]
-(Select
-    $input:(InnerJoin | InnerJoinApply | RightJoin
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
-    $filters:[
-        ...
-        $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
-        ...
-    ]
-)
-=>
-(Select
-    ((OpName $input)
-        $left
-        (Select
-            $right
-            (ExtractBoundConditions $filters $rightCols)
-        )
-        $on
-        $private
-    )
-    (ExtractUnboundConditions $filters $rightCols)
 )
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
