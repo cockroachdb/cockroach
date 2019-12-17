@@ -575,4 +575,71 @@ describe("rest api", function() {
       });
     });
   });
+
+  describe("metrics metadata request", function() {
+    const metricMetadataUrl = `${api.API_PREFIX}/metricmetadata`;
+    afterEach(fetchMock.restore);
+
+    it("returns list of metadata metrics", () => {
+      this.timeout(1000);
+      const metadata = {};
+      fetchMock.mock({
+         matcher: metricMetadataUrl,
+         method: "GET",
+         response: (_url: string, requestObj: RequestInit) => {
+           assert.isUndefined(requestObj.body);
+           const encodedResponse = protos.cockroach.server.serverpb.MetricMetadataResponse.encode({ metadata }).finish();
+           return {
+             body: api.toArrayBuffer(encodedResponse),
+           };
+         },
+       });
+
+      return api.getAllMetricMetadata(new protos.cockroach.server.serverpb.MetricMetadataRequest()).then((result) => {
+        assert.lengthOf(fetchMock.calls(metricMetadataUrl), 1);
+        assert.deepEqual(result.metadata, metadata);
+      });
+    });
+
+    it("correctly handles an error", function (done) {
+      this.timeout(1000);
+
+      // Mock out the fetch query, but return an error
+      fetchMock.mock({
+        matcher: metricMetadataUrl,
+        method: "GET",
+        response: (_url: string, requestObj: RequestInit) => {
+          assert.isUndefined(requestObj.body);
+          return { throws: new Error() };
+        },
+      });
+
+      api.getAllMetricMetadata(new protos.cockroach.server.serverpb.MetricMetadataRequest()).then((_result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.isError(e));
+        done();
+      });
+    });
+
+    it("correctly times out", function (done) {
+      this.timeout(1000);
+      // Mock out the fetch query, but return a promise that's never resolved to test the timeout
+      fetchMock.mock({
+        matcher: metricMetadataUrl,
+        method: "GET",
+        response: (_url: string, requestObj: RequestInit) => {
+          assert.isUndefined(requestObj.body);
+          return new Promise<any>(() => { });
+        },
+      });
+
+      api.getAllMetricMetadata(new protos.cockroach.server.serverpb.MetricMetadataRequest(), moment.duration(0)).then((_result) => {
+        done(new Error("Request unexpectedly succeeded."));
+      }).catch(function (e) {
+        assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
+        done();
+      });
+    });
+  });
 });
