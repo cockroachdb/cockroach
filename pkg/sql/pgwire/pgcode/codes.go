@@ -340,7 +340,6 @@ const (
 
 	// RangeUnavailable signals that some data from the cluster cannot be
 	// accessed (e.g. because all replicas awol).
-	// We're using the postgres "Internal Error" error class "XX".
 	RangeUnavailable = "58C00"
 	// DeprecatedRangeUnavailable is code that we used for RangeUnavailable until 19.2.
 	// 20.1 needs to recognize it coming from 19.2 nodes.
@@ -354,5 +353,5 @@ const (
 	// InternalConnectionFailure until 19.2.
 	// 20.1 needs to recognize it coming from 19.2 nodes.
 	// TODO(andrei): remove in 20.2.
-	DeprecatedInternalConnectionFailure = "XXC03"
+	DeprecatedInternalConnectionFailure = ConnectionFailure
 )

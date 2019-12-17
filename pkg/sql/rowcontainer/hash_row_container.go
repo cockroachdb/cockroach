@@ -553,6 +553,8 @@ type hashDiskRowBucketIterator struct {
 	// encodedEqCols is the encoding of the equality columns of the rows in the
 	// bucket that this iterator iterates over.
 	encodedEqCols []byte
+	// Temporary buffer used for constructed marked values.
+	tmpBuf []byte
 }
 
 var _ RowMarkerIterator = &hashDiskRowBucketIterator{}
@@ -586,10 +588,7 @@ func (i *hashDiskRowBucketIterator) Valid() (bool, error) {
 	}
 	// Since the underlying map is sorted, once the key prefix does not equal
 	// the encoded equality columns, we have gone past the end of the bucket.
-	// TODO(asubiotto): Make UnsafeKey() and UnsafeValue() part of the
-	// SortedDiskMapIterator interface to avoid allocation here, in Mark(), and
-	// isRowMarked().
-	return bytes.HasPrefix(i.Key(), i.encodedEqCols), nil
+	return bytes.HasPrefix(i.UnsafeKey(), i.encodedEqCols), nil
 }
 
 // Row implements the RowIterator interface.
@@ -632,7 +631,7 @@ func (i *hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 		return false
 	}
 
-	rowVal := i.Value()
+	rowVal := i.UnsafeValue()
 	return bytes.Equal(rowVal[len(rowVal)-len(encodedTrue):], encodedTrue)
 }
 
@@ -648,7 +647,7 @@ func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	}
 	// rowVal are the non-equality encoded columns, the last of which is the
 	// column we use to mark a row.
-	rowVal := i.Value()
+	rowVal := append(i.tmpBuf[:0], i.UnsafeValue()...)
 	originalLen := len(rowVal)
 	rowVal = append(rowVal, markBytes...)
 
@@ -656,11 +655,12 @@ func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	// the extra bytes.
 	copy(rowVal[originalLen-len(markBytes):], rowVal[originalLen:])
 	rowVal = rowVal[:originalLen]
+	i.tmpBuf = rowVal
 
 	// These marks only matter when using a hashDiskRowIterator to iterate over
 	// unmarked rows. The writes are flushed when creating a NewIterator() in
 	// NewUnmarkedIterator().
-	return i.HashDiskRowContainer.bufferedRows.Put(i.Key(), rowVal)
+	return i.HashDiskRowContainer.bufferedRows.Put(i.UnsafeKey(), rowVal)
 }
 
 // hashDiskRowIterator iterates over all unmarked rows in a
@@ -720,7 +720,7 @@ func (i *hashDiskRowIterator) isRowMarked() bool {
 		return false
 	}
 
-	rowVal := i.Value()
+	rowVal := i.UnsafeValue()
 	return bytes.Equal(rowVal[len(rowVal)-len(encodedTrue):], encodedTrue)
 }
 
