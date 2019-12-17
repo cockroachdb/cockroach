@@ -76,6 +76,11 @@ back to this document:
 * [ ] Rebuild the Docker image and bump the version in builder.sh accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in go-version-check.sh ([source](./go-version-check.sh)), unless bumping to a new patch release.
 * [ ] Bump the default installed version of Go in bootstrap-debian.sh ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+* [ ] Update the `builder.dockerImage` parameter in the TeamCity `Cockroach` project.
+
+You can test the new builder image in TeamCity by using the custom parameters
+UI (the "..." icon next to the "Run" button) to verify the image before
+committing the change.
 
 ## Updating Dependencies
 
