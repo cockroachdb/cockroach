@@ -169,13 +169,13 @@ func registerSQLSmith(r *testRegistry) {
 					// TODO(yuzefovich): once #41335 is implemented, go back to using a
 					// context with timeout.
 					_, err := conn.Exec(stmt)
-					if err != nil {
+					if err == nil {
 						logStmt(stmt)
 					}
 					done <- err
 				}(ctx)
 				select {
-				case <-time.After(timeout + 5*time.Second):
+				case <-time.After(timeout * 2):
 					t.Fatalf("query timed out, but did not cancel execution:\n%s;", stmt)
 				case err := <-done:
 					return err

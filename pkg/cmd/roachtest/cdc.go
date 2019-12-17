@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
-	"github.com/pkg/errors"
 )
 
 type workloadType string
@@ -298,10 +298,15 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		if atomic.LoadInt64(&doneAtomic) > 0 {
 			return nil
 		}
-		return err
+		return errors.Wrap(err, "workload failed")
 	})
-	m.Go(func(ctx context.Context) error {
+	m.Go(func(ctx context.Context) (_err error) {
 		defer workloadCancel()
+
+		defer func() {
+			_err = errors.Wrap(_err, "CDC failed")
+		}()
+
 		l, err := t.l.ChildLogger(`changefeed`)
 		if err != nil {
 			return err
@@ -317,13 +322,13 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
 		); err != nil {
-			return err
+			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
 		const requestedResolved = 100
 		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "error creating validator")
 		}
 		validators := cdctest.Validators{
 			cdctest.NewOrderValidator(`bank`),
@@ -366,7 +371,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {
-			return errors.New(strings.Join(failures, "\n"))
+			return errors.New("validator failures:\n" + strings.Join(failures, "\n"))
 		}
 		return nil
 	})
@@ -667,6 +672,7 @@ func (k kafkaManager) basePath() string {
 }
 
 func (k kafkaManager) install(ctx context.Context) {
+	k.c.status("installing kafka")
 	folder := k.basePath()
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz -C `+folder)
