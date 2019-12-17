@@ -464,6 +464,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_insert_fast_path`: {
+		GetStringVal: makeBoolGetStringValFn(`enable_insert_fast_path`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parsePostgresBool(s)
+			if err != nil {
+				return err
+			}
+			m.SetInsertFastPath(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.InsertFastPath)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(insertFastPathClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_serial_normalization`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.SerialNormalizationModeFromString(s)

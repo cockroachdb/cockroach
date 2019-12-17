@@ -382,7 +382,7 @@ type testClusterConfig struct {
 	name                string
 	numNodes            int
 	useFakeSpanResolver bool
-	// if non-empty, overrides the default optimizer mode.
+	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
@@ -1690,6 +1690,7 @@ func (t *logicTest) processSubtest(
 			if rows.Next() {
 				return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
 			}
+			t.t().Logf("let %s = %s\n", varName, val)
 			t.varMap[varName] = val
 
 		case "halt", "hash-threshold":

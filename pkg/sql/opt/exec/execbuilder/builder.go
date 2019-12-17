@@ -57,10 +57,12 @@ type Builder struct {
 	// rather than scans.
 	withExprs []builtWithExpr
 
-	// autoCommit is passed through to factory methods for mutation operators. It
-	// allows execution to commit the transaction as part of the mutation itself.
-	// See canAutoCommit().
-	autoCommit bool
+	// allowAutoCommit is passed through to factory methods for mutation
+	// operators. It allows execution to commit the transaction as part of the
+	// mutation itself. See canAutoCommit().
+	allowAutoCommit bool
+
+	allowInsertFastPath bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -71,18 +73,20 @@ type Builder struct {
 func New(
 	factory exec.Factory, mem *memo.Memo, catalog cat.Catalog, e opt.Expr, evalCtx *tree.EvalContext,
 ) *Builder {
-	var nameGen *memo.ExprNameGenerator
-	if evalCtx != nil && evalCtx.SessionData.SaveTablesPrefix != "" {
-		nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
-	}
-	return &Builder{
+	b := &Builder{
 		factory: factory,
 		mem:     mem,
 		catalog: catalog,
 		e:       e,
 		evalCtx: evalCtx,
-		nameGen: nameGen,
 	}
+	if evalCtx != nil {
+		if evalCtx.SessionData.SaveTablesPrefix != "" {
+			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+		}
+		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+	}
+	return b
 }
 
 // DisableTelemetry prevents the execbuilder from updating telemetry counters.
@@ -122,7 +126,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 		)
 	}
 
-	b.autoCommit = b.canAutoCommit(rel)
+	b.allowAutoCommit = b.canAutoCommit(rel)
 
 	return b.buildRelational(rel)
 }

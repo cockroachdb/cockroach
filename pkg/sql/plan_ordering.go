@@ -60,7 +60,7 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		return n.reqOrdering
 	case *unionNode:
 		// TODO(knz): this can be ordered if the source is ordered already.
-	case *insertNode:
+	case *insertNode, *insertFastPathNode:
 		// TODO(knz): RETURNING is ordered by the PK.
 	case *updateNode, *upsertNode:
 		// After an update, the original order may have been destroyed.

@@ -343,6 +343,14 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
+	rows, err := b.buildValuesRows(values)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return b.constructValues(rows, values.Cols)
+}
+
+func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, error) {
 	numCols := len(values.Cols)
 
 	rows := make([][]tree.TypedExpr, len(values.Rows))
@@ -351,7 +359,7 @@ func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
-			return execPlan{}, fmt.Errorf("inconsistent row length %d vs %d", len(tup.Elems), numCols)
+			return nil, fmt.Errorf("inconsistent row length %d vs %d", len(tup.Elems), numCols)
 		}
 		// Chop off prefix of rowBuf and limit its capacity.
 		rows[i] = rowBuf[:numCols:numCols]
@@ -360,11 +368,11 @@ func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
 		for j := 0; j < numCols; j++ {
 			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
 			if err != nil {
-				return execPlan{}, err
+				return nil, err
 			}
 		}
 	}
-	return b.constructValues(rows, values.Cols)
+	return rows, nil
 }
 
 func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {

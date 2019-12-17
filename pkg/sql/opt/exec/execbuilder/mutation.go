@@ -52,6 +52,9 @@ func (b *Builder) buildMutationInput(
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
+	if ep, ok, err := b.tryBuildFastPathInsert(ins); err != nil || ok {
+		return ep, err
+	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
 	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
@@ -75,7 +78,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		insertOrds,
 		returnOrds,
 		checkOrds,
-		b.autoCommit,
+		b.allowAutoCommit && len(ins.Checks) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -92,6 +95,153 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	}
 
 	return ep, nil
+}
+
+// tryBuildFastPathInsert attempts to construct an insert using the fast path,
+// checking all required conditions. See exec.Factory.ConstructInsertFastPath.
+func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok bool, _ error) {
+	// If FKFallback is set, the optimizer-driven FK checks are disabled. We must
+	// use the legacy path.
+	if !b.allowInsertFastPath || ins.FKFallback {
+		return execPlan{}, false, nil
+	}
+
+	// Conditions from ConstructFastPathInsert:
+	//
+	//  - there are no other mutations in the statement, and the output of the
+	//    insert is not processed through side-effecting expressions (i.e. we can
+	//    auto-commit);
+	if !b.allowAutoCommit {
+		return execPlan{}, false, nil
+	}
+
+	//  - the input is Values with at most InsertFastPathMaxRows, and there are no
+	//    subqueries;
+	values, ok := ins.Input.(*memo.ValuesExpr)
+	if !ok || values.ChildCount() > exec.InsertFastPathMaxRows || values.Relational().HasSubquery {
+		return execPlan{}, false, nil
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(ins.Table)
+
+	//  - there are no self-referencing foreign keys;
+	//  - all FK checks can be performed using direct lookups into unique indexes.
+	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.Checks))
+	for i := range ins.Checks {
+		c := &ins.Checks[i]
+		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
+			// Self-referencing FK.
+			return execPlan{}, false, nil
+		}
+		fk := tab.OutboundForeignKey(c.FKOrdinal)
+		lookupJoin, isLookupJoin := c.Check.(*memo.LookupJoinExpr)
+		if !isLookupJoin || lookupJoin.JoinType != opt.AntiJoinOp {
+			// Not a lookup anti-join.
+			return execPlan{}, false, nil
+		}
+		if len(lookupJoin.On) > 0 ||
+			len(lookupJoin.KeyCols) != fk.ColumnCount() {
+			return execPlan{}, false, nil
+		}
+		inputExpr := lookupJoin.Input
+		// Ignore any select (used to deal with NULLs).
+		if sel, isSelect := inputExpr.(*memo.SelectExpr); isSelect {
+			inputExpr = sel.Input
+		}
+		withScan, isWithScan := inputExpr.(*memo.WithScanExpr)
+		if !isWithScan {
+			return execPlan{}, false, nil
+		}
+		if withScan.With != ins.WithID {
+			return execPlan{}, false, nil
+		}
+
+		out := &fkChecks[i]
+		out.InsertCols = make([]exec.ColumnOrdinal, len(lookupJoin.KeyCols))
+		findCol := func(cols opt.ColList, col opt.ColumnID) int {
+			res, ok := cols.Find(col)
+			if !ok {
+				panic(errors.AssertionFailedf("cannot find column %d", col))
+			}
+			return res
+		}
+		for i, keyCol := range lookupJoin.KeyCols {
+			// The keyCol comes from the WithScan operator. We must find the matching
+			// column in the mutation input.
+			withColOrd := findCol(withScan.OutCols, keyCol)
+			inputCol := withScan.InCols[withColOrd]
+			out.InsertCols[i] = exec.ColumnOrdinal(findCol(ins.InsertCols, inputCol))
+		}
+
+		out.ReferencedTable = md.Table(lookupJoin.Table)
+		out.ReferencedIndex = out.ReferencedTable.Index(lookupJoin.Index)
+		out.MatchMethod = fk.MatchMethod()
+		out.MkErr = func(values tree.Datums) error {
+			if len(values) != len(out.InsertCols) {
+				return errors.AssertionFailedf("invalid FK violation values")
+			}
+			// This is a little tricky. The column ordering might not match between
+			// the FK reference and the index we're looking up. We have to reshuffle
+			// the values to fix that.
+			fkVals := make(tree.Datums, len(values))
+			for i, ordinal := range out.InsertCols {
+				for j := range out.InsertCols {
+					if fk.OriginColumnOrdinal(tab, j) == int(ordinal) {
+						fkVals[j] = values[i]
+						break
+					}
+				}
+			}
+			for i := range fkVals {
+				if fkVals[i] == nil {
+					return errors.AssertionFailedf("invalid column mapping")
+				}
+			}
+			return mkFKCheckErr(md, c, fkVals)
+		}
+	}
+
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList = appendColsWhenPresent(colList, ins.InsertCols)
+	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	if !colList.Equals(values.Cols) {
+		// We have a Values input, but the columns are not in the right order. For
+		// example:
+		//   INSERT INTO ab (SELECT y, x FROM (VALUES (1, 10)) AS v (x, y))
+		//
+		// TODO(radu): we could rearrange the columns of the rows below, or add
+		// a normalization rule that adds a Project to rearrange the Values node
+		// columns.
+		return execPlan{}, false, nil
+	}
+
+	rows, err := b.buildValuesRows(values)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+
+	// Construct the InsertFastPath node.
+	insertOrds := ordinalSetFromColList(ins.InsertCols)
+	checkOrds := ordinalSetFromColList(ins.CheckCols)
+	returnOrds := ordinalSetFromColList(ins.ReturnCols)
+	node, err := b.factory.ConstructInsertFastPath(
+		rows,
+		tab,
+		insertOrds,
+		returnOrds,
+		checkOrds,
+		fkChecks,
+	)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+	// Construct the output column map.
+	ep := execPlan{root: node}
+	if ins.NeedResults() {
+		ep.outputCols = mutationOutputColMap(ins)
+	}
+	return ep, true, nil
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
@@ -150,7 +300,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
-		b.autoCommit,
+		b.allowAutoCommit && len(upd.Checks) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -223,7 +373,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
-		b.autoCommit,
+		b.allowAutoCommit && len(ups.Checks) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -268,7 +418,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		tab,
 		fetchColOrds,
 		returnColOrds,
-		b.autoCommit,
+		b.allowAutoCommit && len(del.Checks) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -333,9 +483,15 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	// Calculate the maximum number of keys that the scan could return by
 	// multiplying the number of possible result rows by the number of column
 	// families of the table. The execbuilder needs this information to determine
-	// whether or not autoCommit can be enabled.
+	// whether or not allowAutoCommit can be enabled.
 	maxKeys := int(b.indexConstraintMaxResults(scan)) * tab.FamilyCount()
-	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint, maxKeys, b.autoCommit)
+	root, err := b.factory.ConstructDeleteRange(
+		tab,
+		needed,
+		scan.Constraint,
+		maxKeys,
+		b.allowAutoCommit && len(del.Checks) == 0,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -520,13 +676,15 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 // potentially taking advantage of the 1PC optimization. This is not ok to do in
 // general; a sufficient set of conditions is:
 //   1. There is a single mutation in the query.
-//   2. The mutation has no planned FK checks (which run after the mutation).
-//   3. The mutation is the root operator, or it is directly under a Project
-//      with no side-effecting expressions.
+//   2. The mutation is the root operator, or it is directly under a Project
+//      with no side-effecting expressions. An example of why we can't allow
+//      side-effecting expressions: if the projection encounters a
+//      division-by-zero error, the mutation shouldn't have been committed.
 //
-// An example of why we can't allow side-effecting expressions: if the
-// projection encounters a division-by-zero error, the mutation shouldn't have
-// been committed.
+// An extra condition relates to how the FK checks are run. If they run before
+// the mutation (via the insert fast path), auto commit is possible. If they run
+// after the mutation (the general path), auto commit is not possible. It is up
+// to the builder logic for each mutation to handle this.
 //
 // Note that there are other necessary conditions related to execution
 // (specifically, that the transaction is implicit); it is up to the exec
@@ -542,12 +700,7 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 		// Check that there aren't any more mutations in the input.
 		// TODO(radu): this can go away when all mutations are under top-level
 		// With ops.
-		if rel.Child(0).(memo.RelExpr).Relational().CanMutate {
-			return false
-		}
-		// Check that there aren't any FK checks planned.
-		fkChecks := rel.Child(1).(*memo.FKChecksExpr)
-		return len(*fkChecks) == 0
+		return !rel.Child(0).(memo.RelExpr).Relational().CanMutate
 
 	case opt.ProjectOp:
 		// Allow Project on top, as long as the expressions are not side-effecting.
