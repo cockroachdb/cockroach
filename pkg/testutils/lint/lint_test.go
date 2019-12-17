@@ -1461,6 +1461,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/pgwire/pgcode/codes.go:.* const .* is unused`),
 				// The methods in exprgen.customFuncs are used via reflection.
 				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
+				// Using deprecated method to COPY.
+				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

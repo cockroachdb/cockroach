@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -31,7 +32,7 @@ type Conn struct {
 
 // NewConn returns a new Conn on the given uri and executes initSQL on it.
 func NewConn(
-	uri string, rng *rand.Rand, sqlMutators []mutations.Mutator, initSQL ...string,
+	uri string, rng *rand.Rand, sqlMutators []sqlbase.Mutator, initSQL ...string,
 ) (*Conn, error) {
 	var c Conn
 

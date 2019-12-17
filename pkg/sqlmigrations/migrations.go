@@ -271,6 +271,19 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionProtectedTimestamps),
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
+	{
+		// Introduced in v20.1
+		name:                "create new system.namespace table",
+		workFn:              createNewSystemNamespaceDescriptor,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
+	},
+	{
+		// Introduced in v20.1
+		name:                "migrate system.namespace_deprecated entries into system.namespace",
+		workFn:              migrateSystemNamespace,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -647,6 +660,92 @@ func createProtectedTimestampsMetaTable(ctx context.Context, r runner) error {
 func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error {
 	return errors.Wrap(createSystemTable(ctx, r, sqlbase.ProtectedTimestampsRecordsTable),
 		"failed to create system.protected_ts_records")
+}
+
+func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		// The 19.2 namespace table contains an entry for "namespace" which maps to
+		// the deprecated namespace tables ID. Even though the cluster version at
+		// this point is 19.2, we construct a metadata name key in the 20.1 format.
+		// This is for two reasons:
+		// 1. We do not want to change the mapping in namespace_deprecated for
+		//    "namespace", as for the purpose of namespace_deprecated, namespace
+		//    refers to the correct ID.
+		// 2. By adding the ID mapping in the new system.namespace table, the
+		//    idempotent semantics of the migration ensure that "namespace" maps to
+		//    the correct ID in the new system.namespace table after all tables are
+		//    copied over.
+		nameKey := sqlbase.NewPublicTableKey(sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTable.GetName())
+		b.CPut(nameKey.Key(), sqlbase.NamespaceTable.GetID(), nil)
+		b.CPut(sqlbase.MakeDescMetadataKey(sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable), nil)
+		return txn.Run(ctx, b)
+	})
+	// CPuts only provide idempotent inserts if we ignore the errors that arise
+	// when the condition isn't met.
+	if _, ok := err.(*roachpb.ConditionFailedError); ok {
+		return nil
+	}
+	return err
+}
+
+func migrateSystemNamespace(ctx context.Context, r runner) error {
+	// In system.namespace_deprecated, all databases have
+	// parentID == RootNamespaceID. When migrating databases over, the
+	// parentSchemaID is set to RootNamespaceID as well.
+	migrateDatabaseQuery := fmt.Sprintf(`
+INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id)
+(SELECT "parentID", %d, name, id FROM [%d AS namespace_deprecated] WHERE "parentID" = %d) 
+ON CONFLICT DO NOTHING`,
+		sqlbase.NamespaceTable.ID, keys.RootNamespaceID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID,
+	)
+	// An entry for the `public` schema is added for every database in the old
+	// system.namespace table. This entry maps to a static ID of 29.
+	addPublicSchemasQuery := fmt.Sprintf(`
+INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id)
+(SELECT id, %d, 'public', %d FROM [%d AS namespace_deprecated] WHERE "parentID" = %d)
+ON CONFLICT DO NOTHING`,
+		sqlbase.NamespaceTable.ID, keys.RootNamespaceID, keys.PublicSchemaID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID)
+	// In system.namespace_deprecated, all tables are implicitly under the
+	// `public` schema. When migrating tables over, the parentSchemaID is set
+	// to 29.
+	migrateTablesQuery := fmt.Sprintf(`
+INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id) 
+(SELECT "parentID", %d, name, id FROM [%d AS namespace_deprecated] WHERE "parentID" != %d)
+ON CONFLICT DO NOTHING`,
+		sqlbase.NamespaceTable.ID, keys.PublicSchemaID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID,
+	)
+	_, err := r.sqlExecutor.ExecWithUser(
+		ctx,
+		"migrate-system-namespace-databases",
+		nil, /* txn */
+		security.NodeUser,
+		migrateDatabaseQuery,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = r.sqlExecutor.ExecWithUser(
+		ctx,
+		"migrate-system-namespace-add-public-schemas",
+		nil, /* txn */
+		security.NodeUser,
+		addPublicSchemasQuery,
+	)
+	if err != nil {
+		return err
+	}
+	_, err = r.sqlExecutor.ExecWithUser(
+		ctx,
+		"migrate-system-namespace-tables",
+		nil, /* txn */
+		security.NodeUser,
+		migrateTablesQuery,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
