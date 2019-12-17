@@ -462,19 +462,18 @@ BEGIN; ALTER TABLE mutation DROP COLUMN y
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 ----
-·                      distributed    false                  ·                            ·
-·                      vectorized     false                  ·                            ·
-render                 ·              ·                      (x)                          ·
- │                     render 0       x                      ·                            ·
- └── run               ·              ·                      (x, rowid[hidden])           ·
-      └── insert       ·              ·                      (x, rowid[hidden])           ·
-           │           into           mutation(x, rowid, y)  ·                            ·
-           │           strategy       inserter               ·                            ·
-           └── values  ·              ·                      (column1, column5, column6)  ·
-·                      size           3 columns, 1 row       ·                            ·
-·                      row 0, expr 0  2                      ·                            ·
-·                      row 0, expr 1  unique_rowid()         ·                            ·
-·                      row 0, expr 2  10                     ·                            ·
+·                           distributed    false                  ·                   ·
+·                           vectorized     false                  ·                   ·
+render                      ·              ·                      (x)                 ·
+ │                          render 0       x                      ·                   ·
+ └── run                    ·              ·                      (x, rowid[hidden])  ·
+      └── insert-fast-path  ·              ·                      (x, rowid[hidden])  ·
+·                           into           mutation(x, rowid, y)  ·                   ·
+·                           strategy       inserter               ·                   ·
+·                           size           3 columns, 1 row       ·                   ·
+·                           row 0, expr 0  2                      ·                   ·
+·                           row 0, expr 1  unique_rowid()         ·                   ·
+·                           row 0, expr 2  10                     ·                   ·
 
 statement ok
 ROLLBACK
@@ -486,17 +485,16 @@ BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ----
-·                 distributed    false                  ·                            ·
-·                 vectorized     false                  ·                            ·
-count             ·              ·                      ()                           ·
- └── insert       ·              ·                      ()                           ·
-      │           into           mutation(x, y, rowid)  ·                            ·
-      │           strategy       inserter               ·                            ·
-      └── values  ·              ·                      (column1, column2, column7)  ·
-·                 size           3 columns, 1 row       ·                            ·
-·                 row 0, expr 0  2                      ·                            ·
-·                 row 0, expr 1  2                      ·                            ·
-·                 row 0, expr 2  unique_rowid()         ·                            ·
+·                      distributed    false                  ·   ·
+·                      vectorized     false                  ·   ·
+count                  ·              ·                      ()  ·
+ └── insert-fast-path  ·              ·                      ()  ·
+·                      into           mutation(x, y, rowid)  ·   ·
+·                      strategy       inserter               ·   ·
+·                      size           3 columns, 1 row       ·   ·
+·                      row 0, expr 0  2                      ·   ·
+·                      row 0, expr 1  2                      ·   ·
+·                      row 0, expr 2  unique_rowid()         ·   ·
 
 statement ok
 ROLLBACK

@@ -153,8 +153,14 @@ var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 
 var optDrivenFKClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_optimizer_foreign_keys.enabled",
-	"enables optimizer-driven foreign key checks by default",
+	"default value for experimental_optimizer_foreign_keys session setting; enables optimizer-driven foreign key checks by default",
 	false,
+)
+
+var insertFastPathClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.insert_fast_path.enabled",
+	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
+	true,
 )
 
 // VectorizeClusterMode controls the cluster default for when automatic
@@ -1831,6 +1837,10 @@ func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 
 func (m *sessionDataMutator) SetOptimizerFKs(val bool) {
 	m.data.OptimizerFKs = val
+}
+
+func (m *sessionDataMutator) SetInsertFastPath(val bool) {
+	m.data.InsertFastPath = val
 }
 
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {

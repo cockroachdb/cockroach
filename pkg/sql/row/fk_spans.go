@@ -24,16 +24,30 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 		key := roachpb.Key(f.searchPrefix)
 		return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
 	}
+	return FKCheckSpan(
+		f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix,
+	)
+}
 
+// FKCheckSpan returns a span that can be scanned to ascertain existence of a
+// specific row in a given index.
+func FKCheckSpan(
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	numCols int,
+	colMap map[sqlbase.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (roachpb.Span, error) {
 	// If we are scanning the (entire) primary key, only scan family 0 (which is
 	// always present).
 	// TODO(radu): this logic will need to be improved when secondary indexes also
 	// conform to families.
-	if f.searchIdx.ID == f.searchTable.PrimaryIndex.ID && f.prefixLen == len(f.searchIdx.ColumnIDs) {
+	if index.ID == tableDesc.PrimaryIndex.ID && numCols == len(index.ColumnIDs) {
 		// This code is equivalent to calling EncodePartialIndexSpan followed by
 		// MakeFamilyKey but saves an unnecessary allocation.
 		key, _, err := sqlbase.EncodePartialIndexKey(
-			f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix,
+			tableDesc, index, numCols, colMap, values, keyPrefix,
 		)
 		if err != nil {
 			return roachpb.Span{}, err
@@ -43,6 +57,7 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 	}
 
 	span, _, err := sqlbase.EncodePartialIndexSpan(
-		f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
+		tableDesc, index, numCols, colMap, values, keyPrefix,
+	)
 	return span, err
 }
