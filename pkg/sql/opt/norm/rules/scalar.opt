@@ -211,6 +211,41 @@
 =>
 (SimplifyWhens $condition $whens $orElse)
 
+# InlineAnyValuesSingleCol converts Any with Values input to AnyScalar.
+# This version handles the case where there is a single column.
+[InlineAnyValuesSingleCol, Normalize]
+(Any
+    $values:(Values)
+    $scalar:*
+    $private:*
+)
+=>
+(AnyScalar
+    $scalar
+    (InlineValues $values)
+    (SubqueryCmp $private)
+)
+
+# InlineAnyValuesMultiCol converts Any with Values input to AnyScalar.
+# This version handles the case where there are multiple columns; in this case,
+# the Values is wrapped into a Project that converts each row to a tuple.
+[InlineAnyValuesMultiCol, Normalize]
+(Any
+    (Project
+        $values:(Values)
+        [ (ProjectionsItem $tuple:(Tuple)) ] & (IsTupleOfVars $tuple (ValuesCols $values))
+        $passthrough:* & (ColsAreEmpty $passthrough)
+    )
+    $scalar:*
+    $private:*
+)
+=>
+(AnyScalar
+    $scalar
+    (InlineValues $values)
+    (SubqueryCmp $private)
+)
+
 # SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
 # It transforms
 #
