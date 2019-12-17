@@ -280,7 +280,7 @@ type argTypeOpts []struct {
 	Typ  []*types.T
 }
 
-var strOrOidTypes = []*types.T{types.String, types.Oid}
+var strOrOidTypes = []*types.T{types.String, types.Name, types.Oid}
 
 // makePGPrivilegeInquiryDef constructs all variations of a specific PG access
 // privilege inquiry function. Each variant has a different signature.
@@ -384,7 +384,7 @@ func makePGPrivilegeInquiryDef(
 func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string) (string, error) {
 	var query string
 	switch t := arg.(type) {
-	case *tree.DString:
+	case *tree.DString, *tree.DName:
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE %s = $1 LIMIT 1", pgCol, pgTable, pgCol)
 	case *tree.DOid:
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
@@ -402,22 +402,12 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 // argument, which should be either an unwrapped STRING or an OID. If the table
 // is not found, the returned pointer will be nil.
 func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName, error) {
+	var name string
 	switch t := arg.(type) {
 	case *tree.DString:
-		tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), string(*t))
-		if err != nil {
-			return nil, err
-		}
-		if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
-			return nil, err
-		}
-		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
-			// Postgres does not allow cross-database references in these
-			// functions, so we don't either.
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cross-database references are not implemented: %s", tn)
-		}
-		return tn, nil
+		name = string(*t)
+	case *tree.DName:
+		name = string(*t)
 	case *tree.DOid:
 		r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "get-table-name-for-arg",
 			ctx.Txn,
@@ -435,7 +425,20 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 	default:
 		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
 	}
-	return nil, nil
+	tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), name)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+		return nil, err
+	}
+	if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
+		// Postgres does not allow cross-database references in these
+		// functions, so we don't either.
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cross-database references are not implemented: %s", tn)
+	}
+	return tn, nil
 }
 
 // TODO(nvanbenschoten): give this a comment.
@@ -1146,7 +1149,7 @@ SELECT description
 				var colPred string
 				colArg := tree.UnwrapDatum(ctx, args[1])
 				switch t := colArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					// When colArg is a string, it specifies the attribute name.
 					colPred = "attname = $1"
 				case *tree.DInt:
@@ -1216,7 +1219,7 @@ SELECT description
 			retNull := false
 			if db == "" {
 				switch dbArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.InvalidCatalogName,
 						"database %s does not exist", dbArg)
 				case *tree.DOid:
@@ -1271,7 +1274,7 @@ SELECT description
 			}
 			if fdw == "" {
 				switch fdwArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"foreign-data wrapper %s does not exist", fdwArg)
 				case *tree.DOid:
@@ -1298,7 +1301,7 @@ SELECT description
 			// the allowed input is the same as for the regprocedure data type.
 			var oid tree.Datum
 			switch t := oidArg.(type) {
-			case *tree.DString:
+			case *tree.DString, *tree.DName:
 				var err error
 				oid, err = tree.PerformCast(ctx, t, types.RegProcedure)
 				if err != nil {
@@ -1343,7 +1346,7 @@ SELECT description
 			retNull := false
 			if lang == "" {
 				switch langArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"language %s does not exist", langArg)
 				case *tree.DOid:
@@ -1377,7 +1380,7 @@ SELECT description
 			retNull := false
 			if schema == "" {
 				switch schemaArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.InvalidSchemaName,
 						"schema %s does not exist", schemaArg)
 				case *tree.DOid:
@@ -1483,7 +1486,7 @@ SELECT description
 			}
 			if server == "" {
 				switch serverArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"server %s does not exist", serverArg)
 				case *tree.DOid:
@@ -1587,7 +1590,7 @@ SELECT description
 			}
 			if tablespace == "" {
 				switch tablespaceArg.(type) {
-				case *tree.DString:
+				case *tree.DString, *tree.DName:
 					return nil, pgerror.Newf(pgcode.UndefinedObject,
 						"tablespace %s does not exist", tablespaceArg)
 				case *tree.DOid:
@@ -1614,7 +1617,7 @@ SELECT description
 			// allowed input is the same as for the regtype data type.
 			var oid tree.Datum
 			switch t := oidArg.(type) {
-			case *tree.DString:
+			case *tree.DString, *tree.DName:
 				var err error
 				oid, err = tree.PerformCast(ctx, t, types.RegType)
 				if err != nil {

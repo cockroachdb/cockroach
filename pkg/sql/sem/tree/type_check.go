@@ -1351,6 +1351,10 @@ func (d *DString) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { ret
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DName) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DCollatedString) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
@@ -1423,10 +1427,6 @@ func (d *DArray) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, error) 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DOid) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
-
-// TypeCheck implements the Expr interface. It is implemented as an idempotent
-// identity function for Datum.
-func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.

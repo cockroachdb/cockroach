@@ -88,6 +88,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *tree.DName:
+		if dir == encoding.Ascending {
+			return encoding.EncodeStringAscending(b, string(*t)), nil
+		}
+		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *tree.DBytes:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
@@ -445,6 +450,8 @@ func EncodeTableValue(
 		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), nil
 	case *tree.DString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
+	case *tree.DName:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
@@ -686,8 +693,12 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 			return r, err
 		}
 	case types.StringFamily:
-		if v, ok := tree.AsDString(val); ok {
-			r.SetString(string(v))
+		switch t := val.(type) {
+		case *tree.DString:
+			r.SetString(string(*t))
+			return r, nil
+		case *tree.DName:
+			r.SetString(string(*t))
 			return r, nil
 		}
 	case types.BytesFamily:
@@ -1210,6 +1221,10 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
 		return b, nil
+	case *tree.DName:
+		bytes := []byte(*t)
+		b = encoding.EncodeUntaggedBytesValue(b, bytes)
+		return b, nil
 	case *tree.DBytes:
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
@@ -1242,8 +1257,6 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
-	case *tree.DOidWrapper:
-		return encodeArrayElement(b, t.Wrapped)
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}

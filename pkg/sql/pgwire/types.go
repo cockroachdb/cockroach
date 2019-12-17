@@ -142,6 +142,9 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DString:
 		b.writeLengthPrefixedString(string(*v))
 
+	case *tree.DName:
+		b.writeLengthPrefixedString(string(*v))
+
 	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
 
@@ -405,6 +408,9 @@ func (b *writeBuffer) writeBinaryDatum(
 		}
 
 	case *tree.DString:
+		b.writeLengthPrefixedString(string(*v))
+
+	case *tree.DName:
 		b.writeLengthPrefixedString(string(*v))
 
 	case *tree.DCollatedString:
