@@ -151,10 +151,17 @@ func newNotVectorizedInternalError(err error) *notVectorizedInternalError {
 
 // VectorizedInternalPanic simply panics with the provided object. It will
 // always be returned as internal error to the client with the corresponding
-// stack trace. This method should be called to propagate all unexpected errors
-// that originated within the vectorized engine.
+// stack trace. This method should be called to propagate all *unexpected*
+// errors that originated within the vectorized engine.
 func VectorizedInternalPanic(err interface{}) {
 	panic(err)
+}
+
+// VectorizedExpectedInternalPanic is the same as NonVectorizedPanic. It should
+// be called to propagate all *expected* errors that originated within the
+// vectorized engine.
+func VectorizedExpectedInternalPanic(err error) {
+	NonVectorizedPanic(err)
 }
 
 // NonVectorizedPanic panics with the error that is wrapped by

@@ -139,11 +139,13 @@ func TestRank(t *testing.T) {
 					Windower: &tc.windowerSpec,
 				},
 			}
-			result, err := NewColOperator(
-				ctx, flowCtx, spec, inputs, testMemAcc,
-				true, /* useStreamingMemAccountForBuffering */
-				nil,  /* processorConstructor */
-			)
+			args := NewColOperatorArgs{
+				Spec:                               spec,
+				Inputs:                             inputs,
+				StreamingMemAccount:                testMemAcc,
+				UseStreamingMemAccountForBuffering: true,
+			}
+			result, err := NewColOperator(ctx, flowCtx, args)
 			if err != nil {
 				return nil, err
 			}
@@ -211,11 +213,13 @@ func TestRowNumber(t *testing.T) {
 					Windower: &tc.windowerSpec,
 				},
 			}
-			result, err := NewColOperator(
-				ctx, flowCtx, spec, inputs, testMemAcc,
-				true, /* useStreamingMemAccountForBuffering */
-				nil,  /* processorConstructor */
-			)
+			args := NewColOperatorArgs{
+				Spec:                               spec,
+				Inputs:                             inputs,
+				StreamingMemAccount:                testMemAcc,
+				UseStreamingMemAccountForBuffering: true,
+			}
+			result, err := NewColOperator(ctx, flowCtx, args)
 			if err != nil {
 				return nil, err
 			}
