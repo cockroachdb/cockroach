@@ -55,6 +55,18 @@ type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
 export const nodeStatusesSelector = (state: NodeStatusState) => state.cachedData.nodes.data;
 
 /*
+ * clusterSelector returns information about cluster.
+ */
+export const clusterSelector = (state: AdminUIState) => state.cachedData.cluster.data;
+
+/*
+ * clusterIdSelector returns Cluster Id (as UUID string).
+ */
+export const clusterIdSelector = createSelector(
+  clusterSelector,
+  (clusterInfo) => clusterInfo && clusterInfo.cluster_id,
+);
+/*
  * selectNodeRequestStatus returns the current status of the node status request.
  */
 export function selectNodeRequestStatus(state: AdminUIState) {
@@ -297,3 +309,38 @@ export type NodesSummary = typeof nodesSummaryType;
 export function selectNodesSummaryValid(state: AdminUIState) {
   return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
 }
+
+interface ClusterDetails {
+  clusterName: string;
+  clusterVersion: string;
+}
+
+/*
+ * clusterInfoSelector returns the information about cluster which is a part
+ * of metadata on nodes of current cluster.
+ */
+export const clusterInfoSelector = createSelector(
+  nodeStatusesSelector,
+  livenessStatusByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID): ClusterDetails => {
+    if (_.isUndefined(nodeStatuses) || _.isEmpty(livenessStatusByNodeID)) {
+      return {
+        clusterVersion: undefined,
+        clusterName: undefined,
+      };
+    }
+    const liveNodesOnCluster = nodeStatuses.filter(
+      nodeStatus => livenessStatusByNodeID[nodeStatus.desc.node_id] === LivenessStatus.LIVE);
+
+    const nodesWithUniqClusterNames = _.chain(liveNodesOnCluster)
+      .filter(node => !_.isEmpty(node.desc.cluster_name))
+      .uniqBy(node => node.desc.cluster_name)
+      .value();
+
+    const nodesWithUniqClusterVersions = _.uniqBy(liveNodesOnCluster, node => node.desc.ServerVersion);
+    const { major_val, minor_val, patch, unstable } = nodesWithUniqClusterVersions[0].desc.ServerVersion;
+    return {
+      clusterName: nodesWithUniqClusterNames.length > 0 ? nodesWithUniqClusterNames[0].desc.cluster_name : undefined,
+      clusterVersion: [major_val, minor_val, patch, unstable].join("."),
+    };
+  });
