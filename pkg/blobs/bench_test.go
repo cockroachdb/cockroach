@@ -24,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// filesize should be at least 1 GB when running these benchmarks.
+// Reduced to 129 K for CI.
+const filesize = 129 * 1 << 10
+
 type benchmarkTestCase struct {
 	localNodeID       roachpb.NodeID
 	remoteNodeID      roachpb.NodeID
@@ -68,7 +72,7 @@ func BenchmarkStreamingReadFile(b *testing.B) {
 		localExternalDir:  localExternalDir,
 		remoteExternalDir: remoteExternalDir,
 		blobClient:        blobClient,
-		fileSize:          1 << 30, // 1 GB
+		fileSize:          filesize,
 		fileName:          "test/largefile.csv",
 	}
 	benchmarkStreamingReadFile(b, params)
@@ -119,7 +123,7 @@ func BenchmarkStreamingWriteFile(b *testing.B) {
 		localExternalDir:  localExternalDir,
 		remoteExternalDir: remoteExternalDir,
 		blobClient:        blobClient,
-		fileSize:          1 << 30, // 1 GB
+		fileSize:          filesize,
 		fileName:          "test/largefile.csv",
 	}
 	benchmarkStreamingWriteFile(b, params)

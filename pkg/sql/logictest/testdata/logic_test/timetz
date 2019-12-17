@@ -526,3 +526,116 @@ query R
 SELECT extract(epoch from timetz '12:00:00+04')
 ----
 28800
+
+# Adapted from `src/test/regress/expected/timetz.out` in postgres
+subtest regress_postgres
+
+statement ok
+CREATE TABLE TIMETZ_TBL (id serial primary key, f1 time(2) with time zone)
+
+# Changed PDT/PST/EDT -> zone offsets, as pgdate does not support abbreviations.
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('00:01-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('01:00-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('02:03-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('07:07-05')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('08:08-04')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('11:59-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('12:00-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('12:01-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('23:59-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('11:59:59.99 PM-07')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('2003-03-07 15:36:39 America/New_York')
+
+statement ok
+INSERT INTO TIMETZ_TBL (f1) VALUES ('2003-07-07 15:36:39 America/New_York')
+
+# pgdate supports this, but postgres does not.
+# INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 America/New_York')
+
+# this should fail (timezone not specified without a date)
+query error could not parse "1970-01-01 15:36:39 m2" as TimeTZ
+INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 m2')
+
+# this should fail (dynamic timezone abbreviation without a date)
+query error could not parse "1970-01-01 15:36:39 MSK m2" as TimeTZ
+INSERT INTO TIMETZ_TBL (f1) VALUES ('15:36:39 MSK m2')
+
+query T
+SELECT f1::string AS "Time TZ" FROM TIMETZ_TBL ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query T
+SELECT f1::string AS "Three" FROM TIMETZ_TBL WHERE f1 < '05:06:07-07' ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+
+query T
+SELECT f1::string AS "Seven" FROM TIMETZ_TBL WHERE f1 > '05:06:07-07' ORDER BY id
+----
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query T
+SELECT f1::string AS "None" FROM TIMETZ_TBL WHERE f1 < '00:00-07' ORDER BY id
+----
+
+query T
+SELECT f1::string AS "Ten" FROM TIMETZ_TBL WHERE f1 >= '00:00-07' ORDER BY id
+----
+00:01:00-07:00:00
+01:00:00-07:00:00
+02:03:00-07:00:00
+07:07:00-05:00:00
+08:08:00-04:00:00
+11:59:00-07:00:00
+12:00:00-07:00:00
+12:01:00-07:00:00
+23:59:00-07:00:00
+23:59:59.99-07:00:00
+15:36:39-05:00:00
+15:36:39-04:00:00
+
+query error pq: unsupported binary operator: <timetz\(2\)> \+ <timetz>
+SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL ORDER BY id
