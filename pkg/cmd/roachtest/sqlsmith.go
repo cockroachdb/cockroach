@@ -175,7 +175,7 @@ func registerSQLSmith(r *testRegistry) {
 					done <- err
 				}(ctx)
 				select {
-				case <-time.After(timeout + 5*time.Second):
+				case <-time.After(timeout * 2):
 					t.Fatalf("query timed out, but did not cancel execution:\n%s;", stmt)
 				case err := <-done:
 					return err
