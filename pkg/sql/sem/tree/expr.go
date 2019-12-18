@@ -521,7 +521,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		}
 	}
 
-	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
+	fn, ok := CmpOps[fOp].LookupImpl(leftRet, rightRet)
 	if !ok {
 		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))

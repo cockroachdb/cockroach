@@ -1583,7 +1583,7 @@ func typeCheckComparisonOpWithSubOperator(
 			return nil, nil, nil, false, pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
-	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
+	fn, ok := ops.LookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok {
 		return nil, nil, nil, false, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
 	}
@@ -1636,7 +1636,7 @@ func typeCheckComparisonOp(
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
-		fn, ok := ops.lookupImpl(retType, types.AnyTuple)
+		fn, ok := ops.LookupImpl(retType, types.AnyTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.AnyTuple)
 			return nil, nil, nil, false,
@@ -1665,7 +1665,7 @@ func typeCheckComparisonOp(
 		}
 
 		typ := typedLeft.ResolvedType()
-		fn, ok := ops.lookupImpl(typ, types.AnyTuple)
+		fn, ok := ops.LookupImpl(typ, types.AnyTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, typ, op, types.AnyTuple)
 			return nil, nil, nil, false,
@@ -1688,7 +1688,7 @@ func typeCheckComparisonOp(
 		return typedLeft, typedRight, fn, false, nil
 
 	case leftIsTuple && rightIsTuple:
-		fn, ok := ops.lookupImpl(types.AnyTuple, types.AnyTuple)
+		fn, ok := ops.LookupImpl(types.AnyTuple, types.AnyTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, types.AnyTuple, op, types.AnyTuple)
 			return nil, nil, nil, false,
