@@ -687,6 +687,8 @@ func (p *planner) isAsOf(stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp
 		asOf = s.AsOf
 	case *tree.Export:
 		return p.isAsOf(s.Query, max)
+	case *tree.Explain:
+		return p.isAsOf(s.Statement, max)
 	default:
 		return nil, nil
 	}
