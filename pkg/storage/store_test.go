@@ -1014,7 +1014,7 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 		store:     store,
 		abortSpan: abortspan.New(desc.RangeID),
 	}
-	if err := r.init(desc, store.Clock(), 0); err != nil {
+	if err := r.init(desc, 0); err != nil {
 		t.Fatal(err)
 	}
 
