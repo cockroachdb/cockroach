@@ -395,18 +395,22 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 
 	// Invariants: NewFirstIndex >= FirstIndex
 	//             NewFirstIndex <= LastIndex (if != 10)
-	//             NewFirstIndex <= QuorumIndex (if != 0)
+	//             NewFirstIndex <= CommitIndex (if != 10)
 	//
-	// For uninit'ed replicas we can have input.FirstIndex > input.LastIndex, more
-	// specifically input.FirstIndex = input.LastIndex + 1. FirstIndex is set to
+	// For uninit'ed replicas we can have NewFirstIndex > input.LastIndex, more
+	// specifically NewFirstIndex = input.LastIndex + 1. NewFirstIndex is set to
 	// TruncatedState.Index + 1, and for an unit'ed replica, LastIndex is simply
 	// 10. This is what informs the `input.LastIndex == 10` conditional below.
+	//
+	// We should also never truncate past the "committed" index. A special case
+	// for this, like above, is the uninit'ed replica which starts off with a
+	// committed/last index of 10 and NewFirstIndex = input.LastIndex + 1 = 11.
 	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
 		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex == 10) &&
-		(decision.NewFirstIndex <= decision.QuorumIndex || decision.QuorumIndex == 0)
+		(decision.NewFirstIndex <= input.RaftStatus.Commit || input.RaftStatus.Commit != 10)
 	if !valid {
-		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], quorum idx = %d",
-			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.QuorumIndex)
+		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], commit idx = %d",
+			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, input.RaftStatus.Commit)
 		panic(err)
 	}
 
