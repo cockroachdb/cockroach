@@ -605,14 +605,14 @@ func NewDefaultEngine(cacheSize int64, storageConfig base.StorageConfig) (Engine
 //
 // Deprecated: use MVCCPutProto instead.
 func PutProto(
-	engine Writer, key MVCCKey, msg protoutil.Message,
+	writer Writer, key MVCCKey, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	if err := engine.Put(key, bytes); err != nil {
+	if err := writer.Put(key, bytes); err != nil {
 		return 0, 0, err
 	}
 
@@ -622,9 +622,9 @@ func PutProto(
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
+func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := engine.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
+	err := reader.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
 			return true, nil
 		}
@@ -652,8 +652,8 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
 // (exclusive). Depending on the number of keys, it will either use ClearRange
 // or ClearIterRange.
-func ClearRangeWithHeuristic(eng Reader, writer Writer, start, end roachpb.Key) error {
-	iter := eng.NewIterator(IterOptions{UpperBound: end})
+func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
+	iter := reader.NewIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same

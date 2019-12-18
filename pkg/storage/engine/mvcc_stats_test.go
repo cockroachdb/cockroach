@@ -31,9 +31,9 @@ import (
 )
 
 // assertEq compares the given ms and expMS and errors when they don't match. It
-// also recomputes the stats over the whole engine with all known
+// also recomputes the stats over the whole ReadWriter with all known
 // implementations and errors on mismatch with any of them.
-func assertEq(t *testing.T, engine ReadWriter, debug string, ms, expMS *enginepb.MVCCStats) {
+func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVCCStats) {
 	t.Helper()
 
 	msCpy := *ms // shallow copy
@@ -44,7 +44,7 @@ func assertEq(t *testing.T, engine ReadWriter, debug string, ms, expMS *enginepb
 		t.Errorf("%s: diff(ms, expMS) nontrivial", debug)
 	}
 
-	it := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	it := rw.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
