@@ -483,11 +483,11 @@ func resolveLocalIntents(
 				return nil
 			}
 			intent := roachpb.Intent{
-				Span:                      span,
-				Txn:                       txn.TxnMeta,
-				Status:                    txn.Status,
-				IgnoredSeqNums:            txn.IgnoredSeqNums,
-				IgnoredSeqNumsInitialized: true,
+				Span:           span,
+				Txn:            txn.TxnMeta,
+				Status:         txn.Status,
+				IgnoredSeqNums: txn.IgnoredSeqNums,
+				// IgnoredSeqNumsInitialized: true,
 			}
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
