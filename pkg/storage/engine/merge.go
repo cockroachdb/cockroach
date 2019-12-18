@@ -66,7 +66,7 @@ func MergeInternalTimeSeriesData(
 	var mergedBytes []byte
 	srcBytes, err := serializeMergeInputs(sources...)
 	if err != nil {
-		return roachpb.InternalTimeSeriesData{}, nil
+		return roachpb.InternalTimeSeriesData{}, err
 	}
 	if !mergeIntoNil {
 		mergedBytes = srcBytes[0]

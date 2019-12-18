@@ -121,7 +121,7 @@ func TestLoadEmbeddedCerts(t *testing.T) {
 func countLoadedCertificates(certsDir string) (int, error) {
 	cl := security.NewCertificateLoader(certsDir)
 	if err := cl.Load(); err != nil {
-		return 0, nil
+		return 0, err
 	}
 	return len(cl.Certificates()), nil
 }
