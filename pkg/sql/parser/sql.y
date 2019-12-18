@@ -886,7 +886,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Exprs> substr_list
 %type <tree.Exprs> trim_list
 %type <tree.Exprs> execute_param_clause
-%type <types.IntervalTypeMetadata> opt_interval interval_second interval_qualifier
+%type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_cluster
@@ -918,7 +918,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
 %type <tree.Expr> array_expr
-%type <tree.Expr> interval
+%type <tree.Expr> interval_value
 %type <[]*types.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <*tree.Tuple> row labeled_row
@@ -950,7 +950,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*types.T> numeric opt_numeric_modifiers
 %type <*types.T> opt_float
 %type <*types.T> character_with_length character_without_length
-%type <*types.T> const_datetime const_interval
+%type <*types.T> const_datetime interval_type
 %type <*types.T> bit_with_length bit_without_length
 %type <*types.T> character_base
 %type <*types.T> postgres_oid
@@ -3304,7 +3304,7 @@ zone_value:
   {
     $$.val = tree.NewStrVal($1)
   }
-| interval
+| interval_value
   {
     $$.val = $1.expr()
   }
@@ -6959,27 +6959,14 @@ simple_typename:
   const_typename
 | bit_with_length
 | character_with_length
-| const_interval
-| const_interval interval_qualifier
-  {
-    $$.val = types.MakeInterval($2.intervalTypeMetadata())
-  }
-| const_interval '(' iconst32 ')'
-  {
-    prec := $3.int32()
-    if prec < 0 || prec > 6 {
-      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
-      return 1
-    }
-    $$.val = types.MakeInterval(types.IntervalTypeMetadata{Precision: prec, PrecisionIsSet: true})
-  }
+| interval_type
 | postgres_oid
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
 // default to a length of one, but this makes no sense for constructs like CHAR
 // 'hi' and BIT '0101', where there is an obvious better choice to make. Note
-// that const_interval is not included here since it must be pushed up higher
+// that interval_type is not included here since it must be pushed up higher
 // in the rules to accommodate the postfix options (e.g. INTERVAL '1'
 // YEAR). Likewise, we have to handle the generic-type-name case in
 // a_expr_const to avoid premature reduce/reduce conflicts against function
@@ -7392,10 +7379,23 @@ opt_timezone:
 | WITHOUT TIME ZONE { $$.val = false; }
 | /*EMPTY*/         { $$.val = false; }
 
-
-const_interval:
-  INTERVAL {
+interval_type:
+  INTERVAL
+  {
     $$.val = types.Interval
+  }
+| INTERVAL interval_qualifier
+  {
+    $$.val = types.MakeInterval($2.intervalTypeMetadata())
+  }
+| INTERVAL '(' iconst32 ')'
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
+    }
+    $$.val = types.MakeInterval(types.IntervalTypeMetadata{Precision: prec, PrecisionIsSet: true})
   }
 
 interval_qualifier:
@@ -7501,7 +7501,7 @@ interval_qualifier:
     $$.val = ret
   }
 
-opt_interval:
+opt_interval_qualifier:
   interval_qualifier
 | /* EMPTY */
   {
@@ -8114,23 +8114,9 @@ d_expr:
   {
     $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
   }
-| interval
+| interval_value
   {
     $$.val = $1.expr()
-  }
-| const_interval '(' iconst32 ')' SCONST
-  {
-    prec := $3.int32()
-    if prec < 0 || prec > 6 {
-      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
-      return 1
-    }
-    d, err := tree.ParseDIntervalWithTypeMetadata($5, types.IntervalTypeMetadata{
-      Precision: prec,
-      PrecisionIsSet: true,
-    })
-    if err != nil { return setErr(sqllex, err) }
-    $$.val = d
   }
 | TRUE
   {
@@ -9209,11 +9195,9 @@ iconst64:
     $$.val = val
   }
 
-interval:
-  const_interval SCONST opt_interval
+interval_value:
+  INTERVAL SCONST opt_interval_qualifier
   {
-    // We don't carry opt_interval information into the column type, so we need
-    // to parse the interval directly.
     var err error
     var d tree.Datum
     if $3.val == nil {
@@ -9221,6 +9205,20 @@ interval:
     } else {
       d, err = tree.ParseDIntervalWithTypeMetadata($2, $3.intervalTypeMetadata())
     }
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = d
+  }
+| INTERVAL '(' iconst32 ')' SCONST
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
+    }
+    d, err := tree.ParseDIntervalWithTypeMetadata($5, types.IntervalTypeMetadata{
+      Precision: prec,
+      PrecisionIsSet: true,
+    })
     if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
