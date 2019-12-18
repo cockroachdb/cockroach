@@ -1618,7 +1618,7 @@ func handleTruncatedStateBelowRaft(
 	ctx context.Context,
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 ) (_apply bool, _ error) {
 	// If this is a log truncation, load the resulting unreplicated or legacy
 	// replicated truncated state (in that order). If the migration is happening
@@ -1628,7 +1628,7 @@ func handleTruncatedStateBelowRaft(
 	// Either way, we'll update it below.
 	//
 	// See VersionUnreplicatedRaftTruncatedState for details.
-	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, batch)
+	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter)
 	if err != nil {
 		return false, errors.Wrap(err, "loading truncated state")
 	}
@@ -1650,7 +1650,7 @@ func handleTruncatedStateBelowRaft(
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := batch.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+		if err := readWriter.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
 			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
 		}
 	}
@@ -1668,7 +1668,7 @@ func handleTruncatedStateBelowRaft(
 			// overwrite it if this truncation "moves it forward".
 
 			if err := engine.MVCCPutProto(
-				ctx, batch, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
+				ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
 				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
 			); err != nil {
 				return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")

@@ -120,7 +120,7 @@ func createRangeData(
 func verifyRDIter(
 	t *testing.T,
 	desc *roachpb.RangeDescriptor,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	replicatedOnly bool,
 	expectedKeys []engine.MVCCKey,
 ) {
@@ -140,9 +140,9 @@ func verifyRDIter(
 				Key:    desc.StartKey.AsRawKey(),
 				EndKey: desc.EndKey.AsRawKey(),
 			}, hlc.Timestamp{WallTime: 42})
-			eng = spanset.NewReadWriterAt(eng, &spans, hlc.Timestamp{WallTime: 42})
+			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaDataIterator(desc, eng, replicatedOnly)
+		iter := NewReplicaDataIterator(desc, readWriter, replicatedOnly)
 		defer iter.Close()
 		i := 0
 		for ; ; iter.Next() {

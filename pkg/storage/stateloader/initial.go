@@ -40,7 +40,7 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -62,19 +62,19 @@ func WriteInitialReplicaState(
 	s.GCThreshold = &gcThreshold
 	s.UsingAppliedStateKey = true
 
-	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
+	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
 		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 
-	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, eng); err != nil {
+	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if (*existingGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
 	}
 
-	newMS, err := rsl.Save(ctx, eng, s, truncStateType)
+	newMS, err := rsl.Save(ctx, readWriter, s, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -88,7 +88,7 @@ func WriteInitialReplicaState(
 // state itself, and the updated stats are returned.
 func WriteInitialState(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -96,11 +96,11 @@ func WriteInitialState(
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	newMS, err := WriteInitialReplicaState(
-		ctx, eng, ms, desc, lease, gcThreshold, truncStateType)
+		ctx, readWriter, ms, desc, lease, gcThreshold, truncStateType)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, eng); err != nil {
+	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return newMS, nil
