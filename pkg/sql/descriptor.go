@@ -187,7 +187,7 @@ func getDescriptorByID(
 				"%q is not a table", desc.String())
 		}
 		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
-			return nil
+			return err
 		}
 
 		if err := table.Validate(ctx, txn); err != nil {
