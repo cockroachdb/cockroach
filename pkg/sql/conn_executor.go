@@ -874,6 +874,13 @@ type connExecutor struct {
 		// is done if the statement was executed in an implicit txn).
 		schemaChangers schemaChangerCollection
 
+		// jobs accumulates jobs staged for execution inside the transaction.
+		// Staging happens when executing statements that are implemented with a
+		// job. The jobs are staged via the function QueueJob in
+		// pkg/sql/planner.go. The staged jobs are executed once the transaction
+		// that staged them commits.
+		jobs jobsCollection
+
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
 		// stateOpen.
@@ -1070,6 +1077,8 @@ func (ns *prepStmtNamespace) resetTo(ctx context.Context, to prepStmtNamespace) 
 func (ex *connExecutor) resetExtraTxnState(
 	ctx context.Context, dbCacheHolder *databaseCacheHolder, ev txnEvent,
 ) error {
+	ex.extraTxnState.jobs = nil
+
 	ex.extraTxnState.schemaChangers.reset()
 
 	ex.extraTxnState.tables.releaseTables(ctx)
@@ -1894,6 +1903,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:    ex,
 		SchemaChangers:    &ex.extraTxnState.schemaChangers,
+		Jobs:              &ex.extraTxnState.jobs,
 		schemaAccessors:   scInterface,
 		sqlStatsCollector: ex.statsCollector,
 	}
@@ -2026,6 +2036,48 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}
+
+		handleErr := func(err error) {
+			if implicitTxn {
+				// The schema change/job failed but it was also the only
+				// operation in the transaction. In this case, the transaction's
+				// error is the schema change error.
+				res.SetError(err)
+			} else {
+				// The schema change/job failed but everything else in the
+				// transaction was actually committed successfully already. At
+				// this point, it is too late to cancel the transaction. In
+				// effect, we have violated the "A" of ACID.
+				//
+				// This situation is sufficiently serious that we cannot let the
+				// error that caused the schema change to fail flow back to the
+				// client as-is. We replace it by a custom code dedicated to
+				// this situation. Replacement occurs because this error code is
+				// a "serious error" and the code computation logic will give it
+				// a higher priority.
+				//
+				// We also print out the original error code as prefix of the
+				// error message, in case it was a serious error.
+				newErr := pgerror.Wrapf(err,
+					pgcode.TransactionCommittedWithSchemaChangeFailure,
+					"transaction committed but schema change aborted with error: (%s)",
+					pgerror.GetPGCode(err))
+				newErr = errors.WithHint(newErr,
+					"Some of the non-DDL statements may have committed successfully, "+
+						"but some of the DDL statement(s) failed.\nManual inspection may be "+
+						"required to determine the actual state of the database.")
+				newErr = errors.WithIssueLink(newErr,
+					errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/42061"})
+				res.SetError(newErr)
+			}
+		}
+		if err := ex.server.cfg.JobRegistry.Run(
+			ex.ctxHolder.connCtx,
+			ex.server.cfg.InternalExecutor,
+			ex.extraTxnState.jobs); err != nil {
+			handleErr(err)
+		}
+
 		scc := &ex.extraTxnState.schemaChangers
 		if len(scc.schemaChangers) != 0 {
 			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
@@ -2041,37 +2093,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if schemaChangeErr := scc.execSchemaChanges(
 				ex.Ctx(), ex.server.cfg, &ex.sessionTracing, ieFactory,
 			); schemaChangeErr != nil {
-				if implicitTxn {
-					// The schema change failed but it was also the only
-					// operation in the transaction. In this case, the
-					// transaction's error is the schema change error.
-					res.SetError(schemaChangeErr)
-				} else {
-					// The schema change failed but everything else in the transaction
-					// was actually committed successfully already. At this point,
-					// it is too late to cancel the transaction. In effect, we have
-					// violated the "A" of ACID.
-					//
-					// This situation is sufficiently serious that we cannot let
-					// the error that caused the schema change to fail flow back
-					// to the client as-is. We replace it by a custom code
-					// dedicated to this situation. Replacement occurs
-					// because this error code is a "serious error" and the code
-					// computation logic will give it a higher priority.
-					//
-					// We also print out the original error code as prefix of
-					// the error message, in case it was a serious error.
-					newErr := pgerror.Wrapf(schemaChangeErr,
-						pgcode.TransactionCommittedWithSchemaChangeFailure,
-						"transaction committed but schema change aborted with error: (%s)",
-						pgerror.GetPGCode(schemaChangeErr))
-					newErr = errors.WithHint(newErr,
-						"Some of the non-DDL statements may have committed successfully, but some of the DDL statement(s) failed.\n"+
-							"Manual inspection may be required to determine the actual state of the database.")
-					newErr = errors.WithIssueLink(newErr,
-						errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/42061"})
-					res.SetError(newErr)
-				}
+				handleErr(schemaChangeErr)
 			}
 		}
 

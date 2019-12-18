@@ -257,7 +257,7 @@ func updateRaftProgressFromActivity(
 }
 
 const (
-	truncatableIndexChosenViaQuorumIndex     = "quorum"
+	truncatableIndexChosenViaCommitIndex     = "commit"
 	truncatableIndexChosenViaFollowers       = "followers"
 	truncatableIndexChosenViaProbingFollower = "probing follower"
 	truncatableIndexChosenViaPendingSnap     = "pending snapshot"
@@ -279,7 +279,7 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 
 type truncateDecision struct {
 	Input       truncateDecisionInput
-	QuorumIndex uint64 // largest index known to be present on quorum
+	CommitIndex uint64
 
 	NewFirstIndex uint64 // first index of the resulting log after truncation
 	ChosenVia     string
@@ -390,19 +390,19 @@ func (td *truncateDecision) ProtectIndex(index uint64, chosenVia string) {
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.QuorumIndex = getQuorumIndex(&input.RaftStatus)
+	decision.CommitIndex = input.RaftStatus.Commit
 
 	// The last index is most aggressive possible truncation that we could do.
 	// Everything else in this method makes the truncation less aggressive.
-	decision.NewFirstIndex = decision.Input.LastIndex
+	decision.NewFirstIndex = input.LastIndex
 	decision.ChosenVia = truncatableIndexChosenViaLastIndex
 
-	// Start by trying to truncate at the quorum index. Naively, you would expect
-	// lastIndex to never be smaller than quorumIndex, but
+	// Start by trying to truncate at the commit index. Naively, you would expect
+	// LastIndex to never be smaller than the commit index, but
 	// RaftStatus.Progress.Match is updated on the leader when a command is
 	// proposed and in a single replica Raft group this also means that
 	// RaftStatus.Commit is updated at propose time.
-	decision.ProtectIndex(decision.QuorumIndex, truncatableIndexChosenViaQuorumIndex)
+	decision.ProtectIndex(decision.CommitIndex, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
 		// Snapshots are expensive, so we try our best to avoid truncating past
@@ -431,7 +431,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// queue.
 		if progress.RecentActive {
 			if progress.State == tracker.StateProbe {
-				decision.ProtectIndex(decision.Input.FirstIndex, truncatableIndexChosenViaProbingFollower)
+				decision.ProtectIndex(input.FirstIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
 				decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
 			}
@@ -444,7 +444,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 			decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
 		}
 
-		// Otherwise, we let it truncate to the quorum index.
+		// Otherwise, we let it truncate to the committed index.
 	}
 
 	// The pending snapshot index acts as a placeholder for a replica that is
@@ -457,52 +457,31 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 
 	// If new first index dropped below first index, make them equal (resulting
 	// in a no-op).
-	if decision.NewFirstIndex < decision.Input.FirstIndex {
-		decision.NewFirstIndex = decision.Input.FirstIndex
+	if decision.NewFirstIndex < input.FirstIndex {
+		decision.NewFirstIndex = input.FirstIndex
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
 
 	// Invariants: NewFirstIndex >= FirstIndex
 	//             NewFirstIndex <= LastIndex (if != 10)
-	//             NewFirstIndex <= QuorumIndex (if != 0)
+	//             NewFirstIndex <= CommitIndex (if != 10)
 	//
-	// For uninit'ed replicas we can have input.FirstIndex > input.LastIndex, more
-	// specifically input.FirstIndex = input.LastIndex + 1. FirstIndex is set to
-	// TruncatedState.Index + 1, and for an unit'ed replica, LastIndex is simply
-	// 10. This is what informs the `input.LastIndex == 10` conditional below.
+	// For uninit'ed replicas we can have NewFirstIndex > input.LastIndex, more
+	// specifically NewFirstIndex = input.LastIndex + 1. NewFirstIndex is set to
+	// TruncatedState.Index + 1, and for an unit'ed replica, input.LastIndex is
+	// simply 10. This is what informs the `input.LastIndex == 10` conditional
+	// below. The same reasoning holds for NewFirstIndex and
+	// decision.CommitIndex.
 	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
 		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex == 10) &&
-		(decision.NewFirstIndex <= decision.QuorumIndex || decision.QuorumIndex == 0)
+		(decision.NewFirstIndex <= decision.CommitIndex || decision.CommitIndex == 10)
 	if !valid {
-		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], quorum idx = %d",
-			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.QuorumIndex)
+		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], commit idx = %d",
+			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.CommitIndex)
 		panic(err)
 	}
 
 	return decision
-}
-
-// getQuorumIndex returns the index which a quorum of the nodes have committed.
-// Note that getQuorumIndex may return 0 if the progress map doesn't contain
-// information for a sufficient number of followers (e.g. the local replica has
-// only recently become the leader). In general, the value returned by
-// getQuorumIndex may be smaller than raftStatus.Commit which is the log index
-// that has been committed by a quorum of replicas where that quorum was
-// determined at the time the index was written. If you're thinking of using
-// getQuorumIndex for some purpose, consider that raftStatus.Commit might be
-// more appropriate (e.g. determining if a replica is up to date).
-func getQuorumIndex(raftStatus *raft.Status) uint64 {
-	match := make([]uint64, 0, len(raftStatus.Progress))
-	for _, progress := range raftStatus.Progress {
-		if progress.State == tracker.StateReplicate {
-			match = append(match, progress.Match)
-		} else {
-			match = append(match, 0)
-		}
-	}
-	sort.Sort(uint64Slice(match))
-	quorum := computeQuorum(len(match))
-	return match[len(match)-quorum]
 }
 
 // shouldQueue determines whether a range should be queued for truncating. This
