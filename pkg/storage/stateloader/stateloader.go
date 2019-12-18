@@ -130,38 +130,38 @@ const (
 // strictly for use in Result. Do before merge.
 func (rsl StateLoader) Save(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	state storagepb.ReplicaState,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
-	if err := rsl.SetLease(ctx, eng, ms, *state.Lease); err != nil {
+	if err := rsl.SetLease(ctx, readWriter, ms, *state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetGCThreshold(ctx, eng, ms, state.GCThreshold); err != nil {
+	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if truncStateType == TruncatedStateLegacyReplicated {
-		if err := rsl.SetLegacyRaftTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
+		if err := rsl.SetLegacyRaftTruncatedState(ctx, readWriter, ms, state.TruncatedState); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	} else {
-		if err := rsl.SetRaftTruncatedState(ctx, eng, state.TruncatedState); err != nil {
+		if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
 	if state.UsingAppliedStateKey {
 		rai, lai := state.RaftAppliedIndex, state.LeaseAppliedIndex
-		if err := rsl.SetRangeAppliedState(ctx, eng, rai, lai, ms); err != nil {
+		if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, ms); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	} else {
 		if err := rsl.SetLegacyAppliedIndex(
-			ctx, eng, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
+			ctx, readWriter, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
 		); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
-		if err := rsl.SetLegacyMVCCStats(ctx, eng, ms); err != nil {
+		if err := rsl.SetLegacyMVCCStats(ctx, readWriter, ms); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
@@ -178,9 +178,9 @@ func (rsl StateLoader) LoadLease(ctx context.Context, reader engine.Reader) (roa
 
 // SetLease persists a lease.
 func (rsl StateLoader) SetLease(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
+	ctx context.Context, readWriter engine.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
 ) error {
-	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeLeaseKey(),
+	return engine.MVCCPutProto(ctx, readWriter, ms, rsl.RangeLeaseKey(),
 		hlc.Timestamp{}, nil, &lease)
 }
 
@@ -278,7 +278,7 @@ func (rsl StateLoader) LoadMVCCStats(
 // by the range applied state key.
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	appliedIndex, leaseAppliedIndex uint64,
 	newMS *enginepb.MVCCStats,
 ) error {
@@ -290,22 +290,22 @@ func (rsl StateLoader) SetRangeAppliedState(
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in C.MVCCComputeStats and ComputeStatsGo.
 	ms := (*enginepb.MVCCStats)(nil)
-	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
+	return engine.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
 }
 
 // MigrateToRangeAppliedStateKey deletes the keys that were replaced by the
 // RangeAppliedState key.
 func (rsl StateLoader) MigrateToRangeAppliedStateKey(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats,
+	ctx context.Context, readWriter engine.ReadWriter, ms *enginepb.MVCCStats,
 ) error {
 	noTS := hlc.Timestamp{}
-	if err := engine.MVCCDelete(ctx, eng, ms, rsl.RaftAppliedIndexLegacyKey(), noTS, nil); err != nil {
+	if err := engine.MVCCDelete(ctx, readWriter, ms, rsl.RaftAppliedIndexLegacyKey(), noTS, nil); err != nil {
 		return err
 	}
-	if err := engine.MVCCDelete(ctx, eng, ms, rsl.LeaseAppliedIndexLegacyKey(), noTS, nil); err != nil {
+	if err := engine.MVCCDelete(ctx, readWriter, ms, rsl.LeaseAppliedIndexLegacyKey(), noTS, nil); err != nil {
 		return err
 	}
-	return engine.MVCCDelete(ctx, eng, ms, rsl.RangeStatsLegacyKey(), noTS, nil)
+	return engine.MVCCDelete(ctx, readWriter, ms, rsl.RangeStatsLegacyKey(), noTS, nil)
 }
 
 // SetLegacyAppliedIndex sets the legacy {raft,lease} applied index values,
@@ -315,17 +315,17 @@ func (rsl StateLoader) MigrateToRangeAppliedStateKey(
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyAppliedIndex(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	appliedIndex, leaseAppliedIndex uint64,
 ) error {
-	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+	if err := rsl.AssertNoRangeAppliedState(ctx, readWriter); err != nil {
 		return err
 	}
 
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
-	if err := engine.MVCCPut(ctx, eng, ms,
+	if err := engine.MVCCPut(ctx, readWriter, ms,
 		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
@@ -333,7 +333,7 @@ func (rsl StateLoader) SetLegacyAppliedIndex(
 		return err
 	}
 	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(ctx, eng, ms,
+	return engine.MVCCPut(ctx, readWriter, ms,
 		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
@@ -350,17 +350,17 @@ func (rsl StateLoader) SetLegacyAppliedIndex(
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyAppliedIndexBlind(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	appliedIndex, leaseAppliedIndex uint64,
 ) error {
-	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+	if err := rsl.AssertNoRangeAppliedState(ctx, readWriter); err != nil {
 		return err
 	}
 
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
-	if err := engine.MVCCBlindPut(ctx, eng, ms,
+	if err := engine.MVCCBlindPut(ctx, readWriter, ms,
 		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
@@ -368,7 +368,7 @@ func (rsl StateLoader) SetLegacyAppliedIndexBlind(
 		return err
 	}
 	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCBlindPut(ctx, eng, ms,
+	return engine.MVCCBlindPut(ctx, readWriter, ms,
 		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
@@ -392,13 +392,13 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 }
 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
-	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+	ctx context.Context, readWriter engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
 	// NB: newMS is copied to prevent conditional calls to this method from
 	// causing the stats argument to escape. This is legacy code which does
 	// not need to be optimized for performance.
 	newMSCopy := *newMS
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
+	return engine.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
@@ -406,41 +406,41 @@ func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 // The range applied state key cannot already exist or an assetion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyMVCCStats(
-	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+	ctx context.Context, readWriter engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+	if err := rsl.AssertNoRangeAppliedState(ctx, readWriter); err != nil {
 		return err
 	}
 
-	return rsl.writeLegacyMVCCStatsInternal(ctx, eng, newMS)
+	return rsl.writeLegacyMVCCStatsInternal(ctx, readWriter, newMS)
 }
 
 // SetMVCCStats overwrites the MVCC stats. This needs to perform a read on the
 // RangeAppliedState key before overwriting the stats. Use SetRangeAppliedState
 // when performance is important.
 func (rsl StateLoader) SetMVCCStats(
-	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+	ctx context.Context, readWriter engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	if as, err := rsl.LoadRangeAppliedState(ctx, eng); err != nil {
+	if as, err := rsl.LoadRangeAppliedState(ctx, readWriter); err != nil {
 		return err
 	} else if as != nil {
-		return rsl.SetRangeAppliedState(ctx, eng, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS)
+		return rsl.SetRangeAppliedState(ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS)
 	}
 
-	return rsl.writeLegacyMVCCStatsInternal(ctx, eng, newMS)
+	return rsl.writeLegacyMVCCStatsInternal(ctx, readWriter, newMS)
 }
 
 // SetLegacyRaftTruncatedState overwrites the truncated state.
 func (rsl StateLoader) SetLegacyRaftTruncatedState(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	truncState *roachpb.RaftTruncatedState,
 ) error {
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	return engine.MVCCPutProto(ctx, eng, ms,
+	return engine.MVCCPutProto(ctx, readWriter, ms,
 		rsl.RaftTruncatedStateLegacyKey(), hlc.Timestamp{}, nil, truncState)
 }
 
@@ -456,12 +456,15 @@ func (rsl StateLoader) LoadGCThreshold(
 
 // SetGCThreshold sets the GC threshold.
 func (rsl StateLoader) SetGCThreshold(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, threshold *hlc.Timestamp,
+	ctx context.Context,
+	readWriter engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	threshold *hlc.Timestamp,
 ) error {
 	if threshold == nil {
 		return errors.New("cannot persist nil GCThreshold")
 	}
-	return engine.MVCCPutProto(ctx, eng, ms,
+	return engine.MVCCPutProto(ctx, readWriter, ms,
 		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
 }
 
@@ -541,7 +544,7 @@ func (rsl StateLoader) LoadRaftTruncatedState(
 
 // SetRaftTruncatedState overwrites the truncated state.
 func (rsl StateLoader) SetRaftTruncatedState(
-	ctx context.Context, eng engine.Writer, truncState *roachpb.RaftTruncatedState,
+	ctx context.Context, writer engine.Writer, truncState *roachpb.RaftTruncatedState,
 ) error {
 	if (*truncState == roachpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
@@ -549,7 +552,7 @@ func (rsl StateLoader) SetRaftTruncatedState(
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
 	return engine.MVCCBlindPutProto(
 		ctx,
-		eng,
+		writer,
 		nil, /* ms */
 		rsl.RaftTruncatedStateKey(),
 		hlc.Timestamp{}, /* timestamp */
@@ -574,12 +577,12 @@ func (rsl StateLoader) LoadHardState(
 
 // SetHardState overwrites the HardState.
 func (rsl StateLoader) SetHardState(
-	ctx context.Context, batch engine.Writer, hs raftpb.HardState,
+	ctx context.Context, writer engine.Writer, hs raftpb.HardState,
 ) error {
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.
 	return engine.MVCCBlindPutProto(
 		ctx,
-		batch,
+		writer,
 		nil, /* ms */
 		rsl.RaftHardStateKey(),
 		hlc.Timestamp{}, /* timestamp */
@@ -592,27 +595,29 @@ func (rsl StateLoader) SetHardState(
 // and a lastIndex from pre-seeded data in the engine (typically created via
 // writeInitialReplicaState and, on a split, perhaps the activity of an
 // uninitialized Raft group)
-func (rsl StateLoader) SynthesizeRaftState(ctx context.Context, eng engine.ReadWriter) error {
-	hs, err := rsl.LoadHardState(ctx, eng)
+func (rsl StateLoader) SynthesizeRaftState(
+	ctx context.Context, readWriter engine.ReadWriter,
+) error {
+	hs, err := rsl.LoadHardState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, eng)
+	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	raftAppliedIndex, _, err := rsl.LoadAppliedIndex(ctx, eng)
+	raftAppliedIndex, _, err := rsl.LoadAppliedIndex(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	return rsl.SynthesizeHardState(ctx, eng, hs, truncState, raftAppliedIndex)
+	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, raftAppliedIndex)
 }
 
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,
 // taking care that a HardState compatible with the existing data is written.
 func (rsl StateLoader) SynthesizeHardState(
 	ctx context.Context,
-	eng engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	oldHS raftpb.HardState,
 	truncState roachpb.RaftTruncatedState,
 	raftAppliedIndex uint64,
@@ -639,6 +644,6 @@ func (rsl StateLoader) SynthesizeHardState(
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 	}
-	err := rsl.SetHardState(ctx, eng, newHS)
+	err := rsl.SetHardState(ctx, readWriter, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }

@@ -264,16 +264,16 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 func term(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	eng engine.Reader,
+	reader engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	i uint64,
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
+	ents, err := entries(ctx, rsl, reader, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
-		ts, _, err := rsl.LoadRaftTruncatedState(ctx, eng)
+		ts, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 		if err != nil {
 			return 0, err
 		}
@@ -591,7 +591,7 @@ func snapshot(
 // engine.ReadWriter must be passed in.
 func (r *Replica) append(
 	ctx context.Context,
-	eng engine.Writer,
+	writer engine.Writer,
 	prevLastIndex uint64,
 	prevLastTerm uint64,
 	prevRaftLogSize int64,
@@ -612,13 +612,13 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = engine.MVCCBlindPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = engine.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		} else {
-			// We type assert eng to also be an engine.Reader only in the case where
-			// we're replacing existing entries.
-			eng, ok := eng.(engine.ReadWriter)
+			// We type assert `writer` to also be an engine.ReadWriter only in
+			// the case where we're replacing existing entries.
+			eng, ok := writer.(engine.ReadWriter)
 			if !ok {
-				return 0, 0, 0, errors.Errorf("expected eng to be a engine.ReadWriter when overwriting log entries")
+				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
 			err = engine.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
 		}
@@ -631,11 +631,11 @@ func (r *Replica) append(
 	lastTerm := entries[len(entries)-1].Term
 	// Delete any previously appended log entries which never committed.
 	if prevLastIndex > 0 {
-		// We type assert eng to also be an engine.Reader only in the case where
-		// we're deleting existing entries.
-		eng, ok := eng.(engine.ReadWriter)
+		// We type assert `writer` to also be an engine.ReadWriter only in the
+		// case where we're deleting existing entries.
+		eng, ok := writer.(engine.ReadWriter)
 		if !ok {
-			return 0, 0, 0, errors.Errorf("expected eng to be a engine.ReadWriter when deleting log entries")
+			panic("expected writer to be a engine.ReadWriter when deleting log entries")
 		}
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
@@ -691,7 +691,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // range.
 func clearRangeData(
 	desc *roachpb.RangeDescriptor,
-	eng engine.Reader,
+	reader engine.Reader,
 	writer engine.Writer,
 	rangeIDLocalOnly bool,
 	mustClearRange bool,
@@ -704,7 +704,7 @@ func clearRangeData(
 	}
 	var clearRangeFn func(engine.Reader, engine.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
-		clearRangeFn = func(eng engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
+		clearRangeFn = func(reader engine.Reader, writer engine.Writer, start, end roachpb.Key) error {
 			return writer.ClearRange(engine.MakeMVCCMetadataKey(start), engine.MakeMVCCMetadataKey(end))
 		}
 	} else {
@@ -712,7 +712,7 @@ func clearRangeData(
 	}
 
 	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(eng, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
+		if err := clearRangeFn(reader, writer, keyRange.Start.Key, keyRange.End.Key); err != nil {
 			return err
 		}
 	}
