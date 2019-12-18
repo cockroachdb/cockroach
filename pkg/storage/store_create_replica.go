@@ -230,7 +230,7 @@ func (s *Store) tryGetOrCreateReplica(
 			// NB: other fields are unknown; need to populate them from
 			// snapshot.
 		}
-		return repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID)
+		return repl.initRaftMuLockedReplicaMuLocked(desc, replicaID)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it

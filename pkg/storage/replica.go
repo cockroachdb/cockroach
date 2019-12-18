@@ -520,7 +520,7 @@ func NewReplica(
 	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	r := newReplica(desc.RangeID, store)
-	return r, r.init(desc, store.Clock(), replicaID)
+	return r, r.init(desc, replicaID)
 }
 
 // String returns the string representation of the replica using an
