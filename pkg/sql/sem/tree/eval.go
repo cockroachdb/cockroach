@@ -3606,17 +3606,21 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		}
 
 	case types.IntervalFamily:
+		itm, err := t.IntervalTypeMetadata()
+		if err != nil {
+			return nil, err
+		}
 		switch v := d.(type) {
 		case *DString:
-			return ParseDInterval(string(*v))
+			return ParseDIntervalWithTypeMetadata(string(*v), itm)
 		case *DCollatedString:
-			return ParseDInterval(v.Contents)
+			return ParseDIntervalWithTypeMetadata(v.Contents, itm)
 		case *DInt:
-			return &DInterval{Duration: duration.FromInt64(int64(*v))}, nil
+			return NewDInterval(duration.FromInt64(int64(*v)), itm), nil
 		case *DFloat:
-			return &DInterval{Duration: duration.FromFloat64(float64(*v))}, nil
+			return NewDInterval(duration.FromFloat64(float64(*v)), itm), nil
 		case *DTime:
-			return &DInterval{Duration: duration.MakeDuration(int64(*v)*1000, 0, 0)}, nil
+			return NewDInterval(duration.MakeDuration(int64(*v)*1000, 0, 0), itm), nil
 		case *DDecimal:
 			d := ctx.getTmpDec()
 			dnanos := v.Decimal
@@ -3634,9 +3638,9 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if !ok {
 				return nil, errDecOutOfRange
 			}
-			return &DInterval{Duration: dv}, nil
+			return NewDInterval(dv, itm), nil
 		case *DInterval:
-			return d, nil
+			return NewDInterval(v.Duration, itm), nil
 		}
 	case types.JsonFamily:
 		switch v := d.(type) {

@@ -73,7 +73,11 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	case types.IntFamily:
 		return ParseDInt(s)
 	case types.IntervalFamily:
-		return ParseDInterval(s)
+		itm, err := t.IntervalTypeMetadata()
+		if err != nil {
+			return nil, err
+		}
+		return ParseDIntervalWithTypeMetadata(s, itm)
 	case types.JsonFamily:
 		return ParseDJSON(s)
 	case types.OidFamily:

@@ -82,6 +82,20 @@ func TestParseDatumStringAs(t *testing.T) {
 			"-00:01:00",
 			"2 years 3 mons",
 		},
+		types.MakeInterval(types.IntervalTypeMetadata{}): {
+			"01:02:03",
+			"02:03:04",
+			"-00:01:00",
+			"2 years 3 mons",
+		},
+		types.MakeInterval(types.IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}): {
+			"01:02:03",
+			"02:03:04.123",
+		},
+		types.MakeInterval(types.IntervalTypeMetadata{Precision: 6, PrecisionIsSet: true}): {
+			"01:02:03",
+			"02:03:04.123456",
+		},
 		types.Jsonb: {
 			"{}",
 			"[]",

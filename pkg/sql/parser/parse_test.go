@@ -1667,10 +1667,16 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT (ARRAY (1, 2))[1]`, `SELECT (ARRAY[1, 2])[1]`},
 
-		// Interval precision is syntactic sugar.
-		{`SELECT '0'::INTERVAL(6)`, `SELECT '0'::INTERVAL`},
 		// Interval constructor gets eagerly processed.
 		{`SELECT INTERVAL '0'`, `SELECT '00:00:00'`},
+		{`SELECT INTERVAL(3) '12.1234s'`, `SELECT '00:00:12.123'`},
+		{`SELECT INTERVAL '14.7899s' SECOND(3)`, `SELECT '00:00:14.79'`},
+
+		{`SELECT '11s'::INTERVAL(3)`, `SELECT '11s'::INTERVAL(3)`},
+		{`SELECT '10:00:13.123456'::INTERVAL SECOND`, `SELECT '10:00:13.123456'::INTERVAL SECOND`},
+		{`SELECT '10:00:13.123456'::INTERVAL SECOND(3)`, `SELECT '10:00:13.123456'::INTERVAL SECOND(3)`},
+		{`SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND`, `SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND`},
+		{`SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3)`, `SELECT '10:00:13.123456'::INTERVAL MINUTE TO SECOND(3)`},
 
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.
@@ -3137,11 +3143,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
-
-		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
-		{`SELECT 'a'::INTERVAL(123)`, 32564, ``},
-		{`SELECT 'a'::INTERVAL SECOND(123)`, 32564, `interval second`},
-		{`SELECT INTERVAL(3) 'a'`, 32564, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`},
 		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
