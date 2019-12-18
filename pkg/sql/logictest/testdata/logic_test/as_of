@@ -40,3 +40,7 @@ SELECT * FROM t AS OF SYSTEM TIME '-1h'
 
 statement error cannot specify timestamp in the future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
+
+# Verify we can explain a statement that has AS OF.
+statement ok
+EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'
