@@ -87,7 +87,9 @@ type commandResult struct {
 var _ sql.CommandResult = &commandResult{}
 
 // Close is part of the CommandResult interface.
-func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
+func (r *commandResult) Close(
+	ctx context.Context, t sql.TransactionStatusIndicator, shouldReportError bool,
+) {
 	r.assertNotReleased()
 	defer r.release()
 	if r.errExpected && r.err == nil {
@@ -96,7 +98,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
-		r.conn.bufferErr(ctx, r.err)
+		r.conn.bufferErr(ctx, r.err, shouldReportError)
 		return
 	}
 
@@ -138,7 +140,7 @@ func (r *commandResult) CloseWithErr(ctx context.Context, err error) {
 	}
 
 	r.conn.writerState.fi.registerCmd(r.pos)
-	r.conn.bufferErr(ctx, err)
+	r.conn.bufferErr(ctx, err, true /* shouldReportError */)
 }
 
 // Discard is part of the CommandResult interface.

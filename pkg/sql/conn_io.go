@@ -665,7 +665,10 @@ type CommandResultClose interface {
 	// NOTE(andrei): We might want to tighten the contract if the results get any
 	// state that needs to be closed even when the whole connection is about to be
 	// terminated.
-	Close(context.Context, TransactionStatusIndicator)
+	// shouldReportError indicates whether a sentry report should be created for
+	// an error (if present). This should be set to true only if the caller will
+	// take care of creating the report on their own.
+	Close(ctx context.Context, tsi TransactionStatusIndicator, shouldReportError bool)
 
 	// CloseWithErr is like Close, except it tells the client that an execution
 	// error has happened. All rows previously accumulated on the result might be
@@ -915,14 +918,14 @@ func (r *bufferedCommandResult) RowsAffected() int {
 }
 
 // Close is part of the CommandResultClose interface.
-func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
+func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator, bool) {
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, nil /* err */)
 	}
 }
 
 // CloseWithErr is part of the CommandResultClose interface.
-func (r *bufferedCommandResult) CloseWithErr(ctx context.Context, err error) {
+func (r *bufferedCommandResult) CloseWithErr(_ context.Context, err error) {
 	r.err = err
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, err)

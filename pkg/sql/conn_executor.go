@@ -1367,7 +1367,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			if ex.idleConn() {
 				// If we're about to close the connection, close res in order to flush
 				// now, as we won't have an opportunity to do it later.
-				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
+				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()), true /* shouldReportError */)
 				return errDrainingComplete
 			}
 		}
@@ -1429,7 +1429,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			res.CloseWithErr(ctx, pe.errorCause())
 		} else {
 			ex.recordError(ctx, resErr)
-			res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
+			// We have just reported the error, so we tell res.Close not to report
+			// the error to avoid the duplicate error report.
+			res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()), false /* shouldReportError */)
 		}
 	} else {
 		res.Discard()

@@ -348,7 +348,7 @@ Loop:
 			err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
 			_ /* err */ = writeErr(
 				ctx, &sqlServer.GetExecutorConfig().Settings.SV, err,
-				&c.msgBuilder, &c.writerState.buf)
+				&c.msgBuilder, &c.writerState.buf, true /* shouldReportError */)
 			break Loop
 		case pgwirebase.ClientMsgSimpleQuery:
 			if doingExtendedQueryMessage {
@@ -456,7 +456,8 @@ Loop:
 		// idead; see #22630. I think we should find a way to return the
 		// AdminShutdown error as the only result of the query.
 		_ /* err */ = writeErr(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
-			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder, &c.writerState.buf)
+			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder,
+			&c.writerState.buf, true /* shouldReportError */)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 	}
 }
@@ -541,7 +542,7 @@ func (c *conn) processCommandsAsync(
 					retErr = errors.Wrap(retErr, "caught fatal error")
 					_ = writeErr(
 						ctx, &sqlServer.GetExecutorConfig().Settings.SV, retErr,
-						&c.msgBuilder, &c.writerState.buf)
+						&c.msgBuilder, &c.writerState.buf, true /* shouldReportError */)
 					_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 					c.stmtBuf.Close()
 					// Send a ready for query to make sure the client can react.
@@ -607,7 +608,8 @@ func (c *conn) sendInitialConnData(
 		ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
 	if err != nil {
 		_ /* err */ = writeErr(
-			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder, c.conn)
+			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder,
+			c.conn, true /* shouldReportError */)
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -1169,9 +1171,9 @@ func (c *conn) bufferPortalSuspended() {
 	}
 }
 
-func (c *conn) bufferErr(ctx context.Context, err error) {
+func (c *conn) bufferErr(ctx context.Context, err error, shouldReportError bool) {
 	if err := writeErr(ctx, c.sv,
-		err, &c.msgBuilder, &c.writerState.buf); err != nil {
+		err, &c.msgBuilder, &c.writerState.buf, shouldReportError); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 	}
 }
@@ -1184,10 +1186,17 @@ func (c *conn) bufferEmptyQueryResponse() {
 }
 
 func writeErr(
-	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
+	ctx context.Context,
+	sv *settings.Values,
+	err error,
+	msgBuilder *writeBuffer,
+	w io.Writer,
+	shouldReportError bool,
 ) error {
-	// Record telemetry for the error.
-	sqltelemetry.RecordError(ctx, err, sv)
+	if shouldReportError {
+		// Record telemetry for the error.
+		sqltelemetry.RecordError(ctx, err, sv)
+	}
 
 	// Now send the error to the client.
 	pgErr := pgerror.Flatten(err)
@@ -1495,7 +1504,7 @@ func (c *conn) handleAuthentication(
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sendError := func(err error) error {
-		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
+		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn, true /* shouldReportError */)
 		return err
 	}
 
