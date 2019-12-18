@@ -737,6 +737,13 @@ func (m *IntervalDurationField) IsMinuteToSecond() bool {
 		m.DurationType == IntervalDurationType_SECOND
 }
 
+// IsDayToHour returns whether the IntervalDurationField represents
+// the DAY TO HOUR interval qualifier.
+func (m *IntervalDurationField) IsDayToHour() bool {
+	return m.FromDurationType == IntervalDurationType_DAY &&
+		m.DurationType == IntervalDurationType_HOUR
+}
+
 // IntervalTypeMetadata returns the IntervalTypeMetadata for interval types.
 func (t *T) IntervalTypeMetadata() (IntervalTypeMetadata, error) {
 	if t.Family() != IntervalFamily {

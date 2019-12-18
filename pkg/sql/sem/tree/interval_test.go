@@ -17,6 +17,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+var (
+	dayToHourITM = types.IntervalTypeMetadata{
+		DurationField: types.IntervalDurationField{
+			FromDurationType: types.IntervalDurationType_DAY,
+			DurationType:     types.IntervalDurationType_HOUR,
+		},
+	}
+	minuteToSecondITM = types.IntervalTypeMetadata{
+		DurationField: types.IntervalDurationField{
+			FromDurationType: types.IntervalDurationType_MINUTE,
+			DurationType:     types.IntervalDurationType_SECOND,
+		},
+	}
+)
+
 func TestValidSQLIntervalSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testData := []struct {
@@ -50,30 +65,45 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 		{`1-2`, types.IntervalTypeMetadata{}, `1 year 2 mons`},
 		{`-1-2`, types.IntervalTypeMetadata{}, `-1 years -2 mons`},
 		{`1-2 3`, types.IntervalTypeMetadata{}, `1 year 2 mons 00:00:03`},
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_YEAR,
+			},
+		}, `4 years 2 mons`}, // this gets truncated later to 4 years
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_MONTH,
+			},
+		}, `1 year 5 mons`},
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_DAY,
+			},
+		}, `1 year 2 mons 3 days`},
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_HOUR,
+			},
+		}, `1 year 2 mons 03:00:00`},
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_MINUTE,
+			},
+		}, `1 year 2 mons 00:03:00`},
+		{`1-2 3`, types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_SECOND,
+			},
+		}, `1 year 2 mons 00:00:03`},
 		{`1-2 -3`, types.IntervalTypeMetadata{}, `1 year 2 mons -00:00:03`},
 		{`-1-2 -3`, types.IntervalTypeMetadata{}, `-1 years -2 mons -00:00:03`},
 		{`2 4:08`, types.IntervalTypeMetadata{}, `2 days 04:08:00`},
+		{`2.5 4:08`, types.IntervalTypeMetadata{}, `2 days 16:08:00`},
 		{`-2 4:08`, types.IntervalTypeMetadata{}, `-2 days +04:08:00`},
 		{`2 -4:08`, types.IntervalTypeMetadata{}, `2 days -04:08:00`},
 		{`2 -4:08.1234`, types.IntervalTypeMetadata{}, `2 days -00:04:08.1234`},
-		{
-			`2 -4:08.1234`, types.IntervalTypeMetadata{
-				DurationField: types.IntervalDurationField{
-					FromDurationType: types.IntervalDurationType_MINUTE,
-					DurationType:     types.IntervalDurationType_SECOND,
-				},
-			},
-			`2 days -00:04:08.1234`,
-		},
-		{
-			`2 -4:08`, types.IntervalTypeMetadata{
-				DurationField: types.IntervalDurationField{
-					FromDurationType: types.IntervalDurationType_MINUTE,
-					DurationType:     types.IntervalDurationType_SECOND,
-				},
-			},
-			`2 days -00:04:08`,
-		},
+		{`2 -4:08.1234`, minuteToSecondITM, `2 days -00:04:08.1234`},
+		{`2 -4:08`, minuteToSecondITM, `2 days -00:04:08`},
 		{`1-2 4:08`, types.IntervalTypeMetadata{}, `1 year 2 mons 04:08:00`},
 		{`1-2 3 4:08`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:08:00`},
 		{`1-2 3 4:08:05`, types.IntervalTypeMetadata{}, `1 year 2 mons 3 days 04:08:05`},
@@ -98,6 +128,15 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 		{`2 3:4:`, types.IntervalTypeMetadata{}, `2 days 03:04:00`},
 		{`1- 3:`, types.IntervalTypeMetadata{}, `1 year 03:00:00`},
 		{`1- 3:4`, types.IntervalTypeMetadata{}, `1 year 03:04:00`},
+
+		{`2 3`, dayToHourITM, `2 days 03:00:00`},
+		{`-2 -3`, dayToHourITM, `-2 days -03:00:00`},
+		{`-2 3`, dayToHourITM, `-2 days +03:00:00`},
+		{`2 -3`, dayToHourITM, `2 days -03:00:00`},
+		{`1-2 3`, dayToHourITM, `1 year 2 mons 03:00:00`},
+		{`-1-2 -3`, dayToHourITM, `-1 years -2 mons -03:00:00`},
+		{`-1-2 3`, dayToHourITM, `-1 years -2 mons +03:00:00`},
+		{`1-2 -3`, dayToHourITM, `1 year 2 mons -03:00:00`},
 	}
 	for _, test := range testData {
 		t.Run(test.input, func(t *testing.T) {
@@ -146,6 +185,10 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 		{`{1,2}`, ``, `invalid input syntax for type interval {1,2}`},
 		{`0.000,0`, ``, `invalid input syntax for type interval 0.000,0`},
 		{`0,0`, ``, `invalid input syntax for type interval 0,0`},
+		{`2 3`, ``, `invalid input syntax for type interval 2 3`},
+		{`-2 3`, ``, `invalid input syntax for type interval -2 3`},
+		{`-2 -3`, ``, `invalid input syntax for type interval -2 -3`},
+		{`2 -3`, ``, `invalid input syntax for type interval 2 -3`},
 	}
 	for i, test := range testData {
 		dur, err := sqlStdToDuration(test.input, types.IntervalTypeMetadata{})
@@ -331,16 +374,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 		{`1 day -00:00:30`, types.IntervalTypeMetadata{}, `1 day -00:00:30`, ``},
 		{`-1 day +00:00:30`, types.IntervalTypeMetadata{}, `-1 days +00:00:30`, ``},
 		{`2 days -4:08.1234`, types.IntervalTypeMetadata{}, `2 days -00:04:08.1234`, ``},
-		{
-			`2 days -4:08`, types.IntervalTypeMetadata{
-				DurationField: types.IntervalDurationField{
-					FromDurationType: types.IntervalDurationType_MINUTE,
-					DurationType:     types.IntervalDurationType_SECOND,
-				},
-			},
-			`2 days -00:04:08`,
-			``,
-		},
+		{`2 days -4:08`, minuteToSecondITM, `2 days -00:04:08`, ``},
 		{`1 day 12:30.5`, types.IntervalTypeMetadata{}, `1 day 00:12:30.5`, ``},
 		{`1 day 12:30:40`, types.IntervalTypeMetadata{}, `1 day 12:30:40`, ``},
 		{`1 day 12:30:40.5`, types.IntervalTypeMetadata{}, `1 day 12:30:40.5`, ``},
