@@ -48,11 +48,11 @@ func ResolveIntentRange(
 	}
 
 	intent := roachpb.Intent{
-		Span:                      args.Span(),
-		Txn:                       args.IntentTxn,
-		Status:                    args.Status,
-		IgnoredSeqNums:            args.IgnoredSeqNums,
-		IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
+		Span:           args.Span(),
+		Txn:            args.IntentTxn,
+		Status:         args.Status,
+		IgnoredSeqNums: args.IgnoredSeqNums,
+		//IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
 	}
 
 	iterAndBuf := engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: args.EndKey})
