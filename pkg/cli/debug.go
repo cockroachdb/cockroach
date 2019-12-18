@@ -323,7 +323,7 @@ func loadRangeDescriptor(
 		if err := storage.IsRangeDescriptorKey(kv.Key); err != nil {
 			// Range descriptor keys are interleaved with others, so if it
 			// doesn't parse as a range descriptor just skip it.
-			return false, nil
+			return false, nil //nolint:returnerrcheck
 		}
 		if len(kv.Value) == 0 {
 			// RangeDescriptor was deleted (range merged away).
@@ -867,7 +867,7 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 			if err != io.EOF {
 				return err
 			}
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		if name != data.Name || source != data.Source {
 			name, source = data.Name, data.Source

@@ -70,7 +70,7 @@ func (s *Server) gcSystemLog(
 	var totalRowsAffected int64
 	repl, err := s.node.stores.GetReplicaForRangeID(roachpb.RangeID(1))
 	if err != nil {
-		return timestampLowerBound, 0, nil
+		return timestampLowerBound, 0, nil //nolint:returnerrcheck
 	}
 
 	if !repl.IsFirstRange() || !repl.OwnsValidLease(s.clock.Now()) {

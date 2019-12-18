@@ -99,7 +99,7 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 				// during execution where they are correctly handled. Note that in some
 				// cases we might not even get an error (if this particular expression
 				// does not get evaluated when the query runs, e.g. it's inside a CASE).
-				return texpr, nil
+				return texpr, nil //nolint:returnerrcheck
 			}
 			if value == tree.DNull {
 				// We don't want to return an expression that has a different type; cast
@@ -107,7 +107,7 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 				var newExpr tree.TypedExpr
 				newExpr, err = tree.ReType(tree.DNull, texpr.ResolvedType())
 				if err != nil {
-					return texpr, nil
+					return texpr, nil //nolint:returnerrcheck
 				}
 				return newExpr, nil
 			}
