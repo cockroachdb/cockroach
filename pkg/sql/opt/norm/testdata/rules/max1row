@@ -9,7 +9,7 @@ CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 # --------------------------------------------------
 # EliminateMax1Row
 # --------------------------------------------------
-opt expect=EliminateMax1Row
+norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 1) > 5 AS r
 ----
 values
@@ -20,14 +20,18 @@ values
  └── tuple [type=tuple{bool}]
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    └── scan a
+           │    └── limit
            │         ├── columns: i:2(int)
-           │         ├── limit: 1
+           │         ├── cardinality: [0 - 1]
            │         ├── key: ()
-           │         └── fd: ()-->(2)
+           │         ├── fd: ()-->(2)
+           │         ├── scan a
+           │         │    ├── columns: i:2(int)
+           │         │    └── limit hint: 1.00
+           │         └── const: 1 [type=int]
            └── const: 5 [type=int]
 
-opt expect=EliminateMax1Row
+norm expect=EliminateMax1Row
 SELECT (SELECT count(*) FROM a) > 100 AS r
 ----
 values
@@ -48,7 +52,7 @@ values
            │              └── count-rows [type=int]
            └── const: 100 [type=int]
 
-opt expect=EliminateMax1Row
+norm expect=EliminateMax1Row
 SELECT (SELECT i FROM a LIMIT 0) > 5 AS r
 ----
 values
@@ -67,7 +71,7 @@ values
            └── const: 5 [type=int]
 
 # Don't remove the Max1Row operator.
-opt expect-not=EliminateMax1Row
+norm expect-not=EliminateMax1Row
 SELECT (SELECT i FROM a) > 5 AS r
 ----
 values

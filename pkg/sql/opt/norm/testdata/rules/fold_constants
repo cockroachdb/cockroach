@@ -11,7 +11,7 @@ CREATE TABLE t (
 # --------------------------------------------------
 # FoldNullCast
 # --------------------------------------------------
-opt expect=FoldNullCast
+norm expect=FoldNullCast
 SELECT
     null::int,
     null::timestamptz,
@@ -29,7 +29,7 @@ values
 # --------------------------------------------------
 # FoldNullUnary
 # --------------------------------------------------
-opt expect=FoldNullUnary
+norm expect=FoldNullUnary
 SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
@@ -44,7 +44,7 @@ project
 # --------------------------------------------------
 # FoldNullBinaryLeft, FoldNullBinaryRight
 # --------------------------------------------------
-opt expect=(FoldNullBinaryLeft,FoldNullBinaryRight)
+norm expect=(FoldNullBinaryLeft,FoldNullBinaryRight)
 SELECT
     null::int & 1 AS ra, 1 & null::int AS rb,
     null::decimal + 1 AS sa, 1 + null::decimal AS sb,
@@ -78,7 +78,7 @@ project
       ├── i::DECIMAL || CAST(NULL AS DECIMAL[]) [type=decimal[], outer=(2)]
       └── CAST(NULL AS FLOAT8[]) || i::FLOAT8 [type=float[], outer=(2)]
 
-opt
+norm
 SELECT
     null::json || '[1, 2]' AS ra, '[1, 2]' || null::json AS rb,
     null::json->'foo' AS sa, '{}'::jsonb->null::string AS sb,
@@ -106,7 +106,7 @@ project
 # --------------------------------------------------
 # FoldNullInNonEmpty
 # --------------------------------------------------
-opt expect=FoldNullInNonEmpty
+norm expect=FoldNullInNonEmpty
 SELECT null IN (i) AS r, null NOT IN (s) AS s FROM a
 ----
 project
@@ -120,7 +120,7 @@ project
 # --------------------------------------------------
 # FoldInNull
 # --------------------------------------------------
-opt expect=FoldInNull
+norm expect=FoldInNull
 SELECT i IN (null, null) AS r, k NOT IN (1 * null, null::int, 1 < null) AS s FROM a
 ----
 project
@@ -134,7 +134,7 @@ project
 # --------------------------------------------------
 # FoldArray
 # --------------------------------------------------
-opt expect=FoldArray
+norm expect=FoldArray
 SELECT ARRAY[1, 2, 3] FROM t
 ----
 project
@@ -145,7 +145,7 @@ project
       └── const: ARRAY[1,2,3] [type=int[]]
 
 # Do not fold if there is a non-constant element.
-opt expect-not=FoldArray
+norm expect-not=FoldArray
 SELECT ARRAY[1, 2, 3, x] FROM t
 ----
 project
@@ -156,7 +156,7 @@ project
  └── projections
       └── ARRAY[1, 2, 3, x] [type=int[], outer=(1)]
 
-opt expect=FoldArray
+norm expect=FoldArray
 SELECT ARRAY['foo', 'bar']
 ----
 values
@@ -170,7 +170,7 @@ values
 # FoldBinary
 # --------------------------------------------------
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT 1::INT + 2::DECIMAL
 ----
 values
@@ -181,7 +181,7 @@ values
  └── (3,) [type=tuple{decimal}]
 
 # Don't fold: out of range error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT 9223372036854775800::INT + 9223372036854775800::INT
 ----
 values
@@ -192,7 +192,7 @@ values
  └── (9223372036854775800 + 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT 1::INT - 2::INT
 ----
 values
@@ -203,7 +203,7 @@ values
  └── (-1,) [type=tuple{int}]
 
 # Don't fold: out of range error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT (-9223372036854775800)::INT - 9223372036854775800::INT
 ----
 values
@@ -214,7 +214,7 @@ values
  └── (-9223372036854775800 - 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT 4::INT * 2::INT
 ----
 values
@@ -225,7 +225,7 @@ values
  └── (8,) [type=tuple{int}]
 
 # Don't fold: out of range error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT 9223372036854775800::INT * 9223372036854775800::INT
 ----
 values
@@ -236,7 +236,7 @@ values
  └── (9223372036854775800 * 9223372036854775800,) [type=tuple{int}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT 1::FLOAT / 2::FLOAT
 ----
 values
@@ -247,7 +247,7 @@ values
  └── (0.5,) [type=tuple{float}]
 
 # Don't fold: divide by zero error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT 1::INT / 0::INT
 ----
 values
@@ -259,7 +259,7 @@ values
  └── (1 / 0,) [type=tuple{decimal}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT B'01' # B'11'
 ----
 values
@@ -270,7 +270,7 @@ values
  └── (B'10',) [type=tuple{varbit}]
 
 # Don't fold: cannot mix bit array sizes error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT B'01' # B'11001001010101'
 ----
 values
@@ -281,7 +281,7 @@ values
  └── (B'01' # B'11001001010101',) [type=tuple{varbit}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT B'01' | B'11'
 ----
 values
@@ -292,7 +292,7 @@ values
  └── (B'11',) [type=tuple{varbit}]
 
 # Don't fold: cannot mix bit array sizes error.
-opt expect-not=FoldBinary
+norm expect-not=FoldBinary
 SELECT B'01' | B'11001001010101'
 ----
 values
@@ -303,7 +303,7 @@ values
  └── (B'01' | B'11001001010101',) [type=tuple{varbit}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMP
 ----
 values
@@ -314,7 +314,7 @@ values
  └── ('-24:00:00',) [type=tuple{interval}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP - '2000-05-06 10:00:00+03':::TIMESTAMPTZ
 ----
 values
@@ -325,7 +325,7 @@ values
  └── ('-21:00:00',) [type=tuple{interval}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT ARRAY['a','b','c'] || 'd'::string
 ----
 values
@@ -336,7 +336,7 @@ values
  └── (ARRAY['a','b','c','d'],) [type=tuple{string[]}]
 
 # Fold constant.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT ARRAY['a','b','c'] || ARRAY['d','e','f']
 ----
 values
@@ -347,7 +347,7 @@ values
  └── (ARRAY['a','b','c','d','e','f'],) [type=tuple{string[]}]
 
 # NULL should not be added to the array.
-opt expect=FoldBinary
+norm expect=FoldBinary
 SELECT ARRAY[1,2,3] || NULL
 ----
 values
@@ -358,7 +358,7 @@ values
  └── (ARRAY[1,2,3],) [type=tuple{int[]}]
 
 # Regression test for #34270.
-opt expect=FoldBinary
+norm expect=FoldBinary
 VALUES ((e'{}' ->> 0) || (e'{}' ->> 0))
 ----
 values
@@ -371,7 +371,7 @@ values
 # --------------------------------------------------
 # FoldUnary
 # --------------------------------------------------
-opt expect=FoldUnary
+norm expect=FoldUnary
 SELECT -(1:::int)
 ----
 values
@@ -381,7 +381,7 @@ values
  ├── fd: ()-->(1)
  └── (-1,) [type=tuple{int}]
 
-opt expect=FoldUnary
+norm expect=FoldUnary
 SELECT -(1:::float)
 ----
 values
@@ -393,7 +393,7 @@ values
 
 # TODO(justin): it would be better if this produced an error in the optimizer
 # rather than falling back to execution to error.
-opt expect-not=FoldUnary format=show-all
+norm expect-not=FoldUnary format=show-all
 SELECT -((-9223372036854775808)::int)
 ----
 values
@@ -408,7 +408,7 @@ values
       └── unary-minus [type=int]
            └── const: -9223372036854775808 [type=int]
 
-opt expect=FoldUnary format=show-all
+norm expect=FoldUnary format=show-all
 SELECT -(1:::decimal)
 ----
 values
@@ -422,7 +422,7 @@ values
  └── tuple [type=tuple{decimal}]
       └── const: -1 [type=decimal]
 
-opt expect=FoldUnary format=show-all
+norm expect=FoldUnary format=show-all
 SELECT -('-1d'::interval);
 ----
 values
@@ -438,7 +438,7 @@ values
 
 # TODO(justin): this seems incorrect but it's consistent with the existing
 # planner. Revisit this: #26932.
-opt expect=FoldUnary
+norm expect=FoldUnary
 SELECT -('-9223372036854775808d'::interval);
 ----
 values
@@ -449,7 +449,7 @@ values
  └── ('-9223372036854775808 days',) [type=tuple{interval}]
 
 # Fold constant.
-opt expect=FoldUnary
+norm expect=FoldUnary
 SELECT ~(500::INT)
 ----
 values
@@ -460,7 +460,7 @@ values
  └── (-501,) [type=tuple{int}]
 
 # Fold constant.
-opt expect=FoldUnary
+norm expect=FoldUnary
 SELECT ~('35.231.178.195'::INET)
 ----
 values
@@ -473,7 +473,7 @@ values
 # --------------------------------------------------
 # FoldComparison
 # --------------------------------------------------
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 1::INT < 2::INT
 ----
 values
@@ -483,7 +483,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 1::INT > 2::INT
 ----
 values
@@ -493,7 +493,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 10.0::FLOAT <= 20.0::FLOAT
 ----
 values
@@ -503,7 +503,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 10.0::FLOAT >= 20.0::FLOAT
 ----
 values
@@ -513,7 +513,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 2.0::DECIMAL = 2::INT
 ----
 values
@@ -523,7 +523,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 2.0::DECIMAL != 2::INT
 ----
 values
@@ -533,7 +533,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 100 IS NOT DISTINCT FROM 200
 ----
 values
@@ -543,7 +543,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 100 IS DISTINCT FROM 200
 ----
 values
@@ -553,7 +553,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' IN ('a', 'b', 'c')
 ----
 values
@@ -563,7 +563,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' NOT IN ('a', 'b', 'c')
 ----
 values
@@ -573,7 +573,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' LIKE 'foobar'
 ----
 values
@@ -583,7 +583,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' NOT LIKE 'foobar'
 ----
 values
@@ -593,7 +593,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' ILIKE 'FOO%'
 ----
 values
@@ -603,7 +603,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'foo' NOT ILIKE 'FOO%'
 ----
 values
@@ -613,7 +613,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'monday' SIMILAR TO '_onday'
 ----
 values
@@ -623,7 +623,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'monday' NOT SIMILAR TO '_onday'
 ----
 values
@@ -633,7 +633,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'tuEsday' ~ 't[uU][eE]sday'
 ----
 values
@@ -643,7 +643,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'tuEsday' !~ 't[uU][eE]sday'
 ----
 values
@@ -653,7 +653,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'wednesday' ~* 'W.*y'
 ----
 values
@@ -663,7 +663,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT 'wednesday' !~* 'W.*y'
 ----
 values
@@ -673,7 +673,7 @@ values
  ├── fd: ()-->(1)
  └── (false,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
 ----
 values
@@ -683,7 +683,7 @@ values
  ├── fd: ()-->(1)
  └── (true,) [type=tuple{bool}]
 
-opt expect=FoldComparison
+norm expect=FoldComparison
 SELECT ('a', 'b', 'c') = ('d', 'e', 'f')
 ----
 values
@@ -696,7 +696,7 @@ values
 # --------------------------------------------------
 # FoldCast
 # --------------------------------------------------
-opt expect=FoldCast
+norm expect=FoldCast
 SELECT 1::int/1
 ----
 values
@@ -709,7 +709,7 @@ values
 # --------------------------------------------------
 # FoldFunction
 # --------------------------------------------------
-opt expect=FoldFunction
+norm expect=FoldFunction
 SELECT length('abc'), upper('xyz'), lower('DEF')
 ----
 values
@@ -719,7 +719,7 @@ values
  ├── fd: ()-->(1-3)
  └── (3, 'XYZ', 'def') [type=tuple{int, string, string}]
 
-opt expect=FoldFunction
+norm expect=FoldFunction
 SELECT encode('abc', 'hex'), decode('616263', 'hex')
 ----
 values
@@ -729,7 +729,7 @@ values
  ├── fd: ()-->(1,2)
  └── ('616263', '\x616263') [type=tuple{string, bytes}]
 
-opt expect=FoldFunction locality=(region=east,dc=east1-b)
+norm expect=FoldFunction locality=(region=east,dc=east1-b)
 SELECT crdb_internal.locality_value('dc')
 ----
 values
@@ -739,7 +739,7 @@ values
  ├── fd: ()-->(1)
  └── ('east1-b',) [type=tuple{string}]
 
-opt expect=FoldFunction
+norm expect=FoldFunction
 SELECT crdb_internal.locality_value('unk')
 ----
 values
@@ -749,7 +749,7 @@ values
  ├── fd: ()-->(1)
  └── (NULL,) [type=tuple{string}]
 
-opt expect-not=FoldFunction
+norm expect-not=FoldFunction
 SELECT now(), current_user(), current_database()
 ----
 values
@@ -764,7 +764,7 @@ values
 # FoldIndirection
 # --------------------------------------------------
 # Fold when input is a static array constructor (but elements are not constant).
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][1] FROM a
 ----
 project
@@ -774,7 +774,7 @@ project
  └── projections
       └── variable: i [type=int, outer=(2)]
 
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][2] FROM a
 ----
 project
@@ -785,7 +785,7 @@ project
       └── i + 1 [type=int, outer=(2)]
 
 # Fold when input is a DArray constant.
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][2] FROM a
 ----
 project
@@ -796,7 +796,7 @@ project
       └── const: 5 [type=int]
 
 # Array bounds are out-of-range.
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[s, 'foo'][0] FROM a
 ----
 project
@@ -806,7 +806,7 @@ project
  └── projections
       └── null [type=string]
 
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[i, i + 1][3] FROM a
 ----
 project
@@ -816,7 +816,7 @@ project
  └── projections
       └── null [type=int]
 
-opt expect=FoldIndirection
+norm expect=FoldIndirection
 SELECT ARRAY[4, 5, 6][0] FROM a
 ----
 project
@@ -827,7 +827,7 @@ project
       └── null [type=int]
 
 # Array is dynamically constructed.
-opt expect-not=FoldIndirection
+norm expect-not=FoldIndirection
 SELECT arr[0] FROM a
 ----
 project
@@ -861,7 +861,7 @@ values
 # Fold when input is a static tuple constructor (but elements are not constant).
 # NOTE: Use constant array access to avoid triggering ColumnAccess::TypeCheck
 #       constant tuple folding.
-opt expect=FoldColumnAccess
+norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).foo FROM a
 ----
 project
@@ -871,7 +871,7 @@ project
  └── projections
       └── const: 'foo' [type=string]
 
-opt expect=FoldColumnAccess
+norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', i) AS foo, bar)][1]).bar FROM a
 ----
 project
@@ -882,7 +882,7 @@ project
       └── variable: i [type=int, outer=(2)]
 
 # Fold when input is a constant DTuple.
-opt expect=FoldColumnAccess
+norm expect=FoldColumnAccess
 SELECT (ARRAY[(('foo', 'bar') AS foo, bar)][1]).foo
 ----
 values

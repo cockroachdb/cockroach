@@ -10,7 +10,7 @@ CREATE TABLE a (v INT PRIMARY KEY, w INT, x FLOAT, y STRING NOT NULL, z JSON)
 # EliminateUnionAllLeft
 # --------------------------------------------------
 
-opt expect=EliminateUnionAllLeft
+norm expect=EliminateUnionAllLeft
 SELECT k FROM
   (SELECT k FROM b)
   UNION ALL
@@ -28,7 +28,7 @@ project
 # EliminateUnionAllRight
 # --------------------------------------------------
 
-opt expect=EliminateUnionAllRight
+norm expect=EliminateUnionAllRight
 SELECT k FROM
   (SELECT k FROM b WHERE Null)
   UNION ALL
@@ -42,7 +42,7 @@ project
  └── projections
       └── variable: b.k [type=int, outer=(6)]
 
-opt
+norm
 SELECT k FROM
   (SELECT k FROM b WHERE False)
   UNION ALL
@@ -58,7 +58,7 @@ values
 # PushFilterIntoSetOp
 # --------------------------------------------------
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
   ((SELECT k FROM b)
   UNION ALL
@@ -69,16 +69,24 @@ union-all
  ├── columns: k:11(int!null)
  ├── left columns: b.k:1(int)
  ├── right columns: b.k:6(int)
- ├── scan b
+ ├── select
  │    ├── columns: b.k:1(int!null)
- │    ├── constraint: /1: [ - /9]
- │    └── key: (1)
- └── scan b
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── b.k < 10 [type=bool, outer=(1), constraints=(/1: (/NULL - /9]; tight)]
+ └── select
       ├── columns: b.k:6(int!null)
-      ├── constraint: /6: [ - /9]
-      └── key: (6)
+      ├── key: (6)
+      ├── scan b
+      │    ├── columns: b.k:6(int!null)
+      │    └── key: (6)
+      └── filters
+           └── b.k < 10 [type=bool, outer=(6), constraints=(/6: (/NULL - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   UNION
@@ -90,11 +98,15 @@ union
  ├── left columns: b.k:1(int)
  ├── right columns: w:7(int)
  ├── key: (11)
- ├── scan b
+ ├── select
  │    ├── columns: b.k:1(int!null)
- │    ├── constraint: /1: [/2 - /9]
  │    ├── cardinality: [0 - 8]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (b.k < 10) AND (b.k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
       ├── columns: w:7(int!null)
       ├── scan a
@@ -102,7 +114,7 @@ union
       └── filters
            └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT
 (SELECT k FROM
 ((SELECT k FROM b)
@@ -150,7 +162,7 @@ project
  └── projections
       └── variable: k [type=int, outer=(16)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   EXCEPT
@@ -163,11 +175,15 @@ except
  ├── right columns: w:7(int)
  ├── cardinality: [0 - 8]
  ├── key: (1)
- ├── scan b
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [/2 - /9]
  │    ├── cardinality: [0 - 8]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k < 10) AND (k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
       ├── columns: w:7(int!null)
       ├── scan a
@@ -175,7 +191,7 @@ except
       └── filters
            └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   EXCEPT ALL
@@ -187,11 +203,15 @@ except-all
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
  ├── cardinality: [0 - 8]
- ├── scan b
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [/2 - /9]
  │    ├── cardinality: [0 - 8]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k < 10) AND (k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
       ├── columns: w:7(int!null)
       ├── scan a
@@ -199,7 +219,7 @@ except-all
       └── filters
            └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   INTERSECT
@@ -212,11 +232,15 @@ intersect
  ├── right columns: w:7(int)
  ├── cardinality: [0 - 8]
  ├── key: (1)
- ├── scan b
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [/2 - /9]
  │    ├── cardinality: [0 - 8]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k < 10) AND (k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
       ├── columns: w:7(int!null)
       ├── scan a
@@ -224,7 +248,7 @@ intersect
       └── filters
            └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   INTERSECT ALL
@@ -236,11 +260,15 @@ intersect-all
  ├── left columns: k:1(int!null)
  ├── right columns: w:7(int)
  ├── cardinality: [0 - 8]
- ├── scan b
+ ├── select
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [/2 - /9]
  │    ├── cardinality: [0 - 8]
- │    └── key: (1)
+ │    ├── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── (k < 10) AND (k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  └── select
       ├── columns: w:7(int!null)
       ├── scan a
@@ -248,7 +276,7 @@ intersect-all
       └── filters
            └── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT k FROM
 ((SELECT k FROM b)
   UNION
@@ -268,10 +296,9 @@ union
  │    ├── key: (1)
  │    ├── scan b
  │    │    ├── columns: b.k:1(int!null)
- │    │    ├── constraint: /1: [/2 - /9]
- │    │    ├── cardinality: [0 - 8]
  │    │    └── key: (1)
  │    └── filters
+ │         ├── (b.k < 10) AND (b.k > 1) [type=bool, outer=(1), constraints=(/1: [/2 - /9]; tight)]
  │         └── random() < 0.5 [type=bool, side-effects]
  └── select
       ├── columns: w:7(int!null)
@@ -282,7 +309,7 @@ union
            ├── (w < 10) AND (w > 1) [type=bool, outer=(7), constraints=(/7: [/2 - /9]; tight)]
            └── random() < 0.5 [type=bool, side-effects]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT * FROM
   (SELECT k FROM b
     UNION ALL
@@ -302,12 +329,17 @@ union-all
  │    │    └── key: (1)
  │    └── filters
  │         └── exists [type=bool, subquery]
- │              └── scan a
+ │              └── select
  │                   ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
- │                   ├── constraint: /12: [/1 - /1]
  │                   ├── cardinality: [0 - 1]
  │                   ├── key: ()
- │                   └── fd: ()-->(12-16)
+ │                   ├── fd: ()-->(12-16)
+ │                   ├── scan a
+ │                   │    ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
+ │                   │    ├── key: (12)
+ │                   │    └── fd: (12)-->(13-16)
+ │                   └── filters
+ │                        └── v = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
  └── select
       ├── columns: b.k:6(int!null)
       ├── key: (6)
@@ -316,14 +348,19 @@ union-all
       │    └── key: (6)
       └── filters
            └── exists [type=bool, subquery]
-                └── scan a
+                └── select
                      ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
-                     ├── constraint: /12: [/1 - /1]
                      ├── cardinality: [0 - 1]
                      ├── key: ()
-                     └── fd: ()-->(12-16)
+                     ├── fd: ()-->(12-16)
+                     ├── scan a
+                     │    ├── columns: v:12(int!null) w:13(int) x:14(float) y:15(string!null) z:16(jsonb)
+                     │    ├── key: (12)
+                     │    └── fd: (12)-->(13-16)
+                     └── filters
+                          └── v = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
 
-opt expect=PushFilterIntoSetOp
+norm expect=PushFilterIntoSetOp
 SELECT * FROM
 (SELECT k FROM (SELECT k FROM b UNION ALL SELECT k FROM b)
   UNION ALL
@@ -350,12 +387,17 @@ union-all
  │    │    │    └── key: (1)
  │    │    └── filters
  │    │         ├── exists [type=bool, subquery]
- │    │         │    └── scan a
+ │    │         │    └── select
  │    │         │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
- │    │         │         ├── constraint: /24: [/1 - /1]
  │    │         │         ├── cardinality: [0 - 1]
  │    │         │         ├── key: ()
- │    │         │         └── fd: ()-->(24-28)
+ │    │         │         ├── fd: ()-->(24-28)
+ │    │         │         ├── scan a
+ │    │         │         │    ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+ │    │         │         │    ├── key: (24)
+ │    │         │         │    └── fd: (24)-->(25-28)
+ │    │         │         └── filters
+ │    │         │              └── v = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
  │    │         └── random() < 0.5 [type=bool, side-effects]
  │    └── select
  │         ├── columns: b.k:6(int!null)
@@ -366,12 +408,17 @@ union-all
  │         │    └── key: (6)
  │         └── filters
  │              ├── exists [type=bool, subquery]
- │              │    └── scan a
+ │              │    └── select
  │              │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
- │              │         ├── constraint: /24: [/1 - /1]
  │              │         ├── cardinality: [0 - 1]
  │              │         ├── key: ()
- │              │         └── fd: ()-->(24-28)
+ │              │         ├── fd: ()-->(24-28)
+ │              │         ├── scan a
+ │              │         │    ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+ │              │         │    ├── key: (24)
+ │              │         │    └── fd: (24)-->(25-28)
+ │              │         └── filters
+ │              │              └── v = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
  │              └── random() < 0.5 [type=bool, side-effects]
  └── union-all
       ├── columns: k:22(int!null)
@@ -387,12 +434,17 @@ union-all
       │    │    └── key: (12)
       │    └── filters
       │         ├── exists [type=bool, subquery]
-      │         │    └── scan a
+      │         │    └── select
       │         │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
-      │         │         ├── constraint: /24: [/1 - /1]
       │         │         ├── cardinality: [0 - 1]
       │         │         ├── key: ()
-      │         │         └── fd: ()-->(24-28)
+      │         │         ├── fd: ()-->(24-28)
+      │         │         ├── scan a
+      │         │         │    ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+      │         │         │    ├── key: (24)
+      │         │         │    └── fd: (24)-->(25-28)
+      │         │         └── filters
+      │         │              └── v = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
       │         └── random() < 0.5 [type=bool, side-effects]
       └── select
            ├── columns: b.k:17(int!null)
@@ -403,15 +455,20 @@ union-all
            │    └── key: (17)
            └── filters
                 ├── exists [type=bool, subquery]
-                │    └── scan a
+                │    └── select
                 │         ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
-                │         ├── constraint: /24: [/1 - /1]
                 │         ├── cardinality: [0 - 1]
                 │         ├── key: ()
-                │         └── fd: ()-->(24-28)
+                │         ├── fd: ()-->(24-28)
+                │         ├── scan a
+                │         │    ├── columns: v:24(int!null) w:25(int) x:26(float) y:27(string!null) z:28(jsonb)
+                │         │    ├── key: (24)
+                │         │    └── fd: (24)-->(25-28)
+                │         └── filters
+                │              └── v = 1 [type=bool, outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
                 └── random() < 0.5 [type=bool, side-effects]
 
-opt
+norm
 SELECT * FROM ((values (1,2))
   EXCEPT (values (0,1)))
 WHERE 1 / column1 > 0
@@ -444,7 +501,7 @@ except
       └── filters
            └── (1 / 0) > 0 [type=bool, side-effects]
 
-opt
+norm
 SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';
 ----
 select

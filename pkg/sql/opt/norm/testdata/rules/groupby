@@ -51,7 +51,7 @@ CREATE TABLE s (
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
-opt expect=ConvertGroupByToDistinct
+norm expect=ConvertGroupByToDistinct
 SELECT s, f FROM a GROUP BY s, f
 ----
 distinct-on
@@ -62,7 +62,7 @@ distinct-on
       └── columns: f:3(float) s:4(string!null)
 
 # Group by not converted to DistinctOn because it has an aggregation.
-opt expect-not=ConvertGroupByToDistinct
+norm expect-not=ConvertGroupByToDistinct
 SELECT s, f, sum(f) FROM a GROUP BY s, f
 ----
 group-by
@@ -80,30 +80,30 @@ group-by
 # --------------------------------------------------
 # EliminateDistinct
 # --------------------------------------------------
-opt expect=EliminateDistinct
+norm expect=EliminateDistinct
 SELECT DISTINCT k FROM a
 ----
-scan a@fi_idx
+scan a
  ├── columns: k:1(int!null)
  └── key: (1)
 
-opt expect=EliminateDistinct
+norm expect=EliminateDistinct
 SELECT DISTINCT s, i FROM a
 ----
-scan a@si_idx
+scan a
  ├── columns: s:4(string!null) i:2(int!null)
  └── key: (2,4)
 
-opt expect=EliminateDistinct
+norm expect=EliminateDistinct
 SELECT DISTINCT ON (s, i) k, i, f FROM a
 ----
-scan a@fi_idx
+scan a
  ├── columns: k:1(int!null) i:2(int!null) f:3(float)
  ├── key: (1)
  └── fd: (1)-->(2,3), (2,3)~~>(1)
 
 # Strict superset of key.
-opt expect=EliminateDistinct
+norm expect=EliminateDistinct
 SELECT DISTINCT s, i, f FROM a
 ----
 scan a
@@ -112,29 +112,27 @@ scan a
  └── fd: (2,4)-->(3), (2,3)~~>(4)
 
 # Distinct not eliminated because columns aren't superset of any weak key.
-opt expect-not=EliminateDistinct
+norm expect-not=EliminateDistinct
 SELECT DISTINCT i FROM a
 ----
 distinct-on
  ├── columns: i:2(int!null)
  ├── grouping columns: i:2(int!null)
  ├── key: (2)
- └── scan a@fi_idx
+ └── scan a
       └── columns: i:2(int!null)
 
 # Distinct not eliminated despite a unique index on (f, i) because f is nullable.
-opt expect-not=EliminateDistinct
+norm expect-not=EliminateDistinct
 SELECT DISTINCT f, i FROM a
 ----
 distinct-on
  ├── columns: f:3(float) i:2(int!null)
  ├── grouping columns: i:2(int!null) f:3(float)
- ├── internal-ordering: +3,+2
  ├── key: (2,3)
- └── scan a@fi_idx
+ └── scan a
       ├── columns: i:2(int!null) f:3(float)
-      ├── lax-key: (2,3)
-      └── ordering: +3,+2
+      └── lax-key: (2,3)
 
 # Regression test for #40295. Ensure that the DistinctOn is replaced with a
 # Project operator to keep the correct number of output columns.
@@ -146,7 +144,7 @@ exec-ddl
 CREATE TABLE table1 (col0 REGCLASS, col1 REGTYPE, col2 INT4);
 ----
 
-opt expect=EliminateDistinct
+norm expect=EliminateDistinct
 SELECT
   (
     SELECT
@@ -178,7 +176,7 @@ values
 # --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------
-opt expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a)) GROUP BY i
 ----
 project
@@ -206,7 +204,7 @@ project
                 └── variable: s [type=string]
 
 # ScalarGroupBy case.
-opt expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i, s FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 scalar-group-by
@@ -232,7 +230,7 @@ scalar-group-by
            └── variable: s [type=string]
 
 # DistinctOn case.
-opt expect=EliminateGroupByProject
+norm expect=EliminateGroupByProject
 SELECT DISTINCT ON (i) s FROM (SELECT i, s, f FROM (SELECT * FROM a UNION SELECT * FROM a))
 ----
 distinct-on
@@ -258,7 +256,7 @@ distinct-on
            └── variable: s [type=string]
 
 # Don't eliminate project if it computes extra column(s).
-opt expect-not=EliminateGroupByProject
+norm expect-not=EliminateGroupByProject
 SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 ----
 project
@@ -270,7 +268,7 @@ project
       ├── fd: (6)-->(7)
       ├── project
       │    ├── columns: i2:6(int) s:4(string!null)
-      │    ├── scan a@si_idx
+      │    ├── scan a
       │    │    ├── columns: i:2(int!null) s:4(string!null)
       │    │    └── key: (2,4)
       │    └── projections
@@ -282,20 +280,18 @@ project
 # --------------------------------------------------
 # ReduceGroupingCols
 # --------------------------------------------------
-opt expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols
 SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 ----
 group-by
  ├── columns: k:1(int!null) min:6(int) f:3(float) s:4(string)
  ├── grouping columns: k:1(int!null)
- ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(3,4,6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  └── aggregations
       ├── min [type=int, outer=(2)]
       │    └── variable: i [type=int]
@@ -304,7 +300,7 @@ group-by
       └── const-agg [type=string, outer=(4)]
            └── variable: s [type=string]
 
-opt expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
 ----
 group-by
@@ -331,7 +327,7 @@ group-by
            └── variable: s [type=string]
 
 # Eliminated columns are not part of projection.
-opt expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols
 SELECT min(f) FROM a GROUP BY i, s, k
 ----
 project
@@ -350,7 +346,7 @@ project
                 └── variable: f [type=float]
 
 # All grouping columns eliminated.
-opt expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols
 SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
 ----
 group-by
@@ -358,19 +354,24 @@ group-by
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(2,6)
- ├── scan a
+ ├── select
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
- │    ├── constraint: /1: [/1 - /1]
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    └── fd: ()-->(1-3)
+ │    ├── fd: ()-->(1-3)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    └── filters
+ │         └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  └── aggregations
       ├── sum [type=float, outer=(3)]
       │    └── variable: f [type=float]
       └── const-agg [type=int, outer=(2)]
            └── variable: i [type=int]
 
-opt expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
 ----
 distinct-on
@@ -382,7 +383,7 @@ distinct-on
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) x:6(int!null) y:7(int!null)
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1), (6)-->(7), (2)==(7), (7)==(2)
- │    ├── scan a@fi_idx
+ │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3), (2,3)~~>(1)
@@ -406,7 +407,7 @@ distinct-on
 
 # ScalarGroupBy with key argument. Only the first aggregation can be
 # simplified.
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT k), sum(DISTINCT i) FROM a
 ----
 scalar-group-by
@@ -414,7 +415,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6,7)
- ├── scan a@fi_idx
+ ├── scan a
  │    ├── columns: k:1(int!null) i:2(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
@@ -425,7 +426,7 @@ scalar-group-by
            └── agg-distinct [type=int]
                 └── variable: i [type=int]
 
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT string_agg(DISTINCT s, ', ') FROM s
 ----
 scalar-group-by
@@ -448,7 +449,7 @@ scalar-group-by
            └── const: ', ' [type=string]
 
 # GroupBy with key argument.
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT k) FROM a GROUP BY i
 ----
 project
@@ -458,7 +459,7 @@ project
       ├── grouping columns: i:2(int!null)
       ├── key: (2)
       ├── fd: (2)-->(6)
-      ├── scan a@fi_idx
+      ├── scan a
       │    ├── columns: k:1(int!null) i:2(int!null)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
@@ -467,7 +468,7 @@ project
                 └── variable: k [type=int]
 
 # GroupBy with no key.
-opt expect-not=EliminateAggDistinctForKeys
+norm expect-not=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b
 ----
 project
@@ -485,7 +486,7 @@ project
                      └── variable: a [type=int]
 
 # GroupBy with composite key formed by argument plus grouping columns.
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b, c
 ----
 project
@@ -503,7 +504,7 @@ project
                 └── variable: a [type=int]
 
 # GroupBy with multiple aggregations simplified.
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT i), avg(DISTINCT f) FROM a GROUP BY k
 ----
 project
@@ -513,7 +514,7 @@ project
       ├── grouping columns: k:1(int!null)
       ├── key: (1)
       ├── fd: (1)-->(6,7)
-      ├── scan a@fi_idx
+      ├── scan a
       │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (2,3)~~>(1)
@@ -525,7 +526,7 @@ project
 
 # GroupBy where only some aggregations are simplified (the table has
 # keys u,v and v,w).
-opt expect=EliminateAggDistinctForKeys
+norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 ----
 project
@@ -552,17 +553,26 @@ project
 # EliminateDistinctOnNoColumns
 # --------------------------------------------------
 
-opt expect=EliminateDistinctOnNoColumns
+norm expect=EliminateDistinctOnNoColumns
 SELECT DISTINCT ON (a) a, b FROM abc WHERE a = 1
 ----
-scan abc
+limit
  ├── columns: a:1(int!null) b:2(int!null)
- ├── constraint: /1/2/3: [/1 - /1]
- ├── limit: 1
+ ├── cardinality: [0 - 1]
  ├── key: ()
- └── fd: ()-->(1,2)
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── scan abc
+ │    │    ├── columns: a:1(int!null) b:2(int!null)
+ │    │    └── limit hint: 1.00
+ │    └── filters
+ │         └── a = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ └── const: 1 [type=int]
 
-opt expect=EliminateDistinctOnNoColumns
+norm expect=EliminateDistinctOnNoColumns
 SELECT DISTINCT ON (b) b, c FROM abc WHERE b = 1 ORDER BY b, c
 ----
 limit
