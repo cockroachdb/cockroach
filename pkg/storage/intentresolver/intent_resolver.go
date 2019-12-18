@@ -710,7 +710,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					intents[i].Txn = txn.TxnMeta
 					intents[i].Status = txn.Status
 					intents[i].IgnoredSeqNums = txn.IgnoredSeqNums
-					intents[i].IgnoredSeqNumsInitialized = true
+					//intents[i].IgnoredSeqNumsInitialized = true
 				}
 			}
 			var onCleanupComplete func(error)
