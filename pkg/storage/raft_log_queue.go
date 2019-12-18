@@ -13,6 +13,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"sort"
 	"strings"
 	"time"
@@ -31,6 +33,66 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
+// Overview of Raft log truncation:
+// Our desired state is local truncation decision and action at both the leaseholder and followers.
+// Leaseholders need to be less aggressive with truncation since they may need to provide log
+// entries to slow followers to catch up. The safety requirement for truncation is that the
+// entries being truncated are already durably applied to the state machine. For performance
+// reasons truncation should typically do work when there are "significant" bytes or number of
+// entries to truncate. However, if the replica is quiescent we would like to truncate the whole
+// log when it becomes possible.
+//
+// The raftLogQueue handles the process of truncation. An attempt is made to add a replica to the
+// queue under two situations:
+// - Event occurs that indicates that there are significant bytes/entries that can be truncated.
+//   Until the truncation actually happens, these events can keep firing. The queue dedups the
+//   additions until the replica has been processed. Note that there is insufficient information
+//   at the time of addition to predict that the truncation will actually happen. Only the
+//   processing will finally decide whether truncation should happen, hence the deduping cannot
+//   happen outside the queue (say by changing the firing condition). If nothing is done when
+//   processing the replica, the continued firing of the events will cause the replica to again be
+//   added to the queue. In the current code, these events can only trigger after application to the
+//   state machine.
+// - Periodic addition via the replicaScanner: this is helpful in two ways (a) the events in the
+//   previous bullet can under-fire if the size estimates are wrong, (b) if the replica becomes
+//   quiescent, those events can stop firing but truncation may not have been done due to other
+//   constraints (lagging followers, latest applied state not yet durable). The periodic
+//   addition (polling) takes care of ensuring that when those other constraints are removed, the
+//   truncation happens.
+//
+// We have to consider legacy behavior in our desired state of local truncation.
+// - Legacy19.1 is replicated TruncatedState (TruncatedStateLegacyReplicated): this was the case
+//   when the raft log was sent in snapshots. The truncation decision is made in the leaseholder and
+//   replicated via Raft and acted on everywhere.
+// - Legacy19.2 is unreplicated TruncatedState (TruncatedStateUnreplicated): the raft log is not
+//   sent in snapshots. So the leaseholder may have more entries than a follower that applied a
+//   snapshot. The truncation decision is still made in the leaseholder and replicated via Raft
+//   amd acted on everywhere. The followers who have already truncated past that state ignore this
+//   decision.
+// - 20.1 is unreplicated TruncatedState with local truncation: This will come in two variants (a)
+//   the state machine has a WAL, so applied state is immediately durable, (b) the state machine
+//   does not have a WAL so Replica.mu.state.RaftAppliedIndex can be ahead of the durable index.
+//   The difference between (a) and (b) is local to a node and other nodes do not need to care.
+
+// To allow for these different behaviors to co-exist, we make the leaseholder continue to make
+// truncation decisions that it will replicate via Raft. However a 20.1 follower node will ignore
+// these truncation commands and truncate locally. The truncation decision
+// making (at leaseholder and follower) and local action (follower) and (for the leaseholder) the
+// replication all happen via this raftLogQueue (for the benefits that the queue brings, as stated
+// earlier). Once we have no Legacy* nodes, the replication logic can be removed. Note that since
+// in the followers the truncation decision is locally made one can only safely truncate up to
+// RaftAppliedIndex. The leaseholder continues to truncate itself through Raft since we don't want
+// to run the risk of it truncating without the replication of the truncate being successful -- say
+// the leaseholder submits the proposal and truncates locally but by the time the proposal is
+// replicated it is no longer the leaseholder so the followers ignore it (TODO: do truncation
+// commands also get ingored if the ProposerLeaseSequence is not the same as LeaseSequence?).
+//
+// TODO: the aggressive truncation at followers means that if a follower becomes the leaseholder
+// in the near future it may not have enough of a log to catchup lagging followers and needs to
+// send them a snapshot. Should we instead use consensus to inform the followers on an upper bound
+// on what is allowable to truncate according to the leaseholder. The actual truncation will
+// locally but be informed by the latest upper bound delivered by the leaseholder. This would
+// require us to persist the upper bound in the replicated state.
 const (
 	// raftLogQueueTimerDuration is the duration between truncations.
 	raftLogQueueTimerDuration = 0 // zero duration to process truncations greedily
@@ -173,17 +235,25 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	}
 	raftStatus := r.raftStatusRLocked()
 
+	var leaseholder bool
+	// TODO: how do we know whether leaseholder?
+
 	firstIndex, err := r.raftFirstIndexLocked()
 	const anyRecipientStore roachpb.StoreID = 0
 	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore)
-	lastIndex := r.mu.lastIndex
+	// TODO: since leaseholder is still applying below Raft should we continue to use r.mu.lastIndex
+	// for leaseholder and use RaftAppliedIndex only for follower.
+	lastIndex := r.mu.state.RaftAppliedIndex
 	logSizeTrusted := r.mu.raftLogSizeTrusted
+	quiescent := r.mu.quiescent
+
 	r.mu.Unlock()
 
 	if err != nil {
 		return truncateDecision{}, errors.Errorf("error retrieving first index for r%d: %s", rangeID, err)
 	}
 
+	// TODO: so nothing to truncate?
 	if raftStatus == nil {
 		if log.V(6) {
 			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
@@ -191,30 +261,32 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		return truncateDecision{}, nil
 	}
 
-	// Is this the raft leader? We only perform log truncation on the raft leader
-	// which has the up to date info on followers.
-	if raftStatus.RaftState != raft.StateLeader {
+	// Is this a leaseholder that is not the raft leader? We do not perform log truncation in this
+	// case since the leaseholder does not have up to date info on followers.
+	// TODO: presumably this is a transient state and the raft leader will give up its leadership to
+	// the leaseholder?
+	if leaseholder && raftStatus.RaftState != raft.StateLeader {
 		return truncateDecision{}, nil
 	}
+	if raftStatus.RaftState == raft.StateLeader {
+		// For all our followers, overwrite the RecentActive field (which is always
+		// true since we don't use CheckQuorum) with our own activity check.
+		r.mu.RLock()
+		log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
+		log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
+		updateRaftProgressFromActivity(
+			ctx, raftStatus.Progress, r.descRLocked().Replicas().All(), r.mu.lastUpdateTimes, now,
+		)
+		log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
+		r.mu.RUnlock()
 
-	// For all our followers, overwrite the RecentActive field (which is always
-	// true since we don't use CheckQuorum) with our own activity check.
-	r.mu.RLock()
-	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
-	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
-	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().All(), r.mu.lastUpdateTimes, now,
-	)
-	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
-	r.mu.RUnlock()
-
-	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
-		// TODO(tschottdorf): remove this line once we have picked up
-		// https://github.com/etcd-io/etcd/pull/10279
-		pr.State = tracker.StateReplicate
-		raftStatus.Progress[raftStatus.Lead] = pr
+		if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
+			// TODO(tschottdorf): remove this line once we have picked up
+			// https://github.com/etcd-io/etcd/pull/10279
+			pr.State = tracker.StateReplicate
+			raftStatus.Progress[raftStatus.Lead] = pr
+		}
 	}
-
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,
 		LogSize:              raftLogSize,
@@ -223,6 +295,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		FirstIndex:           firstIndex,
 		LastIndex:            lastIndex,
 		PendingSnapshotIndex: pendingSnapshotIndex,
+		Quiescent:            quiescent,
+		Leaseholder:          leaseholder,
 	}
 
 	decision := computeTruncateDecision(input)
@@ -271,6 +345,8 @@ type truncateDecisionInput struct {
 	LogSizeTrusted        bool // false when LogSize might be off
 	FirstIndex, LastIndex uint64
 	PendingSnapshotIndex  uint64
+	Quiescent             bool
+	Leaseholder           bool
 }
 
 func (input truncateDecisionInput) LogTooLarge() bool {
@@ -279,7 +355,7 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 
 type truncateDecision struct {
 	Input       truncateDecisionInput
-	QuorumIndex uint64 // largest index known to be present on quorum
+	QuorumIndex uint64 // largest index known to be present on quorum. Only when this is leaseholder.
 
 	NewFirstIndex uint64 // first index of the resulting log after truncation
 	ChosenVia     string
@@ -355,7 +431,21 @@ func (td *truncateDecision) NumTruncatableIndexes() int {
 func (td *truncateDecision) ShouldTruncate() bool {
 	n := td.NumTruncatableIndexes()
 	return n >= RaftLogQueueStaleThreshold ||
-		(n > 0 && td.Input.LogSize >= RaftLogQueueStaleSize)
+		(n > 0 && td.Input.LogSize >= RaftLogQueueStaleSize) ||
+		// If quiescent and not a leaseholder we can truncate everything, so truncate even if n is
+		// small. At the leaseholder this truncation is going to propose to raft, and will cause it
+		// not be quiescent, so only do so if there are enough entries for this to be worthwhile.
+		// Additionally, for the leaseholder we want to avoid the pathological situation where
+		// the raft entries after this truncation are too many and after becoming quiescent again we
+		// again truncate and become not quiescent and so on.
+		// TODO: is 3 the right lower bound here -- does queiscence happen
+		// through raft. Ideally we would truncate before becoming quiescent but that seems complicated
+		// to arrange due to the background queue behavior -- should we not bother with quiescence
+		// based truncation at the leaseholder until we are done handling legacy cases?
+		//
+		// Note that in the quiescent case this code path is not being triggered by raft applies so
+		// there isn't the danger that we will do many small truncation for this replica.
+		(td.Input.Quiescent && (n > 3 || (n > 0 && !td.Input.Leaseholder)))
 }
 
 // ProtectIndex attempts to "protect" a position in the log by making sure it's
@@ -390,78 +480,79 @@ func (td *truncateDecision) ProtectIndex(index uint64, chosenVia string) {
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.QuorumIndex = getQuorumIndex(&input.RaftStatus)
 
 	// The last index is most aggressive possible truncation that we could do.
 	// Everything else in this method makes the truncation less aggressive.
 	decision.NewFirstIndex = decision.Input.LastIndex
 	decision.ChosenVia = truncatableIndexChosenViaLastIndex
 
-	// Start by trying to truncate at the quorum index. Naively, you would expect
-	// lastIndex to never be smaller than quorumIndex, but
-	// RaftStatus.Progress.Match is updated on the leader when a command is
-	// proposed and in a single replica Raft group this also means that
-	// RaftStatus.Commit is updated at propose time.
-	decision.ProtectIndex(decision.QuorumIndex, truncatableIndexChosenViaQuorumIndex)
+	if input.Leaseholder {
+		// Start by protecting quorum index. Typically the quorum index will not be
+		// smaller than the lastIndex (since lastIndex represents what has applied at this replica).
+		// It can be substantially higher since RaftStatus.Progress.Match is updated on the leader when
+		// a command is proposed and in a single replica Raft group this also means that
+		// RaftStatus.Commit is updated at propose time.
+		decision.QuorumIndex = getQuorumIndex(&input.RaftStatus)
+		decision.ProtectIndex(decision.QuorumIndex, truncatableIndexChosenViaQuorumIndex)
 
-	for _, progress := range input.RaftStatus.Progress {
-		// Snapshots are expensive, so we try our best to avoid truncating past
-		// where a follower is.
+		for _, progress := range input.RaftStatus.Progress {
+			// Snapshots are expensive, so we try our best to avoid truncating past
+			// where a follower is.
 
-		// First, we never truncate off a recently active follower, no matter how
-		// large the log gets. Recently active shares the (currently 10s) constant
-		// as the quota pool, so the quota pool should put a bound on how much the
-		// raft log can grow due to this.
-		//
-		// For live followers which are being probed (i.e. the leader doesn't know
-		// how far they've caught up), the Match index is too large, and so the
-		// quorum index can be, too. We don't want these followers to require a
-		// snapshot since they are most likely going to be caught up very soon (they
-		// respond with the "right index" to the first probe or don't respond, in
-		// which case they should end up as not recently active). But we also don't
-		// know their index, so we can't possible make a truncation decision that
-		// avoids that at this point and make the truncation a no-op.
-		//
-		// The scenario in which this is most relevant is during restores, where we
-		// split off new ranges that rapidly receive very large log entries while
-		// the Raft group is still in a state of discovery (a new leader starts
-		// probing followers at its own last index). Additionally, these ranges will
-		// be split many times over, resulting in a flurry of snapshots with
-		// overlapping bounds that put significant stress on the Raft snapshot
-		// queue.
-		if progress.RecentActive {
-			if progress.State == tracker.StateProbe {
-				decision.ProtectIndex(decision.Input.FirstIndex, truncatableIndexChosenViaProbingFollower)
-			} else {
+			// First, we never truncate off a recently active follower, no matter how
+			// large the log gets. Recently active shares the (currently 10s) constant
+			// as the quota pool, so the quota pool should put a bound on how much the
+			// raft log can grow due to this.
+			//
+			// For live followers which are being probed (i.e. the leader doesn't know
+			// how far they've caught up), the Match index is too large, and so the
+			// quorum index can be, too. We don't want these followers to require a
+			// snapshot since they are most likely going to be caught up very soon (they
+			// respond with the "right index" to the first probe or don't respond, in
+			// which case they should end up as not recently active). But we also don't
+			// know their index, so we can't possible make a truncation decision that
+			// avoids that at this point and make the truncation a no-op.
+			//
+			// The scenario in which this is most relevant is during restores, where we
+			// split off new ranges that rapidly receive very large log entries while
+			// the Raft group is still in a state of discovery (a new leader starts
+			// probing followers at its own last index). Additionally, these ranges will
+			// be split many times over, resulting in a flurry of snapshots with
+			// overlapping bounds that put significant stress on the Raft snapshot
+			// queue.
+			if progress.RecentActive {
+				if progress.State == tracker.StateProbe {
+					decision.ProtectIndex(decision.Input.FirstIndex, truncatableIndexChosenViaProbingFollower)
+				} else {
+					decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
+				}
+				continue
+			}
+
+			// Second, if the follower has not been recently active, we don't
+			// truncate it off as long as the raft log is not too large.
+			if !input.LogTooLarge() {
 				decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
 			}
-			continue
+
+			// Otherwise, we let it truncate to the quorum index.
 		}
 
-		// Second, if the follower has not been recently active, we don't
-		// truncate it off as long as the raft log is not too large.
-		if !input.LogTooLarge() {
-			decision.ProtectIndex(progress.Match, truncatableIndexChosenViaFollowers)
+		// The pending snapshot index acts as a placeholder for a replica that is
+		// about to be added to the range (or is in Raft recovery). We don't want to
+		// truncate the log in a way that will require that new replica to be caught
+		// up via yet another Raft snapshot.
+		if input.PendingSnapshotIndex > 0 {
+			decision.ProtectIndex(input.PendingSnapshotIndex, truncatableIndexChosenViaPendingSnap)
 		}
 
-		// Otherwise, we let it truncate to the quorum index.
+		// If new first index dropped below first index, make them equal (resulting
+		// in a no-op).
+		if decision.NewFirstIndex < decision.Input.FirstIndex {
+			decision.NewFirstIndex = decision.Input.FirstIndex
+			decision.ChosenVia = truncatableIndexChosenViaFirstIndex
+		}
 	}
-
-	// The pending snapshot index acts as a placeholder for a replica that is
-	// about to be added to the range (or is in Raft recovery). We don't want to
-	// truncate the log in a way that will require that new replica to be caught
-	// up via yet another Raft snapshot.
-	if input.PendingSnapshotIndex > 0 {
-		decision.ProtectIndex(input.PendingSnapshotIndex, truncatableIndexChosenViaPendingSnap)
-	}
-
-	// If new first index dropped below first index, make them equal (resulting
-	// in a no-op).
-	if decision.NewFirstIndex < decision.Input.FirstIndex {
-		decision.NewFirstIndex = decision.Input.FirstIndex
-		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
-	}
-
 	// Invariants: NewFirstIndex >= FirstIndex
 	//             NewFirstIndex <= LastIndex (if != 10)
 	//             NewFirstIndex <= QuorumIndex (if != 0)
@@ -593,14 +684,20 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		} else {
 			log.VEvent(ctx, 1, decision.String())
 		}
-		b := &client.Batch{}
-		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
-			Index:         decision.NewFirstIndex,
-			RangeID:       r.RangeID,
-		})
-		if err := rlq.db.Run(ctx, b); err != nil {
-			return err
+		if decision.Input.Leaseholder {
+			b := &client.Batch{}
+			b.AddRawRequest(&roachpb.TruncateLogRequest{
+				RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+				Index:         decision.NewFirstIndex,
+				RangeID:       r.RangeID,
+			})
+			if err := rlq.db.Run(ctx, b); err != nil {
+				return err
+			}
+		} else {
+			if err := rlq.doLocalTruncation(ctx, r, decision.NewFirstIndex); err != nil {
+				return err
+			}
 		}
 		r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
 	} else {
@@ -616,6 +713,82 @@ func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 
 // purgatoryChan returns nil.
 func (*raftLogQueue) purgatoryChan() <-chan time.Time {
+	return nil
+}
+
+// TODO: deal with a concurrent snapshot being applied in applySnapshot()
+func (rlq *raftLogQueue) doLocalTruncation(ctx context.Context, r *Replica, index uint64) error {
+	// TODO: Can we assume not in Legacy19.1 and so don't need to delete the legacy key? Do we require
+	// upgrades to go through all the major versions?
+	// TODO: wrap all error returns with more info.
+
+	// Compute which entries we need to delete and the term for the new truncated state.
+	firstIndex, err := r.GetFirstIndex()
+	if err != nil {
+		return err
+	}
+	if firstIndex >= index {
+		// nothing to do
+		return nil
+	}
+	term, err := r.GetTerm(index)
+	if err != nil {
+		return err
+	}
+
+	// Compute the number of bytes freed by this truncation.
+	start := keys.RaftLogKey(r.RangeID, firstIndex)
+	end := keys.RaftLogKey(r.RangeID, index)
+	batch := r.store.Engine().NewBatch()
+	iter := batch.NewIterator(engine.IterOptions{UpperBound: end})
+	defer iter.Close()
+	// We can pass zero as nowNanos because we're only interested in SysBytes.
+	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	if err != nil {
+		return err
+	}
+	bytes := -ms.SysBytes
+
+	truncState, legacy, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, batch)
+	if err != nil {
+		return err
+	}
+	if legacy {
+		// TODO: error?
+		return fmt.Errorf("?")
+	}
+
+	// Add deletions for entries.
+	prefixBuf := &r.mu.stateLoader.RangeIDPrefixBuf
+	for idx := firstIndex; idx < index; idx++ {
+		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
+		// avoid allocating when constructing Raft log keys (16 bytes).
+		unsafeKey := prefixBuf.RaftLogKey(idx)
+		if err := batch.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+			return errors.Wrapf(err, "unable to clear truncated Raft entries")
+		}
+	}
+	// Add put for new truncated state.
+	truncState.Index = index
+	truncState.Term = term
+	if err := engine.MVCCPutProto(
+		ctx, batch, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
+		hlc.Timestamp{}, nil /* txn */, &truncState,
+	); err != nil {
+		return errors.Wrap(err, "unable to migrate RaftTruncatedState")
+	}
+
+	// Commit the batch.
+	if err := batch.Commit(true); err != nil {
+		return wrapWithNonDeterministicFailure(err, "unable to commit Raft entry batch")
+	}
+	batch.Close()
+
+	// Make in-memory state consistent with this truncation, remove side-loaded entries and return
+	// the size of the removed side-loaded entries.
+	bytes += r.handleTruncatedStateResult(ctx, &truncState)
+	// Update the size tracking.
+	r.handleRaftLogDeltaResult(ctx, bytes)
 	return nil
 }
 
