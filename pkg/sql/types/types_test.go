@@ -157,9 +157,107 @@ func TestTypes(t *testing.T) {
 		{Int2, MakeScalar(IntFamily, oid.T_int2, 0, 16, emptyLocale)},
 
 		// INTERVAL
-		{Interval, &T{InternalType: InternalType{
-			Family: IntervalFamily, Oid: oid.T_interval, Locale: &emptyLocale}}},
-		{Interval, MakeScalar(IntervalFamily, oid.T_interval, 0, 0, emptyLocale)},
+		{
+			Interval,
+			&T{
+				InternalType: InternalType{
+					Family:                IntervalFamily,
+					Oid:                   oid.T_interval,
+					Locale:                &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{},
+					// Precision and PrecisionIsSet is not set.
+				},
+			},
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 0, PrecisionIsSet: true}),
+			MakeScalar(IntervalFamily, oid.T_interval, 0, 0, emptyLocale),
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 0, PrecisionIsSet: true}),
+			&T{
+				InternalType: InternalType{
+					Family:                IntervalFamily,
+					Precision:             0,
+					TimePrecisionIsSet:    true,
+					Oid:                   oid.T_interval,
+					Locale:                &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{},
+				},
+			},
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}),
+			&T{
+				InternalType: InternalType{
+					Family:                IntervalFamily,
+					Oid:                   oid.T_interval,
+					Precision:             3,
+					TimePrecisionIsSet:    true,
+					Locale:                &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{},
+				},
+			},
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}),
+			MakeScalar(IntervalFamily, oid.T_interval, 3, 0, emptyLocale),
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 6, PrecisionIsSet: true}),
+			&T{
+				InternalType: InternalType{
+					Family:                IntervalFamily,
+					Oid:                   oid.T_interval,
+					Precision:             6,
+					TimePrecisionIsSet:    true,
+					Locale:                &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{},
+				},
+			},
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{Precision: 6, PrecisionIsSet: true}),
+			MakeScalar(IntervalFamily, oid.T_interval, 6, 0, emptyLocale)},
+		{
+			MakeInterval(IntervalTypeMetadata{
+				DurationField: IntervalDurationField{
+					DurationType: IntervalDurationType_SECOND,
+				},
+			}),
+			&T{
+				InternalType: InternalType{
+					Family: IntervalFamily,
+					Oid:    oid.T_interval,
+					Locale: &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{
+						DurationType: IntervalDurationType_SECOND,
+					},
+				},
+			},
+		},
+		{
+			MakeInterval(IntervalTypeMetadata{
+				DurationField: IntervalDurationField{
+					DurationType:     IntervalDurationType_SECOND,
+					FromDurationType: IntervalDurationType_MONTH,
+				},
+				Precision:      3,
+				PrecisionIsSet: true,
+			}),
+			&T{
+				InternalType: InternalType{
+					Family: IntervalFamily,
+					Oid:    oid.T_interval,
+					Locale: &emptyLocale,
+					IntervalDurationField: &IntervalDurationField{
+						DurationType:     IntervalDurationType_SECOND,
+						FromDurationType: IntervalDurationType_MONTH,
+					},
+					Precision:          3,
+					TimePrecisionIsSet: true,
+				}},
+		},
 
 		// JSON
 		{Jsonb, &T{InternalType: InternalType{
@@ -600,7 +698,7 @@ func TestUpgradeType(t *testing.T) {
 		expected *T
 	}{
 		{
-			desc: "upgrading -1 precision to default precision for time",
+			desc: "upgrading -1 timestamp precision to default precision for time",
 			input: &T{InternalType: InternalType{
 				Family:    TimestampFamily,
 				Precision: -1,
@@ -615,7 +713,7 @@ func TestUpgradeType(t *testing.T) {
 			}},
 		},
 		{
-			desc: "upgrading default precision pre-20.1 to default precision",
+			desc: "upgrading default timestamp precision pre-20.1 to default precision",
 			input: &T{InternalType: InternalType{
 				Family:    TimestampFamily,
 				Precision: 0,
@@ -631,7 +729,7 @@ func TestUpgradeType(t *testing.T) {
 			}},
 		},
 		{
-			desc: "upgrading 6 precision pre-20.1 to default precision",
+			desc: "upgrading 6 timestamp precision pre-20.1 to default precision",
 			input: &T{InternalType: InternalType{
 				Family:    TimestampFamily,
 				Precision: 6,
@@ -647,7 +745,7 @@ func TestUpgradeType(t *testing.T) {
 			}},
 		},
 		{
-			desc: "idempotent for precision(3) set objects",
+			desc: "idempotent for timestamp precision(3) set objects",
 			input: &T{InternalType: InternalType{
 				Family:             TimestampFamily,
 				Precision:          3,
@@ -664,7 +762,7 @@ func TestUpgradeType(t *testing.T) {
 			}},
 		},
 		{
-			desc: "idempotent for precision(0) set objects",
+			desc: "idempotent for timestamp precision(0) set objects",
 			input: &T{InternalType: InternalType{
 				Family:             TimestampFamily,
 				Precision:          0,
@@ -681,7 +779,7 @@ func TestUpgradeType(t *testing.T) {
 			}},
 		},
 		{
-			desc: "idempotent for precision unset objects",
+			desc: "idempotent for timestamp precision unset objects",
 			input: &T{InternalType: InternalType{
 				Family:             TimestampFamily,
 				Precision:          0,
@@ -695,6 +793,45 @@ func TestUpgradeType(t *testing.T) {
 				TimePrecisionIsSet: false,
 				Oid:                oid.T_timestamp,
 				Locale:             &emptyLocale,
+			}},
+		},
+		{
+			desc: "intervals upgrading from 19.2 to 20.1 with no precision set",
+			input: &T{InternalType: InternalType{
+				Family: IntervalFamily,
+				Oid:    oid.T_interval,
+				Locale: &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:                IntervalFamily,
+				Precision:             0,
+				TimePrecisionIsSet:    false,
+				Oid:                   oid.T_interval,
+				Locale:                &emptyLocale,
+				IntervalDurationField: &IntervalDurationField{},
+			}},
+		},
+		{
+			desc: "intervals are idempotent after 20.1",
+			input: &T{InternalType: InternalType{
+				Family:             IntervalFamily,
+				Oid:                oid.T_interval,
+				Locale:             &emptyLocale,
+				Precision:          4,
+				TimePrecisionIsSet: true,
+				IntervalDurationField: &IntervalDurationField{
+					DurationType: IntervalDurationType_SECOND,
+				},
+			}},
+			expected: &T{InternalType: InternalType{
+				Family:             IntervalFamily,
+				Oid:                oid.T_interval,
+				Locale:             &emptyLocale,
+				Precision:          4,
+				TimePrecisionIsSet: true,
+				IntervalDurationField: &IntervalDurationField{
+					DurationType: IntervalDurationType_SECOND,
+				},
 			}},
 		},
 	}

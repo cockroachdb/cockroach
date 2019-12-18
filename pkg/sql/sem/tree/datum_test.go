@@ -327,40 +327,74 @@ func TestDFloatCompare(t *testing.T) {
 	}
 }
 
-// TestParseDIntervalWithField tests that the additional features available
-// to tree.ParseDIntervalWithField beyond those in tree.ParseDInterval behave as expected.
-func TestParseDIntervalWithField(t *testing.T) {
+// TestParseDIntervalWithTypeMetadata tests that the additional features available
+// to tree.ParseDIntervalWithTypeMetadata beyond those in tree.ParseDInterval behave as expected.
+func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	var (
+		second = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_SECOND,
+			},
+		}
+		minute = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_MINUTE,
+			},
+		}
+		hour = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_HOUR,
+			},
+		}
+		day = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_DAY,
+			},
+		}
+		month = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_MONTH,
+			},
+		}
+		year = types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: types.IntervalDurationType_YEAR,
+			},
+		}
+	)
+
 	testData := []struct {
 		str      string
-		field    tree.DurationField
+		dtype    types.IntervalTypeMetadata
 		expected string
 	}{
 		// Test cases for raw numbers with fields
-		{"5", tree.Second, "5s"},
-		{"5.8", tree.Second, "5.8s"},
-		{"5", tree.Minute, "5m"},
-		{"5.8", tree.Minute, "5m"},
-		{"5", tree.Hour, "5h"},
-		{"5.8", tree.Hour, "5h"},
-		{"5", tree.Day, "5 day"},
-		{"5.8", tree.Day, "5 day"},
-		{"5", tree.Month, "5 month"},
-		{"5.8", tree.Month, "5 month"},
-		{"5", tree.Year, "5 year"},
-		{"5.8", tree.Year, "5 year"},
+		{"5", second, "5s"},
+		{"5.8", second, "5.8s"},
+		{"5", minute, "5m"},
+		{"5.8", minute, "5m"},
+		{"5", hour, "5h"},
+		{"5.8", hour, "5h"},
+		{"5", day, "5 day"},
+		{"5.8", day, "5 day"},
+		{"5", month, "5 month"},
+		{"5.8", month, "5 month"},
+		{"5", year, "5 year"},
+		{"5.8", year, "5 year"},
 		// Test cases for truncation based on fields
-		{"1-2 3 4:56:07", tree.Second, "1-2 3 4:56:07"},
-		{"1-2 3 4:56:07", tree.Minute, "1-2 3 4:56:00"},
-		{"1-2 3 4:56:07", tree.Hour, "1-2 3 4:00:00"},
-		{"1-2 3 4:56:07", tree.Day, "1-2 3 0:"},
-		{"1-2 3 4:56:07", tree.Month, "1-2 0 0:"},
-		{"1-2 3 4:56:07", tree.Year, "1 year"},
+		{"1-2 3 4:56:07", second, "1-2 3 4:56:07"},
+		{"1-2 3 4:56:07", minute, "1-2 3 4:56:00"},
+		{"1-2 3 4:56:07", hour, "1-2 3 4:00:00"},
+		{"1-2 3 4:56:07", day, "1-2 3 0:"},
+		{"1-2 3 4:56:07", month, "1-2 0 0:"},
+		{"1-2 3 4:56:07", year, "1 year"},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDIntervalWithField(td.str, td.field)
+		actual, err := tree.ParseDIntervalWithTypeMetadata(td.str, td.dtype)
 		if err != nil {
-			t.Errorf("unexpected error while parsing INTERVAL %s %d: %s", td.str, td.field, err)
+			t.Errorf("unexpected error while parsing INTERVAL %s %#v: %s", td.str, td.dtype, err)
 			continue
 		}
 		expected, err := tree.ParseDInterval(td.expected)
@@ -371,7 +405,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
-			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
+			t.Errorf("INTERVAL %s %#v: got %s, expected %s", td.str, td.dtype, actual, expected)
 		}
 	}
 }

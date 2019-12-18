@@ -630,6 +630,36 @@ eval
 '00:00:01'
 
 eval
+'00:00:01.123456'::interval::interval(3)
+----
+'00:00:01.123'
+
+eval
+'00:00:01.123'::interval::interval(3)
+----
+'00:00:01.123'
+
+eval
+'00:00:01.123456'::interval::interval second(3)
+----
+'00:00:01.123'
+
+eval
+'00:00:01.123'::interval::interval second(3)
+----
+'00:00:01.123'
+
+eval
+'00:02:01.123456'::interval::interval minute
+----
+'00:02:00'
+
+eval
+'00:02:01.123456'::interval minute
+----
+'00:02:00'
+
+eval
 '2010-09-28'::date + 3
 ----
 '2010-10-01'

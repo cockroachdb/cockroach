@@ -1,12 +1,12 @@
 # LogicTest: local
 
-statement error unimplemented
+statement error precision 123 out of range
 SELECT 'a'::INTERVAL(123)
 
-query TI colnames
-SELECT *
+query T colnames
+SELECT feature_name
   FROM crdb_internal.feature_usage
- WHERE feature_name LIKE '%syntax.#32564%'
+ WHERE feature_name LIKE '%errorcodes.42601%'
 ----
-feature_name                usage_count
-unimplemented.syntax.#32564  1
+feature_name
+errorcodes.42601

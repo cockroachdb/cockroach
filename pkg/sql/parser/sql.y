@@ -429,8 +429,8 @@ func (u *sqlSymUnion) op() tree.Operator {
 func (u *sqlSymUnion) cmpOp() tree.ComparisonOperator {
     return u.val.(tree.ComparisonOperator)
 }
-func (u *sqlSymUnion) durationField() tree.DurationField {
-    return u.val.(tree.DurationField)
+func (u *sqlSymUnion) intervalTypeMetadata() types.IntervalTypeMetadata {
+    return u.val.(types.IntervalTypeMetadata)
 }
 func (u *sqlSymUnion) kvOption() tree.KVOption {
     return u.val.(tree.KVOption)
@@ -886,7 +886,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Exprs> substr_list
 %type <tree.Exprs> trim_list
 %type <tree.Exprs> execute_param_clause
-%type <tree.DurationField> opt_interval interval_second interval_qualifier
+%type <types.IntervalTypeMetadata> opt_interval interval_second interval_qualifier
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_cluster
@@ -6960,18 +6960,18 @@ simple_typename:
 | bit_with_length
 | character_with_length
 | const_interval
-| const_interval interval_qualifier { return unimplemented(sqllex, "interval with unit qualifier") }
-| const_interval '(' ICONST ')'
+| const_interval interval_qualifier
   {
-    prec, err := $3.numVal().AsInt32()
-    if err != nil {
-      return setErr(sqllex, err)
+    $$.val = types.MakeInterval($2.intervalTypeMetadata())
+  }
+| const_interval '(' iconst32 ')'
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
     }
-    if prec == 6 {
-      $$.val = $1.colType()
-    } else {
-      return unimplementedWithIssue(sqllex, 32564)
-    }
+    $$.val = types.MakeInterval(types.IntervalTypeMetadata{Precision: prec, PrecisionIsSet: true})
   }
 | postgres_oid
 
@@ -7401,57 +7401,104 @@ const_interval:
 interval_qualifier:
   YEAR
   {
-    $$.val = tree.Year
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_YEAR,
+      },
+    }
   }
 | MONTH
   {
-    $$.val = tree.Month
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_MONTH,
+      },
+    }
   }
 | DAY
   {
-    $$.val = tree.Day
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_DAY,
+      },
+    }
   }
 | HOUR
   {
-    $$.val = tree.Hour
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_HOUR,
+      },
+    }
   }
 | MINUTE
   {
-    $$.val = tree.Minute
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_MINUTE,
+      },
+    }
   }
 | interval_second
   {
-    $$.val = $1.durationField()
+    $$.val = $1.intervalTypeMetadata()
   }
 // Like Postgres, we ignore the left duration field. See explanation:
 // https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net
 | YEAR TO MONTH
   {
-    $$.val = tree.Month
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        FromDurationType: types.IntervalDurationType_YEAR,
+        DurationType: types.IntervalDurationType_MONTH,
+      },
+    }
   }
 | DAY TO HOUR
   {
-    $$.val = tree.Hour
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        FromDurationType: types.IntervalDurationType_DAY,
+        DurationType: types.IntervalDurationType_HOUR,
+      },
+    }
   }
 | DAY TO MINUTE
   {
-    $$.val = tree.Minute
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        FromDurationType: types.IntervalDurationType_DAY,
+        DurationType: types.IntervalDurationType_MINUTE,
+      },
+    }
   }
 | DAY TO interval_second
   {
-    $$.val = $3.durationField()
+    ret := $3.intervalTypeMetadata()
+    ret.DurationField.FromDurationType = types.IntervalDurationType_DAY
+    $$.val = ret
   }
 | HOUR TO MINUTE
   {
-    $$.val = tree.Minute
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        FromDurationType: types.IntervalDurationType_HOUR,
+        DurationType: types.IntervalDurationType_MINUTE,
+      },
+    }
   }
 | HOUR TO interval_second
   {
-    $$.val = $3.durationField()
+    ret := $3.intervalTypeMetadata()
+    ret.DurationField.FromDurationType = types.IntervalDurationType_HOUR
+    $$.val = ret
   }
 | MINUTE TO interval_second
   {
-    $$.val = $3.durationField()
+    $$.val = $3.intervalTypeMetadata()
+    ret := $3.intervalTypeMetadata()
+    ret.DurationField.FromDurationType = types.IntervalDurationType_MINUTE
+    $$.val = ret
   }
 
 opt_interval:
@@ -7464,9 +7511,27 @@ opt_interval:
 interval_second:
   SECOND
   {
-    $$.val = tree.Second
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_SECOND,
+      },
+    }
   }
-| SECOND '(' ICONST ')' { return unimplementedWithIssueDetail(sqllex, 32564, "interval second") }
+| SECOND '(' iconst32 ')'
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
+    }
+    $$.val = types.IntervalTypeMetadata{
+      DurationField: types.IntervalDurationField{
+        DurationType: types.IntervalDurationType_SECOND,
+      },
+      PrecisionIsSet: true,
+      Precision: prec,
+    }
+  }
 
 // General expressions. This is the heart of the expression syntax.
 //
@@ -8053,7 +8118,20 @@ d_expr:
   {
     $$.val = $1.expr()
   }
-| const_interval '(' ICONST ')' SCONST { return unimplementedWithIssue(sqllex, 32564) }
+| const_interval '(' iconst32 ')' SCONST
+  {
+    prec := $3.int32()
+    if prec < 0 || prec > 6 {
+      sqllex.Error(fmt.Sprintf("precision %d out of range", prec))
+      return 1
+    }
+    d, err := tree.ParseDIntervalWithTypeMetadata($5, types.IntervalTypeMetadata{
+      Precision: prec,
+      PrecisionIsSet: true,
+    })
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = d
+  }
 | TRUE
   {
     $$.val = tree.MakeDBool(true)
@@ -9141,7 +9219,7 @@ interval:
     if $3.val == nil {
       d, err = tree.ParseDInterval($2)
     } else {
-      d, err = tree.ParseDIntervalWithField($2, $3.durationField())
+      d, err = tree.ParseDIntervalWithTypeMetadata($2, $3.intervalTypeMetadata())
     }
     if err != nil { return setErr(sqllex, err) }
     $$.val = d
