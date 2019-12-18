@@ -396,7 +396,7 @@ func (l *localFileStorage) Delete(ctx context.Context, basename string) error {
 func (l *localFileStorage) Size(ctx context.Context, basename string) (int64, error) {
 	stat, err := l.blobClient.Stat(ctx, joinRelativePath(l.base, basename))
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	return stat.Filesize, nil
 }

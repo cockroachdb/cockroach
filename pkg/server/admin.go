@@ -1847,12 +1847,10 @@ func (s *adminServer) enqueueRangeLocal(
 	var store *storage.Store
 	var repl *storage.Replica
 	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
-		r, err := s.GetReplica(req.RangeID)
-		if err != nil {
-			return nil
+		if r, _ := s.GetReplica(req.RangeID); r != nil {
+			repl = r
+			store = s
 		}
-		repl = r
-		store = s
 		return nil
 	}); err != nil {
 		response.Details[0].Error = err.Error()

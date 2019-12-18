@@ -2236,7 +2236,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				if _, err := txn.Get(ctx, "b"); err != nil {
-					return nil
+					return err
 				}
 				return txn.Put(ctx, "a", "put")
 			},
@@ -2249,7 +2249,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				if _, err := txn.Get(ctx, "a"); err != nil {
-					return nil
+					return err
 				}
 				return txn.Put(ctx, "a", "put")
 			},
@@ -2263,7 +2263,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				// Get so we must refresh when txn timestamp moves forward.
 				if _, err := txn.Get(ctx, "a"); err != nil {
-					return nil
+					return err
 				}
 				// Now, Put a new value to "a" out of band from the txn.
 				if err := txn.DB().Put(ctx, "a", "value2"); err != nil {
