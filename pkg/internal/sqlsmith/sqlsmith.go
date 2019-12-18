@@ -62,15 +62,14 @@ type Smither struct {
 	columns        map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
 	indexes        map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts     map[string]int
-	alters         *WeightedSampler
 	scalars, bools *WeightedSampler
 	selectStmts    *WeightedSampler
 
 	tableExprSampler *WeightedSampler
 	tableExprs       tableExprWeights
 
-	stmtWeights []StatementWeight
-	stmtSampler *StatementSampler
+	stmtWeights, alterWeights []StatementWeight
+	stmtSampler, alterSampler *StatementSampler
 
 	disableWith        bool
 	disableImpureFns   bool
@@ -97,16 +96,18 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		scalars:     NewWeightedSampler(scalarWeights, rnd.Int63()),
 		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
 		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
-		alters:      NewWeightedSampler(alterWeights, rnd.Int63()),
 
-		stmtWeights: allStatements,
-		tableExprs:  allTableExprs,
-		complexity:  0.2,
+		tableExprs: allTableExprs,
+
+		stmtWeights:  allStatements,
+		alterWeights: alters,
+		complexity:   0.2,
 	}
 	for _, opt := range opts {
 		opt.Apply(s)
 	}
 	s.stmtSampler = NewWeightedStatementSampler(s.stmtWeights, rnd.Int63())
+	s.alterSampler = NewWeightedStatementSampler(s.alterWeights, rnd.Int63())
 	s.tableExprSampler = NewWeightedSampler(s.tableExprs.Weights(), rnd.Int63())
 	return s, s.ReloadSchemas()
 }

@@ -141,14 +141,6 @@ func init() {
 	}()
 }
 
-func (ws statementWeights) Weights() []int {
-	m := make([]int, len(ws))
-	for i, w := range ws {
-		m[i] = w.weight
-	}
-	return m
-}
-
 func (ws tableExprWeights) Weights() []int {
 	m := make([]int, len(ws))
 	for i, w := range ws {
@@ -158,12 +150,7 @@ func (ws tableExprWeights) Weights() []int {
 }
 
 type (
-	statementWeight struct {
-		weight int
-		fn     func(s *Smither) (tree.Statement, bool)
-	}
-	statementWeights []statementWeight
-	tableExprWeight  struct {
+	tableExprWeight struct {
 		weight int
 		fn     func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
 	}
