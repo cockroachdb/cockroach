@@ -1376,7 +1376,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			if ex.idleConn() {
 				// If we're about to close the connection, close res in order to flush
 				// now, as we won't have an opportunity to do it later.
-				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
+				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 				return errDrainingComplete
 			}
 		}
@@ -1435,10 +1435,10 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if resErr == nil && ok {
 			// Depending on whether the result has the error already or not, we have
 			// to call either Close or CloseWithErr.
-			res.CloseWithErr(pe.errorCause())
+			res.CloseWithErr(ctx, pe.errorCause())
 		} else {
 			ex.recordError(ctx, resErr)
-			res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
+			res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 		}
 	} else {
 		res.Discard()
