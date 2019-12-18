@@ -55,7 +55,7 @@ type MVCCIncrementalIterator struct {
 	// fields used for a workaround for a bug in the time-bound iterator
 	// (#28358)
 	upperBound roachpb.Key
-	e          Reader
+	reader     Reader
 	sanityIter Iterator
 
 	startTime hlc.Timestamp
@@ -77,9 +77,9 @@ type MVCCIncrementalIterOptions struct {
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
-// specified engine and options.
+// specified reader and options.
 func NewMVCCIncrementalIterator(
-	e Reader, opts MVCCIncrementalIterOptions,
+	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
 	var sanityIter Iterator
 	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
@@ -90,15 +90,15 @@ func NewMVCCIncrementalIterator(
 		// between the two iterators lead to intents and values falling outside of
 		// the timestamp range **from iter's perspective**. This allows us to simply
 		// ignore discrepancies that we notice in advance(). See #34819.
-		sanityIter = e.NewIterator(IterOptions{
+		sanityIter = reader.NewIterator(IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
 		})
 	}
 
 	return &MVCCIncrementalIterator{
-		e:          e,
+		reader:     reader,
 		upperBound: opts.IterOptions.UpperBound,
-		iter:       e.NewIterator(opts.IterOptions),
+		iter:       reader.NewIterator(opts.IterOptions),
 		startTime:  opts.StartTime,
 		endTime:    opts.EndTime,
 		sanityIter: sanityIter,

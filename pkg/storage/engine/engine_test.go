@@ -244,17 +244,17 @@ func TestEngineBatch(t *testing.T) {
 				{key, appender("  B"), true},
 			}
 
-			apply := func(eng ReadWriter, d data) error {
+			apply := func(readWriter ReadWriter, d data) error {
 				if d.value == nil {
-					return eng.Clear(d.key)
+					return readWriter.Clear(d.key)
 				} else if d.merge {
-					return eng.Merge(d.key, d.value)
+					return readWriter.Merge(d.key, d.value)
 				}
-				return eng.Put(d.key, d.value)
+				return readWriter.Put(d.key, d.value)
 			}
 
-			get := func(eng ReadWriter, key MVCCKey) []byte {
-				b, err := eng.Get(key)
+			get := func(readWriter ReadWriter, key MVCCKey) []byte {
+				b, err := readWriter.Get(key)
 				if err != nil {
 					t.Fatal(err)
 				}
