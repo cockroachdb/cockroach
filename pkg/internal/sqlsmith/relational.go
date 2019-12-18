@@ -16,8 +16,7 @@ import (
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
-	idx := s.stmtSampler.Next()
-	return s.statements[idx].fn(s)
+	return s.stmtSampler.Next()(s)
 }
 
 func (s *Smither) makeSelectStmt(
@@ -92,13 +91,13 @@ func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableEx
 }
 
 var (
-	mutatingStatements = statementWeights{
+	mutatingStatements = []StatementWeight{
 		{10, makeInsert},
 		{10, makeDelete},
 		{10, makeUpdate},
 		{1, makeAlter},
 	}
-	nonMutatingStatements = statementWeights{
+	nonMutatingStatements = []StatementWeight{
 		{10, makeSelect},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
