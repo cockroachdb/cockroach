@@ -1669,8 +1669,10 @@ func TestParse2(t *testing.T) {
 
 		// Interval constructor gets eagerly processed.
 		{`SELECT INTERVAL '0'`, `SELECT '00:00:00'`},
+		{`SELECT INTERVAL '1' SECOND`, `SELECT '00:00:01'`},
 		{`SELECT INTERVAL(3) '12.1234s'`, `SELECT '00:00:12.123'`},
-		{`SELECT INTERVAL '14.7899s' SECOND(3)`, `SELECT '00:00:14.79'`},
+		{`SELECT INTERVAL '12.1234s' SECOND(3)`, `SELECT '00:00:12.123'`},
+		{`SELECT INTERVAL '14.7899s' SECOND(3)`, `SELECT '00:00:14.79'`}, // Check rounding.
 
 		{`SELECT '11s'::INTERVAL(3)`, `SELECT '11s'::INTERVAL(3)`},
 		{`SELECT '10:00:13.123456'::INTERVAL SECOND`, `SELECT '10:00:13.123456'::INTERVAL SECOND`},
@@ -1702,6 +1704,8 @@ func TestParse2(t *testing.T) {
 		{`SET TIME ZONE "Europe/Rome"`,
 			`SET timezone = 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
+			`SET timezone = '-07:00:00'`},
+		{`SET TIME ZONE INTERVAL(3) '-7h'`,
 			`SET timezone = '-07:00:00'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
 			`SET timezone = '-06:59:00'`},
