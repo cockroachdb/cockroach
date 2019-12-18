@@ -50,10 +50,10 @@ func (n *createViewNode) startExec(params runParams) error {
 	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
 		params.ExecCfg().Settings, n.dbDesc.ID, viewName)
 
-	key := tKey.Key()
-	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
+	exists, _, err := sqlbase.LookupPublicTableID(params.ctx, params.p.txn, n.dbDesc.ID, viewName)
+	if err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlbase.NewRelationAlreadyExistsError(viewName)
 	} else if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	if err = params.p.createDescriptorWithID(
-		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
+		params.ctx, tKey.Key(), id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
