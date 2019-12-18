@@ -236,6 +236,17 @@ func ParseOne(sql string) (Statement, error) {
 	return p.parseOneWithDepth(1, sql)
 }
 
+// ParseQualifiedTableName parses a SQL string of the form
+// `[ database_name . ] [ schema_name . ] table_name`.
+func ParseQualifiedTableName(sql string) (*tree.TableName, error) {
+	name, err := ParseTableName(sql)
+	if err != nil {
+		return nil, err
+	}
+	tn := name.ToTableName()
+	return &tn, nil
+}
+
 // ParseTableName parses a table name.
 func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	// We wrap the name we want to parse into a dummy statement since our parser

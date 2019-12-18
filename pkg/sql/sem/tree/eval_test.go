@@ -268,7 +268,7 @@ func TestEval(t *testing.T) {
 
 func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
-	o.Init(evalCtx)
+	o.Init(evalCtx, nil /* catalog */)
 	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
 	b.AllowUnsupportedExpr = true
 	if err := b.Build(e); err != nil {

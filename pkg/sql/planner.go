@@ -406,15 +406,12 @@ func (p *planner) ParseType(sql string) (*types.T, error) {
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.
-func (p *planner) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	name, err := parser.ParseTableName(sql)
-	if err != nil {
-		return nil, err
-	}
-	tn := name.ToTableName()
-	return &tn, nil
+// This exists to get around a circular dependency between sql/sem/tree and
+// sql/parser. sql/parser depends on tree to make objects, so tree cannot import
+// ParseQualifiedTableName even though some builtins need that function.
+// TODO(jordan): remove this once builtins can be moved outside of sql/sem/tree.
+func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
+	return parser.ParseQualifiedTableName(sql)
 }
 
 // ResolveTableName implements the tree.EvalDatabase interface.

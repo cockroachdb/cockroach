@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -404,7 +405,7 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName, error) {
 	switch t := arg.(type) {
 	case *tree.DString:
-		tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), string(*t))
+		tn, err := parser.ParseQualifiedTableName(string(*t))
 		if err != nil {
 			return nil, err
 		}

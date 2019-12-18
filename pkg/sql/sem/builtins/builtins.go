@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1421,7 +1422,7 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1446,7 +1447,7 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1492,7 +1493,7 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1514,7 +1515,7 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := parser.ParseQualifiedTableName(string(name))
 				if err != nil {
 					return nil, err
 				}
