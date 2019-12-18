@@ -1055,6 +1055,9 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
+			if ast.Inverted {
+				continue
+			}
 			tableInfo, ok := tables[ast.Table.TableName]
 			if !ok {
 				continue
@@ -1080,10 +1083,9 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				case *tree.UniqueConstraintTableDef:
 					if !defType.PrimaryKey {
 						idx = &defType.IndexTableDef
-					} else {
-						continue
 					}
-				default:
+				}
+				if idx == nil || idx.Inverted {
 					continue
 				}
 				// If we don't have a storing list, make one with 50% chance.
