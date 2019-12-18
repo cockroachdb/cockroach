@@ -159,10 +159,13 @@ ReactDOM.render(
         </Route>
         <Route path="reports">
           <Route path="problemranges" component={ ProblemRanges }>
-            <Route path={`:${nodeIDAttr}`} component={ ProblemRanges }/>
+            <Route path={`:${nodeIDAttr}`} component={ ProblemRanges } />
           </Route>
           <Route path="localities" component={ Localities } />
-          <Route path="network" component={ Network } />
+          {/* <Route path="network" component={ Network } /> */}
+          <Route path="network" component={ Network }>
+            <Route path={`:${nodeIDAttr}`} component={ Network } />
+          </Route>
           <Route path="nodes" component={ Nodes } />
           <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
