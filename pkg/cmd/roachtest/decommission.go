@@ -162,7 +162,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			defer dbNode.Close()
 			var nodeID string
 			if err := dbNode.QueryRow(`SELECT node_id FROM crdb_internal.node_runtime_info LIMIT 1`).Scan(&nodeID); err != nil {
-				return "", nil
+				return "", err
 			}
 			return nodeID, nil
 		}
@@ -182,7 +182,6 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {
 			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
 			id, err := nodeID(node)
-
 			if err != nil {
 				return err
 			}

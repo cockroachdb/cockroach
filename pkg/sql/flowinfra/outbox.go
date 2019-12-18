@@ -282,7 +282,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 				if m.statsCollectionEnabled {
 					err := m.flush(ctx)
 					if err != nil {
-						return nil
+						return err
 					}
 					if m.flowCtx.Cfg.TestingKnobs.DeterministicStats {
 						m.stats.BytesSent = 0
