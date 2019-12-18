@@ -907,13 +907,13 @@ func (ir *IntentResolver) ResolveIntents(
 				})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
-				RequestHeader:             roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:                 intent.Txn,
-				Status:                    intent.Status,
-				Poison:                    opts.Poison,
-				MinTimestamp:              opts.MinTimestamp,
-				IgnoredSeqNums:            intent.IgnoredSeqNums,
-				IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
+				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:      intent.Txn,
+				Status:         intent.Status,
+				Poison:         opts.Poison,
+				MinTimestamp:   opts.MinTimestamp,
+				IgnoredSeqNums: intent.IgnoredSeqNums,
+				//IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
 			})
 		}
 	}
