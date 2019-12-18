@@ -658,14 +658,14 @@ render     ·            ·                     ("least")  ·
 ·          spans        ALL                   ·          ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='foo'::regclass
+EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
-·                   distributed  false                       ·                                                                                                                                                                                                                                              ·
-·                   vectorized   false                       ·                                                                                                                                                                                                                                              ·
-filter              ·            ·                           (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
- │                  filter       attrelid = 'foo'::REGCLASS  ·                                                                                                                                                                                                                                              ·
- └── virtual table  ·            ·                           (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
-·                   source       ·                           ·                                                                                                                                                                                                                                              ·
+·                   distributed  false         ·                                                                                                                                                                                                                                              ·
+·                   vectorized   false         ·                                                                                                                                                                                                                                              ·
+filter              ·            ·             (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
+ │                  filter       attrelid = t  ·                                                                                                                                                                                                                                              ·
+ └── virtual table  ·            ·             (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions)  ·
+·                   source       ·             ·                                                                                                                                                                                                                                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END

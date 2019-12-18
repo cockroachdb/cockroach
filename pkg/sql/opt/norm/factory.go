@@ -12,6 +12,7 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -80,11 +81,15 @@ type Factory struct {
 	// rule has been applied by the factory. It can be set via a call to the
 	// NotifyOnAppliedRule method.
 	appliedRule AppliedRuleFunc
+
+	// catalog is the opt catalog, used to resolve names during constant folding
+	// of special metadata queries like 'table_name'::regclass.
+	catalog cat.Catalog
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
-func (f *Factory) Init(evalCtx *tree.EvalContext) {
+func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	if f.mem == nil {
 		f.mem = &memo.Memo{}
@@ -92,6 +97,7 @@ func (f *Factory) Init(evalCtx *tree.EvalContext) {
 	f.mem.Init(evalCtx)
 
 	f.evalCtx = evalCtx
+	f.catalog = catalog
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
@@ -111,7 +117,7 @@ func (f *Factory) DetachMemo() *memo.Memo {
 	f.mem.ClearColStats(f.mem.RootExpr())
 	detach := f.mem
 	f.mem = nil
-	f.Init(f.evalCtx)
+	f.Init(f.evalCtx, nil /* catalog */)
 	return detach
 }
 

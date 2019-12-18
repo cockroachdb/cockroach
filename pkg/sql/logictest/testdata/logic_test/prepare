@@ -1184,3 +1184,12 @@ PREPARE b AS OPT PLAN '
   (Presentation "k,str")
   (NoOrdering)
 )'
+
+# Make sure that we can constant-fold REGCLASS casts even if they're placeholders.
+statement ok
+PREPARE rcc(string) AS SELECT $1::REGCLASS::OID
+
+query O
+EXECUTE rcc('t')
+----
+53

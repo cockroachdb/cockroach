@@ -723,7 +723,7 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
-	o.Init(&ot.evalCtx)
+	o.Init(&ot.evalCtx, ot.catalog)
 	if _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}
@@ -733,7 +733,7 @@ func (ot *OptTester) Memo() (string, error) {
 // Expr parses the input directly into an expression; see exprgen.Build.
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx)
+	f.Init(&ot.evalCtx, ot.catalog)
 	f.DisableOptimizations()
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
@@ -743,7 +743,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 // normalization; see exprgen.Build.
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx)
+	f.Init(&ot.evalCtx, ot.catalog)
 
 	f.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		// exprgen.Build doesn't run optimization, so we don't need to explicitly
@@ -1272,7 +1272,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
-	o.Init(&ot.evalCtx)
+	o.Init(&ot.evalCtx, ot.catalog)
 	return &o
 }
 
