@@ -226,7 +226,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				batch.SetSelection(true)
 				sel := batch.Selection()
 				col = execgen.SLICE(col, 0, int(n))
-				for execgen.RANGE(i, col) {
+				for execgen.RANGE(i, col, 0, int(n)) {
 					v := execgen.UNSAFEGET(col, i)
 					if !nulls.NullAt(uint16(i)) && cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
@@ -248,7 +248,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				batch.SetSelection(true)
 				sel := batch.Selection()
 				col = execgen.SLICE(col, 0, int(n))
-				for execgen.RANGE(i, col) {
+				for execgen.RANGE(i, col, 0, int(n)) {
 					v := execgen.UNSAFEGET(col, i)
 					if cmpIn_TYPE(v, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = uint16(i)
@@ -307,7 +307,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = execgen.SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
+			for execgen.RANGE(i, col, 0, int(n)) {
 				if nulls.NullAt(uint16(i)) {
 					projNulls.SetNull(uint16(i))
 				} else {
@@ -335,7 +335,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = execgen.SLICE(col, 0, int(n))
-			for execgen.RANGE(i, col) {
+			for execgen.RANGE(i, col, 0, int(n)) {
 				v := execgen.UNSAFEGET(col, i)
 				cmpRes := cmpIn_TYPE(v, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {

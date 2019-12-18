@@ -214,7 +214,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					col = _FROM_TYPE_SLICE(col, 0, int(n))
-					for execgen.RANGE(i, col) {
+					for execgen.RANGE(i, col, 0, int(n)) {
 						if vecNulls.NullAt(uint16(i)) {
 							projNulls.SetNull(uint16(i))
 						} else {
@@ -236,7 +236,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					col = _FROM_TYPE_SLICE(col, 0, int(n))
-					for execgen.RANGE(i, col) {
+					for execgen.RANGE(i, col, 0, int(n)) {
 						v := _FROM_TYPE_UNSAFEGET(col, int(i))
 						var r _GOTYPE
 						_ASSIGN_CAST(r, v)

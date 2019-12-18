@@ -20,6 +20,8 @@ import (
 // unknown is a Vec that represents an unhandled type. Used when a batch needs a placeholder Vec.
 type unknown struct{}
 
+var _ Vec = &unknown{}
+
 func (u unknown) Type() coltypes.T {
 	return coltypes.Unhandled
 }
@@ -76,7 +78,7 @@ func (u unknown) Copy(CopySliceArgs) {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
-func (u unknown) Slice(colType coltypes.T, start uint64, end uint64) Vec {
+func (u unknown) Window(colType coltypes.T, start uint64, end uint64) Vec {
 	panic("Vec is of unknown type and should not be accessed")
 }
 

@@ -176,7 +176,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 					}
 				} else {
 					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col) {
+					for execgen.RANGE(i, col, 0, int(inputLen)) {
 						_ACCUMULATE_MINMAX(a, nulls, i, true)
 					}
 				}
@@ -188,7 +188,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 					}
 				} else {
 					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col) {
+					for execgen.RANGE(i, col, 0, int(inputLen)) {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
 				}

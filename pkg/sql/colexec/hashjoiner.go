@@ -649,7 +649,7 @@ func (builder *hashJoinBuilder) exec(ctx context.Context) {
 		batchSize := uint16(batchEnd - batchStart)
 
 		for i := 0; i < nKeyCols; i++ {
-			builder.ht.keys[i] = builder.ht.vals[builder.ht.keyCols[i]].Slice(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
+			builder.ht.keys[i] = builder.ht.vals[builder.ht.keyCols[i]].Window(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
 		}
 
 		builder.ht.lookupInitial(ctx, batchSize, nil)

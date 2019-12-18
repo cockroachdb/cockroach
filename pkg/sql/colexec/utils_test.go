@@ -1123,7 +1123,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 		lastIdx = c.len
 	}
 	for i, vec := range c.batch.ColVecs() {
-		vec.SetCol(c.cols[i].Slice(c.typs[i], c.curIdx, lastIdx).Col())
+		vec.SetCol(c.cols[i].Window(c.typs[i], c.curIdx, lastIdx).Col())
 		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
 		vec.SetNulls(&nullsSlice)
 	}
