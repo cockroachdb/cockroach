@@ -29,17 +29,9 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
-	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
-	for _, typ := range coltypes.AllTypes {
-		// TODO(asubiotto,jordan): We do not support decimal, timestamp conversion yet.
-		if typ == coltypes.Decimal || typ == coltypes.Timestamp {
-			continue
-		}
-		availableTyps = append(availableTyps, typ)
-	}
 	typs := make([]coltypes.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
+		typs[i] = coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
 	}
 
 	capacity := rng.Intn(int(coldata.BatchSize())) + 1
@@ -107,6 +99,17 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
 				}
 			}
+		} else if typ == coltypes.Timestamp {
+			// Cannot use require.Equal for this type.
+			// TODO(yuzefovich): Again, why not?
+			expectedTimestamp := expectedVec.Timestamp()[0:expected.Length()]
+			resultTimestamp := actualVec.Timestamp()[0:actual.Length()]
+			require.Equal(t, len(expectedTimestamp), len(resultTimestamp))
+			for i := range expectedTimestamp {
+				if !expectedTimestamp[i].Equal(resultTimestamp[i]) {
+					t.Fatalf("Timestamp mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedTimestamp[i], resultTimestamp[i])
+				}
+			}
 		} else {
 			require.Equal(
 				t,
@@ -114,16 +117,6 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 				actualVec.Window(actualVec.Type(), 0, uint64(actual.Length())),
 			)
 		}
-	}
-}
-
-func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	unsupportedTypes := []coltypes.T{coltypes.Decimal}
-	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
-		require.Error(t, err)
 	}
 }
 
@@ -177,19 +170,21 @@ func roundTripBatch(
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs, b := randomBatch(testAllocator)
-	c, err := colserde.NewArrowBatchConverter(typs)
-	require.NoError(t, err)
-	r, err := colserde.NewRecordBatchSerializer(typs)
-	require.NoError(t, err)
+	for run := 0; run < 10; run++ {
+		typs, b := randomBatch(testAllocator)
+		c, err := colserde.NewArrowBatchConverter(typs)
+		require.NoError(t, err)
+		r, err := colserde.NewRecordBatchSerializer(typs)
+		require.NoError(t, err)
 
-	// Make a copy of the original batch because the converter modifies and casts
-	// data without copying for performance reasons.
-	expected := copyBatch(b)
-	actual, err := roundTripBatch(b, c, r)
-	require.NoError(t, err)
+		// Make a copy of the original batch because the converter modifies and
+		// casts data without copying for performance reasons.
+		expected := copyBatch(b)
+		actual, err := roundTripBatch(b, c, r)
+		require.NoError(t, err)
 
-	assertEqualBatches(t, expected, actual)
+		assertEqualBatches(t, expected, actual)
+	}
 }
 
 func BenchmarkArrowBatchConverter(b *testing.B) {
@@ -202,6 +197,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	typs := []coltypes.T{
 		coltypes.Bool,
 		coltypes.Bytes,
+		coltypes.Decimal,
 		coltypes.Int64,
 		coltypes.Timestamp,
 	}

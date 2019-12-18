@@ -59,11 +59,6 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, typ := range allSupportedSQLTypes {
-		if typ.Equal(*types.Decimal) {
-			// Serialization of Decimals is currently not supported.
-			// TODO(yuzefovich): remove this once it is supported.
-			continue
-		}
 		for _, numRows := range []uint16{
 			// A few interesting sizes.
 			1,
