@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -77,18 +76,16 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	return r
 }
 
-func (r *Replica) init(
-	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
-) error {
+func (r *Replica) init(desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID) error {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.initRaftMuLockedReplicaMuLocked(desc, clock, replicaID)
+	return r.initRaftMuLockedReplicaMuLocked(desc, replicaID)
 }
 
 func (r *Replica) initRaftMuLockedReplicaMuLocked(
-	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
+	desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID,
 ) error {
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
@@ -108,7 +105,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.mu.proposalBuf.Init((*replicaProposer)(r))
 
 	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
 		return err
 	}
 
@@ -126,13 +123,13 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		// Instead, we make the first lease special (which is OK) and the problem
 		// disappears.
 		if r.mu.state.Lease.Sequence > 0 {
-			r.mu.minLeaseProposedTS = clock.Now()
+			r.mu.minLeaseProposedTS = r.Clock().Now()
 		}
 	}
 
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.store.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
 	if err != nil {
 		return err
 	}
@@ -190,7 +187,7 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(
 	//
 	// Note that we can't race with a concurrent replicaGC here because both that
 	// and this is under raftMu.
-	ssBase := r.store.Engine().GetAuxiliaryDir()
+	ssBase := r.Engine().GetAuxiliaryDir()
 	rangeID := r.mu.state.Desc.RangeID
 	var err error
 	if r.raftMu.sideloaded, err = newDiskSideloadStorage(

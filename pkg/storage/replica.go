@@ -523,7 +523,7 @@ func NewReplica(
 	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	r := newReplica(desc.RangeID, store)
-	return r, r.init(desc, store.Clock(), replicaID)
+	return r, r.init(desc, replicaID)
 }
 
 // Send executes a command on this range, dispatching it to the
