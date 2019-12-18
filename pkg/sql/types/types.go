@@ -730,6 +730,13 @@ type IntervalTypeMetadata struct {
 	PrecisionIsSet bool
 }
 
+// IsMinuteToSecond returns whether the IntervalDurationField represents
+// the MINUTE TO SECOND interval qualifier.
+func (m *IntervalDurationField) IsMinuteToSecond() bool {
+	return m.FromDurationType == IntervalDurationType_MINUTE &&
+		m.DurationType == IntervalDurationType_SECOND
+}
+
 // IntervalTypeMetadata returns the IntervalTypeMetadata for interval types.
 func (t *T) IntervalTypeMetadata() (IntervalTypeMetadata, error) {
 	if t.Family() != IntervalFamily {

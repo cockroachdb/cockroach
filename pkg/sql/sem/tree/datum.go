@@ -2533,7 +2533,7 @@ func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error
 	} else if strings.IndexFunc(s, unicode.IsLetter) == -1 {
 		// If it has no letter, then we're most likely working with a SQL standard
 		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
-		dur, err := sqlStdToDuration(s)
+		dur, err := sqlStdToDuration(s, itm)
 		if err != nil {
 			return nil, makeParseError(s, types.Interval, err)
 		}
@@ -2542,7 +2542,7 @@ func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error
 
 	// We're either a postgres string or a Go duration.
 	// Our postgres syntax parser also supports golang, so just use that for both.
-	dur, err := parseDuration(s)
+	dur, err := parseDuration(s, itm)
 	if err != nil {
 		return nil, makeParseError(s, types.Interval, err)
 	}
