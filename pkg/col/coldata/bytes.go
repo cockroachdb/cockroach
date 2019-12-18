@@ -162,8 +162,10 @@ func (b *Bytes) Window(start, end int) *Bytes {
 		data: data,
 		// We use 'end+1' because of the extra offset to know the length of the
 		// last element of the newly created window.
-		offsets:  b.offsets[start : end+1],
-		isWindow: true,
+		offsets: b.offsets[start : end+1],
+		// maxSetIndex is set only for pretty printing the Bytes.
+		maxSetIndex: (end - start) - 1,
+		isWindow:    true,
 	}
 }
 
