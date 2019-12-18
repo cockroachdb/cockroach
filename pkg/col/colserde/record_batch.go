@@ -36,7 +36,7 @@ func numBuffersForType(t coltypes.T) int {
 	// null bitmap and one for the values.
 	numBuffers := 2
 	switch t {
-	case coltypes.Bytes, coltypes.Timestamp:
+	case coltypes.Bytes, coltypes.Decimal, coltypes.Timestamp:
 		// This type has an extra offsets buffer.
 		numBuffers = 3
 	}
