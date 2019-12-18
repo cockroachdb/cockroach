@@ -22,7 +22,7 @@ query ITTTTTT
 select * from interval_duration_type order by id asc
 ----
 1  12:34:56.123456           12:34:56.123           12:34:56.123456           12:34:56.123           12:34:00           12:34:56.123
-2  12:56:07.40736            12:56:07.407           12:56:07.40736            12:56:07.407           12:56:00           12:56:07.407
+2  00:12:56.123456           00:12:56.123           00:12:56.123456           00:12:56.123           00:12:00           00:12:56.123
 3  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:00  366 days 12:34:56.123
 
 # tests various typmods of intervals
@@ -171,9 +171,7 @@ SELECT interval '1 2' minute to second
 query T
 SELECT interval '1 2:03' minute to second
 ----
-1 day 02:03:00
-
-# TODO(#43074): above should be 1 day 00:02:03
+1 day 00:02:03
 
 query T
 SELECT interval '1 2:03:04' minute to second
@@ -183,9 +181,7 @@ SELECT interval '1 2:03:04' minute to second
 query T
 SELECT interval '1 +2:03' minute to second
 ----
-1 day 02:03:00
-
-# TODO(#43074): above should be 1 day 00:02:03
+1 day 00:02:03
 
 query T
 SELECT interval '1 +2:03:04' minute to second
@@ -195,9 +191,7 @@ SELECT interval '1 +2:03:04' minute to second
 query T
 SELECT interval '1 -2:03' minute to second
 ----
-1 day -02:03:00
-
-# TODO(#43074): above should be 1 day -00:02:03
+1 day -00:02:03
 
 query T
 SELECT interval '1 -2:03:04' minute to second
@@ -234,9 +228,7 @@ SELECT interval(2) '1 day 01:23:45.6789'
 query T
 SELECT interval '12:34.5678' minute to second(2)
 ----
-12:34:34.07
-
-# TODO(#43074): above should be 00:12:34.57
+00:12:34.57
 
 query T
 SELECT interval '1.234' second
@@ -259,9 +251,7 @@ SELECT interval '1 2:03' day to second(2)
 query T
 SELECT interval '1 2:03.4567' day to second(2)
 ----
-1 day 02:03:27.4
-
-# TODO(#43074): 1 day 00:02:03.46
+1 day 00:02:03.46
 
 query T
 SELECT interval '1 2:03:04.5678' day to second(2)
@@ -274,9 +264,7 @@ SELECT interval '1 2.345' hour to second(2)
 query T
 SELECT interval '1 2:03.45678' hour to second(2)
 ----
-1 day 02:03:27.41
-
-# TODO(#43074): 1 day 00:02:03.57
+1 day 00:02:03.46
 
 query T
 SELECT interval '1 2:03:04.5678' hour to second(2)
@@ -289,11 +277,22 @@ SELECT interval '1 2.3456' minute to second(2)
 query T
 SELECT interval '1 2:03.5678' minute to second(2)
 ----
-1 day 02:03:34.07
-
-# TODO(#43074): 1 day 00:02:03.57
+1 day 00:02:03.57
 
 query T
 SELECT interval '1 2:03:04.5678' minute to second(2)
 ----
 1 day 02:03:04.57
+
+# Extra regression tests found when fixing this bug.
+subtest regression_43074
+
+query T
+SELECT interval '1:02.123456'
+----
+00:01:02.123456
+
+query T
+SELECT interval '-1:02.123456'
+----
+-00:01:02.123456
