@@ -368,6 +368,37 @@ func TestBytes(t *testing.T) {
 		require.Panics(t, func() { b2.AppendVal([]byte("four")) }, "appending to the window into b1 should have panicked")
 	})
 
+	t.Run("String", func(t *testing.T) {
+		b1 := NewBytes(0)
+		vals := [][]byte{
+			[]byte("one"),
+			[]byte("two"),
+			[]byte("three"),
+		}
+		for i := range vals {
+			b1.AppendVal(vals[i])
+		}
+
+		// The values should be printed using the String function.
+		b1String := b1.String()
+		require.True(
+			t,
+			strings.Contains(b1String, fmt.Sprint(vals[0])) &&
+				strings.Contains(b1String, fmt.Sprint(vals[1])) &&
+				strings.Contains(b1String, fmt.Sprint(vals[2])),
+		)
+
+		// A window on the bytes should only print the values included in the
+		// window.
+		b2String := b1.Window(1, 3).String()
+		require.True(
+			t,
+			!strings.Contains(b2String, fmt.Sprint(vals[0])) &&
+				strings.Contains(b2String, fmt.Sprint(vals[1])) &&
+				strings.Contains(b2String, fmt.Sprint(vals[2])),
+		)
+	})
+
 	t.Run("InvariantSimple", func(t *testing.T) {
 		b1 := NewBytes(8)
 		b1.Set(0, []byte("zero"))
