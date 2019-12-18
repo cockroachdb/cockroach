@@ -1781,7 +1781,7 @@ func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOper
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []overloadImpl
 
-func (o cmpOpOverload) lookupImpl(left, right *types.T) (*CmpOp, bool) {
+func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {
 		casted := fn.(*CmpOp)
 		if casted.matchParams(left, right) {
@@ -4412,7 +4412,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	}
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
-	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
+	if fn, ok := CmpOps[op].LookupImpl(ltype, rtype); ok {
 		return fn.Fn(ctx, left, right)
 	}
 	return nil, pgerror.Newf(
@@ -5225,7 +5225,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 func FindEqualComparisonFunction(
 	leftType, rightType *types.T,
 ) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
-	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
+	fn, found := CmpOps[EQ].LookupImpl(leftType, rightType)
 	if found {
 		return fn.Fn, true
 	}
