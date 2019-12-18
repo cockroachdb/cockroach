@@ -297,7 +297,7 @@ func (s *sortAllProcessor) fill() (ok bool, _ error) {
 		if meta != nil {
 			s.AppendTrailingMeta(*meta)
 			if meta.Err != nil {
-				return false, nil
+				return false, nil //nolint:returnerrcheck
 			}
 			continue
 		}
@@ -525,7 +525,7 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 		if meta != nil {
 			s.AppendTrailingMeta(*meta)
 			if meta.Err != nil {
-				return false, nil
+				return false, nil //nolint:returnerrcheck
 			}
 			continue
 		} else if nextChunkRow == nil {
@@ -548,7 +548,7 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 		if meta != nil {
 			s.AppendTrailingMeta(*meta)
 			if meta.Err != nil {
-				return false, nil
+				return false, nil //nolint:returnerrcheck
 			}
 			continue
 		}

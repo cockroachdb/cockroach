@@ -56,7 +56,7 @@ func verifyFormat(sql string) error {
 	stmts, err := parser.Parse(sql)
 	if err != nil {
 		// Cannot serialize a statement list without parsing it.
-		return nil
+		return nil //nolint:returnerrcheck
 	}
 	formattedSQL := stmts.StringWithFlags(tree.FmtShowPasswords)
 	formattedStmts, err := parser.Parse(formattedSQL)
@@ -596,29 +596,29 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		// looking for datums that don't match.
 		parsed1, err := parser.ParseExpr(serializedGen)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		typed1, err := parsed1.TypeCheck(&sema, typ)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		datum1, err := typed1.Eval(&eval)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		serialized1 := tree.Serialize(datum1)
 
 		parsed2, err := parser.ParseExpr(serialized1)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		typed2, err := parsed2.TypeCheck(&sema, typ)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		datum2, err := typed2.Eval(&eval)
 		if err != nil {
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		serialized2 := tree.Serialize(datum2)
 

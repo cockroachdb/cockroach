@@ -95,6 +95,9 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 		if b.evalCtx != nil && b.isConst(texpr) {
 			value, err := texpr.Eval(b.evalCtx)
 			if err != nil {
+				if errors.IsAssertionFailure(err) {
+					return nil, err
+				}
 				// Ignore any errors here (e.g. division by zero), so they can happen
 				// during execution where they are correctly handled. Note that in some
 				// cases we might not even get an error (if this particular expression
@@ -107,7 +110,7 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 				var newExpr tree.TypedExpr
 				newExpr, err = tree.ReType(tree.DNull, texpr.ResolvedType())
 				if err != nil {
-					return texpr, nil
+					return texpr, nil //nolint:returnerrcheck
 				}
 				return newExpr, nil
 			}
