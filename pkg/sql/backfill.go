@@ -1312,7 +1312,8 @@ func runSchemaChangesInTxn(
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
 		for _, drain := range tableDesc.DrainingNames {
-			err := sqlbase.RemovePublicTableNamespaceEntry(ctx, planner.Txn(), drain.ParentID, drain.Name)
+			err := sqlbase.RemoveObjectNamespaceEntry(ctx, planner.Txn(), drain.ParentID,
+				drain.ParentSchemaID, drain.Name, false /* KVTrace */)
 			if err != nil {
 				return err
 			}

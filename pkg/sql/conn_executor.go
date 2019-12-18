@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
 
@@ -539,8 +540,9 @@ func (s *Server) newConnExecutor(
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
-		ctxHolder:    ctxHolder{connCtx: ctx},
-		executorType: executorTypeExec,
+		ctxHolder:                 ctxHolder{connCtx: ctx},
+		executorType:              executorTypeExec,
+		hasCreatedTemporarySchema: false,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -548,6 +550,9 @@ func (s *Server) newConnExecutor(
 	if sdMutator != nil {
 		sdMutator.setCurTxnReadOnly = func(val bool) {
 			ex.state.readOnly = val
+		}
+		sdMutator.onTempSchemaCreation = func() {
+			ex.hasCreatedTemporarySchema = true
 		}
 		sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
@@ -737,11 +742,25 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		// panic or safeErr. I'm propagating safeErr to be on the safe side.
 		panic(safeErr)
 	}
-	ex.close(ctx, normalClose)
+	// Closing is not cancelable.
+	closeCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	ex.close(closeCtx, normalClose)
 }
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
+
+	if ex.hasCreatedTemporarySchema {
+		err := cleanupSessionTempObjects(ctx, ex.server, ex.sessionID)
+		if err != nil {
+			log.Errorf(
+				ctx,
+				"error deleting temporary objects at session close, "+
+					"the temp tables deletion job will retry periodically: %s",
+				err,
+			)
+		}
+	}
 
 	ev := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
@@ -965,6 +984,10 @@ type connExecutor struct {
 	// executorType is set to whether this executor is an ordinary executor which
 	// responds to user queries or an internal one.
 	executorType executorType
+
+	// hasCreatedTemporarySchema is set if the executor has created a
+	// temporary schema, which requires special cleanup on close.
+	hasCreatedTemporarySchema bool
 }
 
 // ctxHolder contains a connection's context and, while session tracing is

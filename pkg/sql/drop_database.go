@@ -62,7 +62,9 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+	tbNames, err := GetObjectNames(
+		ctx, p.txn, p, dbDesc, tree.PublicSchema, true, /*explicitPrefix*/
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -139,22 +141,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	for _, toDel := range n.td {
-		tbDesc := toDel.desc
-		if tbDesc.IsView() {
-			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
-			if err != nil {
-				return err
-			}
-			// TODO(knz): dependent dropped views should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
-		} else {
-			cascadedViews, err := p.dropTableImpl(params, tbDesc)
-			if err != nil {
-				return err
-			}
-			// TODO(knz): dependent dropped table names should be qualified here.
-			tbNameStrings = append(tbNameStrings, cascadedViews...)
+		cascadedObjects, err := p.dropObject(ctx, toDel.desc, tree.DropCascade)
+		if err != nil {
+			return err
 		}
+		tbNameStrings = append(tbNameStrings, cascadedObjects...)
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 

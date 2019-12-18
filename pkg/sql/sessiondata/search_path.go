@@ -20,13 +20,6 @@ import (
 // PgDatabaseName is the name of the default postgres system database.
 const PgDatabaseName = "postgres"
 
-// DefaultTemporarySchemaName is the temporary schema new sessions that have not
-// created a temporary table start off with.
-// This is prefixed with `pg_` to ensure there is no clash with a user defined
-// schema if/when CRDB supports them. In PG, schema names starting with `pg_`
-// are "reserved", so this can never clash with an actual physical schema.
-const DefaultTemporarySchemaName = "pg_no_temp_schema"
-
 // DefaultDatabaseName is the name ofthe default CockroachDB database used
 // for connections without a current db set.
 const DefaultDatabaseName = "defaultdb"
@@ -48,7 +41,7 @@ type SearchPath struct {
 
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice
 // must not be modified after hand-off to MakeSearchPath.
-func MakeSearchPath(paths []string, tempSchemaName string) SearchPath {
+func MakeSearchPath(paths []string) SearchPath {
 	containsPgCatalog := false
 	containsPgTempSchema := false
 	for _, e := range paths {
@@ -62,7 +55,6 @@ func MakeSearchPath(paths []string, tempSchemaName string) SearchPath {
 		paths:                paths,
 		containsPgCatalog:    containsPgCatalog,
 		containsPgTempSchema: containsPgTempSchema,
-		tempSchemaName:       tempSchemaName,
 	}
 }
 
@@ -82,7 +74,7 @@ func (s SearchPath) WithTemporarySchemaName(tempSchemaName string) SearchPath {
 // UpdatePaths returns a new immutable SearchPath struct with the paths supplied
 // and the same tempSchemaName as before.
 func (s SearchPath) UpdatePaths(paths []string) SearchPath {
-	return MakeSearchPath(paths, s.tempSchemaName)
+	return MakeSearchPath(paths).WithTemporarySchemaName(s.tempSchemaName)
 }
 
 // MaybeResolveTemporarySchema returns the session specific temporary schema
@@ -95,7 +87,7 @@ func (s SearchPath) MaybeResolveTemporarySchema(schemaName string) (string, erro
 	}
 	// If the schemaName is pg_temp and the tempSchemaName has been set, pg_temp
 	// is an alias the session specific temp schema.
-	if schemaName == PgTempSchemaName && s.tempSchemaName != DefaultTemporarySchemaName {
+	if schemaName == PgTempSchemaName && s.tempSchemaName != "" {
 		return s.tempSchemaName, nil
 	}
 	return schemaName, nil
@@ -114,14 +106,12 @@ func (s SearchPath) MaybeResolveTemporarySchema(schemaName string) (string, erro
 // first (even before pg_catalog)."
 // - https://www.postgresql.org/docs/9.1/static/runtime-config-client.html
 func (s SearchPath) Iter() SearchPathIter {
-	implicitPgTempSchema := !s.containsPgTempSchema && s.tempSchemaName != DefaultTemporarySchemaName
+	implicitPgTempSchema := !s.containsPgTempSchema && s.tempSchemaName != ""
 	sp := SearchPathIter{
 		paths:                s.paths,
 		implicitPgCatalog:    !s.containsPgCatalog,
 		implicitPgTempSchema: implicitPgTempSchema,
-	}
-	if s.tempSchemaName != DefaultTemporarySchemaName {
-		sp.tempSchemaName = s.tempSchemaName
+		tempSchemaName:       s.tempSchemaName,
 	}
 	return sp
 }
@@ -133,9 +123,7 @@ func (s SearchPath) IterWithoutImplicitPGSchemas() SearchPathIter {
 		paths:                s.paths,
 		implicitPgCatalog:    false,
 		implicitPgTempSchema: false,
-	}
-	if s.tempSchemaName != DefaultTemporarySchemaName {
-		sp.tempSchemaName = s.tempSchemaName
+		tempSchemaName:       s.tempSchemaName,
 	}
 	return sp
 }
