@@ -308,10 +308,10 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 }
 
 func slurpKVsInTimeRange(
-	e Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
+	reader Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
 ) ([]MVCCKeyValue, error) {
 	endKey := prefix.PrefixEnd()
-	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		IterOptions: IterOptions{
 			UpperBound: endKey,
 		},

@@ -2150,7 +2150,7 @@ type dbIteratorGetter interface {
 
 type rocksDBIterator struct {
 	parent *RocksDB
-	engine Reader
+	reader Reader
 	iter   *C.DBIterator
 	valid  bool
 	reseek bool
@@ -2172,14 +2172,14 @@ var iterPool = sync.Pool{
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
 func newRocksDBIterator(
-	rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB,
+	rdb *C.DBEngine, opts IterOptions, reader Reader, parent *RocksDB,
 ) MVCCIterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	r := iterPool.Get().(*rocksDBIterator)
-	r.init(rdb, opts, engine, parent)
+	r.init(rdb, opts, reader, parent)
 	return r
 }
 
@@ -2187,7 +2187,7 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 	return r.iter
 }
 
-func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB) {
+func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, reader Reader, parent *RocksDB) {
 	r.parent = parent
 	if debugIteratorLeak && r.parent != nil {
 		r.parent.iters.Lock()
@@ -2203,7 +2203,7 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
-	r.engine = engine
+	r.reader = reader
 }
 
 func (r *rocksDBIterator) setOptions(opts IterOptions) {
@@ -2218,7 +2218,7 @@ func (r *rocksDBIterator) setOptions(opts IterOptions) {
 }
 
 func (r *rocksDBIterator) checkEngineOpen() {
-	if r.engine.Closed() {
+	if r.reader.Closed() {
 		panic("iterator used after backing engine closed")
 	}
 }
