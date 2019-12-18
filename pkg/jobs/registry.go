@@ -11,6 +11,7 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -244,6 +245,29 @@ func (r *Registry) StartJob(
 		return nil, err
 	}
 	return errCh, nil
+}
+
+// Run starts previously unstarted jobs from a list of scheduled
+// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
+func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []int64) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+	log.Infof(ctx, "scheduled jobs %+v", jobs)
+	buf := bytes.Buffer{}
+	for i, j := range jobs {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		buf.WriteString(fmt.Sprintf(" (%d)", j))
+	}
+	_, err := ex.Exec(
+		ctx,
+		"wait-for-jobs",
+		nil, /* txn */
+		fmt.Sprintf("SHOW JOBS WHEN COMPLETE VALUES %s", buf.String()),
+	)
+	return err
 }
 
 // NewJob creates a new Job.
