@@ -106,10 +106,10 @@ type txnSpanRefresher struct {
 	knobs   *ClientTestingKnobs
 	wrapped lockedSender
 
-	// See TxnCoordMeta.RefreshReads and TxnCoordMeta.RefreshWrites.
+	// See LeafTxnFinalState.RefreshReads and LeafTxnFinalState.RefreshWrites.
 	refreshReads  []roachpb.Span
 	refreshWrites []roachpb.Span
-	// See TxnCoordMeta.RefreshInvalid.
+	// See LeafTxnFinalState.RefreshInvalid.
 	refreshInvalid bool
 	// refreshSpansBytes is the total size in bytes of the spans
 	// encountered during this transaction that need to be refreshed
@@ -384,41 +384,37 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 // setWrapped implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) setWrapped(wrapped lockedSender) { sr.wrapped = wrapped }
 
-// populateMetaLocked implements the txnInterceptor interface.
-func (sr *txnSpanRefresher) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	meta.RefreshInvalid = sr.refreshInvalid
+// populateLeafInputState is part of the txnInterceptor interface.
+func (sr *txnSpanRefresher) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+	tis.RefreshInvalid = sr.refreshInvalid
+}
+
+// populateLeafFinalState is part of the txnInterceptor interface.
+func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
+	tfs.RefreshInvalid = sr.refreshInvalid
 	if !sr.refreshInvalid {
 		// Copy mutable state so access is safe for the caller.
-		meta.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
-		meta.RefreshWrites = append([]roachpb.Span(nil), sr.refreshWrites...)
+		tfs.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
 	}
 }
 
-// augmentMetaLocked implements the txnInterceptor interface.
-func (sr *txnSpanRefresher) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
+// importLeafFinalState is part of the txnInterceptor interface.
+func (sr *txnSpanRefresher) importLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
 	// Do not modify existing span slices when copying.
-	if meta.RefreshInvalid {
+	if tfs.RefreshInvalid {
 		sr.refreshInvalid = true
 		sr.refreshReads = nil
 		sr.refreshWrites = nil
 	} else if !sr.refreshInvalid {
-		if meta.RefreshReads != nil {
+		if tfs.RefreshReads != nil {
 			sr.refreshReads, _ = roachpb.MergeSpans(
-				append(append([]roachpb.Span(nil), sr.refreshReads...), meta.RefreshReads...),
-			)
-		}
-		if meta.RefreshWrites != nil {
-			sr.refreshWrites, _ = roachpb.MergeSpans(
-				append(append([]roachpb.Span(nil), sr.refreshWrites...), meta.RefreshWrites...),
+				append(append([]roachpb.Span(nil), sr.refreshReads...), tfs.RefreshReads...),
 			)
 		}
 	}
 	// Recompute the size of the refreshes.
 	sr.refreshSpansBytes = 0
 	for _, u := range sr.refreshReads {
-		sr.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
-	}
-	for _, u := range sr.refreshWrites {
 		sr.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
 	}
 }
