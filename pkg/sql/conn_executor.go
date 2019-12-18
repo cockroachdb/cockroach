@@ -1433,13 +1433,11 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
 		}
 		if resErr == nil && ok {
-			// Depending on whether the result has the error already or not, we have
-			// to call either Close or CloseWithErr.
-			res.CloseWithErr(ctx, pe.errorCause())
+			res.SetError(pe.errorCause())
 		} else {
 			ex.recordError(ctx, resErr)
-			res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 		}
+		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 	} else {
 		res.Discard()
 	}

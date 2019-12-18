@@ -131,18 +131,6 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	}
 }
 
-// CloseWithErr is part of the CommandResult interface.
-func (r *commandResult) CloseWithErr(ctx context.Context, err error) {
-	r.assertNotReleased()
-	defer r.release()
-	if r.err != nil {
-		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
-	}
-
-	r.conn.writerState.fi.registerCmd(r.pos)
-	r.conn.bufferErr(ctx, err)
-}
-
 // Discard is part of the CommandResult interface.
 func (r *commandResult) Discard() {
 	r.assertNotReleased()
