@@ -1812,11 +1812,11 @@ func AsIntents(spans []Span, txn *Transaction) []Intent {
 	ret := make([]Intent, len(spans))
 	for i := range spans {
 		ret[i] = Intent{
-			Span:                      spans[i],
-			Txn:                       txn.TxnMeta,
-			Status:                    txn.Status,
-			IgnoredSeqNums:            txn.IgnoredSeqNums,
-			IgnoredSeqNumsInitialized: true,
+			Span:           spans[i],
+			Txn:            txn.TxnMeta,
+			Status:         txn.Status,
+			IgnoredSeqNums: txn.IgnoredSeqNums,
+			// IgnoredSeqNumsInitialized: true,
 		}
 	}
 	return ret
