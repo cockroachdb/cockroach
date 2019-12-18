@@ -99,8 +99,8 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		if typ == coltypes.Bytes {
 			// Cannot use require.Equal for this type.
 			// TODO(asubiotto): Again, why not?
-			expectedBytes := expectedVec.Bytes().Slice(0, int(expected.Length()))
-			resultBytes := actualVec.Bytes().Slice(0, int(actual.Length()))
+			expectedBytes := expectedVec.Bytes().Window(0, int(expected.Length()))
+			resultBytes := actualVec.Bytes().Window(0, int(actual.Length()))
 			require.Equal(t, expectedBytes.Len(), resultBytes.Len())
 			for i := 0; i < expectedBytes.Len(); i++ {
 				if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
@@ -110,8 +110,8 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		} else {
 			require.Equal(
 				t,
-				expectedVec.Slice(expectedVec.Type(), 0, uint64(expected.Length())),
-				actualVec.Slice(actualVec.Type(), 0, uint64(actual.Length())),
+				expectedVec.Window(expectedVec.Type(), 0, uint64(expected.Length())),
+				actualVec.Window(actualVec.Type(), 0, uint64(actual.Length())),
 			)
 		}
 	}

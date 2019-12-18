@@ -71,8 +71,13 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 	},
 	{
 		templatePlaceholder: "execgen.RANGE",
-		numArgs:             2,
+		numArgs:             4,
 		replaceWith:         "Range",
+	},
+	{
+		templatePlaceholder: "execgen.WINDOW",
+		numArgs:             3,
+		replaceWith:         "Window",
 	},
 }
 

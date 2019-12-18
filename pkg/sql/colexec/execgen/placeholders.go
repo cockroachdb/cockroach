@@ -26,6 +26,7 @@ var (
 	_ = LEN
 	_ = ZERO
 	_ = RANGE
+	_ = WINDOW
 )
 
 // UNSAFEGET is a template function. Use this if you are not keeping data around
@@ -81,7 +82,13 @@ func ZERO(target interface{}) {
 }
 
 // RANGE is a template function.
-func RANGE(loopVariableIdent interface{}, target interface{}) bool {
+func RANGE(loopVariableIdent, target, start, end interface{}) bool {
 	execerror.VectorizedInternalPanic(nonTemplatePanic)
 	return false
+}
+
+// WINDOW is a template function.
+func WINDOW(target, start, end interface{}) interface{} {
+	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	return nil
 }

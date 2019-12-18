@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemColumnSlice(t *testing.T) {
+func TestMemColumnWindow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	rng, _ := randutil.NewPseudoRand()
@@ -35,25 +35,25 @@ func TestMemColumnSlice(t *testing.T) {
 		}
 	}
 
-	startSlice := uint16(1)
-	endSlice := uint16(0)
-	for startSlice > endSlice {
-		startSlice = uint16(rng.Intn(int(BatchSize())))
-		endSlice = uint16(1 + rng.Intn(int(BatchSize())))
+	startWindow := uint16(1)
+	endWindow := uint16(0)
+	for startWindow > endWindow {
+		startWindow = uint16(rng.Intn(int(BatchSize())))
+		endWindow = uint16(1 + rng.Intn(int(BatchSize())))
 	}
 
-	slice := c.Slice(coltypes.Int64, uint64(startSlice), uint64(endSlice))
-	sliceInts := slice.Int64()
+	window := c.Window(coltypes.Int64, uint64(startWindow), uint64(endWindow))
+	windowInts := window.Int64()
 	// Verify that every other value is null.
-	for i, j := startSlice, uint16(0); i < endSlice; i, j = i+1, j+1 {
+	for i, j := startWindow, uint16(0); i < endWindow; i, j = i+1, j+1 {
 		if i%2 == 0 {
-			if !slice.Nulls().NullAt(j) {
+			if !window.Nulls().NullAt(j) {
 				t.Fatalf("expected null at %d (original index: %d)", j, i)
 			}
 			continue
 		}
-		if ints[i] != sliceInts[j] {
-			t.Fatalf("unexected value at index %d (original index: %d): expected %d got %d", j, i, ints[i], sliceInts[j])
+		if ints[i] != windowInts[j] {
+			t.Fatalf("unexected value at index %d (original index: %d): expected %d got %d", j, i, ints[i], windowInts[j])
 		}
 	}
 }
