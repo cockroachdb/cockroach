@@ -102,12 +102,12 @@ var (
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
-	mutatingTableExprs = tableExprWeights{
+	mutatingTableExprs = []TableExprWeight{
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
 		{1, makeUpdateReturning},
 	}
-	nonMutatingTableExprs = tableExprWeights{
+	nonMutatingTableExprs = []TableExprWeight{
 		{40, makeMergeJoinExpr},
 		{40, makeEquiJoinExpr},
 		{20, makeSchemaTable},
@@ -115,7 +115,7 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = tableExprWeights{
+	vectorizableTableExprs = []TableExprWeight{
 		{20, makeEquiJoinExpr},
 		{20, makeMergeJoinExpr},
 		{20, makeSchemaTable},
@@ -141,20 +141,7 @@ func init() {
 	}()
 }
 
-func (ws tableExprWeights) Weights() []int {
-	m := make([]int, len(ws))
-	for i, w := range ws {
-		m[i] = w.weight
-	}
-	return m
-}
-
 type (
-	tableExprWeight struct {
-		weight int
-		fn     func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
-	}
-	tableExprWeights []tableExprWeight
 	selectStmtWeight struct {
 		weight int
 		fn     selectStmt
@@ -169,8 +156,7 @@ type (
 func makeTableExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
-			idx := s.tableExprSampler.Next()
-			expr, exprRefs, ok := s.tableExprs[idx].fn(s, refs, forJoin)
+			expr, exprRefs, ok := s.tableExprSampler.Next()(s, refs, forJoin)
 			if ok {
 				return expr, exprRefs, ok
 			}
