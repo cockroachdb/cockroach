@@ -225,11 +225,7 @@ func (ir *IntentResolver) NumContended(key roachpb.Key) int {
 // specifying a transaction in the event that the request left its own
 // intent.
 func (ir *IntentResolver) ProcessWriteIntentError(
-	ctx context.Context,
-	wiPErr *roachpb.Error,
-	args roachpb.Request,
-	h roachpb.Header,
-	pushType roachpb.PushTxnType,
+	ctx context.Context, wiPErr *roachpb.Error, h roachpb.Header, pushType roachpb.PushTxnType,
 ) (CleanupFunc, *roachpb.Error) {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {

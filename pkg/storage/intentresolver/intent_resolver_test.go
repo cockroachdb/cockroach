@@ -438,7 +438,7 @@ func TestContendedIntent(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				cleanupFunc, pErr := ir.ProcessWriteIntentError(testCtx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
+				cleanupFunc, pErr := ir.ProcessWriteIntentError(testCtx, roachpb.NewError(wiErr), h, roachpb.PUSH_ABORT)
 				resps <- intentResolverResp{idx: idx, fn: cleanupFunc, pErr: pErr}
 			}(i)
 			testutils.SucceedsSoon(t, func() error {
@@ -513,7 +513,7 @@ func TestContendedIntent(t *testing.T) {
 						Span: roachpb.Span{Key: keyA},
 					}}}
 					h := roachpb.Header{Txn: pusher}
-					cleanupFunc, pErr := ir.ProcessWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
+					cleanupFunc, pErr := ir.ProcessWriteIntentError(ctx, roachpb.NewError(wiErr), h, roachpb.PUSH_ABORT)
 					if pErr != nil {
 						panic(pErr)
 					}
