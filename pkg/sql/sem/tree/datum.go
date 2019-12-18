@@ -2507,30 +2507,8 @@ func parseDInterval(s string, itm types.IntervalTypeMetadata) (*DInterval, error
 			return nil, makeParseError(s, types.Interval, err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else if f, err := strconv.ParseFloat(s, 64); err == nil {
-		// An interval that's just a number uses the field as its unit.
-		// All numbers are rounded down unless the precision is SECOND.
-		ret := &DInterval{Duration: duration.Duration{}}
-		switch itm.DurationField.DurationType {
-		case types.IntervalDurationType_YEAR:
-			ret.Months = int64(f) * 12
-		case types.IntervalDurationType_MONTH:
-			ret.Months = int64(f)
-		case types.IntervalDurationType_DAY:
-			ret.Days = int64(f)
-		case types.IntervalDurationType_HOUR:
-			ret.SetNanos(time.Hour.Nanoseconds() * int64(f))
-		case types.IntervalDurationType_MINUTE:
-			ret.SetNanos(time.Minute.Nanoseconds() * int64(f))
-		case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
-			ret.SetNanos(int64(float64(time.Second.Nanoseconds()) * f))
-		case types.IntervalDurationType_MILLISECOND:
-			ret.SetNanos(int64(float64(time.Millisecond.Nanoseconds()) * f))
-		default:
-			return nil, errors.AssertionFailedf("unhandled DurationField constant %#v", itm.DurationField)
-		}
-		return ret, nil
-	} else if strings.IndexFunc(s, unicode.IsLetter) == -1 {
+	}
+	if strings.IndexFunc(s, unicode.IsLetter) == -1 {
 		// If it has no letter, then we're most likely working with a SQL standard
 		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
 		dur, err := sqlStdToDuration(s, itm)
