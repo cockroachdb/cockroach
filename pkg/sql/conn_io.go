@@ -664,7 +664,7 @@ type CommandResultClose interface {
 	// NOTE(andrei): We might want to tighten the contract if the results get any
 	// state that needs to be closed even when the whole connection is about to be
 	// terminated.
-	Close(TransactionStatusIndicator)
+	Close(context.Context, TransactionStatusIndicator)
 
 	// CloseWithErr is like Close, except it tells the client that an execution
 	// error has happened. All rows previously accumulated on the result might be
@@ -674,7 +674,7 @@ type CommandResultClose interface {
 	// After calling CloseWithErr it is illegal to create CommandResults for any
 	// command in the same batch as the one being closed. The contract is that the
 	// next result created corresponds to the first command in the next batch.
-	CloseWithErr(err error)
+	CloseWithErr(context.Context, error)
 
 	// Discard is called to mark the fact that the result is being disposed off.
 	// No completion message will be sent to the client. The expectation is that
@@ -863,6 +863,7 @@ type bufferedCommandResult struct {
 }
 
 var _ RestrictedCommandResult = &bufferedCommandResult{}
+var _ CommandResultClose = &bufferedCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.ResultColumns) {
@@ -912,15 +913,15 @@ func (r *bufferedCommandResult) RowsAffected() int {
 	return r.rowsAffected
 }
 
-// Close is part of the CommandResult interface.
-func (r *bufferedCommandResult) Close(TransactionStatusIndicator) {
+// Close is part of the CommandResultClose interface.
+func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, nil /* err */)
 	}
 }
 
-// CloseWithErr is part of the CommandResult interface.
-func (r *bufferedCommandResult) CloseWithErr(err error) {
+// CloseWithErr is part of the CommandResultClose interface.
+func (r *bufferedCommandResult) CloseWithErr(ctx context.Context, err error) {
 	r.err = err
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, err)
