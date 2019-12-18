@@ -533,11 +533,11 @@ func TestResolveTablePatternOrName(t *testing.T) {
 	type spath = sessiondata.SearchPath
 
 	var mpath = func(args ...string) spath {
-		return sessiondata.MakeSearchPath(args, sessiondata.DefaultTemporarySchemaName)
+		return sessiondata.MakeSearchPath(args)
 	}
 
 	var tpath = func(tempSchemaName string, args ...string) spath {
-		return sessiondata.MakeSearchPath(args, tempSchemaName)
+		return sessiondata.MakeSearchPath(args).WithTemporarySchemaName(tempSchemaName)
 	}
 
 	testCases := []struct {

@@ -328,10 +328,11 @@ var (
 
 	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
 	DeprecatedNamespaceTable = TableDescriptor{
-		Name:     "namespace_deprecated",
-		ID:       keys.DeprecatedNamespaceTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "namespace_deprecated",
+		ID:                      keys.DeprecatedNamespaceTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: *types.Int},
 			{Name: "name", ID: 2, Type: *types.String},
@@ -360,10 +361,11 @@ var (
 
 	// NamespaceTable is the descriptor for the namespace table.
 	NamespaceTable = TableDescriptor{
-		Name:     "namespace",
-		ID:       keys.NamespaceTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "namespace",
+		ID:                      keys.NamespaceTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: *types.Int},
 			{Name: "parentSchemaID", ID: 2, Type: *types.Int},
@@ -386,18 +388,19 @@ var (
 			Version:          SecondaryIndexFamilyFormatVersion,
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// DescriptorTable is the descriptor for the descriptor table.
 	DescriptorTable = TableDescriptor{
-		Name:       "descriptor",
-		ID:         keys.DescriptorTableID,
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
-		ParentID:   keys.SystemDatabaseID,
-		Version:    1,
+		Name:                    "descriptor",
+		ID:                      keys.DescriptorTableID,
+		Privileges:              NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
 			{Name: "descriptor", ID: 2, Type: *types.Bytes, Nullable: true},
@@ -419,10 +422,11 @@ var (
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = TableDescriptor{
-		Name:     "users",
-		ID:       keys.UsersTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "users",
+		ID:                      keys.UsersTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: *types.String},
 			{Name: "hashedPassword", ID: 2, Type: *types.Bytes, Nullable: true},
@@ -444,10 +448,11 @@ var (
 
 	// ZonesTable is the descriptor for the zones table.
 	ZonesTable = TableDescriptor{
-		Name:     "zones",
-		ID:       keys.ZonesTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "zones",
+		ID:                      keys.ZonesTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
 			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: *types.Bytes, Nullable: true},
@@ -477,10 +482,11 @@ var (
 	// SettingsTable is the descriptor for the settings table.
 	// It contains all cluster settings for which a value has been set.
 	SettingsTable = TableDescriptor{
-		Name:     "settings",
-		ID:       keys.SettingsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "settings",
+		ID:                      keys.SettingsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "name", ID: 1, Type: *types.String},
 			{Name: "value", ID: 2, Type: *types.String},
@@ -513,10 +519,11 @@ var (
 var (
 	// LeaseTable is the descriptor for the leases table.
 	LeaseTable = TableDescriptor{
-		Name:     "lease",
-		ID:       keys.LeaseTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "lease",
+		ID:                      keys.LeaseTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "descID", ID: 1, Type: *types.Int},
 			{Name: "version", ID: 2, Type: *types.Int},
@@ -547,10 +554,11 @@ var (
 
 	// EventLogTable is the descriptor for the event log table.
 	EventLogTable = TableDescriptor{
-		Name:     "eventlog",
-		ID:       keys.EventLogTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "eventlog",
+		ID:                      keys.EventLogTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
 			{Name: "eventType", ID: 2, Type: *types.String},
@@ -587,10 +595,11 @@ var (
 
 	// RangeEventTable is the descriptor for the range log table.
 	RangeEventTable = TableDescriptor{
-		Name:     "rangelog",
-		ID:       keys.RangeEventTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "rangelog",
+		ID:                      keys.RangeEventTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
 			{Name: "rangeID", ID: 2, Type: *types.Int},
@@ -627,10 +636,11 @@ var (
 
 	// UITable is the descriptor for the ui table.
 	UITable = TableDescriptor{
-		Name:     "ui",
-		ID:       keys.UITableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "ui",
+		ID:                      keys.UITableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: *types.String},
 			{Name: "value", ID: 2, Type: *types.Bytes, Nullable: true},
@@ -654,10 +664,11 @@ var (
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{
-		Name:     "jobs",
-		ID:       keys.JobsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "jobs",
+		ID:                      keys.JobsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
 			{Name: "status", ID: 2, Type: *types.String},
@@ -695,10 +706,11 @@ var (
 
 	// WebSessions table to authenticate sessions over stateless connections.
 	WebSessionsTable = TableDescriptor{
-		Name:     "web_sessions",
-		ID:       keys.WebSessionsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "web_sessions",
+		ID:                      keys.WebSessionsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
 			{Name: "hashedSecret", ID: 2, Type: *types.Bytes},
@@ -759,10 +771,11 @@ var (
 
 	// TableStatistics table to hold statistics about columns and column groups.
 	TableStatisticsTable = TableDescriptor{
-		Name:     "table_statistics",
-		ID:       keys.TableStatisticsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "table_statistics",
+		ID:                      keys.TableStatisticsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: *types.Int},
 			{Name: "statisticID", ID: 2, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
@@ -813,10 +826,11 @@ var (
 
 	// LocationsTable is the descriptor for the locations table.
 	LocationsTable = TableDescriptor{
-		Name:     "locations",
-		ID:       keys.LocationsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "locations",
+		ID:                      keys.LocationsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "localityKey", ID: 1, Type: *types.String},
 			{Name: "localityValue", ID: 2, Type: *types.String},
@@ -850,10 +864,11 @@ var (
 
 	// RoleMembersTable is the descriptor for the role_members table.
 	RoleMembersTable = TableDescriptor{
-		Name:     "role_members",
-		ID:       keys.RoleMembersTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "role_members",
+		ID:                      keys.RoleMembersTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "role", ID: 1, Type: *types.String},
 			{Name: "member", ID: 2, Type: *types.String},
@@ -915,10 +930,11 @@ var (
 
 	// CommentsTable is the descriptor for the comments table.
 	CommentsTable = TableDescriptor{
-		Name:     "comments",
-		ID:       keys.CommentsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "comments",
+		ID:                      keys.CommentsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "type", ID: 1, Type: *types.Int},
 			{Name: "object_id", ID: 2, Type: *types.Int},
@@ -947,10 +963,11 @@ var (
 	}
 
 	ReportsMetaTable = TableDescriptor{
-		Name:     "reports_meta",
-		ID:       keys.ReportsMetaTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "reports_meta",
+		ID:                      keys.ReportsMetaTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
 			{Name: "generated", ID: 2, Type: *types.TimestampTZ},
@@ -987,10 +1004,11 @@ var (
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
 	ReplicationConstraintStatsTable = TableDescriptor{
-		Name:     "replication_constraint_stats",
-		ID:       keys.ReplicationConstraintStatsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "replication_constraint_stats",
+		ID:                      keys.ReplicationConstraintStatsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
 			{Name: "subzone_id", ID: 2, Type: *types.Int},
@@ -1039,10 +1057,11 @@ var (
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
 	ReplicationCriticalLocalitiesTable = TableDescriptor{
-		Name:     "replication_critical_localities",
-		ID:       keys.ReplicationCriticalLocalitiesTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "replication_critical_localities",
+		ID:                      keys.ReplicationCriticalLocalitiesTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
 			{Name: "subzone_id", ID: 2, Type: *types.Int},
@@ -1088,10 +1107,11 @@ var (
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
 	ReplicationStatsTable = TableDescriptor{
-		Name:     "replication_stats",
-		ID:       keys.ReplicationStatsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "replication_stats",
+		ID:                      keys.ReplicationStatsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
 			{Name: "subzone_id", ID: 2, Type: *types.Int},
@@ -1135,10 +1155,11 @@ var (
 	}
 
 	ProtectedTimestampsMetaTable = TableDescriptor{
-		Name:     "protected_ts_meta",
-		ID:       keys.ProtectedTimestampsMetaTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "protected_ts_meta",
+		ID:                      keys.ProtectedTimestampsMetaTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{
 				Name:        "singleton",
@@ -1185,10 +1206,11 @@ var (
 	}
 
 	ProtectedTimestampsRecordsTable = TableDescriptor{
-		Name:     "protected_ts_records",
-		ID:       keys.ProtectedTimestampsRecordsTableID,
-		ParentID: keys.SystemDatabaseID,
-		Version:  1,
+		Name:                    "protected_ts_records",
+		ID:                      keys.ProtectedTimestampsRecordsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Uuid},
 			{Name: "ts", ID: 2, Type: *types.Decimal},

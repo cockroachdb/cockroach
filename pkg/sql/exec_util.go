@@ -1757,6 +1757,9 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	setCurTxnReadOnly func(val bool)
+	// onTempSchemaCreation is called when the temporary schema is set
+	// on the search path (the first and only time).
+	onTempSchemaCreation func()
 	// onSessionDataChangeListeners stores all the observers to execute when
 	// session data is modified, keyed by the value to change on.
 	onSessionDataChangeListeners map[string][]func(val string)
@@ -1796,6 +1799,7 @@ func (m *sessionDataMutator) SetDatabase(dbName string) {
 }
 
 func (m *sessionDataMutator) SetTemporarySchemaName(scName string) {
+	m.onTempSchemaCreation()
 	m.data.SearchPath = m.data.SearchPath.WithTemporarySchemaName(scName)
 }
 

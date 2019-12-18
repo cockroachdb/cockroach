@@ -875,7 +875,8 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 		func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
-				err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, drain.ParentID, drain.Name)
+				err := sqlbase.RemoveObjectNamespaceEntry(ctx, txn, drain.ParentID, drain.ParentSchemaID,
+					drain.Name, false /* KVTrace */)
 				if err != nil {
 					return err
 				}

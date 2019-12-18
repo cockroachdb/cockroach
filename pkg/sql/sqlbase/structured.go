@@ -615,6 +615,18 @@ func (desc *TableDescriptor) IsVirtualTable() bool {
 	return IsVirtualTable(desc.ID)
 }
 
+// GetParentSchemaID returns the ParentSchemaID if the descriptor has
+// one. If the descriptor was created before the field was added, then the
+// descriptor belongs to a table under the `public` physical schema. The static
+// public schema ID is returned in that case.
+func (desc *TableDescriptor) GetParentSchemaID() ID {
+	parentSchemaID := desc.GetUnexposedParentSchemaID()
+	if parentSchemaID == InvalidID {
+		parentSchemaID = keys.PublicSchemaID
+	}
+	return parentSchemaID
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the informationgi_schema tables) and thus doesn't
 // need to be physically stored.

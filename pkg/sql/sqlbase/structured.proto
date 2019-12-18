@@ -507,6 +507,13 @@ message TableDescriptor {
   // ID of the parent database.
   optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // ID of the parent schema. For backwards compatibility, 0 means the table is
+  // scoped under the public physical schema (id 29). Because of this backward
+  // compatibility issue, this field should not be accessed directly or through
+  // the generated getter. Instead, use GetParentSchemaID() which is defined in
+  // structured.go.
+  optional uint32 unexposed_parent_schema_id = 40 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "UnexposedParentSchemaID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
   // The design maintains two invariants:
@@ -686,6 +693,10 @@ message TableDescriptor {
     // renamed from one db to another).
     optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+    // The schemaID of the schema the table belongs to before the rename/drop.
+    // Required to correctly identify which namespace entry to reclaim.
+    optional uint32 parent_schema_id = 3 [(gogoproto.nullable) = false,
+          (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
     optional string name = 2 [(gogoproto.nullable) = false];
   }
 

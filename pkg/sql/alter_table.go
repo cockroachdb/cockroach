@@ -324,7 +324,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
 			if len(col.UsesSequenceIds) > 0 {
-				if err := removeSequenceDependencies(n.tableDesc, col, params); err != nil {
+				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, col); err != nil {
 					return err
 				}
 			}
@@ -334,11 +334,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, col, t.DropBehavior); err != nil {
 				return err
 			}
-			// If the dropped column owns a sequence, drop the sequence as well.
-			if len(col.OwnsSequenceIds) > 0 {
-				if err := dropSequencesOwnedByCol(col, params); err != nil {
-					return err
-				}
+
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, col); err != nil {
+				return err
 			}
 
 			// You can't drop a column depended on by a view unless CASCADE was
@@ -819,7 +817,7 @@ func applyColumnMutation(
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {
-			if err := removeSequenceDependencies(tableDesc, col, params); err != nil {
+			if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
 				return err
 			}
 		}
