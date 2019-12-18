@@ -36,7 +36,9 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 	// non-SQL keys are obviously thus not SQL rows.
 	row, err := keys.EnsureSafeSplitKey(key)
 	if err != nil || len(key) == len(row) {
-		return nil
+		// TODO(ajwerner): Determine which errors should be ignored and only
+		// ignore those.
+		return nil //nolint:returnerrcheck
 	}
 
 	// no change key prefix => no new row.

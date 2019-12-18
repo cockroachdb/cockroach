@@ -282,7 +282,7 @@ func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 	if err != nil {
 		// No log directory configured: simply indicate that there are no
 		// log files.
-		return nil, nil
+		return nil, nil //nolint:returnerrcheck
 	}
 	infos, err := ioutil.ReadDir(dir)
 	if err != nil {

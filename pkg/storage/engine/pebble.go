@@ -172,9 +172,9 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(t.lastValue, meta); err != nil {
 			// We're unable to parse the MVCCMetadata. Fail open by not setting the
-			// min/max timestamp properties. THis mimics the behavior of
+			// min/max timestamp properties. This mimics the behavior of
 			// TimeBoundTblPropCollector.
-			return nil
+			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
 			ts := encodeTimestamp(hlc.Timestamp(meta.Timestamp))

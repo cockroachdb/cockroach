@@ -506,9 +506,12 @@ func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
 			// RunWithBuffer to toss the output.
-			if _, err := c.RunWithBuffer(ctx, l, c.Node(node), "ls", perfArtifactsDir); err != nil {
+			if out, err := c.RunWithBuffer(ctx, l, c.Node(node), "ls", perfArtifactsDir); err != nil {
 				// perfArtifactsDir doesn't exist, nothing to fetch.
-				return nil
+				if strings.Contains(string(out), "No such file or directory") {
+					return nil
+				}
+				return err
 			}
 			dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
 			return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))

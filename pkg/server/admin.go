@@ -1848,8 +1848,11 @@ func (s *adminServer) enqueueRangeLocal(
 	var repl *storage.Replica
 	if err := s.server.node.stores.VisitStores(func(s *storage.Store) error {
 		r, err := s.GetReplica(req.RangeID)
-		if err != nil {
+		if roachpb.IsRangeNotFoundError(err) {
 			return nil
+		}
+		if err != nil {
+			return err
 		}
 		repl = r
 		store = s

@@ -67,7 +67,7 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 
 				cmd := `nc -z $(hostname) 9042`
 				if _, err := session.CombinedOutput(cmd); err != nil {
-					return false, nil
+					return false, nil //nolint:returnerrcheck
 				}
 				return true, nil
 			}()
