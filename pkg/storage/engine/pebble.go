@@ -1086,7 +1086,7 @@ func (p pebbleSnapshot) NewIterator(opts IterOptions) Iterator {
 }
 
 func pebbleExportToSst(
-	e Reader,
+	reader Reader,
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
@@ -1098,7 +1098,7 @@ func pebbleExportToSst(
 
 	var rows RowCounter
 	iter := NewMVCCIncrementalIterator(
-		e,
+		reader,
 		MVCCIncrementalIterOptions{
 			IterOptions: io,
 			StartTime:   startTS,
