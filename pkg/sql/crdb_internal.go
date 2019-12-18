@@ -2346,7 +2346,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		g := p.ExecCfg().Gossip
 		descriptors, err := getAllNodeDescriptors(p)
 		if err != nil {
-			return nil
+			return err
 		}
 
 		alive := make(map[roachpb.NodeID]tree.DBool)

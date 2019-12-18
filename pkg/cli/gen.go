@@ -118,7 +118,7 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 		err = cmd.Root().GenZshCompletionFile(autoCompletePath)
 	}
 	if err != nil {
-		return nil
+		return err
 	}
 
 	fmt.Printf("Generated %s completion file: %s\n", shell, autoCompletePath)
