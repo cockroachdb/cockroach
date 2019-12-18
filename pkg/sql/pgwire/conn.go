@@ -1151,10 +1151,8 @@ func (c *conn) bufferPortalSuspended() {
 	}
 }
 
-func (c *conn) bufferErr(err error) {
-	// TODO(andrei,knz): This would benefit from a context with the
-	// current connection log tags.
-	if err := writeErr(context.Background(), c.sv,
+func (c *conn) bufferErr(ctx context.Context, err error) {
+	if err := writeErr(ctx, c.sv,
 		err, &c.msgBuilder, &c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 	}
