@@ -897,12 +897,12 @@ func (ir *IntentResolver) ResolveIntents(
 				resolveReq{
 					rangeID: ir.lookupRangeID(ctx, intent.Key),
 					req: &roachpb.ResolveIntentRequest{
-						RequestHeader:             roachpb.RequestHeaderFromSpan(intent.Span),
-						IntentTxn:                 intent.Txn,
-						Status:                    intent.Status,
-						Poison:                    opts.Poison,
-						IgnoredSeqNums:            intent.IgnoredSeqNums,
-						IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
+						RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
+						IntentTxn:      intent.Txn,
+						Status:         intent.Status,
+						Poison:         opts.Poison,
+						IgnoredSeqNums: intent.IgnoredSeqNums,
+						//IgnoredSeqNumsInitialized: intent.IgnoredSeqNumsInitialized,
 					},
 				})
 		} else {
