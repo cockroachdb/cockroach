@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -629,4 +630,61 @@ func TestWorkloadStorage(t *testing.T) {
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
 	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
+}
+
+func rangeStart(r string) (int, error) {
+	if len(r) == 0 {
+		return 0, nil
+	}
+	return strconv.Atoi(strings.Split(r, "-")[0])
+}
+
+func TestHttpGet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	data := []byte("to serve, or not to serve.  c'est la question")
+
+	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
+		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
+			limit := tc
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				start, err := rangeStart(r.Header.Get("Range"))
+				if start < 0 || start >= len(data) {
+					t.Errorf("invalid start offset %d in range header %s", start, r.Header.Get("Range"))
+				}
+				end := start + limit
+				if end > len(data) {
+					end = len(data)
+				}
+
+				w.Header().Add("Accept-Ranges", "bytes")
+				if start == 0 {
+					w.Header().Add("Content-Length", strconv.Itoa(len(data)))
+				}
+
+				if start > 0 {
+					w.Header().Add(
+						"Content-Range",
+						fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+				}
+
+				if err == nil {
+					_, err = w.Write(data[start:end])
+				}
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+
+			defer s.Close()
+			store := storeFromURI(context.Background(), t, s.URL)
+			defer store.Close()
+			f, err := store.ReadFile(context.Background(), "/something")
+			require.NoError(t, err)
+			defer f.Close()
+			b, err := ioutil.ReadAll(f)
+			require.NoError(t, err)
+			require.EqualValues(t, data, b)
+		})
+	}
+
 }

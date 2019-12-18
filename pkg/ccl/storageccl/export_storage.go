@@ -371,6 +371,10 @@ type httpStorage struct {
 	client   *http.Client
 	hosts    []string
 	settings *cluster.Settings
+	// len is set iff we can resume download in
+	// case of a premature connection termination.
+	len int64
+	pos int64
 }
 
 var _ ExportStorage = &httpStorage{}
@@ -435,13 +439,72 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 	}
 }
 
+type bodyOpener = func() (io.ReadCloser, error)
+
+type bodyReader struct {
+	b          io.ReadCloser
+	reopenBody bodyOpener
+	h          *httpStorage
+	noProgress int
+}
+
+var _ io.ReadCloser = &bodyReader{}
+
+const maxNoProgressHTTPRetries = 16
+
+func (r *bodyReader) Close() error {
+	return r.b.Close()
+}
+
+func (r *bodyReader) Read(p []byte) (n int, err error) {
+	if r.h.len > 0 && r.h.pos == r.h.len {
+		return 0, io.EOF
+	}
+
+	n, err = r.b.Read(p)
+	r.h.pos += int64(n)
+
+	if n > 0 {
+		r.noProgress = 0
+	} else {
+		r.noProgress++
+	}
+
+	if (err == io.EOF || err == io.ErrUnexpectedEOF) && r.h.pos < r.h.len {
+		if r.noProgress == maxNoProgressHTTPRetries {
+			err = fmt.Errorf("expected to read %d bytes, but only read %d", r.h.len, r.h.pos)
+			return
+		}
+
+		if err = r.b.Close(); err != nil {
+			return
+		}
+		r.b, err = r.reopenBody()
+	}
+
+	return
+}
+
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	resp, err := h.req(ctx, "GET", basename, nil)
+	opener := func() (io.ReadCloser, error) {
+		resp, err := h.req(ctx, "GET", basename, nil)
+		if err != nil {
+			return nil, err
+		}
+		return resp.Body, nil
+	}
+
+	body, err := opener()
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+	return &bodyReader{
+		b:          body,
+		reopenBody: opener,
+		h:          h,
+		noProgress: 0,
+	}, nil
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
@@ -509,6 +572,9 @@ func (h *httpStorage) req(
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 	req = req.WithContext(ctx)
+	if h.pos > 0 {
+		req.Header.Add("Range", fmt.Sprintf("%d-", h.pos))
+	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
 	}
@@ -518,7 +584,9 @@ func (h *httpStorage) req(
 	}
 	switch resp.StatusCode {
 	case 200, 201, 204:
-		// ignore
+		if resp.Header.Get("Accept-Ranges") == "bytes" && h.len == 0 && resp.ContentLength > 0 {
+			h.len = resp.ContentLength
+		}
 	default:
 		body, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()

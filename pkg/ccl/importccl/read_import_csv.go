@@ -175,9 +175,10 @@ func (c *csvInputReader) readFile(
 			break
 		}
 
-		c.maybeLogErr(err, debugLine)
 		if err != nil {
-			return errors.Wrapf(err, "row %d: reading CSV record", i)
+			err = errors.Wrapf(err, "row %d: reading CSV record", i)
+			c.maybeLogErr(err, debugLine)
+			return err
 		}
 		// Ignore the first N lines.
 		if uint32(i) <= c.opts.Skip {

@@ -329,6 +329,7 @@ func (r *Reader) readRecord(dst []string, w io.Writer) ([]string, error) {
 	recLine := r.numLine // Starting line for record
 	r.recordBuffer = r.recordBuffer[:0]
 	r.fieldIndexes = r.fieldIndexes[:0]
+
 parseField:
 	for {
 		if r.TrimLeadingSpace {
