@@ -505,10 +505,14 @@ func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
-			// RunWithBuffer to toss the output.
-			if _, err := c.RunWithBuffer(ctx, l, c.Node(node), "ls", perfArtifactsDir); err != nil {
+			doesNotExistStr := perfArtifactsDir + " does not exist"
+			testCmd := "test -d '" + perfArtifactsDir + "' || echo '" + doesNotExistStr + "'"
+			if out, err := c.RunWithBuffer(ctx, l, c.Node(node), "bash", "-c", testCmd); err != nil {
 				// perfArtifactsDir doesn't exist, nothing to fetch.
-				return nil
+				if strings.Contains(string(out), doesNotExistStr) {
+					return nil
+				}
+				return err
 			}
 			dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
 			return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))

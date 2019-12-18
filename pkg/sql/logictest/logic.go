@@ -1955,6 +1955,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	if err != nil {
 		// An error occurred, but it was expected.
 		t.finishOne("XFAIL")
+		//nolint:returnerrcheck
 		return nil
 	}
 	defer rows.Close()
