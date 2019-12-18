@@ -221,6 +221,7 @@ func Reduce(
 		for {
 			next, err := findNextInteresting(vs)
 			if err != nil {
+				//nolint:returnerrcheck
 				return "", nil
 			}
 			if next == nil {

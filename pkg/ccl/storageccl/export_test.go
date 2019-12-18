@@ -206,7 +206,7 @@ func exportUsingGoIterator(
 ) ([]byte, error) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:returnerrcheck
 	}
 	defer sst.Close()
 
