@@ -157,7 +157,11 @@ func statisticsMutator(
 				} else {
 					seen[es] = true
 				}
-				numRange := randNonNegInt(rng)
+				var numRange int64
+				// The first bucket should have NumRange=0.
+				if i > 0 {
+					numRange = randNonNegInt(rng)
+				}
 				var distinctRange float64
 				// distinctRange should be <= numRange.
 				switch rng.Intn(3) {
