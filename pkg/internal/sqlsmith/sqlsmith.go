@@ -65,11 +65,10 @@ type Smither struct {
 	scalars, bools *WeightedSampler
 	selectStmts    *WeightedSampler
 
-	tableExprSampler *WeightedSampler
-	tableExprs       tableExprWeights
-
 	stmtWeights, alterWeights []StatementWeight
 	stmtSampler, alterSampler *StatementSampler
+	tableExprWeights          []TableExprWeight
+	tableExprSampler          *TableExprSampler
 
 	disableWith        bool
 	disableImpureFns   bool
@@ -84,7 +83,10 @@ type Smither struct {
 	complexity         float64
 }
 
-type statement func(*Smither) (tree.Statement, bool)
+type (
+	statement func(*Smither) (tree.Statement, bool)
+	tableExpr func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+)
 
 // NewSmither creates a new Smither. db is used to populate existing tables
 // for use as column references. It can be nil to skip table population.
@@ -97,18 +99,18 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
 		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
 
-		tableExprs: allTableExprs,
+		stmtWeights:      allStatements,
+		alterWeights:     alters,
+		tableExprWeights: allTableExprs,
 
-		stmtWeights:  allStatements,
-		alterWeights: alters,
-		complexity:   0.2,
+		complexity: 0.2,
 	}
 	for _, opt := range opts {
 		opt.Apply(s)
 	}
 	s.stmtSampler = NewWeightedStatementSampler(s.stmtWeights, rnd.Int63())
 	s.alterSampler = NewWeightedStatementSampler(s.alterWeights, rnd.Int63())
-	s.tableExprSampler = NewWeightedSampler(s.tableExprs.Weights(), rnd.Int63())
+	s.tableExprSampler = NewWeightedTableExprSampler(s.tableExprWeights, rnd.Int63())
 	return s, s.ReloadSchemas()
 }
 
@@ -205,7 +207,7 @@ func (o option) Apply(s *Smither) {
 // mutate any on-disk data.
 var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 	s.stmtWeights = nonMutatingStatements
-	s.tableExprs = nonMutatingTableExprs
+	s.tableExprWeights = nonMutatingTableExprs
 })
 
 // DisableDDLs causes the Smither to not emit statements that change table
@@ -279,7 +281,7 @@ var Vectorizable = multiOption(
 	simpleOption("vectorizable", func(s *Smither) {
 		s.vectorizable = true
 		s.stmtWeights = nonMutatingStatements
-		s.tableExprs = vectorizableTableExprs
+		s.tableExprWeights = vectorizableTableExprs
 	})(),
 )
 
