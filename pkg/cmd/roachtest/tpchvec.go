@@ -33,6 +33,7 @@ func registerTPCHVec(r *testRegistry) {
 		// TODO(yuzefovich): remove this once we have disk spilling.
 		5:  "needs disk spilling",
 		8:  "needs disk spilling",
+		9:  "needs disk spilling",
 		19: "needs disk spilling",
 	}
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
