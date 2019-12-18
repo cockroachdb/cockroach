@@ -130,7 +130,7 @@ func splitPostApply(
 	} else {
 		rightRng := rightRngOrNil
 		// Finish initialization of the RHS.
-		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, r.store.Clock(), 0)
+		err := rightRng.initRaftMuLockedReplicaMuLocked(&split.RightDesc, 0)
 		rightRng.mu.Unlock()
 		if err != nil {
 			log.Fatal(ctx, err)
