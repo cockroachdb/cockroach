@@ -61,23 +61,20 @@ func (p *planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
 	shouldCreatePublicSchema := true
-	var plainKey sqlbase.DescriptorKey = sqlbase.NewDatabaseKey(desc.Name)
+	dKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, desc.Name)
 	// TODO(whomever): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
-	// the `shouldCreatePublicSchema` logic as well. The key construction should
-	// also use the MakeDatabaseNameKey interface.
+	// the `shouldCreatePublicSchema` logic as well.
 	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
 		shouldCreatePublicSchema = false
-		plainKey = sqlbase.NewDeprecatedDatabaseKey(desc.Name)
 	}
-	idKey := plainKey.Key()
 
-	if exists, err := descExists(ctx, p.txn, idKey); err == nil && exists {
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, desc.Name); err == nil && exists {
 		if ifNotExists {
 			// Noop.
 			return false, nil
 		}
-		return false, sqlbase.NewDatabaseAlreadyExistsError(plainKey.Name())
+		return false, sqlbase.NewDatabaseAlreadyExistsError(desc.Name)
 	} else if err != nil {
 		return false, err
 	}
@@ -87,7 +84,7 @@ func (p *planner) createDatabase(
 		return false, err
 	}
 
-	if err := p.createDescriptorWithID(ctx, idKey, id, desc, nil); err != nil {
+	if err := p.createDescriptorWithID(ctx, dKey.Key(), id, desc, nil); err != nil {
 		return true, err
 	}
 
@@ -101,15 +98,6 @@ func (p *planner) createDatabase(
 	}
 
 	return true, nil
-}
-
-func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {
-	// Check whether idKey exists.
-	gr, err := txn.Get(ctx, idKey)
-	if err != nil {
-		return false, err
-	}
-	return gr.Exists(), nil
 }
 
 func (p *planner) createDescriptorWithID(

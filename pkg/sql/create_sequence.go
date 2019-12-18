@@ -50,14 +50,15 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssuef(5807,
 			"temporary sequences are unsupported")
 	}
-	tKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, n.dbDesc.ID, n.n.Name.Table())
 
-	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
+	exists, _, err := sqlbase.LookupPublicTableID(params.ctx, params.p.txn, n.dbDesc.ID, n.n.Name.Table())
+	if err == nil && exists {
 		if n.n.IfNotExists {
-			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
+			// If the sequence exists but the user specified IF NOT EXISTS, return
+			// without doing anything.
 			return nil
 		}
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlbase.NewRelationAlreadyExistsError(n.n.Name.Table())
 	} else if err != nil {
 		return err
 	}
