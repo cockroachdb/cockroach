@@ -1639,7 +1639,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// the transaction commit time (and that the txn commit time wasn't
 			// bumped past it).
 			log.Infof(ctx, "checking version %d", table.Version)
-			txn := client.NewTxn(ctx, t.kvDB, roachpb.NodeID(0), client.RootTxn)
+			txn := client.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
 			// Make the txn look back at the known modification timestamp.
 			txn.SetFixedTimestamp(ctx, table.ModificationTime)
 

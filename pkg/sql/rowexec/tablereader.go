@@ -164,7 +164,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
 		)
 	} else {
-		initialTS := tr.FlowCtx.Txn.GetTxnCoordMeta(ctx).Txn.ReadTimestamp
+		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS,
 			tr.maxTimestampAge, tr.spans,
@@ -260,8 +260,8 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}
 	}
-	if meta := execinfra.GetTxnCoordMeta(ctx, tr.FlowCtx.Txn); meta != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TxnCoordMeta: meta})
+	if tfs := execinfra.GetLeafTxnFinalState(ctx, tr.FlowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 
 	meta := execinfrapb.GetProducerMeta()

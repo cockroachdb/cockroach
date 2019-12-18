@@ -52,8 +52,8 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Attempt to read in another txn.
-			conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-			conflictTxn.InternalSetPriority(enginepb.MaxTxnPriority)
+			conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Exists() {
@@ -170,7 +170,7 @@ func TestLostUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Verify that the WriteTooOld boolean is set on the txn.
-		proto := txn.Serialize()
+		proto := txn.TestingCloneTxn()
 		if (txn.Epoch() == 0) != proto.WriteTooOld {
 			t.Fatalf("expected write too old set (%t): got %t", (txn.Epoch() == 0), proto.WriteTooOld)
 		}
@@ -238,7 +238,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 			if iteration == 1 {
 				// Verify our priority has ratcheted to one less than the pusher's priority
 				expPri := enginepb.MaxTxnPriority - 1
-				if pri := txn.Serialize().Priority; pri != expPri {
+				if pri := txn.TestingCloneTxn().Priority; pri != expPri {
 					t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 				}
 				return nil
@@ -286,8 +286,8 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Attempt to read in another txn (this will push timestamp of transaction).
-		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-		conflictTxn.InternalSetPriority(enginepb.MaxTxnPriority)
+		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		conflictTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 		if _, err := conflictTxn.Get(context.TODO(), keyA); err != nil {
 			return err
 		}

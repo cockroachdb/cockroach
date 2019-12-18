@@ -413,7 +413,7 @@ func TestJoinReader(t *testing.T) {
 						TempStorage: tempEngine,
 						DiskMonitor: &diskMonitor,
 					},
-					Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
 				}
 				encRows := make(sqlbase.EncDatumRows, len(c.input))
 				for rowIdx, row := range c.input {
@@ -524,7 +524,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 	// Set the memory limit to the minimum allocation size so that the row
 	// container can buffer some rows in memory before spilling to disk. This
@@ -620,6 +620,11 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
+
+	rootTxn := client.NewTxn(ctx, s.DB(), s.NodeID())
+	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
+	leafTxn := client.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -627,7 +632,7 @@ func TestJoinReaderDrain(t *testing.T) {
 			TempStorage: tempEngine,
 			DiskMonitor: &diskMonitor,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.LeafTxn),
+		Txn: leafTxn,
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -677,7 +682,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		}
 
 		// Check for trailing metadata.
-		var traceSeen, txnCoordMetaSeen bool
+		var traceSeen, txnFinalStateSeen bool
 		for {
 			row, meta = out.Next()
 			if row != nil {
@@ -689,15 +694,15 @@ func TestJoinReaderDrain(t *testing.T) {
 			if meta.TraceData != nil {
 				traceSeen = true
 			}
-			if meta.TxnCoordMeta != nil {
-				txnCoordMetaSeen = true
+			if meta.LeafTxnFinalState != nil {
+				txnFinalStateSeen = true
 			}
 		}
 		if !traceSeen {
 			t.Fatal("missing tracing trailing metadata")
 		}
-		if !txnCoordMetaSeen {
-			t.Fatal("missing txn trailing metadata")
+		if !txnFinalStateSeen {
+			t.Fatal("missing txn final state")
 		}
 	})
 }
@@ -724,7 +729,7 @@ func BenchmarkJoinReader(b *testing.B) {
 			DiskMonitor: diskMonitor,
 			Settings:    st,
 		},
-		Txn: client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+		Txn: client.NewTxn(ctx, s.DB(), s.NodeID()),
 	}
 
 	const numCols = 2

@@ -114,7 +114,7 @@ func (dsp *DistSQLPlanner) initRunners() {
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
-	txnCoordMeta *roachpb.TxnCoordMeta,
+	leafInputState *roachpb.LeafTxnInputState,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
@@ -131,10 +131,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
 	setupReq := execinfrapb.SetupFlowRequest{
-		TxnCoordMeta: txnCoordMeta,
-		Version:      execinfra.Version,
-		EvalContext:  evalCtxProto,
-		TraceKV:      evalCtx.Tracing.KVTracingEnabled(),
+		LeafTxnInputState: leafInputState,
+		Version:           execinfra.Version,
+		EvalContext:       evalCtxProto,
+		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
@@ -287,8 +287,8 @@ func (dsp *DistSQLPlanner) Run(
 	ctx := planCtx.ctx
 
 	var (
-		localState   distsql.LocalState
-		txnCoordMeta *roachpb.TxnCoordMeta
+		localState     distsql.LocalState
+		leafInputState *roachpb.LeafTxnInputState
 	)
 	// NB: putting part of evalCtx in localState means it might be mutated down
 	// the line.
@@ -300,14 +300,13 @@ func (dsp *DistSQLPlanner) Run(
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
-		meta, err := txn.GetTxnCoordMetaOrRejectClient(ctx)
+		tis, err := txn.GetLeafTxnInputStateOrRejectClient(ctx)
 		if err != nil {
 			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 			recv.SetError(err)
 			return func() {}
 		}
-		meta.StripRootToLeaf()
-		txnCoordMeta = &meta
+		leafInputState = &tis
 	}
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
@@ -351,7 +350,7 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	}
 
-	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, txnCoordMeta, flows, recv, localState, vectorizedThresholdMet)
+	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
@@ -452,7 +451,7 @@ type DistSQLReceiver struct {
 	// The transaction in which the flow producing data for this
 	// receiver runs. The DistSQLReceiver updates the transaction in
 	// response to RetryableTxnError's and when distributed processors
-	// pass back TxnCoordMeta objects via ProducerMetas. Nil if no
+	// pass back LeafTxnFinalState objects via ProducerMetas. Nil if no
 	// transaction should be updated on errors (i.e. if the flow overall
 	// doesn't run in a transaction).
 	txn *client.Txn
@@ -592,14 +591,16 @@ func (r *DistSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if meta != nil {
-		if meta.TxnCoordMeta != nil {
+		if meta.LeafTxnFinalState != nil {
 			if r.txn != nil {
-				if r.txn.ID() == meta.TxnCoordMeta.Txn.ID {
-					r.txn.AugmentTxnCoordMeta(r.ctx, *meta.TxnCoordMeta)
+				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
+					if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
+						r.resultWriter.SetError(err)
+					}
 				}
 			} else {
 				r.resultWriter.SetError(
-					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnCoordMeta))
+					errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
 			}
 		}
 		if meta.Err != nil {

@@ -66,3 +66,7 @@ SELECT * FROM t AS OF SYSTEM TIME '-0.1us'
 
 statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
 SELECT * FROM t AS OF SYSTEM TIME '0'
+
+# Verify we can explain a statement that has AS OF.
+statement ok
+EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'

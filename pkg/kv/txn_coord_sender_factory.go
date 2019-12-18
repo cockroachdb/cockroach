@@ -84,11 +84,18 @@ func NewTxnCoordSenderFactory(
 	return tcf
 }
 
-// TransactionalSender is part of the TxnSenderFactory interface.
-func (tcf *TxnCoordSenderFactory) TransactionalSender(
-	typ client.TxnType, meta roachpb.TxnCoordMeta, pri roachpb.UserPriority,
+// RootTransactionalSender is part of the TxnSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) RootTransactionalSender(
+	txn *roachpb.Transaction, pri roachpb.UserPriority,
 ) client.TxnSender {
-	return newTxnCoordSender(tcf, typ, meta, pri)
+	return newRootTxnCoordSender(tcf, txn, pri)
+}
+
+// LeafTransactionalSender is part of the TxnSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) LeafTransactionalSender(
+	tis *roachpb.LeafTxnInputState,
+) client.TxnSender {
+	return newLeafTxnCoordSender(tcf, tis)
 }
 
 // NonTransactionalSender is part of the TxnSenderFactory interface.

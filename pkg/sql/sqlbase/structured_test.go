@@ -830,7 +830,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
+		txn := client.NewTxn(ctx, kvDB, s.NodeID())
 		if err := test.desc.validateCrossReferences(ctx, txn); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {

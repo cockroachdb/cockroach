@@ -130,7 +130,7 @@ func TestTableReader(t *testing.T) {
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-					Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+					Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
 					NodeID:  s.NodeID(),
 				}
 
@@ -161,7 +161,7 @@ func TestTableReader(t *testing.T) {
 				var res sqlbase.EncDatumRows
 				for {
 					row, meta := results.Next()
-					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
+					if meta != nil && meta.LeafTxnFinalState == nil && meta.Metrics == nil {
 						t.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
@@ -215,7 +215,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
-		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
+		Txn:     client.NewTxn(ctx, tc.Server(0).DB(), nodeID),
 		NodeID:  nodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
@@ -273,7 +273,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		for _, m := range metas {
 			if len(m.Ranges) > 0 {
 				misplannedRanges = m.Ranges
-			} else if m.TxnCoordMeta == nil && m.Metrics == nil {
+			} else if m.LeafTxnFinalState == nil && m.Metrics == nil {
 				t.Fatalf("expected only txn coord meta, metrics, or misplanned ranges, got: %+v", metas)
 			}
 		}
@@ -320,7 +320,7 @@ func TestLimitScans(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-		Txn:     client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
+		Txn:     client.NewTxn(ctx, kvDB, s.NodeID()),
 		NodeID:  s.NodeID(),
 	}
 	spec := execinfrapb.TableReaderSpec{
@@ -424,7 +424,7 @@ func BenchmarkTableReader(b *testing.B) {
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-			Txn:     client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+			Txn:     client.NewTxn(ctx, s.DB(), s.NodeID()),
 			NodeID:  s.NodeID(),
 		}
 
@@ -446,7 +446,7 @@ func BenchmarkTableReader(b *testing.B) {
 				count := 0
 				for {
 					row, meta := tr.Next()
-					if meta != nil && meta.TxnCoordMeta == nil && meta.Metrics == nil {
+					if meta != nil && meta.LeafTxnFinalState == nil && meta.Metrics == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {

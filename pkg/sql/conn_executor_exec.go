@@ -264,8 +264,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// before starting a SAVEPOINT for better ORM compatibility.
 		// See also:
 		// https://github.com/cockroachdb/cockroach/issues/15012
-		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
-		if meta.CommandCount > 0 {
+		if ex.state.mu.txn.Active() {
 			err := pgerror.Newf(pgcode.Syntax,
 				"SAVEPOINT %s needs to be the first statement in a "+
 					"transaction", RestartSavepointName)
@@ -503,7 +502,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
-	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.Serialize().WriteTimestamp)
+	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return err
 	}
@@ -514,13 +513,10 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// Restart the transaction so that it is able to replay itself at a newer timestamp
 	// with the hope that the next time around there will be leases only at the current
 	// version.
-	retryErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+	retryErr := txn.PrepareRetryableError(ctx,
 		fmt.Sprintf(
 			`cannot publish new versions for tables: %v, old versions still in use`,
-			tables),
-		txn.ID(),
-		*txn.Serialize(),
-	)
+			tables))
 	// We cleanup the transaction and create a new transaction after
 	// waiting for the invariant to be satisfied because the wait time
 	// might be extensive and intents can block out leases being created
@@ -555,7 +551,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 
 	// Create a new transaction to retry with a higher timestamp than the
 	// timestamps used in the retry loop above.
-	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID, client.RootTxn)
+	ex.state.mu.txn = client.NewTxn(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeID)
 	if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}

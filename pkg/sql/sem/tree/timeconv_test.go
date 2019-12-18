@@ -53,19 +53,22 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
+		txnProto := roachpb.MakeTransaction(
+			"test",
+			nil, // baseKey
+			roachpb.NormalUserPriority,
+			ts,
+			0, /* maxOffsetNs */
+		)
+
 		ctx := tree.EvalContext{
-			Txn: client.NewTxnWithProto(
+			Txn: client.NewTxnFromProto(
 				context.Background(),
 				db,
 				1, /* gatewayNodeID */
+				ts,
 				client.RootTxn,
-				roachpb.MakeTransaction(
-					"test",
-					nil, // baseKey
-					roachpb.NormalUserPriority,
-					ts,
-					0, /* maxOffsetNs */
-				),
+				&txnProto,
 			),
 		}
 

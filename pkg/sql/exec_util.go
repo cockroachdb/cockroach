@@ -875,6 +875,8 @@ func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
 			return nil, nil
 		}
 		asOf = s.Options.AsOf
+	case *tree.Explain:
+		return p.isAsOf(s.Statement)
 	default:
 		return nil, nil
 	}

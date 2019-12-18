@@ -776,7 +776,7 @@ func (r *Replica) AdminMerge(
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
 	for {
-		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID(), client.RootTxn)
+		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
