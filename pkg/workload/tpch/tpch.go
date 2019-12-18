@@ -217,11 +217,16 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.Errorf("[q%s]: %s", queryName, err)
 	}
 	var numRows int
+	// NOTE: we should *NOT* return an error from within this loop because we
+	// might get another, more meaningful error from rows.Err() which can only be
+	// accessed after we fully consumed the rows. So we store the error (if any)
+	// and will return it below if there was no error while executing the query.
 	for rows.Next() {
 		if !w.config.disableChecks {
 			if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
 				if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
-					return errors.Errorf("[q%s]: %s", queryName, err)
+					err = errors.Errorf("[q%s]: %s", queryName, err)
+					break
 				}
 
 				expectedRow := expectedRowsByQueryName[queryName][numRows]
@@ -229,17 +234,21 @@ func (w *worker) run(ctx context.Context) error {
 					if val := *vals[i].(*interface{}); val != nil {
 						actualValue := fmt.Sprint(val)
 						if strings.Compare(expectedValue, actualValue) != 0 {
-							expectedFloat, err := strconv.ParseFloat(expectedValue, 64)
+							var expectedFloat, actualFloat float64
+							var expectedFloatRounded, actualFloatRounded float64
+							expectedFloat, err = strconv.ParseFloat(expectedValue, 64)
 							if err != nil {
-								return errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
+								err = errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
+								break
 							}
-							actualFloat, err := strconv.ParseFloat(actualValue, 64)
+							actualFloat, err = strconv.ParseFloat(actualValue, 64)
 							if err != nil {
-								return errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
+								err = errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
+								break
 							}
 							// TPC-H spec requires 0.01 precision for DECIMALs, so we will
 							// first round the values to use in the comparison. Note that we
@@ -249,17 +258,19 @@ func (w *worker) run(ctx context.Context) error {
 							// two values when rounded to a hundredth would be represented as
 							// something like 0.59999 and 0.610001 which differ by more than
 							// 0.01).
-							expectedFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
+							expectedFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
 							if err != nil {
-								return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
+								err = errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
+								break
 							}
-							actualFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
+							actualFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
 							if err != nil {
-								return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
+								err = errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
+								break
 							}
 							if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.02 {
 								// We only fail the check if the difference is more than 0.02
@@ -271,10 +282,11 @@ func (w *worker) run(ctx context.Context) error {
 								//   "ideal" - expected < 0.01 && actual - "ideal" < 0.01
 								// so in the worst case, actual and expected might differ by
 								// 0.02 and still be considered correct.
-								return errors.Errorf("[q%s] %f and %f differ by more than 0.02\n"+
+								err = errors.Errorf("[q%s] %f and %f differ by more than 0.02\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, actualFloatRounded, expectedFloatRounded,
 									numRows, i, actualValue, expectedValue)
+								break
 							}
 						}
 					}
@@ -283,8 +295,20 @@ func (w *worker) run(ctx context.Context) error {
 		}
 		numRows++
 	}
+
+	// It is possible that we short-circuited the loop above, and we need to
+	// fully consume the rows before we might get an error from the server.
+	for rows.Next() {
+	}
+
+	// We first check whether there is any error that came from the server (for
+	// example, an out of memory error). If there is, we return it.
 	if err := rows.Err(); err != nil {
 		return errors.Errorf("[q%s]: %s", queryName, err)
+	}
+	// Now we check whether there was an error while consuming the rows.
+	if err != nil {
+		return err
 	}
 	if !w.config.disableChecks {
 		if !queriesToSkip[queryName] {
