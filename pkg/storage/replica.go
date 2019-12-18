@@ -1128,13 +1128,13 @@ func (r *Replica) GetSplitQPS() float64 {
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(*r.Desc(), key)
+	return storagebase.ContainsKey(r.Desc(), key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
-	return storagebase.ContainsKeyRange(*r.Desc(), start, end)
+	return storagebase.ContainsKeyRange(r.Desc(), start, end)
 }
 
 // GetLastReplicaGCTimestamp reads the timestamp at which the replica was
