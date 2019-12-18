@@ -1489,11 +1489,12 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Because the merge completed successfully, r2 has ceased to exist. We
-	// therefore *must* see a RangeNotFound error from every pending get and put
-	// request. Anything else is a consistency error (or a bug in the test).
+	// therefore *must* see either a RangeNotFound or a NotLeaseHolderError
+	// error from every pending get and put request. Anything else is a
+	// consistency error (or a bug in the test).
 	for i := 0; i < reqConcurrency; i++ {
-		if err := <-reqErrs; !testutils.IsError(err, "r2 was not found") {
-			t.Fatalf("expected RangeNotFound error from get during merge, but got %v", err)
+		if err := <-reqErrs; !testutils.IsError(err, "(r2 was not found|not lease holder)") {
+			t.Fatalf("expected error from req during merge, but got %v", err)
 		}
 	}
 }
