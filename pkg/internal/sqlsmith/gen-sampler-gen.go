@@ -68,3 +68,62 @@ func (w *StatementSampler) Next() statement {
 	w.mu.Unlock()
 	return v
 }
+
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// TableExprWeight is the generic weight type.
+type TableExprWeight struct {
+	weight int
+	elem   tableExpr
+}
+
+// NewTableExprWeightedSampler creates a TableExprSampler that produces
+// TableExprs. They are returned at the relative frequency of the values of
+// weights. All weights must be >= 1.
+func NewWeightedTableExprSampler(weights []TableExprWeight, seed int64) *TableExprSampler {
+	sum := 0
+	for _, w := range weights {
+		if w.weight < 1 {
+			panic("expected weight >= 1")
+		}
+		sum += w.weight
+	}
+	if sum == 0 {
+		panic("expected weights")
+	}
+	samples := make([]tableExpr, sum)
+	pos := 0
+	for _, w := range weights {
+		for count := 0; count < w.weight; count++ {
+			samples[pos] = w.elem
+			pos++
+		}
+	}
+	return &TableExprSampler{
+		rnd:     rand.New(rand.NewSource(seed)),
+		samples: samples,
+	}
+}
+
+// TableExprSampler is a weighted tableExpr sampler.
+type TableExprSampler struct {
+	mu      syncutil.Mutex
+	rnd     *rand.Rand
+	samples []tableExpr
+}
+
+// Next returns the next weighted sample.
+func (w *TableExprSampler) Next() tableExpr {
+	w.mu.Lock()
+	v := w.samples[w.rnd.Intn(len(w.samples))]
+	w.mu.Unlock()
+	return v
+}
