@@ -476,12 +476,9 @@ func cmdResolveIntent(e *evalCtx) error {
 }
 
 func (e *evalCtx) resolveIntent(
-	engine ReadWriter,
-	key roachpb.Key,
-	txn *roachpb.Transaction,
-	resolveStatus roachpb.TransactionStatus,
+	rw ReadWriter, key roachpb.Key, txn *roachpb.Transaction, resolveStatus roachpb.TransactionStatus,
 ) error {
-	return MVCCResolveWriteIntent(e.ctx, engine, nil, roachpb.Intent{
+	return MVCCResolveWriteIntent(e.ctx, rw, nil, roachpb.Intent{
 		Span:   roachpb.Span{Key: key},
 		Status: resolveStatus,
 		Txn:    txn.TxnMeta,
@@ -538,12 +535,12 @@ func cmdCPut(e *evalCtx) error {
 	}
 	resolve, resolveStatus := e.getResolve()
 
-	return e.withWriter("cput", func(engine ReadWriter) error {
-		if err := MVCCConditionalPut(e.ctx, engine, nil, key, ts, val, expVal, behavior, txn); err != nil {
+	return e.withWriter("cput", func(rw ReadWriter) error {
+		if err := MVCCConditionalPut(e.ctx, rw, nil, key, ts, val, expVal, behavior, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(engine, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
 	})
@@ -554,12 +551,12 @@ func cmdDelete(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(txn)
 	resolve, resolveStatus := e.getResolve()
-	return e.withWriter("del", func(engine ReadWriter) error {
-		if err := MVCCDelete(e.ctx, engine, nil, key, ts, txn); err != nil {
+	return e.withWriter("del", func(rw ReadWriter) error {
+		if err := MVCCDelete(e.ctx, rw, nil, key, ts, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(engine, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
 	})
@@ -606,14 +603,14 @@ func cmdIncrement(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 
-	return e.withWriter("increment", func(engine ReadWriter) error {
-		curVal, err := MVCCIncrement(e.ctx, engine, nil, key, ts, txn, inc)
+	return e.withWriter("increment", func(rw ReadWriter) error {
+		curVal, err := MVCCIncrement(e.ctx, rw, nil, key, ts, txn, inc)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintf(e.results.buf, "inc: current value = %d\n", curVal)
 		if resolve {
-			return e.resolveIntent(engine, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
 	})
@@ -630,8 +627,8 @@ func cmdMerge(e *evalCtx) error {
 		val.SetString(value)
 	}
 	ts := e.getTs(nil)
-	return e.withWriter("merge", func(engine ReadWriter) error {
-		return MVCCMerge(e.ctx, engine, nil, key, ts, val)
+	return e.withWriter("merge", func(rw ReadWriter) error {
+		return MVCCMerge(e.ctx, rw, nil, key, ts, val)
 	})
 }
 
@@ -644,12 +641,12 @@ func cmdPut(e *evalCtx) error {
 
 	resolve, resolveStatus := e.getResolve()
 
-	return e.withWriter("put", func(engine ReadWriter) error {
-		if err := MVCCPut(e.ctx, engine, nil, key, ts, val, txn); err != nil {
+	return e.withWriter("put", func(rw ReadWriter) error {
+		if err := MVCCPut(e.ctx, rw, nil, key, ts, val, txn); err != nil {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(engine, key, txn, resolveStatus)
+			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
 	})
@@ -809,7 +806,7 @@ func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 	return txn
 }
 
-func (e *evalCtx) withWriter(cmd string, fn func(engine ReadWriter) error) error {
+func (e *evalCtx) withWriter(cmd string, fn func(_ ReadWriter) error) error {
 	var rw ReadWriter
 	rw = e.engine
 	var batch Batch

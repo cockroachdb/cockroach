@@ -164,8 +164,8 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		after.SeekGE(k)
 		t.Fatalf(`Seek on batch-backed iter after batched closed should panic.
 			iter.engine: %T, iter.engine.Closed: %v, batch.Closed %v`,
-			after.(*rocksDBIterator).engine,
-			after.(*rocksDBIterator).engine.Closed(),
+			after.(*rocksDBIterator).reader,
+			after.(*rocksDBIterator).reader.Closed(),
 			b.Closed(),
 		)
 	}()
@@ -1547,14 +1547,14 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 		batch := e.NewBatch()
 		defer batch.Close()
 
-		var writer ReadWriter = batch
+		var rw ReadWriter = batch
 		if distinct {
 			// NB: we can't actually close this distinct batch because it auto-
 			// closes when the batch commits.
-			writer = batch.Distinct()
+			rw = batch.Distinct()
 		}
 
-		if err := writer.LogData([]byte("foo")); err != nil {
+		if err := rw.LogData([]byte("foo")); err != nil {
 			t.Fatal(err)
 		}
 		if batch.Empty() {

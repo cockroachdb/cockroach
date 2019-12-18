@@ -118,13 +118,13 @@ func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 // C++ MVCCGet in mvccPutInternal causes a significant performance hit to
 // conditional put operations.
 func mvccGetGo(
-	ctx context.Context, engine Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	if len(key) == 0 {
 		return nil, nil, emptyKeyError()
 	}
 
-	iter := engine.NewIterator(IterOptions{Prefix: true})
+	iter := reader.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	buf := newGetBuffer()
@@ -153,7 +153,7 @@ var mvccGetImpls = []struct {
 	name string
 	fn   func(
 		ctx context.Context,
-		engine Reader,
+		reader Reader,
 		key roachpb.Key,
 		timestamp hlc.Timestamp,
 		opts MVCCGetOptions,
@@ -2311,9 +2311,9 @@ func TestMVCCClearTimeRange(t *testing.T) {
 				return engine
 			}
 
-			assertKVs := func(t *testing.T, e Reader, at hlc.Timestamp, expected []roachpb.KeyValue) {
+			assertKVs := func(t *testing.T, reader Reader, at hlc.Timestamp, expected []roachpb.KeyValue) {
 				t.Helper()
-				actual, _, _, err := MVCCScan(ctx, e, keyMin, keyMax, 100, at, MVCCScanOptions{})
+				actual, _, _, err := MVCCScan(ctx, reader, keyMin, keyMax, 100, at, MVCCScanOptions{})
 				require.NoError(t, err)
 				require.Equal(t, expected, actual)
 			}
@@ -2468,10 +2468,10 @@ func TestMVCCClearTimeRange(t *testing.T) {
 }
 
 func computeStats(
-	t *testing.T, batch Reader, from, to roachpb.Key, nowNanos int64,
+	t *testing.T, reader Reader, from, to roachpb.Key, nowNanos int64,
 ) enginepb.MVCCStats {
 	t.Helper()
-	iter := batch.NewIterator(IterOptions{UpperBound: to})
+	iter := reader.NewIterator(IterOptions{UpperBound: to})
 	defer iter.Close()
 	s, err := ComputeStatsGo(iter, from, to, nowNanos)
 	if err != nil {
