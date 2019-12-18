@@ -213,8 +213,10 @@ fixannot = re.compile(r'^([fF]ix(es|ed)?|[cC]lose(d|s)?) #', flags=re.M)
 # The following merge commits have been seen in the wild:
 #
 # Merge pull request #XXXXX from ...      <- GitHub merges
+# .... (#XXXX)                            <- GitHub merges (alt format)
 # Merge #XXXXX #XXXXX #XXXXX              <- Bors merges
 merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
+simple_merge = re.compile(r'.*\((?P<numbers>#[0-9]+)\)$', re.M)
 
 ### Initialization / option parsing ###
 
@@ -615,14 +617,14 @@ def analyze_pr(merge, pr):
 
     noteexpr = re.compile("^%s: (?P<message>.*) r=.* a=.*" % pr[1:], flags=re.M)
     m = noteexpr.search(merge.message)
-    note = ''
+    title = ''
     if m is None:
         # GitHub merge
-        note = merge.message.split('\n',3)[2]
+        title = merge.message.split('\n',3)[2]
     else:
         # Bors merge
-        note = m.group('message')
-    note = note.strip()
+        title = m.group('message')
+    title = title.strip()
 
     merge_base_result = repo.merge_base(merge.parents[0], tip)
     if len(merge_base_result) == 0:
@@ -647,7 +649,7 @@ def analyze_pr(merge, pr):
         seen_commits.add(commit)
 
         if not commit.message.startswith("Merge"):
-            missing_item, prauthors = process_release_notes(pr, note, commit)
+            missing_item, prauthors = process_release_notes(pr, title, commit)
             authors.update(prauthors)
             ncommits += 1
             if missing_item is not None:
@@ -661,7 +663,7 @@ def analyze_pr(merge, pr):
     text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
     stats = Stats._list_from_string(repo, text)
 
-    collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
+    collect_item(pr, title, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
 
 
 def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
@@ -709,6 +711,10 @@ for commit in mergepoints:
 
     ctime = datetime.datetime.fromtimestamp(commit.committed_date).ctime()
     numbermatch = merge_numbers.search(commit.message)
+    if numbermatch is None:
+        # Try again with the alternate format.
+        firstline = commit.message.split('\n', 1)[0]
+        numbermatch = simple_merge.search(firstline)
     # Analyze the commit
     if numbermatch is not None:
         prs = numbermatch.group("numbers").strip().split(" ")
