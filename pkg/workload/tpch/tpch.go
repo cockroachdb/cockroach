@@ -261,10 +261,17 @@ func (w *worker) run(ctx context.Context) error {
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, err, numRows, i, actualValue, expectedValue)
 							}
-							if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.01 {
-								// We only fail the check if the difference is more than 0.01 -
-								// this is what TPC-H spec requires for DECIMALs.
-								return errors.Errorf("[q%s] %f and %f differ by more than 0.01\n"+
+							if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.02 {
+								// We only fail the check if the difference is more than 0.02
+								// although TPC-H spec requires 0.01 precision for DECIMALs. We
+								// are using the expected value that might not be "precisely
+								// correct." It is possible for the following situation to
+								// occur:
+								//   expected < "ideal" < actual
+								//   "ideal" - expected < 0.01 && actual - "ideal" < 0.01
+								// so in the worst case, actual and expected might differ by
+								// 0.02 and still be considered correct.
+								return errors.Errorf("[q%s] %f and %f differ by more than 0.02\n"+
 									"wrong result in row %d in column %d: got %q, expected %q",
 									queryName, actualFloatRounded, expectedFloatRounded,
 									numRows, i, actualValue, expectedValue)
