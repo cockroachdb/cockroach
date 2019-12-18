@@ -64,11 +64,14 @@ package csv
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -176,6 +179,8 @@ type Reader struct {
 
 	// lastRecord is a record cache and only used when ReuseRecord == true.
 	lastRecord []string
+
+	DebugID string
 }
 
 // NewReader returns a new Reader that reads from r.
@@ -183,6 +188,22 @@ func NewReader(r io.Reader) *Reader {
 	return &Reader{
 		Comma: ',',
 		r:     bufio.NewReader(r),
+	}
+}
+
+func (r *Reader) maybeLogErr(err error) {
+	if err != nil && r.DebugID != "" {
+		pc, _, ln, _ := runtime.Caller(1)
+		caller := runtime.FuncForPC(pc).Name()
+		log.Infof(context.Background(), "TR:{%s:%d}:%s:err=%v", caller, ln, r.DebugID, err)
+	}
+}
+
+func (r *Reader) maybeLog(format string, args ...interface{}) {
+	if r.DebugID != "" {
+		pc, _, ln, _ := runtime.Caller(1)
+		caller := runtime.FuncForPC(pc).Name()
+		log.Infof(context.Background(), "^^TR:{%s:%d}:%s:"+format, caller, ln, r.DebugID, args)
 	}
 }
 
@@ -195,11 +216,17 @@ func NewReader(r io.Reader) *Reader {
 // If ReuseRecord is true, the returned slice may be shared
 // between multiple calls to Read.
 func (r *Reader) Read() (record []string, err error) {
+	return r.DbgRead(nil)
+}
+
+// DbgRead reads dbg or something like that.
+// Who cares, I'm just here to make lint happy.
+func (r *Reader) DbgRead(w io.Writer) (record []string, err error) {
 	if r.ReuseRecord {
-		record, err = r.readRecord(r.lastRecord)
+		record, err = r.readRecord(r.lastRecord, w)
 		r.lastRecord = record
 	} else {
-		record, err = r.readRecord(nil)
+		record, err = r.readRecord(nil, w)
 	}
 	return record, err
 }
@@ -211,7 +238,7 @@ func (r *Reader) Read() (record []string, err error) {
 // reported.
 func (r *Reader) ReadAll() (records [][]string, err error) {
 	for {
-		record, err := r.readRecord(nil)
+		record, err := r.readRecord(nil, nil)
 		if err == io.EOF {
 			return records, nil
 		}
@@ -238,6 +265,7 @@ func (r *Reader) readLine() ([]byte, error) {
 	}
 	if len(line) > 0 && err == io.EOF {
 		err = nil
+		r.maybeLog("Reset err to nil; non-empty line len=%d", len(line))
 		// For backwards compatibility, drop trailing \r before EOF.
 		if line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
@@ -264,7 +292,7 @@ func nextRune(b []byte) rune {
 	return r
 }
 
-func (r *Reader) readRecord(dst []string) ([]string, error) {
+func (r *Reader) readRecord(dst []string, w io.Writer) ([]string, error) {
 	if r.Comma == r.Comment || !validDelim(r.Comma) || (r.Comment != 0 && !validDelim(r.Comment)) {
 		return nil, errInvalidDelim
 	}
@@ -274,6 +302,7 @@ func (r *Reader) readRecord(dst []string) ([]string, error) {
 	var errRead error
 	for errRead == nil {
 		line, errRead = r.readLine()
+		r.maybeLogErr(errRead)
 		if r.Comment != 0 && nextRune(line) == r.Comment {
 			line = nil
 			continue // Skip comment lines
@@ -287,6 +316,10 @@ func (r *Reader) readRecord(dst []string) ([]string, error) {
 	}
 	if errRead == io.EOF {
 		return nil, errRead
+	}
+
+	if w != nil {
+		_, _ = w.Write(line)
 	}
 
 	// Parse each field in the record.
@@ -365,6 +398,7 @@ parseField:
 					}
 					line, errRead = r.readLine()
 					if errRead == io.EOF {
+						r.maybeLog("Reset err from EOF -> nil")
 						errRead = nil
 					}
 					fullLine = line
@@ -381,9 +415,13 @@ parseField:
 			}
 		}
 	}
+
+	r.maybeLogErr(err)
 	if err == nil {
 		err = errRead
 	}
+
+	r.maybeLogErr(err)
 
 	// Create a single string and create slices out of it.
 	// This pins the memory of the fields together, but allocates once.
@@ -407,5 +445,6 @@ parseField:
 	} else if r.FieldsPerRecord == 0 {
 		r.FieldsPerRecord = len(dst)
 	}
+	r.maybeLogErr(err)
 	return dst, err
 }

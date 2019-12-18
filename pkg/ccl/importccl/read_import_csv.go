@@ -9,10 +9,12 @@
 package importccl
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"runtime"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -37,6 +40,7 @@ type csvInputReader struct {
 	tableDesc    *sqlbase.TableDescriptor
 	targetCols   tree.NameList
 	expectedCols int
+	debugID      string
 }
 
 var _ inputConverter = &csvInputReader{}
@@ -106,10 +110,39 @@ func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn p
 	return nil
 }
 
+func anonymize(b *bytes.Buffer) string {
+	return string(bytes.Map(func(r rune) rune {
+		switch {
+		case unicode.IsDigit(r):
+			return '0'
+		case unicode.IsLetter(r):
+			return 'a'
+		default:
+			return r
+		}
+	}, b.Bytes()))
+}
+
+func (c *csvInputReader) maybeLogErr(err error, line *bytes.Buffer) {
+	if err != nil && c.debugID != "" {
+		pc, _, ln, _ := runtime.Caller(1)
+		caller := runtime.FuncForPC(pc).Name()
+
+		log.Infof(context.Background(),
+			"TR:{%s:%d}:%s:%v:LINE:=%s=", caller, ln, c.debugID, err, anonymize(line))
+	}
+}
+
 func (c *csvInputReader) readFile(
 	ctx context.Context, input *fileReader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
 	cr := csv.NewReader(input)
+
+	if tr, ok := input.Reader.(*tracingReader); ok {
+		cr.DebugID = tr.id
+		c.debugID = tr.id
+	}
+
 	if c.opts.Comma != 0 {
 		cr.Comma = c.opts.Comma
 	}
@@ -124,8 +157,12 @@ func (c *csvInputReader) readFile(
 		r:         make([][]string, 0, c.batchSize),
 	}
 
+	debugLine := bytes.NewBuffer(nil)
+
 	for i := 1; ; i++ {
-		record, err := cr.Read()
+		debugLine.Reset()
+		record, err := cr.DbgRead(debugLine)
+
 		finished := err == io.EOF
 		if finished || len(c.batch.r) >= c.batchSize {
 			c.batch.progress = input.ReadFraction()
@@ -137,6 +174,8 @@ func (c *csvInputReader) readFile(
 		if finished {
 			break
 		}
+
+		c.maybeLogErr(err, debugLine)
 		if err != nil {
 			return errors.Wrapf(err, "row %d: reading CSV record", i)
 		}
@@ -150,7 +189,9 @@ func (c *csvInputReader) readFile(
 			// Line has the optional trailing comma, ignore the empty field.
 			record = record[:c.expectedCols]
 		} else {
-			return errors.Errorf("row %d: expected %d fields, got %d", i, c.expectedCols, len(record))
+			err = errors.Errorf("row %d: expected %d fields, got %d", i, c.expectedCols, len(record))
+			c.maybeLogErr(err, debugLine)
+			return err
 		}
 		c.batch.r = append(c.batch.r, record)
 	}
