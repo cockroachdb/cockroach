@@ -14,7 +14,7 @@ CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 # RejectNullsLeftJoin + RejectNullsRightJoin
 # ----------------------------------------------------------
 
-opt expect=RejectNullsRightJoin
+norm expect=RejectNullsRightJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
 ----
 left-join (cross)
@@ -31,26 +31,31 @@ left-join (cross)
  │    └── fd: (5)-->(6)
  └── filters (true)
 
-opt expect=RejectNullsLeftJoin
+norm expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
 ----
-right-join (cross)
+left-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
  ├── key: (1,5)
  ├── fd: (5)-->(6), (1)-->(2-4)
+ ├── select
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    ├── scan xy
+ │    │    ├── columns: x:5(int!null) y:6(int)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    └── filters
+ │         └── x > 5 [type=bool, outer=(5), constraints=(/5: [/6 - ]; tight)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
- ├── scan xy
- │    ├── columns: x:5(int!null) y:6(int)
- │    ├── constraint: /5: [/6 - ]
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
  └── filters (true)
 
 # Inner-join operator.
-opt expect=RejectNullsLeftJoin
+norm expect=RejectNullsLeftJoin
 SELECT *
 FROM (SELECT * FROM a LEFT JOIN uv ON True) AS l
 INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True) AS r
@@ -61,84 +66,91 @@ inner-join (cross)
  ├── key: (1,7,11)
  ├── fd: ()-->(5,6), (1)-->(2-4), (7)-->(8-10), (11)-->(12)
  ├── inner-join (cross)
- │    ├── columns: u:5(int!null) v:6(int) k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:5(int!null) v:6(int)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(5,6), (1)-->(2-4)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    ├── select
+ │    │    ├── columns: u:5(int!null) v:6(int)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5,6)
+ │    │    ├── scan uv
+ │    │    │    ├── columns: u:5(int!null) v:6(int)
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6)
+ │    │    └── filters
+ │    │         └── u = 1 [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+ │    └── filters (true)
+ ├── inner-join (cross)
+ │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string) u:11(int!null) v:12(int!null)
  │    ├── key: (7,11)
- │    ├── fd: ()-->(5,6), (7)-->(8-10), (11)-->(12)
+ │    ├── fd: (7)-->(8-10), (11)-->(12)
  │    ├── scan a
  │    │    ├── columns: k:7(int!null) i:8(int) f:9(float) s:10(string)
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8-10)
- │    ├── inner-join (cross)
- │    │    ├── columns: u:5(int!null) v:6(int) u:11(int!null) v:12(int!null)
+ │    ├── select
+ │    │    ├── columns: u:11(int!null) v:12(int!null)
  │    │    ├── key: (11)
- │    │    ├── fd: ()-->(5,6), (11)-->(12)
- │    │    ├── select
- │    │    │    ├── columns: u:11(int!null) v:12(int!null)
- │    │    │    ├── key: (11)
- │    │    │    ├── fd: (11)-->(12)
- │    │    │    ├── scan uv
- │    │    │    │    ├── columns: u:11(int!null) v:12(int)
- │    │    │    │    ├── key: (11)
- │    │    │    │    └── fd: (11)-->(12)
- │    │    │    └── filters
- │    │    │         └── v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │    ├── fd: (11)-->(12)
  │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int!null) v:6(int)
- │    │    │    ├── constraint: /5: [/1 - /1]
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(5,6)
- │    │    └── filters (true)
+ │    │    │    ├── columns: u:11(int!null) v:12(int)
+ │    │    │    ├── key: (11)
+ │    │    │    └── fd: (11)-->(12)
+ │    │    └── filters
+ │    │         └── v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
  │    └── filters (true)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
  └── filters (true)
 
 # Left-join operator.
-opt expect=RejectNullsLeftJoin
+norm expect=RejectNullsLeftJoin
 SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
 ----
-inner-join (merge)
+inner-join (hash)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
- ├── left ordering: +1
- ├── right ordering: +5
  ├── key: (5)
  ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4)
- │    └── ordering: +1
+ │    └── fd: (1)-->(2-4)
  ├── scan xy
  │    ├── columns: x:5(int!null) y:6(int)
  │    ├── key: (5)
- │    ├── fd: (5)-->(6)
- │    └── ordering: +5
- └── filters (true)
+ │    └── fd: (5)-->(6)
+ └── filters
+      └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Full-join operator.
-opt expect=RejectNullsLeftJoin
+norm expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
 ----
 inner-join (cross)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
  ├── key: (1,5)
  ├── fd: (5)-->(6), (1)-->(2-4)
+ ├── select
+ │    ├── columns: x:5(int!null) y:6(int)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    ├── scan xy
+ │    │    ├── columns: x:5(int!null) y:6(int)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    └── filters
+ │         └── x > 5 [type=bool, outer=(5), constraints=(/5: [/6 - ]; tight)]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
- ├── scan xy
- │    ├── columns: x:5(int!null) y:6(int)
- │    ├── constraint: /5: [/6 - ]
- │    ├── key: (5)
- │    └── fd: (5)-->(6)
  └── filters (true)
 
 # Apply operators.
-opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
+norm expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
 SELECT *
 FROM (SELECT * FROM a FULL JOIN xy ON True)
 WHERE (SELECT u FROM uv WHERE v=k)=i
@@ -147,14 +159,10 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (5)-->(6)
- └── right-join (cross)
+ └── left-join (cross)
       ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int) y:6(int) u:7(int!null)
       ├── key: (1,5)
       ├── fd: (1)-->(2-4,7), (2)==(7), (7)==(2), (5)-->(6)
-      ├── scan xy
-      │    ├── columns: x:5(int!null) y:6(int)
-      │    ├── key: (5)
-      │    └── fd: (5)-->(6)
       ├── inner-join-apply
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) u:7(int!null)
       │    ├── key: (1)
@@ -186,6 +194,10 @@ project
       │    │                   └── v = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │    └── filters
       │         └── i = u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      ├── scan xy
+      │    ├── columns: x:5(int!null) y:6(int)
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6)
       └── filters (true)
 
 # ----------------------------------------------------------
@@ -193,7 +205,7 @@ project
 # ----------------------------------------------------------
 
 # Single max aggregate function.
-opt expect=RejectNullsGroupBy
+norm expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -230,7 +242,7 @@ project
            └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Aggregate function with DISTINCT.
-opt expect=RejectNullsGroupBy
+norm expect=RejectNullsGroupBy
 SELECT sum(DISTINCT y)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT y FROM xy)
@@ -270,7 +282,7 @@ project
            └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Single max aggregate function without grouping columns.
-opt expect=RejectNullsGroupBy
+norm expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -301,7 +313,7 @@ select
       └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Multiple aggregate functions on same column.
-opt expect=RejectNullsGroupBy
+norm expect=RejectNullsGroupBy
 SELECT min(x), max(x)
 FROM a
 LEFT JOIN xy
@@ -340,7 +352,7 @@ project
            └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Multiple aggregate functions on same column, some with DISTINCT.
-opt expect=RejectNullsGroupBy
+norm expect=RejectNullsGroupBy
 SELECT sum(DISTINCT y), max(y)
 FROM a
 LEFT JOIN xy
@@ -443,7 +455,7 @@ select
       └── sum = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
 
 # Don't reject nulls when multiple columns are used.
-opt expect-not=RejectNullsGroupBy
+norm expect-not=RejectNullsGroupBy
 SELECT min(x), max(y)
 FROM (select k from a)
 LEFT JOIN (select x, y from xy)
@@ -485,7 +497,7 @@ project
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
-opt expect-not=RejectNullsGroupBy
+norm expect-not=RejectNullsGroupBy
 SELECT count(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -526,7 +538,7 @@ project
 # rule no longer triggers RejectNullsGroupBy. Find another way to decorrelate
 # this query.
 # opt expect=RejectNullsGroupBy
-opt
+norm
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project

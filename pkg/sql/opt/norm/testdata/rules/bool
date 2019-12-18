@@ -15,7 +15,7 @@ CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 # NormalizeNestedAnds
 # --------------------------------------------------
 
-opt expect=NormalizeNestedAnds
+norm expect=NormalizeNestedAnds
 SELECT a AND (b AND (c AND (d AND e))) FROM c
 ----
 project
@@ -25,7 +25,7 @@ project
  └── projections
       └── (((a AND b) AND c) AND d) AND e [type=bool, outer=(1-5)]
 
-opt expect=NormalizeNestedAnds
+norm expect=NormalizeNestedAnds
 SELECT (a AND b) AND (c AND (d OR e)) FROM c
 ----
 project
@@ -36,7 +36,7 @@ project
       └── ((a AND b) AND c) AND (d OR e) [type=bool, outer=(1-5)]
 
 # Already normalized.
-opt expect-not=NormalizeNestedAnds
+norm expect-not=NormalizeNestedAnds
 SELECT a AND b AND c FROM c
 ----
 project
@@ -50,7 +50,7 @@ project
 # SimplifyTrueAnd + SimplifyAndTrue
 # --------------------------------------------------
 
-opt expect=SimplifyTrueAnd
+norm expect=SimplifyTrueAnd
 SELECT true AND k=1 AS r FROM a
 ----
 project
@@ -61,7 +61,7 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt expect=SimplifyAndTrue
+norm expect=SimplifyAndTrue
 SELECT k=1 AND true AS r FROM a
 ----
 project
@@ -72,7 +72,7 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt expect=(SimplifyTrueAnd,SimplifyAndTrue)
+norm expect=(SimplifyTrueAnd,SimplifyAndTrue)
 SELECT true AND k=1 AND true AND i=2 AS r FROM a
 ----
 project
@@ -85,7 +85,7 @@ project
       └── (k = 1) AND (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
-opt expect=SimplifyTrueAnd
+norm expect=SimplifyTrueAnd
 SELECT * FROM a WHERE true AND (true AND true)
 ----
 scan a
@@ -97,7 +97,7 @@ scan a
 # SimplifyFalseAnd + SimplifyAndFalse
 # --------------------------------------------------
 
-opt expect=SimplifyFalseAnd
+norm expect=SimplifyFalseAnd
 SELECT false AND s='foo' AS r FROM a
 ----
 project
@@ -107,7 +107,7 @@ project
  └── projections
       └── false [type=bool]
 
-opt expect=SimplifyAndFalse
+norm expect=SimplifyAndFalse
 SELECT s='foo' AND false AS r FROM a
 ----
 project
@@ -117,7 +117,7 @@ project
  └── projections
       └── false [type=bool]
 
-opt expect=(SimplifyAndFalse,SimplifyFalseAnd)
+norm expect=(SimplifyAndFalse,SimplifyFalseAnd)
 SELECT k=1 AND false AND (f=3.5 AND false) AS r FROM a
 ----
 project
@@ -131,7 +131,7 @@ project
 # SimplifyTrueOr + SimplifyOrTrue
 # --------------------------------------------------
 
-opt expect=SimplifyTrueOr
+norm expect=SimplifyTrueOr
 SELECT true OR s='foo' AS r FROM a
 ----
 project
@@ -141,7 +141,7 @@ project
  └── projections
       └── true [type=bool]
 
-opt expect=SimplifyOrTrue
+norm expect=SimplifyOrTrue
 SELECT s='foo' OR true AS r FROM a
 ----
 project
@@ -151,7 +151,7 @@ project
  └── projections
       └── true [type=bool]
 
-opt expect=(SimplifyTrueOr,SimplifyOrTrue)
+norm expect=(SimplifyTrueOr,SimplifyOrTrue)
 SELECT k=1 OR true OR (true OR f=3.5) AS r FROM a
 ----
 project
@@ -165,7 +165,7 @@ project
 # SimplifyFalseOr + SimplifyOrFalse
 # --------------------------------------------------
 
-opt expect=SimplifyFalseOr
+norm expect=SimplifyFalseOr
 SELECT false OR k=1 AS r FROM a
 ----
 project
@@ -176,7 +176,7 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt expect=SimplifyOrFalse
+norm expect=SimplifyOrFalse
 SELECT k=1 OR false AS r FROM a
 ----
 project
@@ -187,7 +187,7 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt expect=(SimplifyFalseOr,SimplifyOrFalse)
+norm expect=(SimplifyFalseOr,SimplifyOrFalse)
 SELECT (false OR k=1) OR (i=2 OR false) AS r FROM a
 ----
 project
@@ -200,7 +200,7 @@ project
       └── (k = 1) OR (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
-opt expect=SimplifyFalseOr
+norm expect=SimplifyFalseOr
 SELECT * FROM a WHERE false OR false OR false
 ----
 values
@@ -212,7 +212,7 @@ values
 # --------------------------------------------------
 # SimplifyAnd + SimplifyOr
 # --------------------------------------------------
-opt expect=(SimplifyOrFalse,SimplifyFalseOr,SimplifyAndTrue)
+norm expect=(SimplifyOrFalse,SimplifyFalseOr,SimplifyAndTrue)
 SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true AS r FROM a
 ----
 project
@@ -227,20 +227,25 @@ project
 # SimplifyRange
 # --------------------------------------------------
 
-opt expect=SimplifyRange disable=InlineConstVar
+norm expect=SimplifyRange disable=InlineConstVar
 SELECT * FROM a WHERE k = 1 AND k = 2-1
 ----
-scan a
+select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: [/1 - /1]
  ├── cardinality: [0 - 1]
  ├── key: ()
- └── fd: ()-->(1-5)
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 # --------------------------------------------------
 # FoldNullAndOr
 # --------------------------------------------------
-opt expect=FoldNullAndOr
+norm expect=FoldNullAndOr
 SELECT null and null AS r FROM a
 ----
 project
@@ -250,7 +255,7 @@ project
  └── projections
       └── null [type=bool]
 
-opt expect=FoldNullAndOr
+norm expect=FoldNullAndOr
 SELECT null or null AS r FROM a
 ----
 project
@@ -260,7 +265,7 @@ project
  └── projections
       └── null [type=bool]
 
-opt expect=FoldNullAndOr
+norm expect=FoldNullAndOr
 SELECT null or (null and null and null) or null AS r FROM a
 ----
 project
@@ -271,7 +276,7 @@ project
       └── null [type=bool]
 
 # Don't fold.
-opt expect-not=FoldNullAndOr
+norm expect-not=FoldNullAndOr
 SELECT (null or k=1) AS r, (null and k=1) AS s FROM a
 ----
 project
@@ -287,7 +292,7 @@ project
 # FoldNotTrue + FoldNotFalse
 # --------------------------------------------------
 
-opt expect=(FoldNotTrue,FoldNotFalse)
+norm expect=(FoldNotTrue,FoldNotFalse)
 SELECT NOT(1=1), NOT(1=2)
 ----
 values
@@ -302,7 +307,7 @@ values
 # --------------------------------------------------
 
 # Equality and inequality comparisons.
-opt expect=NegateComparison
+norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(i=1) AND NOT(f<>i) AND NOT(i>k) AND NOT(i>=f) AND NOT(f<1) AND NOT(i<=1)
 ----
 select
@@ -321,7 +326,7 @@ select
       └── f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
 
 # IN and IS comparisons.
-opt expect=NegateComparison
+norm expect=NegateComparison
 SELECT *
 FROM a
 WHERE NOT(i IN (1,2)) AND NOT(f NOT IN (3,4)) AND NOT(f IS NULL) AND NOT(s IS NOT NULL)
@@ -340,7 +345,7 @@ select
       └── s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
-opt expect=NegateComparison
+norm expect=NegateComparison
 SELECT *
 FROM a
 WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT(s NOT ILIKE 'foo')
@@ -360,7 +365,7 @@ select
       └── s ILIKE 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
 
 # SimilarTo comparisons.
-opt expect=NegateComparison
+norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
 ----
 select
@@ -376,7 +381,7 @@ select
       └── s SIMILAR TO 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # RegMatch comparisons.
-opt expect=NegateComparison
+norm expect=NegateComparison
 SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND NOT (s !~* 'foo')
 ----
 select
@@ -393,7 +398,7 @@ select
       ├── s !~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
       └── s ~* 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
 
-opt expect-not=NegateComparison
+norm expect-not=NegateComparison
 SELECT * FROM a WHERE
   NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
   NOT(j ? 'foo') AND
@@ -420,7 +425,7 @@ select
 # --------------------------------------------------
 # EliminateNot
 # --------------------------------------------------
-opt expect=EliminateNot
+norm expect=EliminateNot
 SELECT * FROM c WHERE NOT(NOT(a))
 ----
 select
@@ -434,7 +439,7 @@ select
 # --------------------------------------------------
 # NegateAnd + NegateComparison
 # --------------------------------------------------
-opt expect=(NegateAnd,NegateComparison)
+norm expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f)
 ----
 select
@@ -448,7 +453,7 @@ select
  └── filters
       └── (k < i) OR (i >= f) [type=bool, outer=(1-3), constraints=(/2: (/NULL - ])]
 
-opt expect=(NegateAnd,NegateComparison)
+norm expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
 ----
 select
@@ -466,7 +471,7 @@ select
 # --------------------------------------------------
 # NegateOr + NegateComparison
 # --------------------------------------------------
-opt expect=(NegateOr,NegateComparison)
+norm expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
@@ -482,7 +487,7 @@ select
       ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
       └── f <= (k + i) [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
 
-opt expect=(NegateOr,NegateComparison)
+norm expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 10 OR i < 5 OR f > 1))
 ----
 select
@@ -502,7 +507,7 @@ select
 # --------------------------------------------------
 # NegateAnd + NegateOr + NegateComparison
 # --------------------------------------------------
-opt expect=(NegateAnd,NegateOr,NegateComparison)
+norm expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i OR i < f) AND (i > 5 OR f > 1))
 ----
 select
@@ -516,7 +521,7 @@ select
  └── filters
       └── ((k < i) AND (i >= f)) OR ((i <= 5) AND (f <= 1.0)) [type=bool, outer=(1-3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
 
-opt expect=(NegateAnd,NegateOr,NegateComparison)
+norm expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
 ----
 select
@@ -534,7 +539,7 @@ select
 # --------------------------------------------------
 # ExtractRedundantConjunct
 # --------------------------------------------------
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT b OR b FROM c
 ----
 project
@@ -544,7 +549,7 @@ project
  └── projections
       └── variable: b [type=bool, outer=(2)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT a OR (a AND b) OR (a AND c) FROM c
 ----
 project
@@ -554,7 +559,7 @@ project
  └── projections
       └── variable: a [type=bool, outer=(1)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR a OR (a AND c) FROM c
 ----
 project
@@ -564,7 +569,7 @@ project
  └── projections
       └── variable: a [type=bool, outer=(1)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (b AND a) FROM c
 ----
 project
@@ -574,7 +579,7 @@ project
  └── projections
       └── b AND a [type=bool, outer=(1,2)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (c AND a) FROM c
 ----
 project
@@ -584,7 +589,7 @@ project
  └── projections
       └── a AND (b OR c) [type=bool, outer=(1-3)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
 ----
 select
@@ -596,7 +601,7 @@ select
       ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (b AND (a AND c)) OR (d AND (e AND a))
 ----
 select
@@ -608,7 +613,7 @@ select
       ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       └── (b AND c) OR (d AND e) [type=bool, outer=(2-5)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (b AND a) OR (c AND (a AND e) OR (e AND a AND d))
 ----
 select
@@ -620,7 +625,7 @@ select
       ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       └── b OR (e AND (c OR d)) [type=bool, outer=(2-5)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
 select
@@ -629,24 +634,29 @@ select
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/6 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
       ├── i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
+      ├── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
       └── (i > 0) OR (s = 'foo') [type=bool, outer=(2,4)]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
-scan a
+select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── constraint: /1: [/6 - ]
  ├── key: (1)
- └── fd: (1)-->(2-5)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 # Works with nulls too.
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT null or (null and k=1) AS r FROM a
 ----
 project
@@ -656,7 +666,7 @@ project
  └── projections
       └── null [type=unknown]
 
-opt expect=(ExtractRedundantConjunct)
+norm expect=(ExtractRedundantConjunct)
 SELECT (null and k=2) or (null and k=1) AS r FROM a
 ----
 project
@@ -668,7 +678,7 @@ project
       └── NULL AND ((k = 2) OR (k = 1)) [type=bool, outer=(1)]
 
 # Check that we don't match non-redundant cases.
-opt expect-not=(ExtractRedundantConjunct)
+norm expect-not=(ExtractRedundantConjunct)
 SELECT a OR b OR b FROM c
 ----
 project
@@ -678,7 +688,7 @@ project
  └── projections
       └── (a OR b) OR b [type=bool, outer=(1,2)]
 
-opt expect-not=(ExtractRedundantConjunct)
+norm expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (a OR c) FROM c
 ----
 project
@@ -688,7 +698,7 @@ project
  └── projections
       └── (a AND b) OR (a OR c) [type=bool, outer=(1-3)]
 
-opt expect-not=(ExtractRedundantConjunct)
+norm expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (NOT a AND c) FROM c
 ----
 project
