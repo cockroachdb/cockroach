@@ -370,7 +370,7 @@ func updateIntentTxnStatus(
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
 		intent.IgnoredSeqNums = pushee.IgnoredSeqNums
-		intent.IgnoredSeqNumsInitialized = true
+		//intent.IgnoredSeqNumsInitialized = true
 		results = append(results, intent)
 	}
 	return results
