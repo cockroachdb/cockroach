@@ -129,7 +129,7 @@ func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 // on Replica.ContainsKey.
 func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 	desc := rec.Desc() // already asserts
-	return storagebase.ContainsKey(*desc, key)
+	return storagebase.ContainsKey(desc, key)
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.

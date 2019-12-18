@@ -340,13 +340,13 @@ func (r *Replica) adminSplitWithDescriptor(
 			// If the key that routed this request to this range is now out of this
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
-			if !storagebase.ContainsKey(*desc, args.Key) {
+			if !storagebase.ContainsKey(desc, args.Key) {
 				return reply, roachpb.NewRangeKeyMismatchError(args.Key, args.Key, desc)
 			}
 			foundSplitKey = args.SplitKey
 		}
 
-		if !storagebase.ContainsKey(*desc, foundSplitKey) {
+		if !storagebase.ContainsKey(desc, foundSplitKey) {
 			return reply, errors.Errorf("requested split key %s out of bounds of %s", args.SplitKey, r)
 		}
 
