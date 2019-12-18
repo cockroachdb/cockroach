@@ -83,11 +83,11 @@ func ResolveIntent(
 	}
 
 	intent := roachpb.Intent{
-		Span:                      args.Span(),
-		Txn:                       args.IntentTxn,
-		Status:                    args.Status,
-		IgnoredSeqNums:            args.IgnoredSeqNums,
-		IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
+		Span:           args.Span(),
+		Txn:            args.IntentTxn,
+		Status:         args.Status,
+		IgnoredSeqNums: args.IgnoredSeqNums,
+		//IgnoredSeqNumsInitialized: args.IgnoredSeqNumsInitialized,
 	}
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
 		return result.Result{}, err
