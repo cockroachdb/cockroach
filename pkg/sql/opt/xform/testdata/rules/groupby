@@ -151,7 +151,7 @@ scalar-group-by
 # This is because we know nothing about the ordering of y
 # on the index xy after a scan on xy with x>7.
 opt
-SELECT min(y) FROM xyz WHERE x>7
+SELECT min(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
  ├── columns: min:4
@@ -161,6 +161,7 @@ scalar-group-by
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
+ │    ├── flags: force-index=xy
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
@@ -171,7 +172,7 @@ scalar-group-by
 # This is because we know nothing about the ordering of y
 # on the index xy after a scan on xy with x>7
 opt
-SELECT max(y) FROM xyz WHERE x>7
+SELECT max(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
  ├── columns: max:4
@@ -181,6 +182,7 @@ scalar-group-by
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
+ │    ├── flags: force-index=xy
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
@@ -501,7 +503,7 @@ memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,cols=(1))
- │    │    └── cost: 1050.02
+ │    │    └── cost: 2.12
  │    └── []
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1050.02
@@ -563,7 +565,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: -1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,rev,cols=(1))
- │    │    └── cost: 1149.68
+ │    │    └── cost: 2.14
  │    └── []
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1050.02
