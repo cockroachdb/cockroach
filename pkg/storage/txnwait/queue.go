@@ -60,6 +60,9 @@ func TestingOverrideTxnLivenessThreshold(t time.Duration) func() {
 // ABORT nor TIMESTAMP, but also for ABORT and TIMESTAMP pushes where
 // the pushee has min priority or pusher has max priority.
 func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
+	if req.Force {
+		return true
+	}
 	if !(req.PushType == roachpb.PUSH_ABORT || req.PushType == roachpb.PUSH_TIMESTAMP) {
 		return true
 	}
@@ -388,10 +391,6 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 	}
 }
 
-// ErrDeadlock is a sentinel error returned when a cyclic dependency between
-// waiting transactions is detected.
-var ErrDeadlock = roachpb.NewErrorf("deadlock detected")
-
 // MaybeWaitForPush checks whether there is a queue already
 // established for pushing the transaction. If not, or if the PushTxn
 // request isn't queueable, return immediately. If there is a queue,
@@ -400,9 +399,6 @@ var ErrDeadlock = roachpb.NewErrorf("deadlock detected")
 //
 // If the transaction is successfully pushed while this method is waiting,
 // the first return value is a non-nil PushTxnResponse object.
-//
-// In the event of a dependency cycle of pushers leading to deadlock,
-// this method will return an ErrDeadlock error.
 func (q *Queue) MaybeWaitForPush(
 	ctx context.Context, repl ReplicaInterface, req *roachpb.PushTxnRequest,
 ) (*roachpb.PushTxnResponse, *roachpb.Error) {
@@ -654,7 +650,12 @@ func (q *Queue) MaybeWaitForPush(
 						dependents,
 					)
 					metrics.DeadlocksTotal.Inc(1)
-					return nil, ErrDeadlock
+					// TODO(nvanbenschoten): As it, it would make sense to return
+					// the force push's PushTxnResponse, but the following commit
+					// is planning on removing the response path here and letting
+					// all pushes fall through to standard evaluation to create
+					// their response.
+					return nil, q.forcePushAbort(ctx, req)
 				}
 			}
 			// Signal the pusher query txn loop to continue.
@@ -900,6 +901,24 @@ func (q *Queue) queryTxnStatus(
 		return updatedTxn, resp.WaitingTxns, nil
 	}
 	return nil, nil, nil
+}
+
+// forcePushAbort upgrades the PushTxn request to a "forced" push abort, which
+// overrides the normal expiration and priority checks to ensure that it aborts
+// the pushee. This mechanism can be used to break deadlocks between conflicting
+// transactions.
+func (q *Queue) forcePushAbort(ctx context.Context, req *roachpb.PushTxnRequest) *roachpb.Error {
+	log.VEventf(ctx, 1, "force pushing %v to break deadlock", req.PusheeTxn.ID)
+	forcePush := *req
+	forcePush.Force = true
+	forcePush.PushType = roachpb.PUSH_ABORT
+	b := &client.Batch{}
+	b.Header.Timestamp = q.store.Clock().Now()
+	b.AddRawRequest(&forcePush)
+	if err := q.store.DB().Run(ctx, b); err != nil {
+		return roachpb.NewError(err)
+	}
+	return nil
 }
 
 // TrackedTxns returns a (newly minted) set containing the transaction IDs which

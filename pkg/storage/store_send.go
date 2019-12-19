@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -244,23 +243,13 @@ func (r *Replica) maybeWaitForPushee(
 		}
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
 		pushResp, pErr := r.txnWaitQueue.MaybeWaitForPush(ctx, r, pushReq)
-		// Copy the request in anticipation of setting the force arg and
-		// updating the Now timestamp (see below).
-		pushReqCopy := *pushReq
-		if pErr == txnwait.ErrDeadlock {
-			// We've experienced a deadlock; set Force=true on push request,
-			// and set the push type to ABORT.
-			pushReqCopy.Force = true
-			pushReqCopy.PushType = roachpb.PUSH_ABORT
-		} else if pErr != nil {
+		if pErr != nil {
 			return nil, pErr
 		} else if pushResp != nil {
 			br := &roachpb.BatchResponse{}
 			br.Add(pushResp)
 			return br, nil
 		}
-		ba.Requests = nil
-		ba.Add(&pushReqCopy)
 	} else if ba.IsSingleQueryTxnRequest() {
 		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.

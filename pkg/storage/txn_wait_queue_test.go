@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
@@ -352,6 +353,9 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	}
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher,
 		PusheeTxn: txn.TxnMeta,
@@ -676,16 +680,25 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	}
 
 	reqA := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnB.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnA,
 		PusheeTxn: txnB.TxnMeta,
 	}
 	reqB := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnC.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnB,
 		PusheeTxn: txnC.TxnMeta,
 	}
 	reqC := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnA.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnC,
 		PusheeTxn: txnA.TxnMeta,
@@ -710,14 +723,10 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	}
 
 	// Wait for first request to finish, which should break the
-	// dependency cycle by returning an ErrDeadlock error.
+	// dependency cycle by performing a force push abort.
 	respWithErr := <-retCh
-	if respWithErr.pErr != txnwait.ErrDeadlock {
-		t.Errorf("expected ErrDeadlock; got %v", respWithErr.pErr)
-	}
-	if respWithErr.resp != nil {
-		t.Errorf("expected nil response; got %+v", respWithErr.resp)
-	}
+	require.Nil(t, respWithErr.pErr)
+	require.Nil(t, respWithErr.resp)
 
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := m.DeadlocksTotal.Count(), int64(0); act <= exp {
@@ -766,11 +775,17 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 
 	reqA := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnB.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnA,
 		PusheeTxn: txnB.TxnMeta,
 	}
 	reqB := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnA.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnB,
 		PusheeTxn: updatedTxnA.TxnMeta,
@@ -798,12 +813,8 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	// dependency cycle by returning an ErrDeadlock error. The
 	// returned request should be reqA.
 	reqWithErr := <-retCh
-	if !reflect.DeepEqual(reqA, reqWithErr.req) {
-		t.Errorf("expected request %+v; got %+v", reqA, reqWithErr.req)
-	}
-	if reqWithErr.pErr != txnwait.ErrDeadlock {
-		t.Errorf("expected errDeadlock; got %v", reqWithErr.pErr)
-	}
+	require.Nil(t, reqWithErr.pErr)
+	require.Equal(t, reqA, reqWithErr.req)
 
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := m.DeadlocksTotal.Count(), int64(0); act <= exp {
