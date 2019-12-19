@@ -56,14 +56,13 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd            *rand.Rand
-	db             *gosql.DB
-	lock           syncutil.RWMutex
-	tables         []*tableRef
-	columns        map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
-	indexes        map[tree.TableName]map[tree.Name]*tree.CreateIndex
-	nameCounts     map[string]int
-	scalars, bools *WeightedSampler
+	rnd        *rand.Rand
+	db         *gosql.DB
+	lock       syncutil.RWMutex
+	tables     []*tableRef
+	columns    map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
+	indexes    map[tree.TableName]map[tree.Name]*tree.CreateIndex
+	nameCounts map[string]int
 
 	stmtWeights, alterWeights          []statementWeight
 	stmtSampler, alterSampler          *statementSampler

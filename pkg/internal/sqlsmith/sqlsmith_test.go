@@ -14,7 +14,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -148,20 +147,5 @@ func TestGenerateParse(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-func TestWeightedSampler(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	expected := []int{1, 1, 1, 1, 1, 0, 2, 2, 0, 0, 0, 1, 1, 2, 0, 2}
-
-	s := NewWeightedSampler([]int{1, 3, 4}, 0)
-	var got []int
-	for i := 0; i < 16; i++ {
-		got = append(got, s.Next())
-	}
-	if !reflect.DeepEqual(expected, got) {
-		t.Fatalf("got %v, expected %v", got, expected)
 	}
 }
