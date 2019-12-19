@@ -567,7 +567,7 @@ limit
  │    ├── limit hint: 1.00
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null)
- │    │    └── limit hint: 1.00
+ │    │    └── limit hint: 100.00
  │    └── filters
  │         └── a = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  └── const: 1 [type=int]

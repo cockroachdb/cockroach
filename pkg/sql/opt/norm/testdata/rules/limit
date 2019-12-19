@@ -261,7 +261,7 @@ project
  │    │    └── sort
  │    │         ├── columns: i:2(int) f:3(float)
  │    │         ├── ordering: +3
- │    │         ├── limit hint: 5.00
+ │    │         ├── limit hint: 6.02
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
@@ -443,7 +443,7 @@ project
  │    │    │    └── sort
  │    │    │         ├── columns: i:2(int) f:3(float)
  │    │    │         ├── ordering: +3
- │    │    │         ├── limit hint: 15.00
+ │    │    │         ├── limit hint: 18.16
  │    │    │         └── scan a
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 15 [type=int]

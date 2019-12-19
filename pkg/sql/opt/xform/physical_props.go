@@ -11,6 +11,8 @@
 package xform
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -96,11 +98,17 @@ func BuildChildPhysicalProps(
 		// the right child of an ExceptOp should not be limited.
 		childProps.LimitHint = parentProps.LimitHint
 	case opt.DistinctOnOp:
-		// TODO(celine): Take selectivity into account.
-		childProps.LimitHint = parentProps.LimitHint
+		distinctCount := parent.(memo.RelExpr).Relational().Stats.RowCount
+		childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
 	case opt.SelectOp:
-		// TODO(celine): Take selectivity into account.
-		childProps.LimitHint = parentProps.LimitHint
+		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		if outputRows == 0 || outputRows < parentProps.LimitHint {
+			break
+		}
+		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
+			inputRows := input.Relational().Stats.RowCount
+			childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+		}
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
 		childProps.LimitHint = parentProps.LimitHint
 	}
@@ -111,6 +119,61 @@ func BuildChildPhysicalProps(
 	}
 
 	return mem.InternPhysicalProps(&childProps)
+}
+
+// distinctOnLimitHint returns a limit hint for the distinct operation. Given a
+// table with distinctCount distinct rows, distinctOnLimitHint will return an
+// estimated number of rows to scan that in most cases will yield at least
+// neededRows distinct rows while still substantially reducing the number of
+// unnecessarily scanned rows.
+//
+// Assume that when examining a row, each of the distinctCount possible values
+// has an equal probability of appearing. The expected number of rows that must
+// be examined to collect neededRows distinct rows is
+//
+// E[examined rows] = distinctCount * (H_{distinctCount} - H_{distinctCount-neededRows})
+//
+// where distinctCount > neededRows and H_{i} is the ith harmonic number. This
+// is a variation on the coupon collector's problem:
+// https://en.wikipedia.org/wiki/Coupon_collector%27s_problem
+//
+// Since values are not uniformly distributed in practice, the limit hint is
+// calculated by multiplying E[examined rows] by an experimentally-chosen factor
+// to provide a small overestimate of the actual number of rows needed in most
+// cases.
+//
+// This method is least accurate when attempting to return all or nearly all the
+// distinct values in the table, since the actual distribution of values becomes
+// the primary factor in how long it takes to "collect" the least-likely values.
+// As a result, cases where this limit hint may be poor (too low or more than
+// twice as high as needed) tend to occur when distinctCount is very close to
+// neededRows.
+func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
+	if neededRows >= distinctCount {
+		return 0
+	}
+
+	// Return an approximation of the nth harmonic number.
+	H := func(n float64) float64 {
+		const gamma = 0.5772156649 // Euler–Mascheroni constant
+		return math.Log(n) + gamma + 1/(2*n)
+	}
+
+	// Coupon collector's estimate, for a uniformly-distributed table.
+	uniformPrediction := distinctCount * (H(distinctCount) - H(distinctCount-neededRows))
+
+	// This multiplier was chosen based on simulating the distinct operation on
+	// hundreds of thousands of nonuniformly distributed tables with values of
+	// neededRows and distinctCount ranging between 1 and 1000.
+	multiplier := 0.15*neededRows/(distinctCount-neededRows) + 1.2
+
+	// In 91.6% of trials, this scaled estimate was between a 0% and 30%
+	// overestimate, and in 97.5% it was between a 0% and 100% overestimate.
+	//
+	// In 1.8% of tests, the prediction was for an insufficient number of rows, and
+	// in 0.7% of tests, the predicted number of rows was more than twice the actual
+	// number required.
+	return uniformPrediction * multiplier
 }
 
 // BuildChildPhysicalPropsScalar is like BuildChildPhysicalProps, but for
