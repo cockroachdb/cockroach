@@ -57,9 +57,6 @@ func isTrivial(r *storagepb.ReplicatedEvalResult) bool {
 		if stateWhitelist.Stats != nil && (*stateWhitelist.Stats == enginepb.MVCCStats{}) {
 			stateWhitelist.Stats = nil
 		}
-		if stateWhitelist.DeprecatedTxnSpanGCThreshold != nil {
-			stateWhitelist.DeprecatedTxnSpanGCThreshold = nil
-		}
 		if stateWhitelist != (storagepb.ReplicaState{}) {
 			return false
 		}
@@ -93,10 +90,6 @@ func clearTrivialReplicatedEvalResultFields(r *storagepb.ReplicatedEvalResult) {
 	// replica state for this batch.
 	if haveState := r.State != nil; haveState {
 		r.State.Stats = nil
-
-		// Strip the DeprecatedTxnSpanGCThreshold. We don't care about it.
-		// TODO(nvanbenschoten): Remove in 20.1.
-		r.State.DeprecatedTxnSpanGCThreshold = nil
 		if *r.State == (storagepb.ReplicaState{}) {
 			r.State = nil
 		}

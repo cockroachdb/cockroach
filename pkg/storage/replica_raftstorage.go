@@ -542,15 +542,6 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 
-	// Populate the snapshot's ReplicaState.DeprecatedTxnSpanGCThreshold field.
-	// 19.1 nodes will expect this to be here if the snapshot includes the key
-	// and 19.2 nodes will ignore it.
-	// TODO(nvanbenschoten): Remove in 20.1.
-	state.DeprecatedTxnSpanGCThreshold, err = rsl.LoadLegacyTxnSpanGCThreshold(ctx, snap)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
-
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
 	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -745,10 +736,6 @@ func (r *Replica) applySnapshot(
 	if s.Desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
-
-	// Strip the DeprecatedTxnSpanGCThreshold. We don't care about it.
-	// TODO(nvanbenschoten): Remove in 20.1.
-	s.DeprecatedTxnSpanGCThreshold = nil
 
 	r.mu.RLock()
 	replicaID := r.mu.replicaID

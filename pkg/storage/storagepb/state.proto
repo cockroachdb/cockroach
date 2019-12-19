@@ -58,15 +58,6 @@ message ReplicaState {
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
   util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
-  // deprecated_txn_span_gc_threshold is the (maximum) timestamp below which
-  // transaction records may have been garbage collected (as measured by txn.LastActive()).
-  // Transactions at lower timestamps must not be allowed to write their initial
-  // transaction entry.
-  // The field is no longer maintained. It is included in the proto only so that
-  // it can be populated before being sent to 19.1 nodes to prevent them from
-  // hitting assertion failures. It is stripped when received from other nodes.
-  // TODO(nvanbenschoten): Remove the field entirely in 20.1.
-  util.hlc.Timestamp deprecated_txn_span_gc_threshold = 9 [(gogoproto.customname) = "DeprecatedTxnSpanGCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
   storage.engine.enginepb.MVCCStats stats = 7;
   // using_applied_state_key specifies whether the Range has been upgraded
   // to begin using the RangeAppliedState key. This key holds a combination
@@ -78,7 +69,7 @@ message ReplicaState {
   // Raft commands to set it to true.
   bool using_applied_state_key = 11;
 
-  reserved 8, 10;
+  reserved 8, 9, 10;
 }
 
 // RangeInfo is used for reporting status information about a range out through
