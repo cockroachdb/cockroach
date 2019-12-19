@@ -5555,11 +5555,18 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			t.Fatalf("unexpected status: %v", test.status)
 		}
 
-		// Now, attempt to push the transaction with Now set to the txn start time + offset.
+		// Now, attempt to push the transaction.
 		args := pushTxnArgs(pusher, pushee, test.pushType)
-		args.PushTo = pushee.ReadTimestamp.Add(test.timeOffset, 0)
+		args.PushTo = pushee.ReadTimestamp.Add(0, 1)
+		h := roachpb.Header{Timestamp: args.PushTo}
 
-		reply, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
+		// Set the manual clock to the txn start time + offset. This is the time
+		// source used to detect transaction expiration. We make sure to set it
+		// above h.Timestamp to avoid it being updated by the request.
+		now := pushee.ReadTimestamp.Add(test.timeOffset, 0)
+		tc.manualClock.Set(now.WallTime)
+
+		reply, pErr := tc.SendWrappedWith(h, &args)
 		if !testutils.IsPError(pErr, test.expErr) {
 			t.Fatalf("%d: expected error %q; got %v, args=%+v, reply=%+v", i, test.expErr, pErr, args, reply)
 		}
