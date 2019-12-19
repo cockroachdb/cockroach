@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -63,12 +64,13 @@ type Smither struct {
 	indexes        map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts     map[string]int
 	scalars, bools *WeightedSampler
-	selectStmts    *WeightedSampler
 
 	stmtWeights, alterWeights []StatementWeight
 	stmtSampler, alterSampler *StatementSampler
 	tableExprWeights          []TableExprWeight
 	tableExprSampler          *TableExprSampler
+	selectStmtWeights         []SelectStatementWeight
+	selectStmtSampler         *SelectStatementSampler
 
 	disableWith        bool
 	disableImpureFns   bool
@@ -84,24 +86,25 @@ type Smither struct {
 }
 
 type (
-	statement func(*Smither) (tree.Statement, bool)
-	tableExpr func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+	statement       func(*Smither) (tree.Statement, bool)
+	tableExpr       func(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+	selectStatement func(s *Smither, desiredTypes []*types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, bool)
 )
 
 // NewSmither creates a new Smither. db is used to populate existing tables
 // for use as column references. It can be nil to skip table population.
 func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, error) {
 	s := &Smither{
-		rnd:         rnd,
-		db:          db,
-		nameCounts:  map[string]int{},
-		scalars:     NewWeightedSampler(scalarWeights, rnd.Int63()),
-		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
-		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
+		rnd:        rnd,
+		db:         db,
+		nameCounts: map[string]int{},
+		scalars:    NewWeightedSampler(scalarWeights, rnd.Int63()),
+		bools:      NewWeightedSampler(boolWeights, rnd.Int63()),
 
-		stmtWeights:      allStatements,
-		alterWeights:     alters,
-		tableExprWeights: allTableExprs,
+		stmtWeights:       allStatements,
+		alterWeights:      alters,
+		tableExprWeights:  allTableExprs,
+		selectStmtWeights: selectStmts,
 
 		complexity: 0.2,
 	}
@@ -111,6 +114,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.stmtSampler = NewWeightedStatementSampler(s.stmtWeights, rnd.Int63())
 	s.alterSampler = NewWeightedStatementSampler(s.alterWeights, rnd.Int63())
 	s.tableExprSampler = NewWeightedTableExprSampler(s.tableExprWeights, rnd.Int63())
+	s.selectStmtSampler = NewWeightedSelectStatementSampler(s.selectStmtWeights, rnd.Int63())
 	return s, s.ReloadSchemas()
 }
 
