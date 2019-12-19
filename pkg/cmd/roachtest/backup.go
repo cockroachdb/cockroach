@@ -76,8 +76,8 @@ func registerBackup(r *testRegistry) {
 			if local {
 				duration = 5 * time.Second
 			}
-			warehouses := 1
-			backupDir := "gs://cockroachdb-backup-testing/" + c.name
+			warehouses := 10
+			backupDir := "nodelocal://1/" + c.name
 			fullDir := backupDir + "/full"
 			incDir := backupDir + "/inc"
 
