@@ -1234,6 +1234,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// Remove the redundant filters and update the lookup condition.
 		lookupJoin.On = memo.ExtractRemainingJoinFilters(on, lookupJoin.KeyCols, rightSideCols)
 		lookupJoin.On.RemoveCommonFilters(constFilters)
+		lookupJoin.ConstFilters = constFilters
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).

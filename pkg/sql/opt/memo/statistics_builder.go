@@ -895,8 +895,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	// TODO(rytaft): use histogram for joins.
-	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilter(h.filters, join, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(h.filters, join, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -941,7 +940,8 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
-	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, join, s))
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
+	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), join, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps, constrainedCols))
 
@@ -1004,8 +1004,8 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ColStats.Clear()
 	}
 
-	// Loop through all colSets added in this step, and adjust null counts and
-	// distinct counts.
+	// Loop through all colSets added in this step, and adjust null counts,
+	// distinct counts, and histograms.
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStat := s.ColStats.Get(i)
 		leftSideCols := leftCols.Intersection(colStat.Cols)
@@ -1049,6 +1049,10 @@ func (sb *statisticsBuilder) buildJoin(
 			// Ensure distinct count is non-zero.
 			colStat.DistinctCount = max(colStat.DistinctCount, 1)
 		}
+
+		// We don't yet calculate histograms correctly for joins, so remove any
+		// histograms that have been created above.
+		colStat.Histogram = nil
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -2525,6 +2529,15 @@ func countJSONPaths(conjunct *FiltersItem) int {
 func (sb *statisticsBuilder) applyFilter(
 	filters FiltersExpr, e RelExpr, relProps *props.Relational,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	if lookupJoin, ok := e.(*LookupJoinExpr); ok {
+		// Special hack for lookup joins. Add constant filters from the equality
+		// conditions.
+		// TODO(rytaft): the correct way to do this is probably to fully implement
+		// histograms in Project and Join expressions, and use them in
+		// selectivityFromEquivalencies. See Issue #38082.
+		filters = append(filters, lookupJoin.ConstFilters...)
+	}
+
 	applyConjunct := func(conjunct *FiltersItem) {
 		if isEqualityWithTwoVars(conjunct.Condition) {
 			// We'll handle equalities later.

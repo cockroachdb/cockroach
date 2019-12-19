@@ -196,8 +196,8 @@ RUN git clone git://git.sv.gnu.org/sed \
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.12.12.src.tar.gz -o golang.tar.gz \
- && echo 'fcb33b5290fa9bcc52be3211501540df7483d7276b031fc77528672a3c705b99 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.13.5.src.tar.gz -o golang.tar.gz \
+ && echo '27d356e2a0b30d9983b60a788cf225da5f914066b37a6b4f69d457ba55a626ff golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
