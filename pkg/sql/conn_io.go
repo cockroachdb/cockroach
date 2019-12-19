@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -665,7 +666,7 @@ type CommandResultClose interface {
 	// NOTE(andrei): We might want to tighten the contract if the results get any
 	// state that needs to be closed even when the whole connection is about to be
 	// terminated.
-	Close(context.Context, TransactionStatusIndicator)
+	Close(context.Context, TransactionStatusIndicator, sqltelemetry.RecordErrorStatus)
 
 	// Discard is called to mark the fact that the result is being disposed off.
 	// No completion message will be sent to the client. The expectation is that
@@ -688,7 +689,7 @@ type RestrictedCommandResult interface {
 	SetColumns(context.Context, sqlbase.ResultColumns)
 
 	// ResetStmtType allows a client to change the statement type of the current
-	// result, from the original one set when the result was created trough
+	// result, from the original one set when the result was created through
 	// ClientComm.createStatementResult.
 	ResetStmtType(stmt tree.Statement)
 
@@ -904,7 +905,9 @@ func (r *bufferedCommandResult) RowsAffected() int {
 }
 
 // Close is part of the CommandResultClose interface.
-func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
+func (r *bufferedCommandResult) Close(
+	context.Context, TransactionStatusIndicator, sqltelemetry.RecordErrorStatus,
+) {
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, nil /* err */)
 	}

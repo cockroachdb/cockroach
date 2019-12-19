@@ -21,6 +21,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// RecordErrorStatus indicates whether the error has already been recorded.
+type RecordErrorStatus int
+
+const (
+	// ErrorNotRecorded indicates that the error has not yet been recorded.
+	ErrorNotRecorded RecordErrorStatus = iota
+
+	// ErrorAlreadyRecorded indicates that the error has already been recorded.
+	ErrorAlreadyRecorded
+)
+
 // RecordError processes a SQL error. This includes both incrementing
 // telemetry counters, and sending a sentry report for internal
 // (assertion) errors.

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -87,7 +88,9 @@ type commandResult struct {
 var _ sql.CommandResult = &commandResult{}
 
 // Close is part of the CommandResult interface.
-func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
+func (r *commandResult) Close(
+	ctx context.Context, t sql.TransactionStatusIndicator, errStatus sqltelemetry.RecordErrorStatus,
+) {
 	r.assertNotReleased()
 	defer r.release()
 	if r.errExpected && r.err == nil {
@@ -96,7 +99,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
-		r.conn.bufferErr(ctx, r.err)
+		r.conn.bufferErr(ctx, r.err, errStatus)
 		return
 	}
 

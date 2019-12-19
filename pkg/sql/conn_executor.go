@@ -1376,7 +1376,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			if ex.idleConn() {
 				// If we're about to close the connection, close res in order to flush
 				// now, as we won't have an opportunity to do it later.
-				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
+				res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()), sqltelemetry.ErrorNotRecorded)
 				return errDrainingComplete
 			}
 		}
@@ -1432,12 +1432,14 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if ok {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
 		}
+		errStatus := sqltelemetry.ErrorNotRecorded
 		if resErr == nil && ok {
 			res.SetError(pe.errorCause())
 		} else {
 			ex.recordError(ctx, resErr)
+			errStatus = sqltelemetry.ErrorAlreadyRecorded
 		}
-		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
+		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()), errStatus)
 	} else {
 		res.Discard()
 	}
