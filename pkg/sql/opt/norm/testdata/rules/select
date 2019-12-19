@@ -1106,7 +1106,7 @@ limit
  │    ├── limit hint: 1.00
  │    ├── scan a
  │    │    ├── columns: i:2(int)
- │    │    └── limit hint: 1.00
+ │    │    └── limit hint: 100.00
  │    └── filters
  │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── const: 1 [type=int]

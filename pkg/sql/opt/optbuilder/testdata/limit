@@ -312,7 +312,7 @@ limit
  │         ├── columns: w:3(int)
  │         ├── internal-ordering: +3
  │         ├── ordering: +3
- │         ├── limit hint: 25.00
+ │         ├── limit hint: 40.39
  │         ├── sort
  │         │    ├── columns: w:3(int)
  │         │    ├── ordering: +3

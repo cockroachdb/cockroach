@@ -423,7 +423,7 @@ project
  │    │    ├── limit hint: 5.00
  │    │    └── scan a
  │    │         ├── columns: f:3(float) s:4(string)
- │    │         └── limit hint: 5.00
+ │    │         └── limit hint: 6.02
  │    └── const: 5 [type=int]
  └── projections
       └── f * 2.0 [type=float, outer=(3)]
@@ -668,7 +668,7 @@ project
  │    │    │    ├── limit hint: 10.00
  │    │    │    └── scan a
  │    │    │         ├── columns: f:3(float) s:4(string)
- │    │    │         └── limit hint: 10.00
+ │    │    │         └── limit hint: 12.07
  │    │    └── const: 10 [type=int]
  │    └── const: 5 [type=int]
  └── projections

@@ -2,6 +2,43 @@ exec-ddl
 CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, index y_idx (y))
 ----
 
+# t has 200 rows where z=0, 200 where z=1, and 600 where z=2.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS ' [
+   {
+      "columns":[
+         "z"
+      ],
+      "created_at":"2019-11-11 22:16:04.314619+00:00",
+      "distinct_count":3,
+      "histo_buckets":[
+         {
+            "distinct_range":0,
+            "num_eq":200,
+            "num_range":0,
+            "upper_bound":"0"
+         },
+         {
+            "distinct_range":0,
+            "num_eq":200,
+            "num_range":0,
+            "upper_bound":"1"
+         },
+         {
+            "distinct_range":0,
+            "num_eq":600,
+            "num_range":0,
+            "upper_bound":"2"
+         }
+      ],
+      "histo_col_type":"INT8",
+      "name":"statistics",
+      "null_count":0,
+      "row_count":1000
+   }
+]'
+----
+
 # In order to test how limit hints are propagated through a particular operator,
 # a limit operator must exist higher in the tree, and all operators between the
 # limit and the operator targeted by the test must pass a limit hint to their
@@ -148,6 +185,70 @@ limit
  └── const: 10 [type=int]
 
 # --------------------------------------------------
+# Limit hint depends on statistics.
+# --------------------------------------------------
+
+# Select operator.
+opt
+SELECT * FROM t WHERE z=1 LIMIT 10
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ ├── select
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ │    ├── limit hint: 10.00
+ │    ├── scan t
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │    │    └── limit hint: 50.00
+ │    └── filters
+ │         └── z = 1 [type=bool]
+ └── const: 10 [type=int]
+
+# DistinctOn operator.
+opt
+SELECT DISTINCT z FROM t LIMIT 2
+----
+limit
+ ├── columns: z:3(int)
+ ├── distinct-on
+ │    ├── columns: z:3(int)
+ │    ├── grouping columns: z:3(int)
+ │    ├── limit hint: 2.00
+ │    └── scan t
+ │         ├── columns: z:3(int)
+ │         └── limit hint: 3.44
+ └── const: 2 [type=int]
+
+# No limit hint propagation if number of distinct rows < required number of rows.
+opt
+SELECT DISTINCT z FROM t LIMIT 10
+----
+limit
+ ├── columns: z:3(int)
+ ├── distinct-on
+ │    ├── columns: z:3(int)
+ │    ├── grouping columns: z:3(int)
+ │    ├── limit hint: 10.00
+ │    └── scan t
+ │         └── columns: z:3(int)
+ └── const: 10 [type=int]
+
+opt
+SELECT * FROM t WHERE z=4 LIMIT 10
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ ├── select
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
+ │    ├── limit hint: 10.00
+ │    ├── scan t
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(int)
+ │    └── filters
+ │         └── z = 4 [type=bool]
+ └── const: 10 [type=int]
+
+
+# --------------------------------------------------
 # Passing limit hint through unchanged.
 # --------------------------------------------------
 
@@ -170,37 +271,6 @@ limit
  │              ├── columns: x:1(int!null)
  │              ├── flags: force-index=y_idx
  │              └── limit hint: 10.00
- └── const: 10 [type=int]
-
-# Select operator.
-opt
-SELECT * FROM t WHERE z=1 LIMIT 10
-----
-limit
- ├── columns: x:1(int!null) y:2(int) z:3(int!null)
- ├── select
- │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
- │    ├── limit hint: 10.00
- │    ├── scan t
- │    │    ├── columns: x:1(int!null) y:2(int) z:3(int)
- │    │    └── limit hint: 10.00
- │    └── filters
- │         └── z = 1 [type=bool]
- └── const: 10 [type=int]
-
-# DistinctOn operator.
-opt
-SELECT DISTINCT z FROM t LIMIT 10
-----
-limit
- ├── columns: z:3(int)
- ├── distinct-on
- │    ├── columns: z:3(int)
- │    ├── grouping columns: z:3(int)
- │    ├── limit hint: 10.00
- │    └── scan t
- │         ├── columns: z:3(int)
- │         └── limit hint: 10.00
  └── const: 10 [type=int]
 
 # Ordinality operator.
