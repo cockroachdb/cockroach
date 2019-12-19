@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	alters = []StatementWeight{
+	alters = []statementWeight{
 		{1, makeRenameTable},
 		{1, makeCreateTable},
 		{1, makeDropTable},
