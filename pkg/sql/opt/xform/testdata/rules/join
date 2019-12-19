@@ -1832,7 +1832,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~30KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G6 G7 pqr,keyCols=[1],outCols=(1-4)) (select G8 G9) (select G10 G11) (select G12 G7) (select G13 G7)
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -2644,7 +2644,7 @@ inner-join (merge)
 memo expect=AssociateJoin
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:5,t:6,u:7,x:8,y:9,z:10])
+memo (optimized, ~37KB, required=[presentation: a:1,b:2,c:3,s:5,t:6,u:7,x:8,y:9,z:10])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+5) (merge-join G3 G2 G5 inner-join,+5,+1) (lookup-join G3 G5 abc@ab,keyCols=[5],outCols=(1-3,5-10)) (inner-join G6 G7 G8) (inner-join G9 G10 G11) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+5,+1) (inner-join G10 G9 G11) (merge-join G9 G10 G5 inner-join,+8,+5) (merge-join G7 G6 G5 inner-join,+1,+5) (lookup-join G7 G5 stu,keyCols=[1],outCols=(1-3,5-10)) (inner-join G9 G12 G13) (merge-join G10 G9 G5 inner-join,+5,+8) (lookup-join G10 G5 xyz@xy,keyCols=[5],outCols=(1-3,5-10)) (inner-join G12 G9 G13) (merge-join G9 G12 G5 inner-join,+8,+1) (merge-join G12 G9 G5 inner-join,+1,+8) (lookup-join G12 G5 xyz@xy,keyCols=[1],outCols=(1-3,5-10))
  │    └── [presentation: a:1,b:2,c:3,s:5,t:6,u:7,x:8,y:9,z:10]
  │         ├── best: (merge-join G6="[ordering: +5]" G7="[ordering: +(1|8)]" G5 inner-join,+5,+1)

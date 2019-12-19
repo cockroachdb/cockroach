@@ -163,11 +163,7 @@ func TestErrorReporting(t *testing.T) {
 				severity: log.Severity_INFO,
 				cause:    errors.New("routine"),
 			}),
-			// TODO: In Go 1.13 and later, we should unwrap successfully and get
-			// log.Severity_INFO. With all compilers, wantCLICause is false - in Go
-			// 1.12 the cause is the top-level error, and in Go 1.13+ the cause is
-			// "routine".
-			wantSeverity: log.Severity_ERROR,
+			wantSeverity: log.Severity_INFO,
 			wantCLICause: false,
 		},
 	}
