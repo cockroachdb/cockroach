@@ -395,8 +395,7 @@ SELECT * FROM xyzw LIMIT -100
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── limit hint: -100.00
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── const: -100 [type=int]
 
 # At execution time, this will cause the error: negative value for OFFSET

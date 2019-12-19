@@ -81,7 +81,10 @@ func BuildChildPhysicalProps(
 	switch parent.Op() {
 	case opt.LimitOp:
 		if constLimit, ok := parent.(*memo.LimitExpr).Limit.(*memo.ConstExpr); ok {
-			childProps.LimitHint = float64(*constLimit.Value.(*tree.DInt))
+			limitVal := float64(*constLimit.Value.(*tree.DInt))
+			if limitVal > 0 {
+				childProps.LimitHint = limitVal
+			}
 		}
 	case opt.OffsetOp:
 		if parentProps.LimitHint == 0 {
@@ -91,7 +94,23 @@ func BuildChildPhysicalProps(
 			childProps.LimitHint = parentProps.LimitHint + float64(*constOffset.Value.(*tree.DInt))
 		}
 	case opt.IndexJoinOp:
+		// For an index join, every input row results in exactly one output row.
 		childProps.LimitHint = parentProps.LimitHint
+	case opt.SelectOp, opt.LookupJoinOp:
+		// These operations are assumed to produce a constant number of output rows
+		// for each input row, independent of already-processed rows.
+		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
+		if outputRows == 0 || outputRows < parentProps.LimitHint {
+			break
+		}
+		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
+			inputRows := input.Relational().Stats.RowCount
+			// outputRows / inputRows is roughly the number of output rows produced
+			// for each input row. Reduce the number of required input rows so that
+			// the expected number of output rows is equal to the parent limit hint.
+			childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
+		}
+
 	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
 		opt.UnionOp, opt.UnionAllOp:
 		// TODO(celine): Set operation limits need further thought; for example,
@@ -100,15 +119,6 @@ func BuildChildPhysicalProps(
 	case opt.DistinctOnOp:
 		distinctCount := parent.(memo.RelExpr).Relational().Stats.RowCount
 		childProps.LimitHint = distinctOnLimitHint(distinctCount, parentProps.LimitHint)
-	case opt.SelectOp:
-		outputRows := parent.(memo.RelExpr).Relational().Stats.RowCount
-		if outputRows == 0 || outputRows < parentProps.LimitHint {
-			break
-		}
-		if input, ok := parent.Child(nth).(memo.RelExpr); ok {
-			inputRows := input.Relational().Stats.RowCount
-			childProps.LimitHint = parentProps.LimitHint * inputRows / outputRows
-		}
 	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
 		childProps.LimitHint = parentProps.LimitHint
 	}

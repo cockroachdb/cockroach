@@ -148,18 +148,17 @@ filter     ·            ·          (k)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 LIMIT 10
 ----
-·                distributed  false      ·          ·
-·                vectorized   true       ·          ·
-render           ·            ·          (k, w)     ·
- │               render 0     k          ·          ·
- │               render 1     w          ·          ·
- └── index-join  ·            ·          (k, v, w)  ·
-      │          table        t@primary  ·          ·
-      │          key columns  k          ·          ·
-      └── scan   ·            ·          (k, v)     ·
-·                table        t@t_v_idx  ·          ·
-·                spans        /1-/101    ·          ·
-·                limit        10         ·          ·
+·               distributed  false                    ·          ·
+·               vectorized   true                     ·          ·
+render          ·            ·                        (k, w)     ·
+ │              render 0     k                        ·          ·
+ │              render 1     w                        ·          ·
+ └── limit      ·            ·                        (k, v, w)  ·
+      │         count        10                       ·          ·
+      └── scan  ·            ·                        (k, v, w)  ·
+·               table        t@primary                ·          ·
+·               spans        ALL                      ·          ·
+·               filter       (v >= 1) AND (v <= 100)  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
