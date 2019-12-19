@@ -23,13 +23,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/spf13/pflag"
@@ -629,4 +633,96 @@ func TestWorkloadStorage(t *testing.T) {
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
 	_, err = ExportStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`, settings)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
+}
+
+func rangeStart(r string) (int, error) {
+	if len(r) == 0 {
+		return 0, nil
+	}
+	r = strings.TrimPrefix(r, "bytes=")
+
+	return strconv.Atoi(r[:strings.IndexByte(r, '-')])
+}
+
+func TestHttpGet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	data := []byte("to serve, or not to serve.  c'est la question")
+
+	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
+		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
+			limit := tc
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				start, err := rangeStart(r.Header.Get("Range"))
+				if start < 0 || start >= len(data) {
+					t.Errorf("invalid start offset %d in range header %s",
+						start, r.Header.Get("Range"))
+				}
+				end := start + limit
+				if end > len(data) {
+					end = len(data)
+				}
+
+				w.Header().Add("Accept-Ranges", "bytes")
+				w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
+
+				if start > 0 {
+					w.Header().Add(
+						"Content-Range",
+						fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+				}
+
+				if err == nil {
+					_, err = w.Write(data[start:end])
+				}
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+
+			// Start antagonist function that aggressively closes client connections.
+			ctx, cancelAntagonist := context.WithCancel(context.Background())
+			g := ctxgroup.WithContext(ctx)
+			g.GoCtx(func(ctx context.Context) error {
+				opts := retry.Options{
+					InitialBackoff: 500 * time.Microsecond,
+					MaxBackoff:     5 * time.Millisecond,
+				}
+				for attempt := retry.StartWithCtx(ctx, opts); attempt.Next(); {
+					s.CloseClientConnections()
+				}
+				return nil
+			})
+
+			store, err := makeHTTPStorage(s.URL, testSettings)
+			require.NoError(t, err)
+
+			var file io.ReadCloser
+
+			defer func() {
+				s.Close()
+				if store != nil {
+					require.NoError(t, store.Close())
+				}
+				if file != nil {
+					require.NoError(t, file.Close())
+				}
+				cancelAntagonist()
+				_ = g.Wait()
+			}()
+
+			// Read the file and verify results.
+			file, err = newBodyReader(
+				ctx, store.(*httpStorage), "/something",
+				retry.Options{
+					InitialBackoff: 100 * time.Microsecond,
+					MaxBackoff:     4 * time.Millisecond,
+				})
+			require.NoError(t, err)
+
+			b, err := ioutil.ReadAll(file)
+			require.NoError(t, err)
+			require.EqualValues(t, data, b)
+		})
+	}
+
 }
