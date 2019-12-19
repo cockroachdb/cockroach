@@ -186,3 +186,62 @@ func (w *SelectStatementSampler) Next() selectStatement {
 	w.mu.Unlock()
 	return v
 }
+
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// ScalarExprWeight is the generic weight type.
+type ScalarExprWeight struct {
+	weight int
+	elem   scalarExpr
+}
+
+// NewScalarExprWeightedSampler creates a ScalarExprSampler that produces
+// ScalarExprs. They are returned at the relative frequency of the values of
+// weights. All weights must be >= 1.
+func NewWeightedScalarExprSampler(weights []ScalarExprWeight, seed int64) *ScalarExprSampler {
+	sum := 0
+	for _, w := range weights {
+		if w.weight < 1 {
+			panic("expected weight >= 1")
+		}
+		sum += w.weight
+	}
+	if sum == 0 {
+		panic("expected weights")
+	}
+	samples := make([]scalarExpr, sum)
+	pos := 0
+	for _, w := range weights {
+		for count := 0; count < w.weight; count++ {
+			samples[pos] = w.elem
+			pos++
+		}
+	}
+	return &ScalarExprSampler{
+		rnd:     rand.New(rand.NewSource(seed)),
+		samples: samples,
+	}
+}
+
+// ScalarExprSampler is a weighted scalarExpr sampler.
+type ScalarExprSampler struct {
+	mu      syncutil.Mutex
+	rnd     *rand.Rand
+	samples []scalarExpr
+}
+
+// Next returns the next weighted sample.
+func (w *ScalarExprSampler) Next() scalarExpr {
+	w.mu.Lock()
+	v := w.samples[w.rnd.Intn(len(w.samples))]
+	w.mu.Unlock()
+	return v
+}
