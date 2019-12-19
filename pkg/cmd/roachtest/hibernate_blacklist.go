@@ -24,9 +24,14 @@ var hibernateBlacklists = blacklistsForVersion{
 // in the test log.
 var hibernateBlackList20_1 = blacklist{}
 
-var hibernateBlackList19_2 = blacklist{}
+var hibernateBlackList19_2 = blacklist{
+	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                           "31708",
+	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter": "38636",
+	"org.hibernate.test.hql.ASTParserLoadingTest.testStandardFunctions":                                "31708",
+}
 
 var hibernateBlackList19_1 = blacklist{
+	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                               "31708",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne": "6583",
 	"org.hibernate.jpa.test.indetifier.AssignedInitialValueTableGeneratorConfiguredTest.testTheGeneratedIdValuesAreCorrect":                                "6583",
 	"org.hibernate.jpa.test.indetifier.DefaultInitialValueTableGeneratorConfiguredTest.testTheFirstGeneratedIdIsEqualToTableGeneratorInitialValuePlusOne":  "6583",
@@ -39,6 +44,7 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuery":                                                       "unknown",
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuerySpecifyingType":                                         "unknown",
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testMultipleConstructorResultNativeQuery":                                               "unknown",
+	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter":                                                     "38636",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testAlwaysTransactionalOperations":                                                         "6583",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testMergeWhenExtended":                                                                     "6583",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testRollbackClearPC":                                                                       "6583",
@@ -65,6 +71,7 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.test.annotations.naturalid.ImmutableNaturalKeyLookupTest.testSimpleImmutableNaturalKeyLookup":                                           "6583",
 	"org.hibernate.test.annotations.naturalid.ImmutableNaturalKeyLookupTest.testSubCriteriaOneToOneJoin":                                                   "6583",
 	"org.hibernate.test.annotations.tableperclass.TablePerClassTest.testUnionSubClass":                                                                     "6583",
+	"org.hibernate.test.hql.ASTParserLoadingTest.testStandardFunctions":                                                                                    "31708",
 	"org.hibernate.test.id.MultipleHiLoPerTableGeneratorTest.testAllParams":                                                                                "6583",
 	"org.hibernate.test.id.MultipleHiLoPerTableGeneratorTest.testDistinctId":                                                                               "6583",
 	"org.hibernate.test.id.MultipleHiLoPerTableGeneratorTest.testRollingBack":                                                                              "6583",
@@ -77,9 +84,11 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.test.idgen.enhanced.table.concurrent.HiloOptimizerConcurrencyTest.testTwoSessionsParallelGeneration":                                    "6583",
 	"org.hibernate.test.idgen.enhanced.table.concurrent.HiloOptimizerConcurrencyTest.testTwoSessionsSerialGeneration":                                      "6583",
 	"org.hibernate.test.idgen.namescope.IdGeneratorNamesLocalScopeTest.testNoSequenceGenratorNameClash":                                                    "6583",
+	"org.hibernate.test.inheritance.discriminator.PersistChildEntitiesWithDiscriminatorTest.classMethod":                                                   "unknown",
 	"org.hibernate.test.insertordering.InsertOrderingWithCascadeOnPersist.testInsertOrderingAvoidingForeignKeyConstraintViolation":                         "6583",
 	"org.hibernate.test.joinedsubclass.JoinedSubclassTest.testLockingJoinedSubclass":                                                                       "6583",
 	"org.hibernate.test.jpa.compliance.tck2_2.TableGeneratorVisibilityTest.testGeneratorIsVisible":                                                         "6583",
+	"org.hibernate.test.jpa.naturalid.MutableNaturalIdTest.classMethod":                                                                                    "unknown",
 	"org.hibernate.test.legacy.ABCProxyTest.testSubclassing":                                                                                               "6583",
 	"org.hibernate.test.legacy.FooBarTest.testVersioning":                                                                                                  "6583",
 	"org.hibernate.test.legacy.FumTest.testCompositeID":                                                                                                    "6583",
@@ -149,8 +158,8 @@ var hibernateBlackList2_1 = blacklist{
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockSkipLocked":                                                                                               "6583",
 	"org.hibernate.jpa.test.lock.LockTest.testUpdateWithPessimisticReadLockWithoutNoWait":                                                                                            "6583",
 	"org.hibernate.jpa.test.lock.NativeSQLQueryTimeoutTest.test":                                                                                                                     "41335",
-	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticReadWithOptionalOuterJoinBreaksRefreshTest":                                       "unknown",
-	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticWriteWithOptionalOuterJoinBreaksRefreshTest":                                      "unknown",
+	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticReadWithOptionalOuterJoinBreaksRefreshTest":                                       "6583",
+	"org.hibernate.jpa.test.lock.PessimisticWriteWithOptionalOuterJoinBreaksRefreshTest.pessimisticWriteWithOptionalOuterJoinBreaksRefreshTest":                                      "6583",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testEntityLockModeStateAfterQueryLocking":                                                                                          "6583",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementOverall":                                                                                             "6583",
 	"org.hibernate.jpa.test.lock.QueryLockingTest.testPessimisticForcedIncrementSpecific":                                                                                            "6583",
@@ -158,7 +167,7 @@ var hibernateBlackList2_1 = blacklist{
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuery":                                                                                 "unknown",
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testConstructorResultNativeQuerySpecifyingType":                                                                   "unknown",
 	"org.hibernate.jpa.test.query.ConstructorResultNativeQueryTest.testMultipleConstructorResultNativeQuery":                                                                         "unknown",
-	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter":                                                                               "unknown",
+	"org.hibernate.jpa.test.query.NativeQueryOrdinalParametersTest.testCteNativeQueryOrdinalParameter":                                                                               "38636",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testAlwaysTransactionalOperations":                                                                                   "6583",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testMergeWhenExtended":                                                                                               "6583",
 	"org.hibernate.jpa.test.transaction.FlushAndTransactionTest.testRollbackClearPC":                                                                                                 "6583",
