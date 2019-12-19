@@ -20,9 +20,9 @@ import (
 // iterating over all key ranges for the given range that should
 // be accounted for in its stats.
 func ComputeStatsForRange(
-	d *roachpb.RangeDescriptor, e engine.Reader, nowNanos int64,
+	d *roachpb.RangeDescriptor, reader engine.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	iter := e.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	iter := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}

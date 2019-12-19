@@ -112,9 +112,9 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 
 // NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
 func NewReplicaDataIterator(
-	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
+	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool,
 ) *ReplicaDataIterator {
-	it := e.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	it := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {

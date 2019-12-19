@@ -1449,10 +1449,10 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
-	ctx context.Context, rec batcheval.EvalContext, b engine.Reader, txn roachpb.Transaction,
+	ctx context.Context, rec batcheval.EvalContext, reader engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
 	var entry roachpb.AbortSpanEntry
-	aborted, err := rec.AbortSpan().Get(ctx, b, txn.ID, &entry)
+	aborted, err := rec.AbortSpan().Get(ctx, reader, txn.ID, &entry)
 	if err != nil {
 		return roachpb.NewError(roachpb.NewReplicaCorruptionError(
 			errors.Wrap(err, "could not read from AbortSpan")))
