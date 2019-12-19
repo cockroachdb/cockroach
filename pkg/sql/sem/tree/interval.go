@@ -184,7 +184,7 @@ func newInvalidSQLDurationError(s string) error {
 // See the following links for exampels:
 //  - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
 //  - http://www.ibm.com/support/knowledgecenter/SSGU8G_12.1.0/com.ibm.esqlc.doc/ids_esqlc_0190.htm
-func sqlStdToDuration(s string) (duration.Duration, error) {
+func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration, error) {
 	var d duration.Duration
 	parts := strings.Fields(s)
 	if len(parts) > 3 || len(parts) == 0 {
@@ -231,8 +231,8 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 			// Instead of supporting unit changing based on int or float, use the
 			// following rules:
 			// - One field is S.
-			// - Two fields is H:M.
-			// - Three fields is H:M:S.
+			// - Two fields is H:M or M:S.fff (unless using MINUTE TO SECOND, then M:S).
+			// - Three fields is H:M:S(.fff)?.
 			// - All fields support both int and float.
 			hms := strings.Split(part, ":")
 			var err error
@@ -244,6 +244,10 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 			switch len(hms) {
 			case 2:
 				toParse := hms[0] + "h" + hms[1] + "m"
+				// If we find a decimal, it must be the m:s.ffffff format
+				if strings.Contains(hms[1], ".") || itm.DurationField.IsMinuteToSecond() {
+					toParse = hms[0] + "m" + hms[1] + "s"
+				}
 				if neg {
 					toParse = "-" + toParse
 				}
@@ -423,7 +427,7 @@ var unitMap = func(
 // parseDuration parses a duration in the "traditional" Postgres
 // format (e.g. '1 day 2 hours', '1 day 03:02:04', etc.) or golang
 // format (e.g. '1d2h', '1d3h2m4s', etc.)
-func parseDuration(s string) (duration.Duration, error) {
+func parseDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration, error) {
 	var d duration.Duration
 	l := intervalLexer{str: s, offset: 0, err: nil}
 	l.consumeSpaces()
@@ -442,7 +446,7 @@ func parseDuration(s string) (duration.Duration, error) {
 
 		if l.offset < len(l.str) && l.str[l.offset] == ':' && !hasDecimal {
 			// Special case: HH:MM[:SS.ffff] or MM:SS.ffff
-			delta, err := l.parseShortDuration(v, sign)
+			delta, err := l.parseShortDuration(v, sign, itm)
 			if err != nil {
 				return d, err
 			}
@@ -472,7 +476,9 @@ func parseDuration(s string) (duration.Duration, error) {
 	return d, l.err
 }
 
-func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Duration, error) {
+func (l *intervalLexer) parseShortDuration(
+	h int64, hasSign bool, itm types.IntervalTypeMetadata,
+) (duration.Duration, error) {
 	sign := int64(1)
 	if hasSign {
 		sign = -1
@@ -493,9 +499,9 @@ func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Dura
 			pgcode.InvalidDatetimeFormat, "interval: invalid format: %s", l.str)
 	}
 	// We have three possible formats:
-	// - MM:SS.mmmmm
-	// - HH:MM
-	// - HH:MM:SS[.mmmmm]
+	// - MM:SS.ffffff
+	// - HH:MM (or MM:SS for MINUTE TO SECOND)
+	// - HH:MM:SS[.ffffff]
 	//
 	// The top format has the "h" field parsed above actually
 	// represent minutes. Get this out of the way first.
@@ -510,10 +516,12 @@ func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Dura
 		), nil
 	}
 
-	// Remaining formats
+	// Remaining formats.
 	var s int64
 	var sp float64
+	hasSecondsComponent := false
 	if l.offset != len(l.str) && l.str[l.offset] == ':' {
+		hasSecondsComponent = true
 		// The last :NN part.
 		l.offset++
 		s, _, sp = l.consumeNum()
@@ -524,6 +532,14 @@ func (l *intervalLexer) parseShortDuration(h int64, hasSign bool) (duration.Dura
 	}
 
 	l.consumeSpaces()
+
+	if !hasSecondsComponent && itm.DurationField.IsMinuteToSecond() {
+		return duration.MakeDuration(
+			h*time.Minute.Nanoseconds()+sign*(m*time.Second.Nanoseconds()),
+			0,
+			0,
+		), nil
+	}
 	return duration.MakeDuration(
 		h*time.Hour.Nanoseconds()+
 			sign*(m*time.Minute.Nanoseconds()+
