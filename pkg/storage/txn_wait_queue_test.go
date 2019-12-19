@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
@@ -351,6 +352,9 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	}
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *pusher,
 		PusheeTxn: txn.TxnMeta,
@@ -651,6 +655,12 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	})
 }
 
+type ReqWithRespAndErr struct {
+	req  *roachpb.PushTxnRequest
+	resp *roachpb.PushTxnResponse
+	pErr *roachpb.Error
+}
+
 // TestTxnWaitQueueDependencyCycle verifies that if txn A pushes txn B
 // pushes txn C which in turn is pushing txn A, the cycle will be
 // detected and broken by a higher priority pusher.
@@ -675,16 +685,25 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	}
 
 	reqA := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnB.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnA,
 		PusheeTxn: txnB.TxnMeta,
 	}
 	reqB := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnC.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnB,
 		PusheeTxn: txnC.TxnMeta,
 	}
 	reqC := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnA.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnC,
 		PusheeTxn: txnA.TxnMeta,
@@ -694,45 +713,45 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		q.Enqueue(txn)
 	}
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
 
-	retCh := make(chan RespWithErr, 3)
-	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
+	reqs := []*roachpb.PushTxnRequest{reqA, reqB, reqC}
+	retCh := make(chan ReqWithRespAndErr, len(reqs))
+	for _, req := range reqs {
 		go func(req *roachpb.PushTxnRequest) {
 			resp, pErr := q.MaybeWaitForPush(ctx, tc.repl, req)
-			retCh <- RespWithErr{resp, pErr}
+			retCh <- ReqWithRespAndErr{req, resp, pErr}
 		}(req)
 	}
 
-	// Wait for first request to finish, which should break the
-	// dependency cycle by returning an ErrDeadlock error.
-	respWithErr := <-retCh
-	if respWithErr.pErr != txnwait.ErrDeadlock {
-		t.Errorf("expected ErrDeadlock; got %v", respWithErr.pErr)
-	}
-	if respWithErr.resp != nil {
-		t.Errorf("expected nil response; got %+v", respWithErr.resp)
-	}
+	// Wait for first request to finish, which should break the dependency cycle
+	// by performing a force push abort. This will allow all other requests to
+	// proceed. At least one txn will be aborted by another txn, although it's
+	// possible that up to two are in the case that the deadlock is detected by
+	// multiple txns concurrently.
+	var pushed bool
+	for i := 0; i < len(reqs); i++ {
+		ret := <-retCh
+		if ret.pErr != nil {
+			if !testutils.IsPError(ret.pErr, context.Canceled.Error()) {
+				require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_PUSHER_ABORTED\)`, ret.pErr)
+			}
+		} else {
+			pushed = true
+			require.NotNil(t, ret.resp)
+			require.Equal(t, roachpb.ABORTED, ret.resp.PusheeTxn.Status)
 
-	testutils.SucceedsSoon(t, func() error {
-		if act, exp := m.DeadlocksTotal.Count(), int64(0); act <= exp {
-			return errors.Errorf("%d deadlocks, but want more than %d", act, exp)
+			// Cancel the pushers' context after the deadlock is initially broken.
+			cancel()
 		}
-		return nil
-	})
-	cancel()
-	for i := 0; i < 2; i++ {
-		<-retCh
 	}
-}
-
-type ReqWithErr struct {
-	req  *roachpb.PushTxnRequest
-	pErr *roachpb.Error
+	require.True(t, pushed)
+	require.True(t, m.DeadlocksTotal.Count() >= 1)
 }
 
 // TestTxnWaitQueueDependencyCycleWithPriorityInversion verifies that
@@ -765,11 +784,17 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 
 	reqA := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnB.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnA,
 		PusheeTxn: txnB.TxnMeta,
 	}
 	reqB := &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txnA.Key,
+		},
 		PushType:  roachpb.PUSH_ABORT,
 		PusherTxn: *txnB,
 		PusheeTxn: updatedTxnA.TxnMeta,
@@ -778,38 +803,36 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	q := tc.repl.txnWaitQueue
 	q.Enable()
 
-	ctx, cancel := context.WithCancel(context.Background())
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.Enqueue(txn)
 	}
 	m := tc.store.GetTxnWaitMetrics()
 	assert.EqualValues(tc, 0, m.DeadlocksTotal.Count())
 
-	retCh := make(chan ReqWithErr, 2)
-	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
+	reqs := []*roachpb.PushTxnRequest{reqA, reqB}
+	retCh := make(chan ReqWithRespAndErr, len(reqs))
+	for _, req := range reqs {
 		go func(req *roachpb.PushTxnRequest) {
-			_, pErr := q.MaybeWaitForPush(ctx, tc.repl, req)
-			retCh <- ReqWithErr{req, pErr}
+			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, req)
+			retCh <- ReqWithRespAndErr{req, resp, pErr}
 		}(req)
 	}
 
-	// Wait for first request to finish, which should break the
-	// dependency cycle by returning an ErrDeadlock error. The
-	// returned request should be reqA.
-	reqWithErr := <-retCh
-	if !reflect.DeepEqual(reqA, reqWithErr.req) {
-		t.Errorf("expected request %+v; got %+v", reqA, reqWithErr.req)
-	}
-	if reqWithErr.pErr != txnwait.ErrDeadlock {
-		t.Errorf("expected errDeadlock; got %v", reqWithErr.pErr)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		if act, exp := m.DeadlocksTotal.Count(), int64(0); act <= exp {
-			return errors.Errorf("%d deadlocks, but want more than %d", act, exp)
+	// Wait for the requests to finish. reqA should break the dependency
+	// cycle by force pushing. reqB should notice that it was aborted.
+	for i := 0; i < len(reqs); i++ {
+		ret := <-retCh
+		switch ret.req {
+		case reqA:
+			require.Nil(t, ret.pErr)
+			require.NotNil(t, ret.resp)
+			require.Equal(t, txnB.ID, ret.resp.PusheeTxn.ID)
+			require.Equal(t, roachpb.ABORTED, ret.resp.PusheeTxn.Status)
+		case reqB:
+			require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_PUSHER_ABORTED\)`, ret.pErr)
+		default:
+			t.Fatal("unexpected")
 		}
-		return nil
-	})
-	cancel()
-	<-retCh
+	}
+	require.EqualValues(t, 1, m.DeadlocksTotal.Count())
 }
