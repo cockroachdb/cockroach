@@ -23,6 +23,7 @@ message IOFileFormat {
     Mysqldump = 3;
     PgCopy = 4;
     PgDump = 5;
+    Avro = 6;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
@@ -30,6 +31,7 @@ message IOFileFormat {
   optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
   optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
   optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
+  optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
 
   enum Compression {
     Auto = 0;
@@ -99,4 +101,28 @@ message PgCopyOptions {
 message PgDumpOptions {
   // maxRowSize is the maximum row size
   optional int32 maxRowSize = 1 [(gogoproto.nullable) = false];
+}
+
+message AvroOptions {
+  enum Format {
+    // Avro object container file input
+    OCF = 0;
+    // Input file contains avro binary encoded records; one record per line
+    BIN_RECORDS = 1;
+    // Input file contains avro JSON encoded records; one record per line
+    JSON_RECORDS =2;
+  }
+
+  optional Format format = 1 [(gogoproto.nullable) = false];
+
+  // Strict mode import will reject avro records that do not have
+  // a one-to-one mapping to our target schema.
+  // The default is to ignore unknown avro fields, and to set any missing
+  // columns to null value if they were not set in the avro record.
+  optional bool strict_mode = 2 [(gogoproto.nullable) = false];
+
+  // Applicable for records only.
+  optional string schemaJSON = 3 [(gogoproto.nullable) = false];
+  optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
+  optional int32 record_separator = 5 [(gogoproto.nullable) = false];
 }
