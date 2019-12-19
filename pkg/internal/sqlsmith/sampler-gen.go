@@ -17,19 +17,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// Element is the generic type.
-type Element generic.Type
+type element generic.Type
 
-// ElementWeight is the generic weight type.
-type ElementWeight struct {
+// elementWeight is the generic weight type.
+type elementWeight struct {
 	weight int
-	elem   Element
+	elem   element
 }
 
-// NewElementWeightedSampler creates a ElementSampler that produces
-// Elements. They are returned at the relative frequency of the values of
+// newWeightedelementSampler creates a elementSampler that produces
+// elements. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func NewWeightedElementSampler(weights []ElementWeight, seed int64) *ElementSampler {
+func newWeightedelementSampler(weights []elementWeight, seed int64) *elementSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
@@ -40,7 +39,7 @@ func NewWeightedElementSampler(weights []ElementWeight, seed int64) *ElementSamp
 	if sum == 0 {
 		panic("expected weights")
 	}
-	samples := make([]Element, sum)
+	samples := make([]element, sum)
 	pos := 0
 	for _, w := range weights {
 		for count := 0; count < w.weight; count++ {
@@ -48,21 +47,19 @@ func NewWeightedElementSampler(weights []ElementWeight, seed int64) *ElementSamp
 			pos++
 		}
 	}
-	return &ElementSampler{
+	return &elementSampler{
 		rnd:     rand.New(rand.NewSource(seed)),
 		samples: samples,
 	}
 }
 
-// ElementSampler is a weighted Element sampler.
-type ElementSampler struct {
+type elementSampler struct {
 	mu      syncutil.Mutex
 	rnd     *rand.Rand
-	samples []Element
+	samples []element
 }
 
-// Next returns the next weighted sample.
-func (w *ElementSampler) Next() Element {
+func (w *elementSampler) Next() element {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
 	w.mu.Unlock()

@@ -90,23 +90,23 @@ func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableEx
 }
 
 var (
-	mutatingStatements = []StatementWeight{
+	mutatingStatements = []statementWeight{
 		{10, makeInsert},
 		{10, makeDelete},
 		{10, makeUpdate},
 		{1, makeAlter},
 	}
-	nonMutatingStatements = []StatementWeight{
+	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
-	mutatingTableExprs = []TableExprWeight{
+	mutatingTableExprs = []tableExprWeight{
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
 		{1, makeUpdateReturning},
 	}
-	nonMutatingTableExprs = []TableExprWeight{
+	nonMutatingTableExprs = []tableExprWeight{
 		{40, makeMergeJoinExpr},
 		{40, makeEquiJoinExpr},
 		{20, makeSchemaTable},
@@ -114,14 +114,14 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = []TableExprWeight{
+	vectorizableTableExprs = []tableExprWeight{
 		{20, makeEquiJoinExpr},
 		{20, makeMergeJoinExpr},
 		{20, makeSchemaTable},
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
-	selectStmts = []SelectStatementWeight{
+	selectStmts = []selectStatementWeight{
 		{1, makeValuesSelect},
 		{1, makeSetOp},
 		{1, makeSelectClause},

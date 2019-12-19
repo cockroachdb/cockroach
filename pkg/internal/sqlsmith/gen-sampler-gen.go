@@ -20,16 +20,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// StatementWeight is the generic weight type.
-type StatementWeight struct {
+// statementWeight is the generic weight type.
+type statementWeight struct {
 	weight int
 	elem   statement
 }
 
-// NewStatementWeightedSampler creates a StatementSampler that produces
-// Statements. They are returned at the relative frequency of the values of
+// newWeightedStatementSampler creates a statementSampler that produces
+// statements. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func NewWeightedStatementSampler(weights []StatementWeight, seed int64) *StatementSampler {
+func newWeightedStatementSampler(weights []statementWeight, seed int64) *statementSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
@@ -48,21 +48,19 @@ func NewWeightedStatementSampler(weights []StatementWeight, seed int64) *Stateme
 			pos++
 		}
 	}
-	return &StatementSampler{
+	return &statementSampler{
 		rnd:     rand.New(rand.NewSource(seed)),
 		samples: samples,
 	}
 }
 
-// StatementSampler is a weighted statement sampler.
-type StatementSampler struct {
+type statementSampler struct {
 	mu      syncutil.Mutex
 	rnd     *rand.Rand
 	samples []statement
 }
 
-// Next returns the next weighted sample.
-func (w *StatementSampler) Next() statement {
+func (w *statementSampler) Next() statement {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
 	w.mu.Unlock()
@@ -79,16 +77,16 @@ func (w *StatementSampler) Next() statement {
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// TableExprWeight is the generic weight type.
-type TableExprWeight struct {
+// tableExprWeight is the generic weight type.
+type tableExprWeight struct {
 	weight int
 	elem   tableExpr
 }
 
-// NewTableExprWeightedSampler creates a TableExprSampler that produces
-// TableExprs. They are returned at the relative frequency of the values of
+// newWeightedTableExprSampler creates a tableExprSampler that produces
+// tableExprs. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func NewWeightedTableExprSampler(weights []TableExprWeight, seed int64) *TableExprSampler {
+func newWeightedTableExprSampler(weights []tableExprWeight, seed int64) *tableExprSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
@@ -107,21 +105,19 @@ func NewWeightedTableExprSampler(weights []TableExprWeight, seed int64) *TableEx
 			pos++
 		}
 	}
-	return &TableExprSampler{
+	return &tableExprSampler{
 		rnd:     rand.New(rand.NewSource(seed)),
 		samples: samples,
 	}
 }
 
-// TableExprSampler is a weighted tableExpr sampler.
-type TableExprSampler struct {
+type tableExprSampler struct {
 	mu      syncutil.Mutex
 	rnd     *rand.Rand
 	samples []tableExpr
 }
 
-// Next returns the next weighted sample.
-func (w *TableExprSampler) Next() tableExpr {
+func (w *tableExprSampler) Next() tableExpr {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
 	w.mu.Unlock()
@@ -138,16 +134,16 @@ func (w *TableExprSampler) Next() tableExpr {
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// SelectStatementWeight is the generic weight type.
-type SelectStatementWeight struct {
+// selectStatementWeight is the generic weight type.
+type selectStatementWeight struct {
 	weight int
 	elem   selectStatement
 }
 
-// NewSelectStatementWeightedSampler creates a SelectStatementSampler that produces
-// SelectStatements. They are returned at the relative frequency of the values of
+// newWeightedSelectStatementSampler creates a selectStatementSampler that produces
+// selectStatements. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func NewWeightedSelectStatementSampler(weights []SelectStatementWeight, seed int64) *SelectStatementSampler {
+func newWeightedSelectStatementSampler(weights []selectStatementWeight, seed int64) *selectStatementSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
@@ -166,21 +162,19 @@ func NewWeightedSelectStatementSampler(weights []SelectStatementWeight, seed int
 			pos++
 		}
 	}
-	return &SelectStatementSampler{
+	return &selectStatementSampler{
 		rnd:     rand.New(rand.NewSource(seed)),
 		samples: samples,
 	}
 }
 
-// SelectStatementSampler is a weighted selectStatement sampler.
-type SelectStatementSampler struct {
+type selectStatementSampler struct {
 	mu      syncutil.Mutex
 	rnd     *rand.Rand
 	samples []selectStatement
 }
 
-// Next returns the next weighted sample.
-func (w *SelectStatementSampler) Next() selectStatement {
+func (w *selectStatementSampler) Next() selectStatement {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
 	w.mu.Unlock()
@@ -197,16 +191,16 @@ func (w *SelectStatementSampler) Next() selectStatement {
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// ScalarExprWeight is the generic weight type.
-type ScalarExprWeight struct {
+// scalarExprWeight is the generic weight type.
+type scalarExprWeight struct {
 	weight int
 	elem   scalarExpr
 }
 
-// NewScalarExprWeightedSampler creates a ScalarExprSampler that produces
-// ScalarExprs. They are returned at the relative frequency of the values of
+// newWeightedScalarExprSampler creates a scalarExprSampler that produces
+// scalarExprs. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func NewWeightedScalarExprSampler(weights []ScalarExprWeight, seed int64) *ScalarExprSampler {
+func newWeightedScalarExprSampler(weights []scalarExprWeight, seed int64) *scalarExprSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
@@ -225,21 +219,19 @@ func NewWeightedScalarExprSampler(weights []ScalarExprWeight, seed int64) *Scala
 			pos++
 		}
 	}
-	return &ScalarExprSampler{
+	return &scalarExprSampler{
 		rnd:     rand.New(rand.NewSource(seed)),
 		samples: samples,
 	}
 }
 
-// ScalarExprSampler is a weighted scalarExpr sampler.
-type ScalarExprSampler struct {
+type scalarExprSampler struct {
 	mu      syncutil.Mutex
 	rnd     *rand.Rand
 	samples []scalarExpr
 }
 
-// Next returns the next weighted sample.
-func (w *ScalarExprSampler) Next() scalarExpr {
+func (w *scalarExprSampler) Next() scalarExpr {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
 	w.mu.Unlock()

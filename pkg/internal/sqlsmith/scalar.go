@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	scalars = []ScalarExprWeight{
+	scalars = []scalarExprWeight{
 		{10, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeCaseExpr)},
 		{1, scalarNoContext(makeCoalesceExpr)},
@@ -38,7 +38,7 @@ var (
 		}},
 	}
 
-	bools = []ScalarExprWeight{
+	bools = []scalarExprWeight{
 		{1, scalarNoContext(makeColRef)},
 		{1, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeOr)},
@@ -80,7 +80,7 @@ func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
 }
 
 func makeScalarSample(
-	sampler *ScalarExprSampler, s *Smither, ctx Context, typ *types.T, refs colRefs,
+	sampler *scalarExprSampler, s *Smither, ctx Context, typ *types.T, refs colRefs,
 ) tree.TypedExpr {
 	// If we are in a GROUP BY, attempt to find an aggregate function.
 	if ctx.fnClass == tree.AggregateClass {
