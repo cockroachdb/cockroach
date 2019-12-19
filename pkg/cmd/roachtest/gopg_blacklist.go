@@ -75,7 +75,6 @@ var gopgBlackList19_2 = blacklist{
 	"pg | DB nulls | nil ptr inserts null value":                               "5807",
 	"pg | DB nulls | sql.NullInt64 inserts non-null value":                     "5807",
 	"pg | DB nulls | sql.NullInt64 inserts null value":                         "5807",
-	"pg | DB race | SelectOrInsert with OnConflict is race free":               "unknown",
 	"pg | DB uint64 in struct field | is appended and scanned as int64":        "5807",
 	"pg | DB.Select | selects bytea":                                           "5807",
 	"pg | DB.Select | selects into embedded struct pointer":                    "5807",
@@ -118,4 +117,6 @@ var gopgIgnoreList19_2 = blacklist{
 	"pg | ORM struct model | fetches Genre relations":     "41690",
 	// This test assumes different transaction isolation level (READ COMMITTED).
 	"pg | Tx | supports CopyFrom and CopyIn": "41690",
+	// This test sometimes failed and we haven't diagnosed it
+	"pg | DB race | SelectOrInsert with OnConflict is race free": "unknown",
 }
