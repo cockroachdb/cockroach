@@ -33,9 +33,9 @@ func (node *RenameDatabase) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.NewName)
 }
 
-// RenameTable represents a RENAME TABLE or RENAME VIEW statement.
-// Whether the user has asked to rename a table or view is indicated
-// by the IsView field.
+// RenameTable represents a RENAME TABLE or RENAME VIEW or RENAME SEQUENCE
+// statement. Whether the user has asked to rename a view or a sequence
+// is indicated by the IsView and IsSequence fields.
 type RenameTable struct {
 	Name       *UnresolvedObjectName
 	NewName    *UnresolvedObjectName

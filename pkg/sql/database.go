@@ -17,8 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -274,13 +272,15 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	oldKey := sqlbase.NewDatabaseKey(oldName).Key()
-	newKey := sqlbase.NewDatabaseKey(newName).Key()
-	// TODO(whomever): This can be removed in 20.2.
-	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
-		oldKey = sqlbase.NewDeprecatedDatabaseKey(oldName).Key()
-		newKey = sqlbase.NewDeprecatedDatabaseKey(newName).Key()
+	if exists, _, err := sqlbase.LookupDatabaseID(ctx, p.txn, newName); err == nil && exists {
+		return pgerror.Newf(pgcode.DuplicateDatabase,
+			"the new database name %q already exists", newName)
+	} else if err != nil {
+		return err
 	}
+
+	newKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, newName).Key()
+
 	descID := oldDesc.GetID()
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
@@ -289,22 +289,18 @@ func (p *planner) renameDatabase(
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
-		log.VEventf(ctx, 2, "Del %s", oldKey)
 	}
 	b.CPut(newKey, descID, nil)
 	b.Put(descKey, descDesc)
-	b.Del(oldKey)
+	err := sqlbase.RemoveDatabaseNamespaceEntry(
+		ctx, p.txn, oldName, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+	)
+	if err != nil {
+		return err
+	}
 
 	p.Tables().addUncommittedDatabase(oldName, descID, dbDropped)
 	p.Tables().addUncommittedDatabase(newName, descID, dbCreated)
 
-	if err := p.txn.Run(ctx, b); err != nil {
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return pgerror.Newf(pgcode.DuplicateDatabase,
-				"the new database name %q already exists", newName)
-		}
-		return err
-	}
-
-	return nil
+	return p.txn.Run(ctx, b)
 }
