@@ -259,12 +259,6 @@ func (r *Replica) maybeWaitForPushee(
 			br.Add(pushResp)
 			return br, nil
 		}
-		// Move the push timestamp forward to the current time, as this
-		// request may have been waiting to push the txn. If we don't
-		// move the timestamp forward to the current time, we may fail
-		// to push a txn which has expired.
-		now := r.Clock().Now()
-		ba.Timestamp.Forward(now)
 		ba.Requests = nil
 		ba.Add(&pushReqCopy)
 	} else if ba.IsSingleQueryTxnRequest() {
