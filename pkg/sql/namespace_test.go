@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -54,6 +56,16 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	// the system.namespace_deprecated table.
 	_, err := sqlDB.Exec(`CREATE DATABASE test`)
 	if !testutils.IsError(err, sqlbase.NewDatabaseAlreadyExistsError("test").Error()) {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	// Renaming the database should fail as well.
+	if _, err = sqlDB.Exec(`CREATE DATABASE test2`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`ALTER DATABASE test2 RENAME TO test`)
+	if !testutils.IsError(err, pgerror.Newf(pgcode.DuplicateDatabase,
+		"the new database name \"test\" already exists").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -110,6 +122,24 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 	// Can not create a sequence with the same name either.
 	_, err = sqlDB.Exec(`CREATE SEQUENCE test.rel`)
+	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	// Can not rename a table to the same name either.
+	if _, err = sqlDB.Exec(`CREATE TABLE rel2(a int)`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`ALTER TABLE rel2 RENAME TO rel`)
+	if testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	// Can not rename sequences to the same name either.
+	if _, err = sqlDB.Exec(`CREATE SEQUENCE rel2`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`ALTER SEQUENCE rel2 RENAME TO rel`)
 	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}

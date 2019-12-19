@@ -1495,8 +1495,7 @@ d_expr ::=
 	| 'BCONST'
 	| 'BITCONST'
 	| const_typename 'SCONST'
-	| interval
-	| const_interval '(' iconst32 ')' 'SCONST'
+	| interval_value
 	| 'TRUE'
 	| 'FALSE'
 	| 'NULL'
@@ -1523,9 +1522,7 @@ simple_typename ::=
 	const_typename
 	| bit_with_length
 	| character_with_length
-	| const_interval
-	| const_interval interval_qualifier
-	| const_interval '(' iconst32 ')'
+	| interval_type
 	| postgres_oid
 
 opt_array_bounds ::=
@@ -1834,14 +1831,9 @@ const_typename ::=
 	| 'INT2VECTOR'
 	| 'identifier'
 
-interval ::=
-	const_interval 'SCONST' opt_interval
-
-const_interval ::=
-	'INTERVAL'
-
-iconst32 ::=
-	'ICONST'
+interval_value ::=
+	'INTERVAL' 'SCONST' opt_interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
 
 column_path_with_star ::=
 	column_path
@@ -1887,20 +1879,10 @@ bit_with_length ::=
 character_with_length ::=
 	character_base '(' iconst32 ')'
 
-interval_qualifier ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
+interval_type ::=
+	'INTERVAL'
+	| 'INTERVAL' interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')'
 
 postgres_oid ::=
 	'REGPROC'
@@ -2125,9 +2107,12 @@ const_json ::=
 	'JSON'
 	| 'JSONB'
 
-opt_interval ::=
+opt_interval_qualifier ::=
 	interval_qualifier
 	| 
+
+iconst32 ::=
+	'ICONST'
 
 func_application ::=
 	func_name '(' ')'
@@ -2196,9 +2181,20 @@ character_base ::=
 	| 'VARCHAR'
 	| 'STRING'
 
-interval_second ::=
-	'SECOND'
-	| 'SECOND' '(' iconst32 ')'
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
 
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
@@ -2340,6 +2336,10 @@ tuple1_unambiguous_values ::=
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
+
+interval_second ::=
+	'SECOND'
+	| 'SECOND' '(' iconst32 ')'
 
 window_definition ::=
 	window_name 'AS' window_specification
