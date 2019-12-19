@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -132,19 +131,23 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	if err := writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), p.EvalContext().Settings, b, descID, tableDesc.TableDesc()); err != nil {
+	err = writeDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		p.EvalContext().Settings, b, descID, tableDesc.TableDesc())
+	if err != nil {
 		return err
 	}
+
+	exists, _, err := sqlbase.LookupPublicTableID(
+		params.ctx, params.p.txn, targetDbDesc.ID, newTn.Table(),
+	)
+	if err == nil && exists {
+		return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
+	} else if err != nil {
+		return err
+	}
+
 	b.CPut(newTbKey, descID, nil)
-
-	if err := p.txn.Run(ctx, b); err != nil {
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
-		}
-		return err
-	}
-
-	return nil
+	return p.txn.Run(ctx, b)
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
