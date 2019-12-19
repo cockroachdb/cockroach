@@ -65,14 +65,14 @@ type Smither struct {
 	nameCounts     map[string]int
 	scalars, bools *WeightedSampler
 
-	stmtWeights, alterWeights          []StatementWeight
-	stmtSampler, alterSampler          *StatementSampler
-	tableExprWeights                   []TableExprWeight
-	tableExprSampler                   *TableExprSampler
-	selectStmtWeights                  []SelectStatementWeight
-	selectStmtSampler                  *SelectStatementSampler
-	scalarExprWeights, boolExprWeights []ScalarExprWeight
-	scalarExprSampler, boolExprSampler *ScalarExprSampler
+	stmtWeights, alterWeights          []statementWeight
+	stmtSampler, alterSampler          *statementSampler
+	tableExprWeights                   []tableExprWeight
+	tableExprSampler                   *tableExprSampler
+	selectStmtWeights                  []selectStatementWeight
+	selectStmtSampler                  *selectStatementSampler
+	scalarExprWeights, boolExprWeights []scalarExprWeight
+	scalarExprSampler, boolExprSampler *scalarExprSampler
 
 	disableWith        bool
 	disableImpureFns   bool
@@ -114,12 +114,12 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	for _, opt := range opts {
 		opt.Apply(s)
 	}
-	s.stmtSampler = NewWeightedStatementSampler(s.stmtWeights, rnd.Int63())
-	s.alterSampler = NewWeightedStatementSampler(s.alterWeights, rnd.Int63())
-	s.tableExprSampler = NewWeightedTableExprSampler(s.tableExprWeights, rnd.Int63())
-	s.selectStmtSampler = NewWeightedSelectStatementSampler(s.selectStmtWeights, rnd.Int63())
-	s.scalarExprSampler = NewWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
-	s.boolExprSampler = NewWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
+	s.stmtSampler = newWeightedStatementSampler(s.stmtWeights, rnd.Int63())
+	s.alterSampler = newWeightedStatementSampler(s.alterWeights, rnd.Int63())
+	s.tableExprSampler = newWeightedTableExprSampler(s.tableExprWeights, rnd.Int63())
+	s.selectStmtSampler = newWeightedSelectStatementSampler(s.selectStmtWeights, rnd.Int63())
+	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
+	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
 	return s, s.ReloadSchemas()
 }
 
@@ -222,7 +222,7 @@ var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 // DisableDDLs causes the Smither to not emit statements that change table
 // schema (CREATE, DROP, ALTER, etc.)
 var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
-	s.stmtWeights = []StatementWeight{
+	s.stmtWeights = []statementWeight{
 		{20, makeSelect},
 		{5, makeInsert},
 		{5, makeUpdate},
