@@ -312,6 +312,11 @@ define LookupJoinPrivate {
     # lookup join appear more like other join operators.
     lookupProps RelProps
 
+    # ConstFilters contains the constant filters that are represented as equality
+    # conditions on the KeyCols. These filters are needed by the statistics code to
+    # correctly estimate selectivity.
+    ConstFilters FiltersExpr
+
     _ JoinPrivate
 }
 

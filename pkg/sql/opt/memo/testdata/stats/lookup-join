@@ -353,3 +353,109 @@ anti-join (lookup t@xy_idx)
  │    ├── columns: u.x:1(int) u.y:2(int)
  │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  └── filters (true)
+
+
+exec-ddl
+CREATE TABLE medium (m INT, n INT)
+----
+
+exec-ddl
+ALTER TABLE medium INJECT STATISTICS '[
+  {
+    "columns": ["m"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 40,
+    "distinct_count": 40
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE wxyz (w INT, x INT, y INT, z INT, INDEX (x,y,z))
+----
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 11,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 50, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 50, "num_range": 900, "distinct_range": 9, "upper_bound": "10"}
+    ]
+  }
+]'
+----
+
+# Choose the lookup join due to the highly selective constant column.
+opt
+SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
+----
+inner-join (lookup wxyz)
+ ├── columns: m:1(int!null) n:2(int) w:4(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── key columns: [8] = [8]
+ ├── lookup columns are key
+ ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(5)=39.1263061, null(5)=0]
+ ├── fd: ()-->(6), (1)==(5), (5)==(1)
+ ├── inner-join (lookup wxyz@secondary)
+ │    ├── columns: m:1(int!null) n:2(int) x:5(int!null) y:6(int!null) z:7(int) wxyz.rowid:8(int!null)
+ │    ├── key columns: [1 9] = [5 6]
+ │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(5)=19.8, null(5)=0, distinct(6)=1, null(6)=0, distinct(9)=1, null(9)=0]
+ │    ├── fd: ()-->(6), (8)-->(5,7), (1)==(5), (5)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@6":9(int!null) m:1(int) n:2(int)
+ │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(9)=1, null(9)=0]
+ │    │    ├── fd: ()-->(9)
+ │    │    ├── scan medium
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ │    │    └── projections
+ │    │         └── const: 10 [type=int]
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 11,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 10, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 900, "num_range": 90, "distinct_range": 9, "upper_bound": "10"}
+    ]
+  }
+]'
+----
+
+# With a less selective constant column, the hash join should be chosen instead.
+opt
+SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
+----
+inner-join (hash)
+ ├── columns: m:1(int!null) n:2(int) w:4(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(5)=40, null(5)=0]
+ ├── fd: ()-->(6), (1)==(5), (5)==(1)
+ ├── select
+ │    ├── columns: w:4(int) x:5(int) y:6(int!null) z:7(int)
+ │    ├── stats: [rows=900, distinct(5)=100, null(5)=9, distinct(6)=1, null(6)=0]
+ │    │   histogram(6)=  0 900
+ │    │                <--- 10
+ │    ├── fd: ()-->(6)
+ │    ├── scan wxyz
+ │    │    ├── columns: w:4(int) x:5(int) y:6(int) z:7(int)
+ │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10, distinct(6)=11, null(6)=0]
+ │    │        histogram(6)=  0 10  90 900
+ │    │                     <--- 0 ---- 10
+ │    └── filters
+ │         └── y = 10 [type=bool, outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+ ├── scan medium
+ │    ├── columns: m:1(int) n:2(int)
+ │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
+ └── filters
+      └── m = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
