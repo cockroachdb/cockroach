@@ -16,10 +16,10 @@ import "testing"
 func TestProtectedTimestamps(t *testing.T) {
 	var (
 		_ Provider
-		_ Tracker
+		_ Cache
 		_ Verifier
 		_ Storage
-		_ = ClockTracker(nil)
+		_ = EmptyCache(nil)
 		_ = ErrNotExists
 		_ = ErrExists
 		_ = PollInterval
