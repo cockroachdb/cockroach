@@ -95,7 +95,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 func entries(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	e engine.Reader,
+	reader engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded SideloadStorage,
@@ -165,7 +165,7 @@ func entries(
 		return exceededMaxBytes, nil
 	}
 
-	if err := iterateEntries(ctx, e, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := iterateEntries(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
 	// Cache the fetched entries, if we may.
@@ -191,7 +191,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := rsl.LoadLastIndex(ctx, e)
+		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +204,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, _, err := rsl.LoadRaftTruncatedState(ctx, e)
+	ts, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +218,13 @@ func entries(
 
 func iterateEntries(
 	ctx context.Context,
-	e engine.Reader,
+	reader engine.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi uint64,
 	scanFunc func(roachpb.KeyValue) (bool, error),
 ) error {
 	_, err := engine.MVCCIterate(
-		ctx, e,
+		ctx, reader,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
 		hlc.Timestamp{},

@@ -344,14 +344,14 @@ func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 }
 
 // GetDBEngine recursively searches for the underlying rocksDB engine.
-func GetDBEngine(e engine.Reader, span roachpb.Span) engine.Reader {
-	switch v := e.(type) {
+func GetDBEngine(reader engine.Reader, span roachpb.Span) engine.Reader {
+	switch v := reader.(type) {
 	case ReadWriter:
 		return GetDBEngine(getSpanReader(v, span), span)
 	case *spanSetBatch:
 		return GetDBEngine(getSpanReader(v.ReadWriter, span), span)
 	default:
-		return e
+		return reader
 	}
 }
 
