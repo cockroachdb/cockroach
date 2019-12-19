@@ -1879,7 +1879,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~30KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G6 G7 pqr,keyCols=[1],outCols=(1-4)) (select G8 G9) (select G10 G11) (select G12 G7) (select G13 G7)
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
