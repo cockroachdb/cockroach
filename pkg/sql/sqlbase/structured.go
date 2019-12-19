@@ -645,13 +645,21 @@ func (desc *TableDescriptor) IsPhysicalTable() bool {
 }
 
 // KeysPerRow returns the maximum number of keys used to encode a row for the
-// given index. For secondary indexes, we always only use one, but for primary
-// indexes, we can encode up to one kv per column family.
-func (desc *TableDescriptor) KeysPerRow(indexID IndexID) int {
+// given index. If a secondary index doesn't store any columns, then it only
+// has one k/v pair, but if it stores some columns, it can return up to one
+// k/v pair per family in the table, just like a primary index.
+func (desc *TableDescriptor) KeysPerRow(indexID IndexID) (int, error) {
 	if desc.PrimaryIndex.ID == indexID {
-		return len(desc.Families)
+		return len(desc.Families), nil
 	}
-	return 1
+	idx, err := desc.FindIndexByID(indexID)
+	if err != nil {
+		return 0, err
+	}
+	if len(idx.StoreColumnIDs) == 0 {
+		return 1, nil
+	}
+	return len(desc.Families), nil
 }
 
 // AllNonDropColumns returns all the columns, including those being added
