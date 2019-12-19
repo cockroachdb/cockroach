@@ -24,8 +24,7 @@ func (s *Smither) makeSelectStmt(
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
 	if s.canRecurse() {
 		for {
-			idx := s.selectStmts.Next()
-			expr, exprRefs, ok := selectStmts[idx].fn(s, desiredTypes, refs, withTables)
+			expr, exprRefs, ok := s.selectStmtSampler.Next()(s, desiredTypes, refs, withTables)
 			if ok {
 				return expr, exprRefs, ok
 			}
@@ -122,33 +121,11 @@ var (
 	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
-	selectStmts       []selectStmtWeight
-	selectStmtWeights []int
-)
-
-func init() {
-	selectStmts = []selectStmtWeight{
+	selectStmts = []SelectStatementWeight{
 		{1, makeValuesSelect},
 		{1, makeSetOp},
 		{1, makeSelectClause},
 	}
-	selectStmtWeights = func() []int {
-		m := make([]int, len(selectStmts))
-		for i, s := range selectStmts {
-			m[i] = s.weight
-		}
-		return m
-	}()
-}
-
-type (
-	selectStmtWeight struct {
-		weight int
-		fn     selectStmt
-	}
-	// selectStmt is a func that returns something that can be used in a Select. It
-	// accepts a list of tables generated from WITH expressions.
-	selectStmt func(s *Smither, desiredTypes []*types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, bool)
 )
 
 // makeTableExpr returns a tableExpr. If forJoin is true the tableExpr is
