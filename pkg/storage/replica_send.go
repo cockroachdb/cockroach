@@ -248,7 +248,6 @@ func (r *Replica) handleWriteIntentError(
 	}
 
 	index := pErr.Index
-	args := ba.Requests[index.Index].GetInner()
 	// Make a copy of the header for the upcoming push; we will update the
 	// timestamp.
 	h := ba.Header
@@ -279,7 +278,7 @@ func (r *Replica) handleWriteIntentError(
 	if cleanup != nil {
 		cleanup(t, nil)
 	}
-	cleanup, pErr = r.store.intentResolver.ProcessWriteIntentError(ctx, pErr, args, h, pushType)
+	cleanup, pErr = r.store.intentResolver.ProcessWriteIntentError(ctx, pErr, h, pushType)
 	if pErr != nil {
 		// Do not propagate ambiguous results; assume success and retry original op.
 		if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
