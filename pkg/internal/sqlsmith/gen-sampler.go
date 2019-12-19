@@ -143,7 +143,9 @@ type selectStatementWeight struct {
 // newWeightedSelectStatementSampler creates a selectStatementSampler that produces
 // selectStatements. They are returned at the relative frequency of the values of
 // weights. All weights must be >= 1.
-func newWeightedSelectStatementSampler(weights []selectStatementWeight, seed int64) *selectStatementSampler {
+func newWeightedSelectStatementSampler(
+	weights []selectStatementWeight, seed int64,
+) *selectStatementSampler {
 	sum := 0
 	for _, w := range weights {
 		if w.weight < 1 {
