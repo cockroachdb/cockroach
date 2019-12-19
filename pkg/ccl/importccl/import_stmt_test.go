@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -3361,4 +3362,141 @@ func TestCreateStatsAfterImport(t *testing.T) {
 		[][]string{
 			{"__auto__", "{i}", "1", "1", "0"},
 		})
+}
+
+func TestImportAvro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	simpleOcf := fmt.Sprintf("nodelocal:///%s", "simple.ocf")
+	simpleSchemaURI := fmt.Sprintf("nodelocal:///%s", "simple-schema.json")
+	simpleJSON := fmt.Sprintf("nodelocal:///%s", "simple-sorted.json")
+	simplePrettyJSON := fmt.Sprintf("nodelocal:///%s", "simple-sorted.pjson")
+	simpleBinRecords := fmt.Sprintf("nodelocal:///%s", "simple-sorted-records.avro")
+	tableSchema := fmt.Sprintf("nodelocal:///%s", "simple-schema.sql")
+
+	data, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	simpleSchema := string(data)
+
+	tests := []struct {
+		name   string
+		sql    string
+		create string
+		args   []interface{}
+		err    bool
+	}{
+		{
+			name: "import-ocf",
+			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)",
+			args: []interface{}{simpleOcf},
+		},
+		{
+			name:   "import-ocf-into-table",
+			sql:    "IMPORT INTO simple AVRO DATA ($1)",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY, s text, b bytea)",
+			args:   []interface{}{simpleOcf},
+		},
+		{
+			name: "import-ocf-create-using",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+			args: []interface{}{tableSchema, simpleOcf},
+		},
+		{
+			name: "import-json-records",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema_uri=$3",
+			args: []interface{}{tableSchema, simpleJSON, simpleSchemaURI},
+		},
+		{
+			name:   "import-json-records-into-table-ignores-extra-fields",
+			sql:    "IMPORT INTO simple AVRO DATA ($1) WITH data_as_json_records, schema_uri=$2",
+			create: "CREATE TABLE simple (i INT8 PRIMARY KEY)",
+			args:   []interface{}{simpleJSON, simpleSchemaURI},
+		},
+		{
+			name: "import-json-records-inline-schema",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema=$3",
+			args: []interface{}{tableSchema, simpleJSON, simpleSchema},
+		},
+		{
+			name: "import-json-pretty-printed-records",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_json_records, schema_uri=$3",
+			args: []interface{}{tableSchema, simplePrettyJSON, simpleSchemaURI},
+		},
+		{
+			name: "import-avro-fragments",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2) WITH data_as_binary_records, records_terminated_by='', schema_uri=$3",
+			args: []interface{}{tableSchema, simpleBinRecords, simpleSchemaURI},
+		},
+		{
+			name: "fail-import-expect-ocf-got-json",
+			sql:  "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+			args: []interface{}{tableSchema, simpleJSON},
+			err:  true,
+		},
+		{
+			name: "relaxed-import-sets-missing-fields",
+			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int) AVRO DATA ($1)",
+			args: []interface{}{simpleOcf},
+		},
+		{
+			name: "relaxed-import-ignores-extra-fields",
+			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY) AVRO DATA ($1)",
+			args: []interface{}{simpleOcf},
+		},
+		{
+			name: "strict-import-errors-missing-fields",
+			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea, z int) AVRO DATA ($1) WITH strict_validation",
+			args: []interface{}{simpleOcf},
+			err:  true,
+		},
+		{
+			name: "strict-import-errors-extra-fields",
+			sql:  "IMPORT TABLE simple (i INT8 PRIMARY KEY) AVRO DATA ($1) WITH strict_validation",
+			args: []interface{}{simpleOcf},
+			err:  true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := sqlDB.DB.ExecContext(context.Background(), `DROP TABLE IF EXISTS simple CASCADE`)
+			require.NoError(t, err)
+
+			if len(test.create) > 0 {
+				_, err := sqlDB.DB.ExecContext(context.Background(), test.create)
+				require.NoError(t, err)
+			}
+
+			_, err = sqlDB.DB.ExecContext(context.Background(), test.sql, test.args...)
+			if test.err {
+				if err == nil {
+					t.Error("expected error, but alas")
+				}
+				return
+			}
+
+			require.NoError(t, err)
+
+			var numRows int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM simple`).Scan(&numRows)
+			if numRows == 0 {
+				t.Error("expected some rows after import")
+			}
+		})
+	}
 }

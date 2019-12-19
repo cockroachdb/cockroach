@@ -12,9 +12,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -42,39 +44,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testSpec struct {
-	inputFormat roachpb.IOFileFormat_FileFormat
-	inputs      map[int32]string
-	tables      map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	format roachpb.IOFileFormat
+	inputs map[int32]string
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable
 }
 
 // Given test spec returns ReadImportDataSpec suitable creating input converter.
 func (spec *testSpec) getConverterSpec() *execinfrapb.ReadImportDataSpec {
-	pgDumpOptions := roachpb.PgDumpOptions{MaxRowSize: 64 * 1024}
-	pgCopyOptions := roachpb.PgCopyOptions{
-		Delimiter:  '\t',
-		Null:       `\N`,
-		MaxRowSize: 4096,
-	}
-	mysqlOutOptions := roachpb.MySQLOutfileOptions{
-		FieldSeparator: ',',
-		RowSeparator:   '\n',
-		HasEscape:      true,
-		Escape:         '\\',
-		Enclose:        roachpb.MySQLOutfileOptions_Always,
-		Encloser:       '"',
-	}
-
 	return &execinfrapb.ReadImportDataSpec{
-		Format: roachpb.IOFileFormat{
-			Format:   spec.inputFormat,
-			PgDump:   pgDumpOptions,
-			PgCopy:   pgCopyOptions,
-			MysqlOut: mysqlOutOptions,
-		},
+		Format:            spec.format,
 		Tables:            spec.tables,
 		Uri:               spec.inputs,
 		ReaderParallelism: 1, // Make tests deterministic
@@ -87,14 +71,14 @@ func TestConverterFlushesBatches(t *testing.T) {
 	defer row.TestingSetDatumRowConverterBatchSize(0)()
 
 	// Helper to generate test name.
-	testName := func(inputFormat roachpb.IOFileFormat_FileFormat, batchSize int) string {
+	testName := func(format roachpb.IOFileFormat, batchSize int) string {
 		switch batchSize {
 		case 0:
-			return fmt.Sprintf("%s-default-batch-size", inputFormat)
+			return fmt.Sprintf("%s-default-batch-size", format.Format)
 		case 1:
-			return fmt.Sprintf("%s-always-flush", inputFormat)
+			return fmt.Sprintf("%s-always-flush", format.Format)
 		default:
-			return fmt.Sprintf("%s-flush-%d-records", inputFormat, batchSize)
+			return fmt.Sprintf("%s-flush-%d-records", format.Format, batchSize)
 		}
 	}
 
@@ -102,9 +86,10 @@ func TestConverterFlushesBatches(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(nil)
 
 	tests := []testSpec{
-		newTestSpec(t, roachpb.IOFileFormat_CSV, "testdata/csv/data-0"),
-		newTestSpec(t, roachpb.IOFileFormat_Mysqldump, "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, roachpb.IOFileFormat_PgDump, "testdata/pgdump/simple.sql"),
+		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
 	const endBatchSize = -1
@@ -119,7 +104,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 		// with the default batch size, and use that run to figure out the
 		// expected number of records and batches for the subsequent run.
 		for batchSize := 0; batchSize != endBatchSize; {
-			t.Run(testName(testCase.inputFormat, batchSize), func(t *testing.T) {
+			t.Run(testName(testCase.format, batchSize), func(t *testing.T) {
 				if batchSize > 0 {
 					row.TestingSetDatumRowConverterBatchSize(batchSize)
 				}
@@ -202,33 +187,32 @@ func (r *errorReportingRowReceiver) Types() []types.T {
 	return nil
 }
 
-// A bulk adder implementation that verifies
-// that all of the keys added are greater or equal to the min key
-type ensureMinKeyAdder struct {
-	minKey  *roachpb.Key
-	onFlush func()
+// A do nothing bulk adder implementation.
+type doNothingKeyAdder struct {
+	onKeyAdd func(key roachpb.Key)
+	onFlush  func()
 }
 
-var _ storagebase.BulkAdder = &ensureMinKeyAdder{}
+var _ storagebase.BulkAdder = &doNothingKeyAdder{}
 
-func (a *ensureMinKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) error {
-	if a.minKey != nil && a.minKey.Compare(k) > 0 {
-		return fmt.Errorf("%v > %v", a.minKey, k)
+func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) error {
+	if a.onKeyAdd != nil {
+		a.onKeyAdd(k)
 	}
 	return nil
 }
-func (a *ensureMinKeyAdder) Flush(_ context.Context) error {
+func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
 		a.onFlush()
 	}
 	return nil
 }
 
-func (*ensureMinKeyAdder) IsEmpty() bool                     { return true }
-func (*ensureMinKeyAdder) CurrentBufferFill() float32        { return 0 }
-func (*ensureMinKeyAdder) GetSummary() roachpb.BulkOpSummary { return roachpb.BulkOpSummary{} }
-func (*ensureMinKeyAdder) Close(_ context.Context)           {}
-func (a *ensureMinKeyAdder) SetOnFlush(f func())             { a.onFlush = f }
+func (*doNothingKeyAdder) IsEmpty() bool                     { return true }
+func (*doNothingKeyAdder) CurrentBufferFill() float32        { return 0 }
+func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary { return roachpb.BulkOpSummary{} }
+func (*doNothingKeyAdder) Close(_ context.Context)           {}
+func (a *doNothingKeyAdder) SetOnFlush(f func())             { a.onFlush = f }
 
 var eofOffset int64 = math.MaxInt64
 
@@ -244,7 +228,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			BulkAdder: func(
 				_ context.Context, _ *client.DB, _ hlc.Timestamp,
 				_ storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
-				return &ensureMinKeyAdder{}, nil
+				return &doNothingKeyAdder{}, nil
 			},
 		},
 	}
@@ -259,28 +243,33 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	}{
 		{
 			"csv-two-invalid",
-			newTestSpec(t, roachpb.IOFileFormat_CSV, "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
+			newTestSpec(t, csvFormat(), "__invalid__", "testdata/csv/data-0", "/_/missing/_"),
 			[]int64{eofOffset, 0, eofOffset},
 		},
 		{
 			"csv-all-invalid",
-			newTestSpec(t, roachpb.IOFileFormat_CSV, "__invalid__", "../../&"),
+			newTestSpec(t, csvFormat(), "__invalid__", "../../&"),
 			[]int64{eofOffset, eofOffset},
 		},
 		{
 			"csv-all-valid",
-			newTestSpec(t, roachpb.IOFileFormat_CSV, "testdata/csv/data-0"),
+			newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
 			[]int64{0},
 		},
 		{
 			"mysql-one-invalid",
-			newTestSpec(t, roachpb.IOFileFormat_Mysqldump, "testdata/mysqldump/simple.sql", "/_/missing/_"),
+			newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql", "/_/missing/_"),
 			[]int64{0, eofOffset},
 		},
 		{
 			"pgdump-one-input",
-			newTestSpec(t, roachpb.IOFileFormat_PgDump, "testdata/pgdump/simple.sql"),
+			newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
 			[]int64{0},
+		},
+		{
+			"avro-one-invalid",
+			newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "__invalid__", "testdata/avro/simple.ocf"),
+			[]int64{eofOffset, 0},
 		},
 	}
 
@@ -315,14 +304,18 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	}
 }
 
+type observedKeys struct {
+	syncutil.Mutex
+	keys []roachpb.Key
+}
+
 func TestImportHonorsResumePosition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
 
-	// minKey used for the ensureMinKeyAdder bulk adder.
-	var minKey roachpb.Key
+	pkBulkAdder := &doNothingKeyAdder{}
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	flowCtx := &execinfra.FlowCtx{
@@ -332,8 +325,11 @@ func TestImportHonorsResumePosition(t *testing.T) {
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *client.DB, _ hlc.Timestamp,
-				_ storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
-				return &ensureMinKeyAdder{minKey: &minKey}, nil
+				opts storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				if opts.Name == "pkAdder" {
+					return pkBulkAdder, nil
+				}
+				return &doNothingKeyAdder{}, nil
 			},
 			TestingKnobs: execinfra.TestingKnobs{
 				BulkAdderFlushesEveryBatch: true,
@@ -343,23 +339,55 @@ func TestImportHonorsResumePosition(t *testing.T) {
 
 	// In this test, we'll specify various resume positions for
 	// different input formats. We expect that the rows before resume
-	// position will be skipped. NB: We assume that the (external)
-	// test files are sorted and contain at least batchSize rows.
+	// position will be skipped.
+	// NB: We assume that the (external) test files are sorted and
+	// contain sufficient number of rows.
 	testSpecs := []testSpec{
-		newTestSpec(t, roachpb.IOFileFormat_CSV, "testdata/csv/data-0"),
-		newTestSpec(t, roachpb.IOFileFormat_Mysqldump, "testdata/mysqldump/simple.sql"),
-		newTestSpec(t, roachpb.IOFileFormat_MysqlOutfile, "testdata/mysqlout/csv-ish/simple.txt"),
-		newTestSpec(t, roachpb.IOFileFormat_PgCopy, "testdata/pgcopy/default/test.txt"),
-		newTestSpec(t, roachpb.IOFileFormat_PgDump, "testdata/pgdump/simple.sql"),
+		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
 	}
-	resumes := []int64{0, 10, eofOffset}
+
+	resumes := []int64{0, 10, 64, eofOffset}
 
 	for _, testCase := range testSpecs {
 		spec := testCase.getConverterSpec()
+		keys := &observedKeys{keys: make([]roachpb.Key, 0, 1000)}
+		numKeys := 0
 
 		for _, resumePos := range resumes {
 			spec.ResumePos = map[int32]int64{0: resumePos}
-			minKey = getPkeyForTable(t, spec.Tables["simple"].Desc, resumePos)
+			if resumePos == 0 {
+				// We use 0 resume position to record the set of keys in the input file.
+				pkBulkAdder.onKeyAdd = func(k roachpb.Key) {
+					keys.Lock()
+					keys.keys = append(keys.keys, k)
+					keys.Unlock()
+				}
+			} else {
+				if resumePos != eofOffset && resumePos > int64(numKeys) {
+					t.Logf("test skipped: resume position %d > number of keys %d", resumePos, numKeys)
+					continue
+				}
+
+				// For other resume positions, we want to ensure that
+				// the key we add is not among [0 - resumePos) keys.
+				pkBulkAdder.onKeyAdd = func(k roachpb.Key) {
+					maxKeyIdx := int(resumePos)
+					if resumePos == eofOffset {
+						maxKeyIdx = numKeys
+					}
+					keys.Lock()
+					idx := sort.Search(maxKeyIdx, func(i int) bool { return keys.keys[i].Compare(k) == 0 })
+					if idx < maxKeyIdx {
+						t.Errorf("failed to skip key[%d]=%s", idx, k)
+					}
+					keys.Unlock()
+				}
+			}
 
 			t.Run(fmt.Sprintf("resume-%v-%v", spec.Format.Format, resumePos), func(t *testing.T) {
 				rp := resumePos
@@ -385,6 +413,17 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					t.Fatal(err)
 				}
 			})
+
+			if resumePos == 0 {
+				// Even though the input is assumed to be sorted, we may still observe
+				// bulk adder keys arriving out of order.  We need to sort the keys.
+				keys.Lock()
+				sort.Slice(keys.keys, func(i int, j int) bool {
+					return keys.keys[i].Compare(keys.keys[j]) < 0
+				})
+				numKeys = len(keys.keys)
+				keys.Unlock()
+			}
 		}
 	}
 }
@@ -563,7 +602,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	var importSummary roachpb.BulkOpSummary
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-		// Arrange for our special job resumer to be returned the very first time we start the import.
+		// Arrange for our special job resumer to be
+		// returned the very first time we start the import.
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
@@ -593,7 +633,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	storage := newGeneratedStorage(csv1)
 	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
 
-	// Execute import; ignore any errors returned (since we're aborting the first import run.).
+	// Execute import; ignore any errors returned
+	// (since we're aborting the first import run.).
 	go func() {
 		_, _ = sqlDB.DB.ExecContext(ctx,
 			`IMPORT INTO t (id, data) CSV DATA ($1)`, storage.getGeneratorURIs()[0])
@@ -760,27 +801,29 @@ func externalStorageFactory(
 }
 
 // Helper to create and initialize testSpec.
-func newTestSpec(
-	t *testing.T, inputFormat roachpb.IOFileFormat_FileFormat, inputs ...string,
-) testSpec {
+func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) testSpec {
 	spec := testSpec{
-		inputFormat: inputFormat,
-		inputs:      make(map[int32]string),
+		format: format,
+		inputs: make(map[int32]string),
 	}
 
 	// Initialize table descriptor for import. We need valid descriptor to run
 	// converters, even though we don't actually import anything in this test.
 	var descr *sqlbase.TableDescriptor
-	switch inputFormat {
+	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
 		descr = descForTable(t,
 			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 10, 20, NoFKs)
-	case roachpb.IOFileFormat_Mysqldump, roachpb.IOFileFormat_MysqlOutfile,
-		roachpb.IOFileFormat_PgDump, roachpb.IOFileFormat_PgCopy:
+	case
+		roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_MysqlOutfile,
+		roachpb.IOFileFormat_PgDump,
+		roachpb.IOFileFormat_PgCopy,
+		roachpb.IOFileFormat_Avro:
 		descr = descForTable(t,
 			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 10, 20, NoFKs)
 	default:
-		t.Fatalf("Unsupported input format: %v", inputFormat)
+		t.Fatalf("Unsupported input format: %v", format)
 	}
 
 	targetCols := make([]string, len(descr.Columns))
@@ -804,18 +847,68 @@ func newTestSpec(
 	return spec
 }
 
-func getPkeyForTable(t *testing.T, descr *sqlbase.TableDescriptor, id int64) roachpb.Key {
-	colMap := make(map[sqlbase.ColumnID]int, len(descr.Columns))
-	for i, col := range descr.Columns {
-		colMap[col.ID] = i
+func pgDumpFormat() roachpb.IOFileFormat {
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_PgDump,
+		PgDump: roachpb.PgDumpOptions{
+			MaxRowSize: 64 * 1024,
+		},
+	}
+}
+
+func pgCopyFormat() roachpb.IOFileFormat {
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_PgCopy,
+		PgCopy: roachpb.PgCopyOptions{
+			Delimiter:  '\t',
+			Null:       `\N`,
+			MaxRowSize: 4096,
+		},
+	}
+}
+
+func mysqlDumpFormat() roachpb.IOFileFormat {
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_Mysqldump,
+	}
+}
+
+func mysqlOutFormat() roachpb.IOFileFormat {
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_MysqlOutfile,
+		MysqlOut: roachpb.MySQLOutfileOptions{
+			FieldSeparator: ',',
+			RowSeparator:   '\n',
+			HasEscape:      true,
+			Escape:         '\\',
+			Enclose:        roachpb.MySQLOutfileOptions_Always,
+			Encloser:       '"',
+		},
+	}
+}
+
+func csvFormat() roachpb.IOFileFormat {
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_CSV,
+	}
+}
+
+func avroFormat(t *testing.T, format roachpb.AvroOptions_Format) roachpb.IOFileFormat {
+	avro := roachpb.AvroOptions{
+		Format:     format,
+		StrictMode: false,
 	}
 
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(descr, descr.PrimaryIndex.ID)
-	pk, _, err := sqlbase.EncodeIndexKey(
-		descr, &descr.PrimaryIndex, colMap,
-		[]tree.Datum{tree.NewDInt(tree.DInt(id))}, primaryIndexKeyPrefix)
-	if err != nil {
-		t.Fatal(err)
+	if format != roachpb.AvroOptions_OCF {
+		// Need to load schema for record specific inputs.
+		bytes, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
+		require.NoError(t, err)
+		avro.SchemaJSON = string(bytes)
+		avro.RecordSeparator = '\n'
 	}
-	return pk
+
+	return roachpb.IOFileFormat{
+		Format: roachpb.IOFileFormat_Avro,
+		Avro:   avro,
+	}
 }
