@@ -1266,10 +1266,11 @@ func TestKeysPerRow(t *testing.T) {
 		indexID     IndexID
 		expected    int
 	}{
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                         // Primary index
-		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                         // 'b' index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2}, // Primary index
-		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1}, // 'b' index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
 	}
 
 	for i, test := range tests {
@@ -1288,7 +1289,10 @@ func TestKeysPerRow(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
-			keys := desc.GetTable().KeysPerRow(test.indexID)
+			keys, err := desc.GetTable().KeysPerRow(test.indexID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if test.expected != keys {
 				t.Errorf("expected %d keys got %d", test.expected, keys)
 			}
