@@ -12,7 +12,8 @@ package mutations
 
 import (
 	"bytes"
-	"encoding/json"
+	gojson "encoding/json"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 var (
@@ -34,6 +36,9 @@ var (
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = sqlbase.ColumnFamilyMutator
+
+	// PartitionMutator adds PARTITION BY clauses to CREATE TABLE statements.
+	PartitionMutator StatementMutator = partitionMutator
 )
 
 // StatementMutator defines a func that can change a statement.
@@ -221,13 +226,18 @@ func statisticsMutator(
 			for _, cs := range colStats {
 				allStats = append(allStats, cs)
 			}
-			b, err := json.Marshal(allStats)
+			b, err := gojson.Marshal(allStats)
+			if err != nil {
+				// Should not happen.
+				panic(err)
+			}
+			j, err := json.ParseJSON(string(b))
 			if err != nil {
 				// Should not happen.
 				panic(err)
 			}
 			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
-				Stats: tree.NewDString(string(b)),
+				Stats: tree.NewDJSON(j),
 			})
 			stmts = append(stmts, alter)
 			changed = true
@@ -438,4 +448,134 @@ Loop:
 		}
 		return action
 	}
+}
+
+func partitionMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+	ast, ok := stmt.(*tree.CreateTable)
+	// Don't set partitions if they are already set, and only 50% of the time even still.
+	if !ok || ast.PartitionBy != nil || rng.Intn(2) == 0 {
+		return false
+	}
+	evalCtx := tree.MakeTestingEvalContext(nil /* cluster.Settings */)
+
+	// Fetch the first PK column.
+	info := NewCreateTableInfo(ast)
+	if len(info.PKCols) < 1 {
+		return false
+	}
+	col := info.PKCols[0]
+	typ := info.Cols[col.Column].Type
+	pb := &tree.PartitionBy{
+		Fields: tree.NameList{col.Column},
+	}
+	if rng.Intn(2) == 0 {
+		// List partitions. Always start with a default.
+		pb.List = append(pb.List, tree.ListPartition{
+			Name:  "DEFAULT",
+			Exprs: tree.Exprs{tree.DefaultVal{}},
+		})
+		seen := map[string]bool{}
+		for rng.Intn(3) != 0 {
+			// Use the simple datums here since using a random
+			// datum might never result in a INSERT match.
+			datum := sqlbase.RandDatumSimple(rng, typ)
+			if datum == tree.DNull {
+				break
+			}
+			if s := datum.String(); seen[s] {
+				continue
+			} else {
+				seen[s] = true
+			}
+			pb.List = append(pb.List, tree.ListPartition{
+				Name:  tree.UnrestrictedName(fmt.Sprintf("p_%d", len(pb.List))),
+				Exprs: tree.Exprs{datum},
+			})
+		}
+	} else {
+		// Range partitions. Generate some datums as range split points.
+		seen := map[string]bool{}
+		var splits []tree.Datum
+		for rng.Intn(3) != 0 {
+			datum := sqlbase.RandDatumWithNullChance(rng, typ, 0)
+			if datum == tree.DNull {
+				break
+			}
+			if s := datum.String(); seen[s] {
+				continue
+			} else {
+				seen[s] = true
+			}
+			splits = append(splits, datum)
+		}
+		if len(splits) == 0 {
+			pb = nil
+		} else {
+			// Sort them according to the index order.
+			sort.Slice(splits, func(i, j int) bool {
+				lt := splits[i].Compare(&evalCtx, splits[j]) < 0
+				if col.Direction == tree.Descending {
+					return !lt
+				}
+				return lt
+			})
+			// Manually add the min and max ranges.
+			pb.Range = append(pb.Range, tree.RangePartition{
+				Name: "p_min",
+				From: tree.Exprs{tree.PartitionMinVal{}},
+				To:   tree.Exprs{splits[0]},
+			})
+			for i := 1; i < len(splits); i++ {
+				pb.Range = append(pb.Range, tree.RangePartition{
+					Name: tree.UnrestrictedName(fmt.Sprintf("p_%d", i)),
+					From: tree.Exprs{splits[i-1]},
+					To:   tree.Exprs{splits[i]},
+				})
+			}
+			pb.Range = append(pb.Range, tree.RangePartition{
+				Name: "p_max",
+				From: tree.Exprs{splits[len(splits)-1]},
+				To:   tree.Exprs{tree.PartitionMaxVal{}},
+			})
+		}
+	}
+	ast.PartitionBy = pb
+	return pb != nil
+}
+
+// CreateTableInfo holds quick lookup information about CREATE TABLE
+// statements.
+type CreateTableInfo struct {
+	Cols    map[tree.Name]*tree.ColumnTableDef
+	PKCols  tree.IndexElemList
+	IsPKCol map[tree.Name]bool
+}
+
+// NewCreateTableInfo extracts information from a CREATE TABLE statement for
+// easy querying.
+func NewCreateTableInfo(table *tree.CreateTable) *CreateTableInfo {
+	info := &CreateTableInfo{
+		Cols:    make(map[tree.Name]*tree.ColumnTableDef),
+		IsPKCol: make(map[tree.Name]bool),
+	}
+	for _, def := range table.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			info.Cols[def.Name] = def
+			if def.PrimaryKey {
+				info.IsPKCol[def.Name] = true
+				info.PKCols = append(info.PKCols, tree.IndexElem{
+					Column: def.Name,
+				})
+			}
+		case *tree.UniqueConstraintTableDef:
+			if def.PrimaryKey {
+				for _, col := range def.Columns {
+					info.IsPKCol[col.Column] = true
+					info.PKCols = append(info.PKCols, col)
+				}
+			}
+		}
+	}
+	return info
 }

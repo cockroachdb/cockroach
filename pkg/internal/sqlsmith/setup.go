@@ -67,10 +67,11 @@ func randTables(r *rand.Rand) string {
 	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
+		mutations.PartitionMutator,
 	)
 
 	for _, stmt := range stmts {
-		sb.WriteString(stmt.String())
+		sb.WriteString(prettyCfg.Pretty(stmt))
 		sb.WriteString(";\n")
 	}
 
