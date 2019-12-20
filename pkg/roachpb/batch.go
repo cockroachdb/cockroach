@@ -183,10 +183,9 @@ func (ba *BatchRequest) IsSingleEndTxnRequest() bool {
 	return false
 }
 
-// IsSingleAbortTransactionRequest returns true iff the batch contains a single
-// request, and that request is an EndTxnRequest(commit=false).
-// TODO(nvanbenschoten): rename to IsSingleAbortTxnRequest.
-func (ba *BatchRequest) IsSingleAbortTransactionRequest() bool {
+// IsSingleAbortTxnRequest returns true iff the batch contains a single request,
+// and that request is an EndTxnRequest(commit=false).
+func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
 	if ba.IsSingleRequest() {
 		if et, ok := ba.Requests[0].GetInner().(*EndTxnRequest); ok {
 			return !et.Commit
