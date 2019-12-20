@@ -98,7 +98,6 @@ func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *avg_TYPEAgg) Reset() {
-	copy(a.scratch.vec, zero_TYPEColumn)
 	a.scratch.curIdx = -1
 	a.scratch.curSum = zero_TYPEColumn[0]
 	a.scratch.curCount = 0
@@ -115,7 +114,6 @@ func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
 	if a.scratch.curIdx != -1 {
 		a.scratch.curIdx = idx
 		a.scratch.nulls.UnsetNullsAfter(uint16(idx + 1))
-		copy(a.scratch.vec[idx+1:], zero_TYPEColumn)
 	}
 }
 
@@ -194,6 +192,10 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 			}
 		}
 		a.scratch.curIdx++
+		// {{with .Global}}
+		a.scratch.curSum = zero_TYPEColumn[0]
+		// {{end}}
+		a.scratch.curCount = 0
 
 		// {{/*
 		// We only need to reset this flag if there are nulls. If there are no
@@ -202,12 +204,6 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		// {{ if .HasNulls }}
 		a.scratch.foundNonNullForCurrentGroup = false
 		// {{ end }}
-
-		// The next element of vec is guaranteed  to be initialized to the zero
-		// value. We can't use zero_TYPEColumn here because this is outside of
-		// the earlier template block.
-		a.scratch.curSum = a.scratch.vec[a.scratch.curIdx]
-		a.scratch.curCount = 0
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
