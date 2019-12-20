@@ -187,9 +187,7 @@ func evaluateBatch(
 			// return an aborted proto in their otherwise successful response.
 			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
-			singleAbort := ba.IsSingleEndTxnRequest() &&
-				!baReqs[0].GetInner().(*roachpb.EndTxnRequest).Commit
-			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
+			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
