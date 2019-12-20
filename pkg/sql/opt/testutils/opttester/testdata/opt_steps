@@ -115,3 +115,161 @@ Final best expression
    ├── constraint: /2/1: [/1 - /1]
    ├── key: (1)
    └── fd: ()-->(2)
+
+exec-ddl
+CREATE TABLE customers (                        
+    id INT8 NOT NULL,                           
+    name STRING NOT NULL,                       
+    address STRING NULL,                        
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),  
+    FAMILY "primary" (id, name, address)        
+)                                               
+----
+
+exec-ddl
+CREATE TABLE orders (                                                                                       
+    id INT8 NOT NULL,                                                                                       
+    customer_id INT8 NULL,                                                                                  
+    status STRING NOT NULL,                                                                                 
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),                                                              
+    CONSTRAINT fk_customer_id_ref_customers FOREIGN KEY (customer_id) REFERENCES customers(id),             
+    INDEX orders_auto_index_fk_customer_id_ref_customers (customer_id ASC),                                 
+    FAMILY "primary" (id, customer_id, status),                                                             
+    CONSTRAINT check_status CHECK (status IN ('open':::STRING, 'complete':::STRING, 'cancelled':::STRING))  
+)                                                                                                           
+----
+
+# Verify that we don't crash when a normalization rule runs on a constraint
+# expression that is attached to the TableMeta but otherwise not used.
+# In this example, the rule is NormalizeInConst.
+optsteps
+SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
+----
+================================================================================
+Initial expression
+  Cost: 2160.05
+================================================================================
+  left-join (hash)
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── key: (1,4)
+   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── scan orders
+   │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2,3)
+   ├── scan customers
+   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+   │    ├── key: (4)
+   │    └── fd: (4)-->(5,6)
+   └── filters
+        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+             ├── variable: customer_id [type=int]
+             └── variable: customers.id [type=int]
+--------------------------------------------------------------------------------
+NormalizeInConst (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (hash)
+  +right-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+  + ├── scan customers
+  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  + │    ├── key: (4)
+  + │    └── fd: (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+  - ├── scan customers
+  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  - │    ├── key: (4)
+  - │    └── fd: (4)-->(5,6)
+    └── filters
+         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+              ├── variable: customer_id [type=int]
+              └── variable: customers.id [type=int]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoins (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (hash)
+  +left-join (lookup customers)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  + ├── key columns: [2] = [4]
+  + ├── lookup columns are key
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+  - ├── scan customers
+  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  - │    ├── key: (4)
+  - │    └── fd: (4)-->(5,6)
+  - └── filters
+  -      └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+  -           ├── variable: customer_id [type=int]
+  -           └── variable: customers.id [type=int]
+  + └── filters (true)
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (lookup customers)
+  +right-join (merge)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  - ├── key columns: [2] = [4]
+  - ├── lookup columns are key
+  + ├── left ordering: +4
+  + ├── right ordering: +2
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+  - ├── scan orders
+  + ├── scan customers
+  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  + │    ├── key: (4)
+  + │    ├── fd: (4)-->(5,6)
+  + │    └── ordering: +4
+  + ├── sort
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── key: (1)
+  - │    └── fd: (1)-->(2,3)
+  + │    ├── fd: (1)-->(2,3)
+  + │    ├── ordering: +2
+  + │    └── scan orders
+  + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │         ├── key: (1)
+  + │         └── fd: (1)-->(2,3)
+    └── filters (true)
+================================================================================
+Final best expression
+  Cost: 2160.05
+================================================================================
+  left-join (hash)
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── key: (1,4)
+   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── scan orders
+   │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2,3)
+   ├── scan customers
+   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+   │    ├── key: (4)
+   │    └── fd: (4)-->(5,6)
+   └── filters
+        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+             ├── variable: customer_id [type=int]
+             └── variable: customers.id [type=int]
