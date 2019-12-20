@@ -653,8 +653,8 @@ func (j *Job) updateRow(
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-		if *status != StatusRunning {
-			return false, errors.Errorf("job %d no longer running", *j.id)
+		if *status != StatusRunning && *status != StatusPending {
+			return false, errors.Errorf("job %d has status %v which is not eligible for adopting", *j.id, *status)
 		}
 		if !payload.Lease.Equal(oldLease) {
 			return false, errors.Errorf("current lease %v did not match expected lease %v",
