@@ -17,11 +17,6 @@ import (
 )
 
 var (
-	alters       []statementWeight
-	alterWeights []int
-)
-
-func init() {
 	alters = []statementWeight{
 		{1, makeRenameTable},
 		{1, makeCreateTable},
@@ -37,14 +32,7 @@ func init() {
 		{1, makeDropIndex},
 		{1, makeRenameIndex},
 	}
-	alterWeights = func() []int {
-		m := make([]int, len(alters))
-		for i, s := range alters {
-			m[i] = s.weight
-		}
-		return m
-	}()
-}
+)
 
 func makeAlter(s *Smither) (tree.Statement, bool) {
 	if s.canRecurse() {
@@ -57,8 +45,7 @@ func makeAlter(s *Smither) (tree.Statement, bool) {
 		// test some additional logic.
 		_ = s.ReloadSchemas()
 		for i := 0; i < retryCount; i++ {
-			idx := s.alters.Next()
-			stmt, ok := alters[idx].fn(s)
+			stmt, ok := s.alterSampler.Next()(s)
 			if ok {
 				return stmt, ok
 			}
