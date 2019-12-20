@@ -31,6 +31,7 @@ var SQLPasses = []reduce.Pass{
 	replaceStmt,
 	removeWithCTEs,
 	removeWith,
+	removeCreateDefs,
 	removeValuesCols,
 	removeWithSelectExprs,
 	removeSelectAsExprs,
@@ -43,7 +44,6 @@ var SQLPasses = []reduce.Pass{
 	removeOrderByExprs,
 	removeGroupBy,
 	removeGroupByExprs,
-	removeCreateDefs,
 	removeCreateNullDefs,
 	removeIndexCols,
 	removeWindowPartitions,
@@ -672,13 +672,18 @@ var (
 		return 0
 	})
 	removeIndexCols = walkSQL("remove INDEX cols", func(xfi int, node interface{}) int {
-		switch node := node.(type) {
-		case *tree.IndexTableDef:
-			n := len(node.Columns)
-			if xfi < len(node.Columns) {
-				node.Columns = append(node.Columns[:xfi], node.Columns[xfi+1:]...)
+		removeCol := func(idx *tree.IndexTableDef) int {
+			n := len(idx.Columns)
+			if xfi < len(idx.Columns) {
+				idx.Columns = append(idx.Columns[:xfi], idx.Columns[xfi+1:]...)
 			}
 			return n
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removeCol(node)
+		case *tree.UniqueConstraintTableDef:
+			return removeCol(&node.IndexTableDef)
 		}
 		return 0
 	})
