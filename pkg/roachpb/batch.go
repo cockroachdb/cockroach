@@ -576,7 +576,8 @@ func (ba BatchRequest) String() string {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
+			str = append(str, fmt.Sprintf("%s(commit:%t tsflex:%t) [%s] ",
+				req.Method(), et.Commit, et.CanCommitAtHigherTimestamp, h.Key))
 		} else {
 			h := req.Header()
 			var s string
