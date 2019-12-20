@@ -1823,8 +1823,8 @@ func TestTxnStarvation(t *testing.T) {
 }
 
 // Test that, if the TxnCoordSender gets a TransactionAbortedError, it sends an
-// EndTransaction with Poison=true (the poisoning is so that concurrent readers
-// don't miss their writes).
+// EndTxn with Poison=true (the poisoning is so that concurrent readers don't
+// miss their writes).
 func TestAsyncAbortPoisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1836,12 +1836,12 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			switch r := req.GetInner().(type) {
-			case *roachpb.EndTransactionRequest:
+			case *roachpb.EndTxnRequest:
 				if r.Key.Equal(keyA) {
 					if r.Poison {
 						close(commitCh)
 					} else {
-						commitCh <- fmt.Errorf("EndTransaction didn't have expected Poison flag")
+						commitCh <- fmt.Errorf("EndTxn didn't have expected Poison flag")
 					}
 				}
 			}
@@ -2076,7 +2076,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				b.Put("a", "put")
-				b.AddRawRequest(&roachpb.EndTransactionRequest{
+				b.AddRawRequest(&roachpb.EndTxnRequest{
 					Commit:     true,
 					Require1PC: true,
 				})
@@ -2091,7 +2091,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				b.Put("a", "put")
-				b.AddRawRequest(&roachpb.EndTransactionRequest{
+				b.AddRawRequest(&roachpb.EndTxnRequest{
 					Commit:     true,
 					Require1PC: true,
 				})

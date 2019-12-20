@@ -54,8 +54,8 @@ const (
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.
 	ReverseScan
-	// EndTransaction either commits or aborts an ongoing transaction.
-	EndTransaction
+	// EndTxn either commits or aborts an ongoing transaction.
+	EndTxn
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit
 	// AdminUnsplit is called to remove the sticky bit of a manually split range.

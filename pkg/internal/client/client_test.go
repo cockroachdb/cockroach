@@ -993,10 +993,10 @@ func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var rollbacks int
 	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
-		if !ba.IsSingleEndTransactionRequest() {
+		if !ba.IsSingleEndTxnRequest() {
 			return nil
 		}
-		et := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 		if !et.Commit && et.Key.Equal(key) {
 			rollbacks++
 			cancel()

@@ -880,10 +880,10 @@ func (r *Replica) redirectOnOrAcquireLease(
 						// but the lease can change hands and so the situation in which a follower
 						// coordinates a replica removal of the (new) lease holder is possible (if
 						// unlikely) in practice. In this situation, the new lease holder would at
-						// some point be asked to propose the replica change's EndTransaction to
-						// Raft. A check has been added that prevents proposals that amount to the
-						// removal of the proposer's (and hence lease holder's) Replica, preventing
-						// this scenario.
+						// some point be asked to propose the replica change's EndTxn to Raft. A
+						// check has been added that prevents proposals that amount to the removal
+						// of the proposer's (and hence lease holder's) Replica, preventing this
+						// scenario.
 						//
 						// 2. A lease is accepted for a Replica that has been removed. Without
 						// precautions, this could happen because lease requests are special in

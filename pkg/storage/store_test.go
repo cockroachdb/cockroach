@@ -159,7 +159,7 @@ type testSender struct {
 func (db *testSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+	if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.

@@ -47,7 +47,7 @@ type Txn struct {
 	// commitTriggers are run upon successful commit.
 	commitTriggers []func(ctx context.Context)
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
-	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
+	// span. This sets the SystemConfigTrigger on EndTxnRequest.
 	systemConfigTrigger bool
 
 	// mu holds fields that need to be synchronized for concurrent request execution.
@@ -290,7 +290,7 @@ func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // SetSystemConfigTrigger sets the system db trigger to true on this transaction.
-// This will impact the EndTransactionRequest.
+// This will impact the EndTxnRequest.
 func (txn *Txn) SetSystemConfigTrigger() error {
 	if txn.typ != RootTxn {
 		return errors.AssertionFailedf("SetSystemConfigTrigger() called on leaf txn")
@@ -592,7 +592,7 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	return txn.Run(ctx, b)
 }
 
-// CommitOrCleanup sends an EndTransactionRequest with Commit=true.
+// CommitOrCleanup sends an EndTxnRequest with Commit=true.
 // If that fails, an attempt to rollback is made.
 // txn should not be used to send any more commands after this call.
 func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
@@ -637,7 +637,7 @@ func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil
 }
 
-// Rollback sends an EndTransactionRequest with Commit=false.
+// Rollback sends an EndTxnRequest with Commit=false.
 // txn is considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback(ctx context.Context) error {
 	if txn.typ != RootTxn {
@@ -710,7 +710,7 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 }
 
 func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
-	req := &roachpb.EndTransactionRequest{
+	req := &roachpb.EndTxnRequest{
 		Commit:   commit,
 		Deadline: deadline,
 	}
@@ -840,9 +840,9 @@ func (txn *Txn) IsRetryableErrMeantForTxn(
 // Send runs the specified calls synchronously in a single batch and
 // returns any errors. If the transaction is read-only or has already
 // been successfully committed or aborted, a potential trailing
-// EndTransaction call is silently dropped, allowing the caller to
-// always commit or clean-up explicitly even when that may not be
-// required (or even erroneous). Returns (nil, nil) for an empty batch.
+// EndTxn call is silently dropped, allowing the caller to always
+// commit or clean-up explicitly even when that may not be required
+// (or even erroneous). Returns (nil, nil) for an empty batch.
 func (txn *Txn) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -1134,7 +1134,7 @@ func (txn *Txn) ManualRestart(ctx context.Context, ts hlc.Timestamp) {
 // to get a retriable error later.
 //
 // Note that this method allows for false negatives: sometimes the client only
-// figures out that it's been pushed when it sends an EndTransaction - i.e. it's
+// figures out that it's been pushed when it sends an EndTxn - i.e. it's
 // possible for the txn to have been pushed asynchoronously by some other
 // operation (usually, but not exclusively, by a high-priority txn with
 // conflicting writes).

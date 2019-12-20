@@ -2670,10 +2670,10 @@ func mvccResolveWriteIntent(
 	//
 	// A commit with an older timestamp than the intent should not happen under
 	// normal circumstances because a client should never bump its timestamp
-	// after issuing an EndTransaction request. Replays of intent writes that
-	// are pushed forward due to WriteTooOld errors without client action
-	// combined with replays of intent resolution make this configuration a
-	// possibility. We treat such intents as uncommitted.
+	// after issuing an EndTxn request. Replays of intent writes that are pushed
+	// forward due to WriteTooOld errors without client action combined with
+	// replays of intent resolution make this configuration a possibility. We
+	// treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
 	timestampsValid := !intent.Txn.WriteTimestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid

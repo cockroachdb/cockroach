@@ -1125,18 +1125,19 @@ SELECT * from t.test WHERE k = 'test_key';
 	}
 }
 
-// Verifies that an expired lease is released and a new lease is acquired on transaction
-// restart.
+// Verifies that an expired lease is released and a new lease is acquired on
+// transaction restart.
 //
-// This test triggers the above scenario by making ReadWithinUncertaintyIntervalError advance
-// the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
+// This test triggers the above scenario by making
+// ReadWithinUncertaintyIntervalError advance the clock, so that the transaction
+// timestamp exceeds the deadline of the EndTxnRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	advancement := 2 * base.DefaultTableDescriptorLeaseDuration
 
 	var cmdFilters tests.CommandFilters
-	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
+	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
 
 	var clockUpdate int32
 	testKey := []byte("test_key")
@@ -1235,7 +1236,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var cmdFilters tests.CommandFilters
-	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
+	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{

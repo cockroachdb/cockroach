@@ -390,7 +390,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 }
 
 // TestTxnSpanRefresherAssignsNoRefreshSpans tests that the txnSpanRefresher
-// assigns the NoRefreshSpans flag on EndTransaction requests.
+// assigns the NoRefreshSpans flag on EndTxn requests.
 func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -403,15 +403,15 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
 	MaxTxnRefreshSpansBytes.Override(&tsr.st.SV, 3)
 
-	// Send an EndTransaction request. Should set NoRefreshSpans flag.
+	// Send an EndTxn request. Should set NoRefreshSpans flag.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Add(&roachpb.EndTxnRequest{})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTransaction().NoRefreshSpans)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.True(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -434,14 +434,14 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshReads)
 	require.False(t, tsr.refreshInvalid)
 
-	// Send another EndTransaction request. Should NOT set NoRefreshSpans flag.
+	// Send another EndTxn request. Should NOT set NoRefreshSpans flag.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Add(&roachpb.EndTxnRequest{})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTransaction().NoRefreshSpans)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.False(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -464,14 +464,14 @@ func TestTxnSpanRefresherAssignsNoRefreshSpans(t *testing.T) {
 	require.Equal(t, []roachpb.Span(nil), tsr.refreshReads)
 	require.True(t, tsr.refreshInvalid)
 
-	// Send another EndTransaction request. Still should NOT set NoRefreshSpans flag.
+	// Send another EndTxn request. Still should NOT set NoRefreshSpans flag.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTransactionRequest{})
+	ba.Add(&roachpb.EndTxnRequest{})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTransaction().NoRefreshSpans)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.False(t, ba.Requests[0].GetEndTxn().NoRefreshSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

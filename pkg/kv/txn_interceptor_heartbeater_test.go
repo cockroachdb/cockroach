@@ -197,7 +197,7 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: txn.Clone()}
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
+	ba.Add(&roachpb.EndTxnRequest{Commit: true})
 
 	br, pErr := th.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
@@ -277,7 +277,7 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 				// Mimic a Heartbeat request that observed a committed record.
 				br.Txn.Status = roachpb.COMMITTED
 			} else {
-				// Mimic an EndTransaction that raced with the heartbeat loop.
+				// Mimic an EndTxn that raced with the heartbeat loop.
 				txn.Status = roachpb.COMMITTED
 			}
 			return br, nil
@@ -340,9 +340,9 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			defer close(asyncAbortDone)
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 			require.Equal(t, &txn, ba.Txn)
 			require.Nil(t, etReq.Key) // set in txnCommitter
 			require.False(t, etReq.Commit)

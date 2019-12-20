@@ -16,14 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 )
 
-// CreateTestServerParams creates a set of params suitable for SQL tests.
-// It enables some EndTransaction sanity checking and installs a flexible
+// CreateTestServerParams creates a set of params suitable for SQL tests. It
+// enables some EndTxn sanity checking and installs a flexible
 // TestingEvalFilter.
 // TODO(andrei): this function is not used consistently by SQL tests. Figure out
-// if the EndTransaction checks are important.
+// if the EndTxn checks are important.
 func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(CheckEndTransactionTrigger, true)
+	cmdFilters.AppendFilter(CheckEndTxnTrigger, true)
 	params := base.TestServerArgs{}
 	params.Knobs.Store = &storage.StoreTestingKnobs{
 		EvalKnobs: storagebase.BatchEvalTestingKnobs{

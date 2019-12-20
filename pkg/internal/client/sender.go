@@ -95,8 +95,8 @@ type TxnSender interface {
 
 	// AnchorOnSystemConfigRange ensures that the transaction record, if/when it
 	// will be created, will be created on the system config range. This is useful
-	// because some commit triggers only work when the EndTransaction is evaluated
-	// on that range.
+	// because some commit triggers only work when the EndTxn is evaluated on that
+	// range.
 	//
 	// An error is returned if the transaction's key has already been set by
 	// anything other than a previous call to this function (i.e. if the
@@ -190,17 +190,17 @@ type TxnSender interface {
 	// field on TxnMeta.
 	ProvisionalCommitTimestamp() hlc.Timestamp
 
-	// IsSerializablePushAndRefreshNotPossible returns true if the transaction is
-	// serializable, its timestamp has been pushed and there's no chance that
-	// refreshing the read spans will succeed later (thus allowing the transaction
-	// to commit and not be restarted). Used to detect whether the txn is
-	// guaranteed to get a retriable error later.
+	// IsSerializablePushAndRefreshNotPossible returns true if the transaction
+	// is serializable, its timestamp has been pushed and there's no chance that
+	// refreshing the read spans will succeed later (thus allowing the
+	// transaction to commit and not be restarted). Used to detect whether the
+	// txn is guaranteed to get a retriable error later.
 	//
-	// Note that this method allows for false negatives: sometimes the client only
-	// figures out that it's been pushed when it sends an EndTransaction - i.e.
-	// it's possible for the txn to have been pushed asynchoronously by some other
-	// operation (usually, but not exclusively, by a high-priority txn with
-	// conflicting writes).
+	// Note that this method allows for false negatives: sometimes the client
+	// only figures out that it's been pushed when it sends an EndTxn - i.e.
+	// it's possible for the txn to have been pushed asynchoronously by some
+	// other operation (usually, but not exclusively, by a high-priority txn
+	// with conflicting writes).
 	IsSerializablePushAndRefreshNotPossible() bool
 
 	// Active returns true iff some commands have been performed with

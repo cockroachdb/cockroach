@@ -441,7 +441,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
-			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
+			if et, ok := filterArgs.Req.(*roachpb.EndTxnRequest); ok && et.Commit {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 		}
@@ -4003,11 +4003,9 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	}
 }
 
-// TestFailedConfChange verifies correct behavior after a
-// configuration change experiences an error when applying
-// EndTransaction. Specifically, it verifies that
-// https://github.com/cockroachdb/cockroach/issues/13506 has been
-// fixed.
+// TestFailedConfChange verifies correct behavior after a configuration change
+// experiences an error when applying EndTxn. Specifically, it verifies that
+// https://github.com/cockroachdb/cockroach/issues/13506 has been fixed.
 func TestFailedConfChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -4803,11 +4801,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// before proposing the split trigger.
 		var setupOnce sync.Once
 		f := storagebase.ReplicaProposalFilter(func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-			req, ok := args.Req.GetArg(roachpb.EndTransaction)
+			req, ok := args.Req.GetArg(roachpb.EndTxn)
 			if !ok {
 				return nil
 			}
-			endTxn := req.(*roachpb.EndTransactionRequest)
+			endTxn := req.(*roachpb.EndTxnRequest)
 			if endTxn.InternalCommitTrigger == nil || endTxn.InternalCommitTrigger.SplitTrigger == nil {
 				return nil
 			}
