@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -440,6 +441,14 @@ type WindowFrame struct {
 	StartBoundType tree.WindowFrameBoundType
 	EndBoundType   tree.WindowFrameBoundType
 	FrameExclusion tree.WindowFrameExclusion
+}
+
+// IsCanonical returns true if the ScanPrivate indicates an original unaltered
+// primary index Scan operator (i.e. unconstrained and not limited).
+func (s *ScanPrivate) IsCanonical() bool {
+	return s.Index == cat.PrimaryIndex &&
+		s.Constraint == nil &&
+		s.HardLimit == 0
 }
 
 // NeedResults returns true if the mutation operator can return the rows that

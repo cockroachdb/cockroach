@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -310,6 +311,29 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *ScanExpr:
+		if t.IsCanonical() {
+			// For the canonical scan, show the expressions attached to the TableMeta.
+			tab := md.TableMeta(t.Table)
+			if len(tab.Constraints) > 0 {
+				c := tp.Childf("check constraint expressions")
+				for i := 0; i < len(tab.Constraints); i++ {
+					f.formatExpr(tab.Constraints[i], c)
+				}
+			}
+			if len(tab.ComputedCols) > 0 {
+				c := tp.Childf("computed column expressions")
+				cols := make(opt.ColList, 0, len(tab.ComputedCols))
+				for col := range tab.ComputedCols {
+					cols = append(cols, col)
+				}
+				sort.Slice(cols, func(i, j int) bool {
+					return cols[i] < cols[j]
+				})
+				for _, col := range cols {
+					f.formatExpr(tab.ComputedCols[col], c)
+				}
+			}
+		}
 		if t.Constraint != nil {
 			tp.Childf("constraint: %s", t.Constraint)
 		}

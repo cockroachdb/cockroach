@@ -1356,7 +1356,14 @@ insert checks
       │    ├── project
       │    │    ├── columns: abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int)
       │    │    └── scan abcde
-      │    │         └── columns: abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) abcde.d:8(int) e:9(int) rowid:10(int!null)
+      │    │         ├── columns: abcde.a:5(int!null) abcde.b:6(int) abcde.c:7(int) abcde.d:8(int) e:9(int) rowid:10(int!null)
+      │    │         └── computed column expressions
+      │    │              ├── plus [type=int]
+      │    │              │    ├── plus [type=int]
+      │    │              │    │    ├── variable: abcde.b [type=int]
+      │    │              │    │    └── variable: abcde.c [type=int]
+      │    │              │    └── const: 1 [type=int]
+      │    │              └── variable: abcde.a [type=int]
       │    └── projections
       │         └── plus [type=int]
       │              ├── variable: abcde.c [type=int]
