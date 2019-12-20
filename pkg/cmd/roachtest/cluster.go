@@ -1319,7 +1319,7 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			ctx, "find live node", 5*time.Second,
 			func(ctx context.Context) error {
 				db = c.Conn(ctx, i)
-				_, err := db.ExecContext(ctx, `SELECT 1`)
+				_, err := db.ExecContext(ctx, `;`)
 				return err
 			},
 		); err != nil {
