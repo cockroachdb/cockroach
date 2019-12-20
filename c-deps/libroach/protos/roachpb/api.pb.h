@@ -4576,11 +4576,11 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool require_1pc() const;
   void set_require_1pc(bool value);
 
-  // bool no_refresh_spans = 8;
-  void clear_no_refresh_spans();
-  static const int kNoRefreshSpansFieldNumber = 8;
-  bool no_refresh_spans() const;
-  void set_no_refresh_spans(bool value);
+  // bool can_commit_at_higher_timestamp = 8;
+  void clear_can_commit_at_higher_timestamp();
+  static const int kCanCommitAtHigherTimestampFieldNumber = 8;
+  bool can_commit_at_higher_timestamp() const;
+  void set_can_commit_at_higher_timestamp(bool value);
 
   // bool poison = 9;
   void clear_poison();
@@ -4599,7 +4599,7 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger_;
   bool commit_;
   bool require_1pc_;
-  bool no_refresh_spans_;
+  bool can_commit_at_higher_timestamp_;
   bool poison_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -19961,18 +19961,18 @@ inline void EndTxnRequest::set_require_1pc(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.require_1pc)
 }
 
-// bool no_refresh_spans = 8;
-inline void EndTxnRequest::clear_no_refresh_spans() {
-  no_refresh_spans_ = false;
+// bool can_commit_at_higher_timestamp = 8;
+inline void EndTxnRequest::clear_can_commit_at_higher_timestamp() {
+  can_commit_at_higher_timestamp_ = false;
 }
-inline bool EndTxnRequest::no_refresh_spans() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.no_refresh_spans)
-  return no_refresh_spans_;
+inline bool EndTxnRequest::can_commit_at_higher_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.can_commit_at_higher_timestamp)
+  return can_commit_at_higher_timestamp_;
 }
-inline void EndTxnRequest::set_no_refresh_spans(bool value) {
+inline void EndTxnRequest::set_can_commit_at_higher_timestamp(bool value) {
   
-  no_refresh_spans_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.no_refresh_spans)
+  can_commit_at_higher_timestamp_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.can_commit_at_higher_timestamp)
 }
 
 // bool poison = 9;
