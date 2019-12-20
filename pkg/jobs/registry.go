@@ -255,19 +255,54 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
 	buf := bytes.Buffer{}
-	for i, j := range jobs {
+	for i, id := range jobs {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(fmt.Sprintf(" (%d)", j))
+		buf.WriteString(fmt.Sprintf(" (%d)", id))
+		j, err := r.LoadJob(ctx, id)
+		if err != nil {
+			return err
+		}
+		resultsCh := make(chan tree.Datums)
+		errCh, err := r.StartJob(ctx, resultsCh, j)
+		if err != nil {
+			return err
+		}
+		go func() {
+			// Drain and ignore results.
+			for range resultsCh {
+			}
+		}()
+		go func() {
+			// Any errors will be read from the jobs table.
+			<-errCh
+			close(resultsCh)
+		}()
 	}
-	_, err := ex.Exec(
+	if _, err := ex.Exec(
 		ctx,
 		"wait-for-jobs",
 		nil, /* txn */
 		fmt.Sprintf("SHOW JOBS WHEN COMPLETE VALUES %s", buf.String()),
-	)
-	return err
+	); err != nil {
+		return errors.New("could not finish waiting for queued jobs to complete")
+	}
+	var errMsg string
+	for i, id := range jobs {
+		j, err := r.LoadJob(ctx, id)
+		if err != nil {
+			errMsg += fmt.Sprintf("Job %d could not be loaded. The job may not have succeeded", jobs[i])
+			continue
+		}
+		if j.Payload().Error != "" {
+			errMsg += fmt.Sprintf("Job %d failed with error %s", jobs[i], j.Payload().Error)
+		}
+	}
+	if errMsg != "" {
+		return errors.New(errMsg)
+	}
+	return nil
 }
 
 // NewJob creates a new Job.
