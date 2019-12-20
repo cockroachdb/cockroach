@@ -17,20 +17,23 @@ import (
 )
 
 var (
-	alters = []statementWeight{
-		{1, makeRenameTable},
-		{1, makeCreateTable},
+	alters               = append(altersTableExistence, altersExistingTable...)
+	altersTableExistence = []statementWeight{
+		{10, makeCreateTable},
 		{1, makeDropTable},
+	}
+	altersExistingTable = []statementWeight{
+		{5, makeRenameTable},
 
-		{1, makeAddColumn},
-		{1, makeJSONComputedColumn},
+		{10, makeAddColumn},
+		{10, makeJSONComputedColumn},
 		{1, makeDropColumn},
-		{1, makeRenameColumn},
-		{1, makeAlterColumnType},
+		{5, makeRenameColumn},
+		{5, makeAlterColumnType},
 
-		{1, makeCreateIndex},
+		{10, makeCreateIndex},
 		{1, makeDropIndex},
-		{1, makeRenameIndex},
+		{5, makeRenameIndex},
 	}
 )
 
