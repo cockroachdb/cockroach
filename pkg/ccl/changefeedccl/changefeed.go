@@ -238,7 +238,7 @@ func emitEntries(
 		// being tracked by the local span frontier. The poller should not be forwarding
 		// row updates that have timestamps less than or equal to any resolved timestamp
 		// it's forwarded before.
-		// TODO(aayush): This should be an assertion once we're confident this can never
+		// TODO(dan): This should be an assertion once we're confident this can never
 		// happen under any circumstance.
 		if !sf.Frontier().Less(row.updated) {
 			log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
