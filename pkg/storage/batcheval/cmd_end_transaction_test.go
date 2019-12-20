@@ -1003,9 +1003,9 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 				Commit:        c.commit,
 
-				InFlightWrites: c.inFlightWrites,
-				Deadline:       c.deadline,
-				NoRefreshSpans: c.noRefreshSpans,
+				InFlightWrites:             c.inFlightWrites,
+				Deadline:                   c.deadline,
+				CanCommitAtHigherTimestamp: c.noRefreshSpans,
 			}
 			if !c.noIntentSpans {
 				req.IntentSpans = intents

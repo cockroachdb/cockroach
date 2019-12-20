@@ -84,7 +84,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 		}
 		et, _ := endTxnArgs(txn1, true)
 		et.IntentSpans = []roachpb.Span{spanA, spanB}
-		et.NoRefreshSpans = true
+		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn1, &et)
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
 		txnCh1 <- pErr.GoError()
@@ -114,7 +114,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 		txn2 = &txn2Copy
 		et, _ := endTxnArgs(txn2, true)
 		et.IntentSpans = []roachpb.Span{spanB}
-		et.NoRefreshSpans = true
+		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
 		_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
 		txnCh2 <- pErr.GoError()
@@ -265,7 +265,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 
 			et, _ := endTxnArgs(txn4, true)
 			et.IntentSpans = []roachpb.Span{spanB, spanC}
-			et.NoRefreshSpans = true
+			et.CanCommitAtHigherTimestamp = true
 			assignSeqNumsForReqs(txn4, &et)
 			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn4}, &et)
 			txnCh4 <- pErr.GoError()
@@ -293,7 +293,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 
 			et, _ := endTxnArgs(txn5, true)
 			et.IntentSpans = []roachpb.Span{spanB}
-			et.NoRefreshSpans = true
+			et.CanCommitAtHigherTimestamp = true
 			assignSeqNumsForReqs(txn5, &et)
 			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn5}, &et)
 			txnCh5 <- pErr.GoError()
@@ -331,7 +331,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 
 		et, _ := endTxnArgs(txn2, true)
 		et.IntentSpans = []roachpb.Span{spanB}
-		et.NoRefreshSpans = true
+		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
 		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et); pErr != nil {
 			t.Fatal(pErr)
@@ -367,7 +367,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 
 			et, _ := endTxnArgs(txn3, true)
 			et.IntentSpans = []roachpb.Span{spanA, spanB}
-			et.NoRefreshSpans = true
+			et.CanCommitAtHigherTimestamp = true
 			assignSeqNumsForReqs(txn3, &et)
 			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn3}, &et)
 			txnCh3 <- pErr.GoError()
@@ -394,7 +394,7 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 
 			et, _ := endTxnArgs(txn1, true)
 			et.IntentSpans = []roachpb.Span{spanB}
-			et.NoRefreshSpans = true
+			et.CanCommitAtHigherTimestamp = true
 			assignSeqNumsForReqs(txn1, &et)
 			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
 			txnCh1 <- pErr.GoError()
@@ -461,7 +461,7 @@ func TestContendedIntentPushedByHighPriorityScan(t *testing.T) {
 		}
 		et, _ := endTxnArgs(txn2, true)
 		et.IntentSpans = []roachpb.Span{spanA, spanB}
-		et.NoRefreshSpans = true
+		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
 		txnCh2 <- pErr.GoError()
@@ -491,7 +491,7 @@ func TestContendedIntentPushedByHighPriorityScan(t *testing.T) {
 	// transaction has no refresh spans.
 	et, _ := endTxnArgs(txn1, true)
 	et.IntentSpans = []roachpb.Span{spanA}
-	et.NoRefreshSpans = true
+	et.CanCommitAtHigherTimestamp = true
 	assignSeqNumsForReqs(txn1, &et)
 	if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et); pErr != nil {
 		t.Fatal(pErr)
