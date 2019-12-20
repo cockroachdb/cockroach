@@ -92,6 +92,7 @@ func verifyColOperator(
 		Inputs:                             columnarizers,
 		StreamingMemAccount:                &acc,
 		UseStreamingMemAccountForBuffering: true,
+		ProcessorConstructor:               rowexec.NewProcessor,
 	}
 	result, err := colexec.NewColOperator(ctx, flowCtx, args)
 	if err != nil {
@@ -113,7 +114,7 @@ func verifyColOperator(
 		outputTypes,
 		&execinfrapb.PostProcessSpec{},
 		nil, /* output */
-		nil, /* metadataSourcesQueue */
+		result.MetadataSources,
 		nil, /* outputStatsToTrace */
 		nil, /* cancelFlow */
 	)
@@ -127,41 +128,66 @@ func verifyColOperator(
 	defer outColOp.ConsumerClosed()
 
 	var procRows, colOpRows []string
-	rowCount := 0
+	var procMetas, colOpMetas []execinfrapb.ProducerMetadata
 	for {
-		rowProc, meta := outProc.Next()
-		if meta != nil {
-			return errors.Errorf("unexpected meta %+v from processor", meta)
+		rowProc, metaProc := outProc.Next()
+		if rowProc != nil {
+			procRows = append(procRows, rowProc.String(outputTypes))
 		}
-		rowColOp, meta := outColOp.Next()
-		if meta != nil {
-			return errors.Errorf("unexpected meta %+v from columnar operator", meta)
+		if metaProc != nil {
+			if metaProc.Err == nil {
+				return errors.Errorf("unexpectedly processor returned non-error "+
+					"meta\n%+v", metaProc)
+			}
+			procMetas = append(procMetas, *metaProc)
+		}
+		rowColOp, metaColOp := outColOp.Next()
+		if rowColOp != nil {
+			colOpRows = append(colOpRows, rowColOp.String(outputTypes))
+		}
+		if metaColOp != nil {
+			if metaColOp.Err == nil {
+				return errors.Errorf("unexpectedly columnar operator returned "+
+					"non-error meta\n%+v", metaColOp)
+			}
+			colOpMetas = append(colOpMetas, *metaColOp)
 		}
 
-		if rowProc != nil && rowColOp == nil {
-			return errors.Errorf("different results: processor produced a row %s while columnar operator is done", rowProc.String(outputTypes))
-		}
-		if rowColOp != nil && rowProc == nil {
-			return errors.Errorf("different results: columnar operator produced a row %s while processor is done", rowColOp.String(outputTypes))
-		}
-		if rowProc == nil && rowColOp == nil {
+		if rowProc == nil && metaProc == nil &&
+			rowColOp == nil && metaColOp == nil {
 			break
 		}
+	}
 
-		expStr := rowProc.String(outputTypes)
-		retStr := rowColOp.String(outputTypes)
-		if anyOrder {
-			// We accumulate all the rows to be matched using set comparison when
-			// both "producers" are done.
-			procRows = append(procRows, expStr)
-			colOpRows = append(colOpRows, retStr)
-		} else {
-			// anyOrder is false, so the result rows must match in the same order.
-			if expStr != retStr {
-				return errors.Errorf("different results on row %d;\nexpected:\n   %s\ngot:\n   %s", rowCount, expStr, retStr)
-			}
+	if len(procMetas) != len(colOpMetas) {
+		return errors.Errorf("different number of metas returned:\n"+
+			"processor returned\n%+v\n\ncolumnar operator returned\n%+v",
+			procMetas, colOpMetas)
+	}
+	// It is possible that a query will hit an error (for example, integer out of
+	// range). We then expect that both the processor and the operator returned
+	// such error.
+	if len(procMetas) > 1 {
+		return errors.Errorf("unexpectedly multiple metas returned:\n"+
+			"processor returned\n%+v\n\ncolumnar operator returned\n%+v",
+			procMetas, colOpMetas)
+	} else if len(procMetas) == 1 {
+		procErr := procMetas[0].Err.Error()
+		colOpErr := colOpMetas[0].Err.Error()
+		if procErr != colOpErr {
+			return errors.Errorf("different errors returned:\n"+
+				"processor return\n%+v\ncolumnar operator returned\n%+v",
+				procMetas[0].Err, colOpMetas[0].Err)
 		}
-		rowCount++
+		// The errors are the same, so the rows that were returned do not matter.
+		return nil
+	}
+
+	if len(procRows) != len(colOpRows) {
+		return errors.Errorf("different number of rows returned:\n"+
+			"processor returned\n%+v\n\ncolumnar operator returned\n%+v\n"+
+			"processor metas\n%+v\ncolumnar operator metas\n%+v\n",
+			procRows, colOpRows, procMetas, colOpMetas)
 	}
 
 	if anyOrder {
@@ -183,10 +209,17 @@ func verifyColOperator(
 					"processor output:\n		%v\ncolumnar operator output:\n		%v", i, procRows, colOpRows)
 			}
 		}
-		// Note: we do not check whether used is all true here because procRows and
-		// colOpRows, at this point, must have equal number of rows - if it weren't
-		// true, an error would have been returned that either of the "producers"
-		// outputted a row while the other one didn't.
+	} else {
+		for i, expStr := range procRows {
+			retStr := colOpRows[i]
+			// anyOrder is false, so the result rows must match in the same order.
+			if expStr != retStr {
+				return errors.Errorf(
+					"different results on row %d;\nexpected:\n%s\ngot:\n%s",
+					i, expStr, retStr,
+				)
+			}
+		}
 	}
 	return nil
 }
