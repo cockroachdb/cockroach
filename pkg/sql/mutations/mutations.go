@@ -157,11 +157,7 @@ func statisticsMutator(
 				} else {
 					seen[es] = true
 				}
-				var numRange int64
-				// The first bucket should have NumRange=0.
-				if i > 0 {
-					numRange = randNonNegInt(rng)
-				}
+				numRange := randNonNegInt(rng)
 				var distinctRange float64
 				// distinctRange should be <= numRange.
 				switch rng.Intn(3) {
@@ -183,6 +179,12 @@ func statisticsMutator(
 			sort.Slice(h.Buckets, func(i, j int) bool {
 				return bytes.Compare(h.Buckets[i].UpperBound, h.Buckets[j].UpperBound) < 0
 			})
+			// The first bucket must have numrange = 0, and thus
+			// distinctrange = 0 as well.
+			if len(h.Buckets) > 0 {
+				h.Buckets[0].NumRange = 0
+				h.Buckets[0].DistinctRange = 0
+			}
 			stat := colStats[col.Name]
 			if err := stat.SetHistogram(&h); err != nil {
 				panic(err)
