@@ -430,7 +430,7 @@ inner-join (hash)
 memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~10KB, required=[presentation: s:1,t:2,u:3,s:4,t:5,u:6])
+memo (optimized, ~11KB, required=[presentation: s:1,t:2,u:3,s:4,t:5,u:6])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+4,+5,+6) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+6,+5,+4) (lookup-join G2 G5 stu,keyCols=[1 2 3],outCols=(1-6)) (lookup-join G2 G5 stu@uts,keyCols=[3 2 1],outCols=(1-6)) (merge-join G3 G2 G5 inner-join,+4,+5,+6,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+6,+5,+4,+3,+2,+1) (lookup-join G3 G5 stu,keyCols=[4 5 6],outCols=(1-6)) (lookup-join G3 G5 stu@uts,keyCols=[6 5 4],outCols=(1-6))
  │    └── [presentation: s:1,t:2,u:3,s:4,t:5,u:6]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +4,+5,+6]" G5 inner-join,+1,+2,+3,+4,+5,+6)
@@ -2042,7 +2042,7 @@ inner-join (lookup t5)
 memo
 SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
 ----
-memo (optimized, ~13KB, required=[presentation: a:1])
+memo (optimized, ~14KB, required=[presentation: a:1])
  ├── G1: (project G2 G3 a)
  │    └── [presentation: a:1]
  │         ├── best: (project G2 G3 a)

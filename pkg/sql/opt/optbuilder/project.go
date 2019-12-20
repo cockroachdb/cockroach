@@ -46,10 +46,7 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 			if scalar == nil {
 				passthrough.Add(id)
 			} else {
-				projections = append(projections, memo.ProjectionsItem{
-					Element:    scalar,
-					ColPrivate: memo.ColPrivate{Col: id},
-				})
+				projections = append(projections, b.factory.ConstructProjectionsItem(scalar, id))
 			}
 			colSet.Add(id)
 		}

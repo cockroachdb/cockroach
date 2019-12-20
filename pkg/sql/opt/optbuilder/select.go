@@ -947,7 +947,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
 		inScope.expr.(memo.RelExpr),
-		memo.FiltersExpr{{Condition: filter}},
+		memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)},
 	)
 }
 

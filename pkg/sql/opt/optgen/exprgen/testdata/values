@@ -26,7 +26,7 @@ expr
     [ (Tuple [ (Const 1) ] "tuple{int}" ) ]
     [ (Cols [ (NewColumn "x" "int") ]) ]
   )
-  [ (ProjectionItem (Plus (Var "x") (Const 10)) (NewColumn "y" "int")) ]
+  [ (ProjectionsItem (Plus (Var "x") (Const 10)) (NewColumn "y" "int")) ]
   "x"
 )
 ----

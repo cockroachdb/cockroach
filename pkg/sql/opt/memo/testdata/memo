@@ -345,7 +345,7 @@ memo (optimized, ~2KB, required=[presentation: array_agg:3])
 memo
 SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized, ~8KB, required=[presentation: field:6])
+memo (optimized, ~9KB, required=[presentation: field:6])
  ├── G1: (distinct-on G2 G3 cols=(6))
  │    └── [presentation: field:6]
  │         ├── best: (distinct-on G2 G3 cols=(6))
