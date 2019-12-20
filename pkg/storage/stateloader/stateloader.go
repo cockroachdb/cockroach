@@ -468,18 +468,6 @@ func (rsl StateLoader) SetGCThreshold(
 		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
 }
 
-// LoadLegacyTxnSpanGCThreshold loads the legacy transaction GC threshold. This
-// field is NOT populated in the ReplicaState value returned by StateLoader.Load.
-// TODO(nvanbenschoten): Remove in 20.1.
-func (rsl StateLoader) LoadLegacyTxnSpanGCThreshold(
-	ctx context.Context, reader engine.Reader,
-) (*hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.Timestamp{}, &t, engine.MVCCGetOptions{})
-	return &t, err
-}
-
 // The rest is not technically part of ReplicaState.
 
 // LoadLastIndex loads the last index.
