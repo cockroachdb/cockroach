@@ -21,8 +21,8 @@ with t=A
 ----
 get: "k" -> /BYTES/v @0.000000001,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=5} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
-meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0.000000000,0 seq=5} ts=0.000000001,0 del=false klen=12 vlen=6
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=5} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=5} ts=0.000000001,0 del=false klen=12 vlen=6
 data: "k"/0.000000001,0 -> /BYTES/v
 
 run ok
@@ -31,7 +31,7 @@ with t=A
   txn_step n=4
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0.000000000,0 seq=4} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000000,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
 
 
 # We're operating at a higher epoch but a lower seqnum.
@@ -48,9 +48,9 @@ with t=A k=k
   put v=v2
   check_intent exists
 ----
-meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0.000000000,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
 >> at end:
-meta: "k"/0.000000000,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0.000000000,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000001,0 min=0,0 seq=4} ts=0.000000001,0 del=false klen=12 vlen=7
 data: "k"/0.000000001,0 -> /BYTES/v2
 
 # We're expecting v2 here.
