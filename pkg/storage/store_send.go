@@ -231,34 +231,22 @@ func (s *Store) Send(
 // the txnwait.Queue, where it will wait for updates to the target
 // transaction.
 // TODO(nvanbenschoten): Move this method.
-func (r *Replica) maybeWaitForPushee(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If this is a push txn request, check the push queue first, which
-	// may cause this request to wait and either return a successful push
-	// txn response or else allow this request to proceed.
-	if ba.IsSinglePushTxnRequest() {
+func (r *Replica) maybeWaitForPushee(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+	switch {
+	case ba.IsSinglePushTxnRequest():
+		// If this is a push txn request, check the push queue first, which
+		// may cause this request to wait and either return a successful push
+		// txn response or else allow this request to proceed.
 		if r.store.cfg.TestingKnobs.DontRetryPushTxnFailures {
-			return nil, nil
+			return nil
 		}
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		pushResp, pErr := r.txnWaitQueue.MaybeWaitForPush(ctx, r, pushReq)
-		if pErr != nil {
-			return nil, pErr
-		} else if pushResp != nil {
-			br := &roachpb.BatchResponse{}
-			br.Add(pushResp)
-			return br, nil
-		}
-	} else if ba.IsSingleQueryTxnRequest() {
+		return r.txnWaitQueue.MaybeWaitForPush(ctx, r, pushReq)
+	case ba.IsSingleQueryTxnRequest():
 		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.
 		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
-		pErr := r.txnWaitQueue.MaybeWaitForQuery(ctx, r, queryReq)
-		if pErr != nil {
-			return nil, pErr
-		}
+		return r.txnWaitQueue.MaybeWaitForQuery(ctx, r, queryReq)
 	}
-
-	return nil, nil
+	return nil
 }

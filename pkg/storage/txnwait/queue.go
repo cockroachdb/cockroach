@@ -92,13 +92,6 @@ func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
 	return TxnExpiration(txn).Less(now)
 }
 
-// createPushTxnResponse returns a PushTxnResponse struct with a
-// copy of the supplied transaction. It is necessary to fully copy
-// each field in the transaction to avoid race conditions.
-func createPushTxnResponse(txn *roachpb.Transaction) *roachpb.PushTxnResponse {
-	return &roachpb.PushTxnResponse{PusheeTxn: *txn}
-}
-
 // A waitingPush represents a PushTxn command that is waiting on the
 // pushee transaction to commit or abort. It maintains a transitive
 // set of all txns which are waiting on this txn in order to detect
@@ -401,9 +394,9 @@ func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID
 // the first return value is a non-nil PushTxnResponse object.
 func (q *Queue) MaybeWaitForPush(
 	ctx context.Context, repl ReplicaInterface, req *roachpb.PushTxnRequest,
-) (*roachpb.PushTxnResponse, *roachpb.Error) {
+) *roachpb.Error {
 	if ShouldPushImmediately(req) {
-		return nil, nil
+		return nil
 	}
 
 	q.mu.Lock()
@@ -414,19 +407,19 @@ func (q *Queue) MaybeWaitForPush(
 	// ensure that it's not cleared before an incorrect insertion happens.
 	if q.mu.txns == nil || !repl.ContainsKey(req.Key) {
 		q.mu.Unlock()
-		return nil, nil
+		return nil
 	}
 
 	// If there's no pending queue for this txn, return not pushed. If
-	// already pushed, return push success.
+	// already pushed, let the push proceed.
 	pending, ok := q.mu.txns[req.PusheeTxn.ID]
 	if !ok {
 		q.mu.Unlock()
-		return nil, nil
+		return nil
 	}
 	if txn := pending.getTxn(); isPushed(req, txn) {
 		q.mu.Unlock()
-		return createPushTxnResponse(txn), nil
+		return nil
 	}
 
 	push := &waitingPush{
@@ -522,28 +515,26 @@ func (q *Queue) MaybeWaitForPush(
 		case <-ctx.Done():
 			// Caller has given up.
 			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
-			return nil, roachpb.NewError(ctx.Err())
+			return roachpb.NewError(ctx.Err())
 		case <-q.store.Stopper().ShouldQuiesce():
 			// Let the push out so that they can be sent looking elsewhere.
-			return nil, nil
+			return nil
 		case txn := <-push.pending:
 			log.VEventf(ctx, 2, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
 			// proceeds and is redirected to the new range lease holder.
 			if txn == nil {
-				return nil, nil
+				return nil
 			}
 			// Transaction was committed, aborted or had its timestamp
-			// pushed. If this PushTxn request is satisfied, return
-			// successful PushTxn response.
+			// pushed. Let the push proceed to evaluation.
 			if isPushed(req, txn) {
 				log.VEvent(ctx, 2, "push request is satisfied")
-				return createPushTxnResponse(txn), nil
+			} else {
+				log.VEvent(ctx, 2, "not pushed; returning to caller")
 			}
-			// If not successfully pushed, return not pushed so request proceeds.
-			log.VEvent(ctx, 2, "not pushed; returning to caller")
-			return nil, nil
+			return nil
 
 		case <-pusheeTxnTimer.C:
 			log.VEvent(ctx, 2, "querying pushee")
@@ -553,11 +544,11 @@ func (q *Queue) MaybeWaitForPush(
 				ctx, req.PusheeTxn, false, nil, q.store.Clock().Now(),
 			)
 			if pErr != nil {
-				return nil, pErr
+				return pErr
 			} else if updatedPushee == nil {
 				// Continue with push.
 				log.VEvent(ctx, 2, "pushee not found, push should now succeed")
-				return nil, nil
+				return nil
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
@@ -586,11 +577,11 @@ func (q *Queue) MaybeWaitForPush(
 					// is now uncommittable.
 					q.UpdateTxn(ctx, updatedPushee)
 				}
-				return createPushTxnResponse(updatedPushee), nil
+				return nil
 			}
 			if IsExpired(q.store.Clock().Now(), updatedPushee) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
-				return nil, nil
+				return nil
 			}
 			// Set the timer to check for the pushee txn's expiration.
 			expiration := TxnExpiration(updatedPushee).GoTime()
@@ -601,10 +592,11 @@ func (q *Queue) MaybeWaitForPush(
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
 				log.VEventf(ctx, 1, "pusher committed: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionCommittedStatusError(), updatedPusher)
+				return roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionCommittedStatusError(), updatedPusher)
 			case roachpb.ABORTED:
 				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
-				return nil, roachpb.NewErrorWithTxn(
+				return roachpb.NewErrorWithTxn(
 					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED), updatedPusher)
 			}
 			log.VEventf(ctx, 2, "pusher was updated: %v", updatedPusher)
@@ -650,12 +642,7 @@ func (q *Queue) MaybeWaitForPush(
 						dependents,
 					)
 					metrics.DeadlocksTotal.Inc(1)
-					// TODO(nvanbenschoten): As it, it would make sense to return
-					// the force push's PushTxnResponse, but the following commit
-					// is planning on removing the response path here and letting
-					// all pushes fall through to standard evaluation to create
-					// their response.
-					return nil, q.forcePushAbort(ctx, req)
+					return q.forcePushAbort(ctx, req)
 				}
 			}
 			// Signal the pusher query txn loop to continue.
@@ -663,7 +650,7 @@ func (q *Queue) MaybeWaitForPush(
 
 		case pErr := <-queryPusherErrCh:
 			queryPusherErrCh = nil
-			return nil, pErr
+			return pErr
 		}
 	}
 }

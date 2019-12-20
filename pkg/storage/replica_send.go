@@ -182,8 +182,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// pending updates to the target transaction for either PushTxn or
 		// QueryTxn requests.
 		// TODO(nvanbenschoten): Push this into the concurrency package.
-		br, pErr = r.maybeWaitForPushee(ctx, ba)
-		if br != nil || pErr != nil {
+		if pErr = r.maybeWaitForPushee(ctx, ba); pErr != nil {
 			return br, pErr
 		}
 
