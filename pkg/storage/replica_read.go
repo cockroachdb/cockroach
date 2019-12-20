@@ -61,7 +61,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Evaluate read-only batch command.
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
-	readOnly := r.store.Engine().NewReadOnly()
+	readOnly := r.store.Engine().NewBatch()
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
 
