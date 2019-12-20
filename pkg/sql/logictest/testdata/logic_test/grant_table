@@ -97,6 +97,7 @@ test           pg_catalog          pg_am                              public   S
 test           pg_catalog          pg_attrdef                         public   SELECT
 test           pg_catalog          pg_attribute                       public   SELECT
 test           pg_catalog          pg_auth_members                    public   SELECT
+test           pg_catalog          pg_authid                          public   SELECT
 test           pg_catalog          pg_available_extensions            public   SELECT
 test           pg_catalog          pg_cast                            public   SELECT
 test           pg_catalog          pg_class                           public   SELECT
