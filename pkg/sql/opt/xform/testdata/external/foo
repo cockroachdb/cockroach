@@ -34,6 +34,8 @@ Initial expression
    ├── fd: (1)-->(2,3), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── status IN ('open', 'complete', 'cancelled') [type=bool]
    │    ├── key: (1)
    │    └── fd: (1)-->(2,3)
    ├── scan customers
@@ -42,9 +44,27 @@ Initial expression
    │    └── fd: (4)-->(5,6)
    └── filters
         └── customer_id = customers.id [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
---------------------------------------------------------------------------------
-NormalizeInConst (no changes)
---------------------------------------------------------------------------------
+================================================================================
+NormalizeInConst
+  Cost: 2160.05
+================================================================================
+   left-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+  - │    │    └── status IN ('open', 'complete', 'cancelled') [type=bool]
+  + │    │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+    ├── scan customers
+    │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+    │    ├── key: (4)
+    │    └── fd: (4)-->(5,6)
+    └── filters
+         └── customer_id = customers.id [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -65,6 +85,8 @@ CommuteLeftJoin (higher cost)
   + │    └── fd: (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
@@ -88,6 +110,8 @@ GenerateLookupJoins (higher cost)
     ├── fd: (1)-->(2,3), (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
@@ -98,40 +122,38 @@ GenerateLookupJoins (higher cost)
   -      └── customer_id = customers.id [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
   + └── filters (true)
 --------------------------------------------------------------------------------
-CommuteRightJoin (no changes)
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
-  -left-join (hash)
+  -left-join (lookup customers)
   +right-join (merge)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  - ├── key columns: [2] = [4]
+  - ├── lookup columns are key
   + ├── left ordering: +4
   + ├── right ordering: +2
     ├── key: (1,4)
     ├── fd: (1)-->(2,3), (4)-->(5,6)
   - ├── scan orders
-  - │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
-  - │    ├── key: (1)
-  - │    └── fd: (1)-->(2,3)
-    ├── scan customers
-    │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
-    │    ├── key: (4)
-  - │    └── fd: (4)-->(5,6)
-  - └── filters
-  -      └── customer_id = customers.id [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+  + ├── scan customers
+  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  + │    ├── key: (4)
   + │    ├── fd: (4)-->(5,6)
   + │    └── ordering: +4
   + ├── sort
-  + │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
-  + │    ├── key: (1)
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │    ├── check constraint expressions
+  - │    │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
+    │    ├── key: (1)
+  - │    └── fd: (1)-->(2,3)
   + │    ├── fd: (1)-->(2,3)
   + │    ├── ordering: +2
   + │    └── scan orders
   + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │         ├── check constraint expressions
+  + │         │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
   + │         ├── key: (1)
   + │         └── fd: (1)-->(2,3)
-  + └── filters (true)
+    └── filters (true)
 ================================================================================
 Final best expression
   Cost: 2160.05
@@ -142,6 +164,8 @@ Final best expression
    ├── fd: (1)-->(2,3), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── status IN ('cancelled', 'complete', 'open') [type=bool]
    │    ├── key: (1)
    │    └── fd: (1)-->(2,3)
    ├── scan customers

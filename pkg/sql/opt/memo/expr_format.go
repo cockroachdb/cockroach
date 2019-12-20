@@ -310,6 +310,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *ScanExpr:
+		if t.IsCanonical() {
+			// For the canonical scan, show the check constraint expressions attached
+			// to the TableMeta.
+			if tab := md.TableMeta(t.Table); len(tab.Constraints) > 0 {
+				c := tp.Childf("check constraint expressions")
+				for i := 0; i < len(tab.Constraints); i++ {
+					f.formatExpr(tab.Constraints[i], c)
+				}
+			}
+		}
 		if t.Constraint != nil {
 			tp.Childf("constraint: %s", t.Constraint)
 		}

@@ -1367,7 +1367,11 @@ update mutation
       │    ├── project
       │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: m [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -1398,7 +1402,11 @@ update mutation
       │    ├── project
       │    │    ├── columns: column11:11(int!null) column12:12(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: m [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
@@ -1437,6 +1445,10 @@ update mutation
       │    │    │    │    ├── limit hint: 10.00
       │    │    │    │    └── scan mutation
       │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │         ├── check constraint expressions
+      │    │    │    │         │    └── gt [type=bool]
+      │    │    │    │         │         ├── variable: m [type=int]
+      │    │    │    │         │         └── const: 0 [type=int]
       │    │    │    │         └── ordering: +6
       │    │    │    └── const: 10 [type=int]
       │    │    └── projections
@@ -1504,7 +1516,14 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) column10:10(int!null) column11:11(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         ├── lt [type=bool]
+      │    │    │         │    ├── variable: b [type=int]
+      │    │    │         │    └── variable: d [type=int]
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: a [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]
@@ -1539,7 +1558,14 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         ├── lt [type=bool]
+      │    │    │         │    ├── variable: b [type=int]
+      │    │    │         │    └── variable: d [type=int]
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: a [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -1572,7 +1598,14 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         ├── lt [type=bool]
+      │    │    │         │    ├── variable: b [type=int]
+      │    │    │         │    └── variable: d [type=int]
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: a [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         └── const: 2 [type=int]
       │    └── projections
@@ -1606,7 +1639,14 @@ update checks
       │    ├── left-join-apply
       │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         ├── lt [type=bool]
+      │    │    │         │    ├── variable: checks.b [type=int]
+      │    │    │         │    └── variable: checks.d [type=int]
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: checks.a [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: abcde.a:9(int!null) abcde.b:10(int)
       │    │    │    └── project
@@ -1652,7 +1692,17 @@ update decimals
       ├── project
       │    ├── columns: a:11(decimal) b:12(decimal[]) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
       │    ├── scan decimals
-      │    │    └── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    │    ├── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    │    └── check constraint expressions
+      │    │         ├── eq [type=bool]
+      │    │         │    ├── variable: decimals.a [type=decimal]
+      │    │         │    └── function: round [type=decimal]
+      │    │         │         └── variable: decimals.a [type=decimal]
+      │    │         └── gt [type=bool]
+      │    │              ├── indirection [type=decimal]
+      │    │              │    ├── variable: decimals.b [type=decimal[]]
+      │    │              │    └── const: 0 [type=int]
+      │    │              └── const: 1 [type=decimal]
       │    └── projections
       │         ├── function: crdb_internal.round_decimal_values [type=decimal]
       │         │    ├── const: 1.1 [type=decimal]
