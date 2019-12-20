@@ -11,14 +11,13 @@
 import React from "react";
 import { Link } from "react-router";
 import { connect } from "react-redux";
-import moment from "moment";
+import moment, { Moment } from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
   LivenessStatus,
   nodeCapacityStats,
-  NodesSummary,
   nodesSummarySelector,
   selectNodesSummaryValid,
 } from "src/redux/nodes";
@@ -26,34 +25,54 @@ import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
+import { INodeStatus, MetricConstants } from "src/util/proto";
+import { ColumnsConfig, Table } from "src/components/table";
+import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
-import { trustIcon } from "src/util/trust";
-import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
-import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
-import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
-import { cockroach } from "src/js/protos";
 
-import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
-
-import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
-);
-
-const deadNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "nodes/dead_sort_setting", (s) => s.localSettings,
 );
 
 const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/decommissioned_sort_setting", (s) => s.localSettings,
 );
 
-class NodeSortedTable extends SortedTable<INodeStatus> {}
+// Represents the aggregated dataset with possibly nested items
+// for table view. Note: table columns do not match exactly to fields,
+// instead, column values are computed based on these fields.
+// It is required to reduce computation for top level (grouped) fields,
+// and to allow sorting functionality with specific rather then on column value.
+interface NodeStatusRow {
+  nodeId?: number;
+  region: string;
+  nodesCount?: number;
+  uptime?: string;
+  replicas: number;
+  usedCapacity: number;
+  availableCapacity: number;
+  usedMemory: number;
+  availableMemory: number;
+  version?: string;
+  /*
+  * status is a union of Node statuses and two artificial statuses
+  * used to represent the status of top-level grouped items.
+  * If all nested nodes have Live status then the current item has Ready status.
+  * Otherwise, it has Warning status.
+  * */
+  status: LivenessStatus | "Ready" | "Warning";
+  children?: Array<NodeStatusRow>;
+}
+
+interface DecommissionedNodeStatusRow {
+  nodeId: number;
+  region: string;
+  status: LivenessStatus;
+  decommissionedDate: Moment;
+}
 
 /**
  * NodeCategoryListProps are the properties shared by both LiveNodeList and
@@ -62,8 +81,15 @@ class NodeSortedTable extends SortedTable<INodeStatus> {}
 interface NodeCategoryListProps {
   sortSetting: SortSetting;
   setSort: typeof liveNodesSortSetting.set;
-  statuses: INodeStatus[];
-  nodesSummary: NodesSummary;
+}
+
+interface LiveNodeListProps extends NodeCategoryListProps {
+  dataSource: NodeStatusRow[];
+  count: number;
+}
+
+interface DecommissionedNodeListProps extends NodeCategoryListProps {
+  dataSource: DecommissionedNodeStatusRow[];
 }
 
 /**
@@ -71,219 +97,128 @@ interface NodeCategoryListProps {
  * both healthy and suspect nodes. Included is a side-bar with summary
  * statistics for these nodes.
  */
-class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
-  getLivenessIcon(livenessStatus: NodeLivenessStatus) {
-    switch (livenessStatus) {
-      case NodeLivenessStatus.LIVE:
-        return liveIcon;
-      case NodeLivenessStatus.DEAD:
-        return deadIcon;
-      default:
-        return suspectIcon;
-    }
-  }
+class NodeList extends React.Component<LiveNodeListProps> {
+
+  readonly columns: ColumnsConfig<NodeStatusRow> = [
+    {
+      key: "region",
+      dataIndex: "region",
+      title: "nodes",
+      sorter: true,
+    },
+    {
+      key: "nodesCount",
+      dataIndex: "nodesCount",
+      title: "# of nodes",
+      sorter: true,
+    },
+    {
+      key: "uptime",
+      dataIndex: "uptime",
+      title: "uptime",
+      sorter: true,
+    },
+    {
+      key: "replicas",
+      dataIndex: "replicas",
+      title: "replicas",
+      sorter: true,
+    },
+    {
+      key: "capacityUse",
+      title: "capacity use",
+      render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
+      sorter: (a, b) =>
+        a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
+    },
+    {
+      key: "memoryUse",
+      title: "memory use",
+      render: (_text, record) => Percentage(record.usedMemory, record.availableMemory),
+      sorter: (a, b) =>
+        a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
+    },
+    {
+      key: "version",
+      dataIndex: "version",
+      title: "version",
+      sorter: true,
+    },
+    {
+      key: "status",
+      dataIndex: "status",
+      title: "status",
+      sorter: true,
+    },
+    {
+      key: "logs",
+      title: "",
+      render: (_text, record) => record.nodeId
+        && <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>,
+    },
+  ];
 
   render() {
-    const { statuses, nodesSummary, sortSetting } = this.props;
-    if (!statuses || statuses.length === 0) {
-      return null;
-    }
-
+    const { dataSource, count } = this.props;
     return (
       <div className="embedded-table">
         <section className="section section--heading">
-          <h2>Live Nodes</h2>
+          <h2>Nodes ({count})</h2>
         </section>
-        <NodeSortedTable
-          data={statuses}
-          sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.props.setSort(setting)}
-          columns={[
-            // Node ID column.
-            {
-              title: "ID",
-              cell: (ns) => `n${ns.desc.node_id}`,
-              sort: (ns) => ns.desc.node_id,
-            },
-            // Node address column - displays the node address, links to the
-            // node-specific page for this node.
-            {
-              title: "Address",
-              cell: (ns) => {
-                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
-                const icon = this.getLivenessIcon(status);
-                let tooltip: string;
-                switch (status) {
-                  case LivenessStatus.LIVE:
-                    tooltip = "This node is currently healthy.";
-                    break;
-                  case LivenessStatus.DECOMMISSIONING:
-                    tooltip = "This node is currently being decommissioned.";
-                    break;
-                  default:
-                    tooltip = "This node has not recently reported as being live. " +
-                      "It may not be functioning correctly, but no automatic action has yet been taken.";
-                }
-                return (
-                  <div className="sort-table__unbounded-column">
-                    <span className="node-status-icon" title={tooltip} dangerouslySetInnerHTML={ trustIcon(icon) } />
-                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                  </div>
-                );
-              },
-              sort: (ns) => ns.desc.node_id,
-              // TODO(mrtracy): Consider if there is a better way to use BEM
-              // style CSS in cases like this; it is a bit awkward to write out
-              // the entire modifier class here, but it might not be better to
-              // construct the full BEM class in the table component itself.
-              className: "sort-table__cell--link",
-            },
-            // Started at - displays the time that the node started.
-            {
-              title: "Uptime",
-              cell: (ns) => {
-                const startTime = LongToMoment(ns.started_at);
-                return moment.duration(startTime.diff(moment())).humanize();
-              },
-              sort: (ns) => ns.started_at,
-              className: "sort-table__cell--right-aligned-stats",
-            },
-            // Replicas - displays the total number of replicas on the node.
-            {
-              title: "Replicas",
-              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-              sort: (ns) => ns.metrics[MetricConstants.replicas],
-              className: "sort-table__cell--right-aligned-stat",
-            },
-            // CPUs - the number of CPUs on this node
-            {
-              title: "CPUs",
-              cell: (ns) => ns.num_cpus,
-              className: "sort-table__cell--right-aligned-stat",
-            },
-            // Used Capacity - displays the total persisted bytes maintained by the node.
-            {
-              title: "Capacity Usage",
-              cell: (ns) => {
-                const { usable } = nodeCapacityStats(ns);
-                const used = BytesUsed(ns);
-                return <BytesBarChart used={used} usable={usable} />;
-              },
-              sort: (ns) => BytesUsed(ns) / nodeCapacityStats(ns).usable,
-            },
-            // Mem Usage - total memory being used on this node.
-            {
-              title: "Mem Usage",
-              cell: (ns) => {
-                const used = ns.metrics[MetricConstants.rss];
-                const available = FixLong(ns.total_system_memory).toNumber();
-                return <BytesBarChart used={used} usable={available} />;
-              },
-              sort: (ns) => ns.metrics[MetricConstants.rss] / FixLong(ns.total_system_memory).toNumber(),
-            },
-            // Version - the currently running version of cockroach.
-            {
-              title: "Version",
-              cell: (ns) => ns.build_info.tag,
-              sort: (ns) => ns.build_info.tag,
-            },
-            // Logs - a link to the logs data for this node.
-            {
-              title: "Logs",
-              cell: (ns) => <Link to={`/node/${ns.desc.node_id}/logs`}>Logs</Link>,
-              className: "expand-link",
-            },
-          ]} />
+        <Table dataSource={dataSource} columns={this.columns} />
       </div>
     );
   }
 }
 
 /**
- * NotLiveNodeListProps are the properties of NotLiveNodeList.
+ * DecommissionedNodeList renders a view with a table for recently "decommissioned"
+ * nodes on a link on a full list of decommissioned nodes.
  */
-interface NotLiveNodeListProps extends NodeCategoryListProps {
-  status: LivenessStatus.DECOMMISSIONING | LivenessStatus.DEAD;
-}
+class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
+  columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
+    {
+      key: "nodes",
+      title: "decommissioned nodes",
+      sorter: (a, b) => a.nodeId - b.nodeId,
+      render: (_text, record) => `${record.nodeId} ${record.region}`,
+    },
+    {
+      key: "decommissionedSince",
+      title: "decommissioned since",
+      sorter: (a, b) =>
+        a.decommissionedDate.toDate().getTime() - b.decommissionedDate.toDate().getTime(),
+      render: (_text, record) => record.decommissionedDate.format("LL[ at ]h:mm a"),
+    },
+    {
+      key: "status",
+      title: "status",
+      sorter: (a, b) => a.status - b.status,
+      render: (_text, record) => record.status,
+    },
+  ];
 
-/**
- * NotLiveNodeList renders a sortable table of all "dead" or "decommissioned"
- * nodes on the cluster.
- */
-class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
   render() {
-    const { status, statuses, nodesSummary, sortSetting } = this.props;
-    if (!statuses || statuses.length === 0) {
+    const { dataSource } = this.props;
+    if (_.isEmpty(dataSource)) {
       return null;
     }
-
-    const statusName = _.capitalize(LivenessStatus[status]);
 
     return (
       <div className="embedded-table">
         <section className="section section--heading">
-          <h2>{`${statusName} Nodes`}</h2>
+          <h2>Recently Decommissioned Nodes</h2>
         </section>
-        <NodeSortedTable
-          data={statuses}
-          sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.props.setSort(setting)}
-          columns={[
-            // Node ID column.
-            {
-              title: "ID",
-              cell: (ns) => `n${ns.desc.node_id}`,
-              sort: (ns) => ns.desc.node_id,
-            },
-            // Node address column - displays the node address, links to the
-            // node-specific page for this node.
-            {
-              title: "Address",
-              cell: (ns) => {
-                return (
-                  <div>
-                    <span className="node-status-icon"
-                      title={
-                        "This node has not reported as live for a significant period and is considered dead. " +
-                        "The cut-off period for dead nodes is configurable as cluster setting " +
-                        "'server.time_until_store_dead'"
-                      }
-                      dangerouslySetInnerHTML={ trustIcon(deadIcon) } />
-                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                  </div>
-                );
-              },
-              sort: (ns) => ns.desc.node_id,
-              // TODO(mrtracy): Consider if there is a better way to use BEM
-              // style CSS in cases like this; it is a bit awkward to write out
-              // the entire modifier class here, but it might not be better to
-              // construct the full BEM class in the table component itself.
-              className: "sort-table__cell--link",
-            },
-            // Down/decommissioned since - displays how long the node has been
-            // considered dead.
-            {
-              title: `${statusName} Since`,
-              cell: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                if (!liveness) {
-                  return "no information";
-                }
-
-                const deadTime = liveness.expiration.wall_time;
-                const deadMoment = LongToMoment(deadTime);
-                return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
-              },
-              sort: (ns) => {
-                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                return liveness.expiration.wall_time;
-              },
-            },
-          ]} />
+        <Table dataSource={dataSource} columns={this.columns} />
       </div>
     );
   }
 }
+
+const getNodeRegion = (nodeStatus: INodeStatus) => {
+  const region = nodeStatus.desc.locality.tiers.find(tier => tier.key === "region");
+  return region ? region.value : undefined;
+};
 
 /**
  * partitionedStatuses divides the list of node statuses into "live" and "dead".
@@ -297,55 +232,113 @@ const partitionedStatuses = createSelector(
         switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
           case LivenessStatus.LIVE:
           case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.DEAD:
           case LivenessStatus.DECOMMISSIONING:
             return "live";
           case LivenessStatus.DECOMMISSIONED:
             return "decommissioned";
-          case LivenessStatus.DEAD:
           default:
-            return "dead";
+            return "live";
         }
       },
     );
   },
 );
 
+const liveNodesTableData = createSelector(
+  partitionedStatuses,
+  nodesSummarySelector,
+  (statuses, nodesSummary) => {
+    const liveStatuses = statuses.live || [];
+
+    // TODO (koorosh): Do not display aggregated category and # of nodes column
+    // when `withLocalitiesSetup` is false.
+    // const withLocalitiesSetup = liveStatuses.some(getNodeRegion);
+
+    // `data` can be represented as nested or flat structure.
+    // In case cluster is geo partitioned or at least one locality is specified:
+    // - nodes are grouped by region
+    // - top level record contains aggregated information about nodes in current region
+    // In case cluster is setup without localities:
+    // - it represents a flat structure.
+    const data = _.chain(liveStatuses)
+      .groupBy(getNodeRegion)
+      .map((nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
+        const nestedRows = nodesPerRegion.map((ns): NodeStatusRow => {
+          const { used: usedCapacity, usable: availableCapacity } = nodeCapacityStats(ns);
+          return {
+            nodeId: ns.desc.node_id,
+            region: `${ns.desc.node_id} ${regionKey}-node-${ns.desc.node_id}`,
+            uptime: moment.duration(LongToMoment(ns.started_at).diff(moment())).humanize(),
+            replicas: ns.metrics[MetricConstants.replicas],
+            usedCapacity,
+            availableCapacity,
+            usedMemory: ns.metrics[MetricConstants.rss],
+            availableMemory: FixLong(ns.total_system_memory).toNumber(),
+            version: ns.build_info.tag,
+            status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE,
+          };
+        });
+
+        return {
+          region: `Pretty name (${regionKey})`,
+          nodesCount: nodesPerRegion.length,
+          replicas: _.sum(nestedRows.map(nr => nr.replicas)),
+          usedCapacity: _.sum(nestedRows.map(nr => nr.usedCapacity)),
+          availableCapacity: _.sum(nestedRows.map(nr => nr.availableCapacity)),
+          usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
+          availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
+          status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ? "Ready" : "Warning",
+          children: nestedRows,
+        };
+      })
+      .value();
+    return data;
+  });
+
+const decommissionedNodesTableData = createSelector(
+  partitionedStatuses,
+  nodesSummarySelector,
+  (statuses, nodesSummary): DecommissionedNodeStatusRow[] => {
+    const decommissionedStatuses = statuses.decommissioned || [];
+
+    const getDecommissionedTime = (nodeId: number) => {
+      const liveness = nodesSummary.livenessByNodeID[nodeId];
+      if (!liveness) {
+        return undefined;
+      }
+      const deadTime = liveness.expiration.wall_time;
+      return LongToMoment(deadTime);
+    };
+
+    const data = decommissionedStatuses.map((ns: INodeStatus) => {
+        return {
+          nodeId: ns.desc.node_id,
+          region: getNodeRegion(ns),
+          status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
+          decommissionedDate: getDecommissionedTime(ns.desc.node_id),
+        };
+      });
+    return data;
+  });
+
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
 // tslint:disable-next-line:variable-name
-const LiveNodesConnected = connect(
+const NodesConnected = connect(
   (state: AdminUIState) => {
-    const statuses = partitionedStatuses(state);
+    const liveNodes = partitionedStatuses(state).live || [];
     return {
       sortSetting: liveNodesSortSetting.selector(state),
-      statuses: statuses.live,
-      nodesSummary: nodesSummarySelector(state),
+      dataSource: liveNodesTableData(state),
+      count: liveNodes.length,
     };
   },
   {
     setSort: liveNodesSortSetting.set,
   },
-)(LiveNodeList);
-
-/**
- * DeadNodesConnected is a redux-connected HOC of NotLiveNodeList.
- */
-// tslint:disable-next-line:variable-name
-const DeadNodesConnected = connect(
-  (state: AdminUIState) => {
-    const statuses = partitionedStatuses(state);
-    return {
-      sortSetting: deadNodesSortSetting.selector(state),
-      status: LivenessStatus.DEAD,
-      statuses: statuses.dead,
-      nodesSummary: nodesSummarySelector(state),
-    };
-  },
-  {
-    setSort: deadNodesSortSetting.set,
-  },
-)(NotLiveNodeList);
+)(NodeList);
 
 /**
  * DecommissionedNodesConnected is a redux-connected HOC of NotLiveNodeList.
@@ -353,18 +346,15 @@ const DeadNodesConnected = connect(
 // tslint:disable-next-line:variable-name
 const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
-    const statuses = partitionedStatuses(state);
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
-      status: LivenessStatus.DECOMMISSIONED,
-      statuses: statuses.decommissioned,
-      nodesSummary: nodesSummarySelector(state),
+      dataSource: decommissionedNodesTableData(state),
     };
   },
   {
     setSort: decommissionedNodesSortSetting.set,
   },
-)(NotLiveNodeList);
+)(DecommissionedNodeList);
 
 /**
  * NodesMainProps is the type of the props object that must be passed to
@@ -401,8 +391,7 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
   render() {
     return (
       <div>
-        <DeadNodesConnected />
-        <LiveNodesConnected />
+        <NodesConnected />
         <DecommissionedNodesConnected />
       </div>
     );
