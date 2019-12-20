@@ -19,6 +19,19 @@ import (
 	"github.com/pkg/errors"
 )
 
+// SupportedAggFns contains all aggregate functions supported by the vectorized
+// engine.
+var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
+	execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+	execinfrapb.AggregatorSpec_AVG,
+	execinfrapb.AggregatorSpec_SUM,
+	execinfrapb.AggregatorSpec_SUM_INT,
+	execinfrapb.AggregatorSpec_COUNT_ROWS,
+	execinfrapb.AggregatorSpec_COUNT,
+	execinfrapb.AggregatorSpec_MIN,
+	execinfrapb.AggregatorSpec_MAX,
+}
+
 // aggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
 // in Init. The aggregateFunc performs an aggregation per group and outputs the
