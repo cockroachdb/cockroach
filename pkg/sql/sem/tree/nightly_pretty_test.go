@@ -31,7 +31,7 @@ func TestPrettyData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := tree.DefaultPrettyCfg()
+	cfg := testPrettyCfg
 	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
 		runTestPrettyData(t, "ref", cfg, matches, false /*short*/)

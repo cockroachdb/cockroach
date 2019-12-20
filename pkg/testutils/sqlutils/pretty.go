@@ -30,6 +30,40 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	// Be careful to not simplify otherwise the tests won't round trip.
 	cfg.Simplify = false
 	for i := range stmts {
+		// Dataflow of the statement through these checks:
+		//
+		//             sql (from test file)
+		//              |
+		//          (parser.Parse)
+		//              v
+		//           origStmt
+		//          /         \
+		//    (cfg.Pretty)    (AsStringWithFlags,FmtParsable)
+		//       v                          |
+		//    prettyStmt                    |
+		//       |                          |
+		// (parser.ParseOne)                |
+		//       v                          |
+		//   parsedPretty                   |
+		//       |                          |
+		// (AsStringWithFlags,FmtSimple)    |
+		//       v                          v
+		//   prettyFormatted          origFormatted
+		//
+		// == Check 1: prettyFormatted == origFormatted
+		// If false:
+		//
+		//       |                          |
+		//       |                   (parser.ParseOne)
+		//       |                          v
+		//       |                    reparsedStmt
+		//       |                          |
+		//       |                 (AsStringWithFlags,FmtParsable)
+		//       v                          v
+		//   prettyFormatted           origFormatted
+		//
+		// == Check 2: prettyFormatted == origFormatted
+		//
 		origStmt := stmts[i].AST
 		// Be careful to not simplify otherwise the tests won't round trip.
 		prettyStmt := cfg.Pretty(origStmt)
