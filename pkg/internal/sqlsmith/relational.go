@@ -95,6 +95,9 @@ var (
 		{10, makeDelete},
 		{10, makeUpdate},
 		{1, makeAlter},
+		{1, makeBegin},
+		{2, makeRollback},
+		{6, makeCommit},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
@@ -866,6 +869,18 @@ func (s *Smither) makeUpdateReturning(refs colRefs) (tree.TableExpr, colRefs, bo
 func makeInsert(s *Smither) (tree.Statement, bool) {
 	stmt, _, ok := s.makeInsert(nil)
 	return stmt, ok
+}
+
+func makeBegin(s *Smither) (tree.Statement, bool) {
+	return &tree.BeginTransaction{}, true
+}
+
+func makeCommit(s *Smither) (tree.Statement, bool) {
+	return &tree.CommitTransaction{}, true
+}
+
+func makeRollback(s *Smither) (tree.Statement, bool) {
+	return &tree.RollbackTransaction{}, true
 }
 
 // makeInsert has only one valid reference: its table source, which can be
