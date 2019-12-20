@@ -19,12 +19,7 @@ import (
 )
 
 var (
-	scalars, bools             []scalarWeight
-	scalarWeights, boolWeights []int
-)
-
-func init() {
-	scalars = []scalarWeight{
+	scalars = []scalarExprWeight{
 		{10, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeCaseExpr)},
 		{1, scalarNoContext(makeCoalesceExpr)},
@@ -42,9 +37,8 @@ func init() {
 			return makeConstExpr(s, typ, refs), true
 		}},
 	}
-	scalarWeights = extractWeights(scalars)
 
-	bools = []scalarWeight{
+	bools = []scalarExprWeight{
 		{1, scalarNoContext(makeColRef)},
 		{1, scalarNoContext(makeAnd)},
 		{1, scalarNoContext(makeOr)},
@@ -58,29 +52,13 @@ func init() {
 		{1, scalarNoContext(makeExists)},
 		{1, makeFunc},
 	}
-	boolWeights = extractWeights(bools)
-}
+)
 
 // TODO(mjibson): remove this and correctly pass around the Context.
-func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarFn {
+func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarExpr {
 	return func(s *Smither, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return fn(s, t, refs)
 	}
-}
-
-type scalarFn func(*Smither, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
-
-type scalarWeight struct {
-	weight int
-	fn     scalarFn
-}
-
-func extractWeights(weights []scalarWeight) []int {
-	w := make([]int, len(weights))
-	for i, s := range weights {
-		w[i] = s.weight
-	}
-	return w
 }
 
 // makeScalar attempts to construct a scalar expression of the requested type.
@@ -90,7 +68,7 @@ func makeScalar(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 }
 
 func makeScalarContext(s *Smither, ctx Context, typ *types.T, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.scalars, scalars, s, ctx, typ, refs)
+	return makeScalarSample(s.scalarExprSampler, s, ctx, typ, refs)
 }
 
 func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
@@ -98,16 +76,11 @@ func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
 }
 
 func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.bools, bools, s, ctx, types.Bool, refs)
+	return makeScalarSample(s.boolExprSampler, s, ctx, types.Bool, refs)
 }
 
 func makeScalarSample(
-	sampler *WeightedSampler,
-	weights []scalarWeight,
-	s *Smither,
-	ctx Context,
-	typ *types.T,
-	refs colRefs,
+	sampler *scalarExprSampler, s *Smither, ctx Context, typ *types.T, refs colRefs,
 ) tree.TypedExpr {
 	// If we are in a GROUP BY, attempt to find an aggregate function.
 	if ctx.fnClass == tree.AggregateClass {
@@ -119,8 +92,7 @@ func makeScalarSample(
 		for {
 			// No need for a retry counter here because makeConstExpr will eventually
 			// be called and it always succeeds.
-			idx := sampler.Next()
-			result, ok := weights[idx].fn(s, ctx, typ, refs)
+			result, ok := sampler.Next()(s, ctx, typ, refs)
 			if ok {
 				return result
 			}
