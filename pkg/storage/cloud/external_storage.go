@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -474,13 +474,120 @@ func (h *httpStorage) Conf() roachpb.ExternalStorage {
 	}
 }
 
+type reqSender = func(reqHeaders map[string]string) (io.ReadCloser, http.Header, error)
+
+type resumingHTTPReader struct {
+	b         io.ReadCloser
+	canResume bool      // Can we resume if download aborts prematurely?
+	pos       int64     // How much data was received so far.
+	retryReq  reqSender // Retry request
+}
+
+var _ io.ReadCloser = &resumingHTTPReader{}
+
+const maxNoProgressHTTPRetries = 16
+
+func (r *resumingHTTPReader) Close() error {
+	return r.b.Close()
+}
+
+// checkHTTPContentRangeHeader parses Content-Range header and
+// ensures that range start offset is the same as 'pos'
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
+func checkHTTPContentRangeHeader(h string, pos int64) error {
+	if len(h) == 0 {
+		return errors.New("http server does not honor download resume")
+	}
+
+	h = strings.TrimPrefix(h, "bytes ")
+	dash := strings.IndexByte(h, '-')
+	if dash <= 0 {
+		return errors.Errorf("malformed Content-Range header: %s", h)
+	}
+
+	resume, err := strconv.ParseInt(h[:dash], 10, 64)
+	if err != nil {
+		return errors.Errorf("malformed start offset in Content-Range header: %s", h)
+	}
+
+	if resume != pos {
+		return errors.Errorf(
+			"expected resume position %d, found %d instead in Content-Range header: %s",
+			pos, resume, h)
+	}
+	return nil
+}
+
+// requestNextRanges issues additional http request
+// to continue downloading next range of bytes.
+func (r *resumingHTTPReader) requestNextRange() (err error) {
+	if err := r.b.Close(); err != nil {
+		return err
+	}
+
+	var header http.Header
+	r.b, header, err = r.retryReq(map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)})
+
+	if err != nil {
+		return err
+	}
+
+	return checkHTTPContentRangeHeader(header.Get("Content-Range"), r.pos)
+}
+
+// Read implements io.Reader interface to read the data from the underlying
+// http stream, issuing additional requests in case download is interrupted.
+func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
+	retries := 0
+
+	for n == 0 && err == nil && retries < maxNoProgressHTTPRetries {
+		n, err = r.b.Read(p)
+		r.pos += int64(n)
+
+		if n > 0 {
+			// As long as download progresses, reset the retries.
+			retries = 0
+		}
+
+		// Resume download if the http server supports this.
+		// We can attempt to resume download iff the error is ErrUnexpectedEOF.
+		// In particular, we should not worry about a case when error is io.EOF.
+		// The reason for this is two-fold:
+		//   1. The underlying http library converts io.EOF to io.ErrUnexpectedEOF
+		//   if the number of bytes transferred is less than the number of
+		//   bytes advertised in the Content-Length header.  So if we see
+		//   io.ErrUnexpectedEOF we can simply request the next range.
+		//   2. If the server did *not* advertise Content-Length, then
+		//   there is really nothing we can do: http standard says that
+		//   the stream ends when the server terminates connection.
+		if errors.Is(err, io.ErrUnexpectedEOF) && r.canResume {
+			retries++
+			err = r.requestNextRange()
+		}
+	}
+	return
+}
+
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	resp, err := h.req(ctx, "GET", basename, nil)
+	sender := func(reqHeaders map[string]string) (io.ReadCloser, http.Header, error) {
+		resp, err := h.req(ctx, "GET", basename, nil, reqHeaders)
+		if err != nil {
+			return nil, nil, err
+		}
+		return resp.Body, resp.Header, nil
+	}
+
+	body, headers, err := sender(nil)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+	return &resumingHTTPReader{
+		b:         body,
+		canResume: headers.Get("Accept-Ranges") == "bytes",
+		pos:       0,
+		retryReq:  sender,
+	}, nil
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
@@ -527,7 +634,7 @@ func (h *httpStorage) Close() error {
 func (h *httpStorage) reqNoBody(
 	ctx context.Context, method, file string, body io.Reader,
 ) (*http.Response, error) {
-	resp, err := h.req(ctx, method, file, body)
+	resp, err := h.req(ctx, method, file, body, nil)
 	if resp != nil {
 		resp.Body.Close()
 	}
@@ -535,7 +642,7 @@ func (h *httpStorage) reqNoBody(
 }
 
 func (h *httpStorage) req(
-	ctx context.Context, method, file string, body io.Reader,
+	ctx context.Context, method, file string, body io.Reader, headers map[string]string,
 ) (*http.Response, error) {
 	dest := *h.base
 	if hosts := len(h.hosts); hosts > 1 {
@@ -552,6 +659,11 @@ func (h *httpStorage) req(
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 	req = req.WithContext(ctx)
+
+	for key, val := range headers {
+		req.Header.Add(key, val)
+	}
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
 	}
@@ -560,8 +672,8 @@ func (h *httpStorage) req(
 		return nil, errors.Wrapf(err, "error executing request %s %q", method, url)
 	}
 	switch resp.StatusCode {
-	case 200, 201, 204:
-		// ignore
+	case 200, 201, 204, 206:
+		// Pass.
 	default:
 		body, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
