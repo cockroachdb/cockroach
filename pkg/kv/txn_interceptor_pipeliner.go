@@ -60,7 +60,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 // coordinator during the lifetime of a transaction. Intents are included with a
 // transaction on commit or abort, to be cleaned up asynchronously. If they
 // exceed this threshold, they're condensed to avoid memory blowup both on the
-// coordinator and (critically) on the EndTransaction command at the Raft group
+// coordinator and (critically) on the EndTxn command at the Raft group
 // responsible for the transaction record.
 var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 	"kv.transaction.max_intents_bytes",
@@ -109,12 +109,12 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 //
 // The interceptor proves all in-flight writes before explicitly committing a
 // transaction by tacking on a QueryIntent request for each one to the front of
-// an EndTransaction(Commit=true) request. The in-flight writes that are being
-// queried in the batch with the EndTransaction request are treated as in-flight
-// writes for the purposes of parallel commits. The effect of this is that the
-// in-flight writes must all be proven for a transaction to be considered
-// implicitly committed. It also follows that they will need to be queried
-// during transaction recovery.
+// an EndTxn(Commit=true) request. The in-flight writes that are being queried
+// in the batch with the EndTxn request are treated as in-flight writes for the
+// purposes of parallel commits. The effect of this is that the in-flight writes
+// must all be proven for a transaction to be considered implicitly committed.
+// It also follows that they will need to be queried during transaction
+// recovery.
 //
 // This is fantastic from the standpoint of transaction latency because it means
 // that the consensus latency for every write in a transaction, including the
@@ -133,17 +133,16 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 //
 // Three approaches have been considered to address this, all of which revolve
 // around the idea that earlier writes in a transaction may have finished
-// consensus well before the EndTransaction is sent. Following this logic, it
-// would be in the txnPipeliner's best interest to prove in-flight writes as
-// early as possible, even if no other overlapping requests force them to be
-// proven. The approaches are:
+// consensus well before the EndTxn is sent. Following this logic, it would be
+// in the txnPipeliner's best interest to prove in-flight writes as early as
+// possible, even if no other overlapping requests force them to be proven. The
+// approaches are:
 //
 // 1. launch a background process after each successful async write to query its
 //    intents and wait for it to succeed. This would effectively solve the issue,
 //    but at the cost of many more goroutines and many more QueryIntent requests,
 //    most of which would be redundant because their corresponding write wouldn't
-//    complete until after an EndTransaction synchronously needed to prove them
-//    anyway.
+//    complete until after an EndTxn synchronously needed to prove them anyway.
 //
 // 2. to address the issue of an unbounded number of background goroutines
 //    proving writes in approach 1, a single background goroutine could be run
@@ -152,8 +151,8 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 //    property that only one batch of QueryIntent requests is ever active at a
 //    given time. It may be revisited, but for now it is not used for the same
 //    reason as approach 1: most of its QueryIntent requests will be useless
-//    because a transaction will send an EndTransaction immediately after sending
-//    all of its writes.
+//    because a transaction will send an EndTxn immediately after sending all
+//    of its writes.
 //
 // 3. turn the KV interface into a streaming protocol (#8360) that could support
 //    returning multiple results. This would allow clients to return immediately
@@ -195,8 +194,8 @@ type txnPipeliner struct {
 func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If an EndTransaction request is part of this batch, attach the
-	// in-flight writes and the write footprint to it.
+	// If an EndTxn request is part of this batch, attach the in-flight writes
+	// and the write footprint to it.
 	ba, pErr := tp.attachWritesToEndTxn(ctx, ba)
 	if pErr != nil {
 		return nil, pErr
@@ -218,22 +217,21 @@ func (tp *txnPipeliner) SendLocked(
 }
 
 // attachWritesToEndTxn attaches the in-flight writes and the write footprint
-// that the interceptor has been tracking to any EndTransaction requests present
-// in the provided batch. It augments these sets with writes from the current
-// batch.
+// that the interceptor has been tracking to any EndTxn requests present in the
+// provided batch. It augments these sets with writes from the current batch.
 func (tp *txnPipeliner) attachWritesToEndTxn(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (roachpb.BatchRequest, *roachpb.Error) {
-	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	args, hasET := ba.GetArg(roachpb.EndTxn)
 	if !hasET {
 		return ba, nil
 	}
-	et := args.(*roachpb.EndTransactionRequest)
+	et := args.(*roachpb.EndTxnRequest)
 	if len(et.IntentSpans) > 0 {
-		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
+		return ba, roachpb.NewErrorf("client must not pass intents to EndTxn")
 	}
 	if len(et.InFlightWrites) > 0 {
-		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTransaction")
+		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTxn")
 	}
 
 	// Populate et.IntentSpans and et.InFlightWrites.
@@ -395,10 +393,10 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 				// because their request header is often insufficient to
 				// determine all of the keys that they will interact with.
 				tp.ifWrites.ascend(writeIter)
-			} else if et, ok := req.(*roachpb.EndTransactionRequest); ok {
+			} else if et, ok := req.(*roachpb.EndTxnRequest); ok {
 				if et.Commit {
-					// EndTransactions need to prove all in-flight writes before
-					// being allowed to succeed themselves.
+					// EndTxns need to prove all in-flight writes before being
+					// allowed to succeed themselves.
 					tp.ifWrites.ascend(writeIter)
 				}
 			} else {

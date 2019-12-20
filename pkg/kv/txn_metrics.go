@@ -84,23 +84,21 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	// There are two ways we can get "write too old" restarts. In both
-	// cases, a WriteTooOldError is generated in the MVCC layer. This is
-	// intercepted on the way out by the Store, which performs a single
-	// retry at a pushed timestamp. If the retry succeeds, the immediate
-	// operation succeeds but the WriteTooOld flag is set on the
-	// Transaction, which causes EndTransaction to return a
-	// TransactionRetryError with RETRY_WRITE_TOO_OLD. These are
+	// There are two ways we can get "write too old" restarts. In both cases, a
+	// WriteTooOldError is generated in the MVCC layer. This is intercepted on
+	// the way out by the Store, which performs a single retry at a pushed
+	// timestamp. If the retry succeeds, the immediate operation succeeds but
+	// the WriteTooOld flag is set on the Transaction, which causes EndTxn to
+	// return a/ TransactionRetryError with RETRY_WRITE_TOO_OLD. These are
 	// captured as txn.restarts.writetooold.
 	//
-	// If the Store's retried operation generates a second
-	// WriteTooOldError (indicating a conflict with a third transaction
-	// with a higher timestamp than the one that caused the first
-	// WriteTooOldError), the store doesn't retry again, and the
-	// WriteTooOldError will be returned up the stack to be retried at
-	// this level. These are captured as txn.restarts.writetoooldmulti.
-	// This path is inefficient, and if it turns out to be common we may
-	// want to do something about it.
+	// If the Store's retried operation generates a second WriteTooOldError
+	// (indicating a conflict with a third transaction with a higher timestamp
+	// than the one that caused the first WriteTooOldError), the store doesn't
+	// retry again, and the WriteTooOldError will be returned up the stack to be
+	// retried at this level. These are captured as
+	// txn.restarts.writetoooldmulti. This path is inefficient, and if it turns
+	// out to be common we may want to do something about it.
 	metaRestartsWriteTooOld = metric.Metadata{
 		Name:        "txn.restarts.writetooold",
 		Help:        "Number of restarts due to a concurrent writer committing first",

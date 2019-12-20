@@ -118,12 +118,12 @@ enum TransactionAbortedReason {
   // For backwards compatibility.
   ABORT_REASON_UNKNOWN = 0;
 
-  // A HeartbeatTxn or EndTransaction(commit=true) request found an aborted
-  // transaction record. Another txn must have written this record - that other
-  // txn probably ran into one of our intents and pushed our transaction record
-  // successfully. Either a high-priority transaction simply pushed us or we
-  // failed to heartbeat for a while and another txn (of any priority)
-  // considered us abandoned and pushed us.
+  // A HeartbeatTxn or EndTxn(commit=true) request found an aborted transaction
+  // record. Another txn must have written this record - that other txn probably
+  // ran into one of our intents and pushed our transaction record successfully.
+  // Either a high-priority transaction simply pushed us or we failed to
+  // heartbeat for a while and another txn (of any priority) considered us
+  // abandoned and pushed us.
   ABORT_REASON_ABORTED_RECORD_FOUND = 1;
 
   // The client is trying to use a transaction that's already been aborted. The

@@ -39,11 +39,11 @@ SELECT * FROM t
 user root
 
 # The insert increases the candidate timestamp, but a restart won't occur
-# until an EndTransaction.
+# until an EndTxn.
 statement ok
 INSERT INTO t(a) VALUES (1)
 
-# RELEASE will send an EndTransaction which will result in a retriable error.
+# RELEASE will send an EndTxn which will result in a retriable error.
 statement error pgcode 40001 retry txn.*
 RELEASE SAVEPOINT cockroach_restart
 

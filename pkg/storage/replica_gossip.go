@@ -59,8 +59,7 @@ func (r *Replica) shouldGossip() bool {
 }
 
 // MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// Further calls come from the trigger on EndTransaction or range lease
-// acquisition.
+// Further calls come from the trigger on EndTxn or range lease acquisition.
 //
 // Note that MaybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a range lease

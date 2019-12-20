@@ -24,10 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEndTransactionUpdatesTransactionRecord tests EndTransaction request
-// across its various possible transaction record state transitions and error
-// cases.
-func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
+// TestEndTxnUpdatesTransactionRecord tests EndTxn request across its various
+// possible transaction record state transitions and error cases.
+func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -998,8 +997,8 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 				require.False(t, c.noRefreshSpans)
 			}
 
-			// Issue an EndTransaction request.
-			req := roachpb.EndTransactionRequest{
+			// Issue an EndTxn request.
+			req := roachpb.EndTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 				Commit:        c.commit,
 
@@ -1010,8 +1009,8 @@ func TestEndTransactionUpdatesTransactionRecord(t *testing.T) {
 			if !c.noIntentSpans {
 				req.IntentSpans = intents
 			}
-			var resp roachpb.EndTransactionResponse
-			_, err := EndTransaction(ctx, batch, CommandArgs{
+			var resp roachpb.EndTxnResponse
+			_, err := EndTxn(ctx, batch, CommandArgs{
 				EvalCtx: &mockEvalCtx{
 					desc: &desc,
 					canCreateTxnFn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {

@@ -157,13 +157,12 @@ func (b *Batch) fillResults(ctx context.Context) {
 					// this pass.
 					if b.response != nil && offset+k < len(b.response.Responses) {
 						reply = b.response.Responses[offset+k].GetInner()
-					} else if args.Method() != roachpb.EndTransaction {
-						// TODO(tschottdorf): EndTransaction is special-cased
-						// here because it may be elided (r/o txns). Might
-						// prefer to simulate an EndTransaction response
-						// instead; this effectively just leaks here.
-						// TODO(tschottdorf): returning an error here seems
-						// to get swallowed.
+					} else if args.Method() != roachpb.EndTxn {
+						// TODO(tschottdorf): EndTxn is special-cased here
+						// because it may be elided (r/o txns). Might prefer to
+						// simulate an EndTxn response instead; this effectively
+						// just leaks here. TODO(tschottdorf): returning an
+						// error here seems to get swallowed.
 						panic(errors.Errorf("not enough responses for calls: (%T) %+v\nresponses: %+v",
 							args, args, b.response))
 					}
@@ -242,7 +241,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
-			case *roachpb.EndTransactionRequest:
+			case *roachpb.EndTxnRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
 			case *roachpb.AdminUnsplitRequest:

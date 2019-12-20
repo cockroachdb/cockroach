@@ -20,12 +20,11 @@ import "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 //   i.e. without accounting for any writes in the batch. This can have
 //   ContainsEstimates set.
 // - DeltaBatchEstimated: the writes in the batch, i.e. the stats delta accrued
-//   from the evaluation of the EndTransaction so far (this is mostly the write
-//   to the transaction record, as well as resolving the intent on the range
-//   descriptor, but nothing in this code relies on that). Since we have no
-//   reason to introduce ContainsEstimates in a split trigger, this typically
-//   has ContainsEstimates unset, but the results will be estimate free either
-//   way.
+//   from the evaluation of the EndTxn so far (this is mostly the write to the
+//   transaction record, as well as resolving the intent on the range descriptor,
+//   but nothing in this code relies on that). Since we have no reason to
+//   introduce ContainsEstimates in a split trigger, this typically has
+//   ContainsEstimates unset, but the results will be estimate free either way.
 // - AbsPostSplitLeft: the stats of the range after applying the split, i.e.
 //   accounting both for the shrinking as well as for the writes in DeltaBatch
 //   related to the shrunk keyrange.

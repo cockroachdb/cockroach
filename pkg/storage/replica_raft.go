@@ -239,11 +239,12 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	prefix := true
 	version := raftVersionStandard
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTransactionRequest with a ChangeReplicasTrigger is special because
-		// Raft needs to understand it; it cannot simply be an opaque command.
-		// To permit this, the command is proposed by the proposal buffer using
+		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
+		// needs to understand it; it cannot simply be an opaque command. To
+		// permit this, the command is proposed by the proposal buffer using
 		// ProposeConfChange. For that reason, we also don't need a Raft command
-		// prefix because the command ID is stored in a field in raft.ConfChange.
+		// prefix because the command ID is stored in a field in
+		// raft.ConfChange.
 		log.Infof(p.ctx, "proposing %s", crt)
 		prefix = false
 

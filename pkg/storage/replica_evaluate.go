@@ -187,8 +187,8 @@ func evaluateBatch(
 			// return an aborted proto in their otherwise successful response.
 			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
-			singleAbort := ba.IsSingleEndTransactionRequest() &&
-				!baReqs[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+			singleAbort := ba.IsSingleEndTxnRequest() &&
+				!baReqs[0].GetInner().(*roachpb.EndTxnRequest).Commit
 			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
@@ -342,7 +342,7 @@ func evaluateBatch(
 		}
 	}
 
-	// If there was an EndTransaction in the batch that finalized the transaction,
+	// If there was an EndTxn in the batch that finalized the transaction,
 	// the WriteTooOld status has been fully processed and we can discard the error.
 	if baHeader.Txn != nil && baHeader.Txn.Status.IsFinalized() {
 		writeTooOldErr = nil

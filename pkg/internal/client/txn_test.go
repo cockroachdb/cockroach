@@ -108,8 +108,8 @@ func newTestTxnFactory(
 					union.MustSetInner(&testPutRespCopy)
 				}
 			}
-			if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
-				et := args.(*roachpb.EndTransactionRequest)
+			if args, ok := ba.GetArg(roachpb.EndTxn); ok {
+				et := args.(*roachpb.EndTxnRequest)
 				if et.Commit {
 					status = roachpb.COMMITTED
 				} else {
@@ -206,7 +206,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		testutils.MakeAmbientCtx(),
 		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			calls = append(calls, ba.Methods()...)
-			if et, ok := ba.GetArg(roachpb.EndTransaction); ok && et.(*roachpb.EndTransactionRequest).Commit {
+			if et, ok := ba.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be false")
 			}
 			return ba.CreateReply(), nil
@@ -220,7 +220,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 	}); err == nil {
 		t.Error("expected error on abort")
 	}
-	expectedCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
+	expectedCalls := []roachpb.Method{roachpb.Put, roachpb.EndTxn}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
@@ -437,7 +437,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 
 	b := &Batch{}
-	b.AddRawRequest(&roachpb.EndTransactionRequest{})
+	b.AddRawRequest(&roachpb.EndTxnRequest{})
 	b.Put("x", "y")
 	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)

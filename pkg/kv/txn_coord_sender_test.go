@@ -209,11 +209,11 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	) (*roachpb.BatchResponse, error) {
 		resp := args.CreateReply()
 		resp.Txn = args.Txn
-		if req, ok := args.GetArg(roachpb.EndTransaction); ok {
-			if !req.(*roachpb.EndTransactionRequest).Commit {
+		if req, ok := args.GetArg(roachpb.EndTxn); ok {
+			if !req.(*roachpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
 			}
-			et := req.(*roachpb.EndTransactionRequest)
+			et := req.(*roachpb.EndTxnRequest)
 			if a, e := et.IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
 			}
@@ -913,7 +913,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		t.Fatalf("expected read spans %+v; got %+v", e, a)
 	}
 	ba := txn.NewBatch()
-	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
+	ba.AddRawRequest(&roachpb.EndTxnRequest{Commit: true})
 	if err := txn.Run(ctx, ba); err != nil {
 		t.Fatal(err)
 	}
@@ -934,8 +934,8 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			et := rArgs.(*roachpb.EndTransactionRequest)
+		if rArgs, ok := ba.GetArg(roachpb.EndTxn); ok {
+			et := rArgs.(*roachpb.EndTxnRequest)
 			if !reflect.DeepEqual(et.IntentSpans, expectedIntents) {
 				t.Errorf("Invalid intents: %+v; expected %+v", et.IntentSpans, expectedIntents)
 			}
@@ -1299,8 +1299,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					if ba.Txn != nil && br.Txn == nil {
 						br.Txn.Status = roachpb.PENDING
 					}
-				} else if et, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
-					if et.(*roachpb.EndTransactionRequest).Commit {
+				} else if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+					if et.(*roachpb.EndTxnRequest).Commit {
 						commit.Store(true)
 						if test.errFn != nil {
 							return nil, test.errFn(*ba.Txn)
@@ -1406,7 +1406,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	db := client.NewDB(ambient, factory, clock)
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
+		if _, ok := ba.GetArg(roachpb.EndTxn); !ok {
 			resp := ba.CreateReply()
 			resp.Txn = ba.Txn
 			return resp, nil
@@ -1433,7 +1433,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 
 	if _, pErr := client.SendWrappedWith(
 		ctx, txn, txnHeader,
-		&roachpb.EndTransactionRequest{Commit: false},
+		&roachpb.EndTxnRequest{Commit: false},
 	); !testutils.IsPError(pErr, "injected err") {
 		t.Fatal(pErr)
 	}
@@ -1447,12 +1447,11 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 }
 
 // Test that intent tracking behaves correctly for transactions that attempt to
-// run a batch containing an EndTransaction. Since in case of an error it's not
-// easy to determine whether any intents have been laid down (i.e. in case the
-// batch was split by the DistSender and then there was mixed success for the
-// sub-batches, or in case a retriable error is returned), the test verifies
-// that all possible intents are properly tracked and attached to a subsequent
-// EndTransaction.
+// run a batch containing an EndTxn. Since in case of an error it's not easy to
+// determine whether any intents have been laid down (i.e. in case the batch was
+// split by the DistSender and then there was mixed success for the sub-batches,
+// or in case a retriable error is returned), the test verifies that all
+// possible intents are properly tracked and attached to a subsequent EndTxn.
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1476,20 +1475,20 @@ func TestOnePCErrorTracking(t *testing.T) {
 
 	// Register a matcher catching the commit attempt.
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if et, ok := ba.GetArg(roachpb.EndTransaction); !ok {
+		if et, ok := ba.GetArg(roachpb.EndTxn); !ok {
 			return nil, nil
-		} else if !et.(*roachpb.EndTransactionRequest).Commit {
+		} else if !et.(*roachpb.EndTxnRequest).Commit {
 			return nil, nil
 		}
 		return nil, roachpb.NewErrorf("injected err")
 	})
 	// Register a matcher catching the rollback attempt.
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		et, ok := ba.GetArg(roachpb.EndTransaction)
+		et, ok := ba.GetArg(roachpb.EndTxn)
 		if !ok {
 			return nil, nil
 		}
-		etReq := et.(*roachpb.EndTransactionRequest)
+		etReq := et.(*roachpb.EndTxnRequest)
 		if etReq.Commit {
 			return nil, nil
 		}
@@ -1520,7 +1519,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	// to it.
 	if _, pErr := client.SendWrappedWith(
 		ctx, txn, txnHeader,
-		&roachpb.EndTransactionRequest{Commit: false},
+		&roachpb.EndTxnRequest{Commit: false},
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1535,7 +1534,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 }
 
 // TestCommitReadOnlyTransaction verifies that a read-only does not send an
-// EndTransactionRequest.
+// EndTxnRequest.
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1608,8 +1607,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
 			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
 		}
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			if !et.(*roachpb.EndTransactionRequest).Commit {
+		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
+			if !et.(*roachpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
 			}
 			br.Txn.Status = roachpb.COMMITTED
@@ -1676,7 +1675,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			if test.pointWrite {
 				expectedCalls = append(expectedCalls, roachpb.QueryIntent)
 			}
-			expectedCalls = append(expectedCalls, roachpb.EndTransaction)
+			expectedCalls = append(expectedCalls, roachpb.EndTxn)
 			if !reflect.DeepEqual(expectedCalls, calls) {
 				t.Fatalf("%d: expected %s, got %s", i, expectedCalls, calls)
 			}
@@ -1685,7 +1684,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 }
 
 // TestAbortReadOnlyTransaction verifies that aborting a read-only
-// transaction does not prompt an EndTransaction call.
+// transaction does not prompt an EndTxn call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1724,9 +1723,8 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 
 // TestEndWriteRestartReadOnlyTransaction verifies that if
 // a transaction writes, then restarts and turns read-only,
-// an explicit EndTransaction call is still sent if retry-
-// able didn't, regardless of whether there is an error
-// or not.
+// an explicit EndTxn call is still sent if retry- able
+// didn't, regardless of whether there is an error or not.
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -1747,7 +1745,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
 		}
-		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -1768,7 +1766,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		sender,
 	)
 	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
-	expCalls := []roachpb.Method{roachpb.Put, roachpb.EndTransaction}
+	expCalls := []roachpb.Method{roachpb.Put, roachpb.EndTxn}
 
 	testutils.RunTrueAndFalse(t, "success", func(t *testing.T, success bool) {
 		calls = nil
@@ -1812,7 +1810,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		br.Txn = ba.Txn.Clone()
 
 		// Ignore the final EndTxnRequest.
-		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 			return br, nil
 		}
@@ -1933,7 +1931,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -2032,8 +2030,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 }
 
 // TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline. Read-only transactions have their EndTransaction elided, so the
-// enforcement of the deadline is done in the client.
+// deadline. Read-only transactions have their EndTxn elided, so the enforcement
+// of the deadline is done in the client.
 func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -2066,9 +2064,9 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	)
 	db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 
-	// We're going to run two tests: one where the EndTransaction is by itself in
-	// a batch, one where it is not. As of June 2018, the EndTransaction is elided
-	// in different ways in the two cases.
+	// We're going to run two tests: one where the EndTxn is by itself in a
+	// batch, one where it is not. As of June 2018, the EndTxn is elided in
+	// different ways in the two cases.
 
 	t.Run("standalone commit", func(t *testing.T) {
 		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */)
@@ -2115,9 +2113,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
 			// Ensure that no transactions enter a STAGING state.
-			et.(*roachpb.EndTransactionRequest).InFlightWrites = nil
+			et.(*roachpb.EndTxnRequest).InFlightWrites = nil
 		}
 		return distSender.Send(ctx, ba)
 	}
@@ -2149,8 +2147,8 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	}
 
 	require.Equal(t, []roachpb.Method{
-		roachpb.Put, roachpb.QueryIntent, roachpb.EndTransaction,
-		roachpb.Put, roachpb.EndTransaction,
+		roachpb.Put, roachpb.QueryIntent, roachpb.EndTxn,
+		roachpb.Put, roachpb.EndTxn,
 	}, calls)
 
 	for _, action := range []func(ctx context.Context, txn *client.Txn) error{
@@ -2192,7 +2190,7 @@ func TestAnchorKey(t *testing.T) {
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil

@@ -127,11 +127,12 @@ type IntentResolver struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Map from txn ID being pushed to a refcount of requests waiting on the push.
+		// Map from txn ID being pushed to a refcount of requests waiting on the
+		// push.
 		inFlightPushes map[uuid.UUID]int
-		// Set of txn IDs whose list of intent spans are being resolved. Note that
-		// this pertains only to EndTransaction-style intent cleanups, whether called
-		// directly after EndTransaction evaluation or during GC of txn spans.
+		// Set of txn IDs whose list of intent spans are being resolved. Note
+		// that this pertains only to EndTxn-style intent cleanups, whether
+		// called directly after EndTxn evaluation or during GC of txn spans.
 		inFlightTxnCleanups map[uuid.UUID]struct{}
 	}
 	every log.EveryN
@@ -311,9 +312,9 @@ func getPusherTxn(h roachpb.Header) roachpb.Transaction {
 // a) conflict resolution for commands being executed at the Store with the
 //    client waiting,
 // b) resolving intents encountered during inconsistent operations, and
-// c) resolving intents upon EndTransaction which are not local to the given
-//    range. This is the only path in which the transaction is going to be
-//    in non-pending state and doesn't require a push.
+// c) resolving intents upon EndTxn which are not local to the given range.
+//    This is the only path in which the transaction is going to be in
+//    non-pending state and doesn't require a push.
 func (ir *IntentResolver) maybePushIntents(
 	ctx context.Context,
 	intents []roachpb.Intent,
@@ -555,7 +556,7 @@ func (ir *IntentResolver) CleanupIntents(
 		resolveIntents := updateIntentTxnStatus(ctx, pushedTxns, unpushed[:i],
 			skipIfInFlight, unpushed[:0])
 		// resolveIntents with poison=true because we're resolving
-		// intents outside of the context of an EndTransaction.
+		// intents outside of the context of an EndTxn.
 		//
 		// Naively, it doesn't seem like we need to poison the abort
 		// cache since we're pushing with PUSH_TOUCH - meaning that

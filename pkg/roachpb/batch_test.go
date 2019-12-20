@@ -22,8 +22,8 @@ import (
 func TestBatchIsCompleteTransaction(t *testing.T) {
 	get := &GetRequest{}
 	put := &PutRequest{}
-	etA := &EndTransactionRequest{Commit: false}
-	etC := &EndTransactionRequest{Commit: true}
+	etA := &EndTxnRequest{Commit: false}
+	etC := &EndTxnRequest{Commit: true}
 	withSeq := func(r Request, s enginepb.TxnSeq) Request {
 		c := r.ShallowCopy()
 		h := c.Header()
@@ -77,7 +77,7 @@ func TestBatchSplit(t *testing.T) {
 	put := &PutRequest{}
 	spl := &AdminSplitRequest{}
 	dr := &DeleteRangeRequest{}
-	et := &EndTransactionRequest{}
+	et := &EndTxnRequest{}
 	qi := &QueryIntentRequest{}
 	rv := &ReverseScanRequest{}
 	testCases := []struct {
@@ -91,10 +91,10 @@ func TestBatchSplit(t *testing.T) {
 		{[]Request{spl, get, scan, spl, get}, []int{1, 2, 1, 1}, true},
 		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}, true},
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}, true},
-		// Same one again, but this time don't allow EndTransaction to be split.
+		// Same one again, but this time don't allow EndTxn to be split.
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 2}, false},
-		// An invalid request in real life, but it demonstrates that we'll always
-		// split **after** an EndTransaction (because either the next request
+		// An invalid request in real life, but it demonstrates that we'll
+		// always split **after** an EndTxn (because either the next request
 		// wants to be alone, or its flags can't match the current flags, which
 		// have isAlone set). Could be useful if we ever want to allow executing
 		// multiple batches back-to-back.
@@ -137,7 +137,7 @@ func TestBatchRequestGetArg(t *testing.T) {
 		Value: &RequestUnion_Get{Get: &GetRequest{}},
 	}
 	end := RequestUnion{
-		Value: &RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}},
+		Value: &RequestUnion_EndTxn{EndTxn: &EndTxnRequest{}},
 	}
 	testCases := []struct {
 		bu         []RequestUnion
@@ -151,7 +151,7 @@ func TestBatchRequestGetArg(t *testing.T) {
 
 	for i, c := range testCases {
 		br := BatchRequest{Requests: c.bu}
-		if _, r := br.GetArg(EndTransaction); r != c.expB {
+		if _, r := br.GetArg(EndTxn); r != c.expB {
 			t.Errorf("%d: unexpected batch request for %v: %v", i, c.bu, r)
 		}
 		if _, r := br.GetArg(Get); r != c.expG {

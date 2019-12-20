@@ -53,10 +53,10 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
 				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-					// We'll eventually expect to see an EndTransaction(commit=false) with
-					// the right intents.
-					if args.Req.IsSingleEndTransactionRequest() {
-						et := args.Req.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+					// We'll eventually expect to see an EndTxn(commit=false)
+					// with the right intents.
+					if args.Req.IsSingleEndTxnRequest() {
+						et := args.Req.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 						if !et.Commit && et.Key.Equal(key) &&
 							reflect.DeepEqual(et.IntentSpans, []roachpb.Span{{Key: key}, {Key: key2}}) {
 							atomic.StoreInt64(&cleanupSeen, 1)
@@ -118,8 +118,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		return nil
 	})
 
-	// Check that an EndTransaction(commit=false) with the right intents has been
-	// sent.
+	// Check that an EndTxn(commit=false) with the right intents has been sent.
 	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&cleanupSeen) == 0 {
 			return fmt.Errorf("no cleanup sent yet")
