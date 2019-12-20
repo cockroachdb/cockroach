@@ -1227,7 +1227,13 @@ build
 SELECT * FROM [55(1) as t(a)]
 ----
 scan t
- └── columns: a:1(int!null)
+ ├── columns: a:1(int!null)
+ └── check constraint expressions
+      └── lt [type=bool]
+           ├── plus [type=int]
+           │    ├── variable: a [type=int]
+           │    └── variable: b [type=int]
+           └── const: 10 [type=int]
 
 # Regression test for #28388. Ensure that selecting from a table with no
 # columns does not cause a panic.

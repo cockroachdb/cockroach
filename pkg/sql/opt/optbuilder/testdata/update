@@ -75,7 +75,16 @@ update abcde
       │    ├── select
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    └── filters
       │    │         └── eq [type=bool]
       │    │              ├── variable: a [type=int]
@@ -108,7 +117,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── const: 1 [type=int]
       │         ├── const: 2 [type=int]
@@ -140,7 +158,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── const: 1 [type=int]
       │         ├── const: 2 [type=int]
@@ -172,7 +199,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
@@ -202,7 +238,16 @@ update abcde
       │    ├── select
       │    │    ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    └── filters
       │    │         └── gt [type=bool]
       │    │              ├── variable: b [type=int]
@@ -236,7 +281,16 @@ update foo
  └── project
       ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       ├── scan foo
-      │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    └── computed column expressions
+      │         ├── d:10(int)
+      │         │    └── plus [type=int]
+      │         │         ├── plus [type=int]
+      │         │         │    ├── variable: b [type=int]
+      │         │         │    └── variable: c [type=int]
+      │         │         └── const: 1 [type=int]
+      │         └── e:11(int)
+      │              └── variable: a [type=int]
       └── projections
            └── plus [type=int]
                 ├── plus [type=int]
@@ -269,7 +323,16 @@ update abcde
       │    │    │    └── select
       │    │    │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    │    │         ├── scan abcde
-      │    │    │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │         │    └── computed column expressions
+      │    │    │         │         ├── d:10(int)
+      │    │    │         │         │    └── plus [type=int]
+      │    │    │         │         │         ├── plus [type=int]
+      │    │    │         │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │         │    └── variable: c [type=int]
+      │    │    │         │         │         └── const: 1 [type=int]
+      │    │    │         │         └── e:11(int)
+      │    │    │         │              └── variable: a [type=int]
       │    │    │         └── filters
       │    │    │              └── gt [type=bool]
       │    │    │                   ├── variable: a [type=int]
@@ -468,7 +531,16 @@ update abcde
       │    ├── select
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) e:11(int) rowid:12(int!null)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    └── filters
       │    │         └── eq [type=bool]
       │    │              ├── variable: c [type=int]
@@ -526,7 +598,16 @@ with &1
  │         └── project
  │              ├── columns: column13:13(int) abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
  │              ├── scan abcde
- │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    └── computed column expressions
+ │              │         ├── abcde.d:10(int)
+ │              │         │    └── plus [type=int]
+ │              │         │         ├── plus [type=int]
+ │              │         │         │    ├── variable: abcde.b [type=int]
+ │              │         │         │    └── variable: abcde.c [type=int]
+ │              │         │         └── const: 1 [type=int]
+ │              │         └── abcde.e:11(int)
+ │              │              └── variable: abcde.a [type=int]
  │              └── projections
  │                   └── plus [type=int]
  │                        ├── plus [type=int]
@@ -554,7 +635,16 @@ with &1
            └── project
                 ├── columns: column31:31(int) abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
                 ├── scan abcde
-                │    └── columns: abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                │    ├── columns: abcde.a:25(int!null) abcde.b:26(int) abcde.c:27(int) abcde.d:28(int) abcde.e:29(int) rowid:30(int!null)
+                │    └── computed column expressions
+                │         ├── abcde.d:28(int)
+                │         │    └── plus [type=int]
+                │         │         ├── plus [type=int]
+                │         │         │    ├── variable: abcde.b [type=int]
+                │         │         │    └── variable: abcde.c [type=int]
+                │         │         └── const: 1 [type=int]
+                │         └── abcde.e:29(int)
+                │              └── variable: abcde.a [type=int]
                 └── projections
                      └── plus [type=int]
                           ├── plus [type=int]
@@ -598,7 +688,16 @@ project
            │    ├── select
            │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            │    │    ├── scan abcde
-           │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:10(int)
+           │    │    │         │    └── plus [type=int]
+           │    │    │         │         ├── plus [type=int]
+           │    │    │         │         │    ├── variable: b [type=int]
+           │    │    │         │         │    └── variable: c [type=int]
+           │    │    │         │         └── const: 1 [type=int]
+           │    │    │         └── e:11(int)
+           │    │    │              └── variable: a [type=int]
            │    │    └── filters
            │    │         └── eq [type=bool]
            │    │              ├── variable: a [type=int]
@@ -632,7 +731,16 @@ project
  │         │    ├── select
  │         │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
  │         │    │    ├── scan foo
- │         │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    │    │    └── computed column expressions
+ │         │    │    │         ├── d:10(int)
+ │         │    │    │         │    └── plus [type=int]
+ │         │    │    │         │         ├── plus [type=int]
+ │         │    │    │         │         │    ├── variable: b [type=int]
+ │         │    │    │         │         │    └── variable: c [type=int]
+ │         │    │    │         │         └── const: 1 [type=int]
+ │         │    │    │         └── e:11(int)
+ │         │    │    │              └── variable: a [type=int]
  │         │    │    └── filters
  │         │    │         └── eq [type=bool]
  │         │    │              ├── variable: a [type=int]
@@ -682,7 +790,16 @@ with &1
  │              │    │    │    └── select
  │              │    │    │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
  │              │    │    │         ├── scan abcde
- │              │    │    │         │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    │    │         │    └── computed column expressions
+ │              │    │    │         │         ├── abcde.d:10(int)
+ │              │    │    │         │         │    └── plus [type=int]
+ │              │    │    │         │         │         ├── plus [type=int]
+ │              │    │    │         │         │         │    ├── variable: abcde.b [type=int]
+ │              │    │    │         │         │         │    └── variable: abcde.c [type=int]
+ │              │    │    │         │         │         └── const: 1 [type=int]
+ │              │    │    │         │         └── abcde.e:11(int)
+ │              │    │    │         │              └── variable: abcde.a [type=int]
  │              │    │    │         └── filters
  │              │    │    │              └── gt [type=bool]
  │              │    │    │                   ├── variable: abcde.a [type=int]
@@ -725,7 +842,16 @@ project
            ├── project
            │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            │    ├── scan abcde
-           │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    │    └── computed column expressions
+           │    │         ├── d:10(int)
+           │    │         │    └── plus [type=int]
+           │    │         │         ├── plus [type=int]
+           │    │         │         │    ├── variable: b [type=int]
+           │    │         │         │    └── variable: c [type=int]
+           │    │         │         └── const: 1 [type=int]
+           │    │         └── e:11(int)
+           │    │              └── variable: a [type=int]
            │    └── projections
            │         └── plus [type=int]
            │              ├── variable: rowid [type=int]
@@ -770,7 +896,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── cast: INT8 [type=int]
       │         │    └── null [type=unknown]
@@ -799,7 +934,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
@@ -836,7 +980,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── const: 1 [type=int]
       │         ├── const: 2 [type=int]
@@ -865,7 +1018,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── cast: INT8 [type=int]
       │         │    └── null [type=unknown]
@@ -895,7 +1057,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) column14:14(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         ├── cast: INT8 [type=int]
       │         │    └── null [type=unknown]
@@ -924,7 +1095,16 @@ update abcde
       ├── project
       │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    └── projections
       │         └── cast: INT8 [type=int]
       │              └── null [type=unknown]
@@ -975,7 +1155,16 @@ update abcde
       ├── left-join-apply
       │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) one:13(int)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    ├── max1-row
       │    │    ├── columns: one:13(int!null)
       │    │    └── project
@@ -1011,7 +1200,16 @@ update abcde
       ├── left-join-apply
       │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) x:16(int) z:17(int) y1:18(int)
       │    ├── scan abcde
-      │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    └── computed column expressions
+      │    │         ├── d:10(int)
+      │    │         │    └── plus [type=int]
+      │    │         │         ├── plus [type=int]
+      │    │         │         │    ├── variable: b [type=int]
+      │    │         │         │    └── variable: c [type=int]
+      │    │         │         └── const: 1 [type=int]
+      │    │         └── e:11(int)
+      │    │              └── variable: a [type=int]
       │    ├── max1-row
       │    │    ├── columns: y:14(int) x:16(int) z:17(int) y1:18(int)
       │    │    └── project
@@ -1055,7 +1253,16 @@ update abcde
       │    ├── left-join-apply
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
       │    │    │    └── project
@@ -1098,7 +1305,16 @@ update abcde
       │    ├── left-join-apply
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
       │    │    │    └── project
@@ -1141,7 +1357,16 @@ update abcde
       │    ├── left-join-apply
       │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) y:14(int) y1:16(int)
       │    │    ├── scan abcde
-      │    │    │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:10(int)
+      │    │    │         │    └── plus [type=int]
+      │    │    │         │         ├── plus [type=int]
+      │    │    │         │         │    ├── variable: b [type=int]
+      │    │    │         │         │    └── variable: c [type=int]
+      │    │    │         │         └── const: 1 [type=int]
+      │    │    │         └── e:11(int)
+      │    │    │              └── variable: a [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: y:14(int) y1:16(int)
       │    │    │    └── project
@@ -1218,7 +1443,16 @@ project
            ├── project
            │    ├── columns: column19:19(int) abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
            │    ├── scan abcde1
-           │    │    └── columns: abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    │    ├── columns: abcde1.a:7(int!null) abcde1.b:8(int) abcde1.c:9(int) abcde1.d:10(int) abcde1.e:11(int) abcde1.rowid:12(int!null)
+           │    │    └── computed column expressions
+           │    │         ├── abcde1.d:10(int)
+           │    │         │    └── plus [type=int]
+           │    │         │         ├── plus [type=int]
+           │    │         │         │    ├── variable: abcde1.b [type=int]
+           │    │         │         │    └── variable: abcde1.c [type=int]
+           │    │         │         └── const: 1 [type=int]
+           │    │         └── abcde1.e:11(int)
+           │    │              └── variable: abcde1.a [type=int]
            │    └── projections
            │         └── subquery [type=int]
            │              └── max1-row
@@ -1228,7 +1462,16 @@ project
            │                        └── select
            │                             ├── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
            │                             ├── scan abcde2
-           │                             │    └── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             │    ├── columns: abcde2.a:13(int!null) abcde2.b:14(int) abcde2.c:15(int) abcde2.d:16(int) abcde2.e:17(int) abcde2.rowid:18(int!null)
+           │                             │    └── computed column expressions
+           │                             │         ├── abcde2.d:16(int)
+           │                             │         │    └── plus [type=int]
+           │                             │         │         ├── plus [type=int]
+           │                             │         │         │    ├── variable: abcde2.b [type=int]
+           │                             │         │         │    └── variable: abcde2.c [type=int]
+           │                             │         │         └── const: 1 [type=int]
+           │                             │         └── abcde2.e:17(int)
+           │                             │              └── variable: abcde2.a [type=int]
            │                             └── filters
            │                                  └── eq [type=bool]
            │                                       ├── variable: abcde2.rowid [type=int]
@@ -1289,7 +1532,16 @@ with &1 (cte)
            ├── select
            │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
            │    ├── scan abcde
-           │    │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    │    └── computed column expressions
+           │    │         ├── d:13(int)
+           │    │         │    └── plus [type=int]
+           │    │         │         ├── plus [type=int]
+           │    │         │         │    ├── variable: b [type=int]
+           │    │         │         │    └── variable: c [type=int]
+           │    │         │         └── const: 1 [type=int]
+           │    │         └── e:14(int)
+           │    │              └── variable: a [type=int]
            │    └── filters
            │         └── exists [type=bool]
            │              └── with-scan &1 (cte)
@@ -1329,7 +1581,16 @@ with &1 (a)
            ├── left-join-apply
            │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null) y:17(int) y1:18(int)
            │    ├── scan abcde
-           │    │    └── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+           │    │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int) rowid:16(int!null)
+           │    │    └── computed column expressions
+           │    │         ├── d:14(int)
+           │    │         │    └── plus [type=int]
+           │    │         │         ├── plus [type=int]
+           │    │         │         │    ├── variable: b [type=int]
+           │    │         │         │    └── variable: c [type=int]
+           │    │         │         └── const: 1 [type=int]
+           │    │         └── e:15(int)
+           │    │              └── variable: a [type=int]
            │    ├── max1-row
            │    │    ├── columns: y:17(int) y1:18(int)
            │    │    └── with-scan &1 (a)
@@ -1367,7 +1628,11 @@ update mutation
       │    ├── project
       │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: m [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -1398,7 +1663,11 @@ update mutation
       │    ├── project
       │    │    ├── columns: column11:11(int!null) column12:12(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
       │    │    ├── scan mutation
-      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    └── check constraint expressions
+      │    │    │         └── gt [type=bool]
+      │    │    │              ├── variable: m [type=int]
+      │    │    │              └── const: 0 [type=int]
       │    │    └── projections
       │    │         ├── const: 1 [type=int]
       │    │         └── const: 2 [type=int]
@@ -1437,6 +1706,10 @@ update mutation
       │    │    │    │    ├── limit hint: 10.00
       │    │    │    │    └── scan mutation
       │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │         ├── check constraint expressions
+      │    │    │    │         │    └── gt [type=bool]
+      │    │    │    │         │         ├── variable: m [type=int]
+      │    │    │    │         │         └── const: 0 [type=int]
       │    │    │    │         └── ordering: +6
       │    │    │    └── const: 10 [type=int]
       │    │    └── projections
@@ -1504,7 +1777,19 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) column10:10(int!null) column11:11(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    └── gt [type=bool]
+      │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:8(int)
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: c [type=int]
+      │    │    │                   └── const: 1 [type=int]
       │    │    └── projections
       │    │         ├── const: 1 [type=int]
       │    │         ├── const: 2 [type=int]
@@ -1539,7 +1824,19 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    └── gt [type=bool]
+      │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:8(int)
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: c [type=int]
+      │    │    │                   └── const: 1 [type=int]
       │    │    └── projections
       │    │         └── const: 1 [type=int]
       │    └── projections
@@ -1572,7 +1869,19 @@ update checks
       │    ├── project
       │    │    ├── columns: column9:9(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    └── gt [type=bool]
+      │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:8(int)
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: c [type=int]
+      │    │    │                   └── const: 1 [type=int]
       │    │    └── projections
       │    │         └── const: 2 [type=int]
       │    └── projections
@@ -1606,7 +1915,19 @@ update checks
       │    ├── left-join-apply
       │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int) abcde.a:9(int) abcde.b:10(int)
       │    │    ├── scan checks
-      │    │    │    └── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    │    ├── columns: checks.a:5(int!null) checks.b:6(int) checks.c:7(int) checks.d:8(int)
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    ├── variable: checks.b [type=int]
+      │    │    │    │    │    └── variable: checks.d [type=int]
+      │    │    │    │    └── gt [type=bool]
+      │    │    │    │         ├── variable: checks.a [type=int]
+      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    └── computed column expressions
+      │    │    │         └── checks.d:8(int)
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: checks.c [type=int]
+      │    │    │                   └── const: 1 [type=int]
       │    │    ├── max1-row
       │    │    │    ├── columns: abcde.a:9(int!null) abcde.b:10(int)
       │    │    │    └── project
@@ -1614,7 +1935,16 @@ update checks
       │    │    │         └── select
       │    │    │              ├── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
       │    │    │              ├── scan abcde
-      │    │    │              │    └── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              │    ├── columns: abcde.a:9(int!null) abcde.b:10(int) abcde.c:11(int) abcde.d:12(int) e:13(int) rowid:14(int!null)
+      │    │    │              │    └── computed column expressions
+      │    │    │              │         ├── abcde.d:12(int)
+      │    │    │              │         │    └── plus [type=int]
+      │    │    │              │         │         ├── plus [type=int]
+      │    │    │              │         │         │    ├── variable: abcde.b [type=int]
+      │    │    │              │         │         │    └── variable: abcde.c [type=int]
+      │    │    │              │         │         └── const: 1 [type=int]
+      │    │    │              │         └── e:13(int)
+      │    │    │              │              └── variable: abcde.a [type=int]
       │    │    │              └── filters
       │    │    │                   └── eq [type=bool]
       │    │    │                        ├── variable: abcde.a [type=int]
@@ -1652,7 +1982,22 @@ update decimals
       ├── project
       │    ├── columns: a:11(decimal) b:12(decimal[]) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
       │    ├── scan decimals
-      │    │    └── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    │    ├── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    │    ├── check constraint expressions
+      │    │    │    ├── eq [type=bool]
+      │    │    │    │    ├── variable: decimals.a [type=decimal]
+      │    │    │    │    └── function: round [type=decimal]
+      │    │    │    │         └── variable: decimals.a [type=decimal]
+      │    │    │    └── gt [type=bool]
+      │    │    │         ├── indirection [type=decimal]
+      │    │    │         │    ├── variable: decimals.b [type=decimal[]]
+      │    │    │         │    └── const: 0 [type=int]
+      │    │    │         └── const: 1 [type=decimal]
+      │    │    └── computed column expressions
+      │    │         └── decimals.d:8(decimal)
+      │    │              └── plus [type=decimal]
+      │    │                   ├── variable: decimals.a [type=decimal]
+      │    │                   └── variable: c [type=decimal]
       │    └── projections
       │         ├── function: crdb_internal.round_decimal_values [type=decimal]
       │         │    ├── const: 1.1 [type=decimal]
