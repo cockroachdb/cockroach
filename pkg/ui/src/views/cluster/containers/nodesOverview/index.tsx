@@ -311,14 +311,19 @@ const decommissionedNodesTableData = createSelector(
       return LongToMoment(deadTime);
     };
 
-    const data = decommissionedStatuses.map((ns: INodeStatus) => {
+    // DecommissionedNodeList displays 5 most recent nodes.
+    const data = _.chain(decommissionedStatuses)
+      .orderBy([(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)], ["desc"])
+      .take(5)
+      .map((ns: INodeStatus) => {
         return {
           nodeId: ns.desc.node_id,
           region: getNodeRegion(ns),
           status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
           decommissionedDate: getDecommissionedTime(ns.desc.node_id),
         };
-      });
+      })
+      .value();
     return data;
   });
 
