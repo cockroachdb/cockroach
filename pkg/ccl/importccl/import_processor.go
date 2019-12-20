@@ -28,11 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+var concurrentImportLimiter = limit.MakeConcurrentRequestLimiter("import-worker", envutil.EnvOrDefaultInt("COCKROACH_IMPORT_WORKER_CONCURRENCY", 1024))
 
 var csvOutputTypes = []types.T{
 	*types.Bytes,
@@ -70,6 +74,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 
 	defer cp.output.ProducerDone()
+
+	if err := concurrentImportLimiter.Begin(ctx); err != nil {
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
+		return
+	}
+	defer concurrentImportLimiter.Finish()
 
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan row.KVBatch, 10)
