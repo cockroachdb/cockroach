@@ -5,8 +5,8 @@ with k=k
  get  ts=0,2
  get  ts=1
 ----
-get: "k" -> /BYTES/v @0.000000000,1
-get: "k" -> /BYTES/v @0.000000000,1
-get: "k" -> /BYTES/v @0.000000000,1
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
+get: "k" -> /BYTES/v @0,1
 >> at end:
-data: "k"/0.000000000,1 -> /BYTES/v
+data: "k"/0,1 -> /BYTES/v

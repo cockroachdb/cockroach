@@ -13,6 +13,8 @@ package hlc
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func makeTS(walltime int64, logical int32) Timestamp {
@@ -47,10 +49,8 @@ func TestTimestampNext(t *testing.T) {
 		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
 		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
 	}
-	for i, c := range testCases {
-		if next := c.ts.Next(); next != c.expNext {
-			t.Errorf("%d: expected %s; got %s", i, c.expNext, next)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expNext, c.ts.Next())
 	}
 }
 
@@ -62,10 +62,8 @@ func TestTimestampPrev(t *testing.T) {
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
 	}
-	for i, c := range testCases {
-		if prev := c.ts.Prev(); prev != c.expPrev {
-			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expPrev, c.ts.Prev())
 	}
 }
 
@@ -78,10 +76,8 @@ func TestTimestampFloorPrev(t *testing.T) {
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, 0)},
 	}
-	for i, c := range testCases {
-		if prev := c.ts.FloorPrev(); prev != c.expPrev {
-			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
 	}
 }
 
@@ -94,9 +90,31 @@ func TestAsOfSystemTime(t *testing.T) {
 		{makeTS(145, 123), "145.0000000123"},
 		{makeTS(145, 1123456789), "145.1123456789"},
 	}
-	for i, c := range testCases {
-		if exp := c.ts.AsOfSystemTime(); exp != c.exp {
-			t.Errorf("%d: expected %s; got %s", i, c.exp, exp)
-		}
+	for _, c := range testCases {
+		assert.Equal(t, c.exp, c.ts.AsOfSystemTime())
+	}
+}
+
+func TestTimestampString(t *testing.T) {
+	testCases := []struct {
+		ts  Timestamp
+		exp string
+	}{
+		{makeTS(0, 0), "0,0"},
+		{makeTS(0, 123), "0,123"},
+		{makeTS(0, -123), "0,-123"},
+		{makeTS(1, 0), "0.000000001,0"},
+		{makeTS(-1, 0), "-0.000000001,0"},
+		{makeTS(1, 123), "0.000000001,123"},
+		{makeTS(-1, -123), "-0.000000001,-123"},
+		{makeTS(123, 0), "0.000000123,0"},
+		{makeTS(-123, 0), "-0.000000123,0"},
+		{makeTS(1234567890, 0), "1.234567890,0"},
+		{makeTS(-1234567890, 0), "-1.234567890,0"},
+		{makeTS(6661234567890, 0), "6661.234567890,0"},
+		{makeTS(-6661234567890, 0), "-6661.234567890,0"},
+	}
+	for _, c := range testCases {
+		assert.Equal(t, c.exp, c.ts.String())
 	}
 }
