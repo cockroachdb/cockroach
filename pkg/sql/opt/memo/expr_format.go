@@ -90,10 +90,10 @@ func (f ExprFmtFlags) HasFlags(subset ExprFmtFlags) bool {
 
 // FormatExpr returns a string representation of the given expression, formatted
 // according to the specified flags.
-func FormatExpr(e opt.Expr, flags ExprFmtFlags, catalog cat.Catalog) string {
-	var mem *Memo
-	if nd, ok := e.(RelExpr); ok {
-		mem = nd.Memo()
+func FormatExpr(e opt.Expr, flags ExprFmtFlags, mem *Memo, catalog cat.Catalog) string {
+	if catalog == nil {
+		// Automatically hide qualifications if we have no catalog.
+		flags |= ExprFmtHideQualifications
 	}
 	f := MakeExprFmtCtx(flags, mem, catalog)
 	f.FormatExpr(e)

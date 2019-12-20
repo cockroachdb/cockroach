@@ -978,3 +978,8 @@ func (o *Optimizer) recomputeCostImpl(
 
 	return cost
 }
+
+// FormatExpr is a convenience wrapper for memo.FormatExpr.
+func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags) string {
+	return memo.FormatExpr(e, flags, o.mem, o.catalog)
+}
