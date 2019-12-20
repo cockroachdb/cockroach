@@ -48,6 +48,13 @@ update abcde
       │    │    ├── interesting orderings: (+11)
       │    │    ├── scan abcde
       │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+      │    │    │    ├── computed column expressions
+      │    │    │    │    └── d:10(int)
+      │    │    │    │         └── plus [type=int]
+      │    │    │    │              ├── plus [type=int]
+      │    │    │    │              │    ├── variable: b [type=int]
+      │    │    │    │              │    └── variable: c [type=int]
+      │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── key: (11)
       │    │    │    ├── fd: (11)-->(7-10,12)
       │    │    │    ├── prune: (7-12)
@@ -103,6 +110,13 @@ project
            │    │    ├── interesting orderings: (+11)
            │    │    ├── scan abcde
            │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── d:10(int)
+           │    │    │    │         └── plus [type=int]
+           │    │    │    │              ├── plus [type=int]
+           │    │    │    │              │    ├── variable: b [type=int]
+           │    │    │    │              │    └── variable: c [type=int]
+           │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── key: (11)
            │    │    │    ├── fd: (11)-->(7-10,12)
            │    │    │    ├── prune: (7-12)
@@ -164,6 +178,13 @@ project
            │    │    ├── interesting orderings: (+11)
            │    │    ├── scan abcde
            │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── d:10(int)
+           │    │    │    │         └── plus [type=int]
+           │    │    │    │              ├── plus [type=int]
+           │    │    │    │              │    ├── variable: b [type=int]
+           │    │    │    │              │    └── variable: c [type=int]
+           │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── key: (11)
            │    │    │    ├── fd: (11)-->(7-10,12)
            │    │    │    ├── prune: (7-12)
@@ -219,6 +240,13 @@ project
            │    │    ├── interesting orderings: (+11)
            │    │    ├── scan abcde
            │    │    │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── d:10(int)
+           │    │    │    │         └── plus [type=int]
+           │    │    │    │              ├── plus [type=int]
+           │    │    │    │              │    ├── variable: b [type=int]
+           │    │    │    │              │    └── variable: c [type=int]
+           │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── key: (11)
            │    │    │    ├── fd: (11)-->(7-10,12)
            │    │    │    ├── prune: (7-12)

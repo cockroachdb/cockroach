@@ -155,6 +155,13 @@ Initial expression
    ├── fd: (1)-->(2,3), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── in [type=bool]
+   │    │         ├── variable: status [type=string]
+   │    │         └── tuple [type=tuple{string, string, string}]
+   │    │              ├── const: 'open' [type=string]
+   │    │              ├── const: 'complete' [type=string]
+   │    │              └── const: 'cancelled' [type=string]
    │    ├── key: (1)
    │    └── fd: (1)-->(2,3)
    ├── scan customers
@@ -165,9 +172,35 @@ Initial expression
         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
              ├── variable: customer_id [type=int]
              └── variable: customers.id [type=int]
---------------------------------------------------------------------------------
-NormalizeInConst (no changes)
---------------------------------------------------------------------------------
+================================================================================
+NormalizeInConst
+  Cost: 2160.05
+================================================================================
+   left-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+  - │    │              ├── const: 'open' [type=string]
+  + │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+  - │    │              └── const: 'cancelled' [type=string]
+  + │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+    ├── scan customers
+    │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+    │    ├── key: (4)
+    │    └── fd: (4)-->(5,6)
+    └── filters
+         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+              ├── variable: customer_id [type=int]
+              └── variable: customers.id [type=int]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -188,6 +221,13 @@ CommuteLeftJoin (higher cost)
   + │    └── fd: (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+    │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+    │    │              └── const: 'open' [type=string]
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
@@ -213,6 +253,13 @@ GenerateLookupJoins (higher cost)
     ├── fd: (1)-->(2,3), (4)-->(5,6)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+    │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+    │    │              └── const: 'open' [type=string]
     │    ├── key: (1)
     │    └── fd: (1)-->(2,3)
   - ├── scan customers
@@ -244,12 +291,26 @@ GenerateMergeJoins (higher cost)
   + │    └── ordering: +4
   + ├── sort
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │    ├── check constraint expressions
+  - │    │    └── in [type=bool]
+  - │    │         ├── variable: status [type=string]
+  - │    │         └── tuple [type=tuple{string, string, string}]
+  - │    │              ├── const: 'cancelled' [type=string]
+  - │    │              ├── const: 'complete' [type=string]
+  - │    │              └── const: 'open' [type=string]
     │    ├── key: (1)
   - │    └── fd: (1)-->(2,3)
   + │    ├── fd: (1)-->(2,3)
   + │    ├── ordering: +2
   + │    └── scan orders
   + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │         ├── check constraint expressions
+  + │         │    └── in [type=bool]
+  + │         │         ├── variable: status [type=string]
+  + │         │         └── tuple [type=tuple{string, string, string}]
+  + │         │              ├── const: 'cancelled' [type=string]
+  + │         │              ├── const: 'complete' [type=string]
+  + │         │              └── const: 'open' [type=string]
   + │         ├── key: (1)
   + │         └── fd: (1)-->(2,3)
     └── filters (true)
@@ -263,6 +324,13 @@ Final best expression
    ├── fd: (1)-->(2,3), (4)-->(5,6)
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── in [type=bool]
+   │    │         ├── variable: status [type=string]
+   │    │         └── tuple [type=tuple{string, string, string}]
+   │    │              ├── const: 'cancelled' [type=string]
+   │    │              ├── const: 'complete' [type=string]
+   │    │              └── const: 'open' [type=string]
    │    ├── key: (1)
    │    └── fd: (1)-->(2,3)
    ├── scan customers
@@ -301,15 +369,49 @@ Initial expression
         ├── fd: ()-->(1), (3)-->(2)
         ├── scan comp
         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+        │    ├── computed column expressions
+        │    │    └── c:2(bool)
+        │    │         └── in [type=bool]
+        │    │              ├── variable: k [type=int]
+        │    │              └── tuple [type=tuple{int, int, int}]
+        │    │                   ├── const: 1 [type=int]
+        │    │                   ├── const: 3 [type=int]
+        │    │                   └── const: 2 [type=int]
         │    ├── key: (3)
         │    └── fd: (3)-->(1,2)
         └── filters
              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                   ├── variable: k [type=int]
                   └── const: 1 [type=int]
---------------------------------------------------------------------------------
-NormalizeInConst (no changes)
---------------------------------------------------------------------------------
+================================================================================
+NormalizeInConst
+  Cost: 1070.14
+================================================================================
+   project
+    ├── columns: k:1(int!null) c:2(bool)
+    ├── fd: ()-->(1)
+    └── select
+         ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+         ├── key: (3)
+         ├── fd: ()-->(1), (3)-->(2)
+         ├── scan comp
+         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+         │    ├── computed column expressions
+         │    │    └── c:2(bool)
+         │    │         └── in [type=bool]
+         │    │              ├── variable: k [type=int]
+         │    │              └── tuple [type=tuple{int, int, int}]
+         │    │                   ├── const: 1 [type=int]
+  -      │    │                   ├── const: 3 [type=int]
+  -      │    │                   └── const: 2 [type=int]
+  +      │    │                   ├── const: 2 [type=int]
+  +      │    │                   └── const: 3 [type=int]
+         │    ├── key: (3)
+         │    └── fd: (3)-->(1,2)
+         └── filters
+              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+                   ├── variable: k [type=int]
+                   └── const: 1 [type=int]
 ================================================================================
 PruneSelectCols
   Cost: 1060.14
@@ -325,9 +427,25 @@ PruneSelectCols
   +      ├── fd: ()-->(1)
          ├── scan comp
   -      │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+  -      │    ├── computed column expressions
+  -      │    │    └── c:2(bool)
+  -      │    │         └── in [type=bool]
+  -      │    │              ├── variable: k [type=int]
+  -      │    │              └── tuple [type=tuple{int, int, int}]
+  -      │    │                   ├── const: 1 [type=int]
+  -      │    │                   ├── const: 2 [type=int]
+  -      │    │                   └── const: 3 [type=int]
   -      │    ├── key: (3)
   -      │    └── fd: (3)-->(1,2)
-  +      │    └── columns: k:1(int) c:2(bool)
+  +      │    ├── columns: k:1(int) c:2(bool)
+  +      │    └── computed column expressions
+  +      │         └── c:2(bool)
+  +      │              └── in [type=bool]
+  +      │                   ├── variable: k [type=int]
+  +      │                   └── tuple [type=tuple{int, int, int}]
+  +      │                        ├── const: 1 [type=int]
+  +      │                        ├── const: 2 [type=int]
+  +      │                        └── const: 3 [type=int]
          └── filters
               └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
                    ├── variable: k [type=int]
@@ -344,13 +462,29 @@ EliminateProject
   -      ├── columns: k:1(int!null) c:2(bool)
   -      ├── fd: ()-->(1)
   -      ├── scan comp
-  -      │    └── columns: k:1(int) c:2(bool)
+  -      │    ├── columns: k:1(int) c:2(bool)
+  -      │    └── computed column expressions
+  -      │         └── c:2(bool)
+  -      │              └── in [type=bool]
+  -      │                   ├── variable: k [type=int]
+  -      │                   └── tuple [type=tuple{int, int, int}]
+  -      │                        ├── const: 1 [type=int]
+  -      │                        ├── const: 2 [type=int]
+  -      │                        └── const: 3 [type=int]
   -      └── filters
   -           └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   -                ├── variable: k [type=int]
   -                └── const: 1 [type=int]
   + ├── scan comp
-  + │    └── columns: k:1(int) c:2(bool)
+  + │    ├── columns: k:1(int) c:2(bool)
+  + │    └── computed column expressions
+  + │         └── c:2(bool)
+  + │              └── in [type=bool]
+  + │                   ├── variable: k [type=int]
+  + │                   └── tuple [type=tuple{int, int, int}]
+  + │                        ├── const: 1 [type=int]
+  + │                        ├── const: 2 [type=int]
+  + │                        └── const: 3 [type=int]
   + └── filters
   +      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   +           ├── variable: k [type=int]
@@ -362,8 +496,17 @@ GenerateIndexScans (higher cost)
     ├── columns: k:1(int!null) c:2(bool)
     ├── fd: ()-->(1)
   - ├── scan comp
+  - │    ├── columns: k:1(int) c:2(bool)
+  - │    └── computed column expressions
+  - │         └── c:2(bool)
+  - │              └── in [type=bool]
+  - │                   ├── variable: k [type=int]
+  - │                   └── tuple [type=tuple{int, int, int}]
+  - │                        ├── const: 1 [type=int]
+  - │                        ├── const: 2 [type=int]
+  - │                        └── const: 3 [type=int]
   + ├── scan comp@secondary
-    │    └── columns: k:1(int) c:2(bool)
+  + │    └── columns: k:1(int) c:2(bool)
     └── filters
          └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
               ├── variable: k [type=int]
@@ -383,7 +526,15 @@ FoldComparison
     ├── columns: k:1(int!null) c:2(bool)
   - ├── fd: ()-->(1)
   - ├── scan comp
-  - │    └── columns: k:1(int) c:2(bool)
+  - │    ├── columns: k:1(int) c:2(bool)
+  - │    └── computed column expressions
+  - │         └── c:2(bool)
+  - │              └── in [type=bool]
+  - │                   ├── variable: k [type=int]
+  - │                   └── tuple [type=tuple{int, int, int}]
+  - │                        ├── const: 1 [type=int]
+  - │                        ├── const: 2 [type=int]
+  - │                        └── const: 3 [type=int]
   - └── filters
   -      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
   -           ├── variable: k [type=int]

@@ -84,7 +84,14 @@ project
  └── select
       ├── columns: k_int:1(int!null) k_int_2:2(int)
       ├── scan t_mult
-      │    └── columns: k_int:1(int) k_int_2:2(int)
+      │    ├── columns: k_int:1(int) k_int_2:2(int)
+      │    └── computed column expressions
+      │         ├── c_int:3(int)
+      │         │    └── k_int % 4 [type=int]
+      │         ├── c_mult:4(int)
+      │         │    └── k_int_2 * (k_int * (c_mult_2 * c_int)) [type=int]
+      │         └── c_mult_2:5(int)
+      │              └── k_int + 1 [type=int]
       └── filters
            └── (k_int, k_int_2) > (1, 2) [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
 
@@ -95,7 +102,14 @@ SELECT k_int FROM t_mult WHERE k_int = 2 OR k_int = 3
 select
  ├── columns: k_int:1(int!null)
  ├── scan t_mult
- │    └── columns: k_int:1(int)
+ │    ├── columns: k_int:1(int)
+ │    └── computed column expressions
+ │         ├── c_int:3(int)
+ │         │    └── k_int % 4 [type=int]
+ │         ├── c_mult:4(int)
+ │         │    └── k_int_2 * (k_int * (c_mult_2 * c_int)) [type=int]
+ │         └── c_mult_2:5(int)
+ │              └── k_int + 1 [type=int]
  └── filters
       └── (k_int = 2) OR (k_int = 3) [type=bool, outer=(1), constraints=(/1: [/2 - /2] [/3 - /3])]
 
@@ -120,7 +134,10 @@ select
  ├── columns: k_float:1(float!null)
  ├── fd: ()-->(1)
  ├── scan t_float
- │    └── columns: k_float:1(float)
+ │    ├── columns: k_float:1(float)
+ │    └── computed column expressions
+ │         └── c_float:2(float)
+ │              └── k_float + 1.0 [type=float]
  └── filters
       └── k_float = 5.0 [type=bool, outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
 
@@ -132,6 +149,9 @@ select
  ├── columns: k_interval:1(interval!null)
  ├── fd: ()-->(1)
  ├── scan t_now
- │    └── columns: k_interval:1(interval)
+ │    ├── columns: k_interval:1(interval)
+ │    └── computed column expressions
+ │         └── c_ts:2(timestamp)
+ │              └── k_interval + now() [type=timestamptz]
  └── filters
       └── k_interval = '03:00:00' [type=bool, outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
