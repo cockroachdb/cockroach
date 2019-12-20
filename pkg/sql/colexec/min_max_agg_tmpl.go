@@ -132,9 +132,6 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		vecLen := execgen.LEN(a.col)
-		target := execgen.SLICE(a.col, idx+1, vecLen)
-		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }

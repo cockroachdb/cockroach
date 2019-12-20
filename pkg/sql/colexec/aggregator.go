@@ -63,7 +63,8 @@ type aggregateFunc interface {
 	// index is carried over. Note that calling SetOutputIndex is a noop if
 	// CurrentOutputIndex returns a negative value (i.e. the aggregate function
 	// has not yet performed any computation). This method also has the side
-	// effect of clearing the output buffer past the given index.
+	// effect of clearing the NULLs bitmap of the output buffer past the given
+	// index.
 	SetOutputIndex(idx int)
 
 	// Compute computes the aggregation on the input batch. A zero-length input
@@ -373,7 +374,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			a.done = true
 			break
 		}
-		// zero out a.groupCol. This is necessary because distinct ors the
+		// zero out a.groupCol. This is necessary because distinct ORs the
 		// uniqueness of a value with the groupCol, allowing the operators to be
 		// linked.
 		copy(a.groupCol, zeroBoolColumn)
