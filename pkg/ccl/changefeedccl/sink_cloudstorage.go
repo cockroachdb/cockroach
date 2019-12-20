@@ -299,7 +299,7 @@ func makeCloudStorageSink(
 		files:             btree.New(8),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
-		// TODO(aayush): Use the jobs framework's session ID once that's available.
+		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
 	}
 	if timestampOracle != nil {
