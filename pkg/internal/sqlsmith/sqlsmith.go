@@ -229,6 +229,13 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 	}
 })
 
+// OnlyNoDropDDLs causes the Smither to only emit DDLs, but won't ever drop
+// a table.
+var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
+	// TODO(mjibson): Once #43187 is merged, add txns to this.
+	s.stmtWeights = alterNoDropTable
+})
+
 // DisableWith causes the Smither to not emit WITH clauses.
 var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
