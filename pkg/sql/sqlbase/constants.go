@@ -110,6 +110,7 @@ const (
 	PgCatalogAmTableID
 	PgCatalogAttrDefTableID
 	PgCatalogAttributeTableID
+	PgCatalogAuthIDTableID
 	PgCatalogAuthMembersTableID
 	PgCatalogAvailableExtensionsTableID
 	PgCatalogCastTableID
