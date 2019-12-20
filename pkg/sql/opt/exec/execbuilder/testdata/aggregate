@@ -511,7 +511,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 ----
 ·          distributed  false        ·                   ·
-·          vectorized   false        ·                   ·
+·          vectorized   true         ·                   ·
 group      ·            ·            (variance decimal)  ·
  │         aggregate 0  variance(x)  ·                   ·
  │         scalar       ·            ·                   ·
@@ -1036,7 +1036,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 ·          distributed  false          ·             ·
-·          vectorized   false          ·             ·
+·          vectorized   true           ·             ·
 group      ·            ·              (concat_agg)  ·
  │         aggregate 0  concat_agg(s)  ·             ·
  │         scalar       ·              ·             ·

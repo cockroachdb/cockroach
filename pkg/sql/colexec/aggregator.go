@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // SupportedAggFns contains all aggregate functions supported by the vectorized
@@ -209,7 +211,9 @@ func NewOrderedAggregator(
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.AssertionFailedf(
+			"this error should have been checked in isAggregateSupported\n%+v", err,
+		)
 	}
 
 	return a, nil
@@ -429,4 +433,38 @@ func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
 	}
 
 	return aggTyps
+}
+
+// isAggregateSupported returns whether the aggregate function that operates on
+// column of type 'inputType' (which can be nil in case of COUNT_ROWS) is
+// supported.
+func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
+	var aggType []coltypes.T
+	if inputType != nil {
+		aggType = append(aggType, typeconv.FromColumnType(inputType))
+	}
+	switch aggFn {
+	case execinfrapb.AggregatorSpec_SUM:
+		switch inputType.Family() {
+		case types.IntFamily:
+			// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
+			// at the end, mod issues with overflow. Perhaps to avoid the overflow
+			// issues, at first, we could plan SUM for all types besides Int64.
+			return false, errors.Newf("sum on int cols not supported (use sum_int)")
+		}
+	case execinfrapb.AggregatorSpec_SUM_INT:
+		// TODO(yuzefovich): support this case through vectorize.
+		if inputType.Width() != 64 {
+			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
+		}
+	}
+	_, _, err := makeAggregateFuncs(
+		nil, /* allocator */
+		[][]coltypes.T{aggType},
+		[]execinfrapb.AggregatorSpec_Func{aggFn},
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

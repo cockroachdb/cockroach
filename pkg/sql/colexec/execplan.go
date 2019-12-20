@@ -270,8 +270,7 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 
 	case core.Aggregator != nil:
 		aggSpec := core.Aggregator
-		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
-		for i, agg := range aggSpec.Aggregations {
+		for _, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return false, errors.Newf("distinct aggregation not supported")
 			}
@@ -281,24 +280,12 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			if len(agg.Arguments) > 0 {
 				return false, errors.Newf("aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]types.T, len(agg.ColIdx))
-			for j, colIdx := range agg.ColIdx {
-				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
+			var inputType *types.T
+			if len(agg.ColIdx) > 0 {
+				inputType = &spec.Input[0].ColumnTypes[agg.ColIdx[0]]
 			}
-			switch agg.Func {
-			case execinfrapb.AggregatorSpec_SUM:
-				switch aggTyps[i][0].Family() {
-				case types.IntFamily:
-					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
-					// at the end, mod issues with overflow. Perhaps to avoid the overflow
-					// issues, at first, we could plan SUM for all types besides Int64.
-					return false, errors.Newf("sum on int cols not supported (use sum_int)")
-				}
-			case execinfrapb.AggregatorSpec_SUM_INT:
-				// TODO(yuzefovich): support this case through vectorize.
-				if aggTyps[i][0].Width() != 64 {
-					return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
-				}
+			if supported, err := isAggregateSupported(agg.Func, inputType); !supported {
+				return false, err
 			}
 		}
 		return true, nil
