@@ -2154,6 +2154,7 @@ type rocksDBIterator struct {
 	iter   *C.DBIterator
 	valid  bool
 	reseek bool
+	prefix bool
 	err    error
 	key    C.DBKey
 	value  C.DBSlice
@@ -2204,6 +2205,7 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, reader Reader,
 		panic("unable to create iterator")
 	}
 	r.reader = reader
+	r.prefix = opts.Prefix
 }
 
 func (r *rocksDBIterator) setOptions(opts IterOptions) {
@@ -2286,8 +2288,15 @@ func (r *rocksDBIterator) Next() {
 	r.setState(C.DBIterNext(r.iter, C.bool(false) /* skip_current_key_versions */))
 }
 
+var errReversePrefixIteration = fmt.Errorf("unsupported reverse prefix iteration")
+
 func (r *rocksDBIterator) Prev() {
 	r.checkEngineOpen()
+	if r.prefix {
+		r.valid = false
+		r.err = errReversePrefixIteration
+		return
+	}
 	r.setState(C.DBIterPrev(r.iter, C.bool(false) /* skip_current_key_versions */))
 }
 
