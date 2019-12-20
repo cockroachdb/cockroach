@@ -660,6 +660,16 @@ eval
 '00:02:00'
 
 eval
+interval '1 year 1 day 02:03:04.567'::int
+----
+31651384
+
+eval
+interval '1 year 1 day 02:03:04.567'::float
+----
+31651384.567
+
+eval
 '2010-09-28'::date + 3
 ----
 '2010-10-01'
