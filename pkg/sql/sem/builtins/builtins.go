@@ -4637,21 +4637,6 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	return arrayLower(a, dim-1)
 }
 
-const (
-	microsPerMilli = 1000
-	millisPerSec   = 1000
-	secsPerHour    = 3600
-	secsPerMinute  = 60
-	secsPerDay     = 86400
-	// daysPerMonth is assumed to be 30.
-	// matches DAYS_PER_MONTH in postgres.
-	daysPerMonth = 30
-	// daysPerYear assumed to be a quarter of a leap year.
-	// matches DAYS_PER_YEAR in postgres.
-	daysPerYear   = 365.25
-	monthsPerYear = 12
-)
-
 func extractTimeSpanFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)
 	return extractTimeSpanFromTimeOfDay(t, timeSpan)
@@ -4662,10 +4647,10 @@ func extractTimezoneFromOffset(offsetSecs int32, timeSpan string) tree.Datum {
 	case "timezone":
 		return tree.NewDFloat(tree.DFloat(float64(offsetSecs)))
 	case "timezone_hour", "timezone_hours":
-		numHours := offsetSecs / secsPerHour
+		numHours := offsetSecs / duration.SecsPerHour
 		return tree.NewDFloat(tree.DFloat(float64(numHours)))
 	case "timezone_minute", "timezone_minutes":
-		numMinutes := offsetSecs / secsPerMinute
+		numMinutes := offsetSecs / duration.SecsPerMinute
 		return tree.NewDFloat(tree.DFloat(float64(numMinutes % 60)))
 	}
 	return nil
@@ -4691,11 +4676,11 @@ func extractTimeSpanFromTimeOfDay(t timeofday.TimeOfDay, timeSpan string) (tree.
 	case "minute", "minutes":
 		return tree.NewDFloat(tree.DFloat(t.Minute())), nil
 	case "second", "seconds":
-		return tree.NewDFloat(tree.DFloat(float64(t.Second()) + float64(t.Microsecond())/(microsPerMilli*millisPerSec))), nil
+		return tree.NewDFloat(tree.DFloat(float64(t.Second()) + float64(t.Microsecond())/(duration.MicrosPerMilli*duration.MillisPerSec))), nil
 	case "millisecond", "milliseconds":
-		return tree.NewDFloat(tree.DFloat(float64(t.Second()*millisPerSec) + float64(t.Microsecond())/microsPerMilli)), nil
+		return tree.NewDFloat(tree.DFloat(float64(t.Second()*duration.MillisPerSec) + float64(t.Microsecond())/duration.MicrosPerMilli)), nil
 	case "microsecond", "microseconds":
-		return tree.NewDFloat(tree.DFloat((t.Second() * millisPerSec * microsPerMilli) + t.Microsecond())), nil
+		return tree.NewDFloat(tree.DFloat((t.Second() * duration.MillisPerSec * duration.MicrosPerMilli) + t.Microsecond())), nil
 	case "epoch":
 		seconds := float64(time.Duration(t)) * float64(time.Microsecond) / float64(time.Second)
 		return tree.NewDFloat(tree.DFloat(seconds)), nil
@@ -4744,19 +4729,19 @@ func extractTimeSpanFromInterval(
 ) (tree.Datum, error) {
 	switch timeSpan {
 	case "millennia", "millennium", "millenniums":
-		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 1000))), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (duration.MonthsPerYear * 1000))), nil
 
 	case "centuries", "century":
-		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 100))), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (duration.MonthsPerYear * 100))), nil
 
 	case "decade", "decades":
-		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 10))), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (duration.MonthsPerYear * 10))), nil
 
 	case "year", "years":
-		return tree.NewDFloat(tree.DFloat(fromInterval.Months / monthsPerYear)), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / duration.MonthsPerYear)), nil
 
 	case "month", "months":
-		return tree.NewDFloat(tree.DFloat(fromInterval.Months % monthsPerYear)), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months % duration.MonthsPerYear)), nil
 
 	case "day", "days":
 		return tree.NewDFloat(tree.DFloat(fromInterval.Days)), nil
@@ -4766,7 +4751,7 @@ func extractTimeSpanFromInterval(
 
 	case "minute", "minutes":
 		// Remove the hour component.
-		return tree.NewDFloat(tree.DFloat((fromInterval.Nanos() % int64(time.Second*secsPerHour)) / int64(time.Minute))), nil
+		return tree.NewDFloat(tree.DFloat((fromInterval.Nanos() % int64(time.Second*duration.SecsPerHour)) / int64(time.Minute))), nil
 
 	case "second", "seconds":
 		return tree.NewDFloat(tree.DFloat(float64(fromInterval.Nanos()%int64(time.Minute)) / float64(time.Second))), nil
@@ -4778,14 +4763,7 @@ func extractTimeSpanFromInterval(
 	case "microsecond", "microseconds":
 		return tree.NewDFloat(tree.DFloat(float64(fromInterval.Nanos()%int64(time.Minute)) / float64(time.Microsecond))), nil
 	case "epoch":
-		numYears := fromInterval.Months / 12
-		monthsModYear := fromInterval.Months % 12
-		return tree.NewDFloat(tree.DFloat(
-			(float64(fromInterval.Nanos()) / float64(time.Second)) +
-				float64(fromInterval.Days*secsPerDay) +
-				float64(numYears*secsPerDay)*daysPerYear +
-				float64(monthsModYear*daysPerMonth*secsPerDay),
-		)), nil
+		return tree.NewDFloat(tree.DFloat(fromInterval.AsFloat64())), nil
 	default:
 		return nil, pgerror.Newf(
 			pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
@@ -4852,8 +4830,8 @@ func extractTimeSpanFromTimestamp(
 
 	case "julian":
 		julianDay := float64(dateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())) +
-			(float64(fromTime.Hour()*secsPerHour+fromTime.Minute()*secsPerMinute+fromTime.Second())+
-				float64(fromTime.Nanosecond())/float64(time.Second))/secsPerDay
+			(float64(fromTime.Hour()*duration.SecsPerHour+fromTime.Minute()*duration.SecsPerMinute+fromTime.Second())+
+				float64(fromTime.Nanosecond())/float64(time.Second))/duration.SecsPerDay
 		return tree.NewDFloat(tree.DFloat(julianDay)), nil
 
 	case "hour", "hours":
@@ -4867,10 +4845,20 @@ func extractTimeSpanFromTimestamp(
 
 	case "millisecond", "milliseconds":
 		// This a PG extension not supported in MySQL.
-		return tree.NewDFloat(tree.DFloat(float64(fromTime.Second()*millisPerSec) + float64(fromTime.Nanosecond())/float64(time.Millisecond))), nil
+		return tree.NewDFloat(
+			tree.DFloat(
+				float64(fromTime.Second()*duration.MillisPerSec) + float64(fromTime.Nanosecond())/
+					float64(time.Millisecond),
+			),
+		), nil
 
 	case "microsecond", "microseconds":
-		return tree.NewDFloat(tree.DFloat(float64(fromTime.Second()*millisPerSec*microsPerMilli) + float64(fromTime.Nanosecond())/float64(time.Microsecond))), nil
+		return tree.NewDFloat(
+			tree.DFloat(
+				float64(fromTime.Second()*duration.MillisPerSec*duration.MicrosPerMilli) + float64(fromTime.Nanosecond())/
+					float64(time.Microsecond),
+			),
+		), nil
 
 	case "epoch":
 		return tree.NewDFloat(tree.DFloat(float64(fromTime.UnixNano()) / float64(time.Second))), nil
@@ -4900,7 +4888,7 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 		micro = microTrunc
 	case "millisecond", "milliseconds":
 		// This a PG extension not supported in MySQL.
-		micro = (micro / microsPerMilli) * microsPerMilli
+		micro = (micro / duration.MicrosPerMilli) * duration.MicrosPerMilli
 	case "microsecond", "microseconds":
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
