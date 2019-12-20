@@ -436,7 +436,7 @@ func IsEndTxnTriggeringRetryError(
 func CanForwardCommitTimestampWithoutRefresh(
 	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
 ) bool {
-	return !txn.CommitTimestampFixed && args.NoRefreshSpans
+	return !txn.CommitTimestampFixed && args.CanCommitAtHigherTimestamp
 }
 
 const intentResolutionBatchSize = 500

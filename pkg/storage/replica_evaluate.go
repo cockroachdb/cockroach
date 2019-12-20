@@ -280,11 +280,11 @@ func evaluateBatch(
 			// Update the NoRefreshSpans flag on EndTransactions if this batch had prior requests
 			// that prevent the batch from committing at a higher timestamp.
 			et := args.(*roachpb.EndTxnRequest)
-			if et.Commit && et.NoRefreshSpans && writeTooOldState.batchNeedsRefresh {
+			if et.Commit && et.CanCommitAtHigherTimestamp && writeTooOldState.batchNeedsRefresh {
 				// Make a copy of the request so we don't modify the input batch.
 				// If the batch is re-evaluated, we don't want this change to persist.
 				etCpy := *et
-				etCpy.NoRefreshSpans = false
+				etCpy.CanCommitAtHigherTimestamp = false
 				args = &etCpy
 			}
 		}
