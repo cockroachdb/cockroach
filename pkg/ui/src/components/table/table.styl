@@ -1,0 +1,47 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-table-wrapper
+  // Table header
+  .ant-table-thead
+    background-color $colors--neutral-1
+    @extend $text--heading-6
+
+  .ant-table-thead > tr > th
+    padding $spacing-base $spacing-base
+    .ant-table-column-sorter
+      vertical-align baseline
+  // END: Table header
+
+  // Expand/Collapse icon
+  .ant-table-row-expand-icon
+    border none
+    background-color transparent
+
+  .ant-table-row-collapsed::after
+    content '▶'
+    font-size 8px
+
+  .ant-table-row-expanded::after
+    content '▼'
+    font-size 8px
+  // END: Expand/Collapse icon
+
+  // Table row
+  .ant-table-row
+    @extend $text--body
+  // END: Table row
+
+  // Table cell
+  .ant-table-tbody > tr > td
+    padding $spacing-smaller $spacing-smaller
+  // END: Table cell
