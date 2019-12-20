@@ -558,7 +558,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	)
 	txnReqsNoRefresh := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTxnRequest{Commit: true, NoRefreshSpans: true}, 2),
+		withSeq(&roachpb.EndTxnRequest{Commit: true, CanCommitAtHigherTimestamp: true}, 2),
 	)
 	txnReqsRequire1PC := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
@@ -9825,7 +9825,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 			expErr: "write at timestamp .* too old",
 		},
 		// 1PC serializable transaction will fail instead of retrying if
-		// EndTxnRequest.NoRefreshSpans is not true.
+		// EndTxnRequest.CanCommitAtHigherTimestamp is not true.
 		{
 			name: "no local retry of write too old on 1PC txn and refresh spans",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -9854,7 +9854,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				expTS = ts.Next()
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9903,7 +9903,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 					assignSeqNumsForReqs(ba.Txn, &cput)
 				}
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
@@ -9935,7 +9935,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				ba.Add(&cput)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9953,8 +9953,8 @@ func TestReplicaLocalRetries(t *testing.T) {
 				expTS = ts.Next()
 				cput := putArgs(ba.Txn.Key, []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.Require1PC = true     // don't allow this to bypass the 1PC optimization
-				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				et.Require1PC = true                 // don't allow this to bypass the 1PC optimization
+				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9983,7 +9983,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				put2 := putArgs(ba.Txn.Key, []byte("newput"))
 				ba.Add(&put2)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &put2, &et)
 				return
