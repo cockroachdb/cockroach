@@ -126,8 +126,7 @@ func (c *CustomFuncs) makeAggCols(
 			panic(errors.AssertionFailedf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
 		}
 
-		outAggs[i].Agg = outAgg
-		outAggs[i].Col = id
+		outAggs[i] = c.f.ConstructAggregationsItem(outAgg, id)
 		i++
 	}
 }
@@ -168,8 +167,10 @@ func (c *CustomFuncs) RemoveAggDistinctForKeys(
 			// Remove AggDistinct. We rely on the fact that AggDistinct must be
 			// directly "under" the Aggregate.
 			// TODO(radu): this will need to be revisited when we add more modifiers.
-			newAggs[i].Agg = c.replaceAggInputVar(item.Agg, v)
-			newAggs[i].Col = aggs[i].Col
+			newAggs[i] = c.f.ConstructAggregationsItem(
+				c.replaceAggInputVar(item.Agg, v),
+				aggs[i].Col,
+			)
 		} else {
 			newAggs[i] = *item
 		}
@@ -248,11 +249,7 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		if inputCol == outputCol {
 			passthrough.Add(inputCol)
 		} else {
-			projections = append(projections, memo.ProjectionsItem{
-				Element:    varExpr,
-				ColPrivate: aggs[i].ColPrivate,
-				Typ:        aggs[i].Typ,
-			})
+			projections = append(projections, c.f.ConstructProjectionsItem(varExpr, aggs[i].Col))
 		}
 	}
 	return c.f.ConstructProject(input, projections, passthrough)

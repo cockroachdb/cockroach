@@ -201,7 +201,13 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 		if g.needsDataTypeField(define) {
 			fmt.Fprintf(g.w, "  Typ *types.T\n")
 		}
-		fmt.Fprintf(g.w, "  id  opt.ScalarID\n")
+		if define.Tags.Contains("ListItem") {
+			if define.Tags.Contains("ScalarProps") {
+				fmt.Fprintf(g.w, "  scalar props.Scalar\n")
+			}
+		} else {
+			fmt.Fprintf(g.w, "  id opt.ScalarID\n")
+		}
 	} else if define.Tags.Contains("Enforcer") {
 		fmt.Fprintf(g.w, "  Input RelExpr\n")
 		fmt.Fprintf(g.w, "  best  bestProps\n")
@@ -210,6 +216,7 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "  grp  exprGroup\n")
 		fmt.Fprintf(g.w, "  next RelExpr\n")
 	}
+
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
@@ -225,7 +232,11 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 
 		// Generate the ID method.
 		fmt.Fprintf(g.w, "func (e *%s) ID() opt.ScalarID {\n", opTyp.name)
-		fmt.Fprintf(g.w, "  return e.id\n")
+		if define.Tags.Contains("ListItem") {
+			fmt.Fprintf(g.w, "  return 0\n")
+		} else {
+			fmt.Fprintf(g.w, "  return e.id\n")
+		}
 		fmt.Fprintf(g.w, "}\n\n")
 	} else {
 		fmt.Fprintf(g.w, "var _ RelExpr = &%s{}\n\n", opTyp.name)
@@ -321,13 +332,15 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		}
 		fmt.Fprintf(g.w, "}\n\n")
 
-		// Generate the ScalarProps method.
-		if name := g.scalarPropsFieldName(define); name != "" {
-			fmt.Fprintf(g.w, "func (e *%s) ScalarProps(mem *Memo) *props.Scalar {\n", opTyp.name)
-			fmt.Fprintf(g.w, "  if !e.scalar.Populated {\n")
-			fmt.Fprintf(g.w, "    mem.logPropsBuilder.build%sProps(e, &e.%s)\n", define.Name, name)
-			fmt.Fprintf(g.w, "  }\n")
-			fmt.Fprintf(g.w, "  return &e.%s\n", name)
+		// Generate the PopulateProps and ScalarProps methods.
+		if define.Tags.Contains("ScalarProps") {
+			fmt.Fprintf(g.w, "func (e *%s) PopulateProps(mem *Memo) {\n", opTyp.name)
+			fmt.Fprintf(g.w, "  mem.logPropsBuilder.build%sProps(e, &e.scalar)\n", opTyp.name)
+			fmt.Fprintf(g.w, "  e.scalar.Populated = true\n")
+			fmt.Fprintf(g.w, "}\n\n")
+
+			fmt.Fprintf(g.w, "func (e *%s) ScalarProps() *props.Scalar {\n", opTyp.name)
+			fmt.Fprintf(g.w, "  return &e.scalar\n")
 			fmt.Fprintf(g.w, "}\n\n")
 		}
 	} else {
@@ -630,9 +643,10 @@ func (g *exprsGen) genMemoizeFuncs() {
 		fmt.Fprintf(g.w, "  }\n")
 		if !define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(e, &grp.rel)\n", define.Name)
+			fmt.Fprintf(g.w, "  grp.rel.Populated = true\n")
 		}
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
-		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
+		fmt.Fprintf(g.w, "    m.CheckExpr(e)\n")
 		fmt.Fprintf(g.w, "  }\n")
 		if define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  return interned\n")
@@ -685,7 +699,7 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "  if interned == e {\n")
 		fmt.Fprintf(g.w, "    e.setGroup(grp)\n")
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
-		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
+		fmt.Fprintf(g.w, "    m.CheckExpr(e)\n")
 		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
 		fmt.Fprintf(g.w, "    // This is a group collision, do nothing.\n")
 		fmt.Fprintf(g.w, "    return nil\n")
@@ -807,15 +821,6 @@ func (g *exprsGen) genBuildPropsFunc() {
 
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
-}
-
-func (g *exprsGen) scalarPropsFieldName(define *lang.DefineExpr) string {
-	for _, field := range expandFields(g.compiled, define) {
-		if field.Type == "ScalarProps" {
-			return string(field.Name)
-		}
-	}
-	return ""
 }
 
 func (g *exprsGen) needsDataTypeField(define *lang.DefineExpr) bool {

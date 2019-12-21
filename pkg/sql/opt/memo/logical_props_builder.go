@@ -184,7 +184,7 @@ func (b *logicalPropsBuilder) buildSequenceSelectProps(
 }
 
 func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, sel, &rel.Shared)
+	BuildSharedProps(sel, &rel.Shared)
 
 	inputProps := sel.Input.Relational()
 
@@ -206,7 +206,7 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 
 	// Outer Columns
 	// -------------
-	// Outer columns were derived by buildSharedProps; remove any that are bound
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
 	// by input columns.
 	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
 
@@ -241,7 +241,7 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 }
 
 func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, prj, &rel.Shared)
+	BuildSharedProps(prj, &rel.Shared)
 
 	inputProps := prj.Input.Relational()
 
@@ -273,7 +273,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 
 	// Outer Columns
 	// -------------
-	// Outer columns were derived by buildSharedProps; remove any that are bound
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
 	// by input columns.
 	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
 
@@ -373,7 +373,7 @@ func (b *logicalPropsBuilder) buildAntiJoinApplyProps(
 }
 
 func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, join, &rel.Shared)
+	BuildSharedProps(join, &rel.Shared)
 
 	var h joinPropsHelper
 	h.init(b, join)
@@ -389,7 +389,7 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 
 	// Outer Columns
 	// -------------
-	// Outer columns were initially set by buildSharedProps. Remove any that are
+	// Outer columns were initially set by BuildSharedProps. Remove any that are
 	// bound by the input columns.
 	inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
 	rel.OuterCols.DifferenceWith(inputCols)
@@ -414,7 +414,7 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 }
 
 func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, indexJoin, &rel.Shared)
+	BuildSharedProps(indexJoin, &rel.Shared)
 
 	inputProps := indexJoin.Input.Relational()
 	md := b.mem.Metadata()
@@ -432,7 +432,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -483,7 +483,7 @@ func (b *logicalPropsBuilder) buildDistinctOnProps(
 }
 
 func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, groupExpr, &rel.Shared)
+	BuildSharedProps(groupExpr, &rel.Shared)
 
 	inputProps := groupExpr.Child(0).(RelExpr).Relational()
 	aggs := *groupExpr.Child(1).(*AggregationsExpr)
@@ -505,7 +505,7 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 
 	// Outer Columns
 	// -------------
-	// Outer columns were derived by buildSharedProps; remove any that are bound
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
 	// by input columns.
 	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
 
@@ -571,7 +571,7 @@ func (b *logicalPropsBuilder) buildExceptAllProps(except *ExceptAllExpr, rel *pr
 }
 
 func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, setNode, &rel.Shared)
+	BuildSharedProps(setNode, &rel.Shared)
 
 	leftProps := setNode.Child(0).(RelExpr).Relational()
 	rightProps := setNode.Child(1).(RelExpr).Relational()
@@ -604,7 +604,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -628,7 +628,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 }
 
 func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, values, &rel.Shared)
+	BuildSharedProps(values, &rel.Shared)
 
 	card := uint32(len(values.Rows))
 
@@ -659,7 +659,7 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -680,7 +680,7 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel *props.Relational) {
-	BuildSharedProps(b.mem, e, &rel.Shared)
+	BuildSharedProps(e, &rel.Shared)
 
 	// Output Columns
 	// --------------
@@ -714,7 +714,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 	// Copy over the props from the input.
 	inputProps := with.Main.Relational()
 
-	BuildSharedProps(b.mem, with, &rel.Shared)
+	BuildSharedProps(with, &rel.Shared)
 
 	// Side Effects
 	// ------------
@@ -751,7 +751,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 }
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, withScan, &rel.Shared)
+	BuildSharedProps(withScan, &rel.Shared)
 	bindingProps := withScan.BindingProps
 
 	// Side Effects
@@ -793,7 +793,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 }
 
 func (b *logicalPropsBuilder) buildRecursiveCTEProps(rec *RecursiveCTEExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, rec, &rel.Shared)
+	BuildSharedProps(rec, &rel.Shared)
 
 	// Output Columns
 	// --------------
@@ -892,7 +892,7 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, limit, &rel.Shared)
+	BuildSharedProps(limit, &rel.Shared)
 
 	inputProps := limit.Input.Relational()
 
@@ -922,7 +922,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -952,7 +952,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 }
 
 func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, offset, &rel.Shared)
+	BuildSharedProps(offset, &rel.Shared)
 
 	inputProps := offset.Input.Relational()
 
@@ -968,7 +968,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -997,7 +997,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, max1Row, &rel.Shared)
+	BuildSharedProps(max1Row, &rel.Shared)
 
 	inputProps := max1Row.Input.Relational()
 
@@ -1013,7 +1013,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -1033,7 +1033,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props
 }
 
 func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, ord, &rel.Shared)
+	BuildSharedProps(ord, &rel.Shared)
 
 	inputProps := ord.Input.Relational()
 
@@ -1052,7 +1052,7 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -1078,7 +1078,7 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 }
 
 func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, window, &rel.Shared)
+	BuildSharedProps(window, &rel.Shared)
 
 	inputProps := window.Input.Relational()
 
@@ -1128,7 +1128,7 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 func (b *logicalPropsBuilder) buildProjectSetProps(
 	projectSet *ProjectSetExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(b.mem, projectSet, &rel.Shared)
+	BuildSharedProps(projectSet, &rel.Shared)
 
 	inputProps := projectSet.Input.Relational()
 
@@ -1198,7 +1198,7 @@ func (b *logicalPropsBuilder) buildDeleteProps(del *DeleteExpr, rel *props.Relat
 }
 
 func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, mutation, &rel.Shared)
+	BuildSharedProps(mutation, &rel.Shared)
 
 	private := mutation.Private().(*MutationPrivate)
 
@@ -1256,7 +1256,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were already derived by BuildSharedProps.
 
 	// Functional Dependencies
 	// -----------------------
@@ -1280,15 +1280,15 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, ct, &rel.Shared)
+	BuildSharedProps(ct, &rel.Shared)
 }
 
 func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, cv, &rel.Shared)
+	BuildSharedProps(cv, &rel.Shared)
 }
 
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
-	BuildSharedProps(b.mem, item.Condition, &scalar.Shared)
+	BuildSharedProps(item.Condition, &scalar.Shared)
 
 	// Constraints
 	// -----------
@@ -1319,37 +1319,36 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 			}
 		}
 	}
-
-	scalar.Populated = true
 }
 
 func (b *logicalPropsBuilder) buildProjectionsItemProps(
 	item *ProjectionsItem, scalar *props.Scalar,
 ) {
 	item.Typ = item.Element.DataType()
-	BuildSharedProps(b.mem, item.Element, &scalar.Shared)
+	BuildSharedProps(item.Element, &scalar.Shared)
 }
 
 func (b *logicalPropsBuilder) buildAggregationsItemProps(
 	item *AggregationsItem, scalar *props.Scalar,
 ) {
 	item.Typ = item.Agg.DataType()
-	BuildSharedProps(b.mem, item.Agg, &scalar.Shared)
+	BuildSharedProps(item.Agg, &scalar.Shared)
 }
 
 func (b *logicalPropsBuilder) buildWindowsItemProps(item *WindowsItem, scalar *props.Scalar) {
 	item.Typ = item.Function.DataType()
-	BuildSharedProps(b.mem, item.Function, &scalar.Shared)
+	BuildSharedProps(item.Function, &scalar.Shared)
 }
 
 func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Scalar) {
-	item.Typ = item.Func.DataType()
-	BuildSharedProps(b.mem, item.Func, &scalar.Shared)
+	item.Typ = item.Fn.DataType()
+	BuildSharedProps(item.Fn, &scalar.Shared)
 }
 
 // BuildSharedProps fills in the shared properties derived from the given
-// expression's subtree.
-func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
+// expression's subtree. It will only recurse into a child when it is not
+// already caching properties.
+func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 	switch t := e.(type) {
 	case *VariableExpr:
 		// Variable introduces outer column.
@@ -1368,7 +1367,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 		shared.HasSubquery = true
 		shared.HasCorrelatedSubquery = !e.Child(0).(RelExpr).Relational().OuterCols.Empty()
 		if t.Op() == opt.AnyOp && !shared.HasCorrelatedSubquery {
-			shared.HasCorrelatedSubquery = hasOuterCols(mem, e.Child(1))
+			shared.HasCorrelatedSubquery = hasOuterCols(e.Child(1))
 		}
 
 	case *FunctionExpr:
@@ -1394,7 +1393,7 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 		case RelExpr:
 			cached = &t.Relational().Shared
 		case ScalarPropsExpr:
-			cached = &t.ScalarProps(mem).Shared
+			cached = &t.ScalarProps().Shared
 		}
 
 		// Don't need to recurse if properties are cached.
@@ -1416,25 +1415,25 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 				shared.HasCorrelatedSubquery = true
 			}
 		} else {
-			BuildSharedProps(mem, e.Child(i), shared)
+			BuildSharedProps(e.Child(i), shared)
 		}
 	}
 }
 
 // hasOuterCols returns true if the given expression has outer columns (i.e.
 // columns that are referenced by the expression but not bound by it).
-func hasOuterCols(mem *Memo, e opt.Expr) bool {
+func hasOuterCols(e opt.Expr) bool {
 	switch t := e.(type) {
 	case *VariableExpr:
 		return true
 	case RelExpr:
 		return !t.Relational().OuterCols.Empty()
 	case ScalarPropsExpr:
-		return !t.ScalarProps(mem).Shared.OuterCols.Empty()
+		return !t.ScalarProps().Shared.OuterCols.Empty()
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		if hasOuterCols(mem, e.Child(i)) {
+		if hasOuterCols(e.Child(i)) {
 			return true
 		}
 	}
@@ -1522,7 +1521,7 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
 	var notNullCols opt.ColSet
 	for i := range filters {
-		filterProps := filters[i].ScalarProps(b.mem)
+		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints != nil {
 			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(b.evalCtx))
 		}
@@ -1534,7 +1533,7 @@ func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
 // each condition in the filters.
 func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *props.FuncDepSet) {
 	for i := range filters {
-		filterProps := filters[i].ScalarProps(b.mem)
+		filterProps := filters[i].ScalarProps()
 		fdset.AddFrom(&filterProps.FuncDeps)
 	}
 
@@ -1550,7 +1549,7 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 	var cols opt.ColSet
 	possibleIntersection := false
 	for i := range filters {
-		if c := filters[i].ScalarProps(b.mem).Constraints; c != nil {
+		if c := filters[i].ScalarProps().Constraints; c != nil {
 			s := c.ExtractCols()
 			if cols.Intersects(s) {
 				possibleIntersection = true
@@ -1563,7 +1562,7 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 	if possibleIntersection {
 		intersection := constraint.Unconstrained
 		for i := range filters {
-			if c := filters[i].ScalarProps(b.mem).Constraints; c != nil {
+			if c := filters[i].ScalarProps().Constraints; c != nil {
 				intersection = intersection.Intersect(b.evalCtx, c)
 			}
 		}
@@ -1580,7 +1579,7 @@ func (b *logicalPropsBuilder) updateCardinalityFromFilters(
 	filters FiltersExpr, rel *props.Relational,
 ) {
 	for i := range filters {
-		filterProps := filters[i].ScalarProps(b.mem)
+		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints == nil {
 			continue
 		}

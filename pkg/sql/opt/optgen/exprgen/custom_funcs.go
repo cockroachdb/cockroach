@@ -130,28 +130,6 @@ func (c *customFuncs) FindTable(name string) opt.TableID {
 	return res
 }
 
-// ProjectionItem creates a ProjectionItem. A list of such items can be used as
-// a ProjectionsExpr.
-func (c *customFuncs) ProjectionItem(
-	element opt.ScalarExpr, col opt.ColumnID,
-) memo.ProjectionsItem {
-	return memo.ProjectionsItem{
-		Element:    element,
-		ColPrivate: memo.ColPrivate{Col: col},
-		Typ:        c.mem.Metadata().ColumnMeta(col).Type,
-	}
-}
-
-// AggregationsItem creates an AggregationsItem. A list of such items can be used as
-// an AggregationsExpr.
-func (c *customFuncs) AggregationsItem(agg opt.ScalarExpr, col opt.ColumnID) memo.AggregationsItem {
-	return memo.AggregationsItem{
-		Agg:        agg,
-		ColPrivate: memo.ColPrivate{Col: col},
-		Typ:        c.mem.Metadata().ColumnMeta(col).Type,
-	}
-}
-
 // Ordering parses a string like "+a,-b" into an Ordering.
 func (c *customFuncs) Ordering(str string) opt.Ordering {
 	defer func() {

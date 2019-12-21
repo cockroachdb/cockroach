@@ -22,15 +22,19 @@ define InnerJoinApply {
     On    FiltersExpr
 }
 
-[Scalar, Boolean, List]
+[Scalar, Bool, List]
 define Filters {
 }
 
-[Scalar, Boolean, ListItem]
+[Scalar, Bool, ListItem, ScalarProps]
 define FiltersItem {
     Condition ScalarExpr
+}
 
-    scalar ScalarProps
+[Scalar, ListItem]
+define KVOptionsItem {
+    Value ScalarExpr
+    Key   string
 }
 
 [PushSelectIntoJoinLeft, Normalize]
@@ -136,6 +140,24 @@ func (_f *Factory) ConstructInnerJoinApply(
 	return _f.onConstructRelational(e)
 }
 
+// ConstructFiltersItem constructs an expression for the FiltersItem operator.
+func (_f *Factory) ConstructFiltersItem(
+	condition opt.ScalarExpr,
+) memo.FiltersItem {
+	item := memo.FiltersItem{Condition: condition}
+	item.PopulateProps(_f.mem)
+	return item
+}
+
+// ConstructKVOptionsItem constructs an expression for the KVOptionsItem operator.
+func (_f *Factory) ConstructKVOptionsItem(
+	value opt.ScalarExpr,
+	key string,
+) memo.KVOptionsItem {
+	item := memo.KVOptionsItem{Value: value, Key: key}
+	return item
+}
+
 // Replace enables an expression subtree to be rewritten under the control of
 // the caller. It passes each child of the given expression to the replace
 // callback. The caller can continue traversing the expression tree within the
@@ -205,7 +227,7 @@ func (f *Factory) replaceFiltersExpr(list memo.FiltersExpr, replace ReplaceFunc)
 				newList = make([]memo.FiltersItem, len(list))
 				copy(newList, list[:i])
 			}
-			newList[i].Condition = after
+			newList[i] = f.ConstructFiltersItem(after)
 		} else if newList != nil {
 			newList[i] = list[i]
 		}
@@ -250,6 +272,8 @@ func (f *Factory) copyAndReplaceDefaultFiltersExpr(src memo.FiltersExpr, replace
 	dst = make(memo.FiltersExpr, len(src))
 	for i := range src {
 		dst[i].Condition = f.invokeReplace(src[i].Condition, replace).(opt.ScalarExpr)
+		dst[i].PopulateProps(f.mem)
+		f.mem.CheckExpr(&dst[i])
 	}
 	return dst
 }
