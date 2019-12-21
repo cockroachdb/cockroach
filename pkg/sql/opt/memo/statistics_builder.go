@@ -666,7 +666,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	// equivalencies derived from input expressions.
 	var equivFD props.FuncDepSet
 	for i := range sel.Filters {
-		equivFD.AddEquivFrom(&sel.Filters[i].ScalarProps(sel.Memo()).FuncDeps)
+		equivFD.AddEquivFrom(&sel.Filters[i].ScalarProps().FuncDeps)
 	}
 	equivReps := equivFD.EquivReps()
 
@@ -1969,7 +1969,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	// children.
 	var zipRowCount float64
 	for i := range projectSet.Zip {
-		if fn, ok := projectSet.Zip[i].Func.(*FunctionExpr); ok {
+		if fn, ok := projectSet.Zip[i].Fn.(*FunctionExpr); ok {
 			if fn.Overload.Generator != nil {
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
@@ -2026,7 +2026,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		for i := range projectSet.Zip {
 			item := &projectSet.Zip[i]
 			if item.Cols.ToSet().Intersects(reqZipCols) {
-				if fn, ok := item.Func.(*FunctionExpr); ok && fn.Overload.Generator != nil {
+				if fn, ok := item.Fn.(*FunctionExpr); ok && fn.Overload.Generator != nil {
 					// The columns(s) contain a generator function.
 					// TODO(rytaft): We may want to determine which generator function the
 					// requested columns correspond to, and estimate the distinct count and
@@ -2056,7 +2056,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 					zipColsNullCount += (s.RowCount - inputStats.RowCount) * (1 - zipColsNullCount/s.RowCount)
 				}
 
-				if item.ScalarProps(projectSet.Memo()).OuterCols.Intersects(inputProps.OutputCols) {
+				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
 					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
@@ -2570,7 +2570,7 @@ func (sb *statisticsBuilder) applyFilter(
 		// make sure that we don't include columns that were only present in
 		// equality conjuncts such as var1=var2. The selectivity of these conjuncts
 		// will be accounted for in selectivityFromEquivalencies.
-		scalarProps := conjunct.ScalarProps(e.Memo())
+		scalarProps := conjunct.ScalarProps()
 		constrainedCols.UnionWith(scalarProps.OuterCols)
 		if scalarProps.Constraints != nil {
 			histColsLocal := sb.applyConstraintSet(

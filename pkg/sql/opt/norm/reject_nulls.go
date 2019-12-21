@@ -31,7 +31,7 @@ func (c *CustomFuncs) HasNullRejectingFilter(
 	filters memo.FiltersExpr, nullRejectCols opt.ColSet,
 ) bool {
 	for i := range filters {
-		constraints := filters[i].ScalarProps(c.mem).Constraints
+		constraints := filters[i].ScalarProps().Constraints
 		if constraints == nil {
 			continue
 		}

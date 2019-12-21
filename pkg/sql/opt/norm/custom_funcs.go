@@ -350,7 +350,7 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 	case memo.RelExpr:
 		return &t.Relational().Shared
 	case memo.ScalarPropsExpr:
-		return &t.ScalarProps(c.mem).Shared
+		return &t.ScalarProps().Shared
 	}
 	panic(errors.AssertionFailedf("no logical properties available for node: %v", e))
 }
@@ -511,7 +511,7 @@ func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) physic
 func (c *CustomFuncs) FilterOuterCols(filters memo.FiltersExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range filters {
-		colSet.UnionWith(filters[i].ScalarProps(c.mem).OuterCols)
+		colSet.UnionWith(filters[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }
@@ -520,7 +520,7 @@ func (c *CustomFuncs) FilterOuterCols(filters memo.FiltersExpr) opt.ColSet {
 // contain a correlated subquery.
 func (c *CustomFuncs) FilterHasCorrelatedSubquery(filters memo.FiltersExpr) bool {
 	for i := range filters {
-		if filters[i].ScalarProps(c.mem).HasCorrelatedSubquery {
+		if filters[i].ScalarProps().HasCorrelatedSubquery {
 			return true
 		}
 	}
@@ -537,7 +537,7 @@ func (c *CustomFuncs) IsFilterFalse(filters memo.FiltersExpr) bool {
 // IsContradiction returns true if the given filter item contains a
 // contradiction constraint.
 func (c *CustomFuncs) IsContradiction(item *memo.FiltersItem) bool {
-	return item.ScalarProps(c.mem).Constraints == constraint.Contradiction
+	return item.ScalarProps().Constraints == constraint.Contradiction
 }
 
 // ConcatFilters creates a new Filters operator that contains conditions from
@@ -581,7 +581,7 @@ func (c *CustomFuncs) ReplaceFiltersItem(
 	for i := range filters {
 		if search == &filters[i] {
 			copy(newFilters, filters[:i])
-			newFilters[i].Condition = replace
+			newFilters[i] = c.f.ConstructFiltersItem(replace)
 			copy(newFilters[i+1:], filters[i+1:])
 			return newFilters
 		}
@@ -603,7 +603,7 @@ func (c *CustomFuncs) ReplaceFiltersItem(
 // produced by the Scan.
 func (c *CustomFuncs) FiltersBoundBy(filters memo.FiltersExpr, cols opt.ColSet) bool {
 	for i := range filters {
-		if !filters[i].ScalarProps(c.mem).OuterCols.SubsetOf(cols) {
+		if !filters[i].ScalarProps().OuterCols.SubsetOf(cols) {
 			return false
 		}
 	}
@@ -708,7 +708,7 @@ func (c *CustomFuncs) CanConsolidateFilters(filters memo.FiltersExpr) bool {
 // the column ID of the variable and ok=true. Otherwise, canConsolidateFilter
 // returns ok=false.
 func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col opt.ColumnID, ok bool) {
-	if !filter.ScalarProps(c.mem).TightConstraints {
+	if !filter.ScalarProps().TightConstraints {
 		return 0, false
 	}
 
@@ -784,7 +784,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	// Construct each of the new Range operators now that we have built the
 	// conjunctions.
 	for i, n := 0, seenTwice.Len(); i < n; i++ {
-		newFilters[i].Condition = c.f.ConstructRange(newFilters[i].Condition)
+		newFilters[i] = c.f.ConstructFiltersItem(c.f.ConstructRange(newFilters[i].Condition))
 	}
 
 	return newFilters
@@ -891,7 +891,7 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 		if usedIndices.Contains(i) {
 			continue
 		}
-		if f[i].ScalarProps(c.mem).OuterCols.Intersects(fixedCols) {
+		if f[i].ScalarProps().OuterCols.Intersects(fixedCols) {
 			return true
 		}
 	}
@@ -935,14 +935,14 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 
 	result := make(memo.FiltersExpr, len(f))
 	for i := range f {
-		inliningNeeded := f[i].ScalarProps(c.mem).OuterCols.Intersects(fixedCols)
+		inliningNeeded := f[i].ScalarProps().OuterCols.Intersects(fixedCols)
 		// Don't inline if we used this position to infer a constant value, or if
 		// the expression doesn't contain any fixed columns.
 		if usedIndices.Contains(i) || !inliningNeeded {
 			result[i] = f[i]
 		} else {
 			newCondition := replace(f[i].Condition).(opt.ScalarExpr)
-			result[i] = memo.FiltersItem{Condition: newCondition}
+			result[i] = c.f.ConstructFiltersItem(newCondition)
 		}
 	}
 	return result
@@ -962,7 +962,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 func (c *CustomFuncs) CanMergeProjections(outer, inner memo.ProjectionsExpr) bool {
 	innerCols := c.ProjectionCols(inner)
 	for i := range outer {
-		if outer[i].ScalarProps(c.mem).OuterCols.Intersects(innerCols) {
+		if outer[i].ScalarProps().OuterCols.Intersects(innerCols) {
 			return false
 		}
 	}
@@ -1049,7 +1049,7 @@ func (c *CustomFuncs) ProjectionCols(projections memo.ProjectionsExpr) opt.ColSe
 func (c *CustomFuncs) ProjectionOuterCols(projections memo.ProjectionsExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range projections {
-		colSet.UnionWith(projections[i].ScalarProps(c.mem).OuterCols)
+		colSet.UnionWith(projections[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }
@@ -1060,7 +1060,7 @@ func (c *CustomFuncs) AreProjectionsCorrelated(
 	projections memo.ProjectionsExpr, cols opt.ColSet,
 ) bool {
 	for i := range projections {
-		if projections[i].ScalarProps(c.mem).OuterCols.Intersects(cols) {
+		if projections[i].ScalarProps().OuterCols.Intersects(cols) {
 			return true
 		}
 	}
@@ -1078,10 +1078,7 @@ func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 func (c *CustomFuncs) ProjectExtraCol(
 	in memo.RelExpr, extra opt.ScalarExpr, extraID opt.ColumnID,
 ) memo.RelExpr {
-	projections := memo.ProjectionsExpr{{
-		Element:    extra,
-		ColPrivate: memo.ColPrivate{Col: extraID}},
-	}
+	projections := memo.ProjectionsExpr{c.f.ConstructProjectionsItem(extra, extraID)}
 	return c.f.ConstructProject(in, projections, in.Relational().OutputCols)
 }
 
@@ -1122,7 +1119,7 @@ func (c *CustomFuncs) SimplifyFilters(filters memo.FiltersExpr) memo.FiltersExpr
 	for _, item := range filters {
 		var ok bool
 		if newFilters, ok = c.addConjuncts(item.Condition, newFilters); !ok {
-			return memo.FalseFilter
+			return memo.FiltersExpr{c.f.ConstructFiltersItem(memo.FalseSingleton)}
 		}
 	}
 
@@ -1153,7 +1150,7 @@ func (c *CustomFuncs) addConjuncts(
 		// Filters operator skips True operands.
 
 	default:
-		filters = append(filters, memo.FiltersItem{Condition: t})
+		filters = append(filters, c.f.ConstructFiltersItem(t))
 	}
 	return filters, true
 }
@@ -1182,7 +1179,7 @@ func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 func (c *CustomFuncs) AggregationOuterCols(aggregations memo.AggregationsExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range aggregations {
-		colSet.UnionWith(aggregations[i].ScalarProps(c.mem).OuterCols)
+		colSet.UnionWith(aggregations[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }
@@ -1276,7 +1273,7 @@ func (c *CustomFuncs) IsSameOrdering(
 // any of the given columns.
 func (c *CustomFuncs) IsZipCorrelated(zip memo.ZipExpr, cols opt.ColSet) bool {
 	for i := range zip {
-		if zip[i].ScalarProps(c.mem).OuterCols.Intersects(cols) {
+		if zip[i].ScalarProps().OuterCols.Intersects(cols) {
 			return true
 		}
 	}
@@ -1288,7 +1285,7 @@ func (c *CustomFuncs) IsZipCorrelated(zip memo.ZipExpr, cols opt.ColSet) bool {
 func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range zip {
-		colSet.UnionWith(zip[i].ScalarProps(c.mem).OuterCols)
+		colSet.UnionWith(zip[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }
@@ -1320,8 +1317,7 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 	items := make(memo.ProjectionsExpr, len(toList))
 	for idx, fromCol := range fromList {
 		toCol := toList[idx]
-		items[idx].Element = c.f.ConstructVariable(fromCol)
-		items[idx].Col = toCol
+		items[idx] = c.f.ConstructProjectionsItem(c.f.ConstructVariable(fromCol), toCol)
 	}
 	return items
 }
@@ -1360,7 +1356,7 @@ func (c *CustomFuncs) NeededColMapRight(needed opt.ColSet, set *memo.SetPrivate)
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
 func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
-	filterProps := src.ScalarProps(c.mem)
+	filterProps := src.ScalarProps()
 	for i, ok := filterProps.OuterCols.Next(0); ok; i, ok = filterProps.OuterCols.Next(i + 1) {
 		colType := c.f.Metadata().ColumnMeta(i).Type
 		if sqlbase.DatumTypeHasCompositeKeyEncoding(colType) {
@@ -1843,9 +1839,10 @@ func (c *CustomFuncs) SubqueryCmp(sub *memo.SubqueryPrivate) opt.Operator {
 	return sub.Cmp
 }
 
-// MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
-func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) *memo.ColPrivate {
-	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
+// MakeArrayAggCol returns a ColumnID with the given type and an "array_agg"
+// label.
+func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
+	return c.mem.Metadata().AddColumn("array_agg", typ)
 }
 
 // MakeOrderedGrouping constructs a new GroupingPrivate using the given
@@ -2020,10 +2017,10 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 				// times in the future).
 				projections := make(memo.ProjectionsExpr, len(t.InCols))
 				for i := range t.InCols {
-					projections[i] = memo.ProjectionsItem{
-						Element:    c.f.ConstructVariable(t.InCols[i]),
-						ColPrivate: memo.ColPrivate{Col: t.OutCols[i]},
-					}
+					projections[i] = c.f.ConstructProjectionsItem(
+						c.f.ConstructVariable(t.InCols[i]),
+						t.OutCols[i],
+					)
 				}
 				return c.f.ConstructProject(binding, projections, opt.ColSet{})
 			}
@@ -2049,7 +2046,7 @@ func (c *CustomFuncs) WithUses(r opt.Expr) map[opt.WithID]int {
 		return relProps.Shared.Rule.WithUses
 
 	case memo.ScalarPropsExpr:
-		scalarProps := e.ScalarProps(c.mem)
+		scalarProps := e.ScalarProps()
 
 		// Lazily calculate and store the WithUses value.
 		if !scalarProps.IsAvailable(props.WithUses) {

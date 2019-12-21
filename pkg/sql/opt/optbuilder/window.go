@@ -183,18 +183,18 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		}
 
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
-			memo.WindowsItem{
-				Function: fn,
-				WindowsItemPrivate: memo.WindowsItemPrivate{
+			b.factory.ConstructWindowsItem(
+				fn,
+				&memo.WindowsItemPrivate{
 					Frame: memo.WindowFrame{
 						Mode:           windowFrames[i].Mode,
 						StartBoundType: windowFrames[i].Bounds.StartBound.BoundType,
 						EndBoundType:   windowFrames[i].Bounds.EndBound.BoundType,
 						FrameExclusion: windowFrames[i].Exclusion,
 					},
-					ColPrivate: memo.ColPrivate{Col: w.col.id},
+					Col: w.col.id,
 				},
-			},
+			),
 		)
 	}
 
@@ -282,13 +282,13 @@ func (b *Builder) buildAggregationAsWindow(
 		frameIdx := b.findMatchingFrameIndex(&frames, partitions[i], orderings[i])
 
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
-			memo.WindowsItem{
-				Function: fn,
-				WindowsItemPrivate: memo.WindowsItemPrivate{
-					Frame:      windowAggregateFrame(),
-					ColPrivate: memo.ColPrivate{Col: agg.col.id},
+			b.factory.ConstructWindowsItem(
+				fn,
+				&memo.WindowsItemPrivate{
+					Frame: windowAggregateFrame(),
+					Col:   agg.col.id,
 				},
-			},
+			),
 		)
 	}
 
@@ -305,7 +305,7 @@ func (b *Builder) buildAggregationAsWindow(
 	// Wrap with having filter if it exists.
 	if having != nil {
 		input := g.aggOutScope.expr.(memo.RelExpr)
-		filters := memo.FiltersExpr{{Condition: having}}
+		filters := memo.FiltersExpr{b.factory.ConstructFiltersItem(having)}
 		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
 	return g.aggOutScope
@@ -493,10 +493,10 @@ func (b *Builder) constructWindowGroup(
 	private.Ordering.FromOrderingWithOptCols(nil, groupingColSet)
 	aggs := make(memo.AggregationsExpr, 0, len(aggInfos))
 	for i := range aggInfos {
-		aggs = append(aggs, memo.AggregationsItem{
-			Agg:        b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggInfos[i].col.id)),
-			ColPrivate: memo.ColPrivate{Col: aggInfos[i].col.id},
-		})
+		aggs = append(aggs, b.factory.ConstructAggregationsItem(
+			b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggInfos[i].col.id)),
+			aggInfos[i].col.id,
+		))
 	}
 	return b.factory.ConstructGroupBy(input, aggs, &private)
 }
@@ -569,21 +569,18 @@ func (b *Builder) constructScalarWindowGroup(
 			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name.String(), aggregateCol.typ, aggregateCol.expr, varExpr)
 		}
 
-		aggs = append(aggs, memo.AggregationsItem{
-			Agg:        varExpr,
-			ColPrivate: memo.ColPrivate{Col: aggregateCol.id},
-		})
+		aggs = append(aggs, b.factory.ConstructAggregationsItem(varExpr, aggregateCol.id))
 		passthrough.Add(aggInfos[i].col.id)
 
 		// Add projection to replace default NULL value.
 		if requiresProjection {
-			projections = append(projections, memo.ProjectionsItem{
-				Element: b.replaceDefaultReturn(
+			projections = append(projections, b.factory.ConstructProjectionsItem(
+				b.replaceDefaultReturn(
 					b.factory.ConstructVariable(aggregateCol.id),
 					memo.NullSingleton,
 					defaultNullVal),
-				ColPrivate: memo.ColPrivate{Col: aggInfos[i].col.id},
-			})
+				aggInfos[i].col.id,
+			))
 			passthrough.Remove(aggInfos[i].col.id)
 		}
 	}

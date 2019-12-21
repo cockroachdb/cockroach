@@ -711,8 +711,8 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			writeProp("type=%s", typ)
 		}
 
-		if propsExpr, ok := scalar.(ScalarPropsExpr); ok && f.Memo != nil {
-			scalarProps := propsExpr.ScalarProps(f.Memo)
+		if propsExpr, ok := scalar.(ScalarPropsExpr); ok {
+			scalarProps := propsExpr.ScalarProps()
 			if !f.HasFlags(ExprFmtHideMiscProps) {
 				if !scalarProps.OuterCols.Empty() {
 					writeProp("outer=%s", scalarProps.OuterCols)

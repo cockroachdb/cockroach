@@ -140,10 +140,10 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	for i := range outScope.cols {
 		if id := outScope.cols[i].id; !excluded.Contains(id) {
 			excluded.Add(id)
-			aggs = append(aggs, memo.AggregationsItem{
-				Agg:        b.factory.ConstructFirstAgg(b.factory.ConstructVariable(id)),
-				ColPrivate: memo.ColPrivate{Col: id},
-			})
+			aggs = append(aggs, b.factory.ConstructAggregationsItem(
+				b.factory.ConstructFirstAgg(b.factory.ConstructVariable(id)),
+				id,
+			))
 		}
 	}
 

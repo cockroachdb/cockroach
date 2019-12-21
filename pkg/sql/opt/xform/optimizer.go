@@ -242,7 +242,7 @@ func (o *Optimizer) optimizeExpr(
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
-		if !t.ScalarProps(o.mem).HasSubquery {
+		if !t.ScalarProps().HasSubquery {
 			return 0, true
 		}
 		return o.optimizeScalarExpr(t)
@@ -686,7 +686,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
-		if !t.ScalarProps(o.mem).HasSubquery {
+		if !t.ScalarProps().HasSubquery {
 			return parent
 		}
 	}

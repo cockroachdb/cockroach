@@ -51,14 +51,18 @@ func TestSimplifyFilters(t *testing.T) {
 		Cols: opt.ColList{},
 		ID:   f.Metadata().NextUniqueID(),
 	})
-	filters := memo.FiltersExpr{{Condition: eq}, {Condition: memo.FalseSingleton}, {Condition: eq}}
+	filters := memo.FiltersExpr{
+		f.ConstructFiltersItem(eq),
+		f.ConstructFiltersItem(memo.FalseSingleton),
+		f.ConstructFiltersItem(eq),
+	}
 	sel := f.ConstructSelect(vals, filters)
 	if sel.Relational().Cardinality.Max != 0 {
 		t.Fatalf("result should have been collapsed to zero cardinality rowset")
 	}
 
 	// Filters operator skips True operands.
-	filters = memo.FiltersExpr{{Condition: eq}, {Condition: memo.TrueSingleton}}
+	filters = memo.FiltersExpr{f.ConstructFiltersItem(eq), f.ConstructFiltersItem(memo.TrueSingleton)}
 	sel = f.ConstructSelect(vals, filters)
 	if len(sel.(*memo.SelectExpr).Filters) != 1 {
 		t.Fatalf("filters result should have filtered True operator")
