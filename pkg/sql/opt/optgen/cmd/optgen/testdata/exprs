@@ -233,13 +233,12 @@ type ProjectionsItem struct {
 	ColPrivate
 
 	Typ *types.T
-	id  opt.ScalarID
 }
 
 var _ opt.ScalarExpr = &ProjectionsItem{}
 
 func (e *ProjectionsItem) ID() opt.ScalarID {
-	return e.id
+	return 0
 }
 
 func (e *ProjectionsItem) Op() opt.Operator {
@@ -279,13 +278,6 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 
 func (e *ProjectionsItem) DataType() *types.T {
 	return e.Typ
-}
-
-func (e *ProjectionsItem) ScalarProps(mem *Memo) *props.Scalar {
-	if !e.scalar.Populated {
-		mem.logPropsBuilder.buildProjectionsItemProps(e, &e.scalar)
-	}
-	return &e.scalar
 }
 
 type ColPrivate struct {
@@ -397,8 +389,9 @@ func (m *Memo) MemoizeProject(
 			m.newGroupFn(e)
 		}
 		m.logPropsBuilder.buildProjectProps(e, &grp.rel)
+		grp.rel.Populated = true
 		m.memEstimate += size
-		m.checkExpr(e)
+		m.CheckExpr(e)
 	}
 	return interned.FirstExpr()
 }
@@ -409,7 +402,7 @@ func (m *Memo) AddProjectToGroup(e *ProjectExpr, grp RelExpr) *ProjectExpr {
 	if interned == e {
 		e.setGroup(grp)
 		m.memEstimate += size
-		m.checkExpr(e)
+		m.CheckExpr(e)
 	} else if interned.group() != grp.group() {
 		// This is a group collision, do nothing.
 		return nil

@@ -1082,12 +1082,10 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		for j := 0; j < len(deletedFKCols); j++ {
 			c := mb.b.factory.Metadata().ColumnMeta(deletedFKCols[j])
 			outCols[j] = mb.md.AddColumn(c.Alias, c.Type)
-			proj = append(proj, memo.ProjectionsItem{
-				ColPrivate: memo.ColPrivate{
-					Col: outCols[j],
-				},
-				Element: mb.b.factory.ConstructVariable(deletedFKCols[j]),
-			})
+			proj = append(proj, mb.b.factory.ConstructProjectionsItem(
+				mb.b.factory.ConstructVariable(deletedFKCols[j]),
+				outCols[j],
+			))
 		}
 		// TODO(justin): add rules to allow this to get pushed down.
 		input := mb.b.factory.ConstructProject(deletions, proj, opt.ColSet{})
@@ -1140,12 +1138,12 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 		}
 	}
 
-	item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
+	private := memo.FKChecksItemPrivate{
 		OriginTable: mb.tabID,
 		FKOutbound:  true,
 		FKOrdinal:   fkOrdinal,
 		OpName:      mb.opName,
-	}}
+	}
 
 	// Build an anti-join, with the origin FK columns on the left and the
 	// referenced columns on the right.
@@ -1167,7 +1165,7 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 		refOrdinals[j] = fk.ReferencedColumnOrdinal(refTab, j)
 	}
 	refTabMeta := mb.b.addTable(refTab.(cat.Table), tree.NewUnqualifiedTableName(refTab.Name()))
-	item.ReferencedTable = refTabMeta.MetaID
+	private.ReferencedTable = refTabMeta.MetaID
 	scanScope := mb.b.buildScan(
 		refTabMeta,
 		refOrdinals,
@@ -1177,7 +1175,7 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 	)
 
 	left, withScanCols := mb.makeFKInputScan(insertedFKCols)
-	item.KeyCols = withScanCols
+	private.KeyCols = withScanCols
 	if notNullInputCols.Len() < numCols {
 		// The columns we are inserting might have NULLs. These require special
 		// handling, depending on the match method:
@@ -1203,12 +1201,12 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 			filters := make(memo.FiltersExpr, 0, numCols-notNullInputCols.Len())
 			for i := range insertedFKCols {
 				if !notNullInputCols.Contains(insertedFKCols[i]) {
-					filters = append(filters, memo.FiltersItem{
-						Condition: mb.b.factory.ConstructIsNot(
+					filters = append(filters, mb.b.factory.ConstructFiltersItem(
+						mb.b.factory.ConstructIsNot(
 							mb.b.factory.ConstructVariable(withScanCols[i]),
 							memo.NullSingleton,
 						),
-					})
+					))
 				}
 			}
 			left = mb.b.factory.ConstructSelect(left, filters)
@@ -1235,7 +1233,10 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 					condition = mb.b.factory.ConstructOr(condition, is)
 				}
 			}
-			left = mb.b.factory.ConstructSelect(left, memo.FiltersExpr{{Condition: condition}})
+			left = mb.b.factory.ConstructSelect(
+				left,
+				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(condition)},
+			)
 
 		default:
 			panic(errors.AssertionFailedf("match method %s not supported", m))
@@ -1246,17 +1247,20 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
 	antiJoinFilters := make(memo.FiltersExpr, numCols)
 	for j := 0; j < numCols; j++ {
-		antiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
-			mb.b.factory.ConstructVariable(withScanCols[j]),
-			mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+		antiJoinFilters[j] = mb.b.factory.ConstructFiltersItem(
+			mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(withScanCols[j]),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			),
 		)
 	}
 
-	item.Check = mb.b.factory.ConstructAntiJoin(
-		left, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
-	)
-
-	mb.checks = append(mb.checks, item)
+	mb.checks = append(mb.checks, mb.b.factory.ConstructFKChecksItem(
+		mb.b.factory.ConstructAntiJoin(
+			left, scanScope.expr, antiJoinFilters, &memo.JoinPrivate{},
+		),
+		&private,
+	))
 }
 
 // addDeletionCheck adds a FK check for rows which are removed from a table.
@@ -1270,12 +1274,12 @@ func (mb *mutationBuilder) addDeletionCheck(
 	fkOrdinal int, deletedRows memo.RelExpr, deleteCols opt.ColList, action tree.ReferenceAction,
 ) (ok bool) {
 	fk := mb.tab.InboundForeignKey(fkOrdinal)
-	item := memo.FKChecksItem{FKChecksItemPrivate: memo.FKChecksItemPrivate{
+	private := memo.FKChecksItemPrivate{
 		ReferencedTable: mb.tabID,
 		FKOutbound:      false,
 		FKOrdinal:       fkOrdinal,
 		OpName:          mb.opName,
-	}}
+	}
 
 	// Build a semi join, with the referenced FK columns on the left and the
 	// origin columns on the right.
@@ -1304,7 +1308,7 @@ func (mb *mutationBuilder) addDeletionCheck(
 	}
 
 	origTabMeta := mb.b.addTable(origTab, tree.NewUnqualifiedTableName(origTab.Name()))
-	item.OriginTable = origTabMeta.MetaID
+	private.OriginTable = origTabMeta.MetaID
 	scanScope := mb.b.buildScan(
 		origTabMeta,
 		origOrdinals,
@@ -1314,7 +1318,7 @@ func (mb *mutationBuilder) addDeletionCheck(
 	)
 
 	left, withScanCols := deletedRows, deleteCols
-	item.KeyCols = withScanCols
+	private.KeyCols = withScanCols
 
 	// Note that it's impossible to orphan a row whose FK key columns contain a
 	// NULL, since by definition a NULL never refers to an actual row (in
@@ -1323,15 +1327,19 @@ func (mb *mutationBuilder) addDeletionCheck(
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
 	semiJoinFilters := make(memo.FiltersExpr, numCols)
 	for j := 0; j < numCols; j++ {
-		semiJoinFilters[j].Condition = mb.b.factory.ConstructEq(
-			mb.b.factory.ConstructVariable(withScanCols[j]),
-			mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+		semiJoinFilters[j] = mb.b.factory.ConstructFiltersItem(
+			mb.b.factory.ConstructEq(
+				mb.b.factory.ConstructVariable(withScanCols[j]),
+				mb.b.factory.ConstructVariable(scanScope.cols[j].id),
+			),
 		)
 	}
-	item.Check = mb.b.factory.ConstructSemiJoin(
-		left, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{},
-	)
-	mb.checks = append(mb.checks, item)
+	mb.checks = append(mb.checks, mb.b.factory.ConstructFKChecksItem(
+		mb.b.factory.ConstructSemiJoin(
+			left, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{},
+		),
+		&private,
+	))
 
 	return true
 }

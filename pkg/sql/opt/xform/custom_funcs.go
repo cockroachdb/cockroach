@@ -180,7 +180,7 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 		// Check constraints that are guaranteed to not evaluate to NULL
 		// are the only ones converted into filters.
 		if memo.ExprIsNeverNull(checkConstraint, notNullCols) {
-			checkFilters = append(checkFilters, memo.FiltersItem{Condition: checkConstraint})
+			checkFilters = append(checkFilters, c.e.f.ConstructFiltersItem(checkConstraint))
 		}
 	}
 
@@ -287,7 +287,7 @@ func (c *CustomFuncs) inBetweenFilters(
 	}
 
 	// Return an Or expression between all the expressions.
-	return memo.FiltersExpr{{Condition: c.constructOr(inBetween)}}
+	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(inBetween))}
 }
 
 // inPartitionFilters returns a FiltersExpr that is required to cover
@@ -336,7 +336,7 @@ func (c *CustomFuncs) inPartitionFilters(
 	}
 
 	// Return an Or expression between all the expressions.
-	return memo.FiltersExpr{{Condition: c.constructOr(partitions)}}
+	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(partitions))}
 }
 
 // constructOr constructs an expression that is an OR between all the
@@ -803,7 +803,7 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 	index := md.Table(tabID).Index(indexOrd)
 
 	for i := range filters {
-		filterProps := filters[i].ScalarProps(c.e.mem)
+		filterProps := filters[i].ScalarProps()
 
 		// If the filter involves the first index column, then the index can
 		// possibly be constrained.
@@ -1205,10 +1205,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			constColID := c.e.f.Metadata().AddColumn(
 				fmt.Sprintf("project_const_col_@%d", idxCol),
 				condition.Right.DataType())
-			projections = append(projections, memo.ProjectionsItem{
-				Element:    c.e.f.ConstructConst(constValMap[idxCol]),
-				ColPrivate: memo.ColPrivate{Col: constColID},
-			})
+			projections = append(projections, c.e.f.ConstructProjectionsItem(
+				c.e.f.ConstructConst(constValMap[idxCol]),
+				constColID,
+			))
 
 			needProjection = true
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)

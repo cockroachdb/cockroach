@@ -49,8 +49,10 @@ func (c *CustomFuncs) InlineProjectionConstants(
 	newProjections := make(memo.ProjectionsExpr, len(projections))
 	for i := range projections {
 		item := &projections[i]
-		newProjections[i].Col = item.Col
-		newProjections[i].Element = c.inlineConstants(item.Element, input, constCols).(opt.ScalarExpr)
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			c.inlineConstants(item.Element, input, constCols).(opt.ScalarExpr),
+			item.Col,
+		)
 	}
 	return newProjections
 }
@@ -64,7 +66,9 @@ func (c *CustomFuncs) InlineFilterConstants(
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
 		item := &filters[i]
-		newFilters[i].Condition = c.inlineConstants(item.Condition, input, constCols).(opt.ScalarExpr)
+		newFilters[i] = c.f.ConstructFiltersItem(
+			c.inlineConstants(item.Condition, input, constCols).(opt.ScalarExpr),
+		)
 	}
 	return newFilters
 }
@@ -129,7 +133,7 @@ func (c *CustomFuncs) HasDuplicateRefs(
 	refs := passthrough.Intersection(targetCols)
 	for i := range projections {
 		item := &projections[i]
-		if item.ScalarProps(c.mem).HasCorrelatedSubquery {
+		if item.ScalarProps().HasCorrelatedSubquery {
 			// Don't traverse the expression tree if there is a correlated subquery.
 			return true
 		}
@@ -219,7 +223,9 @@ func (c *CustomFuncs) InlineSelectProject(
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
 		item := &filters[i]
-		newFilters[i].Condition = c.inlineProjections(item.Condition, projections).(opt.ScalarExpr)
+		newFilters[i] = c.f.ConstructFiltersItem(
+			c.inlineProjections(item.Condition, projections).(opt.ScalarExpr),
+		)
 	}
 	return newFilters
 }
@@ -237,9 +243,10 @@ func (c *CustomFuncs) InlineProjectProject(
 	newProjections := make(memo.ProjectionsExpr, len(projections))
 	for i := range projections {
 		item := &projections[i]
-		newItem := &newProjections[i]
-		newItem.Element = c.inlineProjections(item.Element, innerProjections).(opt.ScalarExpr)
-		newItem.Col = item.Col
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			c.inlineProjections(item.Element, innerProjections).(opt.ScalarExpr),
+			item.Col,
+		)
 	}
 
 	// Add any outer passthrough columns that refer to inner synthesized columns.

@@ -1149,7 +1149,7 @@ func (ic *Instance) RemainingFilters() memo.FiltersExpr {
 			if newFilters == nil {
 				newFilters = make(memo.FiltersExpr, 0, len(ic.filters))
 			}
-			newFilters = append(newFilters, memo.FiltersItem{Condition: condition})
+			newFilters = append(newFilters, ic.factory.ConstructFiltersItem(condition))
 		}
 	}
 	return newFilters

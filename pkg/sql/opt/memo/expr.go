@@ -96,14 +96,13 @@ type RelExpr interface {
 }
 
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
-// properties, like FiltersExpr and ProjectionsExpr. The scalar properties are
-// lazily populated only when requested by walking the expression subtree.
+// properties, like FiltersExpr and ProjectionsExpr. These expressions are also
+// tagged with the ScalarProps tag.
 type ScalarPropsExpr interface {
 	opt.ScalarExpr
 
 	// ScalarProps returns the scalar properties associated with the expression.
-	// These can be lazily calculated using the given memo as context.
-	ScalarProps(mem *Memo) *props.Scalar
+	ScalarProps() *props.Scalar
 }
 
 // TrueSingleton is a global instance of TrueExpr, to avoid allocations.
@@ -143,13 +142,6 @@ var CountRowsSingleton = &CountRowsExpr{}
 //   SELECT * FROM a INNER JOIN b ON True
 //
 var TrueFilter = FiltersExpr{}
-
-// FalseFilter is a global instance of a FiltersExpr that contains a single
-// False expression, used in contradiction situations:
-//
-//   SELECT * FROM a WHERE 1=0
-//
-var FalseFilter = FiltersExpr{{Condition: FalseSingleton}}
 
 // EmptyTuple is a global instance of a TupleExpr that contains no elements.
 // While this cannot be created in SQL, it can be the created by normalizations.
@@ -201,7 +193,7 @@ func (n FiltersExpr) IsFalse() bool {
 func (n FiltersExpr) OuterCols(mem *Memo) opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
-		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
+		colSet.UnionWith(n[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }
@@ -281,10 +273,10 @@ func (n AggregationsExpr) OutputCols() opt.ColSet {
 
 // OuterCols returns the set of outer columns needed by any of the zip
 // expressions.
-func (n ZipExpr) OuterCols(mem *Memo) opt.ColSet {
+func (n ZipExpr) OuterCols() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range n {
-		colSet.UnionWith(n[i].ScalarProps(mem).OuterCols)
+		colSet.UnionWith(n[i].ScalarProps().OuterCols)
 	}
 	return colSet
 }

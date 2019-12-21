@@ -172,23 +172,10 @@ define Projections {
 # Project operator instead. However, the Element field can contain a VariableOp
 # when a new ColumnID is being assigned, such as in the case of an outer column
 # reference.
-[Scalar, ListItem]
+[Scalar, ListItem, ScalarProps]
 define ProjectionsItem {
     Element ScalarExpr
-
-    _ ColPrivate
-}
-
-# ColPrivate contains the ColumnID of a synthesized projection or aggregation
-# column, as well as a set of lazily-populated scalar properties that apply to
-# the column. ColPrivate is shared by ProjectionsItem and AggregationsItem so
-# that they can be treated polymorphically.
-[Private]
-define ColPrivate {
-    Col ColumnID
-
-    # Lazily populated.
-    scalar ScalarProps
+    Col     ColumnID
 }
 
 # Aggregations is a set of AggregationsItem expressions that specify the
@@ -215,11 +202,10 @@ define Aggregations {
 #
 # More complex arguments must be formulated using a Project operator as input to
 # the grouping operator.
-[Scalar, ListItem]
+[Scalar, ListItem, ScalarProps]
 define AggregationsItem {
     Agg ScalarExpr
-
-    _ ColPrivate
+    Col ColumnID
 }
 
 # Filters is a set of FiltersItem expressions that specify a set of conjuncts
@@ -236,11 +222,9 @@ define Filters {
 # set of scalar properties that are lazily calculated by traversing the
 # Condition scalar expression. This allows the properties for the entire
 # expression subtree to be calculated once and then repeatedly reused.
-[Scalar, Bool, ListItem]
+[Scalar, Bool, ListItem, ScalarProps]
 define FiltersItem {
     Condition ScalarExpr
-
-    scalar ScalarProps
 }
 
 # Zip represents a functional zip over generators a,b,c, which returns tuples of
@@ -271,25 +255,15 @@ define Zip {
 }
 
 # ZipItem contains a generator function or scalar expression that is contained
-# in a Zip. See the Zip header for more details.
-[Scalar, ListItem]
+# in a Zip. It also contains the list of output columns for the generator or
+# scalar expression in the ZipItem. Cols is a list since a single function may
+# output multiple columns (e.g. pg_get_keywords() outputs three columns).
+#
+# See the Zip header for more details.
+[Scalar, ListItem, ScalarProps]
 define ZipItem {
-    Func ScalarExpr
-
-    _ ZipItemPrivate
-}
-
-# ZipItemPrivate contains the list of output columns for the generator function
-# or scalar expression in a ZipItem, as well as a set of lazily-populated
-# scalar properties that apply to the ZipItem. Cols is a list since a single
-# function may output multiple columns (e.g., pg_get_keywords() outputs three
-# columns).
-[Private]
-define ZipItemPrivate {
+    Fn   ScalarExpr
     Cols ColList
-
-    # Lazily populated.
-    scalar ScalarProps
 }
 
 # And is the boolean conjunction operator that evalutes to true only if both of
@@ -942,7 +916,7 @@ define Windows {
 
 # WindowsItem is a single window function to be computed in the context of a
 # Window expression.
-[Scalar, ListItem]
+[Scalar, ListItem, ScalarProps]
 define WindowsItem {
     # Function is the window function being computed. If the frame has offset
     # expressions, the window function will be hanging off of additional
@@ -966,8 +940,7 @@ define WindowsItemPrivate {
     # TODO(justin): at this point we should probably just have a separate opt
     # version of this structure.
     Frame WindowFrame
-
-    _ ColPrivate
+    Col   ColumnID
 }
 
 # Rank computes the position of a row relative to an ordering, with same-valued
@@ -1058,8 +1031,7 @@ define KVOptions {
 [Scalar, ListItem]
 define KVOptionsItem {
     Value ScalarExpr
-
-    Key string
+    Key   string
 }
 
 # ScalarList is a list expression that has scalar expression items of type

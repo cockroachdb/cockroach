@@ -51,10 +51,7 @@ func (pb *projectBuilder) add(e opt.ScalarExpr) opt.ScalarExpr {
 	}
 
 	newCol := pb.f.Metadata().AddColumn("", e.DataType())
-	pb.projections = append(pb.projections, memo.ProjectionsItem{
-		Element:    e,
-		ColPrivate: memo.ColPrivate{Col: newCol},
-	})
+	pb.projections = append(pb.projections, pb.f.ConstructProjectionsItem(e, newCol))
 	return pb.f.ConstructVariable(newCol)
 }
 

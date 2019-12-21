@@ -147,7 +147,7 @@ func TestIndexConstraints(t *testing.T) {
 					return fmt.Sprintf("error: %v\n", err)
 				}
 				root := f.Memo().RootExpr().(opt.ScalarExpr)
-				filters := memo.FiltersExpr{{Condition: root}}
+				filters := memo.FiltersExpr{f.ConstructFiltersItem(root)}
 				if _, ok := root.(*memo.TrueExpr); ok {
 					filters = memo.TrueFilter
 				}
@@ -263,7 +263,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 			nd := f.Memo().RootExpr()
-			filters := memo.FiltersExpr{{Condition: nd.(opt.ScalarExpr)}}
+			filters := memo.FiltersExpr{f.ConstructFiltersItem(nd.(opt.ScalarExpr))}
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

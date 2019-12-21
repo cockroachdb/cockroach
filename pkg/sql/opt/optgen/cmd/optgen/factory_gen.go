@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
@@ -68,7 +69,6 @@ func (g *factoryGen) genConstructFuncs() {
 	defines := g.compiled.Defines.
 		WithoutTag("Enforcer").
 		WithoutTag("List").
-		WithoutTag("ListItem").
 		WithoutTag("Private")
 
 	for _, define := range defines {
@@ -85,7 +85,9 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.writeIndent("%s %s,\n", unTitle(fieldName), fieldTyp.asParam())
 		}
 
-		if define.Tags.Contains("Relational") {
+		if define.Tags.Contains("ListItem") {
+			g.w.unnest(fmt.Sprintf(") memo.%s", define.Name))
+		} else if define.Tags.Contains("Relational") {
 			g.w.unnest(") memo.RelExpr")
 		} else {
 			g.w.unnest(") opt.ScalarExpr")
@@ -93,30 +95,52 @@ func (g *factoryGen) genConstructFuncs() {
 
 		g.w.nest(" {\n")
 
-		// Only include normalization rules for the current define.
-		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
-		sortRulesByPriority(rules)
-		for _, rule := range rules {
-			g.ruleGen.genRule(rule)
-		}
-		if len(rules) > 0 {
-			g.w.newline()
-		}
+		if define.Tags.Contains("ListItem") {
+			g.w.writeIndent("item := memo.%s{", define.Name)
+			for i, field := range define.Fields {
+				fieldTyp := g.md.typeOf(field)
+				fieldName := g.md.fieldName(field)
 
-		g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
-		for i, field := range define.Fields {
-			if i != 0 {
-				g.w.write(", ")
+				if i != 0 {
+					g.w.write(", ")
+				}
+				if fieldTyp.passByVal {
+					g.w.write("%s: %s", fieldName, unTitle(fieldName))
+				} else {
+					g.w.write("%s: *%s", fieldName, unTitle(fieldName))
+				}
 			}
-			g.w.write("%s", unTitle(g.md.fieldName(field)))
-		}
-
-		g.w.write(")\n")
-
-		if define.Tags.Contains("Relational") {
-			g.w.writeIndent("return _f.onConstructRelational(e)\n")
+			g.w.write("}\n")
+			if define.Tags.Contains("ScalarProps") {
+				g.w.writeIndent("item.PopulateProps(_f.mem)\n")
+			}
+			g.w.writeIndent("return item\n")
 		} else {
-			g.w.writeIndent("return _f.onConstructScalar(e)\n")
+			// Only include normalization rules for the current define.
+			rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
+			sortRulesByPriority(rules)
+			for _, rule := range rules {
+				g.ruleGen.genRule(rule)
+			}
+			if len(rules) > 0 {
+				g.w.newline()
+			}
+
+			g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
+			for i, field := range define.Fields {
+				if i != 0 {
+					g.w.write(", ")
+				}
+				g.w.write("%s", unTitle(g.md.fieldName(field)))
+			}
+
+			g.w.write(")\n")
+
+			if define.Tags.Contains("Relational") {
+				g.w.writeIndent("return _f.onConstructRelational(e)\n")
+			} else {
+				g.w.writeIndent("return _f.onConstructScalar(e)\n")
+			}
 		}
 
 		g.w.unnest("}\n\n")
@@ -251,15 +275,16 @@ func (g *factoryGen) genReplace() {
 		g.w.writeIndent("copy(newList, list[:i])\n")
 		g.w.unnest("}\n")
 		if itemTyp.isGenerated {
-			g.w.writeIndent("newList[i].%s = after\n", g.md.fieldName(itemDefine.Fields[0]))
-
-			// Now copy additional exported private fields.
-			for _, field := range expandFields(g.compiled, itemDefine)[1:] {
-				if isExportedField(field) {
-					fieldName := g.md.fieldName(field)
-					g.w.writeIndent("newList[i].%s = list[i].%s\n", fieldName, fieldName)
+			// Construct new list item.
+			g.w.writeIndent("newList[i] = f.Construct%s(after", itemDefine.Name)
+			for i, field := range itemDefine.Fields {
+				if i == 0 {
+					continue
 				}
+				fieldName := g.md.fieldName(field)
+				g.w.write(", %slist[i].%s", g.md.fieldLoadPrefix(field), fieldName)
 			}
+			g.w.write(")\n")
 		} else {
 			g.w.writeIndent("newList[i] = after\n")
 		}
@@ -365,9 +390,18 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 					g.w.writeIndent("dst[i].%s = src[i].%s\n", fieldName, fieldName)
 				}
 			}
+
+			// Populate scalar properties.
+			if itemDefine.Tags.Contains("ScalarProps") {
+				g.w.writeIndent("dst[i].PopulateProps(f.mem)\n")
+			}
+
+			// Do validation checks on expression in race builds.
+			g.w.writeIndent("f.mem.CheckExpr(&dst[i])\n")
 		} else {
 			g.w.writeIndent("dst[i] = f.invokeReplace(src[i], replace).(%s)\n", itemType.fullName)
 		}
+
 		g.w.unnest("}\n")
 		g.w.writeIndent("return dst\n")
 		g.w.unnest("}\n\n")

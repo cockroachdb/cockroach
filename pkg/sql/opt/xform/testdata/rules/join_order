@@ -135,7 +135,7 @@ inner-join (lookup bx)
 memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~31KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
+memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G6 G7 G8) (inner-join G9 G10 G11) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+3,+7) (inner-join G10 G9 G11) (lookup-join G7 G5 cy,keyCols=[7],outCols=(1-8)) (lookup-join G12 G11 abc,keyCols=[11],outCols=(1-8))
  │    └── [presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  │         ├── best: (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8))
@@ -354,7 +354,7 @@ memo (optimized, ~12KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,
 memo join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
-memo (optimized, ~27KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
+memo (optimized, ~28KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G4) (inner-join G7 G8 G4) (inner-join G9 G10 G4) (inner-join G11 G12 G4) (inner-join G13 G14 G4) (inner-join G15 G16 G4) (inner-join G6 G5 G4) (inner-join G8 G7 G4) (inner-join G10 G9 G4) (inner-join G12 G11 G4) (inner-join G14 G13 G4) (inner-join G16 G15 G4)
  │    └── [presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10]
  │         ├── best: (inner-join G3 G2 G4)

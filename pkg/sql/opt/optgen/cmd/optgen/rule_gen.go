@@ -961,15 +961,15 @@ func (g *newRuleGen) genConstructList(list *lang.ListExpr) {
 		if listItemTyp.isGenerated {
 			listItemDef := g.compiled.LookupDefine(listItemTyp.friendlyName)
 
-			g.w.nestIndent("{\n")
+			g.w.nestIndent("%s.Construct%s(\n", g.factoryVar, listItemDef.Name)
 			for i, subItem := range item.(*lang.FuncExpr).Args {
 				field := listItemDef.Fields[i]
 
-				g.w.writeIndent("%s: %s", g.md.fieldName(field), g.md.fieldStorePrefix(field))
+				g.w.writeIndent("%s", g.md.fieldStorePrefix(field))
 				g.genNestedExpr(subItem)
 				g.w.write(",\n")
 			}
-			g.w.unnest("},\n")
+			g.w.unnest("),\n")
 		} else {
 			g.genNestedExpr(item)
 			g.w.write(",\n")
