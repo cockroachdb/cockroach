@@ -280,10 +280,7 @@ func (b *Builder) constructGroupBy(
 				// aggregation.
 				panic(errors.AssertionFailedf("variable as aggregation"))
 			}
-			aggs = append(aggs, memo.AggregationsItem{
-				Agg:        scalar,
-				ColPrivate: memo.ColPrivate{Col: id},
-			})
+			aggs = append(aggs, b.factory.ConstructAggregationsItem(scalar, id))
 			colSet.Add(id)
 		}
 	}
@@ -410,7 +407,7 @@ func (b *Builder) buildAggregation(having opt.ScalarExpr, fromScope *scope) (out
 	// Wrap with having filter if it exists.
 	if having != nil {
 		input := g.aggOutScope.expr.(memo.RelExpr)
-		filters := memo.FiltersExpr{{Condition: having}}
+		filters := memo.FiltersExpr{b.factory.ConstructFiltersItem(having)}
 		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
 

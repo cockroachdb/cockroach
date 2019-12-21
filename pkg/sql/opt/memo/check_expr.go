@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// +build race
+
 package memo
 
 import (
@@ -15,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -25,13 +26,11 @@ import (
 // builds).
 //
 // This function does not assume that the expression has been fully normalized.
-func (m *Memo) checkExpr(e opt.Expr) {
-	// RaceEnabled ensures that checks are run on every PR (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if !util.RaceEnabled {
-		return
-	}
-
+//
+// This function is only defined in race builds, so that checks are run on every
+// PR (as part of make testrace) while keeping the check code out of non-test
+// builds, since it can be expensive to run.
+func (m *Memo) CheckExpr(e opt.Expr) {
 	// Check properties.
 	switch t := e.(type) {
 	case RelExpr:
@@ -53,7 +52,21 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		}
 
 	case ScalarPropsExpr:
-		t.ScalarProps(m).Verify()
+		t.ScalarProps().Verify()
+
+		// Check that list items are not nested.
+		if opt.IsListItemOp(t.Child(0)) {
+			panic(errors.AssertionFailedf("projections list item cannot contain another list item"))
+		}
+	}
+
+	if !opt.IsListOp(e) {
+		for i := 0; i < e.ChildCount(); i++ {
+			child := e.Child(i)
+			if opt.IsListItemOp(child) {
+				panic(errors.AssertionFailedf("non-list op contains item op: %s", log.Safe(child.Op())))
+			}
+		}
 	}
 
 	// Check operator-specific fields.
@@ -65,11 +78,6 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 	case *ProjectExpr:
 		for _, item := range t.Projections {
-			// Check that list items are not nested.
-			if opt.IsListItemOp(item.Element) {
-				panic(errors.AssertionFailedf("projections list item cannot contain another list item"))
-			}
-
 			// Check that column id is set.
 			if item.Col == 0 {
 				panic(errors.AssertionFailedf("projections column cannot have id of 0"))
@@ -77,7 +85,8 @@ func (m *Memo) checkExpr(e opt.Expr) {
 
 			// Check that column is not both passthrough and synthesized.
 			if t.Passthrough.Contains(item.Col) {
-				panic(errors.AssertionFailedf("both passthrough and synthesized have column %d", log.Safe(item.Col)))
+				panic(errors.AssertionFailedf(
+					"both passthrough and synthesized have column %d", log.Safe(item.Col)))
 			}
 
 			// Check that columns aren't passed through in projection expressions.
@@ -195,23 +204,15 @@ func (m *Memo) checkExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
 		}
 
-	default:
-		if !opt.IsListOp(e) {
-			for i := 0; i < e.ChildCount(); i++ {
-				child := e.Child(i)
-				if opt.IsListItemOp(child) {
-					panic(errors.AssertionFailedf("non-list op contains item op: %s", log.Safe(child.Op())))
-				}
-			}
-		}
-
-		if e.Op() == opt.StringAggOp && !CanExtractConstDatum(e.Child(1)) {
+	case *StringAggExpr:
+		if !CanExtractConstDatum(t.Sep) {
 			panic(errors.AssertionFailedf(
 				"second argument to StringAggOp must always be constant, but got %s",
 				log.Safe(e.Child(1).Op()),
 			))
 		}
 
+	default:
 		if opt.IsJoinOp(e) {
 			checkFilters(*e.Child(2).(*FiltersExpr))
 		}
@@ -265,9 +266,6 @@ func checkExprOrdering(e opt.Expr) {
 
 func checkFilters(filters FiltersExpr) {
 	for _, item := range filters {
-		if opt.IsListItemOp(item.Condition) {
-			panic(errors.AssertionFailedf("filters list item cannot contain another list item"))
-		}
 		if item.Condition.Op() == opt.RangeOp {
 			if !item.scalar.TightConstraints {
 				panic(errors.AssertionFailedf("Range operator should always have tight constraints"))

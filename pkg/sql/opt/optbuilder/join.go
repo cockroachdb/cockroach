@@ -104,7 +104,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 			filter := b.buildScalar(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
-			filters = memo.FiltersExpr{{Condition: filter}}
+			filters = memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)}
 		} else {
 			filters = memo.TrueFilter
 		}
@@ -451,7 +451,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	leftVar := jb.b.factory.ConstructVariable(leftCol.id)
 	rightVar := jb.b.factory.ConstructVariable(rightCol.id)
 	eq := jb.b.factory.ConstructEq(leftVar, rightVar)
-	jb.filters = append(jb.filters, memo.FiltersItem{Condition: eq})
+	jb.filters = append(jb.filters, jb.b.factory.ConstructFiltersItem(eq))
 
 	// Add the merged column to the scope, constructing a new column if needed.
 	if jb.joinType == sqlbase.InnerJoin || jb.joinType == sqlbase.LeftOuterJoin {

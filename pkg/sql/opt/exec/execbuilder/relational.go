@@ -1588,7 +1588,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 
 	for i := range zip {
 		item := &zip[i]
-		exprs[i], err = b.buildScalar(&scalarCtx, item.Func)
+		exprs[i], err = b.buildScalar(&scalarCtx, item.Fn)
 		if err != nil {
 			return execPlan{}, err
 		}

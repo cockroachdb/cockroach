@@ -688,7 +688,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 				mb.b.factory.ConstructVariable(mb.insertColID(indexCol.Ordinal)),
 				mb.b.factory.ConstructVariable(scanColID),
 			)
-			on = append(on, memo.FiltersItem{Condition: condition})
+			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 		}
 
 		// Construct the left join + filter.
@@ -702,12 +702,12 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 					on,
 					memo.EmptyJoinPrivate,
 				),
-				memo.FiltersExpr{memo.FiltersItem{
-					Condition: mb.b.factory.ConstructIs(
+				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(
+					mb.b.factory.ConstructIs(
 						mb.b.factory.ConstructVariable(notNullColID),
 						memo.NullSingleton,
 					),
-				}},
+				)},
 			),
 			memo.EmptyProjectionsExpr,
 			insertColSet,
@@ -781,7 +781,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 					mb.b.factory.ConstructVariable(mb.insertColID(i)),
 					mb.b.factory.ConstructVariable(fetchCol.id),
 				)
-				on = append(on, memo.FiltersItem{Condition: condition})
+				on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 				break
 			}
 		}

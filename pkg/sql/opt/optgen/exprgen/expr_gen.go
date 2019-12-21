@@ -262,7 +262,7 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 				if !ok {
 					return nil
 				}
-				return memo.FiltersItem{Condition: expr}
+				return eg.f.ConstructFiltersItem(expr)
 			})
 			if converted != nil {
 				return converted

@@ -276,7 +276,7 @@ func ExtractConstColumns(
 ) (fixedCols opt.ColSet) {
 	for i := range on {
 		scalar := on[i]
-		scalarProps := scalar.ScalarProps(mem)
+		scalarProps := scalar.ScalarProps()
 		if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
 			fixedCols.UnionWith(scalarProps.Constraints.ExtractConstCols(evalCtx))
 		}

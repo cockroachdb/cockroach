@@ -28,7 +28,7 @@ func (c *CustomFuncs) HasHoistableSubquery(scalar opt.ScalarExpr) bool {
 	// Shortcut if the scalar has properties associated with it.
 	if scalarPropsExpr, ok := scalar.(memo.ScalarPropsExpr); ok {
 		// Don't bother traversing the expression tree if there is no subquery.
-		scalarProps := scalarPropsExpr.ScalarProps(c.mem)
+		scalarProps := scalarPropsExpr.ScalarProps()
 		if !scalarProps.HasSubquery {
 			return false
 		}
@@ -87,13 +87,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 			case *memo.CaseExpr:
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
-					memo.BuildSharedProps(c.mem, child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps)
 					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
 				}
 
 			case *memo.WhenExpr:
 				if child == t.Value {
-					memo.BuildSharedProps(c.mem, child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps)
 					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
 				}
 
@@ -102,7 +102,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// other branches do is tricky because it's a list, but we know that
 				// it's at position 1.
 				if i == 1 {
-					memo.BuildSharedProps(c.mem, child, &sharedProps)
+					memo.BuildSharedProps(child, &sharedProps)
 					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
 				}
 			}
@@ -136,10 +136,10 @@ func (c *CustomFuncs) HoistSelectSubquery(
 	hoister.init(c, input)
 	for i := range filters {
 		item := &filters[i]
-		if item.ScalarProps(c.mem).Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule.HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Condition)
 			if replaced.Op() != opt.TrueOp {
-				newFilters = append(newFilters, memo.FiltersItem{Condition: replaced})
+				newFilters = append(newFilters, c.f.ConstructFiltersItem(replaced))
 			}
 		} else {
 			newFilters = append(newFilters, *item)
@@ -170,12 +170,9 @@ func (c *CustomFuncs) HoistProjectSubquery(
 	hoister.init(c, input)
 	for i := range projections {
 		item := &projections[i]
-		if item.ScalarProps(c.mem).Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule.HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Element)
-			newProjections = append(newProjections, memo.ProjectionsItem{
-				Element:    replaced,
-				ColPrivate: memo.ColPrivate{Col: item.Col},
-			})
+			newProjections = append(newProjections, c.f.ConstructProjectionsItem(replaced, item.Col))
 		} else {
 			newProjections = append(newProjections, *item)
 		}
@@ -213,10 +210,10 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	hoister.init(c, right)
 	for i := range on {
 		item := &on[i]
-		if item.ScalarProps(c.mem).Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule.HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Condition)
 			if replaced.Op() != opt.TrueOp {
-				newFilters = append(newFilters, memo.FiltersItem{Condition: replaced})
+				newFilters = append(newFilters, c.f.ConstructFiltersItem(replaced))
 			}
 		} else {
 			newFilters = append(newFilters, *item)
@@ -299,12 +296,9 @@ func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipEx
 	hoister.init(c, input)
 	for i := range zip {
 		item := &zip[i]
-		if item.ScalarProps(c.mem).Rule.HasHoistableSubquery {
-			replaced := hoister.hoistAll(item.Func)
-			newZip = append(newZip, memo.ZipItem{
-				Func:           replaced,
-				ZipItemPrivate: memo.ZipItemPrivate{Cols: item.Cols},
-			})
+		if item.ScalarProps().Rule.HasHoistableSubquery {
+			replaced := hoister.hoistAll(item.Fn)
+			newZip = append(newZip, c.f.ConstructZipItem(replaced, item.Cols))
 		} else {
 			newZip = append(newZip, *item)
 		}
@@ -559,10 +553,10 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 			if projections == nil {
 				projections = make(memo.ProjectionsExpr, 0, len(newAggs)-i)
 			}
-			projections = append(projections, memo.ProjectionsItem{
-				Element:    c.constructCanaryChecker(aggCanaryVar, newAggs[i].Col),
-				ColPrivate: memo.ColPrivate{Col: oldAggs[i].Col},
-			})
+			projections = append(projections, c.f.ConstructProjectionsItem(
+				c.constructCanaryChecker(aggCanaryVar, newAggs[i].Col),
+				oldAggs[i].Col,
+			))
 			passthrough.Remove(newAggs[i].Col)
 		}
 	}
@@ -622,8 +616,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(
 			}
 		}
 		if newAggs != nil {
-			newAggs[i].Agg = newAgg
-			newAggs[i].Col = newCol
+			newAggs[i] = c.f.ConstructAggregationsItem(newAgg, newCol)
 		}
 	}
 	if newAggs == nil {
@@ -859,25 +852,22 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 		r.f.ConstructScalarGroupBy(
 			r.f.ConstructProject(
 				subquery,
-				memo.ProjectionsExpr{{
-					Element:    memo.TrueSingleton,
-					ColPrivate: memo.ColPrivate{Col: trueColID},
-				}},
+				memo.ProjectionsExpr{r.f.ConstructProjectionsItem(memo.TrueSingleton, trueColID)},
 				opt.ColSet{},
 			),
-			memo.AggregationsExpr{{
-				Agg:        r.f.ConstructConstAgg(r.f.ConstructVariable(trueColID)),
-				ColPrivate: memo.ColPrivate{Col: aggColID},
-			}},
+			memo.AggregationsExpr{r.f.ConstructAggregationsItem(
+				r.f.ConstructConstAgg(r.f.ConstructVariable(trueColID)),
+				aggColID,
+			)},
 			memo.EmptyGroupingPrivate,
 		),
-		memo.ProjectionsExpr{{
-			Element: r.f.ConstructIsNot(
+		memo.ProjectionsExpr{r.f.ConstructProjectionsItem(
+			r.f.ConstructIsNot(
 				r.f.ConstructVariable(aggColID),
 				memo.NullSingleton,
 			),
-			ColPrivate: memo.ColPrivate{Col: existsColID},
-		}},
+			existsColID,
+		)},
 		opt.ColSet{},
 	)
 }
@@ -980,29 +970,29 @@ func (r *subqueryHoister) constructGroupByAny(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
 					input,
-					memo.FiltersExpr{{
-						Condition: r.f.ConstructIsNot(
+					memo.FiltersExpr{r.f.ConstructFiltersItem(
+						r.f.ConstructIsNot(
 							r.f.funcs.ConstructBinary(cmp, scalar, inputVar),
 							memo.FalseSingleton,
 						),
-					}},
+					)},
 				),
-				memo.ProjectionsExpr{{
-					Element:    r.f.ConstructIsNot(inputVar, memo.NullSingleton),
-					ColPrivate: memo.ColPrivate{Col: notNullColID},
-				}},
+				memo.ProjectionsExpr{r.f.ConstructProjectionsItem(
+					r.f.ConstructIsNot(inputVar, memo.NullSingleton),
+					notNullColID,
+				)},
 				opt.ColSet{},
 			),
-			memo.AggregationsExpr{{
-				Agg: r.f.ConstructBoolOr(
+			memo.AggregationsExpr{r.f.ConstructAggregationsItem(
+				r.f.ConstructBoolOr(
 					r.f.ConstructVariable(notNullColID),
 				),
-				ColPrivate: memo.ColPrivate{Col: aggColID},
-			}},
+				aggColID,
+			)},
 			memo.EmptyGroupingPrivate,
 		),
-		memo.ProjectionsExpr{{
-			Element: r.f.ConstructCase(
+		memo.ProjectionsExpr{r.f.ConstructProjectionsItem(
+			r.f.ConstructCase(
 				r.f.ConstructTrue(),
 				memo.ScalarListExpr{
 					r.f.ConstructWhen(
@@ -1019,8 +1009,8 @@ func (r *subqueryHoister) constructGroupByAny(
 				},
 				memo.NullSingleton,
 			),
-			ColPrivate: memo.ColPrivate{Col: caseColID},
-		}},
+			caseColID,
+		)},
 		opt.ColSet{},
 	)
 }
