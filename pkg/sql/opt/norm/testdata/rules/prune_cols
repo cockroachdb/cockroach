@@ -2388,7 +2388,7 @@ norm
 SELECT a FROM [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a, b, c] WHERE a > 1]
 ----
 with &1
- ├── columns: a:21(int)
+ ├── columns: a:21(int!null)
  ├── side-effects, mutations
  ├── project
  │    ├── columns: returning_test.a:1(int) returning_test.b:2(int) returning_test.c:3(string)
@@ -2412,7 +2412,7 @@ with &1
  │              └── projections
  │                   └── returning_test.a + 1 [type=int, outer=(9)]
  └── project
-      ├── columns: a:21(int)
+      ├── columns: a:21(int!null)
       ├── select
       │    ├── columns: a:18(int!null)
       │    ├── with-scan &1
@@ -2433,8 +2433,9 @@ FROM
             AS y ON true
 ----
 with &2
- ├── columns: a:9(int) b:10(int) a:31(int) b:32(int)
+ ├── columns: a:9(int) b:10(int) a:31(int!null) b:32(int)
  ├── side-effects, mutations
+ ├── fd: (9)~~>(10)
  ├── project
  │    ├── columns: returning_test.a:11(int) returning_test.b:12(int) returning_test.c:13(string)
  │    ├── side-effects, mutations
@@ -2457,9 +2458,12 @@ with &2
  │              └── projections
  │                   └── returning_test.a + 1 [type=int, outer=(19)]
  └── inner-join (cross)
-      ├── columns: a:9(int) b:10(int) a:31(int) b:32(int)
+      ├── columns: a:9(int) b:10(int) a:31(int!null) b:32(int)
+      ├── fd: (9)~~>(10)
       ├── project
       │    ├── columns: a:9(int) b:10(int)
+      │    ├── lax-key: (9,10)
+      │    ├── fd: (9)~~>(10)
       │    ├── scan returning_test
       │    │    ├── columns: returning_test.a:1(int) returning_test.b:2(int)
       │    │    ├── lax-key: (1,2)
@@ -2468,7 +2472,7 @@ with &2
       │         ├── variable: returning_test.a [type=int, outer=(1)]
       │         └── variable: returning_test.b [type=int, outer=(2)]
       ├── project
-      │    ├── columns: a:31(int) b:32(int)
+      │    ├── columns: a:31(int!null) b:32(int)
       │    ├── select
       │    │    ├── columns: a:28(int!null) b:29(int)
       │    │    ├── with-scan &2
