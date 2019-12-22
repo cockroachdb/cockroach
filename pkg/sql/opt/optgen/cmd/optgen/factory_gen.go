@@ -72,6 +72,8 @@ func (g *factoryGen) genConstructFuncs() {
 		WithoutTag("Private")
 
 	for _, define := range defines {
+		fields := g.md.childAndPrivateFields(define)
+
 		// Generate Construct method.
 		format := "// Construct%s constructs an expression for the %s operator.\n"
 		g.w.writeIndent(format, define.Name, define.Name)
@@ -79,7 +81,7 @@ func (g *factoryGen) genConstructFuncs() {
 
 		g.w.nestIndent("func (_f *Factory) Construct%s(\n", define.Name)
 
-		for _, field := range define.Fields {
+		for _, field := range fields {
 			fieldTyp := g.md.typeOf(field)
 			fieldName := g.md.fieldName(field)
 			g.w.writeIndent("%s %s,\n", unTitle(fieldName), fieldTyp.asParam())
@@ -97,7 +99,7 @@ func (g *factoryGen) genConstructFuncs() {
 
 		if define.Tags.Contains("ListItem") {
 			g.w.writeIndent("item := memo.%s{", define.Name)
-			for i, field := range define.Fields {
+			for i, field := range fields {
 				fieldTyp := g.md.typeOf(field)
 				fieldName := g.md.fieldName(field)
 
@@ -127,7 +129,7 @@ func (g *factoryGen) genConstructFuncs() {
 			}
 
 			g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
-			for i, field := range define.Fields {
+			for i, field := range fields {
 				if i != 0 {
 					g.w.write(", ")
 				}
@@ -215,7 +217,6 @@ func (g *factoryGen) genReplace() {
 			g.w.writeIndent("return f.Construct%s(", define.Name)
 			for i, child := range childFields {
 				childName := g.md.fieldName(child)
-
 				if i != 0 {
 					g.w.write(", ")
 				}
@@ -277,7 +278,7 @@ func (g *factoryGen) genReplace() {
 		if itemTyp.isGenerated {
 			// Construct new list item.
 			g.w.writeIndent("newList[i] = f.Construct%s(after", itemDefine.Name)
-			for i, field := range itemDefine.Fields {
+			for i, field := range g.md.childAndPrivateFields(itemDefine) {
 				if i == 0 {
 					continue
 				}
@@ -448,7 +449,7 @@ func (g *factoryGen) genDynamicConstruct() {
 		g.w.writeIndent("case opt.%sOp:\n", define.Name)
 		g.w.nestIndent("return f.Construct%s(\n", define.Name)
 
-		for i, field := range define.Fields {
+		for i, field := range g.md.childAndPrivateFields(define) {
 			fieldTyp := g.md.typeOf(field)
 			if fieldTyp.isPointer {
 				g.w.writeIndent("args[%d].(%s),\n", i, fieldTyp.name)

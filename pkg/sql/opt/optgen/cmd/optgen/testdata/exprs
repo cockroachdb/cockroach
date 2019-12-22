@@ -13,6 +13,8 @@ define Project {
     Projections ProjectionsExpr
 
     Passthrough ColSet
+
+    internalFuncDeps FuncDepSet
 }
 
 [Scalar, List]
@@ -63,8 +65,9 @@ type ProjectExpr struct {
 	Input RelExpr
 
 	// Projections are the projected columns.
-	Projections ProjectionsExpr
-	Passthrough opt.ColSet
+	Projections      ProjectionsExpr
+	Passthrough      opt.ColSet
+	internalFuncDeps props.FuncDepSet
 
 	grp  exprGroup
 	next RelExpr
@@ -388,6 +391,7 @@ func (m *Memo) MemoizeProject(
 		if m.newGroupFn != nil {
 			m.newGroupFn(e)
 		}
+		e.initUnexportedFields(m)
 		m.logPropsBuilder.buildProjectProps(e, &grp.rel)
 		grp.rel.Populated = true
 		m.memEstimate += size
@@ -400,6 +404,7 @@ func (m *Memo) AddProjectToGroup(e *ProjectExpr, grp RelExpr) *ProjectExpr {
 	const size = int64(unsafe.Sizeof(ProjectExpr{}))
 	interned := m.interner.InternProject(e)
 	if interned == e {
+		e.initUnexportedFields(m)
 		e.setGroup(grp)
 		m.memEstimate += size
 		m.CheckExpr(e)
