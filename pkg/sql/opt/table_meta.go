@@ -138,6 +138,12 @@ type TableMeta struct {
 	// detail.
 	Constraints []ScalarExpr
 
+	// ComputedCols stores ScalarExprs for each computed column on the table,
+	// indexed by ColumnID. These will be used when building mutation statements
+	// and constraining indexes. See comment above GenerateConstrainedScans for
+	// more detail.
+	ComputedCols map[ColumnID]ScalarExpr
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
@@ -180,6 +186,14 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 // AddConstraint adds a valid table constraint to the table's metadata.
 func (tm *TableMeta) AddConstraint(constraint ScalarExpr) {
 	tm.Constraints = append(tm.Constraints, constraint)
+}
+
+// AddComputedCol adds a computed column expression to the table's metadata.
+func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
+	if tm.ComputedCols == nil {
+		tm.ComputedCols = make(map[ColumnID]ScalarExpr)
+	}
+	tm.ComputedCols[colID] = computedCol
 }
 
 // TableAnnotation returns the given annotation that is associated with the

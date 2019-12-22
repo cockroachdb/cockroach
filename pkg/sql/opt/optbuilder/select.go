@@ -469,7 +469,8 @@ func (b *Builder) buildScan(
 		}
 		outScope.expr = b.factory.ConstructScan(&private)
 
-		b.addCheckConstraintsForTable(outScope, tabMeta, ordinals != nil /* allowMissingColumns */)
+		b.addCheckConstraintsForTable(tabMeta)
+		b.addComputedColsForTable(tabMeta)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
@@ -489,17 +490,12 @@ func (b *Builder) buildScan(
 // addCheckConstraintsForTable finds all the check constraints that apply to the
 // table and adds them to the table metadata. To do this, the scalar expression
 // of the check constraints are built here.
-//
-// If allowMissingColumns is true, we ignore check constraints that involve
-// columns not in the current scope (useful when we build a scan that doesn't
-// contain all table columns).
-func (b *Builder) addCheckConstraintsForTable(
-	scope *scope, tabMeta *opt.TableMeta, allowMissingColumns bool,
-) {
-	tab := tabMeta.Table
+func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// Find all the check constraints that apply to the table and add them
 	// to the table meta data. To do this, we must build them into scalar
 	// expressions.
+	tableScope := scope{builder: b}
+	tab := tabMeta.Table
 	for i, n := 0, tab.CheckCount(); i < n; i++ {
 		checkConstraint := tab.Check(i)
 
@@ -512,25 +508,40 @@ func (b *Builder) addCheckConstraintsForTable(
 			panic(err)
 		}
 
-		var texpr tree.TypedExpr
-		func() {
-			if allowMissingColumns {
-				// Swallow any undefined column errors.
-				defer func() {
-					if r := recover(); r != nil {
-						if err, ok := r.(error); ok {
-							if code := pgerror.GetPGCode(err); code == pgcode.UndefinedColumn {
-								return
-							}
-						}
-						panic(r)
-					}
-				}()
-			}
-			texpr = scope.resolveAndRequireType(expr, types.Bool)
-		}()
-		if texpr != nil {
-			tabMeta.AddConstraint(b.buildScalar(texpr, scope, nil, nil, nil))
+		if len(tableScope.cols) == 0 {
+			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+		}
+
+		if texpr := tableScope.resolveAndRequireType(expr, types.Bool); texpr != nil {
+			scalar := b.buildScalar(texpr, &tableScope, nil, nil, nil)
+			tabMeta.AddConstraint(scalar)
+		}
+	}
+}
+
+// addComputedColsForTable finds all computed columns in the given table and
+// caches them in the table metadata as scalar expressions.
+func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+	tableScope := scope{builder: b}
+	tab := tabMeta.Table
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabCol := tab.Column(i)
+		if !tabCol.IsComputed() {
+			continue
+		}
+		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
+		if err != nil {
+			continue
+		}
+
+		if len(tableScope.cols) == 0 {
+			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+		}
+
+		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
+			colID := tabMeta.MetaID.ColumnID(i)
+			scalar := b.buildScalar(texpr, &tableScope, nil, nil, nil)
+			tabMeta.AddComputedCol(colID, scalar)
 		}
 	}
 }

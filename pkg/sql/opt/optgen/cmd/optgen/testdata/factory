@@ -166,19 +166,19 @@ func (_f *Factory) ConstructKVOptionsItem(
 // ancestors via a calls to the corresponding factory Construct methods. Here
 // is example usage:
 //
-//   var replace func(e opt.Expr, replace ReplaceFunc) opt.Expr
-//   replace = func(e opt.Expr, replace ReplaceFunc) opt.Expr {
+//   var replace func(e opt.Expr) opt.Expr
+//   replace = func(e opt.Expr) opt.Expr {
 //     if e.Op() == opt.VariableOp {
 //       return getReplaceVar(e)
 //     }
-//     return e.Replace(e, replace)
+//     return factory.Replace(e, replace)
 //   }
 //   replace(root, replace)
 //
 // Here, all variables in the tree are being replaced by some other expression
 // in a pre-order traversal of the tree. Post-order traversal is trivially
-// achieved by moving the e.Replace call to the top of the replace function
-// rather than bottom.
+// achieved by moving the factory.Replace call to the top of the replace
+// function rather than bottom.
 func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 	switch t := e.(type) {
 	case *memo.SelectExpr:

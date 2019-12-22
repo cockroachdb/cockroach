@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -179,21 +180,23 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //      )
 //
 // GenerateConstrainedScans will further constrain the enumerated index scans
-// by trying to use the check constraints that apply to the table being
-// scanned and the partitioning defined for the index. See comments above
-// checkColumnFilters and partitionValuesFilters respectively for more
-// detail.
+// by trying to use the check constraints and computed columns that apply to the
+// table being scanned, as well as the partitioning defined for the index. See
+// comments above checkColumnFilters, computedColFilters, and
+// partitionValuesFilters for more detail.
 func (c *CustomFuncs) GenerateConstrainedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
 ) {
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
-	// Generate appropriate filters from constraints.
+	// Generate implicit filters from constraints and computed columns and add
+	// them to the list of explicit filters provided in the query.
 	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
+	expandedFilters := append(explicitFilters, checkFilters...)
 
-	// Consider the checkFilters as well to constrain each of the indexes.
-	explicitAndCheckFilters := append(explicitFilters, checkFilters...)
+	computedColFilters := c.computedColFilters(scanPrivate.Table, expandedFilters)
+	expandedFilters = append(expandedFilters, computedColFilters...)
 
 	// Iterate over all indexes.
 	var iter scanIndexIter
@@ -203,9 +206,9 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	for iter.next() {
 		// We may append to this slice below; avoid any potential aliasing by
 		// limiting its capacity (forcing append to reallocate).
-		filters := explicitAndCheckFilters[:len(explicitAndCheckFilters):len(explicitAndCheckFilters)]
+		allFilters := expandedFilters[:len(expandedFilters):len(expandedFilters)]
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		filterColumns := c.FilterOuterCols(filters)
+		filterColumns := c.FilterOuterCols(allFilters)
 		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 
 		// We only consider the partition values when a particular index can otherwise
@@ -224,15 +227,15 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 				// also constrained. This is also needed so the remaining filters are generated
 				// correctly using the in between spans (some remaining filters may be blown
 				// by the partition constraints).
-				constrainedInBetweenFilters = append(inBetweenFilters, filters...)
-				filters = append(filters, partitionFilters...)
+				constrainedInBetweenFilters = append(inBetweenFilters, allFilters...)
+				allFilters = append(allFilters, partitionFilters...)
 				isIndexPartitioned = true
 			}
 		}
 
 		// Check whether the filter can constrain the index.
 		constraint, remainingFilters, ok := c.tryConstrainIndex(
-			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+			allFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
 		if !ok {
 			continue
 		}
@@ -308,7 +311,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// once we have index skip scans.  A constraint that may not constrain
 		// an index scan may still allow the index to be used more effectively
 		// if an index skip scan is possible.
-		if len(checkFilters) != 0 || isIndexPartitioned {
+		if len(explicitFilters) != len(allFilters) {
 			remainingFilters.RetainCommonFilters(explicitFilters)
 		}
 
@@ -420,6 +423,180 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 	}
 
 	return checkFilters
+}
+
+// computedColFilters generates all filters that can be derived from the list of
+// computed column expressions from the given table. A computed column can be
+// used as a filter when it has a constant value. That is true when:
+//
+//   1. All other columns it references are constant, because other filters in
+//      the query constrain them to be so.
+//   2. All functions in the computed column expression can be folded into
+//      constants (i.e. they do not have problematic side effects).
+//
+// Note that computed columns can depend on other computed columns; in general
+// the dependencies form an acyclic directed graph. computedColFilters will
+// return filters for all constant computed columns, regardless of the order of
+// their dependencies.
+//
+// As with checkConstraintFilters, computedColFilters do not really filter any
+// rows, they are rather facts or guarantees about the data. Treating them as
+// filters may allow some indexes to be constrained and used. Consider the
+// following example:
+//
+//   CREATE TABLE t (
+//     k INT NOT NULL,
+//     hash INT AS (k % 4) STORED,
+//     PRIMARY KEY (hash, k)
+//   )
+//
+//   SELECT * FROM t WHERE k = 5
+//
+// Notice that the filter provided explicitly wouldn't allow the optimizer to
+// seek using the primary index (it would have to fall back to a table scan).
+// However, column "hash" can be proven to have the constant value of 1, since
+// it's dependent on column "k", which has the constant value of 5. This enables
+// usage of the primary index:
+//
+//     scan t
+//      ├── columns: k:1(int!null) hash:2(int!null)
+//      ├── constraint: /2/1: [/1/5 - /1/5]
+//      ├── key: (2)
+//      └── fd: ()-->(1)
+//
+// The values of both columns in that index are known, enabling a single value
+// constraint to be generated.
+func (c *CustomFuncs) computedColFilters(
+	tabID opt.TableID, filters memo.FiltersExpr,
+) memo.FiltersExpr {
+	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
+	if len(tabMeta.ComputedCols) == 0 {
+		return nil
+	}
+
+	// Start with set of constant columns, as derived from the list of filter
+	// conditions.
+	constCols := c.findConstantFilterCols(tabID, filters)
+	if len(constCols) == 0 {
+		// No constant values could be derived from filters, so assume that there
+		// are also no constant computed columns.
+		return nil
+	}
+
+	// Construct a new filter condition for each computed column that is
+	// constant (i.e. all of its variables are in the constCols set).
+	var computedColFilters memo.FiltersExpr
+	for colID := range tabMeta.ComputedCols {
+		if c.tryFoldComputedCol(tabMeta, colID, constCols) {
+			constVal := constCols[colID]
+			eqOp := c.e.f.ConstructEq(c.e.f.ConstructVariable(colID), constVal)
+			computedColFilters = append(computedColFilters, c.e.f.ConstructFiltersItem(eqOp))
+		}
+	}
+	return computedColFilters
+}
+
+// findConstantFilterCols returns a mapping from table column ID to the constant
+// value of that column. It does this by iterating over the given list of
+// filters and finding expressions that constrain columns to a single constant
+// value. For example:
+//
+//   x = 5 AND y = 'foo'
+//
+// This would return a mapping from x => 5 and y => 'foo', which constants can
+// then be used to prove that dependent computed columns are also constant.
+func (c *CustomFuncs) findConstantFilterCols(
+	tabID opt.TableID, filters memo.FiltersExpr,
+) map[opt.ColumnID]opt.ScalarExpr {
+	tab := c.e.mem.Metadata().Table(tabID)
+	constFilterCols := make(map[opt.ColumnID]opt.ScalarExpr)
+	for i := range filters {
+		// If filter constraints are not tight, then no way to derive constant
+		// values.
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+
+		// Iterate over constraint conjuncts with a single column and single
+		// span having a single key.
+		for i, n := 0, props.Constraints.Length(); i < n; i++ {
+			cons := props.Constraints.Constraint(i)
+			if cons.Columns.Count() != 1 || cons.Spans.Count() != 1 {
+				continue
+			}
+
+			// Skip columns with a data type that uses a composite key encoding.
+			// Each of these data types can have multiple distinct values that
+			// compare equal. For example, 0 == -0 for the FLOAT data type. It's
+			// not safe to treat these as constant inputs to computed columns,
+			// since the computed expression may differentiate between the
+			// different forms of the same value.
+			colID := cons.Columns.Get(0).ID()
+			colTyp := tab.Column(tabID.ColumnOrdinal(colID)).DatumType()
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colTyp) {
+				continue
+			}
+
+			span := cons.Spans.Get(0)
+			if !span.HasSingleKey(c.e.evalCtx) {
+				continue
+			}
+
+			datum := span.StartKey().Value(0)
+			if datum != tree.DNull {
+				constFilterCols[colID] = c.e.f.ConstructConstVal(datum, colTyp)
+			}
+		}
+	}
+	return constFilterCols
+}
+
+// tryFoldComputedCol tries to reduce the computed column with the given column
+// ID into a constant value, by evaluating it with respect to a set of other
+// columns that are constant. If the computed column is constant, enter it into
+// the constCols map and return false. Otherwise, return false.
+func (c *CustomFuncs) tryFoldComputedCol(
+	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols map[opt.ColumnID]opt.ScalarExpr,
+) bool {
+	// Check whether computed column has already been folded.
+	if _, ok := constCols[computedColID]; ok {
+		return true
+	}
+
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		if variable, ok := e.(*memo.VariableExpr); ok {
+			// Can variable be folded?
+			if constVal, ok := constCols[variable.Col]; ok {
+				// Yes, so replace it with its constant value.
+				return constVal
+			}
+
+			// No, but that may be because the variable refers to a dependent
+			// computed column. In that case, try to recursively fold that
+			// computed column. There are no infinite loops possible because the
+			// dependency graph is guaranteed to be acyclic.
+			if _, ok := tabMeta.ComputedCols[variable.Col]; ok {
+				if c.tryFoldComputedCol(tabMeta, variable.Col, constCols) {
+					return constCols[variable.Col]
+				}
+			}
+
+			return e
+		}
+		return c.e.f.Replace(e, replace)
+	}
+
+	computedCol := tabMeta.ComputedCols[computedColID]
+	replaced := replace(computedCol).(opt.ScalarExpr)
+
+	// If the computed column is constant, enter it into the constCols map.
+	if opt.IsConstValueOp(replaced) {
+		constCols[computedColID] = replaced
+		return true
+	}
+	return false
 }
 
 // inBetweenFilters returns a set of filters that are required to cover all the
