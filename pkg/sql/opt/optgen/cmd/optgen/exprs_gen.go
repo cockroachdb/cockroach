@@ -581,9 +581,10 @@ func (g *exprsGen) genMemoizeFuncs() {
 
 	for _, define := range defines {
 		opTyp := g.md.typeOf(define)
+		fields := g.md.childAndPrivateFields(define)
 
 		fmt.Fprintf(g.w, "func (m *Memo) Memoize%s(\n", define.Name)
-		for _, field := range define.Fields {
+		for _, field := range fields {
 			fieldTyp := g.md.typeOf(field)
 			fieldName := g.md.fieldName(field)
 			fmt.Fprintf(g.w, "  %s %s,\n", unTitle(fieldName), fieldTyp.asParam())
@@ -610,7 +611,7 @@ func (g *exprsGen) genMemoizeFuncs() {
 			fmt.Fprintf(g.w, "  grp := &%s{mem: m, first: %s{\n", groupName, opTyp.name)
 		}
 
-		for _, field := range define.Fields {
+		for _, field := range fields {
 			fieldTyp := g.md.typeOf(field)
 			fieldName := g.md.fieldName(field)
 
@@ -641,6 +642,11 @@ func (g *exprsGen) genMemoizeFuncs() {
 		fmt.Fprintf(g.w, "  if m.newGroupFn != nil {\n")
 		fmt.Fprintf(g.w, "    m.newGroupFn(e)\n")
 		fmt.Fprintf(g.w, "  }\n")
+
+		if g.md.hasUnexportedFields(define) {
+			fmt.Fprintf(g.w, "  e.initUnexportedFields(m)\n")
+		}
+
 		if !define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(e, &grp.rel)\n", define.Name)
 			fmt.Fprintf(g.w, "  grp.rel.Populated = true\n")
@@ -697,6 +703,9 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
 		fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
 		fmt.Fprintf(g.w, "  if interned == e {\n")
+		if g.md.hasUnexportedFields(define) {
+			fmt.Fprintf(g.w, "    e.initUnexportedFields(m)\n")
+		}
 		fmt.Fprintf(g.w, "    e.setGroup(grp)\n")
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
 		fmt.Fprintf(g.w, "    m.CheckExpr(e)\n")

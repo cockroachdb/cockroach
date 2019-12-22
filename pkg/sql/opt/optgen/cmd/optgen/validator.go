@@ -38,9 +38,12 @@ func (v *validator) validate(compiled *lang.CompiledExpr) []error {
 		// 2. Ensure that fields are defined in the following order:
 		//      Expr*
 		//      Private?
+		//      unexported*
 		// That is, there can be zero or more expression-typed fields, followed
-		// by zero or one private field.
-		for i, field := range define.Fields {
+		// by zero or one private field, followed by zero or more unexported fields.
+		// The unexported fields are initialized separately
+		var exprsDone, privateDone bool
+		for _, field := range define.Fields {
 			typ := md.typeOf(field)
 			if typ == nil {
 				format := "%s is not registered as a valid type in metadata.go"
@@ -48,12 +51,26 @@ func (v *validator) validate(compiled *lang.CompiledExpr) []error {
 				continue
 			}
 
+			if typ.isExpr && exprsDone {
+				format := "expression field '%s' cannot follow private or unexported fields in '%s'"
+				v.addErrorf(field.Source(), format, field.Name, define.Name)
+				break
+			}
+
 			if !typ.isExpr {
-				if i != len(define.Fields)-1 {
-					format := "private field '%s' is not the last field in '%s'"
-					v.addErrorf(field.Source(), format, field.Name, define.Name)
-					break
+				exprsDone = true
+
+				if isExportedField(field) || isEmbeddedField(field) {
+					// Private definition.
+					if privateDone {
+						format := "private field '%s' cannot follow private or unexported field in '%s'"
+						v.addErrorf(field.Source(), format, field.Name, define.Name)
+						break
+					}
 				}
+				// This is either a private definition, or an unexported field. In either
+				// case, we can no longer accept a private definition.
+				privateDone = true
 			}
 		}
 	}

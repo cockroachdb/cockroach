@@ -178,6 +178,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"RelProps":       {fullName: "props.Relational"},
 		"RelPropsPtr":    {fullName: "*props.Relational", isPointer: true, usePointerIntern: true},
 		"ScalarProps":    {fullName: "props.Scalar"},
+		"FuncDepSet":     {fullName: "props.FuncDepSet"},
 		"OpaqueMetadata": {fullName: "opt.OpaqueMetadata", isPointer: true},
 		"JobCommand":     {fullName: "tree.JobCommand", passByVal: true},
 		"IndexOrdinal":   {fullName: "cat.IndexOrdinal", passByVal: true},
@@ -290,17 +291,19 @@ func (m *metadata) fieldName(field *lang.DefineFieldExpr) string {
 }
 
 // childFields returns the set of fields for an operator define expression that
-// are considered children of that operator. Private (non-expression) fields are
-// omitted from the result. For example, for the Project operator:
+// are considered children of that operator. Private (non-expression) and
+// unexported fields are omitted from the result. For example, for the Project
+// operator:
 //
 //   define Project {
-//     Input       RelExpr
-//     Projections ProjectionsExpr
-//     Passthrough ColSet
+//     Input            RelExpr
+//     Projections      ProjectionsExpr
+//     Passthrough      ColSet
+//     internalFuncDeps FuncDepSet
 //  }
 //
-// The Input and Projections fields are children, but the Passthrough field is
-// a private field and will not be returned.
+// The Input and Projections fields are children, but the Passthrough and
+// the internalFuncDeps fields will not be returned.
 func (m *metadata) childFields(define *lang.DefineExpr) lang.DefineFieldsExpr {
 	// Skip until non-expression field is found.
 	n := 0
@@ -331,11 +334,46 @@ func (m *metadata) privateField(define *lang.DefineExpr) *lang.DefineFieldExpr {
 	for _, field := range define.Fields {
 		typ := m.typeOf(field)
 		if !typ.isExpr {
+			if !isEmbeddedField(field) && !isExportedField(field) {
+				// This is an unexported field; because we force the private to appear
+				// before unexported fields, there must be no private.
+				return nil
+			}
 			return define.Fields[n]
 		}
 		n++
 	}
 	return nil
+}
+
+// childAndPrivateFields returns the set of fields for an operator excluding
+// unexported fields (i.e. the children and the private field).
+func (m *metadata) childAndPrivateFields(define *lang.DefineExpr) lang.DefineFieldsExpr {
+	// Skip until non-expression field is found.
+	n := 0
+	for _, field := range define.Fields {
+		typ := m.typeOf(field)
+		if !typ.isExpr {
+			// If this is the private field, include it.
+			if isEmbeddedField(field) || isExportedField(field) {
+				n++
+			}
+			break
+		}
+		n++
+	}
+	return define.Fields[:n]
+}
+
+// hasUnexportedFields returns true if the operator has unexported fields.
+func (m *metadata) hasUnexportedFields(define *lang.DefineExpr) bool {
+	for _, field := range define.Fields {
+		typ := m.typeOf(field)
+		if !typ.isExpr && !isEmbeddedField(field) && !isExportedField(field) {
+			return true
+		}
+	}
+	return false
 }
 
 // fieldLoadPrefix returns "&" if the address of the given field should be taken

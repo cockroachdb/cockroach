@@ -3,14 +3,28 @@ Optimizer operator definitions
 
 This directory contains definitions for the optimizer operators.
 
-The syntax should be fairly self-evident from the existing definitions. Try to
-keep the formatting consistent. In particular:
+The syntax should be fairly self-evident from the existing definitions. Each
+operator can contain, in this order:
+ - any number of "child" expressions (relational and/or scalar);
+ - at most one "private" field. If multiple fields are necessary, the private
+   can be an embedded, separately defined structure (using similar syntax and
+   the `Private` tag). The private fields are interned with the expression and
+   can be used by rules; they must be initialized before construction of the
+   expression. Private fields can be accessed by rules.
+ - any number of unexported fields. Unexported fields are typically used to
+   cache information that can be deduced from the children and the private. If
+   there are unexported fields, an `initUnexportedFields(*Memo)` method must be
+   implemented for the operator (in `opt/memo/expr.go`). This method is used to
+   initialize these fields as necessary. The unexported fields cannot be used by
+   rules (they are initialized after any normalization rules run).
+
+Try to keep the formatting consistent. In particular:
  - use 4 spaces (no tabs) for indentation;
  - include a comment describing the operator;
  - include comments for non-trivial fields;
  - put Private definitions after the corresponding operator.
 
-If a new type is necessary for a Private definition, an entry must be added in
+If a new type is necessary for a field definition, an entry must be added in
 optgen (`opt/optgen/cmd/optgen/metadata.go`), and `HashXX / IsXXEqual` functions
 must be added to the interner (`opt/memo/interner.go`).
 
