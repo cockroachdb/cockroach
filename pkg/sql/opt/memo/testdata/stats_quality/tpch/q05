@@ -63,7 +63,7 @@ sort
       ├── fd: (42)-->(49)
       ├── project
       │    ├── save-table-name: q5_project_3
-      │    ├── columns: column48:48(float) n_name:42(char!null)
+      │    ├── columns: column48:48(float!null) n_name:42(char!null)
       │    ├── stats: [rows=13445.4933, distinct(42)=5, null(42)=0, distinct(48)=13135.9517, null(48)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q5_inner_join_4

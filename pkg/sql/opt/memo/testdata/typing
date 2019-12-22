@@ -49,7 +49,7 @@ build
 SELECT (a.x, 1.5) AS r, a.y FROM a
 ----
 project
- ├── columns: r:3(tuple{int, decimal}) y:2(int)
+ ├── columns: r:3(tuple{int, decimal}!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -166,7 +166,7 @@ SELECT a.x + 1.5 AS r,
   FROM a
 ----
 project
- ├── columns: r:3(decimal) s:4(date) t:5(decimal) u:6(decimal) v:7(decimal)
+ ├── columns: r:3(decimal!null) s:4(date!null) t:5(decimal!null) u:6(decimal) v:7(decimal!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -185,7 +185,7 @@ SELECT 100.1 % a.x AS r,
   FROM a
 ----
 project
- ├── columns: r:3(decimal) s:4(decimal) t:5(int) u:6(int)
+ ├── columns: r:3(decimal!null) s:4(decimal!null) t:5(int!null) u:6(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -217,7 +217,7 @@ build
 SELECT b.x || 'more' AS r FROM b
 ----
 project
- ├── columns: r:3(string)
+ ├── columns: r:3(string!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── projections
@@ -317,7 +317,7 @@ FROM b
 scalar-group-by
  ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int) count:10(int) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:22(jsonb)
  ├── project
- │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) x:1(string!null) z:2(decimal!null)
+ │    ├── columns: column5:5(bool!null) column13:13(int!null) column20:20(jsonb!null) x:1(string!null) z:2(decimal!null)
  │    ├── scan b
  │    │    └── columns: x:1(string!null) z:2(decimal!null)
  │    └── projections
@@ -364,7 +364,7 @@ opt
 SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT max(x) FROM b WHERE y=z::int) > 'foo'
 ----
 project
- ├── columns: x:1(int!null) x:3(string) y:2(int)
+ ├── columns: x:1(int!null) x:3(string!null) y:2(int)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int) max:6(string!null)
  │    ├── group-by
@@ -375,7 +375,7 @@ project
  │    │    │    ├── scan a
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
  │    │    │    ├── project
- │    │    │    │    ├── columns: column7:7(int) b.x:4(string!null)
+ │    │    │    │    ├── columns: column7:7(int!null) b.x:4(string!null)
  │    │    │    │    ├── scan b
  │    │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
  │    │    │    │    └── projections
@@ -397,16 +397,16 @@ opt
 SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:6(bool)
+ ├── columns: exists:6(bool!null)
  ├── group-by
  │    ├── columns: true_agg:8(bool) rownum:10(int!null)
  │    ├── grouping columns: rownum:10(int!null)
  │    ├── left-join (cross)
- │    │    ├── columns: expr:3(int) true:7(bool) rownum:10(int!null)
+ │    │    ├── columns: expr:3(int!null) true:7(bool) rownum:10(int!null)
  │    │    ├── ordinality
- │    │    │    ├── columns: expr:3(int) rownum:10(int!null)
+ │    │    │    ├── columns: expr:3(int!null) rownum:10(int!null)
  │    │    │    └── project
- │    │    │         ├── columns: expr:3(int)
+ │    │    │         ├── columns: expr:3(int!null)
  │    │    │         ├── scan a
  │    │    │         │    └── columns: x:1(int!null)
  │    │    │         └── projections
@@ -429,7 +429,7 @@ build
 SELECT x::VARCHAR(2) FROM b
 ----
 project
- ├── columns: x:3(varchar)
+ ├── columns: x:3(varchar!null)
  ├── scan b
  │    └── columns: b.x:1(string!null) z:2(decimal!null)
  └── projections
@@ -441,7 +441,7 @@ build
 SELECT z::decimal(10, 3), z::decimal(10, 1), z::decimal(10, 4) FROM b
 ----
 project
- ├── columns: z:3(decimal) z:4(decimal) z:5(decimal)
+ ├── columns: z:3(decimal!null) z:4(decimal!null) z:5(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) b.z:2(decimal!null)
  └── projections

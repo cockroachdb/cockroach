@@ -560,9 +560,9 @@ build
 SELECT 'a', crdb_internal.unary_table() b, 'c' LIMIT 1
 ----
 limit
- ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
+ ├── columns: "?column?":1(string!null) b:2(tuple!null) "?column?":3(string!null)
  ├── project
- │    ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
+ │    ├── columns: "?column?":1(string!null) b:2(tuple!null) "?column?":3(string!null)
  │    ├── limit hint: 1.00
  │    ├── project-set
  │    │    ├── limit hint: 1.00

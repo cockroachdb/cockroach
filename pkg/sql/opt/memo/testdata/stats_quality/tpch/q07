@@ -75,7 +75,7 @@ sort
       ├── fd: (42,46,49)-->(51)
       ├── project
       │    ├── save-table-name: q7_project_3
-      │    ├── columns: l_year:49(float) volume:50(float) n1.n_name:42(char!null) n2.n_name:46(char!null)
+      │    ├── columns: l_year:49(float) volume:50(float!null) n1.n_name:42(char!null) n2.n_name:46(char!null)
       │    ├── stats: [rows=7741.78379, distinct(42)=1.33333333, null(42)=0, distinct(46)=1.33333333, null(46)=0, distinct(49)=730.981616, null(49)=0, distinct(50)=7579.92926, null(50)=0, distinct(42,46,49)=974.320532, null(42,46,49)=0]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q7_inner_join_4

@@ -44,10 +44,10 @@ group-by
  ├── fd: (9,10)-->(17,18,20,22-26)
  ├── ordering: +9,+10
  ├── sort
- │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) column19:19(float) column21:21(float)
+ │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) column19:19(float!null) column21:21(float!null)
  │    ├── ordering: +9,+10
  │    └── project
- │         ├── columns: column19:19(float) column21:21(float) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
+ │         ├── columns: column19:19(float!null) column21:21(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
  │         ├── select
  │         │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null)
  │         │    ├── scan lineitem
@@ -349,7 +349,7 @@ limit
  │         ├── key: (18)
  │         ├── fd: (18)-->(13,16,35)
  │         ├── project
- │         │    ├── columns: column34:34(float) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null)
+ │         │    ├── columns: column34:34(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null)
  │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join (hash)
  │         │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) l_shipdate:28(date!null)
@@ -523,7 +523,7 @@ sort
       ├── key: (42)
       ├── fd: (42)-->(49)
       ├── project
-      │    ├── columns: column48:48(float) n_name:42(char!null)
+      │    ├── columns: column48:48(float!null) n_name:42(char!null)
       │    ├── inner-join (hash)
       │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(char!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(char!null)
       │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(4,41), (41)==(4,37), (20)==(34), (34)==(20), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(37,41)
@@ -627,7 +627,7 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(18)
  ├── project
- │    ├── columns: column17:17(float)
+ │    ├── columns: column17:17(float!null)
  │    ├── select
  │    │    ├── columns: l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null)
  │    │    ├── scan lineitem
@@ -704,10 +704,10 @@ group-by
  ├── fd: (42,46,49)-->(51)
  ├── ordering: +42,+46,+49
  ├── sort
- │    ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) volume:50(float)
+ │    ├── columns: n1.n_name:42(char!null) n2.n_name:46(char!null) l_year:49(float) volume:50(float!null)
  │    ├── ordering: +42,+46,+49
  │    └── project
- │         ├── columns: l_year:49(float) volume:50(float) n1.n_name:42(char!null) n2.n_name:46(char!null)
+ │         ├── columns: l_year:49(float) volume:50(float!null) n1.n_name:42(char!null) n2.n_name:46(char!null)
  │         ├── inner-join (hash)
  │         │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float!null) l_discount:14(float!null) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) n1.n_nationkey:41(int!null) n1.n_name:42(char!null) n2.n_nationkey:45(int!null) n2.n_name:46(char!null)
  │         │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
@@ -842,9 +842,9 @@ sort
       │    ├── key: (61)
       │    ├── fd: (61)-->(64,65)
       │    ├── project
-      │    │    ├── columns: column63:63(float) o_year:61(float) volume:62(float)
+      │    │    ├── columns: column63:63(float!null) o_year:61(float) volume:62(float!null)
       │    │    ├── project
-      │    │    │    ├── columns: o_year:61(float) volume:62(float) n2.n_name:55(char!null)
+      │    │    │    ├── columns: o_year:61(float) volume:62(float!null) n2.n_name:55(char!null)
       │    │    │    ├── inner-join (lookup part)
       │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float!null) l_discount:23(float!null) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) n1.n_nationkey:50(int!null) n1.n_regionkey:52(int!null) n2.n_nationkey:54(int!null) n2.n_name:55(char!null) r_regionkey:58(int!null) r_name:59(char!null)
       │    │    │    │    ├── key columns: [18] = [1]
@@ -997,7 +997,7 @@ sort
       ├── key: (48,51)
       ├── fd: (48,51)-->(53)
       ├── project
-      │    ├── columns: o_year:51(float) amount:52(float) n_name:48(char!null)
+      │    ├── columns: o_year:51(float) amount:52(float!null) n_name:48(char!null)
       │    ├── inner-join (lookup part)
       │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float!null) l_extendedprice:22(float!null) l_discount:23(float!null) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float!null) o_orderkey:38(int!null) o_orderdate:42(date!null) n_nationkey:47(int!null) n_name:48(char!null)
       │    │    ├── key columns: [18] = [1]
@@ -1115,7 +1115,7 @@ limit
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3,5,6,8,35,39)
  │         ├── project
- │         │    ├── columns: column38:38(float) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null)
+ │         │    ├── columns: column38:38(float!null) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null)
  │         │    ├── fd: (1)-->(2,3,5,6,8,35)
  │         │    ├── inner-join (lookup nation)
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_nationkey:4(int!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float!null) l_discount:24(float!null) l_returnflag:26(char!null) n_nationkey:34(int!null) n_name:35(char!null)
@@ -1216,7 +1216,7 @@ sort
       │    ├── key: (1)
       │    ├── fd: (1)-->(18)
       │    ├── project
-      │    │    ├── columns: column17:17(float) ps_partkey:1(int!null)
+      │    │    ├── columns: column17:17(float!null) ps_partkey:1(int!null)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:6(int!null) s_nationkey:9(int!null) n_nationkey:13(int!null) n_name:14(char!null)
       │    │    │    ├── key: (1,6)
@@ -1263,7 +1263,7 @@ sort
                           │    ├── key: ()
                           │    ├── fd: ()-->(36)
                           │    ├── project
-                          │    │    ├── columns: column35:35(float)
+                          │    │    ├── columns: column35:35(float!null)
                           │    │    ├── inner-join (hash)
                           │    │    │    ├── columns: ps_suppkey:20(int!null) ps_availqty:21(int!null) ps_supplycost:22(float!null) s_suppkey:24(int!null) s_nationkey:27(int!null) n_nationkey:31(int!null) n_name:32(char!null)
                           │    │    │    ├── fd: ()-->(32), (24)-->(27), (27)==(31), (31)==(27), (20)==(24), (24)==(20)
@@ -1350,7 +1350,7 @@ sort
       ├── key: (24)
       ├── fd: (24)-->(27,29)
       ├── project
-      │    ├── columns: column26:26(int) column28:28(int) l_shipmode:24(char!null)
+      │    ├── columns: column26:26(int!null) column28:28(int!null) l_shipmode:24(char!null)
       │    ├── inner-join (lookup orders)
       │    │    ├── columns: o_orderkey:1(int!null) o_orderpriority:6(char!null) l_orderkey:10(int!null) l_shipdate:20(date!null) l_commitdate:21(date!null) l_receiptdate:22(date!null) l_shipmode:24(char!null)
       │    │    ├── key columns: [10] = [1]
@@ -1485,7 +1485,7 @@ project
  │    ├── key: ()
  │    ├── fd: ()-->(27,29)
  │    ├── project
- │    │    ├── columns: column26:26(float) column28:28(float)
+ │    │    ├── columns: column26:26(float!null) column28:28(float!null)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: l_partkey:2(int!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipdate:11(date!null) p_partkey:17(int!null) p_type:21(varchar!null)
  │    │    │    ├── fd: (17)-->(21), (2)==(17), (17)==(2)
@@ -1583,7 +1583,7 @@ sort
            │    │    ├── key: (10)
            │    │    ├── fd: (10)-->(25)
            │    │    ├── project
-           │    │    │    ├── columns: column24:24(float) l_suppkey:10(int!null)
+           │    │    │    ├── columns: column24:24(float!null) l_suppkey:10(int!null)
            │    │    │    ├── select
            │    │    │    │    ├── columns: l_suppkey:10(int!null) l_extendedprice:13(float!null) l_discount:14(float!null) l_shipdate:18(date!null)
            │    │    │    │    ├── scan lineitem
@@ -1610,7 +1610,7 @@ sort
            │                        │    ├── key: (28)
            │                        │    ├── fd: (28)-->(43)
            │                        │    ├── project
-           │                        │    │    ├── columns: column42:42(float) l_suppkey:28(int!null)
+           │                        │    │    ├── columns: column42:42(float!null) l_suppkey:28(int!null)
            │                        │    │    ├── select
            │                        │    │    │    ├── columns: l_suppkey:28(int!null) l_extendedprice:31(float!null) l_discount:32(float!null) l_shipdate:36(date!null)
            │                        │    │    │    ├── scan lineitem
@@ -2015,7 +2015,7 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(27)
  ├── project
- │    ├── columns: column26:26(float)
+ │    ├── columns: column26:26(float!null)
  │    ├── inner-join (lookup part)
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:17(int!null) p_brand:20(char!null) p_size:22(int!null) p_container:23(char!null)
  │    │    ├── key columns: [2] = [17]

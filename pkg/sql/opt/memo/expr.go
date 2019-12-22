@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -509,6 +510,66 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 			fdset.AddEquivalency(t, id)
 		}
 	}
+}
+
+// initUnexportedFields is called when a project expression is created.
+func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
+	inputProps := prj.Input.Relational()
+	// Determine the not-null columns.
+	prj.notNullCols = inputProps.NotNullCols.Copy()
+	for i := range prj.Projections {
+		item := &prj.Projections[i]
+		if ExprIsNeverNull(item.Element, inputProps.NotNullCols) {
+			prj.notNullCols.Add(item.Col)
+		}
+	}
+
+	// Determine the "internal" functional dependencies (for the union of input
+	// columns and synthesized columns).
+	prj.internalFuncDeps.CopyFrom(&inputProps.FuncDeps)
+	for i := range prj.Projections {
+		item := &prj.Projections[i]
+		if v, ok := item.Element.(*VariableExpr); ok && inputProps.OutputCols.Contains(v.Col) {
+			// Handle any column that is a direct reference to an input column. The
+			// optimizer sometimes constructs these in order to generate different
+			// column IDs; they can also show up after constant-folding e.g. an ORDER
+			// BY expression.
+			prj.internalFuncDeps.AddEquivalency(v.Col, item.Col)
+			continue
+		}
+
+		if !item.scalar.CanHaveSideEffects {
+			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
+
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			//
+			// We only add the FD if composite types are not involved.
+			//
+			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// arithmetic.
+			composite := false
+			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
+				typ := mem.Metadata().ColumnMeta(i).Type
+				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+					composite = true
+					break
+				}
+			}
+			if !composite {
+				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
+			}
+		}
+	}
+	prj.internalFuncDeps.MakeNotNull(prj.notNullCols)
+}
+
+// InternalFDs returns the functional dependencies for the set of all input
+// columns plus the synthesized columns.
+func (proj *ProjectExpr) InternalFDs() *props.FuncDepSet {
+	return &proj.internalFuncDeps
 }
 
 // ExprIsNeverNull makes a best-effort attempt to prove that the provided

@@ -50,28 +50,28 @@ project
       │    └──  upsert_rowid:20 => rowid:4
       ├── side-effects, mutations
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int) column16:16(int)
+           ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int) column16:16(int)
            ├── side-effects
            ├── key: (5,13)
            ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16), (5,13)-->(17), (13,15)-->(18), (13,16)-->(19), (8,13)-->(20)
            ├── prune: (5,6,8-20)
            ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            ├── project
-           │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
+           │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
            │    ├── side-effects
            │    ├── key: (5,13)
            │    ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16)
            │    ├── prune: (5,6,8-16)
            │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │    ├── project
-           │    │    ├── columns: column14:14(int!null) column15:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           │    │    ├── columns: column14:14(int!null) column15:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
            │    │    ├── side-effects
            │    │    ├── key: (5,13)
            │    │    ├── fd: ()-->(6,9,14), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15)
            │    │    ├── prune: (5,6,8-15)
            │    │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │    │    ├── left-join (hash)
-           │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
            │    │    │    ├── side-effects
            │    │    │    ├── key: (5,13)
            │    │    │    ├── fd: ()-->(6,9), (5)-->(8), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
@@ -79,7 +79,7 @@ project
            │    │    │    ├── reject-nulls: (10-13)
            │    │    │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │    │    │    ├── project
-           │    │    │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int!null) column8:8(int)
+           │    │    │    │    ├── columns: column9:9(int!null) x:5(int!null) y:6(int!null) column8:8(int)
            │    │    │    │    ├── side-effects
            │    │    │    │    ├── key: (5)
            │    │    │    │    ├── fd: ()-->(6,9), (5)-->(8)
@@ -392,21 +392,21 @@ project
  │    ├── cardinality: [2 - ]
  │    ├── side-effects, mutations
  │    └── project
- │         ├── columns: upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
+ │         ├── columns: upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
  │         ├── cardinality: [2 - ]
  │         ├── side-effects
  │         ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13), (10,12)-->(14), (12,13)-->(15), (7,12)-->(16)
  │         ├── prune: (5-16)
  │         ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         ├── project
- │         │    ├── columns: column13:13(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+ │         │    ├── columns: column13:13(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
  │         │    ├── cardinality: [2 - ]
  │         │    ├── side-effects
  │         │    ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13)
  │         │    ├── prune: (5-13)
  │         │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    ├── left-join (hash)
- │         │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+ │         │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
  │         │    │    ├── cardinality: [2 - ]
  │         │    │    ├── side-effects
  │         │    │    ├── fd: ()-->(6,8), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12)
@@ -414,7 +414,7 @@ project
  │         │    │    ├── reject-nulls: (9-12)
  │         │    │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    │    ├── project
- │         │    │    │    ├── columns: column8:8(int) column1:5(int!null) column6:6(int!null) column7:7(int)
+ │         │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column6:6(int!null) column7:7(int)
  │         │    │    │    ├── cardinality: [2 - 2]
  │         │    │    │    ├── side-effects
  │         │    │    │    ├── fd: ()-->(6,8)

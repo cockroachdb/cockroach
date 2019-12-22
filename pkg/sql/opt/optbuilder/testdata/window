@@ -81,9 +81,9 @@ SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
 project
  ├── columns: lag:8(string) lag:9(int)
  └── window partition=()
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string!null) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       ├── project
-      │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── columns: lag_1_arg1:10(string!null) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── projections
@@ -364,9 +364,9 @@ SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
 project
  ├── columns: avg:8(decimal)
  └── window partition=()
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg_1_filter:9(bool)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal) avg_1_filter:9(bool!null)
       ├── project
-      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── columns: avg_1_filter:9(bool!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── projections
@@ -1312,9 +1312,9 @@ SELECT avg(f) FILTER (WHERE k = 1) OVER () FROM kv
 project
  ├── columns: avg:8(float)
  └── window partition=()
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(float) avg_1_filter:9(bool)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(float) avg_1_filter:9(bool!null)
       ├── project
-      │    ├── columns: avg_1_filter:9(bool) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── columns: avg_1_filter:9(bool!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    ├── scan kv
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── projections

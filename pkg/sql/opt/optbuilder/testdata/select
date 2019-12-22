@@ -621,7 +621,7 @@ build
 SELECT 1 IN (1, 2) AS r
 ----
 project
- ├── columns: r:1(bool)
+ ├── columns: r:1(bool!null)
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -703,7 +703,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int, int}!null)
            │    ├── values
            │    │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    │    └── tuple [type=tuple{int, int}]
@@ -746,7 +746,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int, int}!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    └── tuple [type=tuple{int, int}]
@@ -794,7 +794,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int, int}!null)
            │    ├── select
            │    │    ├── columns: column1:1(int!null) column2:2(int!null)
            │    │    ├── values
@@ -849,7 +849,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int, int}!null)
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
@@ -904,7 +904,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int, int}!null)
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
@@ -959,7 +959,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int, int}!null)
                 │    ├── select
                 │    │    ├── columns: column1:1(int!null) column2:2(int!null)
                 │    │    ├── values
@@ -1105,7 +1105,7 @@ FROM (
 project
  ├── columns: e:2(int) f:3(string) g:4(bool)
  ├── project
- │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g})
+ │    ├── columns: x:1(tuple{int AS e, string AS f, bool AS g}!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections

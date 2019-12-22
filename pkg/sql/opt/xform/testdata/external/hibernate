@@ -1853,7 +1853,7 @@ where
     bids0_.auctionId=$1
 ----
 project
- ├── columns: auctioni4_1_0_:4(int) id1_1_0_:1(int!null) id1_1_1_:1(int!null) amount2_1_1_:2(decimal) createdd3_1_1_:3(timestamp) auctioni4_1_1_:4(int) formula41_1_:9(bool)
+ ├── columns: auctioni4_1_0_:4(int) id1_1_0_:1(int!null) id1_1_1_:1(int!null) amount2_1_1_:2(decimal) createdd3_1_1_:3(timestamp) auctioni4_1_1_:4(int) formula41_1_:9(bool!null)
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4,9)
