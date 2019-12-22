@@ -280,10 +280,10 @@ build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) ab:4(int!null)
  ├── ordering: -4,+1
  └── project
-      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
+      ├── columns: ab:4(int!null) a:1(int!null) b:2(int!null)
       ├── select
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
@@ -480,47 +480,39 @@ sort
 
 
 # Sort should be skipped if the ORDER BY clause is constant.
-# (This skipping will probably happen later during optimization. The below
-# tests should just show that the ordering column is constant.)
 build
 SELECT * FROM t ORDER BY 1+2
 ----
-sort
+project
  ├── columns: a:1(int!null) b:2(int) c:3(bool)  [hidden: column4:4(int!null)]
  ├── ordering: +4
- └── project
-      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── const: 3 [type=int]
+ ├── scan t
+ │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── projections
+      └── const: 3 [type=int]
 
 build
 SELECT 1 AS r, * FROM t ORDER BY 1
 ----
-sort
+project
  ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
- └── project
-      ├── columns: r:4(int!null) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── const: 1 [type=int]
+ ├── scan t
+ │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── projections
+      └── const: 1 [type=int]
 
 build
 SELECT * FROM t ORDER BY length('abc')
 ----
-sort
+project
  ├── columns: a:1(int!null) b:2(int) c:3(bool)  [hidden: column4:4(int)]
  ├── ordering: +4
- └── project
-      ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
-      ├── scan t
-      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      └── projections
-           └── function: length [type=int]
-                └── const: 'abc' [type=string]
+ ├── scan t
+ │    └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── projections
+      └── function: length [type=int]
+           └── const: 'abc' [type=string]
 
 build
 SELECT b+2 AS r FROM t ORDER BY b+2

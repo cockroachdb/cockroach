@@ -151,7 +151,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized, ~7KB, required=[presentation: k:1])
+memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)

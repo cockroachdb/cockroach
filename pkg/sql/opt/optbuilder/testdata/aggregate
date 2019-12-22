@@ -1144,7 +1144,7 @@ SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM k
 scalar-group-by
  ├── columns: avg:6(decimal) avg:8(decimal) sum:9(decimal) sum:10(decimal)
  ├── project
- │    ├── columns: column5:5(decimal) column7:7(decimal)
+ │    ├── columns: column5:5(decimal!null) column7:7(decimal)
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
@@ -1597,7 +1597,7 @@ project
  ├── scalar-group-by
  │    ├── columns: avg:2(decimal) avg:4(float) avg:6(decimal)
  │    ├── project
- │    │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
  │    │    └── projections
@@ -1628,7 +1628,7 @@ SELECT count(2::int), count(3::float), count(4::decimal)
 scalar-group-by
  ├── columns: count:2(int) count:4(int) count:6(int)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
@@ -1652,7 +1652,7 @@ SELECT sum(1::int), sum(2::float), sum(3::decimal)
 scalar-group-by
  ├── columns: sum:2(decimal) sum:4(float) sum:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
@@ -1676,7 +1676,7 @@ SELECT variance(1::int), variance(1::float), variance(1::decimal)
 scalar-group-by
  ├── columns: variance:2(decimal) variance:4(float) variance:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
@@ -1700,7 +1700,7 @@ SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 scalar-group-by
  ├── columns: stddev:2(decimal) stddev:4(float) stddev:6(decimal)
  ├── project
- │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
+ │    ├── columns: column1:1(int!null) column3:3(float!null) column5:5(decimal!null)
  │    ├── values
  │    │    └── tuple [type=tuple]
  │    └── projections
@@ -2476,10 +2476,10 @@ SELECT 1 + min(v*2) AS r FROM kv GROUP BY k+3
 project
  ├── columns: r:8(int)
  ├── group-by
- │    ├── columns: min:6(int) column7:7(int)
- │    ├── grouping columns: column7:7(int)
+ │    ├── columns: min:6(int) column7:7(int!null)
+ │    ├── grouping columns: column7:7(int!null)
  │    ├── project
- │    │    ├── columns: column5:5(int) column7:7(int)
+ │    │    ├── columns: column5:5(int) column7:7(int!null)
  │    │    ├── scan kv
  │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    │    └── projections
@@ -2663,7 +2663,7 @@ FROM xyz
 scalar-group-by
  ├── columns: string_agg:7(string)
  ├── project
- │    ├── columns: column4:4(string) column5:5(string!null) column6:6(bool)
+ │    ├── columns: column4:4(string!null) column5:5(string!null) column6:6(bool)
  │    ├── scan xyz
  │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    └── projections
@@ -2688,7 +2688,7 @@ group-by
  ├── columns: y:2(int) count:6(int)
  ├── grouping columns: y:2(int)
  ├── project
- │    ├── columns: column4:4(bool!null) column5:5(bool) y:2(int)
+ │    ├── columns: column4:4(bool!null) column5:5(bool!null) y:2(int)
  │    ├── scan xyz
  │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    └── projections

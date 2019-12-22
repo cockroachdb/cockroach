@@ -285,10 +285,10 @@ build
 SELECT DISTINCT max(z), x+y AS r, 3 AS s FROM xyz GROUP BY x, y HAVING y > 4
 ----
 distinct-on
- ├── columns: max:4(float) r:5(int) s:6(int!null)
- ├── grouping columns: max:4(float) r:5(int) s:6(int!null)
+ ├── columns: max:4(float) r:5(int!null) s:6(int!null)
+ ├── grouping columns: max:4(float) r:5(int!null) s:6(int!null)
  └── project
-      ├── columns: r:5(int) s:6(int!null) max:4(float)
+      ├── columns: r:5(int!null) s:6(int!null) max:4(float)
       ├── select
       │    ├── columns: x:1(int!null) y:2(int!null) max:4(float)
       │    ├── group-by

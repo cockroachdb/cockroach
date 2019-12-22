@@ -97,7 +97,7 @@ project
       │         │    ├── fd: (10)-->(25)
       │         │    ├── project
       │         │    │    ├── save-table-name: q15_project_7
-      │         │    │    ├── columns: column24:24(float) l_suppkey:10(int!null)
+      │         │    │    ├── columns: column24:24(float!null) l_suppkey:10(int!null)
       │         │    │    ├── stats: [rows=259635.063, distinct(10)=9920, null(10)=0, distinct(24)=259635.063, null(24)=0]
       │         │    │    ├── index-join lineitem
       │         │    │    │    ├── save-table-name: q15_index_join_8
@@ -141,7 +141,7 @@ project
       │                             │    ├── fd: (28)-->(43)
       │                             │    ├── project
       │                             │    │    ├── save-table-name: q15_project_12
-      │                             │    │    ├── columns: column42:42(float) l_suppkey:28(int!null)
+      │                             │    │    ├── columns: column42:42(float!null) l_suppkey:28(int!null)
       │                             │    │    ├── stats: [rows=259635.063, distinct(28)=9920, null(28)=0, distinct(42)=259635.063, null(42)=0]
       │                             │    │    ├── index-join lineitem
       │                             │    │    │    ├── save-table-name: q15_index_join_13

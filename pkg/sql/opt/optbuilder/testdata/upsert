@@ -89,7 +89,7 @@ upsert abc
  │    ├──  upsert_a:16 => a:1
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
+      ├── columns: upsert_a:16(int!null) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
       ├── project
       │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
       │    ├── project
@@ -191,9 +191,9 @@ project
       │    ├──  upsert_c:19 => c:3
       │    └──  upsert_rowid:20 => rowid:4
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int)
+           ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
            ├── project
-           │    ├── columns: column16:16(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
+           │    ├── columns: column16:16(int!null) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
            │    ├── project
            │    │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
            │    │    ├── left-join (hash)
@@ -283,9 +283,9 @@ upsert abc
  │    ├──  upsert_b:17 => b:2
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int!null)
       ├── project
-      │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
+      │    ├── columns: column15:15(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
       │    ├── project
       │    │    ├── columns: column14:14(int!null) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
       │    │    ├── select
@@ -372,14 +372,14 @@ FROM [INSERT INTO abc (a, b) VALUES (1,2), (3,4) ON CONFLICT (a) DO UPDATE SET b
 ORDER BY a, b DESC
 ----
 sort
- ├── columns: a:19(int!null) b:20(int) c:21(int)
+ ├── columns: a:19(int!null) b:20(int!null) c:21(int!null)
  ├── ordering: +19,-20
  └── with &1
-      ├── columns: a:19(int!null) b:20(int) c:21(int)
+      ├── columns: a:19(int!null) b:20(int!null) c:21(int!null)
       ├── project
-      │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
       │    └── upsert abc
-      │         ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int) rowid:4(int!null)
+      │         ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) rowid:4(int!null)
       │         ├── canary column: 12
       │         ├── fetch columns: abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
       │         ├── insert-mapping:
@@ -396,15 +396,15 @@ sort
       │         │    ├──  upsert_c:17 => abc.c:3
       │         │    └──  upsert_rowid:18 => rowid:4
       │         └── project
-      │              ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
+      │              ├── columns: upsert_a:15(int) upsert_b:16(int!null) upsert_c:17(int!null) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null)
       │              ├── project
-      │              │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null)
+      │              │    ├── columns: column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int) column13:13(int!null)
       │              │    ├── project
-      │              │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+      │              │    │    ├── columns: column13:13(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
       │              │    │    ├── left-join (hash)
-      │              │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+      │              │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
       │              │    │    │    ├── project
-      │              │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │              │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
       │              │    │    │    │    ├── project
       │              │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │              │    │    │    │    │    ├── values
@@ -472,7 +472,7 @@ sort
       │                        │    └── variable: column7 [type=int]
       │                        └── variable: rowid [type=int]
       └── with-scan &1
-           ├── columns: a:19(int!null) b:20(int) c:21(int)
+           ├── columns: a:19(int!null) b:20(int!null) c:21(int!null)
            └── mapping:
                 ├──  abc.a:1(int) => a:19(int)
                 ├──  abc.b:2(int) => b:20(int)
@@ -498,15 +498,15 @@ upsert tab
  │    ├──  upsert_a:15 => a:1
  │    └──  upsert_c:17 => c:3
  └── project
-      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int)
+      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int)
       ├── project
-      │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
+      │    ├── columns: column14:14(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
       │    ├── project
-      │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── columns: column13:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
@@ -736,9 +736,9 @@ WHERE excluded.y>xyz.y
 RETURNING xyz.x*2, y+z
 ----
 project
- ├── columns: "?column?":16(int) "?column?":17(int)
+ ├── columns: "?column?":16(int!null) "?column?":17(int)
  ├── upsert xyz
- │    ├── columns: x:1(int!null) y:2(int) z:3(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int!null)
  │    ├── canary column: 7
  │    ├── fetch columns: x:7(int) y:8(int) z:9(int)
  │    ├── insert-mapping:
@@ -754,9 +754,9 @@ project
  │    │    ├──  upsert_y:14 => y:2
  │    │    └──  upsert_z:15 => z:3
  │    └── project
- │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int) column10:10(int) column11:11(int) column12:12(int)
+ │         ├── columns: upsert_x:13(int!null) upsert_y:14(int) upsert_z:15(int!null) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int) column10:10(int!null) column11:11(int) column12:12(int!null)
  │         ├── project
- │         │    ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
+ │         │    ├── columns: column10:10(int!null) column11:11(int) column12:12(int!null) column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    ├── select
  │         │    │    ├── columns: column1:4(int!null) column2:5(int!null) column3:6(int!null) x:7(int) y:8(int) z:9(int)
  │         │    │    ├── left-join (hash)
@@ -875,15 +875,15 @@ upsert abc
  │    ├──  upsert_b:19 => b:2
  │    └──  upsert_c:20 => c:3
  └── project
-      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int) column17:17(int)
+      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int) column17:17(int)
       ├── project
-      │    ├── columns: column17:17(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    ├── columns: column17:17(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    ├── left-join-apply
-      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
+      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
@@ -984,15 +984,15 @@ upsert abc
  │    ├──  upsert_b:17 => b:2
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null) column15:15(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int!null) upsert_c:18(int!null) upsert_rowid:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null) column15:15(int!null)
       ├── project
-      │    ├── columns: column15:15(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
+      │    ├── columns: column15:15(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
       │    ├── project
-      │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    ├── columns: column13:13(int) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+      │    │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
       │    │    │    │    │    ├── values
@@ -1083,17 +1083,17 @@ upsert mutation
  │    └──  upsert_p:20 => p:4
  ├── check columns: check1:21(bool)
  └── project
-      ├── columns: check1:21(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
+      ├── columns: check1:21(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
       ├── project
-      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int)
+      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int)
       │    ├── project
-      │    │    ├── columns: column16:16(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    │    ├── columns: column16:16(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    │    ├── project
-      │    │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    │    ├── project
       │    │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    │    ├── values
@@ -1231,11 +1231,11 @@ build
 SELECT * FROM [UPSERT INTO abc VALUES (1, 2) RETURNING *]
 ----
 with &1
- ├── columns: a:14(int!null) b:15(int!null) c:16(int)
+ ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
  ├── project
- │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int)
+ │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
  │    └── upsert abc
- │         ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int) rowid:4(int!null)
+ │         ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) rowid:4(int!null)
  │         ├── canary column: 12
  │         ├── fetch columns: abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
  │         ├── insert-mapping:
@@ -1253,11 +1253,11 @@ with &1
  │         │    ├──  column8:8 => abc.c:3
  │         │    └──  upsert_rowid:13 => rowid:4
  │         └── project
- │              ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+ │              ├── columns: upsert_rowid:13(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
  │              ├── left-join (hash)
- │              │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
+ │              │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int!null) abc.a:9(int) abc.b:10(int) abc.c:11(int) rowid:12(int)
  │              │    ├── project
- │              │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column7:7(int)
+ │              │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column7:7(int)
  │              │    │    ├── project
  │              │    │    │    ├── columns: column7:7(int) column1:5(int!null) column2:6(int!null)
  │              │    │    │    ├── values
@@ -1292,7 +1292,7 @@ with &1
  │                        │    └── variable: column7 [type=int]
  │                        └── variable: rowid [type=int]
  └── with-scan &1
-      ├── columns: a:14(int!null) b:15(int!null) c:16(int)
+      ├── columns: a:14(int!null) b:15(int!null) c:16(int!null)
       └── mapping:
            ├──  abc.a:1(int) => a:14(int)
            ├──  abc.b:2(int) => b:15(int)
@@ -1379,13 +1379,13 @@ upsert checks
  │    └──  column8:8 => d:4
  ├── check columns: check1:14(bool) check2:15(bool)
  └── project
-      ├── columns: check1:14(bool) check2:15(bool) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:13(int)
+      ├── columns: check1:14(bool!null) check2:15(bool) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:13(int)
       ├── project
-      │    ├── columns: upsert_a:13(int) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    ├── columns: upsert_a:13(int) column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null) a:9(int) b:10(int) c:11(int) d:12(int)
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null) column8:8(int!null) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    ├── project
-      │    │    │    ├── columns: column8:8(int) column1:5(int!null) column2:6(int!null) column3:7(int!null)
+      │    │    │    ├── columns: column8:8(int!null) column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:5(int!null) column2:6(int!null) column3:7(int!null)
       │    │    │    │    └── tuple [type=tuple{int, int, int}]
@@ -1450,15 +1450,15 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    ├── values
@@ -1535,15 +1535,15 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    ├── columns: column15:15(int) column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    ├── columns: column1:6(int!null) column2:7(int!null) column8:8(int!null) column9:9(int!null) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9(int) column1:6(int!null) column2:7(int!null) column8:8(int!null)
+      │    │    │    │    ├── columns: column9:9(int!null) column1:6(int!null) column2:7(int!null) column8:8(int!null)
       │    │    │    │    ├── project
       │    │    │    │    │    ├── columns: column8:8(int!null) column1:6(int!null) column2:7(int!null)
       │    │    │    │    │    ├── values
@@ -1630,11 +1630,11 @@ upsert checks
  │    └──  upsert_d:19 => d:4
  ├── check columns: check1:20(bool) check2:21(bool)
  └── project
-      ├── columns: check1:20(bool) check2:21(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int)
+      ├── columns: check1:20(bool) check2:21(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null) upsert_a:16(int) upsert_b:17(int!null) upsert_c:18(int) upsert_d:19(int)
       ├── project
-      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int)
+      │    ├── columns: upsert_a:16(int) upsert_b:17(int!null) upsert_c:18(int) upsert_d:19(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
       │    ├── project
-      │    │    ├── columns: column15:15(int) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null)
+      │    │    ├── columns: column15:15(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null)
       │    │    ├── project
       │    │    │    ├── columns: column13:13(int!null) column14:14(int!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    │    ├── left-join (hash)
@@ -1734,7 +1734,7 @@ insert checks
  │    └──  column8:8 => d:4
  ├── check columns: check1:13(bool) check2:14(bool)
  └── project
-      ├── columns: check1:13(bool) check2:14(bool) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
+      ├── columns: check1:13(bool) check2:14(bool!null) column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
       ├── project
       │    ├── columns: column1:5(int!null) column2:6(int!null) column7:7(int) column8:8(int)
       │    └── select
@@ -1904,7 +1904,7 @@ upsert checks
  │    └──  upsert_d:22 => d:4
  ├── check columns: check1:23(bool) check2:24(bool)
  └── project
-      ├── columns: check1:23(bool) check2:24(bool) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int) column19:19(int) upsert_b:20(int) upsert_c:21(int) upsert_d:22(int)
+      ├── columns: check1:23(bool) check2:24(bool!null) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int) column19:19(int) upsert_b:20(int) upsert_c:21(int) upsert_d:22(int)
       ├── project
       │    ├── columns: upsert_b:20(int) upsert_c:21(int) upsert_d:22(int) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int) column19:19(int)
       │    ├── project

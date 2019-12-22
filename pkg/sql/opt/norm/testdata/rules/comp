@@ -354,7 +354,7 @@ norm expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: r:7(bool!null) s:8(bool) t:9(bool)
+ ├── columns: r:7(bool!null) s:8(bool!null) t:9(bool!null)
  ├── fd: ()-->(7)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)

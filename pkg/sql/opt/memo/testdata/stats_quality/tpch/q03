@@ -66,7 +66,7 @@ limit
  │         ├── fd: (18)-->(13,16,35)
  │         ├── project
  │         │    ├── save-table-name: q3_project_4
- │         │    ├── columns: column34:34(float) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null)
+ │         │    ├── columns: column34:34(float!null) o_orderdate:13(date!null) o_shippriority:16(int!null) l_orderkey:18(int!null)
  │         │    ├── stats: [rows=493779.215, distinct(13)=1169, null(13)=0, distinct(16)=1, null(16)=0, distinct(18)=359560.406, null(18)=0, distinct(34)=410295.908, null(34)=0]
  │         │    ├── fd: (18)-->(13,16)
  │         │    ├── inner-join (lookup lineitem)

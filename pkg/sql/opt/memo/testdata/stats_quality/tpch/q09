@@ -73,7 +73,7 @@ sort
       ├── fd: (48,51)-->(53)
       ├── project
       │    ├── save-table-name: q9_project_3
-      │    ├── columns: o_year:51(float) amount:52(float) n_name:48(char!null)
+      │    ├── columns: o_year:51(float) amount:52(float!null) n_name:48(char!null)
       │    ├── stats: [rows=2406.66318, distinct(48)=25, null(48)=0, distinct(51)=1208.19298, null(51)=0, distinct(52)=1508.01915, null(52)=0, distinct(48,51)=1500.68104, null(48,51)=0]
       │    ├── inner-join (lookup part)
       │    │    ├── save-table-name: q9_lookup_join_4

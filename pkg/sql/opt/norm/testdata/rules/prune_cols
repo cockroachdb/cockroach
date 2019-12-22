@@ -52,7 +52,7 @@ norm expect=PruneProjectCols
 SELECT k1*2 FROM (SELECT k+1 AS k1, i+1 FROM a) a
 ----
 project
- ├── columns: "?column?":7(int)
+ ├── columns: "?column?":7(int!null)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
@@ -131,7 +131,7 @@ norm expect=PruneScanCols
 SELECT k, k+1 AS r, i+1 AS s FROM a
 ----
 project
- ├── columns: k:1(int!null) r:5(int) s:6(int)
+ ├── columns: k:1(int!null) r:5(int!null) s:6(int)
  ├── key: (1)
  ├── fd: (1)-->(5,6)
  ├── scan a
@@ -226,7 +226,7 @@ norm expect=PruneSelectCols
 SELECT i-1 AS r, k*k AS t FROM a WHERE k+1<5 AND s||'o'='foo'
 ----
 project
- ├── columns: r:5(int) t:6(int)
+ ├── columns: r:5(int) t:6(int!null)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    ├── key: (1)
@@ -762,7 +762,7 @@ norm expect=PruneJoinLeftCols
 SELECT a.k+1 AS r, a.i/2 AS s, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s||'o'='foo'
 ----
 project
- ├── columns: r:8(int) s:9(decimal) x:5(int!null) y:6(int)
+ ├── columns: r:8(int!null) s:9(decimal) x:5(int!null) y:6(int)
  ├── side-effects
  ├── fd: (5)-->(6)
  ├── inner-join (hash)
@@ -770,7 +770,7 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,7), (5)-->(6), (5)==(7), (7)==(5)
  │    ├── project
- │    │    ├── columns: column7:7(int) k:1(int!null) i:2(int)
+ │    │    ├── columns: column7:7(int!null) k:1(int!null) i:2(int)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,7)
  │    │    ├── select
@@ -1033,7 +1033,7 @@ norm expect=PruneJoinRightCols
 SELECT xy.*, a.k+1 AS r, a.i/2 AS s FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s||'o'='foo'
 ----
 project
- ├── columns: x:1(int!null) y:2(int) r:8(int) s:9(decimal)
+ ├── columns: x:1(int!null) y:2(int) r:8(int!null) s:9(decimal)
  ├── side-effects
  ├── fd: (1)-->(2)
  ├── inner-join (hash)
@@ -1045,7 +1045,7 @@ project
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    ├── project
- │    │    ├── columns: column7:7(int) k:3(int!null) i:4(int)
+ │    │    ├── columns: column7:7(int!null) k:3(int!null) i:4(int)
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4,7)
  │    │    ├── select
@@ -1747,19 +1747,19 @@ delete a
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── limit
-      ├── columns: k:5(int!null) column9:9(int)
+      ├── columns: k:5(int!null) column9:9(int!null)
       ├── internal-ordering: +9
       ├── cardinality: [0 - 10]
       ├── key: (5)
       ├── fd: (5)-->(9)
       ├── sort
-      │    ├── columns: k:5(int!null) column9:9(int)
+      │    ├── columns: k:5(int!null) column9:9(int!null)
       │    ├── key: (5)
       │    ├── fd: (5)-->(9)
       │    ├── ordering: +9
       │    ├── limit hint: 10.00
       │    └── project
-      │         ├── columns: column9:9(int) k:5(int!null)
+      │         ├── columns: column9:9(int!null) k:5(int!null)
       │         ├── key: (5)
       │         ├── fd: (5)-->(9)
       │         ├── select
@@ -1858,7 +1858,7 @@ update "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column11:11(int) a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
+      ├── columns: column11:11(int!null) a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
       ├── key: (6)
       ├── fd: (6)-->(7-11)
       ├── select
@@ -2078,7 +2078,7 @@ project
       ├── key: ()
       ├── fd: ()-->(1,5)
       └── project
-           ├── columns: upsert_a:17(int) upsert_c:19(int) upsert_e:21(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) c:13(int) d:14(int) e:15(int)
+           ├── columns: upsert_a:17(int) upsert_c:19(int!null) upsert_e:21(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column5:10(int!null) a:11(int) c:13(int) d:14(int) e:15(int)
            ├── cardinality: [1 - 1]
            ├── key: ()
            ├── fd: ()-->(6-11,13-15,17,19,21)
@@ -2130,7 +2130,7 @@ upsert "family"
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_d:20(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
+      ├── columns: upsert_d:20(int!null) column1:6(int!null) column2:7(int!null) column3:8(int!null) column4:9(int!null) column10:10(int) a:11(int) c:13(int) d:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-11,13,14,20)
@@ -2178,7 +2178,7 @@ upsert mutation
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_b:17(int) column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
+      ├── columns: upsert_b:17(int!null) column1:6(int!null) column2:7(int!null) column3:8(int!null) column9:9(int) a:10(int) b:11(int) c:12(int) d:13(int) e:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6-14,17)

@@ -62,7 +62,7 @@ scalar-group-by
  ├── fd: ()-->(27)
  ├── project
  │    ├── save-table-name: q19_project_2
- │    ├── columns: column26:26(float)
+ │    ├── columns: column26:26(float!null)
  │    ├── stats: [rows=71.4087386, distinct(26)=71.402791, null(26)=0]
  │    ├── inner-join (hash)
  │    │    ├── save-table-name: q19_inner_join_3

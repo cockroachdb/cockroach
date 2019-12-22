@@ -65,7 +65,7 @@ sort
       │    ├── fd: (1)-->(18)
       │    ├── project
       │    │    ├── save-table-name: q11_project_4
-      │    │    ├── columns: column17:17(float) ps_partkey:1(int!null)
+      │    │    ├── columns: column17:17(float!null) ps_partkey:1(int!null)
       │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(17)=31617.9161, null(17)=0]
       │    │    ├── inner-join (lookup partsupp)
       │    │    │    ├── save-table-name: q11_lookup_join_5
@@ -133,7 +133,7 @@ sort
                           │    ├── fd: ()-->(36)
                           │    ├── project
                           │    │    ├── save-table-name: q11_project_12
-                          │    │    ├── columns: column35:35(float)
+                          │    │    ├── columns: column35:35(float!null)
                           │    │    ├── stats: [rows=32258.0645, distinct(35)=31617.9161, null(35)=0]
                           │    │    ├── inner-join (lookup partsupp)
                           │    │    │    ├── save-table-name: q11_lookup_join_13
