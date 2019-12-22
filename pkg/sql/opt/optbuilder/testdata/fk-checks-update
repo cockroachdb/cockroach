@@ -58,9 +58,9 @@ update child
  └── f-k-checks
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:8(int)
+                ├── columns: c:8(int!null)
                 ├── project
-                │    ├── columns: c:8(int)
+                │    ├── columns: c:8(int!null)
                 │    ├── except
                 │    │    ├── columns: c:6(int!null)
                 │    │    ├── left columns: c:6(int!null)
@@ -226,9 +226,9 @@ update self
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── semi-join (hash)
-                ├── columns: x:8(int)
+                ├── columns: x:8(int!null)
                 ├── project
-                │    ├── columns: x:8(int)
+                │    ├── columns: x:8(int!null)
                 │    ├── except
                 │    │    ├── columns: x:6(int!null)
                 │    │    ├── left columns: x:6(int!null)

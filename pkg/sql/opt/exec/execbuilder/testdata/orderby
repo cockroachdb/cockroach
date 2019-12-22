@@ -685,8 +685,8 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 render               ·            ·            (b, a)           ·
  │                   render 0     b            ·                ·
  │                   render 1     a            ·                ·
- └── sort            ·            ·            (column4, a, b)  +column4
-      │              order        +column4     ·                ·
+ └── sort            ·            ·            (column4, a, b)  +a
+      │              order        +a           ·                ·
       └── render     ·            ·            (column4, a, b)  ·
            │         render 0     a            ·                ·
            │         render 1     a            ·                ·
@@ -703,8 +703,8 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 render               ·            ·            (b, a)           ·
  │                   render 0     b            ·                ·
  │                   render 1     a            ·                ·
- └── sort            ·            ·            (column4, a, b)  +column4
-      │              order        +column4     ·                ·
+ └── sort            ·            ·            (column4, a, b)  +b
+      │              order        +b           ·                ·
       └── render     ·            ·            (column4, a, b)  ·
            │         render 0     b            ·                ·
            │         render 1     a            ·                ·
