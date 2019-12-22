@@ -653,7 +653,7 @@ func findRoundingFunction(typ *types.T, precision int) (*tree.FunctionProperties
 // constraint defined on the target table. The mutation operator will report
 // a constraint violation error if the value of the column is false.
 func (mb *mutationBuilder) addCheckConstraintCols() {
-	if mb.tab.CheckCount() > 0 {
+	if mb.tab.CheckCount() != 0 {
 		// Disambiguate names so that references in the constraint expression refer
 		// to the correct columns.
 		mb.disambiguateColumns()
@@ -810,17 +810,7 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	//
 	inScope := mb.outScope.replace()
 	inScope.expr = mb.outScope.expr
-	inScope.cols = make([]scopeColumn, 0, mb.tab.ColumnCount())
-	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		tabCol := mb.tab.Column(i)
-		inScope.cols = append(inScope.cols, scopeColumn{
-			name:   tabCol.ColName(),
-			table:  mb.alias,
-			typ:    tabCol.DatumType(),
-			id:     mb.tabID.ColumnID(i),
-			hidden: tabCol.IsHidden(),
-		})
-	}
+	inScope.appendColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
 	// extraAccessibleCols contains all the columns that the RETURNING
 	// clause can refer to in addition to the table columns. This is useful for
