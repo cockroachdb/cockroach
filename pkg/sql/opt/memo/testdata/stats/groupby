@@ -484,7 +484,7 @@ project
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
  │    │    ├── project
- │    │    │    ├── columns: a:3(bool) b:4(int)
+ │    │    │    ├── columns: a:3(bool!null) b:4(int)
  │    │    │    ├── cardinality: [0 - 3]
  │    │    │    ├── stats: [rows=3, distinct(4)=0.3, null(4)=0.03]
  │    │    │    ├── fd: ()-->(3)

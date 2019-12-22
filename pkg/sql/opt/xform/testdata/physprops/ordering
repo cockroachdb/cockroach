@@ -149,6 +149,33 @@ sort (segmented)
       └── projections
            └── y + 1.0 [type=float]
 
+# Ordering on an expression that gets constant-folded to a simple variable.
+# Example from #43360: a boolean (possibly a placeholder) indicates the sort
+# direction.
+opt
+SELECT * FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
+----
+project
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)  [hidden: column6:6(int!null)]
+ ├── ordering: -(1|6)
+ ├── scan a,rev
+ │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ │    └── ordering: -1
+ └── projections
+      └── variable: x [type=int]
+
+opt
+SELECT * FROM a ORDER BY CASE WHEN true THEN x END ASC, CASE WHEN NOT true THEN x END DESC
+----
+project
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)  [hidden: column5:5(int!null)]
+ ├── ordering: +(1|5)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
+ │    └── ordering: +1
+ └── projections
+      └── variable: x [type=int]
+
 # --------------------------------------------------
 # Select + Project operators (pass through both).
 # --------------------------------------------------
