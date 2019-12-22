@@ -13,25 +13,7 @@ package testutils
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-// ParseScalarExpr parses a scalar expression and converts it to a
-// tree.TypedExpr.
-func ParseScalarExpr(sql string, ivc tree.IndexedVarContainer) (tree.TypedExpr, error) {
-	expr, err := parser.ParseExpr(sql)
-	if err != nil {
-		return nil, err
-	}
-
-	sema := tree.MakeSemaContext()
-	sema.IVarContainer = ivc
-
-	return expr.TypeCheck(&sema, types.Any)
-}
 
 // GetTestFiles returns the set of test files that matches the Glob pattern.
 func GetTestFiles(tb testing.TB, testdataGlob string) []string {
