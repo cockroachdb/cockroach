@@ -169,6 +169,10 @@ define Project {
     Projections ProjectionsExpr
 
     Passthrough ColSet
+
+    # internalFuncDeps are the functional dependencies for the set of input
+    # columns unioned with the set of synthesized columns.
+    internalFuncDeps FuncDepSet
 }
 
 # InnerJoin creates a result set that combines columns from its left and right

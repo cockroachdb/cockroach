@@ -2145,7 +2145,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~18KB, required=[presentation: ?column?:7])
+memo (optimized, ~19KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -2779,7 +2779,7 @@ JOIN child1 USING (pid1, cid1)
 JOIN parent1 USING (pid1)
 ORDER BY pid1
 ----
-memo (optimized, ~32KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:7,pa1:9] [ordering: +1])
+memo (optimized, ~33KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:7,pa1:9] [ordering: +1])
  ├── G1: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
  │    ├── [presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:7,pa1:9] [ordering: +1]
  │    │    ├── best: (project G2="[ordering: +(1|5|8)]" G3 pid1 cid1 gcid1 gca1 ca1 pa1)

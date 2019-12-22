@@ -176,6 +176,20 @@ project
  └── projections
       └── variable: x [type=int]
 
+# Similar case, except the equivalent input column is not being projected.
+opt
+SELECT 1 FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
+----
+project
+ ├── columns: "?column?":5(int!null)  [hidden: column7:7(int!null)]
+ ├── ordering: -7 opt(5)
+ ├── scan a,rev
+ │    ├── columns: x:1(int!null)
+ │    └── ordering: -1
+ └── projections
+      ├── const: 1 [type=int]
+      └── variable: x [type=int]
+
 # --------------------------------------------------
 # Select + Project operators (pass through both).
 # --------------------------------------------------

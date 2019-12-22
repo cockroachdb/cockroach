@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -502,6 +503,55 @@ func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncD
 	}
 }
 
+// init is called when a project expression is created. It initializes the
+// internalFuncDeps field.
+func (prj *ProjectExpr) init(mem *Memo) {
+	// Determine the "internal" functional dependencies (for the union of input
+	// columns and synthesized columns).
+	inputProps := prj.Input.Relational()
+	prj.internalFuncDeps.CopyFrom(&inputProps.FuncDeps)
+	for i := range prj.Projections {
+		item := &prj.Projections[i]
+		if variable, ok := item.Element.(*VariableExpr); ok {
+			// Handle any column that is a direct reference to another column. The
+			// optimizer sometimes constructs these in order to generate different
+			// column IDs; they can also show up after constant-folding e.g. an ORDER
+			// BY expression.
+			prj.internalFuncDeps.AddEquivalency(variable.Col, item.Col)
+		}
+		if !item.scalar.CanHaveSideEffects {
+			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
+
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			//
+			// We only add the FD if composite types are not involved.
+			//
+			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// arithmetic.
+			composite := false
+			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
+				typ := mem.Metadata().ColumnMeta(i).Type
+				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+					composite = true
+					break
+				}
+			}
+			if !composite {
+				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
+			}
+		}
+	}
+}
+
+// InternalFDs returns the functional dependencies for the set of all input
+// columns plus the synthesized columns.
+func (proj *ProjectExpr) InternalFDs() *props.FuncDepSet {
+	return &proj.internalFuncDeps
+}
+
 // ExprIsNeverNull makes a best-effort attempt to prove that the provided
 // scalar is always non-NULL, given the set of outer columns that are known
 // to be not null. This is particularly useful with check constraints.
@@ -574,4 +624,48 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	default:
 		return false
 	}
+}
+
+// DeriveInternalFDs returns a FuncDepSet for the set of all input columns plus
+// the synthesized columns.
+func (e *ProjectExpr) DeriveInternalFDs() props.FuncDepSet {
+	inputProps := e.Input.Relational()
+	var fds props.FuncDepSet
+	fds.CopyFrom(&inputProps.FuncDeps)
+
+	for i := range e.Projections {
+		item := &e.Projections[i]
+		if variable, ok := item.Element.(*VariableExpr); ok {
+			// Handle any column that is a direct reference to another column. The
+			// optimizer sometimes constructs these in order to generate different
+			// column IDs; they can also show up after constant-folding expressions
+			// that simplify to a simple column reference.
+			fds.AddEquivalency(variable.Col, item.Col)
+		}
+		if !item.scalar.CanHaveSideEffects {
+			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
+
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			//
+			// We only add the FD if composite types are not involved.
+			//
+			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// arithmetic.
+			composite := false
+			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
+				typ := e.Memo().Metadata().ColumnMeta(i).Type
+				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+					composite = true
+					break
+				}
+			}
+			if !composite {
+				fds.AddSynthesizedCol(from, item.Col)
+			}
+		}
+	}
+	return fds
 }

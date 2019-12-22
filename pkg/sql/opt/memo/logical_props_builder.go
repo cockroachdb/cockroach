@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -288,43 +287,9 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 
 	// Functional Dependencies
 	// -----------------------
-	// Start with copy of FuncDepSet, add synthesized column dependencies, and then
-	// remove columns that are not projected.
-	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	for i := range prj.Projections {
-		item := &prj.Projections[i]
-		if variable, ok := item.Element.(*VariableExpr); ok {
-			// Handle any column that is a direct reference to another column. The
-			// optimizer sometimes constructs these in order to generate different
-			// column IDs; they can also show up after constant-folding e.g. an ORDER
-			// BY expression.
-			rel.FuncDeps.AddEquivalency(variable.Col, item.Col)
-		}
-		if !item.scalar.CanHaveSideEffects {
-			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
-
-			// We want to set up the FD: from --> colID.
-			// This does not necessarily hold for "composite" types like decimals or
-			// collated strings. For example if d is a decimal, d::TEXT can have
-			// different values for equal values of d, like 1 and 1.0.
-			//
-			// We only add the FD if composite types are not involved.
-			//
-			// TODO(radu): add a whitelist of expressions/operators that are ok, like
-			// arithmetic.
-			composite := false
-			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-				typ := b.mem.Metadata().ColumnMeta(i).Type
-				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
-					composite = true
-					break
-				}
-			}
-			if !composite {
-				rel.FuncDeps.AddSynthesizedCol(from, item.Col)
-			}
-		}
-	}
+	// Start with the internal FuncDepSet and remove columns that are not
+	// projected.
+	rel.FuncDeps.CopyFrom(&prj.internalFuncDeps)
 	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
