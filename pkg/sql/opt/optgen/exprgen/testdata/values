@@ -31,7 +31,7 @@ expr
 )
 ----
 project
- ├── columns: y:2(int) x:1(int!null)
+ ├── columns: y:2(int!null) x:1(int!null)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 0.05

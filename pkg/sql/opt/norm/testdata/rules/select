@@ -496,7 +496,7 @@ select
  ├── side-effects
  ├── fd: ()-->(2,3,6)
  ├── project
- │    ├── columns: div:6(decimal) i:2(int!null) f:3(float!null)
+ │    ├── columns: div:6(decimal!null) i:2(int!null) f:3(float!null)
  │    ├── side-effects
  │    ├── fd: ()-->(2,3)
  │    ├── select

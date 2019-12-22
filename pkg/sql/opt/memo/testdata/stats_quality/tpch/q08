@@ -83,11 +83,11 @@ sort
       │    ├── fd: (61)-->(64,65)
       │    ├── project
       │    │    ├── save-table-name: q8_project_4
-      │    │    ├── columns: column63:63(float) o_year:61(float) volume:62(float)
+      │    │    ├── columns: column63:63(float!null) o_year:61(float) volume:62(float!null)
       │    │    ├── stats: [rows=2908.77768, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(63)=2896.99622, null(63)=0]
       │    │    ├── project
       │    │    │    ├── save-table-name: q8_project_5
-      │    │    │    ├── columns: o_year:61(float) volume:62(float) n2.n_name:55(char!null)
+      │    │    │    ├── columns: o_year:61(float) volume:62(float!null) n2.n_name:55(char!null)
       │    │    │    ├── stats: [rows=2908.77768, distinct(55)=24.9055527, null(55)=0, distinct(61)=717.329701, null(61)=0, distinct(62)=2896.77415, null(62)=0, distinct(55,62)=2896.99622, null(55,62)=0]
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q8_inner_join_6

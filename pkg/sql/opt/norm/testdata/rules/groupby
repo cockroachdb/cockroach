@@ -262,12 +262,12 @@ SELECT min(s) FROM (SELECT i+1 AS i2, s FROM a) GROUP BY i2
 project
  ├── columns: min:7(string)
  └── group-by
-      ├── columns: i2:6(int) min:7(string)
-      ├── grouping columns: i2:6(int)
+      ├── columns: i2:6(int!null) min:7(string)
+      ├── grouping columns: i2:6(int!null)
       ├── key: (6)
       ├── fd: (6)-->(7)
       ├── project
-      │    ├── columns: i2:6(int) s:4(string!null)
+      │    ├── columns: i2:6(int!null) s:4(string!null)
       │    ├── scan a
       │    │    ├── columns: i:2(int!null) s:4(string!null)
       │    │    └── key: (2,4)

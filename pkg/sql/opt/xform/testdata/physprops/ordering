@@ -109,7 +109,7 @@ opt
 SELECT x+1 AS r, y FROM a ORDER BY x, y DESC
 ----
 project
- ├── columns: r:5(int) y:2(float!null)  [hidden: x:1(int!null)]
+ ├── columns: r:5(int!null) y:2(float!null)  [hidden: x:1(int!null)]
  ├── ordering: +1,-2
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -138,10 +138,10 @@ opt
 SELECT x, y+1 AS computed, y FROM a ORDER BY x, computed
 ----
 sort (segmented)
- ├── columns: x:1(int!null) computed:5(float) y:2(float!null)
+ ├── columns: x:1(int!null) computed:5(float!null) y:2(float!null)
  ├── ordering: +1,+5
  └── project
-      ├── columns: computed:5(float) x:1(int!null) y:2(float!null)
+      ├── columns: computed:5(float!null) x:1(int!null) y:2(float!null)
       ├── ordering: +1
       ├── scan a
       │    ├── columns: x:1(int!null) y:2(float!null)
@@ -176,6 +176,20 @@ project
  └── projections
       └── variable: x [type=int]
 
+# Similar case, except the equivalent input column is not being projected.
+opt
+SELECT 1 FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
+----
+project
+ ├── columns: "?column?":5(int!null)  [hidden: column7:7(int!null)]
+ ├── ordering: -7 opt(5)
+ ├── scan a,rev
+ │    ├── columns: x:1(int!null)
+ │    └── ordering: -1
+ └── projections
+      ├── const: 1 [type=int]
+      └── variable: x [type=int]
+
 # --------------------------------------------------
 # Select + Project operators (pass through both).
 # --------------------------------------------------
@@ -185,7 +199,7 @@ opt
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
 project
- ├── columns: y:2(float!null) z:5(int)  [hidden: x:1(int!null)]
+ ├── columns: y:2(float!null) z:5(int!null)  [hidden: x:1(int!null)]
  ├── ordering: +1,-2
  ├── select
  │    ├── columns: x:1(int!null) y:2(float!null)
@@ -1528,7 +1542,7 @@ sort
       │    │    ├──  upsert_b:12 => abc.b:2
       │    │    └──  upsert_c:13 => abc.c:3
       │    └── project
-      │         ├── columns: upsert_a:11(int) upsert_b:12(int) upsert_c:13(int) x:4(int!null) y:5(int!null) z:6(int!null) abc.a:7(int) abc.b:8(int) abc.c:9(int)
+      │         ├── columns: upsert_a:11(int!null) upsert_b:12(int) upsert_c:13(int) x:4(int!null) y:5(int!null) z:6(int!null) abc.a:7(int) abc.b:8(int) abc.c:9(int)
       │         ├── left-join (lookup abc)
       │         │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null) abc.a:7(int) abc.b:8(int) abc.c:9(int)
       │         │    ├── key columns: [4 5 6] = [7 8 9]

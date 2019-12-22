@@ -169,6 +169,14 @@ define Project {
     Projections ProjectionsExpr
 
     Passthrough ColSet
+
+    # notNullCols is the set of columns (input or synthesized) that are known to
+    # be not-null.
+    notNullCols ColSet
+
+    # internalFuncDeps are the functional dependencies between all columns
+    # (input or synthesized).
+    internalFuncDeps FuncDepSet
 }
 
 # InnerJoin creates a result set that combines columns from its left and right

@@ -107,7 +107,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int, int})
+           │    ├── columns: column4:4(tuple{int, int, int}!null)
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
            │    │    ├── values
@@ -141,9 +141,9 @@ project
            │    └── const: 3 [type=int]
            └── subquery [type=tuple{int, int, int}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int, int})
+                     ├── columns: column4:4(tuple{int, int, int}!null)
                      └── project
-                          ├── columns: column4:4(tuple{int, int, int})
+                          ├── columns: column4:4(tuple{int, int, int}!null)
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
@@ -173,9 +173,9 @@ project
            │    └── const: 3 [type=int]
            └── subquery [type=tuple{int, int, int}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int, int})
+                     ├── columns: column4:4(tuple{int, int, int}!null)
                      └── project
-                          ├── columns: column4:4(tuple{int, int, int})
+                          ├── columns: column4:4(tuple{int, int, int}!null)
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
                           │    ├── values
@@ -201,9 +201,9 @@ project
       └── eq [type=bool]
            ├── subquery [type=tuple{int, int, int}]
            │    └── max1-row
-           │         ├── columns: column7:7(tuple{int, int, int})
+           │         ├── columns: column7:7(tuple{int, int, int}!null)
            │         └── project
-           │              ├── columns: column7:7(tuple{int, int, int})
+           │              ├── columns: column7:7(tuple{int, int, int}!null)
            │              ├── project
            │              │    ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
            │              │    ├── values
@@ -219,9 +219,9 @@ project
            │                        └── variable: z [type=int]
            └── subquery [type=tuple{int, int, int}]
                 └── max1-row
-                     ├── columns: column8:8(tuple{int, int, int})
+                     ├── columns: column8:8(tuple{int, int, int}!null)
                      └── project
-                          ├── columns: column8:8(tuple{int, int, int})
+                          ├── columns: column8:8(tuple{int, int, int}!null)
                           ├── project
                           │    ├── columns: a:4(int!null) b:5(int!null) c:6(int!null)
                           │    ├── values
@@ -302,7 +302,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column5:5(tuple{int, int})
+           │    ├── columns: column5:5(tuple{int, int}!null)
            │    ├── project
            │    │    ├── columns: c:3(int!null) d:4(int!null)
            │    │    ├── values
@@ -316,9 +316,9 @@ project
            │              └── variable: d [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: column6:6(tuple{int, int})
+                     ├── columns: column6:6(tuple{int, int}!null)
                      └── project
-                          ├── columns: column6:6(tuple{int, int})
+                          ├── columns: column6:6(tuple{int, int}!null)
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null)
                           │    ├── values
@@ -346,9 +346,9 @@ project
       └── in [type=bool]
            ├── subquery [type=tuple{int, int}]
            │    └── max1-row
-           │         ├── columns: column3:3(tuple{int, int})
+           │         ├── columns: column3:3(tuple{int, int}!null)
            │         └── project
-           │              ├── columns: column3:3(tuple{int, int})
+           │              ├── columns: column3:3(tuple{int, int}!null)
            │              ├── project
            │              │    ├── columns: a:1(int!null) b:2(int!null)
            │              │    ├── values
@@ -379,7 +379,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int})
+           │    ├── columns: column4:4(tuple{int, int}!null)
            │    ├── project
            │    │    ├── columns: b:2(int!null) c:3(int!null)
            │    │    ├── values
@@ -393,9 +393,9 @@ project
            │              └── variable: c [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: a:1(tuple{int, int})
+                     ├── columns: a:1(tuple{int, int}!null)
                      └── project
-                          ├── columns: a:1(tuple{int, int})
+                          ├── columns: a:1(tuple{int, int}!null)
                           ├── values
                           │    └── tuple [type=tuple]
                           └── projections
@@ -414,9 +414,9 @@ project
       └── in [type=bool]
            ├── subquery [type=tuple{int, int}]
            │    └── max1-row
-           │         ├── columns: a:1(tuple{int, int})
+           │         ├── columns: a:1(tuple{int, int}!null)
            │         └── project
-           │              ├── columns: a:1(tuple{int, int})
+           │              ├── columns: a:1(tuple{int, int}!null)
            │              ├── values
            │              │    └── tuple [type=tuple]
            │              └── projections
@@ -442,7 +442,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: c:3(tuple{int, int})
+           │    ├── columns: c:3(tuple{int, int}!null)
            │    ├── values
            │    │    └── tuple [type=tuple]
            │    └── projections
@@ -451,9 +451,9 @@ project
            │              └── const: 2 [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: column4:4(tuple{int, int})
+                     ├── columns: column4:4(tuple{int, int}!null)
                      └── project
-                          ├── columns: column4:4(tuple{int, int})
+                          ├── columns: column4:4(tuple{int, int}!null)
                           ├── project
                           │    ├── columns: a:1(int!null) b:2(int!null)
                           │    ├── values
@@ -476,7 +476,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: b:2(tuple{int, int})
+           │    ├── columns: b:2(tuple{int, int}!null)
            │    ├── values
            │    │    └── tuple [type=tuple]
            │    └── projections
@@ -485,9 +485,9 @@ project
            │              └── const: 2 [type=int]
            └── subquery [type=tuple{int, int}]
                 └── max1-row
-                     ├── columns: a:1(tuple{int, int})
+                     ├── columns: a:1(tuple{int, int}!null)
                      └── project
-                          ├── columns: a:1(tuple{int, int})
+                          ├── columns: a:1(tuple{int, int}!null)
                           ├── values
                           │    └── tuple [type=tuple]
                           └── projections
@@ -522,7 +522,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int, int}!null)
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
@@ -565,7 +565,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column3:3(tuple{int, int})
+           │    ├── columns: column3:3(tuple{int, int}!null)
            │    ├── project
            │    │    ├── columns: a:1(int!null) b:2(int!null)
            │    │    ├── values
@@ -610,7 +610,7 @@ project
       └── not [type=bool]
            └── any: ne [type=bool]
                 ├── project
-                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── columns: column3:3(tuple{int, int}!null)
                 │    ├── project
                 │    │    ├── columns: a:1(int!null) b:2(int!null)
                 │    │    ├── values
@@ -1704,9 +1704,9 @@ project
                      └── projections
                           └── subquery [type=int]
                                └── max1-row
-                                    ├── columns: r:12(int)
+                                    ├── columns: r:12(int!null)
                                     └── project
-                                         ├── columns: r:12(int)
+                                         ├── columns: r:12(int!null)
                                          ├── select
                                          │    ├── columns: a:10(int!null) a:11(int!null)
                                          │    ├── group-by
@@ -1919,7 +1919,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: column4:4(tuple{int, int, int})
+           │    ├── columns: column4:4(tuple{int, int, int}!null)
            │    ├── project
            │    │    ├── columns: "?column?":1(int!null) "?column?":2(int!null) "?column?":3(int!null)
            │    │    ├── values

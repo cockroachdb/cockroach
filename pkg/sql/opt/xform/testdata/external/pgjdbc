@@ -100,13 +100,13 @@ project
  │    │    └── filters
  │    │         └── t.typnamespace = n.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
  │    ├── max1-row
- │    │    ├── columns: case:70(string)
+ │    │    ├── columns: case:70(string!null)
  │    │    ├── outer: (25)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(70)
  │    │    └── project
- │    │         ├── columns: case:70(string)
+ │    │         ├── columns: case:70(string!null)
  │    │         ├── outer: (25)
  │    │         ├── select
  │    │         │    ├── columns: pg_type.oid:38(oid!null) pg_type.typname:39(name!null)

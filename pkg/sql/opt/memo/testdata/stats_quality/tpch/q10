@@ -78,7 +78,7 @@ limit
  │         ├── fd: (1)-->(2,3,5,6,8,35,39)
  │         ├── project
  │         │    ├── save-table-name: q10_project_4
- │         │    ├── columns: column38:38(float) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null)
+ │         │    ├── columns: column38:38(float!null) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:35(char!null)
  │         │    ├── stats: [rows=91240.8317, distinct(1)=42917.9526, null(1)=0, distinct(2)=68356.4353, null(2)=0, distinct(3)=68348.5807, null(3)=0, distinct(5)=68356.4353, null(5)=0, distinct(6)=67126.327, null(6)=0, distinct(8)=68271.7501, null(8)=0, distinct(35)=25, null(35)=0, distinct(38)=88236.775, null(38)=0]
  │         │    ├── fd: (1)-->(2,3,5,6,8,35)
  │         │    ├── inner-join (hash)
