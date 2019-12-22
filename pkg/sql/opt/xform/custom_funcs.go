@@ -120,302 +120,6 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //
 // ----------------------------------------------------------------------
 
-// checkConstraintFilters generates all filters that we can derive from the
-// check constraints. These are constraints that have been validated and are
-// non-nullable. We only use non-nullable check constraints because they
-// behave differently from filters on NULL. Check constraints are satisfied
-// when their expression evaluates to NULL, while filters are not.
-//
-// For example, the check constraint a > 1 is satisfied if a is NULL but the
-// equivalent filter a > 1 is not.
-//
-// These filters do not really filter any rows, they are rather facts or
-// guarantees about the data but treating them as filters may allow some
-// indexes to be constrained and used. Consider the following example:
-//
-// CREATE TABLE abc (
-// 	a INT PRIMARY KEY,
-// 	b INT NOT NULL,
-// 	c STRING NOT NULL,
-// 	CHECK (a < 10 AND a > 1),
-// 	CHECK (b < 10 AND b > 1),
-// 	CHECK (c in ('first', 'second')),
-// 	INDEX secondary (b, a),
-// 	INDEX tertiary (c, b, a))
-//
-// Now consider the query: SELECT a, b WHERE a > 5
-//
-// Notice that the filter provided previously wouldn't let the optimizer use
-// the secondary or tertiary indexes. However, given that we can use the
-// constraints on a, b and c, we can actually use the secondary and tertiary
-// indexes. In fact, for the above query we can do the following:
-//
-// select
-//  ├── columns: a:1(int!null) b:2(int!null)
-//  ├── scan abc@tertiary
-//  │		├── columns: a:1(int!null) b:2(int!null)
-//  │		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
-//  └── filters
-//        └── gt [type=bool]
-//            ├── variable: a [type=int]
-//            └── const: 5 [type=int]
-//
-// Similarly, the secondary index could also be used. All such index scans
-// will be added to the memo group.
-func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
-	md := c.e.mem.Metadata()
-	tab := md.Table(tabID)
-	tabMeta := md.TableMeta(tabID)
-
-	// Maintain a ColSet of non-nullable columns.
-	var notNullCols opt.ColSet
-	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
-			notNullCols.Add(tabID.ColumnID(i))
-		}
-	}
-
-	checkFilters := make(memo.FiltersExpr, 0, len(tabMeta.Constraints))
-	for _, checkConstraint := range tabMeta.Constraints {
-		// Check constraints that are guaranteed to not evaluate to NULL
-		// are the only ones converted into filters.
-		if memo.ExprIsNeverNull(checkConstraint, notNullCols) {
-			checkFilters = append(checkFilters, c.e.f.ConstructFiltersItem(checkConstraint))
-		}
-	}
-
-	return checkFilters
-}
-
-// columnComparison returns a filter that compares the index columns to the
-// given values. The comp parameter can be -1, 0 or 1 to indicate whether the
-// comparison type of the filter should be a Lt, Eq or Gt.
-func (c *CustomFuncs) columnComparison(
-	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
-) opt.ScalarExpr {
-	colTypes := make([]types.T, len(values))
-	for i := range values {
-		colTypes[i] = *values[i].ResolvedType()
-	}
-
-	columnVariables := make(memo.ScalarListExpr, len(values))
-	scalarValues := make(memo.ScalarListExpr, len(values))
-
-	for i, val := range values {
-		colID := tabID.ColumnID(index.Column(i).Ordinal)
-		columnVariables[i] = c.e.f.ConstructVariable(colID)
-		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
-	}
-
-	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
-	valsTuple := c.e.f.ConstructTuple(scalarValues, types.MakeTuple(colTypes))
-	if comp == 0 {
-		return c.e.f.ConstructEq(colsTuple, valsTuple)
-	} else if comp > 0 {
-		return c.e.f.ConstructGt(colsTuple, valsTuple)
-	}
-
-	return c.e.f.ConstructLt(colsTuple, valsTuple)
-}
-
-// isPrefixOf returns whether pre is a prefix of other.
-func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
-	if len(pre) > len(other) {
-		// Pre can't be a prefix of other as it is larger.
-		return false
-	}
-	for i := range pre {
-		if pre[i].Compare(c.e.evalCtx, other[i]) != 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
-// inBetweenFilters returns a set of filters that are required to cover all the
-// in-between spans given a set of partition values. This is required for
-// correctness reasons; although values are unlikely to exist between defined
-// partitions, they may exist and so the constraints of the scan must incorporate
-// these spans.
-func (c *CustomFuncs) inBetweenFilters(
-	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
-) memo.FiltersExpr {
-	var inBetween memo.ScalarListExpr
-
-	if len(partitionValues) == 0 {
-		return memo.EmptyFiltersExpr
-	}
-
-	// Sort the partitionValues lexicographically.
-	sort.Slice(partitionValues, func(i, j int) bool {
-		return partitionValues[i].Compare(c.e.evalCtx, partitionValues[j]) < 0
-	})
-
-	// Add the beginning span.
-	beginExpr := c.columnComparison(tabID, index, partitionValues[0], -1)
-	inBetween = append(inBetween, beginExpr)
-
-	// Add the end span.
-	endExpr := c.columnComparison(tabID, index, partitionValues[len(partitionValues)-1], 1)
-	inBetween = append(inBetween, endExpr)
-
-	// Add the in-between spans.
-	for i := 1; i < len(partitionValues); i++ {
-		lowerPartition := partitionValues[i-1]
-		higherPartition := partitionValues[i]
-
-		// The between spans will be greater than the lower partition but smaller
-		// than the higher partition.
-		var largerThanLower opt.ScalarExpr
-		if c.isPrefixOf(lowerPartition, higherPartition) {
-
-			// Since the lower partition is a prefix of the higher partition, the span
-			// must begin with the values defined in the lower partition. Consider the
-			// partitions ('us') and ('us', 'cali'). In this case the in-between span
-			// should be [/'us - /'us'/'cali').
-			largerThanLower = c.columnComparison(tabID, index, lowerPartition, 0)
-		} else {
-			largerThanLower = c.columnComparison(tabID, index, lowerPartition, 1)
-		}
-
-		smallerThanHigher := c.columnComparison(tabID, index, higherPartition, -1)
-
-		// Add the in-between span to the list of inBetween spans.
-		betweenExpr := c.e.f.ConstructAnd(largerThanLower, smallerThanHigher)
-		inBetween = append(inBetween, betweenExpr)
-	}
-
-	// Return an Or expression between all the expressions.
-	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(inBetween))}
-}
-
-// inPartitionFilters returns a FiltersExpr that is required to cover
-// all the partition spans. For each partition defined, inPartitionFilters
-// will contain a FilterItem that restricts the index columns by
-// the partition values. Use inBetweenFilters to generate filters that
-// cover all the spans that the partitions don't cover.
-func (c *CustomFuncs) inPartitionFilters(
-	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
-) memo.FiltersExpr {
-	var partitions memo.ScalarListExpr
-
-	// Sort the partition values so the most selective ones are first.
-	sort.Slice(partitionValues, func(i, j int) bool {
-		return len(partitionValues[i]) >= len(partitionValues[j])
-	})
-
-	// Construct all the partition filters.
-	for i, partition := range partitionValues {
-
-		// Only add this partition if a more selective partition hasn't
-		// been defined on the same partition.
-		partitionSeen := false
-		for j, moreSelectivePartition := range partitionValues {
-			if j >= i {
-				break
-			}
-
-			// At this point we know whether the current partition was seen before.
-			partitionSeen = c.isPrefixOf(partition, moreSelectivePartition)
-			if partitionSeen {
-				break
-			}
-		}
-
-		// This partition is a prefix of a more selective partition and so,
-		// will be taken care of by the in-between partitions.
-		if partitionSeen {
-			continue
-		}
-
-		// Get an expression that restricts the values of the index to the
-		// partition values.
-		inPartition := c.columnComparison(tabID, index, partition, 0)
-		partitions = append(partitions, inPartition)
-	}
-
-	// Return an Or expression between all the expressions.
-	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(partitions))}
-}
-
-// constructOr constructs an expression that is an OR between all the
-// provided conditions
-func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
-	if len(conditions) == 0 {
-		return c.e.f.ConstructFalse()
-	}
-
-	orExpr := conditions[0]
-	for i := 1; i < len(conditions); i++ {
-		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
-	}
-
-	return orExpr
-}
-
-// partitionValuesFilters constructs filters with the purpose of
-// constraining an index scan using the partition values similar to
-// the filters added from the check constraints (see
-// checkConstraintFilters). It returns two sets of filters, one to
-// create the partition spans, and one to create the spans for all
-// the in between ranges that are not part of any partitions.
-//
-// For example consider the following table and partitioned index:
-//
-// CREATE TABLE orders (
-//     region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, created_at TIMESTAMP NOT NULL,
-//     PRIMARY KEY (region, id)
-// )
-//
-// CREATE INDEX orders_by_created_at
-//     ON orders (region, created_at, id)
-//     STORING (total)
-//     PARTITION BY LIST (region)
-//         (
-//             PARTITION us_east1 VALUES IN ('us-east1'),
-//             PARTITION us_west1 VALUES IN ('us-west1'),
-//             PARTITION europe_west2 VALUES IN ('europe-west2')
-//         )
-//
-// Now consider the following query:
-// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
-//
-// Normally, the index would not be utilized but because we know what the
-// partition values are for the prefix of the index, we can generate
-// filters that allow us to use the index (adding the appropriate in-between
-// filters to catch all the values that are not part of the partitions).
-// By doing so, we get the following plan:
-// ----
-// scalar-group-by
-//  ├── select
-//  │    ├── scan orders@orders_by_created_at
-//  │    │    └── constraint: /1/4/2: [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/e'europe-west2\x00'/'2019-05-04 00:00:00+00:00' - /'us-east1') [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-east1\x00'/'2019-05-04 00:00:00+00:00' - /'us-west1') [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-west1\x00'/'2019-05-04 00:00:00+00:00' - ]
-//  │    └── filters
-//  │         └── (created_at >= '2019-05-04 00:00:00+00:00') AND (created_at < '2019-05-05 00:00:00+00:00')
-//  └── aggregations
-//       └── sum
-//            └── variable: total
-//
-func (c *CustomFuncs) partitionValuesFilters(
-	tabID opt.TableID, index cat.Index,
-) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
-
-	// Find all the partition values
-	partitionValues := index.PartitionByListPrefixes()
-	if len(partitionValues) == 0 {
-		return partitionFilter, inBetweenFilter
-	}
-
-	// Get the in partition expressions.
-	inPartition := c.inPartitionFilters(tabID, index, partitionValues)
-
-	// Get the in between expressions.
-	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
-
-	return inPartition, inBetween
-}
-
 // GenerateConstrainedScans enumerates all secondary indexes on the Scan
 // operator's table and tries to push the given Select filter into new
 // constrained Scan operators using those indexes. Since this only needs to be
@@ -649,6 +353,302 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		sb.build(grp)
 	}
+}
+
+// checkConstraintFilters generates all filters that we can derive from the
+// check constraints. These are constraints that have been validated and are
+// non-nullable. We only use non-nullable check constraints because they
+// behave differently from filters on NULL. Check constraints are satisfied
+// when their expression evaluates to NULL, while filters are not.
+//
+// For example, the check constraint a > 1 is satisfied if a is NULL but the
+// equivalent filter a > 1 is not.
+//
+// These filters do not really filter any rows, they are rather facts or
+// guarantees about the data but treating them as filters may allow some
+// indexes to be constrained and used. Consider the following example:
+//
+// CREATE TABLE abc (
+// 	a INT PRIMARY KEY,
+// 	b INT NOT NULL,
+// 	c STRING NOT NULL,
+// 	CHECK (a < 10 AND a > 1),
+// 	CHECK (b < 10 AND b > 1),
+// 	CHECK (c in ('first', 'second')),
+// 	INDEX secondary (b, a),
+// 	INDEX tertiary (c, b, a))
+//
+// Now consider the query: SELECT a, b WHERE a > 5
+//
+// Notice that the filter provided previously wouldn't let the optimizer use
+// the secondary or tertiary indexes. However, given that we can use the
+// constraints on a, b and c, we can actually use the secondary and tertiary
+// indexes. In fact, for the above query we can do the following:
+//
+// select
+//  ├── columns: a:1(int!null) b:2(int!null)
+//  ├── scan abc@tertiary
+//  │		├── columns: a:1(int!null) b:2(int!null)
+//  │		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+//  └── filters
+//        └── gt [type=bool]
+//            ├── variable: a [type=int]
+//            └── const: 5 [type=int]
+//
+// Similarly, the secondary index could also be used. All such index scans
+// will be added to the memo group.
+func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
+	md := c.e.mem.Metadata()
+	tab := md.Table(tabID)
+	tabMeta := md.TableMeta(tabID)
+
+	// Maintain a ColSet of non-nullable columns.
+	var notNullCols opt.ColSet
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			notNullCols.Add(tabID.ColumnID(i))
+		}
+	}
+
+	checkFilters := make(memo.FiltersExpr, 0, len(tabMeta.Constraints))
+	for _, checkConstraint := range tabMeta.Constraints {
+		// Check constraints that are guaranteed to not evaluate to NULL
+		// are the only ones converted into filters.
+		if memo.ExprIsNeverNull(checkConstraint, notNullCols) {
+			checkFilters = append(checkFilters, c.e.f.ConstructFiltersItem(checkConstraint))
+		}
+	}
+
+	return checkFilters
+}
+
+// inBetweenFilters returns a set of filters that are required to cover all the
+// in-between spans given a set of partition values. This is required for
+// correctness reasons; although values are unlikely to exist between defined
+// partitions, they may exist and so the constraints of the scan must incorporate
+// these spans.
+func (c *CustomFuncs) inBetweenFilters(
+	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
+) memo.FiltersExpr {
+	var inBetween memo.ScalarListExpr
+
+	if len(partitionValues) == 0 {
+		return memo.EmptyFiltersExpr
+	}
+
+	// Sort the partitionValues lexicographically.
+	sort.Slice(partitionValues, func(i, j int) bool {
+		return partitionValues[i].Compare(c.e.evalCtx, partitionValues[j]) < 0
+	})
+
+	// Add the beginning span.
+	beginExpr := c.columnComparison(tabID, index, partitionValues[0], -1)
+	inBetween = append(inBetween, beginExpr)
+
+	// Add the end span.
+	endExpr := c.columnComparison(tabID, index, partitionValues[len(partitionValues)-1], 1)
+	inBetween = append(inBetween, endExpr)
+
+	// Add the in-between spans.
+	for i := 1; i < len(partitionValues); i++ {
+		lowerPartition := partitionValues[i-1]
+		higherPartition := partitionValues[i]
+
+		// The between spans will be greater than the lower partition but smaller
+		// than the higher partition.
+		var largerThanLower opt.ScalarExpr
+		if c.isPrefixOf(lowerPartition, higherPartition) {
+
+			// Since the lower partition is a prefix of the higher partition, the span
+			// must begin with the values defined in the lower partition. Consider the
+			// partitions ('us') and ('us', 'cali'). In this case the in-between span
+			// should be [/'us - /'us'/'cali').
+			largerThanLower = c.columnComparison(tabID, index, lowerPartition, 0)
+		} else {
+			largerThanLower = c.columnComparison(tabID, index, lowerPartition, 1)
+		}
+
+		smallerThanHigher := c.columnComparison(tabID, index, higherPartition, -1)
+
+		// Add the in-between span to the list of inBetween spans.
+		betweenExpr := c.e.f.ConstructAnd(largerThanLower, smallerThanHigher)
+		inBetween = append(inBetween, betweenExpr)
+	}
+
+	// Return an Or expression between all the expressions.
+	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(inBetween))}
+}
+
+// columnComparison returns a filter that compares the index columns to the
+// given values. The comp parameter can be -1, 0 or 1 to indicate whether the
+// comparison type of the filter should be a Lt, Eq or Gt.
+func (c *CustomFuncs) columnComparison(
+	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
+) opt.ScalarExpr {
+	colTypes := make([]types.T, len(values))
+	for i := range values {
+		colTypes[i] = *values[i].ResolvedType()
+	}
+
+	columnVariables := make(memo.ScalarListExpr, len(values))
+	scalarValues := make(memo.ScalarListExpr, len(values))
+
+	for i, val := range values {
+		colID := tabID.ColumnID(index.Column(i).Ordinal)
+		columnVariables[i] = c.e.f.ConstructVariable(colID)
+		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
+	}
+
+	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
+	valsTuple := c.e.f.ConstructTuple(scalarValues, types.MakeTuple(colTypes))
+	if comp == 0 {
+		return c.e.f.ConstructEq(colsTuple, valsTuple)
+	} else if comp > 0 {
+		return c.e.f.ConstructGt(colsTuple, valsTuple)
+	}
+
+	return c.e.f.ConstructLt(colsTuple, valsTuple)
+}
+
+// inPartitionFilters returns a FiltersExpr that is required to cover
+// all the partition spans. For each partition defined, inPartitionFilters
+// will contain a FilterItem that restricts the index columns by
+// the partition values. Use inBetweenFilters to generate filters that
+// cover all the spans that the partitions don't cover.
+func (c *CustomFuncs) inPartitionFilters(
+	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
+) memo.FiltersExpr {
+	var partitions memo.ScalarListExpr
+
+	// Sort the partition values so the most selective ones are first.
+	sort.Slice(partitionValues, func(i, j int) bool {
+		return len(partitionValues[i]) >= len(partitionValues[j])
+	})
+
+	// Construct all the partition filters.
+	for i, partition := range partitionValues {
+
+		// Only add this partition if a more selective partition hasn't
+		// been defined on the same partition.
+		partitionSeen := false
+		for j, moreSelectivePartition := range partitionValues {
+			if j >= i {
+				break
+			}
+
+			// At this point we know whether the current partition was seen before.
+			partitionSeen = c.isPrefixOf(partition, moreSelectivePartition)
+			if partitionSeen {
+				break
+			}
+		}
+
+		// This partition is a prefix of a more selective partition and so,
+		// will be taken care of by the in-between partitions.
+		if partitionSeen {
+			continue
+		}
+
+		// Get an expression that restricts the values of the index to the
+		// partition values.
+		inPartition := c.columnComparison(tabID, index, partition, 0)
+		partitions = append(partitions, inPartition)
+	}
+
+	// Return an Or expression between all the expressions.
+	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(partitions))}
+}
+
+// isPrefixOf returns whether pre is a prefix of other.
+func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
+	if len(pre) > len(other) {
+		// Pre can't be a prefix of other as it is larger.
+		return false
+	}
+	for i := range pre {
+		if pre[i].Compare(c.e.evalCtx, other[i]) != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// constructOr constructs an expression that is an OR between all the
+// provided conditions
+func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr {
+	if len(conditions) == 0 {
+		return c.e.f.ConstructFalse()
+	}
+
+	orExpr := conditions[0]
+	for i := 1; i < len(conditions); i++ {
+		orExpr = c.e.f.ConstructOr(conditions[i], orExpr)
+	}
+
+	return orExpr
+}
+
+// partitionValuesFilters constructs filters with the purpose of
+// constraining an index scan using the partition values similar to
+// the filters added from the check constraints (see
+// checkConstraintFilters). It returns two sets of filters, one to
+// create the partition spans, and one to create the spans for all
+// the in between ranges that are not part of any partitions.
+//
+// For example consider the following table and partitioned index:
+//
+// CREATE TABLE orders (
+//     region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, created_at TIMESTAMP NOT NULL,
+//     PRIMARY KEY (region, id)
+// )
+//
+// CREATE INDEX orders_by_created_at
+//     ON orders (region, created_at, id)
+//     STORING (total)
+//     PARTITION BY LIST (region)
+//         (
+//             PARTITION us_east1 VALUES IN ('us-east1'),
+//             PARTITION us_west1 VALUES IN ('us-west1'),
+//             PARTITION europe_west2 VALUES IN ('europe-west2')
+//         )
+//
+// Now consider the following query:
+// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+//
+// Normally, the index would not be utilized but because we know what the
+// partition values are for the prefix of the index, we can generate
+// filters that allow us to use the index (adding the appropriate in-between
+// filters to catch all the values that are not part of the partitions).
+// By doing so, we get the following plan:
+// ----
+// scalar-group-by
+//  ├── select
+//  │    ├── scan orders@orders_by_created_at
+//  │    │    └── constraint: /1/4/2: [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/e'europe-west2\x00'/'2019-05-04 00:00:00+00:00' - /'us-east1') [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-east1\x00'/'2019-05-04 00:00:00+00:00' - /'us-west1') [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-west1\x00'/'2019-05-04 00:00:00+00:00' - ]
+//  │    └── filters
+//  │         └── (created_at >= '2019-05-04 00:00:00+00:00') AND (created_at < '2019-05-05 00:00:00+00:00')
+//  └── aggregations
+//       └── sum
+//            └── variable: total
+//
+func (c *CustomFuncs) partitionValuesFilters(
+	tabID opt.TableID, index cat.Index,
+) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
+
+	// Find all the partition values
+	partitionValues := index.PartitionByListPrefixes()
+	if len(partitionValues) == 0 {
+		return partitionFilter, inBetweenFilter
+	}
+
+	// Get the in partition expressions.
+	inPartition := c.inPartitionFilters(tabID, index, partitionValues)
+
+	// Get the in between expressions.
+	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
+
+	return inPartition, inBetween
 }
 
 // HasInvertedIndexes returns true if at least one inverted index is defined on
