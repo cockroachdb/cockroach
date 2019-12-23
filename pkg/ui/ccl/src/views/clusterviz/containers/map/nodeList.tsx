@@ -12,6 +12,8 @@ import {InjectedRouter, RouterState} from "react-router";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 
+import "./nodesList.styl";
+
 export default class NodeList extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
     this.props.router.push(`/overview/${opt.value}`);
@@ -25,39 +27,16 @@ export default class NodeList extends React.Component<RouterState & { router: In
 
     // TODO(vilterp): dedup with ClusterVisualization
     return (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: "white",
-        }}
-        className="clusterviz"
-      >
-        <div style={{
-          flex: "none",
-          backgroundColor: "white",
-          boxShadow: "0 0 4px 0 rgba(0, 0, 0, 0.2)",
-          zIndex: 5,
-          padding: "4px 12px",
-        }}>
-          <div style={{ float: "left" }}>
-            <Dropdown
-              title="View"
-              selected="list"
-              options={options}
-              onChange={this.handleMapTableToggle}
-            />
-          </div>
+      <div className="clusterviz fixed-panel">
+        <div className="fixed-panel__panel-switcher">
+          <Dropdown
+            title="View"
+            selected="list"
+            options={options}
+            onChange={this.handleMapTableToggle}
+          />
         </div>
-        <div style={{
-          paddingBottom: 24,
-          width: "100%",
-          height: "100%",
-          overflow: "auto",
-        }}>
+        <div className="fixed-panel__content">
           <NodesOverview />
         </div>
       </div>

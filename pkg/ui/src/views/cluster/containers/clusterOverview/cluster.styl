@@ -10,6 +10,7 @@
 
 @require "~styl/base/palette.styl"
 @require "~styl/base/layout-vars.styl"
+@require '~src/components/core/index.styl'
 
 .page
   padding-top 0
@@ -22,6 +23,13 @@
 
 .database-summary-title h2
   padding-top 0
+
+.cluster-page
+  height 100vh
+  max-height 100vh
+  display flex
+  flex-direction column
+  overflow hidden
 
 .cluster-overview
   .cluster-summary
@@ -237,3 +245,10 @@
 
       &.bar
         fill $link-color
+
+
+.cluster-overview--fixed
+  flex-grow 1
+  position relative
+  margin $spacing-small $spacing-medium
+  overflow hidden

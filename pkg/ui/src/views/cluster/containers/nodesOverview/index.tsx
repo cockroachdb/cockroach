@@ -47,6 +47,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
 // It is required to reduce computation for top level (grouped) fields,
 // and to allow sorting functionality with specific rather then on column value.
 interface NodeStatusRow {
+  key: string;
   nodeId?: number;
   region: string;
   nodesCount?: number;
@@ -68,6 +69,7 @@ interface NodeStatusRow {
 }
 
 interface DecommissionedNodeStatusRow {
+  key: string;
   nodeId: number;
   region: string;
   status: LivenessStatus;
@@ -102,15 +104,41 @@ class NodeList extends React.Component<LiveNodeListProps> {
   readonly columns: ColumnsConfig<NodeStatusRow> = [
     {
       key: "region",
-      dataIndex: "region",
       title: "nodes",
-      sorter: true,
+      render: (_text, record) => {
+        if (!!record.nodeId) {
+          return (
+            <React.Fragment>
+              <span>{record.nodeId}</span>
+              <span>{record.region}</span>
+            </React.Fragment>);
+        } else {
+          // Top level grouping item does not have nodeId
+          return (
+            <React.Fragment>
+              <span>{record.region}</span>
+            </React.Fragment>);
+        }
+      },
+      sorter: (a, b) => {
+        if (!_.isUndefined(a.nodeId) && !_.isUndefined(b.nodeId)) { return 0; }
+        if (a.region < b.region) { return -1; }
+        if (a.region > b.region) { return 1; }
+        return 0;
+      },
     },
     {
       key: "nodesCount",
-      dataIndex: "nodesCount",
+      // dataIndex: "nodesCount",
       title: "# of nodes",
-      sorter: true,
+      sorter: (a, b) => {
+        if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
+        if (a.nodesCount < b.nodesCount) { return -1; }
+        if (a.nodesCount > b.nodesCount) { return 1; }
+        return 0;
+      },
+      render: (_text, record) => record.nodesCount,
+      sortDirections: ["ascend", "descend"],
     },
     {
       key: "uptime",
@@ -162,7 +190,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
     const { dataSource, count } = this.props;
     return (
       <div className="embedded-table">
-        <section className="section section--heading">
+        <section className="embedded-table__heading">
           <h2>Nodes ({count})</h2>
         </section>
         <Table dataSource={dataSource} columns={this.columns} />
@@ -180,20 +208,16 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "nodes",
       title: "decommissioned nodes",
-      sorter: (a, b) => a.nodeId - b.nodeId,
       render: (_text, record) => `${record.nodeId} ${record.region}`,
     },
     {
       key: "decommissionedSince",
       title: "decommissioned since",
-      sorter: (a, b) =>
-        a.decommissionedDate.toDate().getTime() - b.decommissionedDate.toDate().getTime(),
       render: (_text, record) => record.decommissionedDate.format("LL[ at ]h:mm a"),
     },
     {
       key: "status",
       title: "status",
-      sorter: (a, b) => a.status - b.status,
       render: (_text, record) => record.status,
     },
   ];
@@ -206,7 +230,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
 
     return (
       <div className="embedded-table">
-        <section className="section section--heading">
+        <section className="embedded-table__heading">
           <h2>Recently Decommissioned Nodes</h2>
         </section>
         <Table dataSource={dataSource} columns={this.columns} />
@@ -264,11 +288,12 @@ const liveNodesTableData = createSelector(
     const data = _.chain(liveStatuses)
       .groupBy(getNodeRegion)
       .map((nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
-        const nestedRows = nodesPerRegion.map((ns): NodeStatusRow => {
+        const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
           const { used: usedCapacity, usable: availableCapacity } = nodeCapacityStats(ns);
           return {
+            key: `${regionKey}-${idx}`,
             nodeId: ns.desc.node_id,
-            region: `${ns.desc.node_id} ${regionKey}-node-${ns.desc.node_id}`,
+            region: getNodeRegion(ns),
             uptime: moment.duration(LongToMoment(ns.started_at).diff(moment())).humanize(),
             replicas: ns.metrics[MetricConstants.replicas],
             usedCapacity,
@@ -281,7 +306,8 @@ const liveNodesTableData = createSelector(
         });
 
         return {
-          region: `Pretty name (${regionKey})`,
+          key: `${regionKey}`,
+          region: regionKey,
           nodesCount: nodesPerRegion.length,
           replicas: _.sum(nestedRows.map(nr => nr.replicas)),
           usedCapacity: _.sum(nestedRows.map(nr => nr.usedCapacity)),
@@ -315,8 +341,9 @@ const decommissionedNodesTableData = createSelector(
     const data = _.chain(decommissionedStatuses)
       .orderBy([(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)], ["desc"])
       .take(5)
-      .map((ns: INodeStatus) => {
+      .map((ns: INodeStatus, idx: number) => {
         return {
+          key: `${idx}`,
           nodeId: ns.desc.node_id,
           region: getNodeRegion(ns),
           status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id],
@@ -395,9 +422,13 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 
   render() {
     return (
-      <div>
-        <NodesConnected />
-        <DecommissionedNodesConnected />
+      <div className="nodes-overview">
+        <div className="nodes-overview__panel">
+          <NodesConnected />
+        </div>
+        <div className="nodes-overview__panel">
+          <DecommissionedNodesConnected />
+        </div>
       </div>
     );
   }
