@@ -1047,7 +1047,7 @@ build
 SELECT @1 AS r, @2 AS s FROM a
 ----
 project
- ├── columns: r:3(int) s:4(float)
+ ├── columns: r:3(int!null) s:4(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections

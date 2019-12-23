@@ -102,7 +102,7 @@ build
 SELECT @1 FROM x
 ----
 project
- ├── columns: "?column?":4(int)
+ ├── columns: "?column?":4(int!null)
  ├── sequence-select x
  │    └── columns: last_value:1(int!null) log_cnt:2(int!null) is_called:3(bool!null)
  └── projections

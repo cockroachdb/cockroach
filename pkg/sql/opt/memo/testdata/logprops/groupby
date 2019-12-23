@@ -179,7 +179,9 @@ project
  │    ├── fd: (2)-->(10)
  │    ├── prune: (10)
  │    ├── project
- │    │    ├── columns: x:9(int) xyzs.y:2(int)
+ │    │    ├── columns: x:9(int!null) xyzs.y:2(int)
+ │    │    ├── key: (9)
+ │    │    ├── fd: (9)-->(2)
  │    │    ├── prune: (2,9)
  │    │    ├── scan xyzs
  │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)

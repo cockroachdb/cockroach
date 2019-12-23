@@ -179,6 +179,23 @@ project
  └── projections
       └── const: 1 [type=int]
 
+# Project simple variable reference after constant folding; should be not-null
+# if the column it refers to is not-null.
+norm
+SELECT CASE WHEN true THEN x END FROM xysd
+----
+project
+ ├── columns: case:5(int!null)
+ ├── key: (5)
+ ├── prune: (5)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null)
+ │    ├── key: (1)
+ │    ├── prune: (1)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── variable: x [type=int, outer=(1)]
+
 # Project correlated subquery.
 build
 SELECT k, (SELECT y FROM xysd WHERE x=k) FROM kuv
@@ -321,6 +338,26 @@ project
  └── projections
       └── cast: STRING [type=string, outer=(4)]
            └── variable: xysd.d [type=decimal]
+
+# We have the equality relation between the synthesized column and the column
+# it refers to.
+norm
+SELECT x, CASE WHEN true THEN x END FROM xysd
+----
+project
+ ├── columns: x:1(int!null) case:5(int!null)
+ ├── key: (1)
+ ├── fd: (1)==(5), (5)==(1)
+ ├── prune: (1,5)
+ ├── interesting orderings: (+1)
+ ├── scan xysd
+ │    ├── columns: x:1(int!null)
+ │    ├── key: (1)
+ │    ├── prune: (1)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── variable: x [type=int, outer=(1)]
+
 
 # Verify that a,b form a key.
 norm
