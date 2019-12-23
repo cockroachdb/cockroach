@@ -17,7 +17,8 @@ SELECT k FROM
   (SELECT k FROM b WHERE k IN ())
 ----
 project
- ├── columns: k:11(int)
+ ├── columns: k:11(int!null)
+ ├── key: (11)
  ├── scan b
  │    ├── columns: b.k:1(int!null)
  │    └── key: (1)
@@ -35,7 +36,8 @@ SELECT k FROM
   (SELECT k FROM b)
 ----
 project
- ├── columns: k:11(int)
+ ├── columns: k:11(int!null)
+ ├── key: (11)
  ├── scan b
  │    ├── columns: b.k:6(int!null)
  │    └── key: (6)

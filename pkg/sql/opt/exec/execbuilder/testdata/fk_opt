@@ -404,6 +404,7 @@ root                                                      ·                   �
  │              └── hash-join                             ·                   ·
  │                   │                                    type                inner
  │                   │                                    equality            (p) = (p)
+ │                   │                                    left cols are key   ·
  │                   │                                    right cols are key  ·
  │                   ├── render                           ·                   ·
  │                   │    └── union                       ·                   ·
@@ -425,6 +426,7 @@ root                                                      ·                   �
                 └── hash-join                             ·                   ·
                      │                                    type                inner
                      │                                    equality            (p) = (p)
+                     │                                    left cols are key   ·
                      │                                    right cols are key  ·
                      ├── render                           ·                   ·
                      │    └── union                       ·                   ·
@@ -513,6 +515,7 @@ root                                                      ·                   �
                 └── hash-join                             ·                   ·
                      │                                    type                inner
                      │                                    equality            (c) = (c)
+                     │                                    left cols are key   ·
                      │                                    right cols are key  ·
                      ├── render                           ·                   ·
                      │    └── union                       ·                   ·
@@ -625,6 +628,7 @@ root                                                      ·                   �
                 └── hash-join                             ·                   ·
                      │                                    type                inner
                      │                                    equality            (c) = (c)
+                     │                                    left cols are key   ·
                      │                                    right cols are key  ·
                      ├── render                           ·                   ·
                      │    └── union                       ·                   ·
@@ -731,6 +735,7 @@ root                                                      ·                   �
                 └── hash-join                             ·                   ·
                      │                                    type                inner
                      │                                    equality            (x) = (y)
+                     │                                    left cols are key   ·
                      │                                    right cols are key  ·
                      ├── render                           ·                   ·
                      │    └── union                       ·                   ·
