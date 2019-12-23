@@ -202,7 +202,7 @@ func (j containsableArray) contains(other containsable) (bool, error) {
 		// objects and arrays, but for now just do the quadratic check.
 		objectsMatch, err := quadraticJSONArrayContains(j.objects, contained.objects)
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 		if !objectsMatch {
 			return false, nil
@@ -210,7 +210,7 @@ func (j containsableArray) contains(other containsable) (bool, error) {
 
 		arraysMatch, err := quadraticJSONArrayContains(j.arrays, contained.arrays)
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 		if !arraysMatch {
 			return false, nil

@@ -95,6 +95,9 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 		if b.evalCtx != nil && b.isConst(texpr) {
 			value, err := texpr.Eval(b.evalCtx)
 			if err != nil {
+				if errors.IsAssertionFailure(err) {
+					return nil, err
+				}
 				// Ignore any errors here (e.g. division by zero), so they can happen
 				// during execution where they are correctly handled. Note that in some
 				// cases we might not even get an error (if this particular expression
@@ -104,12 +107,7 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.
 			if value == tree.DNull {
 				// We don't want to return an expression that has a different type; cast
 				// the NULL if necessary.
-				var newExpr tree.TypedExpr
-				newExpr, err = tree.ReType(tree.DNull, texpr.ResolvedType())
-				if err != nil {
-					return texpr, nil
-				}
-				return newExpr, nil
+				return tree.ReType(tree.DNull, texpr.ResolvedType()), nil
 			}
 			return value, nil
 		}
@@ -125,7 +123,7 @@ func (b *Builder) buildTypedExpr(
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
-	return tree.ReType(tree.DNull, scalar.DataType())
+	return tree.ReType(tree.DNull, scalar.DataType()), nil
 }
 
 func (b *Builder) buildVariable(
@@ -140,11 +138,7 @@ func (b *Builder) indexedVar(
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
 		if b.nullifyMissingVarExprs > 0 {
-			expr, err := tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
-			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected failure during ReType"))
-			}
-			return expr
+			return tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
 		}
 		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
 	}

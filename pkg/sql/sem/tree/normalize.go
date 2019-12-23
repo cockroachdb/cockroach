@@ -127,25 +127,25 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case Plus:
 		if v.isNumericZero(right) {
-			final, v.err = ReType(left, expectedType)
+			final = ReType(left, expectedType)
 			break
 		}
 		if v.isNumericZero(left) {
-			final, v.err = ReType(right, expectedType)
+			final = ReType(right, expectedType)
 			break
 		}
 	case Minus:
 		if types.IsAdditiveType(left.ResolvedType()) && v.isNumericZero(right) {
-			final, v.err = ReType(left, expectedType)
+			final = ReType(left, expectedType)
 			break
 		}
 	case Mult:
 		if v.isNumericOne(right) {
-			final, v.err = ReType(left, expectedType)
+			final = ReType(left, expectedType)
 			break
 		}
 		if v.isNumericOne(left) {
-			final, v.err = ReType(right, expectedType)
+			final = ReType(right, expectedType)
 			break
 		}
 		// We can't simplify multiplication by zero to zero,
@@ -153,7 +153,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// the result must be NULL.
 	case Div, FloorDiv:
 		if v.isNumericOne(right) {
-			final, v.err = ReType(left, expectedType)
+			final = ReType(left, expectedType)
 			break
 		}
 	}
@@ -740,12 +740,7 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 		if value == DNull {
 			// We don't want to return an expression that has a different type; cast
 			// the NULL if necessary.
-			var newExpr TypedExpr
-			newExpr, v.err = ReType(DNull, expr.(TypedExpr).ResolvedType())
-			if v.err != nil {
-				return expr
-			}
-			return newExpr
+			return ReType(DNull, expr.(TypedExpr).ResolvedType())
 		}
 		return value
 	}
@@ -972,11 +967,11 @@ func init() {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType *types.T) (TypedExpr, error) {
+func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
 	if expr.ResolvedType().Equivalent(wantedType) {
-		return expr, nil
+		return expr
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}
 	res.typ = wantedType
-	return res, nil
+	return res
 }

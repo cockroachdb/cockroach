@@ -58,12 +58,7 @@ func (v *ConstantEvalVisitor) VisitPost(expr Expr) Expr {
 	if value == DNull {
 		// We don't want to return an expression that has a different type; cast
 		// the NULL if necessary.
-		var newExpr TypedExpr
-		newExpr, v.err = ReType(DNull, typedExpr.ResolvedType())
-		if v.err != nil {
-			return expr
-		}
-		return newExpr
+		return ReType(DNull, typedExpr.ResolvedType())
 	}
 	return value
 }

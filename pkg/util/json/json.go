@@ -1272,7 +1272,7 @@ func (j jsonArray) FetchValKeyOrIdx(key string) (JSON, error) {
 		// We shouldn't return this error because it means we couldn't parse the
 		// number, meaning it was a string and that just means we can't find the
 		// value in an array.
-		return nil, nil
+		return nil, nil //nolint:returnerrcheck
 	}
 	return j.FetchValIdx(idx)
 }

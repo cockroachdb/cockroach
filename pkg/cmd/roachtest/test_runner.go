@@ -505,13 +505,29 @@ func getPerfArtifacts(ctx context.Context, l *logger, c *cluster, t *test) {
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
-			// RunWithBuffer to toss the output.
-			if _, err := c.RunWithBuffer(ctx, l, c.Node(node), "ls", perfArtifactsDir); err != nil {
-				// perfArtifactsDir doesn't exist, nothing to fetch.
-				return nil
+			testCmd := `'PERF_ARTIFACTS="` + perfArtifactsDir + `"
+if [[ -d "${PERF_ARTIFACTS}" ]]; then
+    echo true
+elif [[ -e "${PERF_ARTIFACTS}" ]]; then
+    ls -la "${PERF_ARTIFACTS}"
+    exit 1
+else
+    echo false
+fi'`
+			out, err := c.RunWithBuffer(ctx, l, c.Node(node), "bash", "-c", testCmd)
+			if err != nil {
+				return errors.Wrapf(err, "failed to check for perf artifacts: %v", string(out))
 			}
-			dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
-			return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
+			switch out := strings.TrimSpace(string(out)); out {
+			case "true":
+				dst := fmt.Sprintf("%s/%d.%s", t.artifactsDir, node, perfArtifactsDir)
+				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
+			case "false":
+				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
+				return nil
+			default:
+				return errors.Errorf("unexpected output when checking for perf artifacts: %s", out)
+			}
 		}
 	}
 	for _, i := range c.All() {

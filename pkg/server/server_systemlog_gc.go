@@ -69,8 +69,11 @@ func (s *Server) gcSystemLog(
 ) (time.Time, int64, error) {
 	var totalRowsAffected int64
 	repl, err := s.node.stores.GetReplicaForRangeID(roachpb.RangeID(1))
-	if err != nil {
+	if roachpb.IsRangeNotFoundError(err) {
 		return timestampLowerBound, 0, nil
+	}
+	if err != nil {
+		return timestampLowerBound, 0, err
 	}
 
 	if !repl.IsFirstRange() || !repl.OwnsValidLease(s.clock.Now()) {
