@@ -101,9 +101,9 @@ func testLogGC(
 	// Check that the file exists, and also measure its size.
 	// We'll use this as base value for the maximum combined size
 	// below, to force GC.
-	dir, err := logger.logDir.get()
-	if err != nil {
-		t.Fatal(err)
+	dir, isSet := logger.logDir.get()
+	if !isSet {
+		t.Fatal(errDirectoryNotSet)
 	}
 	stat, err := os.Stat(filepath.Join(dir, allFilesOriginal[0].Name))
 	if err != nil {
