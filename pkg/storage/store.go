@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnrecovery"
@@ -385,6 +386,7 @@ type Store struct {
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
 	sss                SSTSnapshotStorage
+	protectedtsCache   protectedts.Cache
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -691,6 +693,11 @@ type StoreConfig struct {
 	// ExternalStorage creates ExternalStorage objects which allows access to external files
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	// ProtectedTimestampCache maintains the state of the protected timestamp
+	// subsystem. It is queried during the GC process and in the handling of
+	// AdminVerifyProtectedTimestampRequest.
+	ProtectedTimestampCache protectedts.Cache
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -739,6 +746,10 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
+	}
+
+	if sc.ProtectedTimestampCache == nil {
+		sc.ProtectedTimestampCache = protectedts.EmptyCache(sc.Clock)
 	}
 }
 
@@ -847,6 +858,7 @@ func NewStore(
 	if err := s.sss.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
+	s.protectedtsCache = cfg.ProtectedTimestampCache
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
