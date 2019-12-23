@@ -57,5 +57,5 @@ func Get(
 			}
 		}
 	}
-	return result.FromIntents(intents, args), err
+	return result.FromIntents(intents), err
 }

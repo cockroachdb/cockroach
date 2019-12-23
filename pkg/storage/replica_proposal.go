@@ -678,7 +678,7 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 type proposalResult struct {
 	Reply   *roachpb.BatchResponse
 	Err     *roachpb.Error
-	Intents []result.IntentsWithArg
+	Intents []roachpb.Intent
 	EndTxns []result.EndTxnIntents
 }
 

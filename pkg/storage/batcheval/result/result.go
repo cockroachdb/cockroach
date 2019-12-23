@@ -34,7 +34,7 @@ type LocalResult struct {
 	//
 	// This is a pointer to allow the zero (and as an unwelcome side effect,
 	// all) values to be compared.
-	Intents *[]IntentsWithArg
+	Intents *[]roachpb.Intent
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.
 	//
@@ -104,11 +104,11 @@ func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
 
 // DetachIntents returns (and removes) those intents from the
 // LocalEvalResult which are supposed to be handled.
-func (lResult *LocalResult) DetachIntents() []IntentsWithArg {
+func (lResult *LocalResult) DetachIntents() []roachpb.Intent {
 	if lResult == nil {
 		return nil
 	}
-	var r []IntentsWithArg
+	var r []roachpb.Intent
 	if lResult.Intents != nil {
 		r = *lResult.Intents
 	}
