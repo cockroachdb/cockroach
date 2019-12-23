@@ -307,23 +307,23 @@ func (m *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	db, err := gosql.Open(`postgres`, strings.Join(urls, ` `))
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-
+	urlStrs := strings.Join(urls, ` `)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-
-	worker := movrWorker{
-		db:           db,
-		rng:          rand.New(rand.NewSource(m.seed)),
-		faker:        m.faker,
-		creationTime: m.creationTime,
-		activeRides:  []rideInfo{},
-		hists:        reg.GetHandle(),
+	for range urls {
+		db, err := gosql.Open(`cockroach`, urlStrs)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		worker := movrWorker{
+			db:           db,
+			rng:          rand.New(rand.NewSource(m.seed)),
+			faker:        m.faker,
+			creationTime: m.creationTime,
+			activeRides:  []rideInfo{},
+			hists:        reg.GetHandle(),
+		}
+		ql.WorkerFns = append(ql.WorkerFns, worker.generateWorkSimulation())
 	}
-
-	ql.WorkerFns = append(ql.WorkerFns, worker.generateWorkSimulation())
 
 	return ql, nil
 }
