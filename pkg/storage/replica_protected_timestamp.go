@@ -1,0 +1,181 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package storage
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+)
+
+// protectedTimestampRecordApplies returns true if it is this case that the
+// record which protects the specified time and was created at the specified
+// time will apply. It returns false if it may not. If the state of the cache
+// is not sufficiently new to determine whether the record will apply, the cache
+// is refreshed and then the check is performed again.
+func (r *Replica) protectedTimestampRecordApplies(
+	ctx context.Context, protected, recordAliveAt hlc.Timestamp, id uuid.UUID,
+) (willApply bool, _ error) {
+	// Check the state of the cache without a refresh.
+	willApply, cacheTooOld, err := r.protectedTimestampRecordCurrentlyApplies(ctx, protected, recordAliveAt, id)
+	if err != nil {
+		return false, err
+	}
+	if !cacheTooOld {
+		return willApply, nil
+	}
+	// Refresh the cache so that we know that the next time we come around we're
+	// certain to either see the record or see a timestamp for readAt that is
+	// greater than or equal to recordAliveAt.
+	if err := r.store.protectedtsCache.Refresh(ctx, recordAliveAt); err != nil {
+		return false, err
+	}
+	willApply, cacheTooOld, err = r.protectedTimestampRecordCurrentlyApplies(ctx, protected, recordAliveAt, id)
+	if err != nil {
+		return false, err
+	}
+	if cacheTooOld {
+		return false, errors.AssertionFailedf("cache was not updated after being refreshed")
+	}
+	return willApply, nil
+}
+
+// protectedTimestampRecordCurrentlyApplies determines whether a record with
+// the specified ID which protects `protected` and is known to exist at
+// `recordAliveAt` will apply given the current state of the cache. This method
+// is called by `r.protectedTimestampRecordApplies()`. It may be the case that
+// the current state of the cache is too old to determine whether the record
+// will apply. In such cases the cache should be refreshed to recordAliveAt and
+// then this method should be called again.
+func (r *Replica) protectedTimestampRecordCurrentlyApplies(
+	ctx context.Context, protected, recordAliveAt hlc.Timestamp, id uuid.UUID,
+) (willApply, cacheTooOld bool, _ error) {
+	// We first need to check that we're the current leaseholder.
+	// TODO(ajwerner): what other conditions with regards to time do we need to
+	// check? I don't think there are any. If the recordAliveAt is after our
+	// liveness expiration that's okay because we're either going to find the
+	// record or we're not and if we don't then we'll push the cache and re-assert
+	// that we're still the leaseholder. If somebody else becomes the leaseholder
+	// then they will have to go through the same process.
+	ls, pErr := r.redirectOnOrAcquireLease(ctx)
+	if pErr != nil {
+		return false, false, pErr.GoError()
+	}
+
+	// NB: It should be the case that the recordAliveAt timestamp
+	// is before the current time and that the above lease check means that
+	// the replica is the leaseholder at the current time. If recordAliveAt
+	// happened to be newer than the current time we'd need to make sure that
+	// the current Replica will be live at that time. Given that recordAliveAt
+	// has to be before the batch timestamp for this request and we should
+	// have forwarded the local clock to the batch timestamp this can't
+	// happen.
+	// TODO(ajwerner): do we need to assert that indeed the recordAliveAt precedes
+	// the batch timestamp? Probably not a bad sanity check.
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if !r.mu.state.GCThreshold.Less(protected) {
+		return false, false, nil
+	}
+	if recordAliveAt.Less(ls.Lease.Start) {
+		return true, false, nil
+	}
+
+	// Now we're in the case where maybe it is possible that we're going to later
+	// attempt to set the GC threshold above our protected point so to prevent
+	// that we add some state to the replica.
+	r.protectedTimestampMu.Lock()
+	defer r.protectedTimestampMu.Unlock()
+	if protected.Less(r.protectedTimestampMu.pendingGCThreshold) {
+		return false, false, nil
+	}
+
+	var seen bool
+	desc := r.mu.state.Desc
+	readAt := r.store.protectedtsCache.Iterate(ctx,
+		roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey),
+		func(r *ptpb.Record) (wantMore bool) {
+			if r.ID == id {
+				seen = true
+			}
+			return !seen
+		})
+	if seen {
+		r.protectedTimestampMu.minStateReadTimestamp = readAt
+		return true, false, nil
+	}
+
+	// Protected timestamp state has progressed past the point at which we
+	// should see this record. This implies that the record has been removed.
+	return false, readAt.Less(recordAliveAt), nil
+}
+
+// checkProtectedTimestampsForGC determines whether the Replica can run GC.
+// If the Replica can run GC, this method returns the latest timestamp which
+// can be used to determine a valid new GCThreshold.
+func (r *Replica) checkProtectedTimestampsForGC(
+	ctx context.Context, now hlc.Timestamp,
+) (canGC bool, gcTimestamp hlc.Timestamp) {
+	r.mu.RLock()
+	desc := r.descRLocked()
+	gcThreshold := *r.mu.state.GCThreshold
+	lease := *r.mu.state.Lease
+	r.mu.RUnlock()
+	var overlapping []*ptpb.Record
+	gcTimestamp = r.store.protectedtsCache.Iterate(ctx,
+		roachpb.Key(desc.StartKey),
+		roachpb.Key(desc.EndKey),
+		func(rec *ptpb.Record) (wantMore bool) {
+			// Check if we've already GC'd past the timestamp this record was trying
+			// to protect, in which case we know that the record does not apply.
+			// Note that when we implement PROTECT_AT, we'll need to consult some
+			// replica state here to determine whether the record indeed has been
+			// applied.
+			if !rec.Timestamp.Less(gcThreshold) {
+				overlapping = append(overlapping, rec)
+			}
+			return true
+		})
+
+	if len(overlapping) > 0 {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to protected timestamps %v as of %v",
+			r, overlapping, gcTimestamp)
+		return false, hlc.Timestamp{}
+	}
+
+	// TODO(ajwerner): Is there any need to check the end of the lease?
+	// It seems like there shouldn't be given the fact that the GC request
+	// will fail if this replica does not have the lease.
+	if gcTimestamp.Less(lease.Start) {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
+			r, lease, gcTimestamp)
+		return false, hlc.Timestamp{}
+	}
+	return true, gcTimestamp
+}
+
+func (r *Replica) markPendingGC(readAt, newThreshold hlc.Timestamp) error {
+	r.protectedTimestampMu.Lock()
+	defer r.protectedTimestampMu.Unlock()
+	if readAt.Less(r.protectedTimestampMu.minStateReadTimestamp) {
+		return errors.Errorf("cannot set gc threshold to %v because read at %v < min %v",
+			newThreshold, readAt, r.protectedTimestampMu.minStateReadTimestamp)
+	}
+	r.protectedTimestampMu.pendingGCThreshold = newThreshold
+	return nil
+}
