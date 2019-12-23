@@ -271,6 +271,7 @@ func init() {
 type runner struct {
 	db          db
 	sqlExecutor *sql.InternalExecutor
+	clock       *hlc.Clock
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -298,6 +299,7 @@ type Manager struct {
 	leaseManager leaseManager
 	db           db
 	sqlExecutor  *sql.InternalExecutor
+	clock        *hlc.Clock
 	testingKnobs MigrationManagerTestingKnobs
 }
 
@@ -319,6 +321,7 @@ func NewManager(
 		leaseManager: client.NewLeaseManager(db, clock, opts),
 		db:           db,
 		sqlExecutor:  executor,
+		clock:        clock,
 		testingKnobs: testingKnobs,
 	}
 }
@@ -469,6 +472,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, filter MigrationFilter) 
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
+		clock:       m.clock,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		if migration.workFn == nil {
@@ -691,7 +695,13 @@ func upgradeDescsWithFn(
 	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
 	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
-	// use multiple transactions to prevent blocking reads on the
+	// Record a clock reading from before the descriptor upgrade. We will
+	// use this timestamp to count the number of leases at the version two
+	// below the version we intend to bump the updated table desctiptors to.
+	// As long as this time is <= to the migration's timestamp, we maintain
+	// the "two leased versions" descriptor invariant.
+	before := r.clock.Now()
+	// Use multiple transactions to prevent blocking reads on the
 	// table descriptors while running this upgrade process.
 	startKey := sqlbase.MakeAllDescsMetadataKey()
 	span := roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
@@ -712,7 +722,6 @@ func upgradeDescsWithFn(
 			resumeSpan = result.ResumeSpan
 
 			var idVersions []sql.IDVersion
-			var now hlc.Timestamp
 			b = txn.NewBatch()
 			for _, kv := range kvs {
 				var sqlDesc sqlbase.Descriptor
@@ -738,7 +747,6 @@ func upgradeDescsWithFn(
 							// concern: consider that dropping a large table can take several
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
-							now = txn.CommitTimestamp()
 							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
 							table.Version++
 							// Use ValidateTable() instead of Validate()
@@ -772,7 +780,7 @@ func upgradeDescsWithFn(
 				return err
 			}
 			if idVersions != nil {
-				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
+				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, before)
 				if err != nil {
 					return err
 				}
