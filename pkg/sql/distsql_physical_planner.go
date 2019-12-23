@@ -674,7 +674,8 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		// written on startup, the most likely scenario is
 		// that the node is ready. We therefore return no
 		// error.
-		return nil
+		// TODO(ajwerner): Determine the expected error types and only filter those.
+		return nil //nolint:returnerrcheck
 	}
 
 	if drainingInfo.Draining {

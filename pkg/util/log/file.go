@@ -85,13 +85,10 @@ func (l *DirName) String() string {
 	return l.name
 }
 
-func (l *DirName) get() (string, error) {
+func (l *DirName) get() (dirName string, isSet bool) {
 	l.Lock()
 	defer l.Unlock()
-	if len(l.name) == 0 {
-		return "", errDirectoryNotSet
-	}
-	return l.name, nil
+	return l.name, l.name != ""
 }
 
 // IsSet returns true iff the directory name is set.
@@ -230,9 +227,9 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 func create(
 	logDir *DirName, prefix string, t time.Time, lastRotation int64,
 ) (f *os.File, updatedRotation int64, filename string, err error) {
-	dir, err := logDir.get()
-	if err != nil {
-		return nil, lastRotation, "", err
+	dir, isSet := logDir.get()
+	if !isSet {
+		return nil, lastRotation, "", errDirectoryNotSet
 	}
 
 	// Ensure that the timestamp of the new file name is greater than
@@ -278,8 +275,8 @@ func ListLogFiles() ([]FileInfo, error) {
 
 func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	dir, err := l.logDir.get()
-	if err != nil {
+	dir, isSet := l.logDir.get()
+	if !isSet {
 		// No log directory configured: simply indicate that there are no
 		// log files.
 		return nil, nil
@@ -315,9 +312,9 @@ func (l *loggerT) listLogFiles() ([]FileInfo, error) {
 //
 // TODO(knz): make this work for secondary loggers too.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	dir, err := mainLog.logDir.get()
-	if err != nil {
-		return nil, err
+	dir, isSet := mainLog.logDir.get()
+	if !isSet {
+		return nil, errDirectoryNotSet
 	}
 
 	switch restricted {

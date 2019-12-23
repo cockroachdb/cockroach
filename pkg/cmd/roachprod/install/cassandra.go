@@ -67,7 +67,10 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 
 				cmd := `nc -z $(hostname) 9042`
 				if _, err := session.CombinedOutput(cmd); err != nil {
-					return false, nil
+					// The common case here is going to be "exit status 1" until the
+					// cassandra process starts listening on the port. Logging would
+					// just generate noise.
+					return false, nil //nolint:returnerrcheck
 				}
 				return true, nil
 			}()

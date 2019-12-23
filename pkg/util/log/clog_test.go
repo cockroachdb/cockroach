@@ -447,9 +447,9 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := mainLog.logDir.get()
-	if err != nil {
-		t.Fatal(err)
+	dir, isSet := mainLog.logDir.get()
+	if !isSet {
+		t.Fatal(errDirectoryNotSet)
 	}
 	otherFile, err := os.Create(filepath.Join(dir, "other.txt"))
 	if err != nil {

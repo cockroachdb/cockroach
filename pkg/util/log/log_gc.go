@@ -60,8 +60,8 @@ func (l *loggerT) gcDaemon(ctx context.Context) {
 // gcOldFiles removes the "old" files that do not match
 // the configured size and number threshold.
 func (l *loggerT) gcOldFiles() {
-	dir, err := l.logDir.get()
-	if err != nil {
+	dir, isSet := l.logDir.get()
+	if !isSet {
 		// No log directory configured. Nothing to do.
 		return
 	}

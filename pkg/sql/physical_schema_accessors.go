@@ -193,7 +193,10 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	}
 
 	ok, schemaID, err := a.IsValidSchema(ctx, txn, dbID, name.Schema())
-	if !ok || err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
 		}
