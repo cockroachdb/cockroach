@@ -25,30 +25,6 @@ import (
 func TestNightlyLint(t *testing.T) {
 	_, pkgSpecified := os.LookupEnv("PKG")
 
-	// RoachLint is expensive memory-wise and thus should not run with t.Parallel().
-	//
-	// Note: It is too expensive RAM-wise to run roachlint on every CI
-	// until issue https://github.com/cockroachdb/cockroach/issues/42594
-	// has been addressed.
-	t.Run("TestRoachLint", func(t *testing.T) {
-		vetCmd(t, crdb.Dir, "roachlint", []string{pkgScope}, []stream.Filter{
-			// Ignore generated files.
-			stream.GrepNot(`pkg/.*\.pb\.go:`),
-			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
-
-			// Ignore types that can change by system.
-			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
-
-			// Ignore tests.
-			// TODO(mjibson): remove this ignore.
-			stream.GrepNot(`pkg/.*_test\.go:`),
-		})
-	})
-
 	// TestHelpURLs checks that all help texts have a valid documentation URL.
 	t.Run("TestHelpURLs", func(t *testing.T) {
 		if testing.Short() {
