@@ -23,7 +23,6 @@ export interface TableProps<T> {
 
 export function Table<T>(props: TableProps<T>) {
   const { columns, dataSource } = props;
-
   return (
     <AntTable<T>
       className="crl-table-wrapper"

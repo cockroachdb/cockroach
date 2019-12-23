@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,16 +10,20 @@
 
 @require '~src/components/core/index.styl'
 
-.embedded-table
-  padding 0 $spacing-medium-small $spacing-medium-small
-  &__heading
-    padding-top $spacing-base
-
-.nodes-overview
-  background $colors--neutral-1
-  &__panel
-    background $colors--neutral-0
-    margin-bottom $spacing-small
+.fixed-panel
+  flex-grow 1
+  position relative
+  height 100%
+  &__panel-switcher
+    flex none
+    background-color $colors--white
+    z-index  5
+    padding $spacing-xx-small $spacing-smaller
     border 1px solid rgb(237, 237, 237)
+    border-bottom none
     box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
     border-radius 3px
+  &__content
+    width 100%
+    height 100%
+    overflow: auto
