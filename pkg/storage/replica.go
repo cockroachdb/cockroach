@@ -495,6 +495,22 @@ type Replica struct {
 		syncutil.Mutex
 		remotes map[roachpb.ReplicaID]struct{}
 	}
+
+	// r.mu < r.protectedTimestampMu
+	protectedTimestampMu struct {
+		syncutil.Mutex
+
+		// minStateReadTimestamp is a lower bound on the timestamp of the cached
+		// protected timestamp state which may be used when updating
+		// pendingGCThreshold. This field acts to eliminate races between
+		// verification of protected timestamp records and the setting of a new
+		// GC threshold
+		minStateReadTimestamp hlc.Timestamp
+
+		// pendingGCThreshold holds a timestamp which is being proposed as a new
+		// GC threshold for the range.
+		pendingGCThreshold hlc.Timestamp
+	}
 }
 
 var _ batcheval.EvalContext = &Replica{}
