@@ -8,4 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./decommissionedNodeHistory";
+export { default as DecommissionedNodeHistory } from "./decommissionedNodeHistory";
