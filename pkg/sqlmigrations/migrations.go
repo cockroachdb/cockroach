@@ -920,7 +920,7 @@ func upgradeDescsWithFn(
 					if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
 						if upgraded, err := upgradeTableDescFn(table); err != nil {
 							return err
-						} else if upgraded {
+						} else if upgraded || true {
 							// It's safe to ignore the DROP state here and
 							// unconditionally increment the version. For proof, see
 							// TestDropTableWhileUpgradingFormat.
@@ -968,7 +968,9 @@ func upgradeDescsWithFn(
 				return err
 			}
 			if idVersions != nil {
+				log.Infof(ctx, "%s: CountLeases: running", span.Key)
 				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
+				log.Infof(ctx, "%s: CountLeases: done: %d", span.Key, count)
 				if err != nil {
 					return err
 				}
