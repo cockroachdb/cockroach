@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,7 +80,8 @@ type providerOpts struct {
 	// CreateZones stores the list of zones for used cluster creation.
 	// When specifying the geo flag, nodes will be placed over these zones.
 	// See defaultGeoZones.
-	CreateZones []string
+	CreateZones      []string
+	NodeDistribution []string
 }
 
 const (
@@ -143,6 +145,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
 		"aws availability zones to use for cluster creation, the cluster will be spread out evenly by region (if geo) and then by AZ within a region")
+
+	flags.StringSliceVar(&o.NodeDistribution, ProviderName+"-dist", []string{},
+		"distribution of the nodes across the specified zones, by default nodes will be evenly distributed across the zones")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -233,6 +238,41 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		zone := regionZones[rand.Intn(len(regionZones))]
 		for range names {
 			zones = append(zones, zone)
+		}
+	} else if opts.GeoDistributed && len(p.opts.NodeDistribution) != 0 {
+		if len(p.opts.NodeDistribution) != len(p.opts.CreateZones) {
+			return errors.Errorf("Node distribution and zones don't match.")
+		}
+
+		var nodesPerZone []int
+		totalNodes := 0
+		for _, d := range p.opts.NodeDistribution {
+			num, err := strconv.Atoi(d)
+			if err != nil {
+				return err
+			}
+			totalNodes += num
+			nodesPerZone = append(nodesPerZone, num)
+		}
+
+		if totalNodes != len(names) {
+			return errors.Errorf("Total number of nodes does not equal the number of nodes listed in the node distrbution")
+		}
+
+		nodeQueue := nodesPerZone
+
+		for _, region := range regions {
+			regionZones, err := p.regionZones(region, p.opts.CreateZones)
+			if err != nil {
+				return err
+			}
+
+			for j := 0; j < len(regionZones); j++ {
+				for n := 0; n < nodeQueue[0]; n++ {
+					zones = append(zones, regionZones[j])
+				}
+				nodeQueue = nodeQueue[1:]
+			}
 		}
 	} else {
 		// Distribute the nodes amongst availability zones if geo distributed.
