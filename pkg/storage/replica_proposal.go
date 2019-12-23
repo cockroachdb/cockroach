@@ -613,6 +613,13 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		log.Fatalf(ctx, "LocalEvalResult.MaybeWatchForMerge should be false")
 	}
 
+	if lResult.UpdatedTxns != nil {
+		for _, txn := range *lResult.UpdatedTxns {
+			r.txnWaitQueue.UpdateTxn(ctx, txn)
+		}
+		lResult.UpdatedTxns = nil
+	}
+
 	if lResult.GossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
 		// the range lease and we'll deadlock if we try to acquire it while
@@ -648,6 +655,7 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		}
 		lResult.MaybeGossipSystemConfig = false
 	}
+
 	if lResult.MaybeGossipNodeLiveness != nil {
 		if err := r.MaybeGossipNodeLiveness(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
 			log.Error(ctx, err)
@@ -658,13 +666,6 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	if lResult.Metrics != nil {
 		r.store.metrics.handleMetricsResult(ctx, *lResult.Metrics)
 		lResult.Metrics = nil
-	}
-
-	if lResult.UpdatedTxns != nil {
-		for _, txn := range *lResult.UpdatedTxns {
-			r.txnWaitQueue.UpdateTxn(ctx, txn)
-			lResult.UpdatedTxns = nil
-		}
 	}
 
 	if (lResult != result.LocalResult{}) {
