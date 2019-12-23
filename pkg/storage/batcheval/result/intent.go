@@ -12,20 +12,14 @@ package result
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// IntentsWithArg contains a request and the intents it discovered.
-type IntentsWithArg struct {
-	Arg     roachpb.Request
-	Intents []roachpb.Intent
-}
-
 // FromIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
-func FromIntents(intents []roachpb.Intent, args roachpb.Request) Result {
+func FromIntents(intents []roachpb.Intent) Result {
 	var pd Result
 	if len(intents) == 0 {
 		return pd
 	}
-	pd.Local.Intents = &[]IntentsWithArg{{Arg: args, Intents: intents}}
+	pd.Local.Intents = &intents
 	return pd
 }
 
