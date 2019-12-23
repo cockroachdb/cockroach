@@ -298,6 +298,7 @@ type Manager struct {
 	leaseManager leaseManager
 	db           db
 	sqlExecutor  *sql.InternalExecutor
+	clock        *hlc.Clock
 	testingKnobs MigrationManagerTestingKnobs
 }
 
@@ -679,6 +680,7 @@ func ensureMaxPrivileges(ctx context.Context, r runner) error {
 }
 
 var upgradeDescBatchSize int64 = 10
+var errTxnRestarted = errors.New("upgradeDescsWithFn transaction restarted")
 
 // upgradeTableDescsWithFn runs the provided upgrade functions on each table
 // and database descriptor, persisting any upgrades if the function indicates that the
@@ -691,100 +693,131 @@ func upgradeDescsWithFn(
 	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
 	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
-	// use multiple transactions to prevent blocking reads on the
+	// Use multiple transactions to prevent blocking reads on the
 	// table descriptors while running this upgrade process.
 	startKey := sqlbase.MakeAllDescsMetadataKey()
 	span := roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}
 	for resumeSpan := (roachpb.Span{}); span.Key != nil; span = resumeSpan {
 		// It's safe to use multiple transactions here because it is assumed
 		// that a new table created will be created upgraded.
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			// Scan a limited batch of keys.
-			b := txn.NewBatch()
-			b.Header.MaxSpanRequestKeys = upgradeDescBatchSize
-			b.Scan(span.Key, span.EndKey)
-			if err := txn.Run(ctx, b); err != nil {
-				return err
-			}
-			result := b.Results[0]
-			kvs := result.Rows
-			// Store away the span for the next batch.
-			resumeSpan = result.ResumeSpan
+		//
+		// However, if a migration transaction encounters an error, we need to
+		// trigger a full abort and try again with a new transaction. Why? An
+		// epoch of the transaction may leave intents on table descriptors. If
+		// a future epoch attempted to read one of these descriptors in a
+		// dependent but separate transaction (e.g. in CountLeases) then we
+		// could create a deadlock scenario. Aborting the txn on each retry
+		// avoids this hazard.
+		//
+		// Note that db.Txn performs retries using the same transaction, so we
+		// have to use our own retry loop outside of it. It would probably be
+		// cleaner and more efficient to avoid db.Txn entirely, but that would
+		// require modifying the runner interface, which isn't worth it.
+	TxnLoop:
+		for {
+			err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				// Detect retries and abort if necessary.
+				if txn.Serialize().Epoch != 0 {
+					return errTxnRestarted
+				}
 
-			var idVersions []sql.IDVersion
-			var now hlc.Timestamp
-			b = txn.NewBatch()
-			for _, kv := range kvs {
-				var sqlDesc sqlbase.Descriptor
-				if err := kv.ValueProto(&sqlDesc); err != nil {
+				// Scan a limited batch of keys.
+				b := txn.NewBatch()
+				b.Header.MaxSpanRequestKeys = upgradeDescBatchSize
+				b.Scan(span.Key, span.EndKey)
+				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}
-				switch t := sqlDesc.Union.(type) {
-				case *sqlbase.Descriptor_Table:
-					if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
-						if upgraded, err := upgradeTableDescFn(table); err != nil {
-							return err
-						} else if upgraded {
-							// It's safe to ignore the DROP state here and
-							// unconditionally increment the version. For proof, see
-							// TestDropTableWhileUpgradingFormat.
-							//
-							// In fact, it's of the utmost importance that this migration
-							// upgrades every last old-format table descriptor, including those
-							// that are dropping. Otherwise, the user could upgrade to a version
-							// without support for reading the old format before the drop
-							// completes, leaving a broken table descriptor and the table's
-							// remaining data around forever. This isn't just a theoretical
-							// concern: consider that dropping a large table can take several
-							// days, while upgrading to a new version can take as little as a
-							// few minutes.
-							now = txn.CommitTimestamp()
-							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
-							table.Version++
-							// Use ValidateTable() instead of Validate()
-							// because of #26422. We still do not know why
-							// a table can reference a dropped database.
-							if err := table.ValidateTable(nil); err != nil {
-								return err
-							}
+				result := b.Results[0]
+				kvs := result.Rows
+				// Store away the span for the next batch.
+				resumeSpan = result.ResumeSpan
 
-							b.Put(kv.Key, sqlbase.WrapDescriptor(table))
-						}
+				var idVersions []sql.IDVersion
+				b = txn.NewBatch()
+				for _, kv := range kvs {
+					var sqlDesc sqlbase.Descriptor
+					if err := kv.ValueProto(&sqlDesc); err != nil {
+						return err
 					}
-				case *sqlbase.Descriptor_Database:
-					if database := sqlDesc.GetDatabase(); database != nil && upgradeDatabaseDescFn != nil {
-						if upgraded, err := upgradeDatabaseDescFn(database); err != nil {
-							return err
-						} else if upgraded {
-							if err := database.Validate(); err != nil {
+					switch t := sqlDesc.Union.(type) {
+					case *sqlbase.Descriptor_Table:
+						if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
+							if upgraded, err := upgradeTableDescFn(table); err != nil {
 								return err
+							} else if upgraded {
+								// It's safe to ignore the DROP state here and
+								// unconditionally increment the version. For proof, see
+								// TestDropTableWhileUpgradingFormat.
+								//
+								// In fact, it's of the utmost importance that this migration
+								// upgrades every last old-format table descriptor, including those
+								// that are dropping. Otherwise, the user could upgrade to a version
+								// without support for reading the old format before the drop
+								// completes, leaving a broken table descriptor and the table's
+								// remaining data around forever. This isn't just a theoretical
+								// concern: consider that dropping a large table can take several
+								// days, while upgrading to a new version can take as little as a
+								// few minutes.
+								idVersions = append(idVersions, sql.NewIDVersionPrev(table))
+								table.Version++
+								// Use ValidateTable() instead of Validate()
+								// because of #26422. We still do not know why
+								// a table can reference a dropped database.
+								if err := table.ValidateTable(nil); err != nil {
+									return err
+								}
+
+								b.Put(kv.Key, sqlbase.WrapDescriptor(table))
 							}
-
-							b.Put(kv.Key, sqlbase.WrapDescriptor(database))
 						}
-					}
+					case *sqlbase.Descriptor_Database:
+						if database := sqlDesc.GetDatabase(); database != nil && upgradeDatabaseDescFn != nil {
+							if upgraded, err := upgradeDatabaseDescFn(database); err != nil {
+								return err
+							} else if upgraded {
+								if err := database.Validate(); err != nil {
+									return err
+								}
 
-				default:
-					return errors.Errorf("Descriptor.Union has unexpected type %T", t)
+								b.Put(kv.Key, sqlbase.WrapDescriptor(database))
+							}
+						}
+
+					default:
+						return errors.Errorf("Descriptor.Union has unexpected type %T", t)
+					}
 				}
-			}
-			if err := txn.SetSystemConfigTrigger(); err != nil {
-				return err
-			}
-			if idVersions != nil {
-				count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, now)
-				if err != nil {
+				if err := txn.SetSystemConfigTrigger(); err != nil {
 					return err
 				}
-				if count > 0 {
-					return errors.Errorf(
-						`penultimate schema version is leased, upgrade again with no outstanding schema changes`,
-					)
+				if idVersions != nil {
+					// Count the leases at the transaction's original timestamp,
+					// which requires a scan of the system.lease table. This
+					// will force the transaction to push its timestamp if it's
+					// migrating the system.lease descriptor, but it should
+					// still be able to commit.
+					count, err := sql.CountLeases(ctx, r.sqlExecutor, idVersions, txn.OrigTimestamp())
+					if err != nil {
+						return err
+					}
+					if count > 0 {
+						return errors.Errorf(
+							`penultimate schema version is leased, upgrade again with no outstanding schema changes`,
+						)
+					}
 				}
+				return txn.CommitInBatch(ctx, b)
+			})
+
+			switch err {
+			case nil:
+				break TxnLoop
+			case errTxnRestarted:
+				// Loop around and retry.
+			default:
+				return err
 			}
-			return txn.Run(ctx, b)
-		}); err != nil {
-			return err
 		}
 	}
 	return nil

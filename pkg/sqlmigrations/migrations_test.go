@@ -27,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -533,6 +535,60 @@ func TestAdminUserExists(t *testing.T) {
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
+	}
+}
+
+func TestEnsureAdminRoleOnLeaseTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "repeat: ensure admin role privileges in all descriptors")
+	mt.start(t, base.TestServerArgs{})
+
+	// Fetch the descriptor for the system.lease table. We're going to modify it
+	// to force it to hit the migration path in ensureMaxPrivileges. An prior
+	// bug would result in a deadlock when migrating this table to ensure that
+	// the admin role had proper privileges. See #43497.
+	tableID := sqlbase.ID(keys.LeaseTableID)
+	role := sqlbase.AdminRole
+	query := `SELECT descriptor FROM system.descriptor WHERE id = $1`
+	var descBytes []byte
+	mt.sqlDB.QueryRow(t, query, tableID).Scan(&descBytes)
+
+	// Revoke some of the Admin roles privileges and re-write.
+	var desc sqlbase.Descriptor
+	if err := protoutil.Unmarshal(descBytes, &desc); err != nil {
+		t.Fatal(err)
+	}
+	desc.GetTable().Privileges.Revoke(role, privilege.ReadData)
+	if err := mt.kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableID), &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Confirm that the descriptor has incorrect privileges.
+	mt.sqlDB.QueryRow(t, query, tableID).Scan(&descBytes)
+	if err := protoutil.Unmarshal(descBytes, &desc); err != nil {
+		t.Fatal(err)
+	}
+	if p := desc.GetTable().Privileges; p.CheckPrivilege(role, privilege.SELECT) {
+		t.Fatalf("expected incorrect privileges, found %v", p)
+	}
+
+	// Run the migration, which should correct the privileges.
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fetch the descriptor again. Its privileges should have been updated.
+	mt.sqlDB.QueryRow(t, query, tableID).Scan(&descBytes)
+	if err := protoutil.Unmarshal(descBytes, &desc); err != nil {
+		t.Fatal(err)
+	}
+	if p := desc.GetTable().Privileges; !p.CheckPrivilege(role, privilege.SELECT) {
+		t.Fatalf("expected correct privileges, found %v", p)
 	}
 }
 
