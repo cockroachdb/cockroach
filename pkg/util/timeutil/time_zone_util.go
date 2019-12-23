@@ -84,7 +84,7 @@ func TimeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
 		return 0, false
 	}
 	prefix := string(submatch[0][3])
-	timeString := string(submatch[3])
+	timeString := submatch[3]
 
 	var (
 		hoursString   = "0"
