@@ -12,7 +12,6 @@ package movr
 
 import (
 	"context"
-	gosql "database/sql"
 	"strings"
 	"time"
 
@@ -30,7 +29,7 @@ type rideInfo struct {
 }
 
 type movrWorker struct {
-	db           *gosql.DB
+	db           *workload.RoundRobinDB
 	hists        *histogram.Histograms
 	activeRides  []rideInfo
 	rng          *rand.Rand
@@ -307,13 +306,12 @@ func (m *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	db, err := gosql.Open(`postgres`, strings.Join(urls, ` `))
+	urlStrs := strings.Join(urls, ` `)
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	db, err := workload.NewRoundRobinDB(urlStrs)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-
 	worker := movrWorker{
 		db:           db,
 		rng:          rand.New(rand.NewSource(m.seed)),
@@ -322,7 +320,6 @@ func (m *movr) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		activeRides:  []rideInfo{},
 		hists:        reg.GetHandle(),
 	}
-
 	ql.WorkerFns = append(ql.WorkerFns, worker.generateWorkSimulation())
 
 	return ql, nil
