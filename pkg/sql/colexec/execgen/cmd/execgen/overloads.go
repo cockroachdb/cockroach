@@ -540,6 +540,10 @@ type intFloatCustomizer struct{}
 // timestampCustomizer is necessary since time.Time doesn't have infix operators.
 type timestampCustomizer struct{}
 
+// intervalCustomizer is necessary since duration.Duration doesn't have infix
+// operators.
+type intervalCustomizer struct{}
+
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		args := map[string]string{"Target": target, "Left": l, "Right": r}
@@ -1021,11 +1025,28 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
 	}
 }
 
-func (timestampCustomizer) getHashAssignFunc() assignFunc {
+func (c timestampCustomizer) getHashAssignFunc() assignFunc {
 	return func(op overload, target, v, _ string) string {
 		return fmt.Sprintf(`
 		  s := %[2]s.UnixNano()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&s)), %[1]s)
+		`, target, v)
+	}
+}
+
+func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		return fmt.Sprintf("%s = %s.Compare(%s)", target, l, r)
+	}
+}
+
+func (c intervalCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf(`
+		  months, days, nanos := %[2]s.Months, %[2]s.Days, %[2]s.Nanos()
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&months)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&days)), %[1]s)
+		  %[1]s = memhash64(noescape(unsafe.Pointer(&nanos)), %[1]s)
 		`, target, v)
 	}
 }
@@ -1036,6 +1057,7 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Interval}, intervalCustomizer{})
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightFloatType := range coltypes.FloatTypes {
 			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
