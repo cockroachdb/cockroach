@@ -233,7 +233,7 @@ full-join (cross)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) one:6(int)
  ├── cardinality: [1 - ]
  ├── key: (1)
- ├── fd: (1)-->(2-6), ()~~>(6)
+ ├── fd: (1)-->(2-6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
@@ -609,7 +609,7 @@ project
  │    ├── fd: (13)-->(11)
  │    ├── left-join (cross)
  │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
- │    │    ├── fd: (13)-->(6), ()~~>(10)
+ │    │    ├── fd: (13)-->(6)
  │    │    ├── ordinality
  │    │    │    ├── columns: expr:6(int) rownum:13(int!null)
  │    │    │    ├── key: (13)
