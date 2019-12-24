@@ -40,7 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
@@ -414,6 +416,22 @@ type httpStorage struct {
 
 var _ ExternalStorage = &httpStorage{}
 
+type retryableHTTPError struct {
+	cause error
+}
+
+func (e *retryableHTTPError) Error() string {
+	return fmt.Sprintf("retryable http error: %s", e.cause)
+}
+
+// package visible for test.
+var httpRetryOptions = retry.Options{
+	InitialBackoff: 100 * time.Millisecond,
+	MaxBackoff:     2 * time.Second,
+	MaxRetries:     32,
+	Multiplier:     4,
+}
+
 func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	var tlsConf *tls.Config
 	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
@@ -474,21 +492,41 @@ func (h *httpStorage) Conf() roachpb.ExternalStorage {
 	}
 }
 
-type reqSender = func(reqHeaders map[string]string) (io.ReadCloser, http.Header, error)
-
 type resumingHTTPReader struct {
-	b         io.ReadCloser
-	canResume bool      // Can we resume if download aborts prematurely?
-	pos       int64     // How much data was received so far.
-	retryReq  reqSender // Retry request
+	body      io.ReadCloser
+	canResume bool  // Can we resume if download aborts prematurely?
+	pos       int64 // How much data was received so far.
+	ctx       context.Context
+	url       string
+	client    *httpStorage
 }
 
 var _ io.ReadCloser = &resumingHTTPReader{}
 
-const maxNoProgressHTTPRetries = 16
+func newResumingHTTPReader(
+	ctx context.Context, client *httpStorage, url string,
+) (*resumingHTTPReader, error) {
+	r := &resumingHTTPReader{
+		ctx:    ctx,
+		client: client,
+		url:    url,
+	}
+
+	resp, err := r.sendRequest(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	r.canResume = resp.Header.Get("Accept-Ranges") == "bytes"
+	r.body = resp.Body
+	return r, nil
+}
 
 func (r *resumingHTTPReader) Close() error {
-	return r.b.Close()
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
 }
 
 // checkHTTPContentRangeHeader parses Content-Range header and
@@ -518,76 +556,97 @@ func checkHTTPContentRangeHeader(h string, pos int64) error {
 	return nil
 }
 
+func (r *resumingHTTPReader) sendRequest(
+	reqHeaders map[string]string,
+) (resp *http.Response, err error) {
+	for attempt, retries := 0,
+		retry.StartWithCtx(r.ctx, httpRetryOptions); retries.Next(); attempt++ {
+		resp, err = r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
+
+		if err == nil {
+			return
+		}
+
+		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
+
+		if _, ok := err.(*retryableHTTPError); !ok {
+			break
+		}
+	}
+
+	return
+}
+
 // requestNextRanges issues additional http request
 // to continue downloading next range of bytes.
 func (r *resumingHTTPReader) requestNextRange() (err error) {
-	if err := r.b.Close(); err != nil {
+	if err := r.body.Close(); err != nil {
 		return err
 	}
 
-	var header http.Header
-	r.b, header, err = r.retryReq(map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)})
+	r.body = nil
+	var resp *http.Response
+	resp, err = r.sendRequest(map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)})
 
-	if err != nil {
-		return err
+	if err == nil {
+		err = checkHTTPContentRangeHeader(resp.Header.Get("Content-Range"), r.pos)
 	}
 
-	return checkHTTPContentRangeHeader(header.Get("Content-Range"), r.pos)
+	if err == nil {
+		r.body = resp.Body
+	}
+	return
 }
+
+// isResumableHTTPError returns true if we can
+// resume download after receiving an error 'err'.
+// We can attempt to resume download if the error is ErrUnexpectedEOF.
+// In particular, we should not worry about a case when error is io.EOF.
+// The reason for this is two-fold:
+//   1. The underlying http library converts io.EOF to io.ErrUnexpectedEOF
+//   if the number of bytes transferred is less than the number of
+//   bytes advertised in the Content-Length header.  So if we see
+//   io.ErrUnexpectedEOF we can simply request the next range.
+//   2. If the server did *not* advertise Content-Length, then
+//   there is really nothing we can do: http standard says that
+//   the stream ends when the server terminates connection.
+// In addition, we treat connection reset by peer errors (which can
+// happen if we didn't read from the connection too long due to e.g. load),
+// the same was as unexpected eof errors.
+func isResumableHTTPError(err error) bool {
+	return errors.Is(err, io.ErrUnexpectedEOF) || sysutil.IsErrConnectionReset(err)
+}
+
+const maxNoProgressReads = 3
 
 // Read implements io.Reader interface to read the data from the underlying
 // http stream, issuing additional requests in case download is interrupted.
 func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
-	retries := 0
-
-	for n == 0 && err == nil && retries < maxNoProgressHTTPRetries {
-		n, err = r.b.Read(p)
+	for retries := 0; n == 0 && err == nil; retries++ {
+		n, err = r.body.Read(p)
 		r.pos += int64(n)
 
-		if n > 0 {
-			// As long as download progresses, reset the retries.
-			retries = 0
+		if err != nil && !errors.IsAny(err, io.EOF, io.ErrUnexpectedEOF) {
+			log.Errorf(r.ctx, "HTTP:Read err: %s", err)
 		}
 
 		// Resume download if the http server supports this.
-		// We can attempt to resume download iff the error is ErrUnexpectedEOF.
-		// In particular, we should not worry about a case when error is io.EOF.
-		// The reason for this is two-fold:
-		//   1. The underlying http library converts io.EOF to io.ErrUnexpectedEOF
-		//   if the number of bytes transferred is less than the number of
-		//   bytes advertised in the Content-Length header.  So if we see
-		//   io.ErrUnexpectedEOF we can simply request the next range.
-		//   2. If the server did *not* advertise Content-Length, then
-		//   there is really nothing we can do: http standard says that
-		//   the stream ends when the server terminates connection.
-		if errors.Is(err, io.ErrUnexpectedEOF) && r.canResume {
-			retries++
+		if r.canResume && isResumableHTTPError(err) {
+			log.Errorf(r.ctx, "HTTP:Retry: error %s", err)
+			if retries > maxNoProgressReads {
+				err = errors.Wrap(err, "multiple Read calls return no data")
+				return
+			}
 			err = r.requestNextRange()
 		}
 	}
+
 	return
 }
 
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	sender := func(reqHeaders map[string]string) (io.ReadCloser, http.Header, error) {
-		resp, err := h.req(ctx, "GET", basename, nil, reqHeaders)
-		if err != nil {
-			return nil, nil, err
-		}
-		return resp.Body, resp.Header, nil
-	}
-
-	body, headers, err := sender(nil)
-	if err != nil {
-		return nil, err
-	}
-	return &resumingHTTPReader{
-		b:         body,
-		canResume: headers.Get("Accept-Ranges") == "bytes",
-		pos:       0,
-		retryReq:  sender,
-	}, nil
+	return newResumingHTTPReader(ctx, h, basename)
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
@@ -658,19 +717,25 @@ func (h *httpStorage) req(
 	dest.Path = filepath.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
+	}
 	req = req.WithContext(ctx)
 
 	for key, val := range headers {
 		req.Header.Add(key, val)
 	}
 
-	if err != nil {
-		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
-	}
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error executing request %s %q", method, url)
+		// We failed to establish connection to the server (we don't even have
+		// a response object/server response code). Those errors (e.g. due to
+		// network blip, or DNS resolution blip, etc) are usually transient. The
+		// client may choose to retry the request few times before giving up.
+		return nil, &retryableHTTPError{err}
 	}
+
 	switch resp.StatusCode {
 	case 200, 201, 204, 206:
 		// Pass.
