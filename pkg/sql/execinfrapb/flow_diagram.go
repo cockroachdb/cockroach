@@ -714,7 +714,7 @@ func GeneratePlanDiagramURL(
 ) (string, url.URL, error) {
 	d, err := GeneratePlanDiagram(sql, flows)
 	if err != nil {
-		return "", url.URL{}, nil
+		return "", url.URL{}, err
 	}
 	return d.ToURL()
 }
