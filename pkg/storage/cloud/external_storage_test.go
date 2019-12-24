@@ -28,12 +28,15 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/spf13/pflag"
@@ -798,6 +801,10 @@ func TestHttpGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	data := []byte("to serve, or not to serve.  c'est la question")
 
+	httpRetryOptions.InitialBackoff = 1 * time.Microsecond
+	httpRetryOptions.MaxBackoff = 10 * time.Millisecond
+	httpRetryOptions.MaxRetries = 100
+
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
 			limit := tc
@@ -829,18 +836,45 @@ func TestHttpGet(t *testing.T) {
 				}
 			}))
 
-			defer s.Close()
+			// Start antagonist function that aggressively closes client connections.
+			ctx, cancelAntagonist := context.WithCancel(context.Background())
+			g := ctxgroup.WithContext(ctx)
+			g.GoCtx(func(ctx context.Context) error {
+				opts := retry.Options{
+					InitialBackoff: 500 * time.Microsecond,
+					MaxBackoff:     1 * time.Millisecond,
+				}
+				for attempt := retry.StartWithCtx(ctx, opts); attempt.Next(); {
+					s.CloseClientConnections()
+				}
+				return nil
+			})
+
 			store, err := makeHTTPStorage(s.URL, testSettings)
 			require.NoError(t, err)
 
-			defer store.Close()
-			f, err := store.ReadFile(context.Background(), "/something")
+			var file io.ReadCloser
+
+			// Cleanup.
+			defer func() {
+				s.Close()
+				if store != nil {
+					require.NoError(t, store.Close())
+				}
+				if file != nil {
+					require.NoError(t, file.Close())
+				}
+				cancelAntagonist()
+				_ = g.Wait()
+			}()
+
+			// Read the file and verify results.
+			file, err = store.ReadFile(ctx, "/something")
 			require.NoError(t, err)
-			defer f.Close()
-			b, err := ioutil.ReadAll(f)
+
+			b, err := ioutil.ReadAll(file)
 			require.NoError(t, err)
 			require.EqualValues(t, data, b)
 		})
 	}
-
 }
