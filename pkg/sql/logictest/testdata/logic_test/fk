@@ -7,13 +7,13 @@ statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
-CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE)
+CREATE TABLE customers (id INT PRIMARY KEY, email STRING UNIQUE, FAMILY (id), FAMILY (email))
 
 statement ok
 INSERT INTO customers VALUES (1, 'a@co.tld'), (2, 'b@co.tld')
 
 statement ok
-CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
+CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING, FAMILY (sku), FAMILY (upc, vendor))
 
 statement ok
 INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
@@ -62,7 +62,8 @@ CREATE TABLE orders (
   customer INT CONSTRAINT valid_customer REFERENCES customers (id),
   PRIMARY KEY (id, shipment),
   INDEX (product),
-  INDEX (customer)
+  INDEX (customer),
+  FAMILY (id, shipment), FAMILY (product, customer)
 )
 
 statement ok
@@ -715,8 +716,8 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'FKScan%'
 ----
-FKScan /Table/93/1/3/{0-1}
-FKScan /Table/94/1/2/{0-1}
+FKScan /Table/93/1/3{-/#}
+FKScan /Table/94/1/2{-/#}
 
 statement ok
 CREATE TABLE tx (
