@@ -368,6 +368,11 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 			arrowserde.FloatingPointAddPrecision(fb, arrowserde.PrecisionDOUBLE)
 			fbTypOffset = arrowserde.FloatingPointEnd(fb)
 			fbTyp = arrowserde.TypeFloatingPoint
+		case coltypes.Timestamp:
+			// Timestamps are marshaled into bytes, so we use binary headers.
+			arrowserde.BinaryStart(fb)
+			fbTypOffset = arrowserde.BinaryEnd(fb)
+			fbTyp = arrowserde.TypeTimestamp
 		default:
 			panic(errors.Errorf(`don't know how to map %s`, typ))
 		}
@@ -451,6 +456,8 @@ func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
 		default:
 			return coltypes.Unhandled, errors.Errorf(`unhandled float precision %d`, floatType.Precision())
 		}
+	case arrowserde.TypeTimestamp:
+		return coltypes.Timestamp, nil
 	}
 	// It'd be nice if this error could include more details, but flatbuffers
 	// doesn't make a String method or anything like that.

@@ -93,7 +93,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 		if err == nil {
 			vec.Bytes().Set(int(idx), data.GetBytes())
 		}
-	case types.TimestampFamily:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
 		buf, t, err = encoding.DecodeUntaggedTimeValue(buf)
 		vec.Timestamp()[idx] = t

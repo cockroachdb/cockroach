@@ -3,24 +3,26 @@
 # Check that all types supported by the vectorized engine can be read correctly.
 statement ok
 CREATE TABLE all_types (
-    _bool      BOOL,
-    _bytes     BYTES,
-    _date      DATE,
-    _decimal   DECIMAL,
-    _int2      INT2,
-    _int4      INT4,
-    _int       INT8,
-    _oid       OID,
-    _float     FLOAT8,
-    _string    STRING,
-    _uuid      UUID,
-    _timestamp TIMESTAMP
+    _bool        BOOL,
+    _bytes       BYTES,
+    _date        DATE,
+    _decimal     DECIMAL,
+    _int2        INT2,
+    _int4        INT4,
+    _int         INT8,
+    _oid         OID,
+    _float       FLOAT8,
+    _string      STRING,
+    _uuid        UUID,
+    _timestamp   TIMESTAMP,
+    _timestamptz TIMESTAMPTZ
 )
 
 statement ok
 INSERT
   INTO all_types
 VALUES (
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -46,14 +48,15 @@ VALUES (
        1.23,
        '123',
        '63616665-6630-3064-6465-616462656562',
-       '1-1-18 1:00:00.001'
+       '1-1-18 1:00:00.001',
+       '1-1-18 1:00:00.001-8'
        )
 
-query BTTRIIIORTTT
+query BTTRIIIORTTTT
 SELECT * FROM all_types ORDER BY 1
 ----
-NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL
-false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000
+NULL   NULL  NULL                             NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL                                  NULL                                 NULL
+false  123   2019-10-22 00:00:00 +0000 +0000  1.23  123   123   123   123   1.23  123   63616665-6630-3064-6465-616462656562  2001-01-18 01:00:00.001 +0000 +0000  2001-01-18 09:00:00.001 +0000 UTC
 
 statement ok
 CREATE TABLE skip_unneeded_cols (
