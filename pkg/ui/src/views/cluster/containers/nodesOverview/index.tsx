@@ -27,7 +27,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { ColumnsConfig, Table } from "src/components/table";
+import { ColumnsConfig, Table, Text, TextTypes, Tooltip } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 
@@ -40,6 +40,13 @@ const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
 const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/decommissioned_sort_setting", (s) => s.localSettings,
 );
+
+// AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
+// for correct sorting in the table.
+enum AggregatedNodeStatus {
+  READY = 6,
+  WARNING = 7,
+}
 
 // Represents the aggregated dataset with possibly nested items
 // for table view. Note: table columns do not match exactly to fields,
@@ -64,7 +71,7 @@ interface NodeStatusRow {
   * If all nested nodes have Live status then the current item has Ready status.
   * Otherwise, it has Warning status.
   * */
-  status: LivenessStatus | "Ready" | "Warning";
+  status: LivenessStatus | AggregatedNodeStatus;
   children?: Array<NodeStatusRow>;
 }
 
@@ -94,6 +101,20 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
   dataSource: DecommissionedNodeStatusRow[];
 }
 
+const getStatusDescription = (status: LivenessStatus) => {
+  switch (status) {
+    case LivenessStatus.LIVE:
+      return "This node is currently healthy.";
+    case LivenessStatus.DECOMMISSIONING:
+      return `This node is in the process of being decommissioned.
+       It may take some time to transfer the data to other nodes.
+       When finished, it will appear below as a decommissioned node.`;
+    default:
+      return "This node has not recently reported as being live. " +
+        "It may not be functioning correctly, but no automatic action has yet been taken.";
+  }
+};
+
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
  * both healthy and suspect nodes. Included is a side-bar with summary
@@ -109,14 +130,14 @@ class NodeList extends React.Component<LiveNodeListProps> {
         if (!!record.nodeId) {
           return (
             <React.Fragment>
-              <span>{record.nodeId}</span>
-              <span>{record.region}</span>
+              <Text>{record.nodeId}</Text>
+              <Text>{record.region}</Text>
             </React.Fragment>);
         } else {
           // Top level grouping item does not have nodeId
           return (
             <React.Fragment>
-              <span>{record.region}</span>
+              <Text>{record.region}</Text>
             </React.Fragment>);
         }
       },
@@ -126,10 +147,10 @@ class NodeList extends React.Component<LiveNodeListProps> {
         if (a.region > b.region) { return 1; }
         return 0;
       },
+      className: "column--border-right",
     },
     {
       key: "nodesCount",
-      // dataIndex: "nodesCount",
       title: "# of nodes",
       sorter: (a, b) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
@@ -139,18 +160,21 @@ class NodeList extends React.Component<LiveNodeListProps> {
       },
       render: (_text, record) => record.nodesCount,
       sortDirections: ["ascend", "descend"],
+      className: "column--align-right",
     },
     {
       key: "uptime",
       dataIndex: "uptime",
       title: "uptime",
       sorter: true,
+      className: "column--align-right",
     },
     {
       key: "replicas",
       dataIndex: "replicas",
       title: "replicas",
       sorter: true,
+      className: "column--align-right",
     },
     {
       key: "capacityUse",
@@ -158,6 +182,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
       sorter: (a, b) =>
         a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
+      className: "column--align-right",
     },
     {
       key: "memoryUse",
@@ -165,6 +190,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       render: (_text, record) => Percentage(record.usedMemory, record.availableMemory),
       sorter: (a, b) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
+      className: "column--align-right",
     },
     {
       key: "version",
@@ -174,15 +200,39 @@ class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "status",
-      dataIndex: "status",
+      render: (_text, record) => {
+        let status: string;
+        let tooltipText: string;
+
+        switch (record.status) {
+          case AggregatedNodeStatus.READY:
+          case AggregatedNodeStatus.WARNING:
+            status =  _.capitalize(AggregatedNodeStatus[record.status]);
+            break;
+          default:
+            status = _.capitalize(LivenessStatus[record.status]);
+            tooltipText = getStatusDescription(record.status);
+            break;
+        }
+        return (
+          <Text
+            className={`status-column status-column--color-${status.toLowerCase()}`}
+            textType={TextTypes.Body}>
+            { tooltipText ? (<Tooltip title={tooltipText}>{status}</Tooltip>) : status }
+          </Text>
+        );
+      },
       title: "status",
-      sorter: true,
+      sorter: (a, b) => a.status - b.status,
     },
     {
       key: "logs",
       title: "",
-      render: (_text, record) => record.nodeId
-        && <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>,
+      render: (_text, record) => record.nodeId && (
+        <div className="cell--show-on-hover">
+          <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>
+        </div>),
+      sorter: true,
     },
   ];
 
@@ -218,7 +268,19 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "status",
       title: "status",
-      render: (_text, record) => record.status,
+      render: (_text, record) => {
+        const status = _.capitalize(LivenessStatus[record.status]);
+        const tooltipText = getStatusDescription(record.status);
+        return (
+          <Text
+            className={`status-column status-column--color-${status.toLowerCase()}`}
+            textType={TextTypes.Body}>
+            <Tooltip title={tooltipText}>
+              {status}
+            </Tooltip>
+          </Text>
+        );
+      },
     },
   ];
 
@@ -275,7 +337,7 @@ const liveNodesTableData = createSelector(
   (statuses, nodesSummary) => {
     const liveStatuses = statuses.live || [];
 
-    // TODO (koorosh): Do not display aggregated category and # of nodes column
+    // Do not display aggregated category and # of nodes column
     // when `withLocalitiesSetup` is false.
     // const withLocalitiesSetup = liveStatuses.some(getNodeRegion);
 
@@ -314,11 +376,17 @@ const liveNodesTableData = createSelector(
           availableCapacity: _.sum(nestedRows.map(nr => nr.availableCapacity)),
           usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
           availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
-          status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ? "Ready" : "Warning",
+          status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ?
+            AggregatedNodeStatus.READY : AggregatedNodeStatus.WARNING,
           children: nestedRows,
         };
       })
       .value();
+
+    // Do not render nested tree structure in case only one group is present.
+    if (data.length === 1) {
+      return _.head(data).children;
+    }
     return data;
   });
 
