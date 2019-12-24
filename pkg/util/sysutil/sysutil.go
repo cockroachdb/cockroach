@@ -15,6 +15,7 @@
 package sysutil
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -58,4 +59,15 @@ func RefreshSignaledChan() <-chan os.Signal {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, refreshSignal)
 	return ch
+}
+
+// IsErrConnectionReset returns true if an
+// error is a "connection reset by peer" error.
+func IsErrConnectionReset(err error) bool {
+	if opErr, ok := err.(*net.OpError); ok {
+		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
+			return sysErr.Err == syscall.ECONNRESET
+		}
+	}
+	return false
 }
