@@ -28,10 +28,7 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	// HACK: crlfmt removes the "*/}}" comment if it's the last line in the import
-	// block. This was picked because it sorts after "pkg/sql/exec/execgen" and
-	// has no deps.
-	_ "github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
@@ -48,6 +45,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
 var _ time.Time
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // */}}
 

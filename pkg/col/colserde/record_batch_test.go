@@ -208,9 +208,17 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 		dataLen         = rng.Intn(maxDataLen) + 1
 		nullProbability = rng.Float64()
 		buf             = bytes.Buffer{}
+		supportedTypes  = make([]coltypes.T, 0, len(coltypes.AllTypes))
 	)
 
-	supportedTypes := coltypes.AllTypes
+	// We do not support intervals.
+	for _, t := range coltypes.AllTypes {
+		if t == coltypes.Interval {
+			continue
+		}
+		supportedTypes = append(supportedTypes, t)
+	}
+
 	for i := range typs {
 		typs[i] = supportedTypes[rng.Intn(len(supportedTypes))]
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)

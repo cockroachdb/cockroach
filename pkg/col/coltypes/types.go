@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // T represents an exec physical type - a bytes representation of a particular
@@ -41,6 +42,8 @@ const (
 	Float64
 	// Timestamp is a column of type time.Time
 	Timestamp
+	// Interval is a column of type duration.Duration
+	Interval
 
 	// Unhandled is a temporary value that represents an unhandled type.
 	// TODO(jordan): this should be replaced by a panic once all types are
@@ -78,6 +81,7 @@ func init() {
 	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], NumberTypes...)
 	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], NumberTypes...)
 	CompatibleTypes[Timestamp] = append(CompatibleTypes[Timestamp], Timestamp)
+	CompatibleTypes[Interval] = append(CompatibleTypes[Interval], Interval)
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
@@ -102,6 +106,8 @@ func FromGoType(v interface{}) T {
 		return Decimal
 	case time.Time:
 		return Timestamp
+	case duration.Duration:
+		return Interval
 	default:
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
@@ -126,6 +132,8 @@ func (t T) GoTypeName() string {
 		return "float64"
 	case Timestamp:
 		return "time.Time"
+	case Interval:
+		return "duration.Duration"
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}

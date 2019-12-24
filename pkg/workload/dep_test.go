@@ -26,11 +26,18 @@ func TestDepWhitelist(t *testing.T) {
 		[]string{
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/coltypes`,
+			`github.com/cockroachdb/cockroach/pkg/util/arith`,
 			`github.com/cockroachdb/cockroach/pkg/util/bufalloc`,
+			`github.com/cockroachdb/cockroach/pkg/util/duration`,
 			`github.com/cockroachdb/cockroach/pkg/util/encoding/csv`,
+			`github.com/cockroachdb/cockroach/pkg/util/stacktrace`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,
 			`github.com/cockroachdb/cockroach/pkg/workload/histogram`,
+			// TODO(dan): These really shouldn't be used in util packages, but the
+			// payoff of fixing it is not worth it right now.
+			`github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode`,
+			`github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror`,
 		},
 	)
 }

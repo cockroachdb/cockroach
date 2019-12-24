@@ -34,6 +34,7 @@ import (
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -45,6 +46,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
 var _ time.Time
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for

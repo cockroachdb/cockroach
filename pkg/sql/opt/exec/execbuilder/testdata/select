@@ -927,7 +927,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
 ----
 ·     distributed  false                        ·             ·
-·     vectorized   false                        ·             ·
+·     vectorized   true                         ·             ·
 scan  ·            ·                            (n interval)  ·
 ·     table        num@num_n_key                ·             ·
 ·     spans        /-01:00:00-/1 day -25:00:00  ·             ·

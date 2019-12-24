@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
@@ -40,6 +41,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
 var _ time.Time
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 const (
 	_FAMILY = types.Family(0)

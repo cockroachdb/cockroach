@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -104,6 +105,11 @@ func RandomVec(
 			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
 			loc := locations[rng.Intn(len(locations))]
 			timestamps[i] = timestamps[i].In(loc)
+		}
+	case coltypes.Interval:
+		intervals := vec.Interval()
+		for i := 0; i < n; i++ {
+			intervals[i] = duration.FromFloat64(rng.Float64())
 		}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", typ))
