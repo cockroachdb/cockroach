@@ -569,16 +569,16 @@ func TestAggregatorRandom(t *testing.T) {
 
 									expNull := expNulls[tupleIdx]
 									if expNull {
-										if !sumCol.Nulls().NullAt(uint16(j)) {
+										if !sumCol.Nulls().NullAt(j) {
 											t.Fatalf("Found non-null sum %f, expected null, idx %d of batch %d", sum, j, i)
 										}
-										if !minCol.Nulls().NullAt(uint16(j)) {
+										if !minCol.Nulls().NullAt(j) {
 											t.Fatalf("Found non-null min %f, expected null, idx %d of batch %d", sum, j, i)
 										}
-										if !maxCol.Nulls().NullAt(uint16(j)) {
+										if !maxCol.Nulls().NullAt(j) {
 											t.Fatalf("Found non-null max %f, expected null, idx %d of batch %d", sum, j, i)
 										}
-										if !avgCol.Nulls().NullAt(uint16(j)) {
+										if !avgCol.Nulls().NullAt(j) {
 											t.Fatalf("Found non-null avg %f, expected null, idx %d of batch %d", sum, j, i)
 										}
 									} else {
