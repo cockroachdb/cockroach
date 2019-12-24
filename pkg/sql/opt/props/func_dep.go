@@ -145,8 +145,8 @@ import (
 //
 // Intuitively, if two different rows have equal values for A using "NULLs are
 // equal" semantics, then those rows will also have equal values for B using
-// those same semantics. As an example, the following rows would be be valid for
-// the dependency (b)-->(c):
+// those same semantics. As an example, the following sets of rows would be
+// valid for the dependency (b)-->(c):
 //
 //   b     c
 //   ----------
@@ -154,17 +154,27 @@ import (
 //   1     NULL
 //   NULL  1
 //   NULL  1
+//   2     3
+//   2     3
+//
+//   b     c
+//   ----------
 //   NULL  NULL
 //   NULL  NULL
 //
-// but these rows would be invalid:
+// but these sets of rows would be invalid:
 //
 //   b     c
 //   ----------
 //   NULL  1
 //   NULL  NULL
 //
-// Unique constraints allow the latter case, however, and therefore it is
+//   b     c
+//   ----------
+//   NULL  1
+//   NULL  2
+//
+// Unique constraints allow the latter cases, however, and therefore it is
 // desirable to somehow encode these weaker dependencies as FDs, because they
 // can be strengthened later on if NULL values are filtered from determinant
 // columns (more on that below).
@@ -190,13 +200,18 @@ import (
 // In other words, if two different non-NULL rows have equal values for A, then
 // those rows will also have equal values for B using NULL= semantics. Note that
 // both strict and lax equality definitions collapse to the same semantics when
-// the columns of A are not-NULL. The example rows shown above that were invalid
-// for a strict dependency are valid for a lax dependency:
+// the columns of A are not-NULL. The example row sets shown above that were
+// invalid for a strict dependency are valid for a lax dependency:
 //
 //   b     c
 //   ----------
 //   NULL  1
 //   NULL  NULL
+//
+//   b     c
+//   ----------
+//   NULL  1
+//   NULL  2
 //
 // To continue the CREATE TABLE example shown above, another FD can now be
 // derived from that statement, in addition to the primary key FD:
@@ -637,6 +652,9 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 	if !keyCols.SubsetOf(allCols) {
 		panic(errors.AssertionFailedf("allCols does not include keyCols"))
 	}
+	if keyCols.Empty() {
+		panic(errors.AssertionFailedf("lax key cannot be empty"))
+	}
 
 	// Ensure we have candidate key (i.e. has no columns that are functionally
 	// determined by other columns).
@@ -673,7 +691,6 @@ func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
 // Note: this function should be called with all known null columns; it won't do
 // as good of a job if it's called multiple times with different subsets.
 func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
-	var constCols opt.ColSet
 	var laxFDs util.FastIntSet
 	for i := range f.deps {
 		fd := &f.deps[i]
@@ -681,24 +698,10 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 			continue
 		}
 
-		if fd.from.Empty() {
-			// Constant value FD can be made strict if the constant itself is
-			// not NULL. A lax constant FD means that the value can be either
-			// a single value or else NULL, so eliminating the NULL possibility
-			// means it has a single definite value (i.e. is strict).
-			constCols.UnionWith(fd.to)
-			constCols.IntersectionWith(notNullCols)
-		} else {
-			// Non-constant FD can be made strict if all determinant columns are
-			// not null.
-			if fd.from.SubsetOf(notNullCols) {
-				laxFDs.Add(i)
-			}
+		// FD can be made strict if all determinant columns are not null.
+		if fd.from.SubsetOf(notNullCols) {
+			laxFDs.Add(i)
 		}
-	}
-
-	if !constCols.Empty() {
-		f.AddConstants(constCols)
 	}
 
 	for i, ok := laxFDs.Next(0); ok; i, ok = laxFDs.Next(i + 1) {
@@ -741,6 +744,8 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 //
 //   ()-->(a)
 //
+// Since it is a constant, any set of determinant columns (including the empty
+// set) trivially determines the value of "a".
 func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 	if cols.Empty() {
 		return
@@ -749,9 +754,9 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 	// Determine complete set of constants by computing closure.
 	cols = f.ComputeClosure(cols)
 
-	// Ensure that first FD in the set is a strict constant FD and make sure the
+	// Ensure that first FD in the set is a constant FD and make sure the
 	// constants are part of it.
-	if len(f.deps) == 0 || !f.deps[0].hasStrictConstants() {
+	if len(f.deps) == 0 || !f.deps[0].isConstant() {
 		deps := make([]funcDep, len(f.deps)+1)
 		deps[0] = funcDep{to: cols, strict: true}
 		copy(deps[1:], f.deps)
@@ -853,8 +858,8 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	for i := range f.deps {
 		fd := &f.deps[i]
 
-		// Remember strict constant columns.
-		if fd.strict && fd.from.Empty() {
+		// Remember constant columns.
+		if fd.isConstant() {
 			constCols = fd.to
 		}
 
@@ -909,7 +914,7 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 		// constant columns from dependants for nicer presentation.
 		if !fd.to.SubsetOf(cols) {
 			fd.to = fd.to.Intersection(cols)
-			if !fd.from.Empty() {
+			if !fd.isConstant() {
 				fd.to.DifferenceWith(constCols)
 			}
 			if !fd.removeToCols(fd.from) {
@@ -995,7 +1000,7 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
 	for i := range inner.deps {
 		fd := &inner.deps[i]
-		if fd.from.Empty() {
+		if fd.isConstant() {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 		} else {
 			f.deps = append(f.deps, *fd)
@@ -1047,7 +1052,7 @@ func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
 		fd := &inner.deps[i]
 		if fd.equiv {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
-		} else if !fd.from.Empty() && f.hasKey == strictKey {
+		} else if !fd.isConstant() && f.hasKey == strictKey {
 			f.addDependency(f.key.Union(fd.from), fd.to, fd.strict, fd.equiv)
 		}
 		// TODO(radu): can we use a laxKey here?
@@ -1080,13 +1085,12 @@ func (f *FuncDepSet) MakeOuter(nullExtendedCols, notNullCols opt.ColSet) {
 	for i := range f.deps {
 		fd := &f.deps[i]
 
-		if fd.from.Empty() {
-			// Null-extended constant dependency becomes lax (i.e. it may be either
-			// its previous constant value or NULL after extension).
-			if fd.strict && fd.to.Intersects(nullExtendedCols) {
-				laxConstCols := fd.to.Intersection(nullExtendedCols)
-				newFDs = append(newFDs, funcDep{from: fd.from, to: laxConstCols})
-				if !fd.removeToCols(laxConstCols) {
+		if fd.isConstant() {
+			// Null-extended constant columns are no longer constant, because they
+			// now may contain NULL values.
+			if fd.to.Intersects(nullExtendedCols) {
+				constCols := fd.to.Intersection(nullExtendedCols)
+				if !fd.removeToCols(constCols) {
 					continue
 				}
 			}
@@ -1226,13 +1230,14 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 // conforms to several invariants:
 //
 //   1. An FD determinant should not intersect its dependants.
-//   2. If a strict constant FD is present, it's the first FD in the set.
-//   3. Lax equivalencies should be reduced to lax dependencies.
-//   4. Equivalence determinant should be exactly one column.
-//   5. The dependants of an equivalence is always its closure.
-//   6. If FD set has a key, it should be a candidate key (already reduced).
-//   7. Closure of key should include all known columns in the FD set.
-//   8. If FD set has no key then key columns should be empty.
+//   2. If a constant FD is present, it's the first FD in the set.
+//   3. A constant FD must be strict.
+//   4. Lax equivalencies should be reduced to lax dependencies.
+//   5. Equivalence determinant should be exactly one column.
+//   6. The dependants of an equivalence is always its closure.
+//   7. If FD set has a key, it should be a candidate key (already reduced).
+//   8. Closure of key should include all known columns in the FD set.
+//   9. If FD set has no key then key columns should be empty.
 //
 func (f *FuncDepSet) Verify() {
 	for i := range f.deps {
@@ -1242,15 +1247,18 @@ func (f *FuncDepSet) Verify() {
 			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", log.Safe(f), log.Safe(i)))
 		}
 
-		if fd.strict && fd.from.Empty() {
+		if fd.isConstant() {
 			if i != 0 {
-				panic(errors.AssertionFailedf("expected strict constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
+			}
+			if !fd.strict {
+				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
 			}
 		}
 
 		if fd.equiv {
 			if !fd.strict {
-				panic(errors.AssertionFailedf("unexpected lax equivalency: %s (%d)", f, i))
+				panic(errors.AssertionFailedf("expected equivalency to be strict: %s (%d)", f, i))
 			}
 
 			if fd.from.Len() != 1 {
@@ -1424,8 +1432,11 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 		return
 	}
 
-	// Delegate strict constant dependency.
-	if strict && from.Empty() {
+	// Delegate constant dependency.
+	if from.Empty() {
+		if !strict {
+			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
+		}
 		f.AddConstants(to)
 		return
 	}
@@ -1496,7 +1507,7 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
-		if fd.from.Empty() {
+		if fd.isConstant() {
 			// If any equivalent column is a constant, then all are constants.
 			if fd.to.Intersects(equiv) && !equiv.SubsetOf(fd.to) {
 				addConst = true
@@ -1585,8 +1596,10 @@ func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.Colu
 	return equivMap
 }
 
-func (f *funcDep) hasStrictConstants() bool {
-	return f.strict && f.from.Empty()
+// isConstant returns true if this FD contains the set of constant columns. If
+// it exists, it must always be the first FD in the set.
+func (f *funcDep) isConstant() bool {
+	return f.from.Empty()
 }
 
 // implies returns true if this FD is at least as strong as the given FD. This
@@ -1610,7 +1623,7 @@ func (f *funcDep) removeFromCols(remove opt.ColSet) bool {
 	if f.from.Intersects(remove) {
 		f.from = f.from.Difference(remove)
 	}
-	return !f.from.Empty()
+	return !f.isConstant()
 
 }
 
