@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -58,9 +59,6 @@ type fkExistenceCheckBaseHelper struct {
 	// `(x,y,z)`.
 	prefixLen int
 
-	// Pre-computed KV key prefix for searchIdx.
-	searchPrefix []byte
-
 	// ids maps column IDs in index searchIdx to positions of the `row`
 	// array provided to each FK existence check. This tells the checker
 	// where to find the values in the row for each column of the
@@ -86,6 +84,9 @@ type fkExistenceCheckBaseHelper struct {
 	// valuesScratch is memory used to populate an error message when the check
 	// fails.
 	valuesScratch tree.Datums
+
+	// spanBuilder is responsible for constructing spans for FK lookups.
+	spanBuilder *span.Builder
 }
 
 // makeFkExistenceCheckBaseHelper instantiates a FK helper.
@@ -136,9 +137,6 @@ func makeFkExistenceCheckBaseHelper(
 		return ret, err
 	}
 
-	// Precompute the KV lookup prefix.
-	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), searchIdx.ID)
-
 	// Initialize the row fetcher.
 	tableArgs := FetcherTableArgs{
 		Desc:             searchTable,
@@ -163,8 +161,8 @@ func makeFkExistenceCheckBaseHelper(
 		mutatedIdx:    mutatedIdx,
 		ids:           ids,
 		prefixLen:     len(ref.OriginColumnIDs),
-		searchPrefix:  searchPrefix,
 		valuesScratch: make(tree.Datums, len(ref.OriginColumnIDs)),
+		spanBuilder:   span.MakeBuilder(searchTable.TableDesc(), searchIdx),
 	}, nil
 }
 
