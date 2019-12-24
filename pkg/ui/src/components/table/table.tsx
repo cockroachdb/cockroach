@@ -10,6 +10,7 @@
 
 import * as  React from "react";
 import { default as AntTable, ColumnProps } from "antd/es/table";
+import ConfigProvider from "antd/es/config-provider";
 
 import "antd/es/table/style/css";
 import "./table.styl";
@@ -19,16 +20,28 @@ export interface ColumnsConfig<T> extends Array<ColumnProps<T>> {}
 export interface TableProps<T> {
   columns: Array<ColumnProps<T>>;
   dataSource: Array<T>;
+  noDataMessage?: string;
 }
 
+const customizeRenderEmpty = (text: string) => () => (
+  <div className="empty-table__message">
+    {text}
+  </div>
+);
+
+Table.defaultProps = {
+  noDataMessage: "No data to display",
+};
+
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource } = props;
+  const { columns, dataSource, noDataMessage } = props;
   return (
+    <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
     <AntTable<T>
       className="crl-table-wrapper"
       columns={columns}
       dataSource={dataSource}
-      pagination={{hideOnSinglePage: true}}
-      indentSize={32} />
+      pagination={{hideOnSinglePage: true}} />
+    </ConfigProvider>
   );
 }

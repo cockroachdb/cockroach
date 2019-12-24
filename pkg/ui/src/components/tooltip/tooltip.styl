@@ -8,10 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./icon";
-export * from "./globalNavigation";
-export * from "./sideNavigation";
-export * from "./tabNavigation";
-export * from "./text";
-export * from "./table";
-export * from "./tooltip";
+@require '~src/components/core/index.styl'
+
+.tooltip-overlay
+  .ant-tooltip-content
+    .ant-tooltip-inner
+      @extend $text--body
+      line-height $line-height--small
+      padding $spacing-x-small $spacing-small
+      color $colors--white
+      background $colors--neutral-8
+    .ant-tooltip-arrow
+      color $colors--neutral-8
