@@ -201,6 +201,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogAmTableID:                  pgCatalogAmTable,
 		sqlbase.PgCatalogAttrDefTableID:             pgCatalogAttrDefTable,
 		sqlbase.PgCatalogAttributeTableID:           pgCatalogAttributeTable,
+		sqlbase.PgCatalogAuthIDTableID:              pgCatalogAuthIDTable,
 		sqlbase.PgCatalogAuthMembersTableID:         pgCatalogAuthMembersTable,
 		sqlbase.PgCatalogAvailableExtensionsTableID: pgCatalogAvailableExtensionsTable,
 		sqlbase.PgCatalogCastTableID:                pgCatalogCastTable,
@@ -493,6 +494,48 @@ CREATE TABLE pg_catalog.pg_cast (
 		// can simply range over the list. This would probably be better for
 		// maintainability anyway.
 		return nil
+	},
+}
+
+var pgCatalogAuthIDTable = virtualSchemaTable{
+	comment: `authorization identifiers - differs from postgres as we do not display passwords, 
+and thus do not require admin privileges for access. 
+https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_authid (
+  oid OID,
+  rolname NAME,
+  rolsuper BOOL,
+  rolinherit BOOL,
+  rolcreaterole BOOL,
+  rolcreatedb BOOL,
+  rolcanlogin BOOL,
+  rolreplication BOOL,
+  rolbypassrls BOOL,
+  rolconnlimit INT4,
+  rolpassword TEXT, 
+  rolvaliduntil TIMESTAMPTZ
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachRole(ctx, p, func(username string, isRole bool) error {
+			isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
+			isRoleDBool := tree.DBool(isRole)
+			return addRow(
+				h.UserOid(username),          // oid
+				tree.NewDName(username),      // rolname
+				tree.MakeDBool(isRoot),       // rolsuper
+				tree.MakeDBool(isRoleDBool),  // rolinherit. Roles inherit by default.
+				tree.MakeDBool(isRoot),       // rolcreaterole
+				tree.MakeDBool(isRoot),       // rolcreatedb
+				tree.MakeDBool(!isRoleDBool), // rolcanlogin. Only users can login.
+				tree.DBoolFalse,              // rolreplication
+				tree.DBoolFalse,              // rolbypassrls
+				negOneVal,                    // rolconnlimit
+				passwdStarString,             // rolpassword
+				tree.DNull,                   // rolvaliduntil
+			)
+		})
 	},
 }
 
