@@ -238,7 +238,7 @@ func decodeTableKeyToCol(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Int64()[idx] = t
-	case types.TimestampFamily:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -297,7 +297,7 @@ func UnmarshalColumnValueToCol(
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
-	case types.TimestampFamily:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		var v time.Time
 		v, err = value.GetTime()
 		vec.Timestamp()[idx] = v
