@@ -1547,10 +1547,6 @@ func TestLint(t *testing.T) {
 			// Ignore types that can change by system.
 			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
 
-			// Ignore tests.
-			// TODO(mjibson): remove this ignore.
-			stream.GrepNot(`pkg/.*_test\.go:`),
-
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
 			stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
@@ -1567,7 +1563,7 @@ func TestLint(t *testing.T) {
 			t.Fatalf("failed to find roachvet: %v", err)
 		}
 		vetCmd(t, crdb.Dir, "go",
-			[]string{"vet", "-vettool", roachlint, "-all", "-printfuncs", printfuncs, pkgScope},
+			[]string{"vet", "-vettool", roachlint, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
 
 	})
