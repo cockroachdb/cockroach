@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,7 +61,6 @@ func TestExprIsNeverNull(t *testing.T) {
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
-			var iVarHelper tree.IndexedVarHelper
 			var err error
 
 			tester := opttester.New(catalog, d.Input)
@@ -83,8 +82,6 @@ func TestExprIsNeverNull(t *testing.T) {
 							d.Fatalf(t, "%v", err)
 						}
 
-						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-
 					default:
 						if err := tester.Flags.Set(arg); err != nil {
 							d.Fatalf(t, "%s", err)
@@ -92,7 +89,7 @@ func TestExprIsNeverNull(t *testing.T) {
 					}
 				}
 
-				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+				expr, err := parser.ParseExpr(d.Input)
 				if err != nil {
 					d.Fatalf(t, "%v", err)
 				}
@@ -107,7 +104,7 @@ func TestExprIsNeverNull(t *testing.T) {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-				err = b.Build(typedExpr)
+				err = b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}

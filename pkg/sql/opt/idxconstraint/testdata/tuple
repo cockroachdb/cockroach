@@ -10,13 +10,13 @@ index-constraints vars=(int) index=(@1 desc)
 ----
 [/3 - /1]
 
-index-constraints vars=(int) index=(@1) semtree-normalize
+index-constraints vars=(int) index=(@1)
 @1 IN (1, 5, 1, 4)
 ----
 [/1 - /1]
 [/4 - /5]
 
-index-constraints vars=(int) index=(@1 desc) semtree-normalize
+index-constraints vars=(int) index=(@1 desc)
 @1 IN (1, 5, 1, 4)
 ----
 [/5 - /4]
@@ -264,13 +264,13 @@ index-constraints vars=(int, int) index=(@1, @2)
 [/1/2 - /3/4]
 Remaining filter: (@1, @2) <= (3, 4)
 
-index-constraints vars=(int, int) index=(@1, @2) semtree-normalize
+index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) BETWEEN (1, 2) AND (3, 4)
 ----
 [/1/2 - /3/4]
 Remaining filter: (@1, @2) <= (3, 4)
 
-index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4) semtree-normalize
+index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 (@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
 ----
 [/1/2 - /4/5]

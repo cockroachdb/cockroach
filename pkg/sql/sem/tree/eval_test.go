@@ -58,19 +58,13 @@ func TestEval(t *testing.T) {
 		})
 	}
 
-	walkExpr := func(t *testing.T, getExpr func(tree.TypedExpr) (tree.TypedExpr, error)) {
+	walkExpr := func(t *testing.T, getExpr func(tree.Expr) (tree.TypedExpr, error)) {
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			expr, err := parser.ParseExpr(d.Input)
 			if err != nil {
 				t.Fatalf("%s: %v", d.Input, err)
 			}
-			// expr.TypeCheck to avoid constant folding.
-			typedExpr, err := expr.TypeCheck(nil, types.Any)
-			if err != nil {
-				return fmt.Sprint(err)
-			}
-
-			e, err := getExpr(typedExpr)
+			e, err := getExpr(expr)
 			if err != nil {
 				return fmt.Sprint(err)
 			}
@@ -83,14 +77,19 @@ func TestEval(t *testing.T) {
 	}
 
 	t.Run("opt", func(t *testing.T) {
-		walkExpr(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
+		walkExpr(t, func(e tree.Expr) (tree.TypedExpr, error) {
 			return optBuildScalar(evalCtx, e)
 		})
 	})
 
 	t.Run("no-opt", func(t *testing.T) {
-		walkExpr(t, func(e tree.TypedExpr) (tree.TypedExpr, error) {
-			return evalCtx.NormalizeExpr(e)
+		walkExpr(t, func(e tree.Expr) (tree.TypedExpr, error) {
+			// expr.TypeCheck to avoid constant folding.
+			typedExpr, err := e.TypeCheck(nil, types.Any)
+			if err != nil {
+				return nil, err
+			}
+			return evalCtx.NormalizeExpr(typedExpr)
 		})
 	})
 
@@ -266,7 +265,7 @@ func TestEval(t *testing.T) {
 	})
 }
 
-func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr, error) {
+func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, error) {
 	var o xform.Optimizer
 	o.Init(evalCtx, nil /* catalog */)
 	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())

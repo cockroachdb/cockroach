@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -77,7 +77,6 @@ func TestIndexConstraints(t *testing.T) {
 			var notNullCols opt.ColSet
 			var iVarHelper tree.IndexedVarHelper
 			var invertedIndex bool
-			var normalizeTypedExpr bool
 			var err error
 
 			var f norm.Factory
@@ -114,9 +113,6 @@ func TestIndexConstraints(t *testing.T) {
 				case "nonormalize":
 					f.DisableOptimizations()
 
-				case "semtree-normalize":
-					normalizeTypedExpr = true
-
 				default:
 					d.Fatalf(t, "unknown argument: %s", key)
 				}
@@ -124,16 +120,9 @@ func TestIndexConstraints(t *testing.T) {
 
 			switch d.Cmd {
 			case "index-constraints":
-				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+				expr, err := parser.ParseExpr(d.Input)
 				if err != nil {
 					d.Fatalf(t, "%v", err)
-				}
-
-				if normalizeTypedExpr {
-					typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
 				}
 
 				varNames := make([]string, len(varTypes))
@@ -142,7 +131,7 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, &f)
 				b.AllowUnsupportedExpr = true
-				err = b.Build(typedExpr)
+				err = b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
@@ -248,8 +237,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			}
 			indexCols, notNullCols := parseIndexColumns(b, md, strings.Split(tc.indexInfo, ", "))
 
-			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-			typedExpr, err := testutils.ParseScalarExpr(tc.expr, iVarHelper.Container())
+			expr, err := parser.ParseExpr(tc.expr)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -258,7 +246,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
 
-			err = bld.Build(typedExpr)
+			err = bld.Build(expr)
 			if err != nil {
 				b.Fatal(err)
 			}
