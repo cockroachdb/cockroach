@@ -544,9 +544,9 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 		// Scalar GroupBy returns exactly one row.
 		rel.Cardinality = props.OneCardinality
 	} else {
-		// GroupBy and DistinctOn act like a filter, never returning more rows than the input
-		// has. However, if the input has at least one row, then at least one row
-		// will also be returned by GroupBy and DistinctOn.
+		// GroupBy and DistinctOn act like a filter, never returning more rows
+		// than the input has. However, if the input has at least one row, then
+		// at least one row will also be returned by GroupBy and DistinctOn.
 		rel.Cardinality = inputProps.Cardinality.AsLowAs(1)
 		if rel.FuncDeps.HasMax1Row() {
 			rel.Cardinality = rel.Cardinality.Limit(1)
