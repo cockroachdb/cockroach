@@ -560,7 +560,6 @@ project
  │    │    │    ├── left-join (cross)
  │    │    │    │    ├── columns: ref_1.k:5(int!null) true:14(bool)
  │    │    │    │    ├── outer: (4)
- │    │    │    │    ├── fd: ()~~>(14)
  │    │    │    │    ├── scan ref_1
  │    │    │    │    │    ├── columns: ref_1.k:5(int!null)
  │    │    │    │    │    └── key: (5)

@@ -1388,7 +1388,7 @@ full-join (cross)
  ├── columns: a:1(int) b:2(int) c:3(int) a:4(int) b:5(int) c:6(int)
  ├── stats: [rows=100]
  ├── key: (1,2)
- ├── fd: (1,2)-->(3-6), ()~~>(4-6)
+ ├── fd: (1,2)-->(3-6)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  │    ├── stats: [rows=100]

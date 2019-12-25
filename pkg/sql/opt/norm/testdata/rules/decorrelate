@@ -1516,7 +1516,7 @@ semi-join-apply
  │    ├── columns: k:2(int!null) i:3(int!null) x:7(int!null) y:8(int!null) v1:11(int)
  │    ├── outer: (1)
  │    ├── key: (7)
- │    ├── fd: (2)-->(3), (7)-->(8,11), (2)==(7), (7)==(2), (3)==(8), (8)==(3), ()~~>(11)
+ │    ├── fd: (2)-->(3), (7)-->(8,11), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
  │    ├── inner-join (hash)
  │    │    ├── columns: k:2(int!null) i:3(int!null) x:7(int!null) y:8(int!null)
  │    │    ├── key: (7)
@@ -2163,7 +2163,7 @@ group-by
  │    │    ├── fd: (1)-->(2-5), (1,6)-->(2-5,11)
  │    │    ├── left-join (cross)
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) canary:12(bool)
- │    │    │    ├── fd: (1)-->(2-5), ()~~>(12)
+ │    │    │    ├── fd: (1)-->(2-5)
  │    │    │    ├── inner-join (cross)
  │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
  │    │    │    │    ├── key: (1,6)
@@ -2331,10 +2331,10 @@ project
  │    ├── columns: k:1(int!null) canary:10(bool) array_agg:11(int[])
  │    ├── grouping columns: k:1(int!null)
  │    ├── key: (1)
- │    ├── fd: ()~~>(10), (1)-->(10,11)
+ │    ├── fd: (1)-->(10,11)
  │    ├── left-join (cross)
  │    │    ├── columns: k:1(int!null) i:2(int) y:7(int) canary:10(bool)
- │    │    ├── fd: (1)-->(2), ()~~>(10)
+ │    │    ├── fd: (1)-->(2)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    │    ├── key: (1)
@@ -2544,11 +2544,11 @@ project
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) canary:10(bool) concat_agg:11(string)
       │    │    ├── grouping columns: k:1(int!null)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,10,11), ()~~>(10)
+      │    │    ├── fd: (1)-->(2-5,10,11)
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) column8:8(string) canary:10(bool)
       │    │    │    ├── key: (1,6)
-      │    │    │    ├── fd: (1)-->(2-5), (6)-->(8), ()~~>(10), (1,6)-->(10)
+      │    │    │    ├── fd: (1)-->(2-5), (6)-->(8), (1,6)-->(10)
       │    │    │    ├── scan a
       │    │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    │    ├── key: (1)
@@ -3417,7 +3417,7 @@ project
       │    ├── fd: ()-->(1-5,7)
       │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int)
-      │    │    ├── fd: ()-->(1-5), ()~~>(7)
+      │    │    ├── fd: ()-->(1-5)
       │    │    ├── limit hint: 1.00
       │    │    ├── select
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -3605,7 +3605,7 @@ project
       │    ├── fd: (1)-->(2-5,9)
       │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) y:7(int) true:8(bool)
-      │    │    ├── fd: (1)-->(2-5), ()~~>(8)
+      │    │    ├── fd: (1)-->(2-5)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
@@ -3784,7 +3784,7 @@ project
       │    ├── left-join (hash)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:8(int) true:10(bool)
       │    │    ├── key: (1,8)
-      │    │    ├── fd: (1)-->(2-5), ()~~>(10), (1,8)-->(10)
+      │    │    ├── fd: (1)-->(2-5), (1,8)-->(10)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
@@ -3968,7 +3968,7 @@ project
  │    ├── fd: (12)-->(10)
  │    ├── left-join (hash)
  │    │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
- │    │    ├── fd: (12)-->(2), ()~~>(9)
+ │    │    ├── fd: (12)-->(2)
  │    │    ├── ordinality
  │    │    │    ├── columns: i:2(int) rownum:12(int!null)
  │    │    │    ├── key: (12)
@@ -4047,7 +4047,7 @@ values
                 ├── fd: ()-->(2,7,9,12)
                 ├── left-join (hash)
                 │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
-                │    ├── fd: ()-->(2,12), ()~~>(9)
+                │    ├── fd: ()-->(2,12)
                 │    ├── limit hint: 1.00
                 │    ├── ordinality
                 │    │    ├── columns: i:2(int) rownum:12(int!null)
@@ -4150,7 +4150,7 @@ project
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) true:10(bool)
       │    │    │    ├── key: (6,8)
-      │    │    │    ├── fd: (6)-->(7), ()~~>(10), (6,8)-->(10)
+      │    │    │    ├── fd: (6)-->(7), (6,8)-->(10)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    │    │    ├── key: (6)

@@ -74,7 +74,6 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 	fd1.AddEquivalency(4, 5)
 	verifyFD(t, fd1, "(1)-->(2-4), (2,3,5)-->(6), (4)==(5), (5)==(4)")
 
-	// ()~~>(a)
 	// (a)~~>(d)
 	// ()-->(b)
 	// (b)==(c)
@@ -86,7 +85,7 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 	fd2.MakeOuter(c(1, 4), c())
 	fd2.AddEquivalency(2, 3)
 	fd2.AddSynthesizedCol(c(4), 5)
-	verifyFD(t, fd2, "()-->(2,3), ()~~>(1), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
+	verifyFD(t, fd2, "()-->(2,3), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
 
 	testcases := []struct {
 		fd       *props.FuncDepSet
@@ -113,7 +112,6 @@ func TestFuncDeps_ComputeClosure(t *testing.T) {
 }
 
 func TestFuncDeps_InClosureOf(t *testing.T) {
-	// ()~~>(a)
 	// (a)~~>(d)
 	// ()-->(b)
 	// (b)==(c)
@@ -125,7 +123,7 @@ func TestFuncDeps_InClosureOf(t *testing.T) {
 	fd.MakeOuter(c(1, 4), c())
 	fd.AddEquivalency(2, 3)
 	fd.AddSynthesizedCol(c(4), 5)
-	verifyFD(t, fd, "()-->(2,3), ()~~>(1), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
+	verifyFD(t, fd, "()-->(2,3), (1)~~>(4), (2)==(3), (3)==(2), (4)-->(5)")
 
 	testcases := []struct {
 		cols     []opt.ColumnID
@@ -310,13 +308,6 @@ func TestFuncDeps_AddLaxKey(t *testing.T) {
 	testColsAreLaxKey(t, mnpq, c(10, 11), true)
 	testColsAreLaxKey(t, mnpq, c(10, 11, 12), true)
 
-	// Empty key.
-	empty := &props.FuncDepSet{}
-	empty.AddLaxKey(opt.ColSet{}, c(1))
-	verifyFD(t, empty, "lax-key(); ()~~>(1)")
-	testColsAreStrictKey(t, empty, c(), false)
-	testColsAreLaxKey(t, empty, c(), true)
-
 	// Verify that a shorter lax key overwrites a longer lax key (but not
 	// vice-versa).
 	abcde := &props.FuncDepSet{}
@@ -365,9 +356,9 @@ func TestFuncDeps_MakeNotNull(t *testing.T) {
 	loj.AddConstants(c(1, 2, 10, 12))
 	verifyFD(t, loj, "key(11); ()-->(1-5,10,12), (11)-->(13)")
 	loj.MakeOuter(nullExtendedCols, c(1, 2, 10, 11, 12))
-	verifyFD(t, loj, "key(11); ()-->(1-5), (11)-->(10,12,13), ()~~>(10,12)")
+	verifyFD(t, loj, "key(11); ()-->(1-5), (11)-->(10,12,13)")
 	loj.MakeNotNull(c(1, 2, 12))
-	verifyFD(t, loj, "key(11); ()-->(1-5,12), (11)-->(10,13), ()~~>(10)")
+	verifyFD(t, loj, "key(11); ()-->(1-5), (11)-->(10,12,13)")
 
 	// Test MakeNotNull triggering key reduction.
 	//   SELECT * FROM (SELECT DISTINCT b, c, d, e FROM abcde) WHERE b IS NOT NULL AND c IS NOT NULL
@@ -951,7 +942,7 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	roj.MakeNotNull(c(2, 3, 12))
 	verifyFD(t, roj, "key(10,11); ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
 	roj.MakeOuter(nullExtendedCols, c(1, 2, 3, 10, 11, 12))
-	verifyFD(t, roj, "key(10,11); ()-->(12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(1-5,13), ()~~>(2,3)")
+	verifyFD(t, roj, "key(10,11); ()-->(12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(1-5,13)")
 
 	// Test equivalency on both sides of outer join.
 	//   SELECT * FROM abcde RIGHT OUTER JOIN mnpq ON b=c AND c=d AND m=p AND m=q
@@ -997,9 +988,9 @@ func TestFuncDeps_MakeOuter(t *testing.T) {
 	roj.MakeProduct(makeMnpqFD(t))
 	verifyFD(t, roj, "key(1,10,11); ()-->(2), (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13)")
 	roj.MakeOuter(nullExtendedCols, c(1, 2, 10, 11))
-	verifyFD(t, roj, "key(1,10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), ()~~>(2), (1,10,11)-->(2)")
+	verifyFD(t, roj, "key(1,10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1,10,11)-->(2)")
 	roj.MakeOuter(nullExtendedCols2, c(1, 2, 10, 11))
-	verifyFD(t, roj, "key(1,10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), ()~~>(2), (1,10,11)-->(2)")
+	verifyFD(t, roj, "key(1,10,11); (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1,10,11)-->(2)")
 
 	// Join keyless relations with nullable columns.
 	//   SELECT * FROM (SELECT d, e, d+e FROM abcde) LEFT JOIN (SELECT p, q, p+q FROM mnpq) ON True

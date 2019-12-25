@@ -175,7 +175,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
- ├── fd: ()~~>(2)
  ├── scan xyz
  │    └── columns: x:5(int) y:6(int) z:7(int)
  ├── scan abc@bc
@@ -294,7 +293,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) RIGHT OUTER JOIN xyz ON a=z
 ----
 left-join (hash)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
- ├── fd: ()~~>(2)
  ├── scan xyz
  │    └── columns: x:5(int) y:6(int) z:7(int)
  ├── scan abc@bc

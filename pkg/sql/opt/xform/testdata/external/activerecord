@@ -122,7 +122,7 @@ sort
       ├── right-join (hash)
       │    ├── columns: attrelid:1(oid!null) attname:2(string!null) atttypid:3(oid!null) attnum:6(int!null) atttypmod:9(int!null) attnotnull:13(bool!null) attisdropped:15(bool!null) attcollation:18(oid!null) adrelid:23(oid) adnum:24(int) adbin:25(string) c.oid:27(oid) c.collname:28(string) t.oid:34(oid) typcollation:61(oid)
       │    ├── key: (6,24,27,34)
-      │    ├── fd: ()-->(1,15), (6)-->(2,3,9,13,18), (2)-->(3,6,9,13,18), (24)-->(25), ()~~>(23), (6,24)-->(23), (27)-->(28), (34)-->(61)
+      │    ├── fd: ()-->(1,15), (6)-->(2,3,9,13,18), (2)-->(3,6,9,13,18), (24)-->(25), (6,24)-->(23), (27)-->(28), (34)-->(61)
       │    ├── inner-join (cross)
       │    │    ├── columns: c.oid:27(oid!null) c.collname:28(string!null) t.oid:34(oid!null) typcollation:61(oid!null)
       │    │    ├── key: (27,34)
@@ -142,7 +142,7 @@ sort
       │    │    ├── left ordering: +1,+6
       │    │    ├── right ordering: +23,+24
       │    │    ├── key: (6,24)
-      │    │    ├── fd: ()-->(1,15), (6)-->(2,3,9,13,18), (2)-->(3,6,9,13,18), (24)-->(25), ()~~>(23), (6,24)-->(23)
+      │    │    ├── fd: ()-->(1,15), (6)-->(2,3,9,13,18), (2)-->(3,6,9,13,18), (24)-->(25), (6,24)-->(23)
       │    │    ├── select
       │    │    │    ├── columns: attrelid:1(oid!null) attname:2(string!null) atttypid:3(oid!null) attnum:6(int!null) atttypmod:9(int!null) attnotnull:13(bool!null) attisdropped:15(bool!null) attcollation:18(oid!null)
       │    │    │    ├── key: (6)
