@@ -483,8 +483,13 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 }
 
 func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.Required) memo.Cost {
+	// Start with some extra fixed overhead, since the grouping operators have
+	// setup overhead that is greater than other operators like Project. This
+	// can matter for rules like ReplaceMaxWithLimit.
+	cost := memo.Cost(cpuCostFactor)
+
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
+	cost += memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
 
 	// GroupBy must process each input row once. Cost per row depends on the
 	// number of grouping columns and the number of aggregates.

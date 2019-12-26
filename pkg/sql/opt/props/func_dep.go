@@ -539,6 +539,15 @@ func (f *FuncDepSet) ColsAreLaxKey(cols opt.ColSet) bool {
 	return f.colsAreKey(cols, laxKey)
 }
 
+// ConstantCols returns the set of columns that will always have the same value
+// for all rows in the relation.
+func (f *FuncDepSet) ConstantCols() opt.ColSet {
+	if len(f.deps) > 0 && f.deps[0].isConstant() {
+		return f.deps[0].to
+	}
+	return opt.ColSet{}
+}
+
 // ReduceCols removes redundant columns from the given set. Redundant columns
 // can be functionally determined from the remaining columns. If the columns
 // contain a key for the relation, then the reduced columns will form a

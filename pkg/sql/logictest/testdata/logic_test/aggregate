@@ -798,6 +798,15 @@ SELECT stddev(x) FROM xyz WHERE x = 1
 ----
 NULL
 
+# Ensure subqueries don't trigger aggregation.
+query B
+SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+----
+true
+
+statement ok
+DROP TABLE xyz
+
 # Numerical stability test for VARIANCE/STDDEV.
 # See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
 # Avoid using random() since we do not have the deterministic option to specify a pseudo-random seed yet.
@@ -853,12 +862,6 @@ query RRR
 SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
 ----
 NULL NULL NULL
-
-# Ensure subqueries don't trigger aggregation.
-query B
-SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
-----
-true
 
 statement ok
 CREATE TABLE bits (b INT)
@@ -1978,3 +1981,56 @@ SELECT a, b, count(*) FROM ab RIGHT JOIN tab ON b=col2 GROUP BY a
 ----
 NULL  NULL  4
 4     7     2
+
+# Additional tests for MIN/MAX aggregates with indexes.
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX yz (y, z)
+)
+
+statement ok
+INSERT INTO xyz VALUES (1, 2, 3), (2, 2, 7), (3, 2, 1), (4, 2, NULL), (5, 3, -1)
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 GROUP BY y
+----
+1
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 AND z IS NOT NULL GROUP BY y
+----
+1
+
+query I
+SELECT min(z) FROM xyz WHERE y = 2 AND z IS NULL GROUP BY y
+----
+NULL
+
+query I
+SELECT min(z) FROM xyz WHERE y = 100 AND z IS NULL GROUP BY y
+----
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 GROUP BY y
+----
+7
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 AND z IS NOT NULL GROUP BY y
+----
+7
+
+query I
+SELECT max(z) FROM xyz WHERE y = 2 AND z IS NULL GROUP BY y
+----
+NULL
+
+query I
+SELECT max(z) FROM xyz WHERE y = 100 GROUP BY y
+----
+
+statement ok
+DROP TABLE xyz
