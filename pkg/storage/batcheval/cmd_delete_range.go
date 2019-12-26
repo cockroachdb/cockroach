@@ -51,10 +51,15 @@ func DeleteRange(
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
+	returnKeys := args.ReturnKeys || h.Txn != nil
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, cArgs.MaxKeys, timestamp, h.Txn, args.ReturnKeys,
+		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, cArgs.MaxKeys, timestamp, h.Txn, returnKeys,
 	)
-	if err == nil {
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	if args.ReturnKeys {
 		reply.Keys = deleted
 	}
 	reply.NumKeys = num
@@ -62,5 +67,5 @@ func DeleteRange(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
-	return result.Result{}, err
+	return result.FromUpdatedIntents(h.Txn, deleted), nil
 }

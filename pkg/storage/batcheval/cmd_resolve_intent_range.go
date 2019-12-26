@@ -61,6 +61,7 @@ func ResolveIntentRange(
 	}
 
 	var res result.Result
+	res.Local.ResolvedIntents = []roachpb.Intent{intent} // TODO(nvanbenschoten): resume span
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, numKeys > 0) {

@@ -29,5 +29,9 @@ func Delete(
 	args := cArgs.Args.(*roachpb.DeleteRequest)
 	h := cArgs.Header
 
-	return result.Result{}, engine.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
+	err := engine.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
+	return result.FromUpdatedIntent(h.Txn, args.Key), nil
 }
