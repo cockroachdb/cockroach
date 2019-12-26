@@ -1304,6 +1304,24 @@ func planTypedMaybeNullProjectionOperators(
 	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
 }
 
+// planCastOperator plans a CAST operator that casts the column at index
+// 'inputIdx' coming from input of type 'fromType' into a column of type
+// 'toType' that will be output at index 'resultIdx'.
+func planCastOperator(
+	ctx context.Context,
+	acc *mon.BoundAccount,
+	columnTypes []types.T,
+	input Operator,
+	inputIdx int,
+	fromType *types.T,
+	toType *types.T,
+) (op Operator, resultIdx int, ct []types.T, err error) {
+	outputIdx := len(columnTypes)
+	op, err = GetCastOperator(NewAllocator(ctx, acc), input, inputIdx, outputIdx, fromType, toType)
+	ct = append(columnTypes, *toType)
+	return op, outputIdx, ct, err
+}
+
 // planProjectionOperators plans a chain of operators to execute the provided
 // expression. It returns the tail of the chain, as well as the column index
 // of the expression's result (if any, otherwise -1) and the column types of the
@@ -1338,10 +1356,8 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, 0, nil, internalMemUsed, err
 		}
-		outputIdx := len(ct)
-		op, err = GetCastOperator(NewAllocator(ctx, acc), op, resultIdx, outputIdx, expr.ResolvedType(), t.Type)
-		ct = append(ct, *t.Type)
-		return op, outputIdx, ct, internalMemUsed, err
+		op, resultIdx, ct, err = planCastOperator(ctx, acc, ct, op, resultIdx, expr.ResolvedType(), t.Type)
+		return op, resultIdx, ct, internalMemUsed, err
 	case *tree.FuncExpr:
 		var (
 			inputCols             []int
@@ -1430,6 +1446,18 @@ func planProjectionOperators(
 				return nil, resultIdx, ct, internalMemUsed, err
 			}
 			internalMemUsed += whenInternalMemUsed + thenInternalMemUsed
+			if !ct[thenIdxs[i]].Equal(ct[caseOutputIdx]) {
+				// It is possible that the projection of this THEN arm has different
+				// column type (for example, we expect INT2, but INT8 is given). In
+				// such case, we need to plan a cast.
+				fromType, toType := &ct[thenIdxs[i]], &ct[caseOutputIdx]
+				caseOps[i], thenIdxs[i], ct, err = planCastOperator(
+					ctx, acc, ct, caseOps[i], thenIdxs[i], fromType, toType,
+				)
+				if err != nil {
+					return nil, resultIdx, ct, internalMemUsed, err
+				}
+			}
 		}
 		var elseInternalMemUsed int
 		var elseOp Operator
@@ -1445,10 +1473,23 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		internalMemUsed += elseInternalMemUsed
+		if !ct[thenIdxs[len(t.Whens)]].Equal(ct[caseOutputIdx]) {
+			// It is possible that the projection of the ELSE arm has different
+			// column type (for example, we expect INT2, but INT8 is given). In
+			// such case, we need to plan a cast.
+			elseIdx := thenIdxs[len(t.Whens)]
+			fromType, toType := &ct[elseIdx], &ct[caseOutputIdx]
+			elseOp, thenIdxs[len(t.Whens)], ct, err = planCastOperator(
+				ctx, acc, ct, elseOp, elseIdx, fromType, toType,
+			)
+			if err != nil {
+				return nil, resultIdx, ct, internalMemUsed, err
+			}
+		}
 
 		op := NewCaseOp(NewAllocator(ctx, acc), buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
-		return op, caseOutputIdx, ct, internalMemUsed, nil
+		return op, caseOutputIdx, ct, internalMemUsed, err
 	case *tree.AndExpr, *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc)
 	default:
