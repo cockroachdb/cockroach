@@ -610,7 +610,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	}
 
 	if lResult.UpdatedTxns != nil {
-		for _, txn := range *lResult.UpdatedTxns {
+		for _, txn := range lResult.UpdatedTxns {
 			r.txnWaitQueue.UpdateTxn(ctx, txn)
 		}
 		lResult.UpdatedTxns = nil
@@ -664,7 +664,7 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		lResult.Metrics = nil
 	}
 
-	if (lResult != result.LocalResult{}) {
+	if !lResult.IsZero() {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 }
@@ -723,8 +723,8 @@ func (r *Replica) evaluateProposal(
 		intents := res.Local.DetachEncounteredIntents()
 		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			EncounteredIntents: &intents,
-			EndTxns:            &endTxns,
+			EncounteredIntents: intents,
+			EndTxns:            endTxns,
 			Metrics:            res.Local.Metrics,
 		}
 		res.Replicated.Reset()

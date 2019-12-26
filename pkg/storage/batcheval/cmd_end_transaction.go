@@ -372,7 +372,7 @@ func EndTxn(
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
-	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
+	intentsResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}

@@ -8292,7 +8292,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 		// is proposed and we're going to hackily decrease its MaxLeaseIndex, so
 		// that the processing gets rejected further on.
 		ut := p.Local.UpdatedTxns
-		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(*ut) == 1 && (*ut)[0].ID == txn.ID {
+		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(ut) == 1 && ut[0].ID == txn.ID {
 			atomic.StoreInt64(&proposalRecognized, 1)
 			return p.command.MaxLeaseIndex - 1, nil
 		}

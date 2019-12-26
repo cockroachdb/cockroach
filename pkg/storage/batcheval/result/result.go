@@ -31,16 +31,10 @@ type LocalResult struct {
 	// EncounteredIntents stores any intents encountered but not conflicted
 	// with. They should be handed off to asynchronous intent processing on
 	// the proposer, so that an attempt to resolve them is made.
-	//
-	// This is a pointer to allow the zero (and as an unwelcome side effect,
-	// all) values to be compared.
-	EncounteredIntents *[]roachpb.Intent
+	EncounteredIntents []roachpb.Intent
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.
-	//
-	// This is a pointer to allow the zero (and as an unwelcome side effect,
-	// all) values to be compared.
-	UpdatedTxns *[]*roachpb.Transaction
+	UpdatedTxns []*roachpb.Transaction
 	// EndTxns stores completed transactions. If the transaction
 	// contains unresolved intents, they should be handed off for
 	// asynchronous intent resolution. A bool in each EndTxnIntents
@@ -49,7 +43,7 @@ type LocalResult struct {
 	// resolving intents of a committing txn should not happen if the
 	// commit fails, or we may accidentally make uncommitted values
 	// live.
-	EndTxns *[]EndTxnIntents
+	EndTxns []EndTxnIntents
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -68,26 +62,31 @@ type LocalResult struct {
 	Metrics *Metrics
 }
 
+// IsZero reports whether lResult is the zero value.
+func (lResult *LocalResult) IsZero() bool {
+	// NB: keep in order.
+	return lResult.Reply == nil &&
+		lResult.EncounteredIntents == nil &&
+		lResult.UpdatedTxns == nil &&
+		lResult.EndTxns == nil &&
+		!lResult.GossipFirstRange &&
+		!lResult.MaybeGossipSystemConfig &&
+		lResult.MaybeGossipNodeLiveness == nil &&
+		!lResult.MaybeWatchForMerge &&
+		lResult.Metrics == nil
+}
+
 func (lResult *LocalResult) String() string {
 	if lResult == nil {
 		return "LocalResult: nil"
-	}
-	var numEncounteredIntents, numEndTxns, numUpdatedTxns int
-	if lResult.EncounteredIntents != nil {
-		numEncounteredIntents = len(*lResult.EncounteredIntents)
-	}
-	if lResult.UpdatedTxns != nil {
-		numUpdatedTxns = len(*lResult.UpdatedTxns)
-	}
-	if lResult.EndTxns != nil {
-		numEndTxns = len(*lResult.EndTxns)
 	}
 	return fmt.Sprintf("LocalResult (reply: %v, #encountered intents: %d, "+
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
-		lResult.Reply, numEncounteredIntents, numUpdatedTxns, numEndTxns, lResult.GossipFirstRange,
-		lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
+		lResult.Reply, len(lResult.EncounteredIntents),
+		len(lResult.UpdatedTxns), len(lResult.EndTxns),
+		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
 
@@ -97,10 +96,7 @@ func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {
 	if lResult == nil {
 		return nil
 	}
-	var r []roachpb.Intent
-	if lResult.EncounteredIntents != nil {
-		r = *lResult.EncounteredIntents
-	}
+	r := lResult.EncounteredIntents
 	lResult.EncounteredIntents = nil
 	return r
 }
@@ -114,16 +110,13 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 	if lResult == nil {
 		return nil
 	}
-	var r []EndTxnIntents
-	if lResult.EndTxns != nil {
-		r = *lResult.EndTxns
-		if alwaysOnly {
-			// If alwaysOnly, filter away any !Always EndTxnIntents.
-			r = r[:0]
-			for _, eti := range *lResult.EndTxns {
-				if eti.Always {
-					r = append(r, eti)
-				}
+	r := lResult.EndTxns
+	if alwaysOnly {
+		// If alwaysOnly, filter away any !Always EndTxnIntents.
+		r = r[:0]
+		for _, eti := range lResult.EndTxns {
+			if eti.Always {
+				r = append(r, eti)
 			}
 		}
 	}
@@ -149,7 +142,7 @@ type Result struct {
 
 // IsZero reports whether p is the zero value.
 func (p *Result) IsZero() bool {
-	if p.Local != (LocalResult{}) {
+	if !p.Local.IsZero() {
 		return false
 	}
 	if !p.Replicated.Equal(storagepb.ReplicatedEvalResult{}) {
@@ -284,30 +277,24 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PrevLeaseProposal = nil
 
-	if q.Local.EncounteredIntents != nil {
-		if p.Local.EncounteredIntents == nil {
-			p.Local.EncounteredIntents = q.Local.EncounteredIntents
-		} else {
-			*p.Local.EncounteredIntents = append(*p.Local.EncounteredIntents, *q.Local.EncounteredIntents...)
-		}
+	if p.Local.EncounteredIntents == nil {
+		p.Local.EncounteredIntents = q.Local.EncounteredIntents
+	} else {
+		p.Local.EncounteredIntents = append(p.Local.EncounteredIntents, q.Local.EncounteredIntents...)
 	}
 	q.Local.EncounteredIntents = nil
 
-	if q.Local.UpdatedTxns != nil {
-		if p.Local.UpdatedTxns == nil {
-			p.Local.UpdatedTxns = q.Local.UpdatedTxns
-		} else {
-			*p.Local.UpdatedTxns = append(*p.Local.UpdatedTxns, *q.Local.UpdatedTxns...)
-		}
+	if p.Local.UpdatedTxns == nil {
+		p.Local.UpdatedTxns = q.Local.UpdatedTxns
+	} else {
+		p.Local.UpdatedTxns = append(p.Local.UpdatedTxns, q.Local.UpdatedTxns...)
 	}
 	q.Local.UpdatedTxns = nil
 
-	if q.Local.EndTxns != nil {
-		if p.Local.EndTxns == nil {
-			p.Local.EndTxns = q.Local.EndTxns
-		} else {
-			*p.Local.EndTxns = append(*p.Local.EndTxns, *q.Local.EndTxns...)
-		}
+	if p.Local.EndTxns == nil {
+		p.Local.EndTxns = q.Local.EndTxns
+	} else {
+		p.Local.EndTxns = append(p.Local.EndTxns, q.Local.EndTxns...)
 	}
 	q.Local.EndTxns = nil
 

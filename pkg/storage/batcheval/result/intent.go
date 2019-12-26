@@ -19,7 +19,7 @@ func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	if len(intents) == 0 {
 		return pd
 	}
-	pd.Local.EncounteredIntents = &intents
+	pd.Local.EncounteredIntents = intents
 	return pd
 }
 
@@ -39,6 +39,6 @@ func FromEndTxn(txn *roachpb.Transaction, alwaysReturn, poison bool) Result {
 	if len(txn.IntentSpans) == 0 {
 		return pd
 	}
-	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: txn, Always: alwaysReturn, Poison: poison}}
+	pd.Local.EndTxns = []EndTxnIntents{{Txn: txn, Always: alwaysReturn, Poison: poison}}
 	return pd
 }
