@@ -3084,7 +3084,7 @@ group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=991, distinct(1,2)=991, null(1,2)=10]
- ├── cost: 1109.95
+ ├── cost: 1109.96
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1,+2)

@@ -3,9 +3,9 @@
 # =============================================================================
 
 
-# ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a
-# lower cost plan if the column min(x) is applied to is indexed.
-[ReplaceMinWithLimit, Explore]
+# ReplaceScalarMinWithLimit replaces a min with a limit 1. This rule may result
+# in a lower cost plan if the column min(x) is applied to is indexed.
+[ReplaceScalarMinWithLimit, Explore]
 (ScalarGroupBy
     $input:*
     [ (AggregationsItem (Min $variable:(Variable $col:*)) $aggPrivate:*) ]
@@ -25,11 +25,10 @@
     $groupingPrivate
 )
 
-# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule.
-# Due to limitations with OpName in exploration rules, the rule
-# had to be duplicated with minor modifications (we replace occurrences
-# of Min with Max)
-[ReplaceMaxWithLimit, Explore]
+# ReplaceScalarMaxWithLimit is analogous to the ReplaceScalarMinWithLimit rule.
+# Due to limitations with OpName in exploration rules, the rule had to be
+# duplicated with minor modifications (we replace occurrences of Min with Max).
+[ReplaceScalarMaxWithLimit, Explore]
 (ScalarGroupBy
     $input:*
     [ (AggregationsItem (Max $variable:(Variable $col:*)) $aggPrivate:*) ]
@@ -47,6 +46,73 @@
     )
     [ (AggregationsItem (ConstAgg $variable) $aggPrivate) ]
     $groupingPrivate
+)
+
+# ReplaceMinWithLimit replaces a Min group-by expression with a limit 1, in the
+# case where the group-by returns zero or one groups (i.e. the grouping columns
+# are constant). In this situation, the group-by can be entirely replaced by a
+# project, similar to this:
+#
+#   SELECT w, min(k) FROM kw WHERE w = 5 GROUP BY w
+#   =>
+#   SELECT w, k FROM kw@wk WHERE w = 5 LIMIT 1
+#
+# This rule may result in a lower cost plan if the column min(k) is applied to
+# is indexed.
+#
+# NOTE: This rule is not fully symmetric with ReplaceMaxWithLimit. This is
+# because NULL values sort first in CRDB. This can interfere with the
+# calculation of the Min function, because NULL values need to be ignored unless
+# the group contains only NULL values (in which case the function returns NULL).
+# Therefore, this rule only works when the MIN column is NOT NULL, as only in
+# that case is one input row always sufficient to calculate MIN.
+[ReplaceMinWithLimit, Explore]
+(GroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem (Min $variable:(Variable $col:*)))
+        ...
+    ] &
+        (IsColNotNull $col $input) &
+        (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst (GroupingCols $groupingPrivate) $input)
+)
+=>
+(MakeProjectFromPassthroughAggs
+    (Limit
+        $input
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Min $col)
+    )
+    $aggregations
+)
+
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule, except that
+# it works when the Max function's operand can be NULL. See the header comment
+# for ReplaceMinWithLimit for more details.
+[ReplaceMaxWithLimit, Explore]
+(GroupBy
+    $input:*
+    $aggregations:[
+        ...
+        $item:(AggregationsItem (Max $variable:(Variable $col:*)))
+        ...
+    ] & (OtherAggsAreConst $aggregations $item)
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreConst (GroupingCols $groupingPrivate) $input)
+)
+=>
+(MakeProjectFromPassthroughAggs
+    (Limit
+        $input
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Max $col)
+    )
+    $aggregations
 )
 
 # GenerateStreamingGroupBy creates variants of a GroupBy or DistinctOn which
