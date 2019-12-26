@@ -95,7 +95,8 @@ interface NodeCategoryListProps {
 
 interface LiveNodeListProps extends NodeCategoryListProps {
   dataSource: NodeStatusRow[];
-  count: number;
+  nodesCount: number;
+  regionsCount: number;
 }
 
 interface DecommissionedNodeListProps extends NodeCategoryListProps {
@@ -240,13 +241,21 @@ class NodeList extends React.Component<LiveNodeListProps> {
   ];
 
   render() {
-    const { dataSource, count } = this.props;
+    const { nodesCount, regionsCount } = this.props;
+    let columns = this.columns;
+    let dataSource = this.props.dataSource;
+
+    // Remove "Nodes Count" column If nodes are not partitioned by regions,
+    if (regionsCount === 1) {
+      columns = columns.filter(column => column.key !== "nodesCount");
+      dataSource = _.head(dataSource).children;
+    }
     return (
       <TableSection
         id={`nodes-overview__live-nodes`}
-        title={`Live Nodes (${count})`}
+        title={`Live Nodes (${nodesCount})`}
         className="embedded-table">
-        <Table dataSource={dataSource} columns={this.columns} />
+        <Table dataSource={dataSource} columns={columns} />
       </TableSection>
     );
   }
@@ -393,10 +402,6 @@ const liveNodesTableData = createSelector(
       })
       .value();
 
-    // Do not render nested tree structure in case only one group is present.
-    if (data.length === 1) {
-      return _.head(data).children;
-    }
     return data;
   });
 
@@ -439,10 +444,12 @@ const decommissionedNodesTableData = createSelector(
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
+    let data = liveNodesTableData(state);
     return {
       sortSetting: liveNodesSortSetting.selector(state),
-      dataSource: liveNodesTableData(state),
-      count: liveNodes.length,
+      dataSource: data,
+      nodesCount: liveNodes.length,
+      regionsCount: data.length,
     };
   },
   {
