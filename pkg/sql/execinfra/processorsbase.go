@@ -233,7 +233,7 @@ func (h *ProcOutputHelper) EmitRow(
 	}
 
 	if log.V(3) {
-		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
+		log.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
 	}
 	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
@@ -275,7 +275,7 @@ func (h *ProcOutputHelper) ProcessRow(
 			return nil, false, err
 		}
 		if !passes {
-			if log.V(3) {
+			if log.V(4) {
 				log.Infof(ctx, "filtered out row %s", row.String(h.filter.Types))
 			}
 			return nil, true, nil
@@ -723,6 +723,9 @@ func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDa
 		pb.MoveToDraining(nil /* err */)
 	}
 	// Note that outRow might be nil here.
+	if outRow != nil && log.V(3) {
+		log.InfofDepth(pb.Ctx, 1, "pushing row %s", outRow.String(pb.Out.OutputTypes))
+	}
 	return outRow
 }
 
