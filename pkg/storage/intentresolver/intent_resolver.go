@@ -56,6 +56,12 @@ const (
 	// up than wait too long (this helps avoid deadlocks during test shutdown).
 	asyncIntentResolutionTimeout = 30 * time.Second
 
+	// gcBatchSize is the maximum number of transaction records that will be
+	// GCed in a single batch. Batches that span many ranges (which is possible
+	// for the transaction records that spans many ranges) will be split into
+	// many batches by the DistSender.
+	gcBatchSize = 1024
+
 	// intentResolverBatchSize is the maximum number of intents that will be
 	// resolved in a single batch. Batches that span many ranges (which is
 	// possible for the commit of a transaction that spans many ranges) will be
@@ -187,21 +193,25 @@ func New(c Config) *IntentResolver {
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
+	gcBatchSize := gcBatchSize
+	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
+		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
+	}
 	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_gc_batcher",
-		MaxMsgsPerBatch: 1024,
+		MaxMsgsPerBatch: gcBatchSize,
 		MaxWait:         c.MaxGCBatchWait,
 		MaxIdle:         c.MaxGCBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
 	})
-	batchSize := intentResolverBatchSize
+	intentResolutionBatchSize := intentResolverBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
-		batchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
+		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_ir_batcher",
-		MaxMsgsPerBatch: batchSize,
+		MaxMsgsPerBatch: intentResolutionBatchSize,
 		MaxWait:         c.MaxIntentResolutionBatchWait,
 		MaxIdle:         c.MaxIntentResolutionBatchIdle,
 		Stopper:         c.Stopper,
@@ -497,7 +507,8 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 	ctx context.Context, intents []result.IntentsWithArg, allowSyncProcessing bool,
 ) error {
 	now := ir.clock.Now()
-	for _, item := range intents {
+	for i := range intents {
+		item := &intents[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			err := contextutil.RunWithTimeout(ctx, "async intent resolution",
 				asyncIntentResolutionTimeout, func(ctx context.Context) error {
@@ -597,7 +608,8 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	allowSyncProcessing bool,
 ) error {
 	now := ir.clock.Now()
-	for _, et := range endTxns {
+	for i := range endTxns {
+		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			locked, release := ir.lockInFlightTxnCleanup(ctx, et.Txn.ID)
 			if !locked {
