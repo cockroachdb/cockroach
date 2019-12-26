@@ -27,7 +27,7 @@ func FromEncounteredIntents(intents []roachpb.Intent) Result {
 // which indicates whether the intents should be resolved whether or
 // not the command succeeds through Raft.
 type EndTxnIntents struct {
-	Txn    roachpb.Transaction
+	Txn    *roachpb.Transaction
 	Always bool
 	Poison bool
 }
@@ -39,6 +39,6 @@ func FromEndTxn(txn *roachpb.Transaction, alwaysReturn, poison bool) Result {
 	if len(txn.IntentSpans) == 0 {
 		return pd
 	}
-	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: *txn, Always: alwaysReturn, Poison: poison}}
+	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: txn, Always: alwaysReturn, Poison: poison}}
 	return pd
 }
