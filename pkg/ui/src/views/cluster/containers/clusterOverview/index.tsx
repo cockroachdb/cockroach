@@ -220,7 +220,6 @@ class ClusterOverview extends React.Component<RouterState, {}> {
         <Helmet>
           <title>Cluster Overview</title>
         </Helmet>
-        <section className="section"><h1>Cluster Overview</h1></section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
