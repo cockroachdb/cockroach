@@ -1,0 +1,155 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package kvnemeses
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	utilspan "github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+)
+
+// Watcher slurps all changes that happen to some span of kvs using RangeFeed.
+type Watcher struct {
+	mu struct {
+		syncutil.Mutex
+		kvs             *Engine
+		frontierWaiters map[hlc.Timestamp][]chan error
+	}
+	cancel   func()
+	g        ctxgroup.Group
+	frontier *utilspan.Frontier
+}
+
+// Watch starts a new Watcher over the given span of kvs. See Watcher.
+func Watch(ctx context.Context, db *client.DB, span roachpb.Span) (*Watcher, error) {
+	w := &Watcher{
+		frontier: utilspan.MakeFrontier(span),
+	}
+	w.mu.kvs = MakeEngine()
+	w.mu.frontierWaiters = make(map[hlc.Timestamp][]chan error)
+	ctx, w.cancel = context.WithCancel(ctx)
+	w.g = ctxgroup.WithContext(ctx)
+
+	sender := db.NonTransactionalSender()
+	ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+
+	startTs := db.Clock().Now()
+	eventC := make(chan *roachpb.RangeFeedEvent, 128)
+	w.g.GoCtx(func(ctx context.Context) error {
+		return ds.RangeFeed(ctx, span, startTs, true /* withDiff */, eventC)
+	})
+	w.g.GoCtx(func(ctx context.Context) error {
+		return w.processEvents(ctx, eventC)
+	})
+
+	// Make sure the RangeFeed has started up, else we might lose some events.
+	if err := w.WaitForFrontier(ctx, startTs); err != nil {
+		_ = w.Finish()
+		return nil, err
+	}
+
+	return w, nil
+}
+
+// Finish tears down the Watcher and returns all the kvs it has ingested.
+func (w *Watcher) Finish() *Engine {
+	if w.cancel == nil {
+		// Finish was already called.
+		return w.mu.kvs
+	}
+	w.cancel()
+	w.cancel = nil
+	// Only WaitForFrontier cares about errors.
+	_ = w.g.Wait()
+	return w.mu.kvs
+}
+
+// WaitForFrontier blocks until all kv changes <= the given timestamp are
+// guaranteed to have been ingested.
+func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) error {
+	log.Infof(ctx, `watcher waiting for %s`, ts)
+	resultCh := make(chan error, 1)
+	w.mu.Lock()
+	w.mu.frontierWaiters[ts] = append(w.mu.frontierWaiters[ts], resultCh)
+	w.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-resultCh:
+		return err
+	}
+}
+
+func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeFeedEvent) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event := <-eventC:
+			switch e := event.GetValue().(type) {
+			case *roachpb.RangeFeedError:
+				return e.Error.GoError()
+			case *roachpb.RangeFeedValue:
+				log.Infof(ctx, `rangefeed Put %s %s -> %s (prev %s)`,
+					e.Key, e.Value.Timestamp, e.Value.PrettyPrint(), e.PrevValue.PrettyPrint())
+				w.mu.Lock()
+				w.mu.kvs.Put(engine.MVCCKey{Key: e.Key, Timestamp: e.Value.Timestamp}, e.Value.RawBytes)
+				prevTs := e.Value.Timestamp.Prev()
+				prevValue := w.mu.kvs.Get(e.Key, prevTs)
+
+				// RangeFeed doesn't send the timestamps of the previous values back
+				// because changefeeds don't need them. It would likely be easy to
+				// implement, but would add unnecessary allocations in changefeeds,
+				// which don't need them. This means we'd want to make it an option in
+				// the request, which seems silly to do for only this test.
+				prevValue.Timestamp = hlc.Timestamp{}
+				prevValueMismatch := !prevValue.Equal(e.PrevValue)
+				var engineContents string
+				if prevValueMismatch {
+					engineContents = w.mu.kvs.DebugPrint()
+				}
+				w.mu.Unlock()
+
+				if prevValueMismatch {
+					log.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
+					panic(errors.Errorf(`expected (%s, %s) previous value %s got: %s WIP %x %x`,
+						e.Key, prevTs, prevValue, e.PrevValue, prevValue.RawBytes, e.PrevValue.RawBytes))
+				}
+			case *roachpb.RangeFeedCheckpoint:
+				if w.frontier.Forward(e.Span, e.ResolvedTS) {
+					frontier := w.frontier.Frontier()
+					w.mu.Lock()
+					log.Infof(ctx, `watcher reached frontier %s`, frontier)
+					for ts, chs := range w.mu.frontierWaiters {
+						if frontier.Less(ts) {
+							continue
+						}
+						log.Infof(ctx, `watcher notifying %s`, ts)
+						delete(w.mu.frontierWaiters, ts)
+						for _, ch := range chs {
+							ch <- nil
+						}
+					}
+					w.mu.Unlock()
+				}
+			}
+		}
+	}
+}
