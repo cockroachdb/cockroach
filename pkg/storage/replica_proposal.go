@@ -590,17 +590,13 @@ func addSSTablePreApply(
 	return copied
 }
 
-func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
+func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
 		lResult.Reply = nil
 	}
-
-	// ======================
-	// Non-state updates and actions.
-	// ======================
 
 	// The caller is required to detach and handle the following three fields.
 	if lResult.EncounteredIntents != nil {

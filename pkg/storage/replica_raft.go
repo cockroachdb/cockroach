@@ -97,7 +97,7 @@ func (r *Replica) evalAndPropose(
 	if proposal.command == nil {
 		intents := proposal.Local.DetachEncounteredIntents()
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
-		r.handleLocalEvalResult(ctx, *proposal.Local)
+		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
 		pr := proposalResult{
 			Reply:              proposal.Local.Reply,
