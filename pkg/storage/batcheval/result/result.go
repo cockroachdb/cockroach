@@ -91,18 +91,6 @@ func (lResult *LocalResult) String() string {
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
 
-// DetachMaybeWatchForMerge returns and clears the MaybeWatchForMerge flag
-// from the local result.
-func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
-	if lResult == nil {
-		return false
-	} else if lResult.MaybeWatchForMerge {
-		lResult.MaybeWatchForMerge = false
-		return true
-	}
-	return false
-}
-
 // DetachEncounteredIntents returns (and removes) those encountered
 // intents from the LocalEvalResult which are supposed to be handled.
 func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {
