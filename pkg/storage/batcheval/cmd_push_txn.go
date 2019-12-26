@@ -168,7 +168,7 @@ func PushTxn(
 			// that only the transaction's own coordinator can create its
 			// transaction record.
 			result := result.Result{}
-			result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
+			result.Local.UpdatedTxns = []*roachpb.Transaction{&reply.PusheeTxn}
 			return result, nil
 		}
 	} else {
@@ -309,6 +309,6 @@ func PushTxn(
 	}
 
 	result := result.Result{}
-	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
+	result.Local.UpdatedTxns = []*roachpb.Transaction{&reply.PusheeTxn}
 	return result, nil
 }
