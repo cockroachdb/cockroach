@@ -10,6 +10,8 @@
 
 @require '~src/components/core/index.styl'
 
+$node-switcher-height = 38px
+
 .fixed-panel
   flex-grow 1
   position relative
@@ -23,7 +25,8 @@
     border-bottom none
     box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
     border-radius 3px
+    height $node-switcher-height
   &__content
     width 100%
-    height 100%
+    height "calc( 100% - %s )" % $node-switcher-height
     overflow: auto

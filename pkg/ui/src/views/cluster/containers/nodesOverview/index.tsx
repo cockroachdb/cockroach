@@ -31,6 +31,7 @@ import { ColumnsConfig, Table, Text, TextTypes, Tooltip } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 
+import TableSection from "./tableSection";
 import "./nodes.styl";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -99,6 +100,7 @@ interface LiveNodeListProps extends NodeCategoryListProps {
 
 interface DecommissionedNodeListProps extends NodeCategoryListProps {
   dataSource: DecommissionedNodeStatusRow[];
+  isCollapsible: boolean;
 }
 
 const getStatusDescription = (status: LivenessStatus) => {
@@ -232,19 +234,18 @@ class NodeList extends React.Component<LiveNodeListProps> {
         <div className="cell--show-on-hover">
           <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>
         </div>),
-      sorter: true,
     },
   ];
 
   render() {
     const { dataSource, count } = this.props;
     return (
-      <div className="embedded-table">
-        <section className="embedded-table__heading">
-          <h2>Nodes ({count})</h2>
-        </section>
+      <TableSection
+        id={`nodes-overview__live-nodes`}
+        title={`Live Nodes ${count}`}
+        className="embedded-table">
         <Table dataSource={dataSource} columns={this.columns} />
-      </div>
+      </TableSection>
     );
   }
 }
@@ -285,18 +286,21 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
   ];
 
   render() {
-    const { dataSource } = this.props;
+    const { dataSource, isCollapsible } = this.props;
     if (_.isEmpty(dataSource)) {
       return null;
     }
 
     return (
-      <div className="embedded-table">
-        <section className="embedded-table__heading">
-          <h2>Recently Decommissioned Nodes</h2>
-        </section>
+      <TableSection
+        id={`nodes-overview__decommissioned-nodes`}
+        title="Recently Decommissioned Nodes"
+        // TODO (koorosh): Uncomment link after Decommissioned node history page is added
+        // footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
+        isCollapsible={isCollapsible}
+        className="embedded-table">
         <Table dataSource={dataSource} columns={this.columns} />
-      </div>
+      </TableSection>
     );
   }
 }
@@ -449,6 +453,7 @@ const DecommissionedNodesConnected = connect(
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
       dataSource: decommissionedNodesTableData(state),
+      isCollapsible: true,
     };
   },
   {
