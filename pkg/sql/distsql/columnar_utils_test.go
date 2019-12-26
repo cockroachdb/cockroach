@@ -29,12 +29,15 @@ import (
 // verifyColOperator passes inputs through both the processor defined by pspec
 // and the corresponding columnar operator and verifies that the results match.
 //
-// anyOrder determines whether the results should be matched in order (when
-// anyOrder is false) or as sets (when anyOrder is true).
-// memoryLimit specifies the desired memory limit on the testing knob (in
-// bytes). If it is 0, then the default limit of 64MiB will be used.
+// - anyOrder determines whether the results should be matched in order (when
+//   anyOrder is false) or as sets (when anyOrder is true).
+// - colsForEqCheck (when non-nil) specifies the column indices that should be
+//   used for equality check. If it is nil, then the whole rows are compared.
+// - memoryLimit specifies the desired memory limit on the testing knob (in
+//   bytes). If it is 0, then the default limit of 64MiB will be used.
 func verifyColOperator(
 	anyOrder bool,
+	colsForEqCheck []uint32,
 	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
 	outputTypes []types.T,
@@ -134,12 +137,24 @@ func verifyColOperator(
 	defer outProc.ConsumerClosed()
 	defer outColOp.ConsumerClosed()
 
+	scratchRow := make(sqlbase.EncDatumRow, len(colsForEqCheck))
+	scratchTypes := make([]types.T, len(colsForEqCheck))
+	printRowForChecking := func(r sqlbase.EncDatumRow) string {
+		if colsForEqCheck == nil {
+			return r.String(outputTypes)
+		}
+		for i, col := range colsForEqCheck {
+			scratchRow[i] = r[col]
+			scratchTypes[i] = outputTypes[col]
+		}
+		return scratchRow.String(scratchTypes)
+	}
 	var procRows, colOpRows []string
 	var procMetas, colOpMetas []execinfrapb.ProducerMetadata
 	for {
 		rowProc, metaProc := outProc.Next()
 		if rowProc != nil {
-			procRows = append(procRows, rowProc.String(outputTypes))
+			procRows = append(procRows, printRowForChecking(rowProc))
 		}
 		if metaProc != nil {
 			if metaProc.Err == nil {
@@ -150,7 +165,7 @@ func verifyColOperator(
 		}
 		rowColOp, metaColOp := outColOp.Next()
 		if rowColOp != nil {
-			colOpRows = append(colOpRows, rowColOp.String(outputTypes))
+			colOpRows = append(colOpRows, printRowForChecking(rowColOp))
 		}
 		if metaColOp != nil {
 			if metaColOp.Err == nil {
