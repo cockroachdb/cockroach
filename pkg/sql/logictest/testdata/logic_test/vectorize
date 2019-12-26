@@ -1025,3 +1025,17 @@ query I
 SELECT b FROM t42994_2@i
 ----
 NULL
+
+# Regression test for zeroing out an aggregate value when NULLs are present.
+statement ok
+SELECT
+	max(s)
+FROM
+	(
+		SELECT
+			s, i
+		FROM
+			(VALUES ('1', 1), (NULL, 2)) AS t (s, i)
+	)
+GROUP BY
+	i

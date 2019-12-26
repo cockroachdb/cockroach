@@ -11,9 +11,9 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for distinct.eg.go. It's formatted in a
-// special way, so it's both valid Go and a valid text/template input. This
-// permits editing this file with editor support.
+// This file is the execgen template for any_not_null_agg.eg.go. It's formatted
+// in a special way, so it's both valid Go and a valid text/template input.
+// This permits editing this file with editor support.
 //
 // */}}
 
@@ -86,7 +86,6 @@ func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 }
 
 func (a *anyNotNull_TYPEAgg) Reset() {
-	execgen.ZERO(a.vec)
 	a.curIdx = -1
 	a.done = false
 	a.foundNonNullForCurrentGroup = false
@@ -100,9 +99,6 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		vecLen := execgen.LEN(a.vec)
-		target := execgen.SLICE(a.vec, idx+1, vecLen)
-		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }

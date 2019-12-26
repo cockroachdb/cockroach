@@ -15,9 +15,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// SupportedAggFns contains all aggregate functions supported by the vectorized
+// engine.
+var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
+	execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+	execinfrapb.AggregatorSpec_AVG,
+	execinfrapb.AggregatorSpec_SUM,
+	execinfrapb.AggregatorSpec_SUM_INT,
+	execinfrapb.AggregatorSpec_COUNT_ROWS,
+	execinfrapb.AggregatorSpec_COUNT,
+	execinfrapb.AggregatorSpec_MIN,
+	execinfrapb.AggregatorSpec_MAX,
+}
 
 // aggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
@@ -48,7 +63,8 @@ type aggregateFunc interface {
 	// index is carried over. Note that calling SetOutputIndex is a noop if
 	// CurrentOutputIndex returns a negative value (i.e. the aggregate function
 	// has not yet performed any computation). This method also has the side
-	// effect of clearing the output buffer past the given index.
+	// effect of clearing the NULLs bitmap of the output buffer past the given
+	// index.
 	SetOutputIndex(idx int)
 
 	// Compute computes the aggregation on the input batch. A zero-length input
@@ -196,7 +212,9 @@ func NewOrderedAggregator(
 	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.AssertionFailedf(
+			"this error should have been checked in isAggregateSupported\n%+v", err,
+		)
 	}
 
 	return a, nil
@@ -356,7 +374,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			a.done = true
 			break
 		}
-		// zero out a.groupCol. This is necessary because distinct ors the
+		// zero out a.groupCol. This is necessary because distinct ORs the
 		// uniqueness of a value with the groupCol, allowing the operators to be
 		// linked.
 		copy(a.groupCol, zeroBoolColumn)
@@ -416,4 +434,38 @@ func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
 	}
 
 	return aggTyps
+}
+
+// isAggregateSupported returns whether the aggregate function that operates on
+// column of type 'inputType' (which can be nil in case of COUNT_ROWS) is
+// supported.
+func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
+	var aggType []coltypes.T
+	if inputType != nil {
+		aggType = append(aggType, typeconv.FromColumnType(inputType))
+	}
+	switch aggFn {
+	case execinfrapb.AggregatorSpec_SUM:
+		switch inputType.Family() {
+		case types.IntFamily:
+			// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
+			// at the end, mod issues with overflow. Perhaps to avoid the overflow
+			// issues, at first, we could plan SUM for all types besides Int64.
+			return false, errors.Newf("sum on int cols not supported (use sum_int)")
+		}
+	case execinfrapb.AggregatorSpec_SUM_INT:
+		// TODO(yuzefovich): support this case through vectorize.
+		if inputType.Width() != 64 {
+			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
+		}
+	}
+	_, _, err := makeAggregateFuncs(
+		nil, /* allocator */
+		[][]coltypes.T{aggType},
+		[]execinfrapb.AggregatorSpec_Func{aggFn},
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

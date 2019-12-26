@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // HashAggregator is an operator chain that performs an aggregation based on
@@ -120,7 +121,9 @@ func NewHashAggregator(
 
 	funcs, outTyps, err := makeAggregateFuncs(allocator, aggTyps, aggFns)
 	if err != nil {
-		return nil, err
+		return nil, errors.AssertionFailedf(
+			"this error should have been checked in isAggregateSupported\n%+v", err,
+		)
 	}
 
 	distinctCol := make([]bool, coldata.BatchSize())

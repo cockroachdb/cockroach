@@ -8,6 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// {{/*
+// +build execgen_template
+//
+// This file is the execgen template for count_agg.eg.go. It's formatted in a
+// special way, so it's both valid Go and a valid text/template input. This
+// permits editing this file with editor support.
+//
+// */}}
+
 package colexec
 
 import "github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -29,6 +38,7 @@ func newCountAgg() *countAgg {
 type countAgg struct {
 	groups   []bool
 	vec      []int64
+	nulls    *coldata.Nulls
 	curIdx   int
 	done     bool
 	countRow bool
@@ -37,13 +47,14 @@ type countAgg struct {
 func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec.Int64()
+	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
 func (a *countAgg) Reset() {
 	a.curIdx = -1
+	a.nulls.UnsetNulls()
 	a.done = false
-	copy(a.vec, zeroInt64Column)
 }
 
 func (a *countAgg) CurrentOutputIndex() int {
@@ -53,7 +64,7 @@ func (a *countAgg) CurrentOutputIndex() int {
 func (a *countAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		copy(a.vec[idx+1:], zeroInt64Column)
+		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
 
@@ -76,56 +87,52 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if !a.countRow && b.ColVec(int(inputIdxs[0])).MaybeHasNulls() {
 		nulls := b.ColVec(int(inputIdxs[0])).Nulls()
 		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				x := 0
-				if a.groups[i] {
-					x = 1
-				}
-				a.curIdx += x
-				y := int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
-				}
-				a.vec[a.curIdx] += y
+			for _, i := range sel[:inputLen] {
+				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
 		} else {
 			for i := range a.groups[:inputLen] {
-				x := 0
-				if a.groups[i] {
-					x = 1
-				}
-				a.curIdx += x
-				y := int64(0)
-				if !nulls.NullAt(uint16(i)) {
-					y = 1
-				}
-				a.vec[a.curIdx] += y
+				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
 		}
 	} else {
 		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				x := 0
-				if a.groups[i] {
-					x = 1
-				}
-				a.curIdx += x
-				a.vec[a.curIdx]++
+			for _, i := range sel[:inputLen] {
+				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
 		} else {
 			for i := range a.groups[:inputLen] {
-				x := 0
-				if a.groups[i] {
-					x = 1
-				}
-				a.curIdx += x
-				a.vec[a.curIdx]++
+				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
 		}
 	}
 }
+
+// {{/*
+// _ACCUMULATE_COUNT aggregates the value at index i into the count aggregate.
+// _COL_WITH_NULLS indicates whether we have COUNT aggregate (i.e. not
+// COUNT_ROWS) and there maybe NULLs.
+func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
+	// {{define "accumulateCount" -}}
+
+	if a.groups[i] {
+		a.curIdx++
+		a.vec[a.curIdx] = 0
+	}
+	var y int64
+	// {{if .ColWithNulls}}
+	y = int64(0)
+	if !nulls.NullAt(uint16(i)) {
+		y = 1
+	}
+	// {{else}}
+	y = int64(1)
+	// {{end}}
+	a.vec[a.curIdx] += y
+	// {{end}}
+
+	// {{/*
+} // */}}
 
 func (a *countAgg) HandleEmptyInputScalar() {
 	a.vec[0] = 0
