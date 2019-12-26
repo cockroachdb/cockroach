@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -36,6 +36,20 @@ const (
 	numOrderPerSF    = 1500000
 	numLineItemPerSF = 6001215
 )
+
+// wrongOutputError indicates that incorrect results were returned for one of
+// the TPCH queries.
+type wrongOutputError struct {
+	error
+}
+
+// TPCHWrongOutputErrorPrefix is the string that all errors about the wrong
+// output will be prefixed with.
+const TPCHWrongOutputErrorPrefix = "TPCH wrong output "
+
+func (e wrongOutputError) Error() string {
+	return TPCHWrongOutputErrorPrefix + e.error.Error()
+}
 
 type tpch struct {
 	flags     workload.Flags
@@ -217,74 +231,105 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.Errorf("[q%s]: %s", queryName, err)
 	}
 	var numRows int
-	for rows.Next() {
-		if !w.config.disableChecks {
-			if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
-				if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
-					return errors.Errorf("[q%s]: %s", queryName, err)
-				}
+	// NOTE: we should *NOT* return an error from this function right away
+	// because we might get another, more meaningful error from rows.Err() which
+	// can only be accessed after we fully consumed the rows.
+	checkExpectedOutput := func() error {
+		for rows.Next() {
+			if !w.config.disableChecks {
+				if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
+					if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
+						return errors.Errorf("[q%s]: %s", queryName, err)
+					}
 
-				expectedRow := expectedRowsByQueryName[queryName][numRows]
-				for i, expectedValue := range expectedRow {
-					if val := *vals[i].(*interface{}); val != nil {
-						actualValue := fmt.Sprint(val)
-						if strings.Compare(expectedValue, actualValue) != 0 {
-							expectedFloat, err := strconv.ParseFloat(expectedValue, 64)
-							if err != nil {
-								return errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
-									"wrong result in row %d in column %d: got %q, expected %q",
-									queryName, err, numRows, i, actualValue, expectedValue)
-							}
-							actualFloat, err := strconv.ParseFloat(actualValue, 64)
-							if err != nil {
-								return errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
-									"wrong result in row %d in column %d: got %q, expected %q",
-									queryName, err, numRows, i, actualValue, expectedValue)
-							}
-							// TPC-H spec requires 0.01 precision for DECIMALs, so we will
-							// first round the values to use in the comparison. Note that we
-							// round to a thousandth so that values like 0.601 and 0.609 were
-							// always considered to differ by less than 0.01 (due to the
-							// nature of representation of floats, it is possible that those
-							// two values when rounded to a hundredth would be represented as
-							// something like 0.59999 and 0.610001 which differ by more than
-							// 0.01).
-							expectedFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
-							if err != nil {
-								return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
-									"wrong result in row %d in column %d: got %q, expected %q",
-									queryName, err, numRows, i, actualValue, expectedValue)
-							}
-							actualFloatRounded, err := strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
-							if err != nil {
-								return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
-									"wrong result in row %d in column %d: got %q, expected %q",
-									queryName, err, numRows, i, actualValue, expectedValue)
-							}
-							if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.01 {
-								// We only fail the check if the difference is more than 0.01 -
-								// this is what TPC-H spec requires for DECIMALs.
-								return errors.Errorf("[q%s] %f and %f differ by more than 0.01\n"+
-									"wrong result in row %d in column %d: got %q, expected %q",
-									queryName, actualFloatRounded, expectedFloatRounded,
-									numRows, i, actualValue, expectedValue)
+					expectedRow := expectedRowsByQueryName[queryName][numRows]
+					for i, expectedValue := range expectedRow {
+						if val := *vals[i].(*interface{}); val != nil {
+							actualValue := fmt.Sprint(val)
+							if strings.Compare(expectedValue, actualValue) != 0 {
+								var expectedFloat, actualFloat float64
+								var expectedFloatRounded, actualFloatRounded float64
+								expectedFloat, err = strconv.ParseFloat(expectedValue, 64)
+								if err != nil {
+									return errors.Errorf("[q%s] failed parsing expected value as float64 with %s\n"+
+										"wrong result in row %d in column %d: got %q, expected %q",
+										queryName, err, numRows, i, actualValue, expectedValue)
+								}
+								actualFloat, err = strconv.ParseFloat(actualValue, 64)
+								if err != nil {
+									return errors.Errorf("[q%s] failed parsing actual value as float64 with %s\n"+
+										"wrong result in row %d in column %d: got %q, expected %q",
+										queryName, err, numRows, i, actualValue, expectedValue)
+								}
+								// TPC-H spec requires 0.01 precision for DECIMALs, so we will
+								// first round the values to use in the comparison. Note that we
+								// round to a thousandth so that values like 0.601 and 0.609 were
+								// always considered to differ by less than 0.01 (due to the
+								// nature of representation of floats, it is possible that those
+								// two values when rounded to a hundredth would be represented as
+								// something like 0.59999 and 0.610001 which differ by more than
+								// 0.01).
+								expectedFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
+								if err != nil {
+									return errors.Errorf("[q%s] failed parsing rounded expected value as float64 with %s\n"+
+										"wrong result in row %d in column %d: got %q, expected %q",
+										queryName, err, numRows, i, actualValue, expectedValue)
+								}
+								actualFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
+								if err != nil {
+									return errors.Errorf("[q%s] failed parsing rounded actual value as float64 with %s\n"+
+										"wrong result in row %d in column %d: got %q, expected %q",
+										queryName, err, numRows, i, actualValue, expectedValue)
+								}
+								if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.02 {
+									// We only fail the check if the difference is more than 0.02
+									// although TPC-H spec requires 0.01 precision for DECIMALs. We
+									// are using the expected value that might not be "precisely
+									// correct." It is possible for the following situation to
+									// occur:
+									//   expected < "ideal" < actual
+									//   "ideal" - expected < 0.01 && actual - "ideal" < 0.01
+									// so in the worst case, actual and expected might differ by
+									// 0.02 and still be considered correct.
+									return errors.Errorf("[q%s] %f and %f differ by more than 0.02\n"+
+										"wrong result in row %d in column %d: got %q, expected %q",
+										queryName, actualFloatRounded, expectedFloatRounded,
+										numRows, i, actualValue, expectedValue)
+								}
 							}
 						}
 					}
 				}
 			}
+			numRows++
 		}
-		numRows++
+		return nil
 	}
+
+	expectedOutputError := checkExpectedOutput()
+
+	// In order to definitely get the error below, we need to fully consume the
+	// result set.
+	for rows.Next() {
+	}
+
+	// We first check whether there is any error that came from the server (for
+	// example, an out of memory error). If there is, we return it.
 	if err := rows.Err(); err != nil {
 		return errors.Errorf("[q%s]: %s", queryName, err)
+	}
+	// Now we check whether there was an error while consuming the rows.
+	if expectedOutputError != nil {
+		return wrongOutputError{error: expectedOutputError}
 	}
 	if !w.config.disableChecks {
 		if !queriesToSkip[queryName] {
 			if numRows != numExpectedRowsByQueryName[queryName] {
-				return errors.Errorf("[q%s] returned wrong number of rows: got %d, expected %d",
-					queryName, numRows, numExpectedRowsByQueryName[queryName],
-				)
+				return wrongOutputError{
+					error: errors.Errorf(
+						"[q%s] returned wrong number of rows: got %d, expected %d",
+						queryName, numRows, numExpectedRowsByQueryName[queryName],
+					)}
 			}
 		}
 	}
