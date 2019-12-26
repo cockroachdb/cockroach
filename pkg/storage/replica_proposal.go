@@ -603,8 +603,8 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	// ======================
 
 	// The caller is required to detach and handle the following three fields.
-	if lResult.Intents != nil {
-		log.Fatalf(ctx, "LocalEvalResult.Intents should be nil: %+v", lResult.Intents)
+	if lResult.EncounteredIntents != nil {
+		log.Fatalf(ctx, "LocalEvalResult.EncounteredIntents should be nil: %+v", lResult.EncounteredIntents)
 	}
 	if lResult.EndTxns != nil {
 		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
@@ -676,10 +676,10 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 // proposalResult indicates the result of a proposal. Exactly one of
 // Reply and Err is set, and it represents the result of the proposal.
 type proposalResult struct {
-	Reply   *roachpb.BatchResponse
-	Err     *roachpb.Error
-	Intents []roachpb.Intent
-	EndTxns []result.EndTxnIntents
+	Reply              *roachpb.BatchResponse
+	Err                *roachpb.Error
+	EncounteredIntents []roachpb.Intent
+	EndTxns            []result.EndTxnIntents
 }
 
 // evaluateProposal generates a Result from the given request by
@@ -724,12 +724,12 @@ func (r *Replica) evaluateProposal(
 
 		// Failed proposals can't have any Result except for what's
 		// whitelisted here.
-		intents := res.Local.DetachIntents()
+		intents := res.Local.DetachEncounteredIntents()
 		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			Intents: &intents,
-			EndTxns: &endTxns,
-			Metrics: res.Local.Metrics,
+			EncounteredIntents: &intents,
+			EndTxns:            &endTxns,
+			Metrics:            res.Local.Metrics,
 		}
 		res.Replicated.Reset()
 		return &res, false /* needConsensus */, pErr
