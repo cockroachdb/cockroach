@@ -13,6 +13,7 @@ package constraint
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,6 +68,24 @@ func (sp *Span) IsUnconstrained() bool {
 	endUnconstrained := sp.end.IsEmpty()
 
 	return startUnconstrained && endUnconstrained
+}
+
+// HasSingleKey is true if the span contains exactly one key. This is true when
+// the start key is the same as the end key, and both boundaries are inclusive.
+func (sp *Span) HasSingleKey(evalCtx *tree.EvalContext) bool {
+	l := sp.start.Length()
+	if l == 0 || l != sp.end.Length() {
+		return false
+	}
+	if sp.startBoundary != IncludeBoundary || sp.endBoundary != IncludeBoundary {
+		return false
+	}
+	for i, n := 0, l; i < n; i++ {
+		if sp.start.Value(i).Compare(evalCtx, sp.end.Value(i)) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // StartKey returns the start key.

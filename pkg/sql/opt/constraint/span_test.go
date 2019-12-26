@@ -17,6 +17,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -111,6 +112,90 @@ func TestSpanUnconstrained(t *testing.T) {
 	sp.Init(MakeKey(tree.NewDInt(5)), IncludeBoundary, MakeKey(tree.NewDInt(5)), IncludeBoundary)
 	if sp.IsUnconstrained() {
 		t.Errorf("IsUnconstrained should have returned false")
+	}
+}
+
+func TestSpanSingleKey(t *testing.T) {
+	testCases := []struct {
+		start         Key
+		startBoundary SpanBoundary
+		end           Key
+		endBoundary   SpanBoundary
+		expected      bool
+	}{
+		{ // 0
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			true,
+		},
+		{ // 1
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(2)), IncludeBoundary,
+			false,
+		},
+		{ // 2
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			false,
+		},
+		{ // 3
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 4
+			EmptyKey, IncludeBoundary,
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 5
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			EmptyKey, IncludeBoundary,
+			false,
+		},
+		{ // 6
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.DNull), IncludeBoundary,
+			false,
+		},
+		{ // 7
+			MakeKey(tree.NewDString("a")), IncludeBoundary,
+			MakeKey(tree.NewDString("ab")), IncludeBoundary,
+			false,
+		},
+		{ // 8
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			true,
+		},
+		{ // 9
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 10
+			MakeCompositeKey(tree.NewDString("cherry")), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1)), IncludeBoundary,
+			false,
+		},
+		{ // 11
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1), tree.DNull), IncludeBoundary,
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(1), tree.DNull), IncludeBoundary,
+			true,
+		},
+	}
+
+	for i, tc := range testCases {
+		st := cluster.MakeTestingClusterSettings()
+		evalCtx := tree.MakeTestingEvalContext(st)
+
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			var sp Span
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			if sp.HasSingleKey(&evalCtx) != tc.expected {
+				t.Errorf("expected: %v, actual: %v", tc.expected, !tc.expected)
+			}
+		})
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -120,6 +121,243 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 //
 // ----------------------------------------------------------------------
 
+// GenerateConstrainedScans enumerates all secondary indexes on the Scan
+// operator's table and tries to push the given Select filter into new
+// constrained Scan operators using those indexes. Since this only needs to be
+// done once per table, GenerateConstrainedScans should only be called on the
+// original unaltered primary index Scan operator (i.e. not constrained or
+// limited).
+//
+// For each secondary index that "covers" the columns needed by the scan, there
+// are three cases:
+//
+//  - a filter that can be completely converted to a constraint over that index
+//    generates a single constrained Scan operator (to be added to the same
+//    group as the original Select operator):
+//
+//      (Scan $scanDef)
+//
+//  - a filter that can be partially converted to a constraint over that index
+//    generates a constrained Scan operator in a new memo group, wrapped in a
+//    Select operator having the remaining filter (to be added to the same group
+//    as the original Select operator):
+//
+//      (Select (Scan $scanDef) $filter)
+//
+//  - a filter that cannot be converted to a constraint generates nothing
+//
+// And for a secondary index that does not cover the needed columns:
+//
+//  - a filter that can be completely converted to a constraint over that index
+//    generates a single constrained Scan operator in a new memo group, wrapped
+//    in an IndexJoin operator that looks up the remaining needed columns (and
+//    is added to the same group as the original Select operator)
+//
+//      (IndexJoin (Scan $scanDef) $indexJoinDef)
+//
+//  - a filter that can be partially converted to a constraint over that index
+//    generates a constrained Scan operator in a new memo group, wrapped in an
+//    IndexJoin operator that looks up the remaining needed columns; the
+//    remaining filter is distributed above and/or below the IndexJoin,
+//    depending on which columns it references:
+//
+//      (IndexJoin
+//        (Select (Scan $scanDef) $filter)
+//        $indexJoinDef
+//      )
+//
+//      (Select
+//        (IndexJoin (Scan $scanDef) $indexJoinDef)
+//        $filter
+//      )
+//
+//      (Select
+//        (IndexJoin
+//          (Select (Scan $scanDef) $innerFilter)
+//          $indexJoinDef
+//        )
+//        $outerFilter
+//      )
+//
+// GenerateConstrainedScans will further constrain the enumerated index scans
+// by trying to use the check constraints and computed columns that apply to the
+// table being scanned, as well as the partitioning defined for the index. See
+// comments above checkColumnFilters, computedColFilters, and
+// partitionValuesFilters for more detail.
+func (c *CustomFuncs) GenerateConstrainedScans(
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
+) {
+	var sb indexScanBuilder
+	sb.init(c, scanPrivate.Table)
+
+	// Generate implicit filters from constraints and computed columns and add
+	// them to the list of explicit filters provided in the query.
+	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
+	expandedFilters := append(explicitFilters, checkFilters...)
+
+	computedColFilters := c.computedColFilters(scanPrivate.Table, expandedFilters)
+	expandedFilters = append(expandedFilters, computedColFilters...)
+
+	// Iterate over all indexes.
+	var iter scanIndexIter
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+	iter.init(c.e.mem, scanPrivate)
+	for iter.next() {
+		// We may append to this slice below; avoid any potential aliasing by
+		// limiting its capacity (forcing append to reallocate).
+		allFilters := expandedFilters[:len(expandedFilters):len(expandedFilters)]
+		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
+		filterColumns := c.FilterOuterCols(allFilters)
+		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
+
+		// We only consider the partition values when a particular index can otherwise
+		// not be constrained. For indexes that are constrained, the partitioned values
+		// add no benefit as they don't really constrain anything.
+		// Furthermore, if the filters don't take advantage of the index (use any of the
+		// index columns), using the partition values add no benefit.
+		var constrainedInBetweenFilters memo.FiltersExpr
+		var isIndexPartitioned bool
+		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
+			// Add any partition filters if appropriate.
+			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
+
+			if len(partitionFilters) > 0 {
+				// We must add the filters so when we generate the inBetween spans, they are
+				// also constrained. This is also needed so the remaining filters are generated
+				// correctly using the in between spans (some remaining filters may be blown
+				// by the partition constraints).
+				constrainedInBetweenFilters = append(inBetweenFilters, allFilters...)
+				allFilters = append(allFilters, partitionFilters...)
+				isIndexPartitioned = true
+			}
+		}
+
+		// Check whether the filter can constrain the index.
+		constraint, remainingFilters, ok := c.tryConstrainIndex(
+			allFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+		if !ok {
+			continue
+		}
+
+		// If the index is partitioned (by list), then the constraints above only
+		// contain spans within the partition ranges. For correctness, we must
+		// also add the spans for the in between ranges. Consider the following index
+		// and its partition:
+		//
+		// CREATE INDEX orders_by_created_at
+		//     ON orders (region, created_at, id)
+		//     STORING (total)
+		//     PARTITION BY LIST (region)
+		//         (
+		//             PARTITION us_east1 VALUES IN ('us-east1'),
+		//             PARTITION us_west1 VALUES IN ('us-west1'),
+		//             PARTITION europe_west2 VALUES IN ('europe-west2')
+		//         )
+		//
+		// The constraint generated for the query:
+		// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+		// is:
+		//
+		// [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+		//
+		// You'll notice that the spans before europe-west2, after us-west1 and in between
+		// the defined partitions are missing. We must add these spans now, appropriately
+		// constrained using the filters.
+		//
+		// It is important that we add these spans after the partition spans are generated
+		// because otherwise these spans would merge with the partition spans and would
+		// disallow the partition spans (and the in between ones) to be constrained further.
+		// Using the partitioning example and the query above, if we added the in between
+		// spans at the same time as the partitioned ones, we would end up with a span that
+		// looked like:
+		//
+		// [ - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// However, allowing the partition spans to be constrained further and then adding the
+		// spans give us a more constrained index scan as shown below:
+		//
+		// [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		//
+		// Notice how we 'skip' all the europe-west2 values that satisfy (created_at < '2019-05-04')
+		if isIndexPartitioned {
+			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
+				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
+			if !ok {
+				panic(errors.AssertionFailedf("constraining index should not failed with the in between filters"))
+			}
+
+			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
+
+			// Even though the partitioned constrains and the inBetween constraints
+			// were consolidated, we must make sure their Union is as well.
+			constraint.ConsolidateSpans(c.e.evalCtx)
+
+			// Add all remaining filters that need to be present in the
+			// inBetween spans. Some of the remaining filters are common
+			// between them, so we must deduplicate them.
+			remainingFilters = c.ConcatFilters(remainingFilters, inBetweenRemainingFilters)
+			remainingFilters.Sort()
+			remainingFilters.Deduplicate()
+		}
+
+		// If a check constraint filter or a partition filter wasn't able to
+		// constrain the index, it should not be used anymore for this group
+		// expression.
+		// TODO(ridwanmsharif): Does it ever make sense for us to continue
+		// using any constraint filter that wasn't able to constrain a scan?
+		// Maybe once we have more information about data distribution, we may
+		// use it to further constrain an index scan. We should revisit this
+		// once we have index skip scans.  A constraint that may not constrain
+		// an index scan may still allow the index to be used more effectively
+		// if an index skip scan is possible.
+		if len(explicitFilters) != len(allFilters) {
+			remainingFilters.RetainCommonFilters(explicitFilters)
+		}
+
+		// Construct new constrained ScanPrivate.
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Constraint = constraint
+		// Record whether we were able to use partitions to constrain the scan.
+		newScanPrivate.PartitionConstrainedScan = isIndexPartitioned
+
+		// If the alternate index includes the set of needed columns, then construct
+		// a new Scan operator using that index.
+		if iter.isCovering() {
+			sb.setScan(&newScanPrivate)
+
+			// If there are remaining filters, then the constrained Scan operator
+			// will be created in a new group, and a Select operator will be added
+			// to the same group as the original operator.
+			sb.addSelect(remainingFilters)
+
+			sb.build(grp)
+			continue
+		}
+
+		// Otherwise, construct an IndexJoin operator that provides the columns
+		// missing from the index.
+		if scanPrivate.Flags.NoIndexJoin {
+			continue
+		}
+
+		// Scan whatever columns we need which are available from the index, plus
+		// the PK columns.
+		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(&newScanPrivate)
+
+		// If remaining filter exists, split it into one part that can be pushed
+		// below the IndexJoin, and one part that needs to stay above.
+		remainingFilters = sb.addSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
+		sb.addIndexJoin(scanPrivate.Cols)
+		sb.addSelect(remainingFilters)
+
+		sb.build(grp)
+	}
+}
+
 // checkConstraintFilters generates all filters that we can derive from the
 // check constraints. These are constraints that have been validated and are
 // non-nullable. We only use non-nullable check constraints because they
@@ -187,50 +425,178 @@ func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr
 	return checkFilters
 }
 
-// columnComparison returns a filter that compares the index columns to the
-// given values. The comp parameter can be -1, 0 or 1 to indicate whether the
-// comparison type of the filter should be a Lt, Eq or Gt.
-func (c *CustomFuncs) columnComparison(
-	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
-) opt.ScalarExpr {
-	colTypes := make([]types.T, len(values))
-	for i := range values {
-		colTypes[i] = *values[i].ResolvedType()
+// computedColFilters generates all filters that can be derived from the list of
+// computed column expressions from the given table. A computed column can be
+// used as a filter when it has a constant value. That is true when:
+//
+//   1. All other columns it references are constant, because other filters in
+//      the query constrain them to be so.
+//   2. All functions in the computed column expression can be folded into
+//      constants (i.e. they do not have problematic side effects).
+//
+// Note that computed columns can depend on other computed columns; in general
+// the dependencies form an acyclic directed graph. computedColFilters will
+// return filters for all constant computed columns, regardless of the order of
+// their dependencies.
+//
+// As with checkConstraintFilters, computedColFilters do not really filter any
+// rows, they are rather facts or guarantees about the data. Treating them as
+// filters may allow some indexes to be constrained and used. Consider the
+// following example:
+//
+//   CREATE TABLE t (
+//     k INT NOT NULL,
+//     hash INT AS (k % 4) STORED,
+//     PRIMARY KEY (hash, k)
+//   )
+//
+//   SELECT * FROM t WHERE k = 5
+//
+// Notice that the filter provided explicitly wouldn't allow the optimizer to
+// seek using the primary index (it would have to fall back to a table scan).
+// However, column "hash" can be proven to have the constant value of 1, since
+// it's dependent on column "k", which has the constant value of 5. This enables
+// usage of the primary index:
+//
+//     scan t
+//      ├── columns: k:1(int!null) hash:2(int!null)
+//      ├── constraint: /2/1: [/1/5 - /1/5]
+//      ├── key: (2)
+//      └── fd: ()-->(1)
+//
+// The values of both columns in that index are known, enabling a single value
+// constraint to be generated.
+func (c *CustomFuncs) computedColFilters(
+	tabID opt.TableID, filters memo.FiltersExpr,
+) memo.FiltersExpr {
+	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
+	if len(tabMeta.ComputedCols) == 0 {
+		return nil
 	}
 
-	columnVariables := make(memo.ScalarListExpr, len(values))
-	scalarValues := make(memo.ScalarListExpr, len(values))
-
-	for i, val := range values {
-		colID := tabID.ColumnID(index.Column(i).Ordinal)
-		columnVariables[i] = c.e.f.ConstructVariable(colID)
-		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
+	// Start with set of constant columns, as derived from the list of filter
+	// conditions.
+	constCols := c.findConstantFilterCols(tabID, filters)
+	if len(constCols) == 0 {
+		// No constant values could be derived from filters, so assume that there
+		// are also no constant computed columns.
+		return nil
 	}
 
-	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
-	valsTuple := c.e.f.ConstructTuple(scalarValues, types.MakeTuple(colTypes))
-	if comp == 0 {
-		return c.e.f.ConstructEq(colsTuple, valsTuple)
-	} else if comp > 0 {
-		return c.e.f.ConstructGt(colsTuple, valsTuple)
-	}
-
-	return c.e.f.ConstructLt(colsTuple, valsTuple)
-}
-
-// isPrefixOf returns whether pre is a prefix of other.
-func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
-	if len(pre) > len(other) {
-		// Pre can't be a prefix of other as it is larger.
-		return false
-	}
-	for i := range pre {
-		if pre[i].Compare(c.e.evalCtx, other[i]) != 0 {
-			return false
+	// Construct a new filter condition for each computed column that is
+	// constant (i.e. all of its variables are in the constCols set).
+	var computedColFilters memo.FiltersExpr
+	for colID := range tabMeta.ComputedCols {
+		if c.tryFoldComputedCol(tabMeta, colID, constCols) {
+			constVal := constCols[colID]
+			eqOp := c.e.f.ConstructEq(c.e.f.ConstructVariable(colID), constVal)
+			computedColFilters = append(computedColFilters, c.e.f.ConstructFiltersItem(eqOp))
 		}
 	}
+	return computedColFilters
+}
 
-	return true
+// findConstantFilterCols returns a mapping from table column ID to the constant
+// value of that column. It does this by iterating over the given list of
+// filters and finding expressions that constrain columns to a single constant
+// value. For example:
+//
+//   x = 5 AND y = 'foo'
+//
+// This would return a mapping from x => 5 and y => 'foo', which constants can
+// then be used to prove that dependent computed columns are also constant.
+func (c *CustomFuncs) findConstantFilterCols(
+	tabID opt.TableID, filters memo.FiltersExpr,
+) map[opt.ColumnID]opt.ScalarExpr {
+	tab := c.e.mem.Metadata().Table(tabID)
+	constFilterCols := make(map[opt.ColumnID]opt.ScalarExpr)
+	for i := range filters {
+		// If filter constraints are not tight, then no way to derive constant
+		// values.
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+
+		// Iterate over constraint conjuncts with a single column and single
+		// span having a single key.
+		for i, n := 0, props.Constraints.Length(); i < n; i++ {
+			cons := props.Constraints.Constraint(i)
+			if cons.Columns.Count() != 1 || cons.Spans.Count() != 1 {
+				continue
+			}
+
+			// Skip columns with a data type that uses a composite key encoding.
+			// Each of these data types can have multiple distinct values that
+			// compare equal. For example, 0 == -0 for the FLOAT data type. It's
+			// not safe to treat these as constant inputs to computed columns,
+			// since the computed expression may differentiate between the
+			// different forms of the same value.
+			colID := cons.Columns.Get(0).ID()
+			colTyp := tab.Column(tabID.ColumnOrdinal(colID)).DatumType()
+			if sqlbase.DatumTypeHasCompositeKeyEncoding(colTyp) {
+				continue
+			}
+
+			span := cons.Spans.Get(0)
+			if !span.HasSingleKey(c.e.evalCtx) {
+				continue
+			}
+
+			datum := span.StartKey().Value(0)
+			if datum != tree.DNull {
+				constFilterCols[colID] = c.e.f.ConstructConstVal(datum, colTyp)
+			}
+		}
+	}
+	return constFilterCols
+}
+
+// tryFoldComputedCol tries to reduce the computed column with the given column
+// ID into a constant value, by evaluating it with respect to a set of other
+// columns that are constant. If the computed column is constant, enter it into
+// the constCols map and return false. Otherwise, return false.
+func (c *CustomFuncs) tryFoldComputedCol(
+	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols map[opt.ColumnID]opt.ScalarExpr,
+) bool {
+	// Check whether computed column has already been folded.
+	if _, ok := constCols[computedColID]; ok {
+		return true
+	}
+
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		if variable, ok := e.(*memo.VariableExpr); ok {
+			// Can variable be folded?
+			if constVal, ok := constCols[variable.Col]; ok {
+				// Yes, so replace it with its constant value.
+				return constVal
+			}
+
+			// No, but that may be because the variable refers to a dependent
+			// computed column. In that case, try to recursively fold that
+			// computed column. There are no infinite loops possible because the
+			// dependency graph is guaranteed to be acyclic.
+			if _, ok := tabMeta.ComputedCols[variable.Col]; ok {
+				if c.tryFoldComputedCol(tabMeta, variable.Col, constCols) {
+					return constCols[variable.Col]
+				}
+			}
+
+			return e
+		}
+		return c.e.f.Replace(e, replace)
+	}
+
+	computedCol := tabMeta.ComputedCols[computedColID]
+	replaced := replace(computedCol).(opt.ScalarExpr)
+
+	// If the computed column is constant, enter it into the constCols map.
+	if opt.IsConstValueOp(replaced) {
+		constCols[computedColID] = replaced
+		return true
+	}
+	return false
 }
 
 // inBetweenFilters returns a set of filters that are required to cover all the
@@ -290,6 +656,37 @@ func (c *CustomFuncs) inBetweenFilters(
 	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(inBetween))}
 }
 
+// columnComparison returns a filter that compares the index columns to the
+// given values. The comp parameter can be -1, 0 or 1 to indicate whether the
+// comparison type of the filter should be a Lt, Eq or Gt.
+func (c *CustomFuncs) columnComparison(
+	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
+) opt.ScalarExpr {
+	colTypes := make([]types.T, len(values))
+	for i := range values {
+		colTypes[i] = *values[i].ResolvedType()
+	}
+
+	columnVariables := make(memo.ScalarListExpr, len(values))
+	scalarValues := make(memo.ScalarListExpr, len(values))
+
+	for i, val := range values {
+		colID := tabID.ColumnID(index.Column(i).Ordinal)
+		columnVariables[i] = c.e.f.ConstructVariable(colID)
+		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
+	}
+
+	colsTuple := c.e.f.ConstructTuple(columnVariables, types.MakeTuple(colTypes))
+	valsTuple := c.e.f.ConstructTuple(scalarValues, types.MakeTuple(colTypes))
+	if comp == 0 {
+		return c.e.f.ConstructEq(colsTuple, valsTuple)
+	} else if comp > 0 {
+		return c.e.f.ConstructGt(colsTuple, valsTuple)
+	}
+
+	return c.e.f.ConstructLt(colsTuple, valsTuple)
+}
+
 // inPartitionFilters returns a FiltersExpr that is required to cover
 // all the partition spans. For each partition defined, inPartitionFilters
 // will contain a FilterItem that restricts the index columns by
@@ -337,6 +734,21 @@ func (c *CustomFuncs) inPartitionFilters(
 
 	// Return an Or expression between all the expressions.
 	return memo.FiltersExpr{c.e.f.ConstructFiltersItem(c.constructOr(partitions))}
+}
+
+// isPrefixOf returns whether pre is a prefix of other.
+func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
+	if len(pre) > len(other) {
+		// Pre can't be a prefix of other as it is larger.
+		return false
+	}
+	for i := range pre {
+		if pre[i].Compare(c.e.evalCtx, other[i]) != 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 // constructOr constructs an expression that is an OR between all the
@@ -414,241 +826,6 @@ func (c *CustomFuncs) partitionValuesFilters(
 	inBetween := c.inBetweenFilters(tabID, index, partitionValues)
 
 	return inPartition, inBetween
-}
-
-// GenerateConstrainedScans enumerates all secondary indexes on the Scan
-// operator's table and tries to push the given Select filter into new
-// constrained Scan operators using those indexes. Since this only needs to be
-// done once per table, GenerateConstrainedScans should only be called on the
-// original unaltered primary index Scan operator (i.e. not constrained or
-// limited).
-//
-// For each secondary index that "covers" the columns needed by the scan, there
-// are three cases:
-//
-//  - a filter that can be completely converted to a constraint over that index
-//    generates a single constrained Scan operator (to be added to the same
-//    group as the original Select operator):
-//
-//      (Scan $scanDef)
-//
-//  - a filter that can be partially converted to a constraint over that index
-//    generates a constrained Scan operator in a new memo group, wrapped in a
-//    Select operator having the remaining filter (to be added to the same group
-//    as the original Select operator):
-//
-//      (Select (Scan $scanDef) $filter)
-//
-//  - a filter that cannot be converted to a constraint generates nothing
-//
-// And for a secondary index that does not cover the needed columns:
-//
-//  - a filter that can be completely converted to a constraint over that index
-//    generates a single constrained Scan operator in a new memo group, wrapped
-//    in an IndexJoin operator that looks up the remaining needed columns (and
-//    is added to the same group as the original Select operator)
-//
-//      (IndexJoin (Scan $scanDef) $indexJoinDef)
-//
-//  - a filter that can be partially converted to a constraint over that index
-//    generates a constrained Scan operator in a new memo group, wrapped in an
-//    IndexJoin operator that looks up the remaining needed columns; the
-//    remaining filter is distributed above and/or below the IndexJoin,
-//    depending on which columns it references:
-//
-//      (IndexJoin
-//        (Select (Scan $scanDef) $filter)
-//        $indexJoinDef
-//      )
-//
-//      (Select
-//        (IndexJoin (Scan $scanDef) $indexJoinDef)
-//        $filter
-//      )
-//
-//      (Select
-//        (IndexJoin
-//          (Select (Scan $scanDef) $innerFilter)
-//          $indexJoinDef
-//        )
-//        $outerFilter
-//      )
-//
-// GenerateConstrainedScans will further constrain the enumerated index scans
-// by trying to use the check constraints that apply to the table being
-// scanned and the partitioning defined for the index. See comments above
-// checkColumnFilters and partitionValuesFilters respectively for more
-// detail.
-func (c *CustomFuncs) GenerateConstrainedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
-) {
-	var sb indexScanBuilder
-	sb.init(c, scanPrivate.Table)
-
-	// Generate appropriate filters from constraints.
-	checkFilters := c.checkConstraintFilters(scanPrivate.Table)
-
-	// Consider the checkFilters as well to constrain each of the indexes.
-	explicitAndCheckFilters := append(explicitFilters, checkFilters...)
-
-	// Iterate over all indexes.
-	var iter scanIndexIter
-	md := c.e.mem.Metadata()
-	tabMeta := md.TableMeta(scanPrivate.Table)
-	iter.init(c.e.mem, scanPrivate)
-	for iter.next() {
-		// We may append to this slice below; avoid any potential aliasing by
-		// limiting its capacity (forcing append to reallocate).
-		filters := explicitAndCheckFilters[:len(explicitAndCheckFilters):len(explicitAndCheckFilters)]
-		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		filterColumns := c.FilterOuterCols(filters)
-		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
-
-		// We only consider the partition values when a particular index can otherwise
-		// not be constrained. For indexes that are constrained, the partitioned values
-		// add no benefit as they don't really constrain anything.
-		// Furthermore, if the filters don't take advantage of the index (use any of the
-		// index columns), using the partition values add no benefit.
-		var constrainedInBetweenFilters memo.FiltersExpr
-		var isIndexPartitioned bool
-		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
-			// Add any partition filters if appropriate.
-			partitionFilters, inBetweenFilters := c.partitionValuesFilters(scanPrivate.Table, iter.index)
-
-			if len(partitionFilters) > 0 {
-				// We must add the filters so when we generate the inBetween spans, they are
-				// also constrained. This is also needed so the remaining filters are generated
-				// correctly using the in between spans (some remaining filters may be blown
-				// by the partition constraints).
-				constrainedInBetweenFilters = append(inBetweenFilters, filters...)
-				filters = append(filters, partitionFilters...)
-				isIndexPartitioned = true
-			}
-		}
-
-		// Check whether the filter can constrain the index.
-		constraint, remainingFilters, ok := c.tryConstrainIndex(
-			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
-		if !ok {
-			continue
-		}
-
-		// If the index is partitioned (by list), then the constraints above only
-		// contain spans within the partition ranges. For correctness, we must
-		// also add the spans for the in between ranges. Consider the following index
-		// and its partition:
-		//
-		// CREATE INDEX orders_by_created_at
-		//     ON orders (region, created_at, id)
-		//     STORING (total)
-		//     PARTITION BY LIST (region)
-		//         (
-		//             PARTITION us_east1 VALUES IN ('us-east1'),
-		//             PARTITION us_west1 VALUES IN ('us-west1'),
-		//             PARTITION europe_west2 VALUES IN ('europe-west2')
-		//         )
-		//
-		// The constraint generated for the query:
-		// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
-		// is:
-		//
-		// [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
-		//
-		// You'll notice that the spans before europe-west2, after us-west1 and in between
-		// the defined partitions are missing. We must add these spans now, appropriately
-		// constrained using the filters.
-		//
-		// It is important that we add these spans after the partition spans are generated
-		// because otherwise these spans would merge with the partition spans and would
-		// disallow the partition spans (and the in between ones) to be constrained further.
-		// Using the partitioning example and the query above, if we added the in between
-		// spans at the same time as the partitioned ones, we would end up with a span that
-		// looked like:
-		//
-		// [ - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
-		//
-		// However, allowing the partition spans to be constrained further and then adding the
-		// spans give us a more constrained index scan as shown below:
-		//
-		// [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
-		//
-		// Notice how we 'skip' all the europe-west2 values that satisfy (created_at < '2019-05-04')
-		if isIndexPartitioned {
-			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
-				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
-			if !ok {
-				panic(errors.AssertionFailedf("constraining index should not failed with the in between filters"))
-			}
-
-			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
-
-			// Even though the partitioned constrains and the inBetween constraints
-			// were consolidated, we must make sure their Union is as well.
-			constraint.ConsolidateSpans(c.e.evalCtx)
-
-			// Add all remaining filters that need to be present in the
-			// inBetween spans. Some of the remaining filters are common
-			// between them, so we must deduplicate them.
-			remainingFilters = c.ConcatFilters(remainingFilters, inBetweenRemainingFilters)
-			remainingFilters.Sort()
-			remainingFilters.Deduplicate()
-		}
-
-		// If a check constraint filter or a partition filter wasn't able to
-		// constrain the index, it should not be used anymore for this group
-		// expression.
-		// TODO(ridwanmsharif): Does it ever make sense for us to continue
-		// using any constraint filter that wasn't able to constrain a scan?
-		// Maybe once we have more information about data distribution, we may
-		// use it to further constrain an index scan. We should revisit this
-		// once we have index skip scans.  A constraint that may not constrain
-		// an index scan may still allow the index to be used more effectively
-		// if an index skip scan is possible.
-		if len(checkFilters) != 0 || isIndexPartitioned {
-			remainingFilters.RetainCommonFilters(explicitFilters)
-		}
-
-		// Construct new constrained ScanPrivate.
-		newScanPrivate := *scanPrivate
-		newScanPrivate.Index = iter.indexOrdinal
-		newScanPrivate.Constraint = constraint
-		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = isIndexPartitioned
-
-		// If the alternate index includes the set of needed columns, then construct
-		// a new Scan operator using that index.
-		if iter.isCovering() {
-			sb.setScan(&newScanPrivate)
-
-			// If there are remaining filters, then the constrained Scan operator
-			// will be created in a new group, and a Select operator will be added
-			// to the same group as the original operator.
-			sb.addSelect(remainingFilters)
-
-			sb.build(grp)
-			continue
-		}
-
-		// Otherwise, construct an IndexJoin operator that provides the columns
-		// missing from the index.
-		if scanPrivate.Flags.NoIndexJoin {
-			continue
-		}
-
-		// Scan whatever columns we need which are available from the index, plus
-		// the PK columns.
-		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
-
-		// If remaining filter exists, split it into one part that can be pushed
-		// below the IndexJoin, and one part that needs to stay above.
-		remainingFilters = sb.addSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
-		sb.addIndexJoin(scanPrivate.Cols)
-		sb.addSelect(remainingFilters)
-
-		sb.build(grp)
-	}
 }
 
 // HasInvertedIndexes returns true if at least one inverted index is defined on
