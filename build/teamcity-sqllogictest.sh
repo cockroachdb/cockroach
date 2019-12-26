@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+source "$(dirname "${0}")/teamcity-support.sh"
+
 mkdir -p artifacts
 
 # TestSqlLiteLogic needs the sqllogictest repo from the host's GOPATH, so we
