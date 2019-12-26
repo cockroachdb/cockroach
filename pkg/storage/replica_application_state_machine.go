@@ -1022,7 +1022,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		sm.r.handleNoRaftLogDeltaResult(ctx)
 	}
 	if cmd.localResult != nil {
-		sm.r.handleLocalEvalResult(ctx, *cmd.localResult)
+		sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 	}
 	if err := sm.maybeApplyConfChange(ctx, cmd); err != nil {
 		return nil, wrapWithNonDeterministicFailure(err, "unable to apply conf change")
