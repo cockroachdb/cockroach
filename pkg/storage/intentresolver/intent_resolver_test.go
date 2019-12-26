@@ -13,6 +13,7 @@ package intentresolver
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -654,16 +656,84 @@ func TestCleanupIntentsAsync(t *testing.T) {
 			}
 			ir := newIntentResolverWithSendFuncs(cfg, sf)
 			err := ir.CleanupIntentsAsync(context.Background(), c.intents, true)
-			testutils.SucceedsSoon(t, func() error {
-				if l := sf.len(); l > 0 {
-					return fmt.Errorf("Still have %d funcs to send", l)
-				}
-				return nil
-			})
+			sf.drain(t)
 			stopper.Stop(context.Background())
 			assert.Nil(t, err, "error from CleanupIntentsAsync")
 		})
 	}
+}
+
+// TestCleanupMultipleIntentsAsync verifies that CleanupIntentsAsync sends the
+// expected requests when multiple IntentsWithArg are provided to it.
+func TestCleanupMultipleIntentsAsync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn1 := newTransaction("txn1", roachpb.Key("a"), 1, clock)
+	txn2 := newTransaction("txn2", roachpb.Key("c"), 1, clock)
+	testIntentsWithArg := []result.IntentsWithArg{
+		{Intents: []roachpb.Intent{
+			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn1.TxnMeta},
+			{Span: roachpb.Span{Key: roachpb.Key("b")}, Txn: txn1.TxnMeta},
+		}},
+		{Intents: []roachpb.Intent{
+			{Span: roachpb.Span{Key: roachpb.Key("c")}, Txn: txn2.TxnMeta},
+			{Span: roachpb.Span{Key: roachpb.Key("d")}, Txn: txn2.TxnMeta},
+		}},
+	}
+
+	// We expect to see a PushTxn req for each pair of intents and a
+	// ResolveIntent req for each pair of intents. However, because these
+	// requests are all async, it's unclear which order these will be issued in.
+	// Handle all orders and record the resolved intents.
+	var resolved struct {
+		syncutil.Mutex
+		keys []string
+	}
+	pushOrResolveFunc := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		switch ba.Requests[0].GetInner().Method() {
+		case roachpb.PushTxn:
+			return pushTxnSendFunc(t, len(ba.Requests))(ba)
+		case roachpb.ResolveIntent:
+			for _, ru := range ba.Requests {
+				resolved.Lock()
+				resolved.keys = append(resolved.keys, string(ru.GetResolveIntent().Key))
+				resolved.Unlock()
+			}
+			return resolveIntentsSendFunc(t)(ba)
+		default:
+			return nil, roachpb.NewErrorf("unexpected")
+		}
+	}
+	sf := newSendFuncs(t, repeat(pushOrResolveFunc, 4)...)
+
+	stopper := stop.NewStopper()
+	cfg := Config{
+		Stopper: stopper,
+		Clock:   clock,
+		// Don't let the 2-key intent resolution batches be batched with each
+		// other. This would make it harder to determine how to drain sf.
+		TestingKnobs: storagebase.IntentResolverTestingKnobs{
+			MaxIntentResolutionBatchSize: 2,
+		},
+	}
+	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	err := ir.CleanupIntentsAsync(ctx, testIntentsWithArg, false)
+	sf.drain(t)
+	stopper.Stop(ctx)
+	assert.Nil(t, err)
+
+	// All four intents should be resolved.
+	sort.Strings(resolved.keys)
+	assert.Equal(t, []string{"a", "b", "c", "d"}, resolved.keys)
+}
+
+func repeat(f sendFunc, n int) []sendFunc {
+	fns := make([]sendFunc, n)
+	for i := range fns {
+		fns[i] = f
+	}
+	return fns
 }
 
 func newSendFuncs(t *testing.T, sf ...sendFunc) *sendFuncs {
@@ -693,6 +763,15 @@ func (sf *sendFuncs) popLocked() sendFunc {
 	ret := sf.sendFuncs[0]
 	sf.sendFuncs = sf.sendFuncs[1:]
 	return ret
+}
+
+func (sf *sendFuncs) drain(t *testing.T) {
+	testutils.SucceedsSoon(t, func() error {
+		if l := sf.len(); l > 0 {
+			return errors.Errorf("still have %d funcs to send", l)
+		}
+		return nil
+	})
 }
 
 // TestCleanupTxnIntentsAsync verifies that CleanupTxnIntentsAsync sends the
@@ -763,6 +842,83 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 			assert.Equal(t, sf.len(), 0)
 		})
 	}
+}
+
+// TestCleanupMultipleTxnIntentsAsync verifies that CleanupTxnIntentsAsync sends
+// the expected requests when multiple EndTxnIntents are provided to it.
+func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	txn1 := newTransaction("txn1", roachpb.Key("a"), 1, clock)
+	txn2 := newTransaction("txn2", roachpb.Key("c"), 1, clock)
+	testEndTxnIntents := []result.EndTxnIntents{
+		{
+			Txn: roachpb.Transaction{
+				TxnMeta: txn1.TxnMeta,
+				IntentSpans: []roachpb.Span{
+					{Key: roachpb.Key("a")},
+					{Key: roachpb.Key("b")},
+				},
+			},
+		},
+		{
+			Txn: roachpb.Transaction{
+				TxnMeta: txn2.TxnMeta,
+				IntentSpans: []roachpb.Span{
+					{Key: roachpb.Key("c")},
+					{Key: roachpb.Key("d")},
+				},
+			},
+		},
+	}
+
+	// We expect to see a ResolveIntent req for each txn and a GC req for each
+	// txn. However, because these requests are all async, it's unclear which
+	// order these will be issued in. Handle all orders and record the GCed
+	// transaction records.
+	var gced struct {
+		syncutil.Mutex
+		keys []string
+	}
+	resolveOrGCFunc := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		switch ba.Requests[0].GetInner().Method() {
+		case roachpb.ResolveIntent:
+			return resolveIntentsSendFunc(t)(ba)
+		case roachpb.GC:
+			for _, ru := range ba.Requests {
+				gced.Lock()
+				gced.keys = append(gced.keys, string(ru.GetGc().Key))
+				gced.Unlock()
+			}
+			return gcSendFunc(t)(ba)
+		default:
+			return nil, roachpb.NewErrorf("unexpected")
+		}
+	}
+	sf := newSendFuncs(t, repeat(resolveOrGCFunc, 4)...)
+
+	stopper := stop.NewStopper()
+	cfg := Config{
+		Stopper: stopper,
+		Clock:   clock,
+		// Don't let the 1-key transaction record GC batches or the 2-key intent
+		// resolution batches be batched with each other. This would make it
+		// harder to determine how to drain sf.
+		TestingKnobs: storagebase.IntentResolverTestingKnobs{
+			MaxGCBatchSize:               1,
+			MaxIntentResolutionBatchSize: 2,
+		},
+	}
+	ir := newIntentResolverWithSendFuncs(cfg, sf)
+	err := ir.CleanupTxnIntentsAsync(ctx, 1, testEndTxnIntents, false)
+	sf.drain(t)
+	stopper.Stop(ctx)
+	assert.Nil(t, err)
+
+	// Both txn records should be GCed.
+	sort.Strings(gced.keys)
+	assert.Equal(t, []string{"a", "c"}, gced.keys)
 }
 
 func counterSendFuncs(counter *int64, funcs []sendFunc) []sendFunc {
