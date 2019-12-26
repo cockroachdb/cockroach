@@ -117,7 +117,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		}
 	}
 
-	if (lResult != result.LocalResult{}) {
+	if !lResult.IsZero() {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
