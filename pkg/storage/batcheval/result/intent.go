@@ -12,14 +12,14 @@ package result
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// FromIntents creates a Result communicating that the intents were encountered
+// FromEncounteredIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
-func FromIntents(intents []roachpb.Intent) Result {
+func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	var pd Result
 	if len(intents) == 0 {
 		return pd
 	}
-	pd.Local.Intents = &intents
+	pd.Local.EncounteredIntents = &intents
 	return pd
 }
 

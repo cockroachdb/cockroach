@@ -9136,8 +9136,8 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if !testutils.IsPError(propRes.Err, "boom") {
 		t.Fatalf("expected injected error, got: %v", propRes.Err)
 	}
-	if len(propRes.Intents) != 0 {
-		t.Fatal("expected intents to have been cleared")
+	if len(propRes.EncounteredIntents) != 0 {
+		t.Fatal("expected encountered intents to have been cleared")
 	}
 }
 
