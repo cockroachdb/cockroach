@@ -166,6 +166,25 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 }
 
+// appendColumnsFromTable adds all columns from the given table metadata to this
+// scope.
+func (s *scope) appendColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
+	tab := tabMeta.Table
+	if s.cols == nil {
+		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
+	}
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		tabCol := tab.Column(i)
+		s.cols = append(s.cols, scopeColumn{
+			name:   tabCol.ColName(),
+			table:  *alias,
+			typ:    tabCol.DatumType(),
+			id:     tabMeta.MetaID.ColumnID(i),
+			hidden: tabCol.IsHidden(),
+		})
+	}
+}
+
 // appendColumns adds newly bound variables to this scope.
 // The expressions in the new columns are reset to nil.
 func (s *scope) appendColumns(cols []scopeColumn) {
