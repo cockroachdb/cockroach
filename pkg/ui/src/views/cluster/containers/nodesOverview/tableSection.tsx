@@ -15,6 +15,7 @@ import { Icon } from "antd";
 
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import { Text, TextTypes } from "src/components";
 
 import "./tableSection.styl";
 
@@ -98,9 +99,8 @@ class TableSection extends React.Component<TableSectionProps & MapStateToProps &
     return (
       <div className={rootClass}>
         <section
-          className="section section--heading table-section__heading--justify-end"
-          style={{maxWidth: "unset"}}>
-          <h2>{title}</h2>
+          className="table-section__heading table-section__heading--justify-end">
+          <Text textType={TextTypes.Heading3}>{title}</Text>
           {collapseToggleButton}
         </section>
         <div className={contentClass}>

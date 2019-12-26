@@ -12,8 +12,6 @@
 
 .embedded-table
   padding 0 $spacing-medium-small $spacing-medium-small
-  &__heading
-    padding-top $spacing-base
 
 .nodes-overview
   background $colors--neutral-1
@@ -30,3 +28,14 @@
     color $colors--functional-orange-3
   &--color-dead
     color $colors--functional-red-3
+
+.nodes-list-container
+  background $background-color
+  display flex
+  flex-direction column
+
+.nodes-list-container > *
+  margin-bottom $spacing-smaller
+
+.nodes-list-container > *:last-child
+  margin-bottom 0
