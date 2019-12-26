@@ -95,6 +95,7 @@ type _AGG_TYPEAgg struct {
 	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
+	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg _GOTYPE
 	// col points to the output vector we are updating.
 	col _GOTYPESLICE
@@ -118,9 +119,6 @@ func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *_AGG_TYPEAgg) Reset() {
-	// TODO(asubiotto): Zeros don't seem necessary.
-	execgen.ZERO(a.col)
-	a.curAgg = zero_TYPEColumn[0]
 	a.curIdx = -1
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
@@ -134,9 +132,6 @@ func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
 func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		vecLen := execgen.LEN(a.col)
-		target := execgen.SLICE(a.col, idx+1, vecLen)
-		execgen.ZERO(target)
 		a.nulls.UnsetNullsAfter(uint16(idx + 1))
 	}
 }
@@ -152,13 +147,14 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// be null.
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
+		} else {
+			a.allocator.performOperation(
+				[]coldata.Vec{a.vec},
+				func() {
+					execgen.SET(a.col, a.curIdx, a.curAgg)
+				},
+			)
 		}
-		a.allocator.performOperation(
-			[]coldata.Vec{a.vec},
-			func() {
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-			},
-		)
 		a.curIdx++
 		a.done = true
 		return
@@ -219,15 +215,12 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		if a.curIdx >= 0 {
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(uint16(a.curIdx))
+			} else {
+				execgen.SET(a.col, a.curIdx, a.curAgg)
 			}
-			execgen.SET(a.col, a.curIdx, a.curAgg)
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
-		// The next element of vec is guaranteed  to be initialized to the zero
-		// value. We can't use zero_TYPEColumn here because this is outside of
-		// the earlier template block.
-		a.curAgg = execgen.UNSAFEGET(a.col, a.curIdx)
 	}
 	var isNull bool
 	// {{ if .HasNulls }}

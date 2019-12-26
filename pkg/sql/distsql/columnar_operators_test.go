@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,6 +32,86 @@ import (
 
 const nullProbability = 0.2
 const randTypesProbability = 0.5
+
+func TestAggregatorAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+
+	seed := rand.Int()
+	rng := rand.New(rand.NewSource(int64(seed)))
+	nRuns := 100
+	nRows := 100
+	const nextGroupProb = 0.3
+
+	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(colexec.SupportedAggFns))
+	for i, aggFn := range colexec.SupportedAggFns {
+		aggregations[i].Func = aggFn
+		aggregations[i].ColIdx = []uint32{uint32(i + 1)}
+	}
+	inputTypes := make([]types.T, len(aggregations)+1)
+	inputTypes[0] = *types.Int
+	outputTypes := make([]types.T, len(aggregations))
+
+	for run := 0; run < nRuns; run++ {
+		var rows sqlbase.EncDatumRows
+		// We will be grouping based on the zeroth column (which we already set to
+		// be of INT type) with the values for the column set manually below.
+		for i := range aggregations {
+			aggFn := aggregations[i].Func
+			var aggTyp *types.T
+			for {
+				aggTyp = sqlbase.RandType(rng)
+				aggInputTypes := []types.T{*aggTyp}
+				if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
+					// Count rows takes no arguments.
+					aggregations[i].ColIdx = []uint32{}
+					aggInputTypes = aggInputTypes[:0]
+				}
+				if isSupportedType(aggTyp) {
+					if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
+						outputTypes[i] = *outputType
+						break
+					}
+				}
+			}
+			inputTypes[i+1] = *aggTyp
+		}
+		rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+		groupIdx := 0
+		for _, row := range rows {
+			row[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(groupIdx))}
+			if rng.Float64() < nextGroupProb {
+				groupIdx++
+			}
+		}
+
+		aggregatorSpec := &execinfrapb.AggregatorSpec{
+			Type:         execinfrapb.AggregatorSpec_NON_SCALAR,
+			GroupCols:    []uint32{0},
+			Aggregations: aggregations,
+		}
+		for _, hashAgg := range []bool{false, true} {
+			if !hashAgg {
+				aggregatorSpec.OrderedGroupCols = []uint32{0}
+			}
+			pspec := &execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+				Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
+			}
+			if err := verifyColOperator(
+				hashAgg, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, outputTypes, pspec,
+			); err != nil {
+				fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
+					seed, run, hashAgg)
+				prettyPrintTypes(inputTypes, "t" /* tableName */)
+				prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+				t.Fatal(err)
+			}
+		}
+	}
+}
 
 func TestSorterAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -75,7 +156,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 				Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
 			if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
-				fmt.Printf("--- seed = %d nCols = %d types = %v ---\n", seed, nCols, inputTypes)
+				fmt.Printf("--- seed = %d nCols = %d ---\n", seed, nCols)
+				prettyPrintTypes(inputTypes, "t" /* tableName */)
+				prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 				t.Fatal(err)
 			}
 		}
@@ -138,7 +221,9 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
 				if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
-					fmt.Printf("--- seed = %d nCols = %d types = %v ---\n", seed, nCols, inputTypes)
+					fmt.Printf("--- seed = %d nCols = %d ---\n", seed, nCols)
+					prettyPrintTypes(inputTypes, "t" /* tableName */)
+					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 					t.Fatal(err)
 				}
 			}
@@ -263,7 +348,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 								fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
-								fmt.Printf("--- inputTypes = %v ---\n", inputTypes)
+								prettyPrintTypes(inputTypes, "left" /* tableName */)
+								prettyPrintTypes(inputTypes, "right" /* tableName */)
+								prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
+								prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
 								t.Fatal(err)
 							}
 							if onExpr.Expr == "" {
@@ -440,6 +528,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+								prettyPrintTypes(inputTypes, "left" /* tableName */)
+								prettyPrintTypes(inputTypes, "right" /* tableName */)
+								prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
+								prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
 								t.Fatal(err)
 							}
 							if onExpr.Expr == "" {
@@ -584,6 +676,8 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
 					if err := verifyColOperator(true /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, append(inputTypes, *types.Int), pspec); err != nil {
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)
 					}
 				}
@@ -592,14 +686,18 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	}
 }
 
+func isSupportedType(typ *types.T) bool {
+	converted := typeconv.FromColumnType(typ)
+	return converted != coltypes.Unhandled
+}
+
 // generateRandomSupportedTypes generates nCols random types that are supported
 // by the vectorized engine.
 func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
 	typs := make([]types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
-		converted := typeconv.FromColumnType(typ)
-		if converted != coltypes.Unhandled {
+		if isSupportedType(typ) {
 			typs = append(typs, *typ)
 		}
 	}
@@ -635,4 +733,34 @@ func generateOrderingGivenPartitionBy(
 		}
 	}
 	return ordering
+}
+
+// prettyPrintTypes prints out typs as a CREATE TABLE statement.
+func prettyPrintTypes(typs []types.T, tableName string) {
+	fmt.Printf("CREATE TABLE %s(", tableName)
+	colName := byte('a')
+	for typIdx, typ := range typs {
+		if typIdx < len(typs)-1 {
+			fmt.Printf("%c %s, ", colName, typ.SQLStandardName())
+		} else {
+			fmt.Printf("%c %s);\n", colName, typ.SQLStandardName())
+		}
+		colName++
+	}
+}
+
+// prettyPrintInput prints out rows as INSERT INTO tableName VALUES statement.
+func prettyPrintInput(rows sqlbase.EncDatumRows, inputTypes []types.T, tableName string) {
+	fmt.Printf("INSERT INTO %s VALUES\n", tableName)
+	for rowIdx, row := range rows {
+		fmt.Printf("(%s", row[0].String(&inputTypes[0]))
+		for i := range row[1:] {
+			fmt.Printf(", %s", row[i+1].String(&inputTypes[i+1]))
+		}
+		if rowIdx < len(rows)-1 {
+			fmt.Printf("),\n")
+		} else {
+			fmt.Printf(");\n")
+		}
+	}
 }
