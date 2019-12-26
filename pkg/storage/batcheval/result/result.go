@@ -28,13 +28,13 @@ import (
 type LocalResult struct {
 	Reply *roachpb.BatchResponse
 
-	// Intents stores any intents encountered but not conflicted with.
-	// They should be handed off to asynchronous intent processing on the
-	// proposer, so that an attempt to resolve them is made.
+	// EncounteredIntents stores any intents encountered but not conflicted
+	// with. They should be handed off to asynchronous intent processing on
+	// the proposer, so that an attempt to resolve them is made.
 	//
 	// This is a pointer to allow the zero (and as an unwelcome side effect,
 	// all) values to be compared.
-	Intents *[]roachpb.Intent
+	EncounteredIntents *[]roachpb.Intent
 	// UpdatedTxns stores transaction records that have been updated by
 	// calls to EndTxn, PushTxn, and RecoverTxn.
 	//
@@ -72,9 +72,9 @@ func (lResult *LocalResult) String() string {
 	if lResult == nil {
 		return "LocalResult: nil"
 	}
-	var numIntents, numEndTxns, numUpdatedTxns int
-	if lResult.Intents != nil {
-		numIntents = len(*lResult.Intents)
+	var numEncounteredIntents, numEndTxns, numUpdatedTxns int
+	if lResult.EncounteredIntents != nil {
+		numEncounteredIntents = len(*lResult.EncounteredIntents)
 	}
 	if lResult.UpdatedTxns != nil {
 		numUpdatedTxns = len(*lResult.UpdatedTxns)
@@ -82,10 +82,11 @@ func (lResult *LocalResult) String() string {
 	if lResult.EndTxns != nil {
 		numEndTxns = len(*lResult.EndTxns)
 	}
-	return fmt.Sprintf("LocalResult (reply: %v, #intents: %d, #updated txns: %d #endTxns: %d, "+
+	return fmt.Sprintf("LocalResult (reply: %v, #encountered intents: %d, "+
+		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
-		lResult.Reply, numIntents, numUpdatedTxns, numEndTxns, lResult.GossipFirstRange,
+		lResult.Reply, numEncounteredIntents, numUpdatedTxns, numEndTxns, lResult.GossipFirstRange,
 		lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
@@ -102,17 +103,17 @@ func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
 	return false
 }
 
-// DetachIntents returns (and removes) those intents from the
-// LocalEvalResult which are supposed to be handled.
-func (lResult *LocalResult) DetachIntents() []roachpb.Intent {
+// DetachEncounteredIntents returns (and removes) those encountered
+// intents from the LocalEvalResult which are supposed to be handled.
+func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {
 	if lResult == nil {
 		return nil
 	}
 	var r []roachpb.Intent
-	if lResult.Intents != nil {
-		r = *lResult.Intents
+	if lResult.EncounteredIntents != nil {
+		r = *lResult.EncounteredIntents
 	}
-	lResult.Intents = nil
+	lResult.EncounteredIntents = nil
 	return r
 }
 
@@ -295,14 +296,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PrevLeaseProposal = nil
 
-	if q.Local.Intents != nil {
-		if p.Local.Intents == nil {
-			p.Local.Intents = q.Local.Intents
+	if q.Local.EncounteredIntents != nil {
+		if p.Local.EncounteredIntents == nil {
+			p.Local.EncounteredIntents = q.Local.EncounteredIntents
 		} else {
-			*p.Local.Intents = append(*p.Local.Intents, *q.Local.Intents...)
+			*p.Local.EncounteredIntents = append(*p.Local.EncounteredIntents, *q.Local.EncounteredIntents...)
 		}
 	}
-	q.Local.Intents = nil
+	q.Local.EncounteredIntents = nil
 
 	if q.Local.UpdatedTxns != nil {
 		if p.Local.UpdatedTxns == nil {

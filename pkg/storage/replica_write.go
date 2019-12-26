@@ -184,17 +184,21 @@ func (r *Replica) executeWriteBatch(
 			// resolution is semi-synchronous in that there is a limited number of
 			// outstanding asynchronous resolution tasks allowed after which
 			// further calls will block.
-			if len(propResult.Intents) > 0 {
+			if len(propResult.EncounteredIntents) > 0 {
 				// TODO(peter): Re-proposed and canceled (but executed) commands can
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				if err := r.store.intentResolver.CleanupIntentsAsync(ctx, propResult.Intents, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.CleanupIntentsAsync(
+					ctx, propResult.EncounteredIntents, true, /* allowSync */
+				); err != nil {
 					log.Warning(ctx, err)
 				}
 			}
 			if len(propResult.EndTxns) > 0 {
-				if err := r.store.intentResolver.CleanupTxnIntentsAsync(ctx, r.RangeID, propResult.EndTxns, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
+					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
+				); err != nil {
 					log.Warning(ctx, err)
 				}
 			}

@@ -78,7 +78,7 @@ func (r *Replica) executeReadOnlyBatch(
 		}
 	}
 
-	if intents := result.Local.DetachIntents(); len(intents) > 0 {
+	if intents := result.Local.DetachEncounteredIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
 		// Intent resolution is async/best-effort for inconsistent requests.
