@@ -41,8 +41,14 @@ func InitPut(
 			defer batch.Close()
 		}
 	}
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+		err = engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	} else {
+		err = engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 	}
-	return result.Result{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
+	return result.FromUpdatedIntent(h.Txn, args.Key), nil
 }

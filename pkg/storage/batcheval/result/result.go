@@ -28,6 +28,10 @@ import (
 type LocalResult struct {
 	Reply *roachpb.BatchResponse
 
+	// UpdatedIntents stores any newly created or updated intents.
+	UpdatedIntents []roachpb.Intent
+	// ResolvedIntents stores any resolved intents.
+	ResolvedIntents []roachpb.Intent
 	// EncounteredIntents stores any intents encountered but not conflicted
 	// with. They should be handed off to asynchronous intent processing on
 	// the proposer, so that an attempt to resolve them is made.
@@ -66,6 +70,8 @@ type LocalResult struct {
 func (lResult *LocalResult) IsZero() bool {
 	// NB: keep in order.
 	return lResult.Reply == nil &&
+		lResult.UpdatedIntents == nil &&
+		lResult.ResolvedIntents == nil &&
 		lResult.EncounteredIntents == nil &&
 		lResult.UpdatedTxns == nil &&
 		lResult.EndTxns == nil &&
@@ -80,11 +86,13 @@ func (lResult *LocalResult) String() string {
 	if lResult == nil {
 		return "LocalResult: nil"
 	}
-	return fmt.Sprintf("LocalResult (reply: %v, #encountered intents: %d, "+
+	return fmt.Sprintf("LocalResult (reply: %v, "+
+		"#updated intents: %d #resolved intents: %d #encountered intents: %d, "+
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
-		lResult.Reply, len(lResult.EncounteredIntents),
+		lResult.Reply,
+		len(lResult.UpdatedIntents), len(lResult.ResolvedIntents), len(lResult.EncounteredIntents),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
@@ -276,6 +284,20 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.New("conflicting lease expiration")
 	}
 	q.Replicated.PrevLeaseProposal = nil
+
+	if p.Local.UpdatedIntents == nil {
+		p.Local.UpdatedIntents = q.Local.UpdatedIntents
+	} else {
+		p.Local.UpdatedIntents = append(p.Local.UpdatedIntents, q.Local.UpdatedIntents...)
+	}
+	q.Local.UpdatedIntents = nil
+
+	if p.Local.ResolvedIntents == nil {
+		p.Local.ResolvedIntents = q.Local.ResolvedIntents
+	} else {
+		p.Local.ResolvedIntents = append(p.Local.ResolvedIntents, q.Local.ResolvedIntents...)
+	}
+	q.Local.ResolvedIntents = nil
 
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents

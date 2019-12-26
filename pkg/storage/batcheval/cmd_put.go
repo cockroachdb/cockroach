@@ -59,8 +59,14 @@ func Put(
 			defer batch.Close()
 		}
 	}
+	var err error
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+		err = engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+	} else {
+		err = engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 	}
-	return result.Result{}, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+	if err != nil {
+		return result.Result{}, err
+	}
+	return result.FromUpdatedIntent(h.Txn, args.Key), nil
 }

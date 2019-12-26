@@ -12,6 +12,35 @@ package result
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
+// FromUpdatedIntent creates a Result communicating that an intent was updated
+// by the given request and should be handled.
+func FromUpdatedIntent(txn *roachpb.Transaction, key roachpb.Key) Result {
+	var pd Result
+	if txn == nil {
+		return pd
+	}
+	pd.Local.UpdatedIntents = []roachpb.Intent{{
+		Span: roachpb.Span{Key: key}, Txn: txn.TxnMeta, Status: roachpb.PENDING,
+	}}
+	return pd
+}
+
+// FromUpdatedIntents creates a Result communicating that the intents were
+// updated by the given request and should be handled.
+func FromUpdatedIntents(txn *roachpb.Transaction, keys []roachpb.Key) Result {
+	var pd Result
+	if txn == nil {
+		return pd
+	}
+	pd.Local.UpdatedIntents = make([]roachpb.Intent, len(keys))
+	for i := range pd.Local.UpdatedIntents {
+		pd.Local.UpdatedIntents[i] = roachpb.Intent{
+			Span: roachpb.Span{Key: keys[i]}, Txn: txn.TxnMeta, Status: roachpb.PENDING,
+		}
+	}
+	return pd
+}
+
 // FromEncounteredIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
 func FromEncounteredIntents(intents []roachpb.Intent) Result {
