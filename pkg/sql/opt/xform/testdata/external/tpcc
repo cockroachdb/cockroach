@@ -1337,7 +1337,7 @@ scalar-group-by
  ├── columns: sum:11(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 11.5322943
+ ├── cost: 11.5422943
  ├── key: ()
  ├── fd: ()-->(11)
  ├── prune: (11)
@@ -1637,7 +1637,7 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1465.1653
+ ├── cost: 1465.1753
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
@@ -1691,7 +1691,7 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1265.42333
+ ├── cost: 1265.44333
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
@@ -1700,7 +1700,7 @@ scalar-group-by
  │    ├── left ordering: +1
  │    ├── right ordering: +11
  │    ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, distinct(9)=1, null(9)=0, distinct(11)=33.3333333, null(11)=0, distinct(21)=33.3333333, null(21)=0]
- │    ├── cost: 1265.07
+ │    ├── cost: 1265.08
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── scan warehouse
@@ -1716,7 +1716,7 @@ scalar-group-by
  │    │    ├── columns: d_w_id:11(int!null) sum:21(decimal)
  │    │    ├── grouping columns: d_w_id:11(int!null)
  │    │    ├── stats: [rows=100, distinct(11)=100, null(11)=0, distinct(21)=100, null(21)=0]
- │    │    ├── cost: 1151.03
+ │    │    ├── cost: 1151.04
  │    │    ├── key: (11)
  │    │    ├── fd: (11)-->(21)
  │    │    ├── ordering: +11
@@ -1764,7 +1764,7 @@ group-by
  ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
- ├── cost: 981010.03
+ ├── cost: 981010.04
  ├── key: (2,3)
  ├── fd: (2,3)-->(4)
  ├── ordering: +3,+2
@@ -1792,7 +1792,7 @@ group-by
  ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
- ├── cost: 3360010.03
+ ├── cost: 3360010.04
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -1824,14 +1824,14 @@ scalar-group-by
  ├── columns: count:8(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 999023.393
+ ├── cost: 999023.413
  ├── key: ()
  ├── fd: ()-->(8)
  ├── prune: (8)
  ├── select
  │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
  │    ├── stats: [rows=333.333333]
- │    ├── cost: 999020.04
+ │    ├── cost: 999020.05
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(4-6)
  │    ├── interesting orderings: (+3,+2)
@@ -1840,7 +1840,7 @@ scalar-group-by
  │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    ├── internal-ordering: +3,+2
  │    │    ├── stats: [rows=1000, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(2,3)=1000, null(2,3)=0]
- │    │    ├── cost: 999010.03
+ │    │    ├── cost: 999010.04
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4-6)
  │    │    ├── prune: (4-6)
@@ -1880,7 +1880,7 @@ group-by
  ├── columns: sum:9(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
- ├── cost: 3420010.03
+ ├── cost: 3420010.04
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2

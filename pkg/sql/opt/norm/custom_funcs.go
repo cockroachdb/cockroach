@@ -290,6 +290,21 @@ func (c *CustomFuncs) CanHaveZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.CanBeZero()
 }
 
+// ColsAreKey returns true if the given columns form a strict key for the given
+// input expression. A strict key means that any two rows will have unique key
+// column values. Nulls are treated as equal to one another (i.e. no duplicate
+// nulls allowed). Having a strict key means that the set of key column values
+// uniquely determine the values of all other columns in the relation.
+func (c *CustomFuncs) ColsAreKey(cols opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.ColsAreStrictKey(cols)
+}
+
+// ColsAreConst returns true if the given columns have the same values for all
+// rows in the given input expression.
+func (c *CustomFuncs) ColsAreConst(cols opt.ColSet, input memo.RelExpr) bool {
+	return cols.SubsetOf(input.Relational().FuncDeps.ConstantCols())
+}
+
 // ColsAreEmpty returns true if the column set is empty.
 func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
 	return cols.Empty()
@@ -1217,15 +1232,9 @@ func (c *CustomFuncs) GroupingOutputCols(
 	return result
 }
 
-// GroupingColsAreKey returns true if the input expression's grouping columns
-// form a strict key for its output rows. A strict key means that any two rows
-// will have unique key column values. Nulls are treated as equal to one another
-// (i.e. no duplicate nulls allowed). Having a strict key means that the set of
-// key column values uniquely determine the values of all other columns in the
-// relation.
-func (c *CustomFuncs) GroupingColsAreKey(grouping *memo.GroupingPrivate, input memo.RelExpr) bool {
-	colSet := grouping.GroupingCols
-	return input.Relational().FuncDeps.ColsAreStrictKey(colSet)
+// GroupingCols returns the grouping columns from the given grouping private.
+func (c *CustomFuncs) GroupingCols(grouping *memo.GroupingPrivate) opt.ColSet {
+	return grouping.GroupingCols
 }
 
 // IsUnorderedGrouping returns true if the given grouping ordering is not
