@@ -132,8 +132,10 @@ class NodeList extends React.Component<LiveNodeListProps> {
         if (!!record.nodeId) {
           return (
             <React.Fragment>
-              <Text>{record.nodeId}</Text>
-              <Text>{record.region}</Text>
+              <Link to={`/node/${record.nodeId}`}>
+                <Text>{record.nodeId}</Text>
+                <Text>{record.region}</Text>
+              </Link>
             </React.Fragment>);
         } else {
           // Top level grouping item does not have nodeId
@@ -242,7 +244,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
     return (
       <TableSection
         id={`nodes-overview__live-nodes`}
-        title={`Live Nodes ${count}`}
+        title={`Live Nodes (${count})`}
         className="embedded-table">
         <Table dataSource={dataSource} columns={this.columns} />
       </TableSection>
@@ -259,7 +261,11 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     {
       key: "nodes",
       title: "decommissioned nodes",
-      render: (_text, record) => `${record.nodeId} ${record.region}`,
+      render: (_text, record) => (
+        <Link  to={`/node/${record.nodeId}`}>
+          <Text>{record.nodeId}</Text>
+          <Text>{record.region}</Text>
+        </Link>),
     },
     {
       key: "decommissionedSince",
