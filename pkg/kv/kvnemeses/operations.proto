@@ -1,0 +1,96 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvnemeses;
+option go_package = "kvnemeses";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+
+message BatchOperation {
+  repeated Operation ops = 1 [(gogoproto.nullable) = false];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message BeginTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message UseTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  repeated Operation ops = 2 [(gogoproto.nullable) = false];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message CommitTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message RollbackTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message GetOperation {
+  bytes key = 1;
+  bytes result_value = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message PutOperation {
+  bytes key = 1;
+  bytes value = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message SplitOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MergeOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message Operation {
+  option (gogoproto.onlyone) = true;
+  BatchOperation batch = 1;
+
+  BeginTxnOperation begin_txn = 2;
+  UseTxnOperation use_txn = 3;
+  CommitTxnOperation commit_txn = 4;
+  RollbackTxnOperation rollback_txn = 5;
+
+  GetOperation get = 6;
+  PutOperation put = 7;
+  SplitOperation split = 8;
+  MergeOperation merge = 9;
+}
+
+enum ResultType {
+  NoError = 0;
+  Error = 2;
+  Value = 3;
+}
+
+message Result {
+  ResultType type = 1;
+  errorspb.EncodedError err = 2;
+  bytes value = 3;
+}
+
+message Step {
+  option (gogoproto.goproto_stringer) = false;
+  repeated Operation ops = 1 [(gogoproto.nullable) = false];
+}
