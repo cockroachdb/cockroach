@@ -18,6 +18,9 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
+
+	tpchworkload "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
 func registerTPCHVec(r *testRegistry) {
@@ -30,10 +33,10 @@ func registerTPCHVec(r *testRegistry) {
 	)
 
 	var queriesToSkip = map[int]string{
-		// TODO(yuzefovich): remove this once we have disk spilling.
-		5:  "needs disk spilling",
-		8:  "needs disk spilling",
-		19: "needs disk spilling",
+		// TODO(yuzefovich): remove this once the bug is fixed.
+		10: "incorrect #43323",
+		12: "the query is skipped by tpch workload",
+		15: "unsupported: create view",
 	}
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
@@ -57,7 +60,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		}
 
 		// TODO(yuzefovich): remove this once we have disk spilling.
-		workmem := "2GiB"
+		workmem := "1GiB"
 		t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
 		if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
 			t.Fatal(err)
@@ -106,7 +109,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				queriesToRun, vectorizeSetting, numRunsPerQuery,
 			)
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--max-ops=%d --queries=%s --vectorize=%s {pgurl:1-%d}",
+				"--max-ops=%d --queries=%s --vectorize=%s --tolerate-errors {pgurl:1-%d}",
 				numRunsPerQuery*(numTPCHQueries-len(queriesToSkip)),
 				queriesToRun, vectorizeSetting, nodeCount)
 			workloadOutput, err := repeatRunWithBuffer(ctx, c, t.l, firstNode, operation, cmd)
@@ -137,30 +140,39 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				}
 			}
 			parseOutput(workloadOutput, timeByQueryNum[configIdx])
+			// We want to fail the test only if wrong results were returned (we
+			// ignore errors like OOM and unsupported features in order to not
+			// short-circuit the run of this test).
+			if strings.Contains(string(workloadOutput), tpchworkload.TPCHWrongOutputErrorPrefix) {
+				t.Fatal("tpch workload found wrong results")
+			}
 		}
 		// TODO(yuzefovich): remove the note when disk spilling is in place.
 		t.Status("comparing the runtimes (only median values for each query are compared).\n" +
 			"NOTE: the comparison might not be fair because vec ON doesn't spill to disk")
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			if _, skipped := queriesToSkip[queryNum]; skipped {
-				continue
-			}
 			findMedian := func(times []float64) float64 {
 				sort.Float64s(times)
 				return times[len(times)/2]
 			}
-			vecOnTime := findMedian(timeByQueryNum[vecOnConfig][queryNum])
-			vecOffTime := findMedian(timeByQueryNum[vecOffConfig][queryNum])
-			if vecOffTime < vecOnTime {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF --- WARNING",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTime, vecOffTime))
-			} else {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF",
-						queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime, vecOnTime, vecOffTime))
+			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
+			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
+			// It is possible that the query errored out on one of the configs. We
+			// want to compare the runtimes only if both have not errored out.
+			if len(vecOnTimes) > 0 && len(vecOffTimes) > 0 {
+				vecOnTime := findMedian(vecOnTimes)
+				vecOffTime := findMedian(vecOffTimes)
+				if vecOffTime < vecOnTime {
+					t.l.Printf(
+						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+							"%.2fs ON vs %.2fs OFF --- WARNING",
+							queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTime, vecOffTime))
+				} else {
+					t.l.Printf(
+						fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+							"%.2fs ON vs %.2fs OFF",
+							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime, vecOnTime, vecOffTime))
+				}
 			}
 		}
 	}
