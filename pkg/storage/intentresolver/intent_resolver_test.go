@@ -785,7 +785,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 	}
 	testEndTxnIntents := []result.EndTxnIntents{
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					ID:           uuid.MakeV4(),
 					MinTimestamp: hlc.Timestamp{WallTime: 123},
@@ -854,7 +854,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 	txn2 := newTransaction("txn2", roachpb.Key("c"), 1, clock)
 	testEndTxnIntents := []result.EndTxnIntents{
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: txn1.TxnMeta,
 				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
@@ -863,7 +863,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			},
 		},
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: txn2.TxnMeta,
 				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("c")},
