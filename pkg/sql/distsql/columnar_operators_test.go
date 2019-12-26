@@ -102,14 +102,109 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
 			}
 			if err := verifyColOperator(
-				hashAgg, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows},
-				outputTypes, pspec, 0, /* memoryLimit */
+				hashAgg,
+				nil, /* colsForEqCheck */
+				[][]types.T{inputTypes},
+				[]sqlbase.EncDatumRows{rows},
+				outputTypes,
+				pspec,
+				0, /* memoryLimit */
 			); err != nil {
 				fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
 					seed, run, hashAgg)
 				prettyPrintTypes(inputTypes, "t" /* tableName */)
 				prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestDistinctAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var da sqlbase.DatumAlloc
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	seed := rand.Int()
+	rng := rand.New(rand.NewSource(int64(seed)))
+	nRuns := 10
+	nRows := 100
+	maxCols := 3
+	maxNum := 10
+	intTyps := make([]types.T, maxCols)
+	for i := range intTyps {
+		intTyps[i] = *types.Int
+	}
+
+	for run := 1; run < nRuns; run++ {
+		for nCols := 1; nCols <= maxCols; nCols++ {
+			for nDistinctCols := 1; nDistinctCols <= nCols; nDistinctCols++ {
+				for nOrderedCols := 0; nOrderedCols <= nDistinctCols; nOrderedCols++ {
+					var (
+						rows       sqlbase.EncDatumRows
+						inputTypes []types.T
+						ordCols    []execinfrapb.Ordering_Column
+					)
+					if rng.Float64() < randTypesProbability {
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					} else {
+						inputTypes = intTyps[:nCols]
+						rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					}
+					distinctCols := make([]uint32, nDistinctCols)
+					for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
+						distinctCols[i] = uint32(distinctCol)
+					}
+					orderedCols := make([]uint32, nOrderedCols)
+					for i, orderedColIdx := range rng.Perm(nDistinctCols)[:nOrderedCols] {
+						// From the set of distinct columns we need to choose nOrderedCols
+						// to be in the ordered columns set.
+						orderedCols[i] = distinctCols[orderedColIdx]
+					}
+					ordCols = make([]execinfrapb.Ordering_Column, nOrderedCols)
+					for i, col := range orderedCols {
+						ordCols[i] = execinfrapb.Ordering_Column{
+							ColIdx: col,
+						}
+					}
+					sort.Slice(rows, func(i, j int) bool {
+						cmp, err := rows[i].Compare(
+							inputTypes, &da,
+							execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}),
+							&evalCtx, rows[j],
+						)
+						if err != nil {
+							t.Fatal(err)
+						}
+						return cmp < 0
+					})
+
+					spec := &execinfrapb.DistinctSpec{
+						DistinctColumns: distinctCols,
+						OrderedColumns:  orderedCols,
+					}
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Distinct: spec},
+					}
+					if err := verifyColOperator(
+						true, /* anyOrder */
+						distinctCols,
+						[][]types.T{inputTypes},
+						[]sqlbase.EncDatumRows{rows},
+						inputTypes,
+						pspec,
+						0, /* memoryLimit */
+					); err != nil {
+						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
+							seed, run, nCols, distinctCols, orderedCols)
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+						t.Fatal(err)
+					}
+				}
 			}
 		}
 	}
@@ -164,8 +259,13 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
 				if err := verifyColOperator(
-					false /* anyOrder */, [][]types.T{inputTypes},
-					[]sqlbase.EncDatumRows{rows}, inputTypes, pspec, memoryLimit,
+					false, /* anyOrder */
+					nil,   /* colsForEqCheck */
+					[][]types.T{inputTypes},
+					[]sqlbase.EncDatumRows{rows},
+					inputTypes,
+					pspec,
+					memoryLimit,
 				); err != nil {
 					fmt.Printf("--- seed = %d memoryLimit = %d nCols = %d ---\n", seed, memoryLimit, nCols)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -233,8 +333,13 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
 				if err := verifyColOperator(
-					false /* anyOrder */, [][]types.T{inputTypes},
-					[]sqlbase.EncDatumRows{rows}, inputTypes, pspec, 0, /* memoryLimit */
+					false, /* anyOrder */
+					nil,   /* colsForEqCheck */
+					[][]types.T{inputTypes},
+					[]sqlbase.EncDatumRows{rows},
+					inputTypes,
+					pspec,
+					0, /* memoryLimit */
 				); err != nil {
 					fmt.Printf("--- seed = %d nCols = %d ---\n", seed, nCols)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
@@ -355,6 +460,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							}
 							if err := verifyColOperator(
 								true, /* anyOrder */
+								nil,  /* colsForEqCheck */
 								[][]types.T{inputTypes, inputTypes},
 								[]sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes,
@@ -537,6 +643,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							}
 							if err := verifyColOperator(
 								testSpec.anyOrder,
+								nil, /* colsForEqCheck */
 								[][]types.T{inputTypes, inputTypes},
 								[]sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes,
@@ -697,8 +804,11 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
 					if err := verifyColOperator(
-						true /* anyOrder */, [][]types.T{inputTypes},
-						[]sqlbase.EncDatumRows{rows}, append(inputTypes, *types.Int),
+						true, /* anyOrder */
+						nil,  /* colsForEqCheck */
+						[][]types.T{inputTypes},
+						[]sqlbase.EncDatumRows{rows},
+						append(inputTypes, *types.Int),
 						pspec, 0, /* memoryLimit */
 					); err != nil {
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
