@@ -37,6 +37,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 		prefixLen         int
 		numNeededFamilies int
 		canSplit          bool
+		containsNull      bool
 	}{
 		{
 			sql:               "a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), FAMILY (a, b, c), FAMILY (d)",
@@ -66,26 +67,45 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			numNeededFamilies: 1,
 			canSplit:          false,
 		},
+		{
+			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:             "i",
+			prefixLen:         1,
+			numNeededFamilies: 1,
+			canSplit:          false,
+			containsNull:      true,
+		},
+		{
+			sql:               "a INT, b INT, c INT, UNIQUE INDEX i (b) STORING (a, c), FAMILY (a), FAMILY (b), FAMILY (c)",
+			index:             "i",
+			prefixLen:         1,
+			numNeededFamilies: 1,
+			canSplit:          true,
+			containsNull:      false,
+		},
 	}
 	if _, err := sqlDB.Exec("CREATE DATABASE t"); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range tcs {
-		if _, err := sqlDB.Exec("DROP TABLE IF EXISTS t.t"); err != nil {
-			t.Fatal(err)
-		}
-		sql := fmt.Sprintf("CREATE TABLE t.t (%s)", tc.sql)
-		if _, err := sqlDB.Exec(sql); err != nil {
-			t.Fatal(err)
-		}
-		desc := sqlbase.GetTableDescriptor(kvDB, "t", "t")
-		idx, _, err := desc.FindIndexByName(tc.index)
-		if err != nil {
-			t.Fatal(err)
-		}
-		builder := span.MakeBuilder(desc, idx)
-		if res := builder.CanSplitSpanIntoSeparateFamilies(tc.numNeededFamilies, tc.prefixLen); res != tc.canSplit {
-			t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
-		}
+		t.Run(tc.sql, func(t *testing.T) {
+			if _, err := sqlDB.Exec("DROP TABLE IF EXISTS t.t"); err != nil {
+				t.Fatal(err)
+			}
+			sql := fmt.Sprintf("CREATE TABLE t.t (%s)", tc.sql)
+			if _, err := sqlDB.Exec(sql); err != nil {
+				t.Fatal(err)
+			}
+			desc := sqlbase.GetTableDescriptor(kvDB, "t", "t")
+			idx, _, err := desc.FindIndexByName(tc.index)
+			if err != nil {
+				t.Fatal(err)
+			}
+			builder := span.MakeBuilder(desc, idx)
+			if res := builder.CanSplitSpanIntoSeparateFamilies(
+				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
+				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
+			}
+		})
 	}
 }
