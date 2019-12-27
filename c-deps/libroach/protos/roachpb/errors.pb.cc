@@ -841,6 +841,7 @@ bool TransactionAbortedReason_IsValid(int value) {
     case 5:
     case 6:
     case 7:
+    case 8:
       return true;
     default:
       return false;
