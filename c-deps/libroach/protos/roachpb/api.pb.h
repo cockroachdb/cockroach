@@ -6924,12 +6924,6 @@ class PushTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::PushTxnType push_type() const;
   void set_push_type(::cockroach::roachpb::PushTxnType value);
 
-  // bool inclusive_push_to = 9;
-  void clear_inclusive_push_to();
-  static const int kInclusivePushToFieldNumber = 9;
-  bool inclusive_push_to() const;
-  void set_inclusive_push_to(bool value);
-
   // bool force = 7;
   void clear_force();
   static const int kForceFieldNumber = 7;
@@ -6945,7 +6939,6 @@ class PushTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::storage::engine::enginepb::TxnMeta* pushee_txn_;
   ::cockroach::util::hlc::Timestamp* push_to_;
   int push_type_;
-  bool inclusive_push_to_;
   bool force_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -21497,20 +21490,6 @@ inline void PushTxnRequest::set_allocated_push_to(::cockroach::util::hlc::Timest
   }
   push_to_ = push_to;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.PushTxnRequest.push_to)
-}
-
-// bool inclusive_push_to = 9;
-inline void PushTxnRequest::clear_inclusive_push_to() {
-  inclusive_push_to_ = false;
-}
-inline bool PushTxnRequest::inclusive_push_to() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.PushTxnRequest.inclusive_push_to)
-  return inclusive_push_to_;
-}
-inline void PushTxnRequest::set_inclusive_push_to(bool value) {
-  
-  inclusive_push_to_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.PushTxnRequest.inclusive_push_to)
 }
 
 // .cockroach.roachpb.PushTxnType push_type = 6;

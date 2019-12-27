@@ -102,7 +102,7 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 type ReplicaResponseFilter func(roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 
 // ContainsKey returns whether this range contains the specified key.
-func ContainsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
+func ContainsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {
 	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
 		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
 	}
@@ -115,7 +115,7 @@ func ContainsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
 
 // ContainsKeyRange returns whether this range contains the specified key range
 // from start to end.
-func ContainsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
+func ContainsKeyRange(desc *roachpb.RangeDescriptor, start, end roachpb.Key) bool {
 	startKeyAddr, err := keys.Addr(start)
 	if err != nil {
 		return false
@@ -138,7 +138,7 @@ func ContainsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 // TODO(tschottdorf): move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
 func IntersectSpan(
-	span roachpb.Span, desc roachpb.RangeDescriptor,
+	span roachpb.Span, desc *roachpb.RangeDescriptor,
 ) (middle *roachpb.Span, outside []roachpb.Span) {
 	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
 	if len(span.EndKey) == 0 {

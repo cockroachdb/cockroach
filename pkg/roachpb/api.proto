@@ -900,12 +900,6 @@ message PushTxnRequest {
   // conflict resolution, it should be set just after the timestamp of the
   // conflicting read or write.
   util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
-  // InclusivePushTo is sent by nodes to specify that their PushTo timestamp
-  // is the timestamp they want the transaction to be pushed to, instead of
-  // the timestamp before the one they want the transaction to be pushed to.
-  // It is used to assist that field's migration.
-  // TODO(nvanbenschoten): Remove this field in 19.3.
-  bool inclusive_push_to = 9;
   // Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
   // commit timestamp forward. Writers set this to PUSH_ABORT to request
   // that pushee_txn be aborted if possible. Inconsistent readers set
@@ -916,7 +910,7 @@ message PushTxnRequest {
   // in PushTxn to either abort or push the timestamp.
   bool force = 7;
 
-  reserved 5, 8;
+  reserved 5, 8, 9;
 }
 
 // A PushTxnResponse is the return value from the PushTxn() method. It

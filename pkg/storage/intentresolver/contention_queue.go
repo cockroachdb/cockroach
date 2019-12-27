@@ -264,11 +264,10 @@ func (cq *contentionQueue) add(
 					RequestHeader: roachpb.RequestHeader{
 						Key: pusheeTxn.Key,
 					},
-					PusherTxn:       getPusherTxn(h),
-					PusheeTxn:       *pusheeTxn,
-					PushTo:          h.Timestamp.Next(),
-					InclusivePushTo: true,
-					PushType:        roachpb.PUSH_ABORT,
+					PusherTxn: getPusherTxn(h),
+					PusheeTxn: *pusheeTxn,
+					PushTo:    h.Timestamp.Next(),
+					PushType:  roachpb.PUSH_ABORT,
 				})
 				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
 				if err := cq.db.Run(ctx, b); err != nil {
