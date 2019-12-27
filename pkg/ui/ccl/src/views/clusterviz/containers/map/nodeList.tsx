@@ -9,32 +9,31 @@
 import React from "react";
 import {InjectedRouter, RouterState} from "react-router";
 
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
+import { Select } from "src/components/select";
 
 import "./nodesList.styl";
 
+const Option = Select.Option;
+
 export default class NodeList extends React.Component<RouterState & { router: InjectedRouter }> {
-  handleMapTableToggle = (opt: DropdownOption) => {
-    this.props.router.push(`/overview/${opt.value}`);
+  handleMapTableToggle = (value: string) => {
+    this.props.router.push(`/overview/${value}`);
   }
 
   render() {
-    const options: DropdownOption[] = [
-      { value: "map", label: "Node Map" },
-      { value: "list", label: "Node List" },
-    ];
-
     // TODO(vilterp): dedup with ClusterVisualization
     return (
-      <div className="clusterviz fixed-panel">
+      <div className="fixed-panel">
         <div className="fixed-panel__panel-switcher">
-          <Dropdown
-            title="View"
-            selected="list"
-            options={options}
+          <Select
+            defaultValue="list"
+            display="link"
             onChange={this.handleMapTableToggle}
-          />
+          >
+            <Option value="list">Node List</Option>
+            <Option value="map">Node Map</Option>
+          </Select>
         </div>
         <div className="fixed-panel__content">
           <NodesOverview />

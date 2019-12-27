@@ -1,0 +1,21 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+@require "~src/components/core/index.styl"
+
+.breadcrumbs
+  font-weight $font-weight--bold
+  &__icon
+    padding-right $spacing-xx-small
+    position relative
+    top 2px
+  &__link
+    @extends $text--body
+    color $colors--link
+  &__separator
+    color $colors--link
