@@ -239,7 +239,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	var mtc *multiTestContext
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
-			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retries, -1) >= 0 {
 					return roachpb.NewError(
 						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
@@ -702,7 +702,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	var retriesBeforeFailure int64
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
-			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retriesBeforeFailure, -1) >= 0 {
 					return roachpb.NewError(
 						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
@@ -1337,7 +1337,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	finishMerge := make(chan struct{})
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
-			if et := r.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+			if et := r.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				mergeEndTxnReceived <- ba.Txn
 				<-finishMerge
 			}
@@ -1394,7 +1394,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		mergeErr <- pErr.GoError()
 	}()
 
-	// Wait for the merge transaction to send its EndTransaction request. It won't
+	// Wait for the merge transaction to send its EndTxn request. It won't
 	// be able to complete just yet, thanks to the hook we installed above.
 	mergeTxn := <-mergeEndTxnReceived
 
@@ -2607,7 +2607,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	var mtc *multiTestContext
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
-			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&mergeTxnRetries, -1) >= 0 {
 					return roachpb.NewError(
 						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "filter err"))
@@ -2747,7 +2747,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 				ba.GatewayNodeID == store1.Ident.NodeID {
 				cond.Wait()
 			}
-			if et := req.GetEndTransaction(); et != nil && !et.Commit && ba.Txn.Name == "merge" {
+			if et := req.GetEndTxn(); et != nil && !et.Commit && ba.Txn.Name == "merge" {
 				// The merge transaction needed to restart for some reason. To avoid
 				// deadlocking, we need to allow the watcher goroutine's PushTxn request
 				// through so that it allows traffic on the range again. We'll try again

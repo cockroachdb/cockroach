@@ -98,13 +98,13 @@ func TestMustSetInner(t *testing.T) {
 	// GetRequest is checked first in the generated code for SetInner.
 	req.MustSetInner(&GetRequest{})
 	res.MustSetInner(&GetResponse{})
-	req.MustSetInner(&EndTransactionRequest{})
-	res.MustSetInner(&EndTransactionResponse{})
+	req.MustSetInner(&EndTxnRequest{})
+	res.MustSetInner(&EndTxnResponse{})
 
-	if m := req.GetInner().Method(); m != EndTransaction {
+	if m := req.GetInner().Method(); m != EndTxn {
 		t.Fatalf("unexpected request: %s in %+v", m, req)
 	}
-	if _, isET := res.GetInner().(*EndTransactionResponse); !isET {
+	if _, isET := res.GetInner().(*EndTxnResponse); !isET {
 		t.Fatalf("unexpected response union: %+v", res)
 	}
 }

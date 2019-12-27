@@ -325,8 +325,8 @@ message RevertRangeResponse {
 // apply to all the scans in the batch.
 //
 // If ScanOptions is present on a batch, the batch can only be made up of scan
-// requests (i.e. {Reverse,}ScanReques), except for EndTransactionRequest which
-// are still allowed. Moreover, the batch cannot mix forward and reverse scans.
+// requests (i.e. {Reverse,}ScanReques), except for EndTxnRequest which are
+// still allowed. Moreover, the batch cannot mix forward and reverse scans.
 //
 // TODO(andrei): add option to stop scan(s) when an intent is encountered.
 message ScanOptions {
@@ -571,9 +571,9 @@ message RecomputeStatsResponse {
   storage.engine.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
 }
 
-// An EndTransactionRequest is the argument to the EndTransaction() method. It
-// specifies whether to commit or roll back an extant transaction.
-message EndTransactionRequest {
+// An EndTxnRequest is the argument to the EndTxn() method. It specifies
+// whether to commit or roll back an extant transaction.
+message EndTxnRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -582,9 +582,9 @@ message EndTransactionRequest {
   // If set, deadline represents the maximum (exclusive) timestamp at which the
   // transaction can commit (i.e. the maximum timestamp for the txn's reads and
   // writes).
-  // If EndTransaction(Commit=true) finds that the txn's timestamp has been
-  // pushed above this deadline, an error will be returned and the client is
-  // supposed to rollback the txn.
+  // If EndTxn(Commit=true) finds that the txn's timestamp has been pushed above
+  // this deadline, an error will be returned and the client is supposed to
+  // rollback the txn.
   util.hlc.Timestamp deadline = 3;
   // commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
@@ -605,10 +605,10 @@ message EndTransactionRequest {
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any promised writes are provided, a
-  // committing EndTransaction request will move a PENDING transaction to the
-  // STAGING status instead of the COMMITTED status. These in-flight writes must
-  // then all be confirmed as successful before the transaction can be moved
-  // from STAGING to COMMITTED. For more, see txnCommitter.
+  // committing EndTxn request will move a PENDING transaction to the STAGING
+  // status instead of the COMMITTED status. These in-flight writes must then
+  // all be confirmed as successful before the transaction can be moved from
+  // STAGING to COMMITTED. For more, see txnCommitter.
   //
   // The slice is maintained in sorted order by sequence number. This provides
   // O(log n) access to individual writes in this set based on their sequence
@@ -633,14 +633,13 @@ message EndTransactionRequest {
   reserved 7;
 }
 
-// An EndTransactionResponse is the return value from the
-// EndTransaction() method. The final transaction record is returned
-// as part of the response header. In particular, transaction status
-// and timestamp will be updated to reflect final committed
-// values. Clients may propagate the transaction timestamp as the
-// final txn commit timestamp in order to preserve causal ordering
-// between subsequent transactions.
-message EndTransactionResponse {
+// An EndTxnResponse is the return value from the EndTxn() method. The final
+// transaction record is returned as part of the response header. In particular,
+// transaction status and timestamp will be updated to reflect final committed
+// values. Clients may propagate the transaction timestamp as the final txn
+// commit timestamp in order to preserve causal ordering between subsequent
+// transactions.
+message EndTxnResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
   reserved 3;
@@ -1633,7 +1632,7 @@ message RequestUnion {
     ClearRangeRequest clear_range = 38;
     RevertRangeRequest revert_range = 48;
     ScanRequest scan = 7;
-    EndTransactionRequest end_transaction = 9;
+    EndTxnRequest end_txn = 9;
     AdminSplitRequest admin_split = 10;
     AdminUnsplitRequest admin_unsplit = 47;
     AdminMergeRequest admin_merge = 11;
@@ -1684,7 +1683,7 @@ message ResponseUnion {
     ClearRangeResponse clear_range = 38;
     RevertRangeResponse revert_range = 48;
     ScanResponse scan = 7;
-    EndTransactionResponse end_transaction = 9;
+    EndTxnResponse end_txn = 9;
     AdminSplitResponse admin_split = 10;
     AdminUnsplitResponse admin_unsplit = 47;
     AdminMergeResponse admin_merge = 11;
@@ -1771,9 +1770,8 @@ message Header {
   int64 max_span_request_keys = 8;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
-  // EndTransactionRequest. Currently set conservatively: a request
-  // might be composed of distinct spans yet have this field set to
-  // false.
+  // EndTxnRequest. Currently set conservatively: a request might be
+  // composed of distinct spans yet have this field set to false.
   bool distinct_spans = 9;
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.

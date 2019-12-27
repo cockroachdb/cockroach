@@ -505,7 +505,7 @@ func (*ReverseScanRequest) Method() Method { return ReverseScan }
 func (*CheckConsistencyRequest) Method() Method { return CheckConsistency }
 
 // Method implements the Request interface.
-func (*EndTransactionRequest) Method() Method { return EndTransaction }
+func (*EndTxnRequest) Method() Method { return EndTxn }
 
 // Method implements the Request interface.
 func (*AdminSplitRequest) Method() Method { return AdminSplit }
@@ -670,7 +670,7 @@ func (ccr *CheckConsistencyRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (etr *EndTransactionRequest) ShallowCopy() Request {
+func (etr *EndTxnRequest) ShallowCopy() Request {
 	shallowCopy := *etr
 	return &shallowCopy
 }
@@ -1058,10 +1058,10 @@ func (*ReverseScanRequest) flags() int {
 	return isRead | isRange | isReverse | isTxn | updatesReadTSCache | needsRefresh
 }
 
-// EndTransaction updates the write timestamp cache to prevent
-// replays. Replays for the same transaction key and timestamp will
-// have Txn.WriteTooOld=true and must retry on EndTransaction.
-func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone | updatesWriteTSCache }
+// EndTxn updates the write timestamp cache to prevent replays.
+// Replays for the same transaction key and timestamp will have
+// Txn.WriteTooOld=true and must retry on EndTxn.
+func (*EndTxnRequest) flags() int              { return isWrite | isTxn | isAlone | updatesWriteTSCache }
 func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
 func (*AdminUnsplitRequest) flags() int        { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
@@ -1138,10 +1138,10 @@ func (r *RefreshRangeRequest) flags() int {
 func (*SubsumeRequest) flags() int    { return isRead | isAlone | updatesReadTSCache }
 func (*RangeStatsRequest) flags() int { return isRead }
 
-// IsParallelCommit returns whether the EndTransaction request is attempting to
-// perform a parallel commit. See txn_interceptor_committer.go for a discussion
-// about parallel commits.
-func (etr *EndTransactionRequest) IsParallelCommit() bool {
+// IsParallelCommit returns whether the EndTxn request is attempting to perform
+// a parallel commit. See txn_interceptor_committer.go for a discussion about
+// parallel commits.
+func (etr *EndTxnRequest) IsParallelCommit() bool {
 	return etr.Commit && len(etr.InFlightWrites) > 0
 }
 

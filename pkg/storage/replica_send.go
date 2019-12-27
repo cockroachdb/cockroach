@@ -479,8 +479,8 @@ func (r *Replica) executeAdminBatch(
 // the batch must have an assigned timestamp, and either all requests must be
 // read-only, or none.
 //
-// TODO(tschottdorf): should check that request is contained in range
-// and that EndTransaction only occurs at the very end.
+// TODO(tschottdorf): should check that request is contained in range and that
+// EndTxn only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) error {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		// For transactional requests, Store.Send sets the timestamp. For non-
@@ -517,9 +517,9 @@ func (r *Replica) collectSpans(ba *roachpb.BatchRequest) (*spanset.SpanSet, erro
 		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
 		guess := len(ba.Requests)
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			// EndTransaction declares a global write for each of its intent spans.
-			guess += len(et.(*roachpb.EndTransactionRequest).IntentSpans) - 1
+		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
+			// EndTxn declares a global write for each of its intent spans.
+			guess += len(et.(*roachpb.EndTxnRequest).IntentSpans) - 1
 		}
 		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, guess)
 	}

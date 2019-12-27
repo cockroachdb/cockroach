@@ -93,8 +93,8 @@ func (r *Replica) executeWriteBatch(
 	// Verify that the batch can be executed.
 	// NB: we only need to check that the request is in the Range's key bounds
 	// at proposal time, not at application time, because the spanlatch manager
-	// will synchronize all requests (notably EndTransaction with SplitTrigger)
-	// that may cause this condition to change.
+	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
+	// cause this condition to change.
 	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -238,14 +238,13 @@ and the following Raft status: %+v`,
 
 // evaluateWriteBatch evaluates the supplied batch.
 //
-// If the batch is transactional and has all the hallmarks of a 1PC
-// commit (i.e. includes all intent writes & EndTransaction, and
-// there's nothing to suggest that the transaction will require retry
-// or restart), the batch's txn is stripped and it's executed as an
-// atomic batch write. If the writes cannot all be completed at the
-// intended timestamp, the batch's txn is restored and it's
-// re-executed in full. This allows it to lay down intents and return
-// an appropriate retryable error.
+// If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
+// includes all intent writes & EndTxn, and there's nothing to suggest that the
+// transaction will require retry or restart), the batch's txn is stripped and
+// it's executed as an atomic batch write. If the writes cannot all be completed
+// at the intended timestamp, the batch's txn is restored and it's re-executed
+// in full. This allows it to lay down intents and return an appropriate
+// retryable error.
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
@@ -253,8 +252,8 @@ func (r *Replica) evaluateWriteBatch(
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
 	if isOnePhaseCommit(ba) {
-		arg, _ := ba.GetArg(roachpb.EndTransaction)
-		etArg := arg.(*roachpb.EndTransactionRequest)
+		arg, _ := ba.GetArg(roachpb.EndTxn)
+		etArg := arg.(*roachpb.EndTxnRequest)
 
 		// Try executing with transaction stripped. We use the transaction timestamp
 		// to write any values as it may have been advanced by the timestamp cache.
@@ -274,7 +273,7 @@ func (r *Replica) evaluateWriteBatch(
 			ctx, idKey, rec, &ms, &strippedBa, spans, canForwardTimestamp,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(canForwardTimestamp && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, etArg))) {
+			(canForwardTimestamp && !batcheval.IsEndTxnExceedingDeadline(br.Timestamp, etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
@@ -300,7 +299,7 @@ func (r *Replica) evaluateWriteBatch(
 			}
 
 			// Add placeholder responses for end transaction requests.
-			br.Add(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
+			br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})
 			br.Txn = clonedTxn
 			return batch, ms, br, res, nil
 		}
@@ -416,13 +415,13 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 }
 
 // isOnePhaseCommit returns true iff the BatchRequest contains all writes in the
-// transaction and ends with an EndTransaction. One phase commits are disallowed
-// if any of the following conditions are true:
+// transaction and ends with an EndTxn. One phase commits are disallowed if any
+// of the following conditions are true:
 // (1) the transaction has already been flagged with a write too old error
 // (2) the transaction's commit timestamp has been forwarded
 // (3) the transaction exceeded its deadline
-// (4) the transaction is not in its first epoch and the EndTransaction request
-//     does not require one phase commit.
+// (4) the transaction is not in its first epoch and the EndTxn request does
+//     not require one phase commit.
 func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
@@ -430,9 +429,9 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	if !ba.IsCompleteTransaction() {
 		return false
 	}
-	arg, _ := ba.GetArg(roachpb.EndTransaction)
-	etArg := arg.(*roachpb.EndTransactionRequest)
-	if retry, _, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, etArg); retry {
+	arg, _ := ba.GetArg(roachpb.EndTxn)
+	etArg := arg.(*roachpb.EndTxnRequest)
+	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}
 	// If the transaction has already restarted at least once then it may have
@@ -450,33 +449,32 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 }
 
 // maybeStripInFlightWrites attempts to remove all point writes and query
-// intents that ended up in the same batch as an EndTransaction request from
-// that EndTransaction request's "in-flight" write set. The entire batch will
-// commit atomically, so there is no need to consider the writes in the same
-// batch concurrent.
+// intents that ended up in the same batch as an EndTxn request from that EndTxn
+// request's "in-flight" write set. The entire batch will commit atomically, so
+// there is no need to consider the writes in the same batch concurrent.
 //
 // The transformation can lead to bypassing the STAGING state for a transaction
 // entirely. This is possible if the function removes all of the in-flight
-// writes from an EndTransaction request that was committing in parallel with
-// writes which all happened to be on the same range as the transaction record.
+// writes from an EndTxn request that was committing in parallel with writes
+// which all happened to be on the same range as the transaction record.
 func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, error) {
-	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	args, hasET := ba.GetArg(roachpb.EndTxn)
 	if !hasET {
 		return ba, nil
 	}
 
-	et := args.(*roachpb.EndTransactionRequest)
+	et := args.(*roachpb.EndTxnRequest)
 	otherReqs := ba.Requests[:len(ba.Requests)-1]
 	if !et.IsParallelCommit() || len(otherReqs) == 0 {
 		return ba, nil
 	}
 
-	// Clone the BatchRequest and the EndTransaction request before modifying
-	// it. We nil out the request's in-flight writes and make the intent spans
-	// immutable on append. Code below can use origET to recreate the in-flight
-	// write set if any elements remain in it.
+	// Clone the BatchRequest and the EndTxn request before modifying it. We nil
+	// out the request's in-flight writes and make the intent spans immutable on
+	// append. Code below can use origET to recreate the in-flight write set if
+	// any elements remain in it.
 	origET := et
-	et = origET.ShallowCopy().(*roachpb.EndTransactionRequest)
+	et = origET.ShallowCopy().(*roachpb.EndTxnRequest)
 	et.InFlightWrites = nil
 	et.IntentSpans = et.IntentSpans[:len(et.IntentSpans):len(et.IntentSpans)] // immutable
 	ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
@@ -502,7 +500,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 			}
 		}
 		if len(origET.InFlightWrites) < writes {
-			return ba, errors.New("more write in batch with EndTransaction than listed in in-flight writes")
+			return ba, errors.New("more write in batch with EndTxn than listed in in-flight writes")
 		} else if len(origET.InFlightWrites) == writes {
 			et.IntentSpans = make([]roachpb.Span, len(origET.IntentSpans)+len(origET.InFlightWrites))
 			copy(et.IntentSpans, origET.IntentSpans)
@@ -532,13 +530,13 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 			// each subsequent request.
 			//
 			// We already don't intend on sending QueryIntent requests in the
-			// same batch as EndTransaction requests because doing so causes
-			// a pipeline stall, so this doesn't seem worthwhile to support.
+			// same batch as EndTxn requests because doing so causes a pipeline
+			// stall, so this doesn't seem worthwhile to support.
 			continue
 		default:
 			// Ranged write or read. These can make it into the final batch with
-			// a parallel committing EndTransaction request if the entire batch
-			// issued by DistSender lands on the same range. Skip.
+			// a parallel committing EndTxn request if the entire batch issued
+			// by DistSender lands on the same range. Skip.
 			continue
 		}
 
@@ -562,7 +560,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 			}
 		}
 		if match == -1 {
-			return ba, errors.New("write in batch with EndTransaction missing from in-flight writes")
+			return ba, errors.New("write in batch with EndTxn missing from in-flight writes")
 		}
 		w := origET.InFlightWrites[match]
 		notInBa := origET.InFlightWrites[copiedTo:match]

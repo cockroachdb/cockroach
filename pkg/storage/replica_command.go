@@ -224,7 +224,7 @@ func splitTxnAttempt(
 
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
-	b.AddRawRequest(&roachpb.EndTransactionRequest{
+	b.AddRawRequest(&roachpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
@@ -259,7 +259,7 @@ func splitTxnStickyUpdateAttempt(
 	}
 	// End the transaction manually, instead of letting RunTransaction loop
 	// do it, in order to provide a sticky bit trigger.
-	b.AddRawRequest(&roachpb.EndTransactionRequest{
+	b.AddRawRequest(&roachpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			StickyBitTrigger: &roachpb.StickyBitTrigger{
@@ -480,7 +480,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 			return err
 		}
 		// End the transaction manually in order to provide a sticky bit trigger.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				StickyBitTrigger: &roachpb.StickyBitTrigger{
@@ -746,7 +746,7 @@ func (r *Replica) AdminMerge(
 		// not serve another request unless this transaction aborts. End the
 		// transaction manually in order to provide a merge trigger.
 		b = txn.NewBatch()
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
@@ -1746,7 +1746,7 @@ func execChangeReplicasTxn(
 			return err
 		}
 
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
+		b.AddRawRequest(&roachpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				ChangeReplicasTrigger: crt,

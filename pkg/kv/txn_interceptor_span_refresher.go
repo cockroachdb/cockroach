@@ -147,8 +147,8 @@ func (sr *txnSpanRefresher) SendLocked(
 			batchReadTimestamp, sr.refreshedTimestamp, ba))
 	}
 
-	if rArgs, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
-		et := rArgs.(*roachpb.EndTransactionRequest)
+	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+		et := rArgs.(*roachpb.EndTxnRequest)
 		if !sr.refreshInvalid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
 			et.NoRefreshSpans = true
 		}
@@ -230,9 +230,8 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	// If a prefix of the batch was executed, collect refresh spans for
 	// that executed portion, and retry the remainder. The canonical
 	// case is a batch split between everything up to but not including
-	// the EndTransaction. Requests up to the EndTransaction succeed,
-	// but the EndTransaction fails with a retryable error. We want to
-	// retry only the EndTransaction.
+	// the EndTxn. Requests up to the EndTxn succeed, but the EndTxn
+	// fails with a retryable error. We want to retry only the EndTxn.
 	ba.UpdateTxn(retryTxn)
 	retryBa := ba
 	if br != nil {

@@ -470,10 +470,10 @@ message Transaction {
   repeated Span intent_spans = 11 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any in-flight writes are provided, a
-  // committing EndTransaction request will move a PENDING transaction to the
-  // STAGING status instead of the COMMITTED status. These in-flight writes must
-  // then all be confirmed as successful before the transaction can be moved
-  // from STAGING to COMMITTED. Because of this, the set will only ever contain
+  // committing EndTxn request will move a PENDING transaction to the STAGING
+  // status instead of the COMMITTED status. These in-flight writes must then
+  // all be confirmed as successful before the transaction can be moved from
+  // STAGING to COMMITTED. Because of this, the set will only ever contain
   // entries when the transaction is STAGING. For more, see txnCommitter.
   //
   // The slice is maintained in sorted order by sequence number. It should be

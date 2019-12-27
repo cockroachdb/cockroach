@@ -41,8 +41,8 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		// Create a transaction that will get stuck performing a parallel commit.
 		txn := newTransaction("txn", keyA, 1, store.Clock())
 
-		// Issue two writes, which will be considered in-flight at the time of the
-		// transaction's EndTransaction request.
+		// Issue two writes, which will be considered in-flight at the time of
+		// the transaction's EndTxn request.
 		keyAVal := []byte("value")
 		pArgs := putArgs(keyA, keyAVal)
 		pArgs.Sequence = 1
@@ -67,8 +67,8 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		// Issue a parallel commit, which will put the transaction into a STAGING
-		// state. Include both writes as the EndTransaction's in-flight writes.
+		// Issue a parallel commit, which will put the transaction into a
+		// STAGING state. Include both writes as the EndTxn's in-flight writes.
 		et, etH := endTxnArgs(txn, true)
 		et.InFlightWrites = []roachpb.SequencedWrite{
 			{Key: keyA, Sequence: 1},

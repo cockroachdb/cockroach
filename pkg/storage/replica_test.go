@@ -435,9 +435,9 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 	return result
 }
 
-// TestMaybeStripInFlightWrites verifies that in-flight writes declared
-// on an EndTransaction request are stripped if the corresponding write
-// or query intent is in the same batch as the EndTransaction.
+// TestMaybeStripInFlightWrites verifies that in-flight writes declared on an
+// EndTxn request are stripped if the corresponding write or query intent is in
+// the same batch as the EndTxn.
 func TestMaybeStripInFlightWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -452,7 +452,7 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 	delRng3.Sequence = 3
 	scan3 := &roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
 	scan3.Sequence = 3
-	et := &roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}, Commit: true}
+	et := &roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}, Commit: true}
 	et.Sequence = 4
 	et.IntentSpans = []roachpb.Span{{Key: keyC}}
 	et.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}}
@@ -481,7 +481,7 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 		},
 		{
 			reqs:   []roachpb.Request{put3, et},
-			expErr: "write in batch with EndTransaction missing from in-flight writes",
+			expErr: "write in batch with EndTxn missing from in-flight writes",
 		},
 		{
 			reqs:           []roachpb.Request{qi1, put2, et},
@@ -513,8 +513,8 @@ func TestMaybeStripInFlightWrites(t *testing.T) {
 				if err != nil {
 					t.Errorf("expected no error, got %v", err)
 				}
-				resArgs, _ := resBa.GetArg(roachpb.EndTransaction)
-				resEt := resArgs.(*roachpb.EndTransactionRequest)
+				resArgs, _ := resBa.GetArg(roachpb.EndTxn)
+				resEt := resArgs.(*roachpb.EndTxnRequest)
 				if !reflect.DeepEqual(resEt.InFlightWrites, c.expIFW) {
 					t.Errorf("expected in-flight writes %v, got %v", c.expIFW, resEt.InFlightWrites)
 				}
@@ -551,18 +551,18 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	noReqs := makeReqs()
 	getReq := makeReqs(withSeq(&roachpb.GetRequest{}, 0))
 	putReq := makeReqs(withSeq(&roachpb.PutRequest{}, 1))
-	etReq := makeReqs(withSeq(&roachpb.EndTransactionRequest{Commit: true}, 1))
+	etReq := makeReqs(withSeq(&roachpb.EndTxnRequest{Commit: true}, 1))
 	txnReqs := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTransactionRequest{Commit: true}, 2),
+		withSeq(&roachpb.EndTxnRequest{Commit: true}, 2),
 	)
 	txnReqsNoRefresh := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTransactionRequest{Commit: true, NoRefreshSpans: true}, 2),
+		withSeq(&roachpb.EndTxnRequest{Commit: true, NoRefreshSpans: true}, 2),
 	)
 	txnReqsRequire1PC := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTransactionRequest{Commit: true, Require1PC: true}, 2),
+		withSeq(&roachpb.EndTxnRequest{Commit: true, Require1PC: true}, 2),
 	)
 
 	testCases := []struct {
@@ -1756,10 +1756,8 @@ func heartbeatArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
-func endTxnArgs(
-	txn *roachpb.Transaction, commit bool,
-) (roachpb.EndTransactionRequest, roachpb.Header) {
-	return roachpb.EndTransactionRequest{
+func endTxnArgs(txn *roachpb.Transaction, commit bool) (roachpb.EndTxnRequest, roachpb.Header) {
+	return roachpb.EndTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
@@ -2742,11 +2740,11 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var spans spanset.SpanSet
-	cmd, _ := batcheval.LookupCommand(roachpb.EndTransaction)
+	cmd, _ := batcheval.LookupCommand(roachpb.EndTxn)
 	cmd.DeclareKeys(
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
 		roachpb.Header{},
-		&roachpb.EndTransactionRequest{
+		&roachpb.EndTxnRequest{
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				SplitTrigger: &roachpb.SplitTrigger{
 					LeftDesc: roachpb.RangeDescriptor{
@@ -3717,9 +3715,8 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 	}
 }
 
-// TestEndTransactionDeadline verifies that EndTransaction respects the
-// transaction deadline.
-func TestEndTransactionDeadline(t *testing.T) {
+// TestEndTxnDeadline verifies that EndTxn respects the transaction deadline.
+func TestEndTxnDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3810,8 +3807,8 @@ func TestSerializableDeadline(t *testing.T) {
 		t.Fatalf("expected pushee to still be alive, but got %+v", updatedPushee)
 	}
 
-	// Send an EndTransaction with a deadline below the point where the txn
-	// has been pushed.
+	// Send an EndTxn with a deadline below the point where the txn has been
+	// pushed.
 	etArgs, etHeader := endTxnArgs(txn, true /* commit */)
 	deadline := updatedPushee.WriteTimestamp
 	deadline.Logical--
@@ -3901,7 +3898,7 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 			t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
 		}
 
-		// EndTransaction.
+		// EndTxn.
 		et, etH := endTxnArgs(pushee, true)
 		resp, pErr = tc.SendWrappedWith(etH, &et)
 		if pErr == nil {
@@ -3922,7 +3919,7 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		// EndTransaction.
+		// EndTxn.
 		newTxn2 := newTransaction("foo", key, 1, tc.Clock())
 		et, etH := endTxnArgs(newTxn2, true)
 		if _, pErr := tc.SendWrappedWith(etH, &et); pErr != nil {
@@ -3931,10 +3928,9 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 	}
 }
 
-// TestEndTransactionDeadline_1PC verifies that a transaction that
-// exceeded its deadline will be aborted even when one phase commit is
-// applicable.
-func TestEndTransactionDeadline_1PC(t *testing.T) {
+// TestEndTxnDeadline_1PC verifies that a transaction that exceeded its deadline
+// will be aborted even when one phase commit is applicable.
+func TestEndTxnDeadline_1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3994,9 +3990,9 @@ func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	}
 }
 
-// TestEndTransactionWithMalformedSplitTrigger verifies an
-// EndTransaction call with a malformed commit trigger fails.
-func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
+// TestEndTxnWithMalformedSplitTrigger verifies an EndTxn call with a malformed
+// commit trigger fails.
+func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var exitStatus int
@@ -4021,9 +4017,9 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	}
 
 	args, h := endTxnArgs(txn, true /* commit */)
-	// Make an EndTransaction request which would fail if not
-	// stripped. In this case, we set the start key to "bar" for a
-	// split of the default range; start key must be "" in this case.
+	// Make an EndTxn request which would fail if not stripped. In this case, we
+	// set the start key to "bar" for a split of the default range; start key
+	// must be "" in this case.
 	args.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 		SplitTrigger: &roachpb.SplitTrigger{
 			LeftDesc: roachpb.RangeDescriptor{
@@ -4048,9 +4044,9 @@ func TestEndTransactionWithMalformedSplitTrigger(t *testing.T) {
 	}
 }
 
-// TestEndTransactionBeforeHeartbeat verifies that a transaction
-// can be committed/aborted before being heartbeat.
-func TestEndTransactionBeforeHeartbeat(t *testing.T) {
+// TestEndTxnBeforeHeartbeat verifies that a transaction can be
+// committed/aborted before being heartbeat.
+func TestEndTxnBeforeHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Don't automatically GC the Txn record: We want to heartbeat the
 	// committed Transaction and compare it against our expectations.
@@ -4079,7 +4075,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		reply := resp.(*roachpb.EndTransactionResponse)
+		reply := resp.(*roachpb.EndTxnResponse)
 		expStatus := roachpb.COMMITTED
 		if !commit {
 			expStatus = roachpb.ABORTED
@@ -4102,9 +4098,9 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 	})
 }
 
-// TestEndTransactionAfterHeartbeat verifies that a transaction
-// can be committed/aborted after being heartbeat.
-func TestEndTransactionAfterHeartbeat(t *testing.T) {
+// TestEndTxnAfterHeartbeat verifies that a transaction can be committed/aborted
+// after being heartbeat.
+func TestEndTxnAfterHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -4139,7 +4135,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		if pErr != nil {
 			t.Error(pErr)
 		}
-		reply := resp.(*roachpb.EndTransactionResponse)
+		reply := resp.(*roachpb.EndTxnResponse)
 		expStatus := roachpb.COMMITTED
 		if !commit {
 			expStatus = roachpb.ABORTED
@@ -4155,11 +4151,10 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 	})
 }
 
-// TestEndTransactionWithPushedTimestamp verifies that txn can be
-// ended (both commit or abort) correctly when the commit timestamp is
-// greater than the transaction timestamp, depending on the isolation
-// level.
-func TestEndTransactionWithPushedTimestamp(t *testing.T) {
+// TestEndTxnWithPushedTimestamp verifies that txn can be ended (both commit or
+// abort) correctly when the commit timestamp is greater than the transaction
+// timestamp, depending on the isolation level.
+func TestEndTxnWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -4211,7 +4206,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 			if !test.commit {
 				expStatus = roachpb.ABORTED
 			}
-			reply := resp.(*roachpb.EndTransactionResponse)
+			reply := resp.(*roachpb.EndTxnResponse)
 			if reply.Txn.Status != expStatus {
 				t.Errorf("%d: expected transaction status to be %s; got %s", i, expStatus, reply.Txn.Status)
 			}
@@ -4220,9 +4215,9 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	}
 }
 
-// TestEndTransactionWithIncrementedEpoch verifies that txn ended with
-// a higher epoch (and priority) correctly assumes the higher epoch.
-func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
+// TestEndTxnWithIncrementedEpoch verifies that txn ended with a higher epoch
+// (and priority) correctly assumes the higher epoch.
+func TestEndTxnWithIncrementedEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -4255,7 +4250,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	if pErr != nil {
 		t.Error(pErr)
 	}
-	reply := resp.(*roachpb.EndTransactionResponse)
+	reply := resp.(*roachpb.EndTxnResponse)
 	if reply.Txn.Status != roachpb.COMMITTED {
 		t.Errorf("expected transaction status to be COMMITTED; got %s", reply.Txn.Status)
 	}
@@ -4267,10 +4262,10 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	}
 }
 
-// TestEndTransactionWithErrors verifies various error conditions
-// are checked such as transaction already being committed or
-// aborted, or timestamp or epoch regression.
-func TestEndTransactionWithErrors(t *testing.T) {
+// TestEndTxnWithErrors verifies various error conditions are checked such as
+// transaction already being committed or aborted, or timestamp or epoch
+// regression.
+func TestEndTxnWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	ctx := context.Background()
@@ -4320,10 +4315,10 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
-// TestEndTransactionRollbackAbortedTransaction verifies that no error
-// is returned when a transaction that has already been aborted is
-// rolled back by an EndTransactionRequest.
-func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
+// TestEndTxnRollbackAbortedTransaction verifies that no error is returned when
+// a transaction that has already been aborted is rolled back by an EndTxn
+// request.
+func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "populateAbortSpan", func(t *testing.T, populateAbortSpan bool) {
@@ -4395,7 +4390,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		reply := resp.(*roachpb.EndTransactionResponse)
+		reply := resp.(*roachpb.EndTxnResponse)
 		if reply.Txn.Status != roachpb.ABORTED {
 			t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
 		}
@@ -4547,7 +4542,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
-	// EndTransaction.
+	// EndTxn.
 	etTxn := br.Txn.Clone()
 	et, etH := endTxnArgs(etTxn, true)
 	et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
@@ -4598,7 +4593,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
 
-	// EndTransaction should fail with a TransactionAbortedError.
+	// EndTxn should fail with a TransactionAbortedError.
 	_, pErr = tc.SendWrappedWith(etH, &et)
 	if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
@@ -4612,10 +4607,10 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	}
 }
 
-// TestEndTransactionGC verifies that a transaction record is immediately
-// garbage-collected upon EndTransaction iff all of the supplied intents are
-// local relative to the transaction record's location.
-func TestEndTransactionLocalGC(t *testing.T) {
+// TestEndTxnGC verifies that a transaction record is immediately
+// garbage-collected upon EndTxn iff all of the supplied intents are local
+// relative to the transaction record's location.
+func TestEndTxnLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
@@ -4720,9 +4715,9 @@ func setupResolutionTest(
 	return newRepl, txn
 }
 
-// TestEndTransactionResolveOnlyLocalIntents verifies that an end transaction
-// request resolves only local intents within the same batch.
-func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
+// TestEndTxnResolveOnlyLocalIntents verifies that an end transaction request
+// resolves only local intents within the same batch.
+func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
@@ -4772,10 +4767,10 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	}
 }
 
-// TestEndTransactionDirectGC verifies that after successfully resolving the
-// external intents of a transaction after EndTransaction, the transaction and
-// AbortSpan records are purged on both the local range and non-local range.
-func TestEndTransactionDirectGC(t *testing.T) {
+// TestEndTxnDirectGC verifies that after successfully resolving the external
+// intents of a transaction after EndTxn, the transaction and AbortSpan records
+// are purged on both the local range and non-local range.
+func TestEndTxnDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := roachpb.Key("a")
 	splitKey := keys.MustAddr(a).Next()
@@ -4829,9 +4824,9 @@ func TestEndTransactionDirectGC(t *testing.T) {
 	}
 }
 
-// TestEndTransactionDirectGCFailure verifies that no immediate GC takes place
-// if external intents can't be resolved (see also TestEndTransactionDirectGC).
-func TestEndTransactionDirectGCFailure(t *testing.T) {
+// TestEndTxnDirectGCFailure verifies that no immediate GC takes place
+// if external intents can't be resolved (see also TestEndTxnDirectGC).
+func TestEndTxnDirectGCFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	key := roachpb.Key("a")
@@ -4871,9 +4866,9 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	})
 }
 
-// TestEndTransactionDirectGC_1PC runs a test similar to TestEndTransactionDirectGC
+// TestEndTxnDirectGC_1PC runs a test similar to TestEndTxnDirectGC
 // for the case of a transaction which is contained in a single batch.
-func TestEndTransactionDirectGC_1PC(t *testing.T) {
+func TestEndTxnDirectGC_1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, commit := range []bool{true, false} {
 		func() {
@@ -4896,7 +4891,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			if err != nil {
 				t.Fatalf("commit=%t: %+v", commit, err)
 			}
-			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
+			etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTxnResponse)
 			if !ok || (!etArgs.OnePhaseCommit && commit) {
 				t.Errorf("commit=%t: expected one phase commit", commit)
 			}
@@ -4911,10 +4906,9 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 	}
 }
 
-// TestReplicaTransactionRequires1PC verifies that a transaction which
-// sets Requires1PC on EndTransaction request will never leave intents
-// in the event that it experiences an error or the timestamp is
-// advanced.
+// TestReplicaTransactionRequires1PC verifies that a transaction which sets
+// Requires1PC on EndTxn request will never leave intents in the event that it
+// experiences an error or the timestamp is advanced.
 func TestReplicaTransactionRequires1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -4992,9 +4986,9 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 	}
 }
 
-// TestReplicaEndTransactionWithRequire1PC verifies an error if an EndTransaction
-// request is received with the Requires1PC flag set to true.
-func TestReplicaEndTransactionWithRequire1PC(t *testing.T) {
+// TestReplicaEndTxnWithRequire1PC verifies an error if an EndTxn request is
+// received with the Requires1PC flag set to true.
+func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := testContext{}
@@ -5846,9 +5840,9 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Fatalf("expected retry error; got %s", pErr)
 	}
-	// Verify that the returned transaction has timestamp equal to the
-	// pushed timestamp. This verifies that the EndTransaction found
-	// the pushed record and propagated it.
+	// Verify that the returned transaction has timestamp equal to the pushed
+	// timestamp. This verifies that the EndTxn found the pushed record and
+	// propagated it.
 	if txn := pErr.GetTxn(); txn.WriteTimestamp != pusher.WriteTimestamp.Next() {
 		t.Errorf("expected retry error txn timestamp %s; got %s", pusher.WriteTimestamp, txn.WriteTimestamp)
 	}
@@ -8258,8 +8252,8 @@ func TestGCWithoutThreshold(t *testing.T) {
 	}
 }
 
-// Test that, if the Raft command resulting from EndTransaction request fails to
-// be processed/apply, then the LocalResult associated with that command is
+// Test that, if the Raft command resulting from EndTxn request fails to be
+// processed/apply, then the LocalResult associated with that command is
 // cleared.
 func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -8287,9 +8281,9 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	r := tc.repl
 	r.mu.Lock()
 	r.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64, _ error) {
-		// We're going to recognize the first time the commnand for the
-		// EndTransaction is proposed and we're going to hackily decrease its
-		// MaxLeaseIndex, so that the processing gets rejected further on.
+		// We're going to recognize the first time the commnand for the EndTxn
+		// is proposed and we're going to hackily decrease its MaxLeaseIndex, so
+		// that the processing gets rejected further on.
 		ut := p.Local.UpdatedTxns
 		if atomic.LoadInt64(&proposalRecognized) == 0 && ut != nil && len(*ut) == 1 && (*ut)[0].ID == txn.ID {
 			atomic.StoreInt64(&proposalRecognized, 1)
@@ -9060,7 +9054,7 @@ func TestCommandTooLarge(t *testing.T) {
 
 // Test that, if the application of a Raft command fails, intents are not
 // resolved. This is because we don't want intent resolution to take place if an
-// EndTransaction fails.
+// EndTxn fails.
 func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -9089,9 +9083,9 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	// Fail future command applications.
 	atomic.StoreInt32(&filterActive, 1)
 
-	// Propose an EndTransaction with a remote intent. The _remote_ part is
-	// important because intents local to the txn's range are resolved inline with
-	// the EndTransaction execution.
+	// Propose an EndTxn with a remote intent. The _remote_ part is important
+	// because intents local to the txn's range are resolved inline with the
+	// EndTxn execution.
 	// We do this by using replica.propose() directly, as opposed to going through
 	// the DistSender, because we want to inspect the proposal's result after the
 	// injected error.
@@ -9812,7 +9806,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 			expErr: "write at timestamp .* too old",
 		},
 		// 1PC serializable transaction will fail instead of retrying if
-		// EndTransactionRequest.NoRefreshSpans is not true.
+		// EndTxnRequest.NoRefreshSpans is not true.
 		{
 			name: "no local retry of write too old on 1PC txn and refresh spans",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -10527,7 +10521,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				clone.WriteTimestamp.Forward(now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				// Add different in-flight writes to test whether they are
-				// replaced by the second EndTransaction request.
+				// replaced by the second EndTxn request.
 				et.InFlightWrites = otherInFlightWrites
 				return sendWrappedWithErr(etH, &et)
 			},
@@ -10553,7 +10547,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				clone.Restart(-1, 0, now)
 				et, etH := endTxnArgs(clone, true /* commit */)
 				// Add different in-flight writes to test whether they are
-				// replaced by the second EndTransaction request.
+				// replaced by the second EndTxn request.
 				et.InFlightWrites = otherInFlightWrites
 				return sendWrappedWithErr(etH, &et)
 			},
@@ -11612,8 +11606,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	}
 }
 
-// Test that an EndTransaction(commit=false) request that doesn't find its
-// transaction record doesn't return an error.
+// Test that an EndTxn(commit=false) request that doesn't find its transaction
+// record doesn't return an error.
 // This is relied upon by the client which liberally sends rollbacks even when
 // it's unclear whether the txn record has been written.
 func TestRollbackMissingTxnRecordNoError(t *testing.T) {
@@ -11631,7 +11625,7 @@ func TestRollbackMissingTxnRecordNoError(t *testing.T) {
 	res, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
 		RangeID: tc.repl.RangeID,
 		Txn:     txn,
-	}, &roachpb.EndTransactionRequest{
+	}, &roachpb.EndTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},

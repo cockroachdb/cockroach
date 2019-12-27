@@ -872,10 +872,10 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			expVal := oldLiveness
 			b.CPutDeprecated(key, &val, &expVal)
 		}
-		// Use a trigger on EndTransaction to indicate that node liveness should
-		// be re-gossiped. Further, require that this transaction complete as a
-		// one phase commit to eliminate the possibility of leaving write intents.
-		b.AddRawRequest(&roachpb.EndTransactionRequest{
+		// Use a trigger on EndTxn to indicate that node liveness should be
+		// re-gossiped. Further, require that this transaction complete as a one
+		// phase commit to eliminate the possibility of leaving write intents.
+		b.AddRawRequest(&roachpb.EndTxnRequest{
 			Commit:     true,
 			Require1PC: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{

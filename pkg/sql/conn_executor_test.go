@@ -281,7 +281,7 @@ func TestErrorOnRollback(t *testing.T) {
 	const targetKeyString string = "/Table/53/1/1/0"
 	var injectedErr int64
 
-	// We're going to inject an error into our EndTransaction.
+	// We're going to inject an error into our EndTxn.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
@@ -290,13 +290,13 @@ func TestErrorOnRollback(t *testing.T) {
 						return nil
 					}
 					req := fArgs.Req.Requests[0]
-					etReq, ok := req.GetInner().(*roachpb.EndTransactionRequest)
-					// We only inject the error once. Turns out that during the life of
-					// the test there's two EndTransactions being sent - one is the direct
-					// result of the test's call to tx.Rollback(), the second is sent by
-					// the TxnCoordSender - indirectly triggered by the fact that, on the
-					// server side, the transaction's context gets canceled at the SQL
-					// layer.
+					etReq, ok := req.GetInner().(*roachpb.EndTxnRequest)
+					// We only inject the error once. Turns out that during the
+					// life of the test there's two EndTxns being sent - one is
+					// the direct result of the test's call to tx.Rollback(),
+					// the second is sent by the TxnCoordSender - indirectly
+					// triggered by the fact that, on the server side, the
+					// transaction's context gets canceled at the SQL layer.
 					if ok &&
 						etReq.Header().Key.String() == targetKeyString &&
 						atomic.LoadInt64(&injectedErr) == 0 {
@@ -325,8 +325,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 
-	// Perform a write so that the EndTransaction we're going to send doesn't get
-	// elided.
+	// Perform a write so that the EndTxn we're going to send doesn't get elided.
 	if _, err := tx.ExecContext(ctx, "INSERT INTO t.test(k, v) VALUES (1, 'abc')"); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +344,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 	if atomic.LoadInt64(&injectedErr) == 0 {
 		t.Fatal("test didn't inject the error; it must have failed to find " +
-			"the EndTransaction with the expected key")
+			"the EndTxn with the expected key")
 	}
 }
 
