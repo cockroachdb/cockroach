@@ -8,22 +8,23 @@
 
 import React from "react";
 import { InjectedRouter, RouterState } from "react-router";
+import { connect } from "react-redux";
+import cn from "classnames";
 
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
-import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
-import "./tweaks.styl";
+import { Select } from "src/components";
 
 // tslint:disable-next-line:variable-name
 const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
+const Option = Select.Option;
 
 interface ClusterVisualizationProps {
   licenseDataExists: boolean;
@@ -32,50 +33,40 @@ interface ClusterVisualizationProps {
 }
 
 class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
-  handleMapTableToggle = (opt: DropdownOption) => {
-    this.props.router.push(`/overview/${opt.value}`);
+  handleMapTableToggle = (value: string) => {
+    this.props.router.push(`/overview/${value}`);
   }
 
   render() {
     const tiers = parseLocalityRoute(this.props.params.splat);
-    const options: DropdownOption[] = [
-      { value: "map", label: "Node Map" },
-      { value: "list", label: "Node List" },
-    ];
 
     // TODO(couchand): integrate with license swapper
     const showingLicensePage = this.props.licenseDataExists && !this.props.enterpriseEnabled;
 
+    const classes = cn(
+      "cluster-visualization-layout",
+      { "cluster-visualization-layout--show-license": showingLicensePage });
+
+    const contentItemClasses = cn(
+      "cluster-visualization-layout__content-item",
+      { "cluster-visualization-layout__content-item--show-license": showingLicensePage });
+
     // TODO(vilterp): dedup with NodeList
     return (
-      <div
-        style={{
-          width: "100%",
-          height: showingLicensePage ? null : "100%",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          backgroundColor: "white",
-        }}
-        className="clusterviz"
-      >
-        <div style={{
-          flex: "none",
-          backgroundColor: "white",
-          boxShadow: "0 0 4px 0 rgba(0, 0, 0, 0.2)",
-          zIndex: 5,
-          padding: "4px 12px",
-        }}>
-          <div style={{ float: "left" }}>
-            <Dropdown
-              title="View"
-              selected="map"
-              options={options}
+      <div className={classes}>
+        <div className="cluster-visualization-layout__content">
+          <div className="cluster-visualization-layout__content-item">
+            <Select
+              defaultValue="map"
+              display="link"
               onChange={this.handleMapTableToggle}
-            />
+            >
+              <Option value="list">Node List</Option>
+              <Option value="map">Node Map</Option>
+            </Select>
           </div>
-          <div style={{ float: "right", display: showingLicensePage ? "none" : null }}><TimeScaleDropdown /></div>
-          <div style={{ textAlign: "center", paddingTop: 4, display: showingLicensePage ? "none" : null }}><Breadcrumbs tiers={tiers} /></div>
+          <div className={contentItemClasses}><Breadcrumbs tiers={tiers} /></div>
+          <div className={contentItemClasses}><TimeScaleDropdown /></div>
         </div>
         <Loading
           loading={!this.props.licenseDataExists}

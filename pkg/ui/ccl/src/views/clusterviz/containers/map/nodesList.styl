@@ -8,14 +8,16 @@
 
 @require '~src/components/core/index.styl'
 
-$node-switcher-height = 38px
+$node-switcher-height = 48px
 
 .fixed-panel
   flex-grow 1
   position relative
   height 100%
   &__panel-switcher
-    flex none
+    display flex
+    flex-direction row
+    align-items center
     background-color $colors--white
     z-index  5
     padding $spacing-xx-small $spacing-smaller

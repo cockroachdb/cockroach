@@ -1,0 +1,32 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.select
+  &--type-link
+    padding 0
+    border none
+    @extends $text--body
+    color $colors--link
+    font-weight $font-weight--bold
+    letter-spacing $letter-spacing--compact
+    & > .ant-select-selection
+      border none
+      & > .ant-select-arrow
+        font-size $spacing-base
+        color $colors--link
+        top 18px
+      & > .ant-select-selection__rendered
+        margin-right $spacing-large
+    & > .ant-select-selection:focus
+      outline-style none
+      box-shadow none
+      border-color transparent
