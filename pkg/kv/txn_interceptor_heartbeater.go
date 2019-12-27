@@ -35,12 +35,12 @@ import (
 // Transaction coordinators only need to perform heartbeats for transactions
 // that risk running for longer than the abandonment duration. For transactions
 // that finish well beneath this time, a heartbeat will never be sent and the
-// EndTransaction request will create and immediately finalize the transaction.
-// However, for transactions that live long enough that they risk running into
-// issues with other's perceiving them as abandoned, the first HeartbeatTxn
-// request they send will create the transaction record in the PENDING state.
-// Future heartbeats will update the transaction record to indicate
-// progressively larger heartbeat timestamps.
+// EndTxn request will create and immediately finalize the transaction. However,
+// for transactions that live long enough that they risk running into issues
+// with other's perceiving them as abandoned, the first HeartbeatTxn request
+// they send will create the transaction record in the PENDING state. Future
+// heartbeats will update the transaction record to indicate progressively
+// larger heartbeat timestamps.
 //
 // NOTE: there are other mechanisms by which concurrent actors could determine
 // the liveness of transactions. One proposal is to have concurrent actors
@@ -91,18 +91,18 @@ type txnHeartbeater struct {
 		// If the status here is COMMITTED then the transaction definitely
 		// committed. However, if the status here is ABORTED then the
 		// transaction may or may not have been aborted. Instead, it's possible
-		// that the transaction was committed by an EndTransaction request and
-		// then its record was garbage collected before the heartbeat request
-		// reached the record. The only way to distinguish this situation from
-		// a truly aborted transaction is to consider whether or not the
-		// transaction coordinator sent an EndTransaction request and, if so,
-		// consider whether it succeeded or not.
+		// that the transaction was committed by an EndTxn request and then its
+		// record was garbage collected before the heartbeat request reached the
+		// record. The only way to distinguish this situation from a truly
+		// aborted transaction is to consider whether or not the transaction
+		// coordinator sent an EndTxn request and, if so, consider whether it
+		// succeeded or not.
 		//
 		// Because of this ambiguity, the status is not used to immediately
-		// update txn in case the heartbeat loop raced with an EndTransaction
-		// request. Instead, it is used by the transaction coordinator to reject
-		// any future requests sent though it (which indicates that the
-		// heartbeat loop did not race with an EndTransaction request).
+		// update txn in case the heartbeat loop raced with an EndTxn request.
+		// Instead, it is used by the transaction coordinator to reject any
+		// future requests sent though it (which indicates that the heartbeat
+		// loop did not race with an EndTxn request).
 		finalObservedStatus roachpb.TransactionStatus
 	}
 }
@@ -156,7 +156,7 @@ func (h *txnHeartbeater) SendLocked(
 		// retriable errors if the batch has been split between ranges. We consider
 		// that unlikely enough so we prefer to not pay for a goroutine.
 		if !h.mu.loopStarted {
-			if _, haveEndTxn := ba.GetArg(roachpb.EndTransaction); !haveEndTxn {
+			if _, haveEndTxn := ba.GetArg(roachpb.EndTxn); !haveEndTxn {
 				if err := h.startHeartbeatLoopLocked(ctx); err != nil {
 					return nil, roachpb.NewError(err)
 				}
@@ -341,7 +341,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 		switch respTxn.Status {
 		case roachpb.COMMITTED:
 			// Shut down the heartbeat loop without doing anything else.
-			// We must have raced with an EndTransaction(commit=true).
+			// We must have raced with an EndTxn(commit=true).
 		case roachpb.ABORTED:
 			// Roll back the transaction record to clean up intents and
 			// then shut down the heartbeat loop.
@@ -353,7 +353,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	return true
 }
 
-// abortTxnAsyncLocked send an EndTransaction(commmit=false) asynchronously.
+// abortTxnAsyncLocked send an EndTxn(commmit=false) asynchronously.
 // The purpose of the async cleanup is to resolve transaction intents as soon
 // as possible when a transaction coordinator observes an ABORTED transaction.
 func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
@@ -363,11 +363,11 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	// context to interrupt the aborting.
 	ctx = h.AnnotateCtx(context.Background())
 
-	// Construct a batch with an EndTransaction request.
+	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&roachpb.EndTransactionRequest{
+	ba.Add(&roachpb.EndTxnRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
@@ -379,7 +379,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
 			// Send the abort request through the interceptor stack. This is
 			// important because we need the txnPipeliner to append intent spans
-			// to the EndTransaction request.
+			// to the EndTxn request.
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			_, pErr := h.wrapped.SendLocked(ctx, ba)
@@ -394,13 +394,13 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 
 // firstWriteIndex returns the index of the first transactional write in the
 // BatchRequest. Returns -1 if the batch has not intention to write. It also
-// verifies that if an EndTransactionRequest is included, then it is the last
-// request in the batch.
+// verifies that if an EndTxnRequest is included, then it is the last request
+// in the batch.
 func firstWriteIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
-			if _, ok := args.(*roachpb.EndTransactionRequest); ok {
+			if _, ok := args.(*roachpb.EndTxnRequest); ok {
 				return -1, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}

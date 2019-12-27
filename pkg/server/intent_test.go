@@ -69,7 +69,7 @@ func TestIntentResolution(t *testing.T) {
 	splitKey := []byte("s")
 	for i, tc := range testCases {
 		// Use deterministic randomness to randomly put the writes in separate
-		// batches or commit them with EndTransaction.
+		// batches or commit them with EndTxn.
 		rnd, seed := randutil.NewPseudoRand()
 		log.Infof(context.Background(), "%d: using intent test seed %d", i, seed)
 

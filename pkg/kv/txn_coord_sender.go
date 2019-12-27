@@ -35,8 +35,8 @@ const (
 	opTxnCoordSender = "txn coordinator send"
 )
 
-// txnState represents states relating to whether an EndTransaction request
-// needs to be sent.
+// txnState represents states relating to whether an EndTxn request needs
+// to be sent.
 //go:generate stringer -type=txnState
 type txnState int
 
@@ -45,13 +45,13 @@ const (
 	txnPending txnState = iota
 
 	// txnError means that a batch encountered a non-retriable error. Further
-	// batches except EndTransaction(commit=false) will be rejected.
+	// batches except EndTxn(commit=false) will be rejected.
 	txnError
 
-	// txnFinalized means that an EndTransaction(commit=true) has been executed
-	// successfully, or an EndTransaction(commit=false) was sent - regardless of
+	// txnFinalized means that an EndTxn(commit=true) has been executed
+	// successfully, or an EndTxn(commit=false) was sent - regardless of
 	// whether it executed successfully or not. Further batches except
-	// EndTransaction(commit=false) will be rejected; a second rollback is allowed
+	// EndTxn(commit=false) will be rejected; a second rollback is allowed
 	// in case the first one fails.
 	// TODO(andrei): we'd probably benefit from splitting this state into at least
 	// two - transaction definitely cleaned up, and transaction potentially
@@ -72,7 +72,7 @@ const (
 // from the root transaction coordinator, in the event that multiple
 // coordinators are active (i.e. in a distributed SQL flow).
 // - Accumulating intent spans.
-// - Attaching intent spans to EndTransaction requests, for intent cleanup.
+// - Attaching intent spans to EndTxn requests, for intent cleanup.
 // - Handles retriable errors by either bumping the transaction's epoch or, in
 // case of TransactionAbortedErrors, cleaning up the transaction (in this case,
 // the client.Txn is expected to create a new TxnCoordSender instance
@@ -84,14 +84,14 @@ const (
 // - they're stateless. For the others, once an intent write is sent by the
 // client, the TxnCoordSender considers the transactions completed in the
 // following situations:
-// - A batch containing an EndTransactions (commit or rollback) succeeds.
-// - A batch containing an EndTransaction(commit=false) succeeds or fails. Only
+// - A batch containing an EndTxns (commit or rollback) succeeds.
+// - A batch containing an EndTxn(commit=false) succeeds or fails. Only
 // more rollback attempts can follow a rollback attempt.
 // - A batch returns a TransactionAbortedError. As mentioned above, the client
 // is expected to create a new TxnCoordSender for the next transaction attempt.
 //
 // Note that "1PC" batches (i.e. batches containing both a Begin and an
-// EndTransaction) are no exception from the contract - if the batch fails, the
+// EndTxn) are no exception from the contract - if the batch fails, the
 // client is expected to send a rollback (or perform another transaction attempt
 // in case of retriable errors).
 type TxnCoordSender struct {
@@ -393,18 +393,18 @@ func generateTxnDeadlineExceededErr(
 }
 
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
-// cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
-// a transaction record, so there's no need to send any request to the server.
-// An EndTransactionRequest for a read-only txn is elided by the txnCommitter
-// interceptor. However, calling this and short-circuting even earlier is
-// even more efficient (and shows in benchmarks).
+// cheaper than, sending an EndTxnRequest. A read-only txn doesn't have a
+// transaction record, so there's no need to send any request to the server. An
+// EndTxnRequest for a read-only txn is elided by the txnCommitter interceptor.
+// However, calling this and short-circuting even earlier is even more efficient
+// (and shows in benchmarks).
 // TODO(nvanbenschoten): we could have this call into txnCommitter's
-// sendLockedWithElidedEndTransaction method, but we would want to confirm
+// sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
-	deadline := ba.Requests[0].GetEndTransaction().Deadline
+	deadline := ba.Requests[0].GetEndTxn().Deadline
 	if deadline != nil && !tc.mu.txn.WriteTimestamp.Less(*deadline) {
 		txn := tc.mu.txn.Clone()
 		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
@@ -438,7 +438,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnPipeliner.haveWrites() {
+	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.haveWrites() {
 		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
 	}
 
@@ -482,8 +482,8 @@ func (tc *TxnCoordSender) Send(
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
-	if req, ok := ba.GetArg(roachpb.EndTransaction); ok {
-		etReq := req.(*roachpb.EndTransactionRequest)
+	if req, ok := ba.GetArg(roachpb.EndTxn); ok {
+		etReq := req.(*roachpb.EndTxnRequest)
 		if etReq.Commit {
 			if pErr == nil {
 				tc.mu.txnState = txnFinalized
@@ -527,7 +527,7 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 
 	if tc.linearizable && sleepNS > 0 {
 		// TODO(andrei): perhaps we shouldn't sleep with the lock held.
-		log.VEventf(ctx, 2, "%v: waiting %s on EndTransaction for linearizability",
+		log.VEventf(ctx, 2, "%v: waiting %s on EndTxn for linearizability",
 			br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
 		time.Sleep(sleepNS)
 	}
@@ -542,7 +542,7 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if ba != nil && ba.IsSingleAbortTransactionRequest() {
+	if ba != nil && ba.IsSingleAbortTxnRequest() {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for

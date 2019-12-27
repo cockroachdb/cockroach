@@ -61,8 +61,8 @@ type LocalResult struct {
 	MaybeWatchForMerge bool
 
 	// Set when transaction record(s) are updated, after calls to
-	// EndTransaction or PushTxn. This is a pointer to allow the zero
-	// (and as an unwelcome side effect, all) values to be compared.
+	// EndTxn or PushTxn. This is a pointer to allow the zero (and
+	// as an unwelcome side effect, all) values to be compared.
 	UpdatedTxns *[]*roachpb.Transaction
 }
 
@@ -118,7 +118,7 @@ func (lResult *LocalResult) DetachIntents() []IntentsWithArg {
 // the local result. If alwaysOnly is true, the slice is filtered to
 // include only those which have specified returnAlways=true, meaning
 // the intents should be resolved regardless of whether the
-// EndTransaction command succeeded.
+// EndTxn command succeeded.
 func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 	if lResult == nil {
 		return nil

@@ -69,7 +69,7 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// retriable errors, so they're safe. And they're used concurrently by schema
 	// change code.
 	if !gs.allowConcurrentRequests && !ba.Txn.CommitTimestampFixed {
-		asyncRequest := ba.IsSingleAbortTransactionRequest() || ba.IsSingleHeartbeatTxnRequest()
+		asyncRequest := ba.IsSingleAbortTxnRequest() || ba.IsSingleHeartbeatTxnRequest()
 		if !asyncRequest {
 			if gs.requestInFlight {
 				return nil, roachpb.NewError(

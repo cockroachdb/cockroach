@@ -74,8 +74,8 @@ func (r *Replica) updateTimestampCache(
 		header := args.Header()
 		start, end := header.Key, header.EndKey
 		switch t := args.(type) {
-		case *roachpb.EndTransactionRequest:
-			// EndTransaction requests that finalize their transaction add the
+		case *roachpb.EndTxnRequest:
+			// EndTxn requests that finalize their transaction add the
 			// transaction key to the write timestamp cache as a tombstone to
 			// ensure replays and concurrent requests aren't able to recreate
 			// the transaction record.
@@ -94,7 +94,7 @@ func (r *Replica) updateTimestampCache(
 			// transaction's key to the write timestamp cache as a tombstone to
 			// ensure that replays and concurrent requests aren't able to
 			// recreate the transaction record. This parallels what we do in the
-			// EndTransaction request case.
+			// EndTxn request case.
 			//
 			// Insert the timestamp of the batch, which we asserted during
 			// command evaluation was equal to or greater than the transaction's
@@ -129,7 +129,7 @@ func (r *Replica) updateTimestampCache(
 				continue
 			case roachpb.COMMITTED:
 				// No need to update the timestamp cache. It was already
-				// updated by the corresponding EndTransaction request.
+				// updated by the corresponding EndTxn request.
 				continue
 			}
 			key := keys.TransactionKey(start, pushee.ID)
@@ -288,10 +288,9 @@ func (r *Replica) applyTimestampCache(
 			bumpedDueToMinReadTS = (!bumpedCurReq && bumpedDueToMinReadTS) || (bumpedCurReq && forwardedToMinReadTS)
 			bumped, bumpedCurReq = bumped || bumpedCurReq, false
 
-			// On more recent writes, forward the timestamp and set the
-			// write too old boolean for transactions. Note that currently
-			// only EndTransaction and DeleteRange requests update the
-			// write timestamp cache.
+			// On more recent writes, forward the timestamp and set the write
+			// too old boolean for transactions. Note that currently only EndTxn
+			// and DeleteRange requests update the write timestamp cache.
 			wTS, wTxnID := r.store.tsCache.GetMaxWrite(header.Key, header.EndKey)
 			nextWTS := wTS.Next()
 			if ba.Txn != nil {
@@ -473,10 +472,10 @@ func (r *Replica) CanCreateTxnRecord(
 	if !wTS.Less(txnMinTS) {
 		switch wTxnID {
 		case txnID:
-			// If we find our own transaction ID then an EndTransaction request
-			// sent by our coordinator has already been processed. We might be a
-			// replay, or we raced with an asynchronous abort. Either way, return
-			// an error.
+			// If we find our own transaction ID then an EndTxn request sent by
+			// our coordinator has already been processed. We might be a replay,
+			// or we raced with an asynchronous abort. Either way, return an
+			// error.
 			return false, minCommitTS, roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
 		case uuid.Nil:
 			// On lease transfers the timestamp cache is reset with the transfer

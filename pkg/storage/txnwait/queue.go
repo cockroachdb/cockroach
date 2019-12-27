@@ -294,9 +294,8 @@ func (q *Queue) Enqueue(txn *roachpb.Transaction) {
 	}
 }
 
-// UpdateTxn is invoked to update a transaction's status after a
-// successful PushTxn or EndTransaction command. It unblocks all
-// pending waiters.
+// UpdateTxn is invoked to update a transaction's status after a successful
+// PushTxn or EndTxn command. It unblocks all pending waiters.
 func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	txn.AssertInitialized(ctx)
 	q.mu.Lock()

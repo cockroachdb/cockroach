@@ -36,14 +36,13 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// TxnAutoGC controls whether Transaction entries are automatically gc'ed
-// upon EndTransaction if they only have local intents (which can be
-// resolved synchronously with EndTransaction). Certain tests become
-// simpler with this being turned off.
+// TxnAutoGC controls whether Transaction entries are automatically gc'ed upon
+// EndTxn if they only have local intents (which can be resolved synchronously
+// with EndTxn). Certain tests become simpler with this being turned off.
 var TxnAutoGC = true
 
 func init() {
-	RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, EndTransaction)
+	RegisterCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
 
 // declareKeysWriteTransaction is the shared portion of
@@ -59,10 +58,10 @@ func declareKeysWriteTransaction(
 	}
 }
 
-func declareKeysEndTransaction(
+func declareKeysEndTxn(
 	desc *roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	et := req.(*roachpb.EndTransactionRequest)
+	et := req.(*roachpb.EndTxnRequest)
 	declareKeysWriteTransaction(desc, header, req, spans)
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -164,22 +163,21 @@ func declareKeysEndTransaction(
 	}
 }
 
-// EndTransaction either commits or aborts (rolls back) an extant
-// transaction according to the args.Commit parameter. Rolling back
-// an already rolled-back txn is ok.
-func EndTransaction(
+// EndTxn either commits or aborts (rolls back) an extant transaction according
+// to the args.Commit parameter. Rolling back an already rolled-back txn is ok.
+func EndTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.EndTransactionRequest)
+	args := cArgs.Args.(*roachpb.EndTxnRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	reply := resp.(*roachpb.EndTransactionResponse)
+	reply := resp.(*roachpb.EndTxnResponse)
 
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
 
-	// If a 1PC txn was required and we're in EndTransaction, something went wrong.
+	// If a 1PC txn was required and we're in EndTxn, something went wrong.
 	if args.Require1PC {
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
@@ -269,7 +267,7 @@ func EndTransaction(
 
 	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
-		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
+		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
@@ -352,19 +350,19 @@ func EndTransaction(
 	// could have been written (the txn would already have been in
 	// state=ABORTED).
 	//
-	// Summary of transaction replay protection after EndTransaction: When a
+	// Summary of transaction replay protection after EndTxn: When a
 	// transactional write gets replayed over its own resolved intents, the
 	// write will succeed but only as an intent with a newer timestamp (with a
 	// WriteTooOldError). However, the replayed intent cannot be resolved by a
-	// subsequent replay of this EndTransaction call because the txn timestamp
-	// will be too old. Replays of requests which attempt to create a new txn
-	// record (HeartbeatTxn or EndTransaction) never succeed because
-	// EndTransaction inserts in the write timestamp cache in Replica's
-	// updateTimestampCache method, forcing the call to CanCreateTxnRecord to
-	// return false, resulting in a transaction retry error. If the replay
-	// didn't attempt to create a txn record, any push will immediately succeed
-	// as a missing txn record on push where CanCreateTxnRecord returns false
-	// succeeds. In both cases, the txn will be GC'd on the slow path.
+	// subsequent replay of this EndTxn call because the txn timestamp will be
+	// too old. Replays of requests which attempt to create a new txn record
+	// (HeartbeatTxn or EndTxn) never succeed because EndTxn inserts in the
+	// write timestamp cache in Replica's updateTimestampCache method, forcing
+	// the call to CanCreateTxnRecord to return false, resulting in a
+	// transaction retry error. If the replay didn't attempt to create a txn
+	// record, any push will immediately succeed as a missing txn record on push
+	// where CanCreateTxnRecord returns false succeeds. In both cases, the txn
+	// will be GC'd on the slow path.
 	//
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
@@ -377,18 +375,17 @@ func EndTransaction(
 	return pd, nil
 }
 
-// IsEndTransactionExceedingDeadline returns true if the transaction
-// exceeded its deadline.
-func IsEndTransactionExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTransactionRequest) bool {
+// IsEndTxnExceedingDeadline returns true if the transaction exceeded its
+// deadline.
+func IsEndTxnExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTxnRequest) bool {
 	return args.Deadline != nil && !t.Less(*args.Deadline)
 }
 
-// IsEndTransactionTriggeringRetryError returns true if the
-// EndTransactionRequest cannot be committed and needs to return a
-// TransactionRetryError. It also returns the reason and possibly an extra
-// message to be used for the error.
-func IsEndTransactionTriggeringRetryError(
-	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
+// IsEndTxnTriggeringRetryError returns true if the EndTxnRequest cannot be
+// committed and needs to return a TransactionRetryError. It also returns the
+// reason and possibly an extra message to be used for the error.
+func IsEndTxnTriggeringRetryError(
+	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
 ) (retry bool, reason roachpb.TransactionRetryReason, extraMsg string) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
@@ -414,7 +411,7 @@ func IsEndTransactionTriggeringRetryError(
 	}
 
 	// However, a transaction must obey its deadline, if set.
-	if !retry && IsEndTransactionExceedingDeadline(txn.WriteTimestamp, args) {
+	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args) {
 		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
 		extraMsg = fmt.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
@@ -432,7 +429,7 @@ func IsEndTransactionTriggeringRetryError(
 // timestamp. If either of those conditions are true, a client-side
 // retry is required.
 func CanForwardCommitTimestampWithoutRefresh(
-	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
+	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
 ) bool {
 	return !txn.CommitTimestampFixed && args.NoRefreshSpans
 }
@@ -452,7 +449,7 @@ func resolveLocalIntents(
 	desc *roachpb.RangeDescriptor,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	args *roachpb.EndTransactionRequest,
+	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
 ) ([]roachpb.Span, error) {
@@ -533,15 +530,15 @@ func resolveLocalIntents(
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status
-// (and possibly timestamp). It persists the record with the EndTransaction
-// request's declared in-flight writes along with all of the transaction's
-// (local and remote) intents.
+// (and possibly timestamp). It persists the record with the EndTxn request's
+// declared in-flight writes along with all of the transaction's (local and
+// remote) intents.
 func updateStagingTxn(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
-	args *roachpb.EndTransactionRequest,
+	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
 	txn.IntentSpans = args.IntentSpans
@@ -559,7 +556,7 @@ func updateFinalizedTxn(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
-	args *roachpb.EndTransactionRequest,
+	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Span,
 ) error {
@@ -581,7 +578,7 @@ func RunCommitTrigger(
 	rec EvalContext,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
-	args *roachpb.EndTransactionRequest,
+	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) (result.Result, error) {
 	ct := args.InternalCommitTrigger
@@ -699,8 +696,8 @@ func RunCommitTrigger(
 // and the meta range addressing information. (If we're splitting a meta2 range
 // we'll be updating the meta1 addressing, otherwise we'll be updating the
 // meta2 addressing). That transaction includes a special SplitTrigger flag on
-// the EndTransaction request. Like all transactions, the requests within the
-// transaction are replicated via Raft, including the EndTransaction request.
+// the EndTxn request. Like all transactions, the requests within the
+// transaction are replicated via Raft, including the EndTxn request.
 //
 // The second phase of split processing occurs when each replica for the range
 // encounters the SplitTrigger. Processing of the SplitTrigger happens below,

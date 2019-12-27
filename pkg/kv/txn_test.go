@@ -268,10 +268,10 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	}
 }
 
-// TestTxnTimestampRegression verifies that if a transaction's
-// timestamp is pushed forward by a concurrent read, it may still
-// commit. A bug in the EndTransaction implementation used to compare
-// the transaction's current timestamp instead of original timestamp.
+// TestTxnTimestampRegression verifies that if a transaction's timestamp is
+// pushed forward by a concurrent read, it may still commit. A bug in the EndTxn
+// implementation used to compare the transaction's current timestamp instead of
+// original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -501,9 +501,9 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	}
 	// We expect no restarts (so a count of one). The transaction continues
 	// despite the push and timestamp forwarding in order to lay down all
-	// intents in the first pass. On the first EndTransaction, the difference
-	// in timestamps would cause the serializable transaction to update spans,
-	// but only writes occurred during the transaction, so the commit succeeds.
+	// intents in the first pass. On the first EndTxn, the difference in
+	// timestamps would cause the serializable transaction to update spans, but
+	// only writes occurred during the transaction, so the commit succeeds.
 	const expCount = 1
 	if count != expCount {
 		t.Fatalf("expected %d restarts, but got %d", expCount, count)

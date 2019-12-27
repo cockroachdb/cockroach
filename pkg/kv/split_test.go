@@ -93,7 +93,7 @@ func startTestWriter(
 
 // TestRangeSplitMeta executes various splits (including at meta addressing)
 // and checks that all created intents are resolved. This includes both intents
-// which are resolved synchronously with EndTransaction and via RPC.
+// which are resolved synchronously with EndTxn and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)

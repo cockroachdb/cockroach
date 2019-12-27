@@ -19,10 +19,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CheckEndTransactionTrigger verifies that an EndTransactionRequest
-// that includes intents for the SystemDB keys sets the proper trigger.
-func CheckEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
-	req, ok := args.Req.(*roachpb.EndTransactionRequest)
+// CheckEndTxnTrigger verifies that an EndTxnRequest that includes intents for
+// the SystemDB keys sets the proper trigger.
+func CheckEndTxnTrigger(args storagebase.FilterArgs) *roachpb.Error {
+	req, ok := args.Req.(*roachpb.EndTxnRequest)
 	if !ok {
 		return nil
 	}
@@ -53,7 +53,7 @@ func CheckEndTransactionTrigger(args storagebase.FilterArgs) *roachpb.Error {
 	// For more information, see the related comment at the beginning of
 	// planner.makePlan().
 	if hasSystemKey && !modifiedSystemConfigSpan {
-		return roachpb.NewError(errors.Errorf("EndTransaction hasSystemKey=%t, but hasSystemConfigTrigger=%t",
+		return roachpb.NewError(errors.Errorf("EndTxn hasSystemKey=%t, but hasSystemConfigTrigger=%t",
 			hasSystemKey, modifiedSystemConfigSpan))
 	}
 

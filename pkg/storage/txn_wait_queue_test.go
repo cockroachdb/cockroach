@@ -324,12 +324,11 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 // writes a key K. Another transaction, TB, attempts to read K. It notices the
 // intent on K and sends a PushTxnRequest. The PushTxnRequest fails and returns
 // a TransactionPushError. Before the replica handles the TransactionPushError,
-// TA commits and the replica fully processes its EndTransactionRequest. Only
-// then does the replica notice the TransactionPushError and put TB's
-// PushTxnRequest into TA's wait queue. Updates to TA will never be sent via
-// Queue.UpdateTxn, because Queue.UpdateTxn was already called when the
-// EndTransactionRequest was processed, before TB's PushTxnRequest was in TA's
-// wait queue.
+// TA commits and the replica fully processes its EndTxnRequest. Only then does
+// the replica notice the TransactionPushError and put TB's PushTxnRequest into
+// TA's wait queue. Updates to TA will never be sent via Queue.UpdateTxn,
+// because Queue.UpdateTxn was already called when the EndTxnRequest was
+// processed, before TB's PushTxnRequest was in TA's wait queue.
 //
 // This sequence of events was previously mishandled when TA's transaction
 // record was not immediately cleaned up, e.g. because it had non-local intents.

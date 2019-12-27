@@ -1932,7 +1932,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
 
 	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
-		et, ok := args.Req.(*roachpb.EndTransactionRequest)
+		et, ok := args.Req.(*roachpb.EndTxnRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
 		}
@@ -3180,17 +3180,17 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 // TestSplitBlocksReadsToRHS tests that an ongoing range split does not
 // interrupt reads to the LHS of the split but does interrupt reads for the RHS
-// of the split. The test relies on the fact that EndTransaction(SplitTrigger)
-// declares read access to the LHS of the split but declares write access to the
-// RHS of the split.
+// of the split. The test relies on the fact that EndTxn(SplitTrigger) declares
+// read access to the LHS of the split but declares write access to the RHS of
+// the split.
 func TestSplitBlocksReadsToRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	keyLHS, keySplit, keyRHS := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 	splitBlocked := make(chan struct{})
 	propFilter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-		if req, ok := args.Req.GetArg(roachpb.EndTransaction); ok {
-			et := req.(*roachpb.EndTransactionRequest)
+		if req, ok := args.Req.GetArg(roachpb.EndTxn); ok {
+			et := req.(*roachpb.EndTxnRequest)
 			if tr := et.InternalCommitTrigger.GetSplitTrigger(); tr != nil {
 				if tr.RightDesc.StartKey.Equal(keySplit) {
 					// Signal that the split is blocked.

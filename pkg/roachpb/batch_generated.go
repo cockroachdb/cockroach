@@ -96,8 +96,8 @@ func (ru RequestUnion) GetInner() Request {
 		return t.RevertRange
 	case *RequestUnion_Scan:
 		return t.Scan
-	case *RequestUnion_EndTransaction:
-		return t.EndTransaction
+	case *RequestUnion_EndTxn:
+		return t.EndTxn
 	case *RequestUnion_AdminSplit:
 		return t.AdminSplit
 	case *RequestUnion_AdminUnsplit:
@@ -190,8 +190,8 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.RevertRange
 	case *ResponseUnion_Scan:
 		return t.Scan
-	case *ResponseUnion_EndTransaction:
-		return t.EndTransaction
+	case *ResponseUnion_EndTxn:
+		return t.EndTxn
 	case *ResponseUnion_AdminSplit:
 		return t.AdminSplit
 	case *ResponseUnion_AdminUnsplit:
@@ -352,8 +352,8 @@ func (ru *RequestUnion) SetInner(r Request) bool {
 		union = &RequestUnion_RevertRange{t}
 	case *ScanRequest:
 		union = &RequestUnion_Scan{t}
-	case *EndTransactionRequest:
-		union = &RequestUnion_EndTransaction{t}
+	case *EndTxnRequest:
+		union = &RequestUnion_EndTxn{t}
 	case *AdminSplitRequest:
 		union = &RequestUnion_AdminSplit{t}
 	case *AdminUnsplitRequest:
@@ -449,8 +449,8 @@ func (ru *ResponseUnion) SetInner(r Response) bool {
 		union = &ResponseUnion_RevertRange{t}
 	case *ScanResponse:
 		union = &ResponseUnion_Scan{t}
-	case *EndTransactionResponse:
-		union = &ResponseUnion_EndTransaction{t}
+	case *EndTxnResponse:
+		union = &ResponseUnion_EndTxn{t}
 	case *AdminSplitResponse:
 		union = &ResponseUnion_AdminSplit{t}
 	case *AdminUnsplitResponse:
@@ -548,7 +548,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[7]++
 		case *RequestUnion_Scan:
 			counts[8]++
-		case *RequestUnion_EndTransaction:
+		case *RequestUnion_EndTxn:
 			counts[9]++
 		case *RequestUnion_AdminSplit:
 			counts[10]++
@@ -738,9 +738,9 @@ type scanResponseAlloc struct {
 	union ResponseUnion_Scan
 	resp  ScanResponse
 }
-type endTransactionResponseAlloc struct {
-	union ResponseUnion_EndTransaction
-	resp  EndTransactionResponse
+type endTxnResponseAlloc struct {
+	union ResponseUnion_EndTxn
+	resp  EndTxnResponse
 }
 type adminSplitResponseAlloc struct {
 	union ResponseUnion_AdminSplit
@@ -889,7 +889,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf6 []clearRangeResponseAlloc
 	var buf7 []revertRangeResponseAlloc
 	var buf8 []scanResponseAlloc
-	var buf9 []endTransactionResponseAlloc
+	var buf9 []endTxnResponseAlloc
 	var buf10 []adminSplitResponseAlloc
 	var buf11 []adminUnsplitResponseAlloc
 	var buf12 []adminMergeResponseAlloc
@@ -989,11 +989,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf8[0].union.Scan = &buf8[0].resp
 			br.Responses[i].Value = &buf8[0].union
 			buf8 = buf8[1:]
-		case *RequestUnion_EndTransaction:
+		case *RequestUnion_EndTxn:
 			if buf9 == nil {
-				buf9 = make([]endTransactionResponseAlloc, counts[9])
+				buf9 = make([]endTxnResponseAlloc, counts[9])
 			}
-			buf9[0].union.EndTransaction = &buf9[0].resp
+			buf9[0].union.EndTxn = &buf9[0].resp
 			br.Responses[i].Value = &buf9[0].union
 			buf9 = buf9[1:]
 		case *RequestUnion_AdminSplit:

@@ -69,7 +69,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// will leave intents or requests that will commit the transaction.
 		// This enables ba.IsCompleteTransaction to work properly.
 		req := ru.GetInner()
-		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTransaction {
+		if roachpb.IsTransactionWrite(req) || req.Method() == roachpb.EndTxn {
 			s.seqGen++
 		}
 

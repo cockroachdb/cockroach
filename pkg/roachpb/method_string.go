@@ -18,7 +18,7 @@ func _() {
 	_ = x[RevertRange-7]
 	_ = x[Scan-8]
 	_ = x[ReverseScan-9]
-	_ = x[EndTransaction-10]
+	_ = x[EndTxn-10]
 	_ = x[AdminSplit-11]
 	_ = x[AdminUnsplit-12]
 	_ = x[AdminMerge-13]
@@ -53,9 +53,9 @@ func _() {
 	_ = x[RangeStats-42]
 }
 
-const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTransactionAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeSubsumeRangeStats"
+const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeRevertRangeScanReverseScanEndTxnAdminSplitAdminUnsplitAdminMergeAdminTransferLeaseAdminChangeReplicasAdminRelocateRangeHeartbeatTxnGCPushTxnRecoverTxnQueryTxnQueryIntentResolveIntentResolveIntentRangeMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRangeSubsumeRangeStats"
 
-var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 96, 106, 118, 128, 146, 165, 183, 195, 197, 204, 214, 222, 233, 246, 264, 269, 280, 292, 305, 314, 329, 345, 352, 362, 368, 374, 386, 396, 410, 417, 429, 436, 446}
+var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 67, 71, 82, 88, 98, 110, 120, 138, 157, 175, 187, 189, 196, 206, 214, 225, 238, 256, 261, 272, 284, 297, 306, 321, 337, 344, 354, 360, 366, 378, 388, 402, 409, 421, 428, 438}
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {

@@ -29,11 +29,11 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 )
 
 // txnCommitter is a txnInterceptor that concerns itself with committing and
-// rolling back transactions. It intercepts EndTransaction requests and
-// coordinates their execution. This is accomplished either by issuing them
-// directly with proper addressing if they are alone, eliding them if they are
-// not needed, or coordinating their execution in parallel with the rest of
-// their batch if they are part of a larger set of requests.
+// rolling back transactions. It intercepts EndTxn requests and coordinates
+// their execution. This is accomplished either by issuing them directly with
+// proper addressing if they are alone, eliding them if they are not needed, or
+// coordinating their execution in parallel with the rest of their batch if they
+// are part of a larger set of requests.
 //
 // The third operation listed, which we define as a "parallel commit", is the
 // most interesting. Marking a transaction record as committed in parallel with
@@ -75,8 +75,8 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 // whether the transaction successfully committed by satisfying the implicit
 // commit condition.
 //
-// If all requests in the batch succeeded (including the EndTransaction request)
-// then the implicit commit condition is satisfied. The interceptor returns a
+// If all requests in the batch succeeded (including the EndTxn request) then
+// the implicit commit condition is satisfied. The interceptor returns a
 // successful response up then stack and launches an async task to make the
 // commit explicit by moving the transaction record's status from STAGING to
 // COMMITTED.
@@ -120,33 +120,32 @@ type txnCommitter struct {
 func (tc *txnCommitter) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If the batch does not include an EndTransaction request, pass it through.
-	rArgs, hasET := ba.GetArg(roachpb.EndTransaction)
+	// If the batch does not include an EndTxn request, pass it through.
+	rArgs, hasET := ba.GetArg(roachpb.EndTxn)
 	if !hasET {
 		return tc.wrapped.SendLocked(ctx, ba)
 	}
-	et := rArgs.(*roachpb.EndTransactionRequest)
+	et := rArgs.(*roachpb.EndTxnRequest)
 
-	// Determine whether we can elide the EndTransaction entirely. We can do
-	// so if the transaction is read-only, which we determine based on whether
-	// the EndTransaction request contains any writes.
+	// Determine whether we can elide the EndTxn entirely. We can do so if the
+	// transaction is read-only, which we determine based on whether the EndTxn
+	// request contains any writes.
 	if len(et.IntentSpans) == 0 && len(et.InFlightWrites) == 0 {
-		return tc.sendLockedWithElidedEndTransaction(ctx, ba, et)
+		return tc.sendLockedWithElidedEndTxn(ctx, ba, et)
 	}
 
 	// Assign the transaction's key to the Request's header if it isn't already
-	// set. This is the only place where EndTransactionRequest.Key is assigned,
-	// but we could be dealing with a re-issued batch after a refresh. Remember,
-	// the committer is below the span refresh on the interceptor stack.
+	// set. This is the only place where EndTxnRequest.Key is assigned, but we
+	// could be dealing with a re-issued batch after a refresh. Remember, the
+	// committer is below the span refresh on the interceptor stack.
 	if et.Key == nil {
 		et.Key = ba.Txn.Key
 	}
 
 	// Determine whether the commit can be run in parallel with the rest of the
 	// writes in the batch. If not, move the in-flight writes currently attached
-	// to the EndTransaction request to the IntentSpans and clear the in-flight
-	// write set; no writes will be in-flight concurrently with the EndTransaction
-	// request.
+	// to the EndTxn request to the IntentSpans and clear the in-flight write
+	// set; no writes will be in-flight concurrently with the EndTxn request.
 	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ctx, ba, et) {
 		// NB: when parallel commits is disabled, this is the best place to
 		// detect whether the batch has only distinct spans. We can set this
@@ -159,7 +158,7 @@ func (tc *txnCommitter) SendLocked(
 		et.InFlightWrites = nil
 	}
 
-	// If the EndTransaction request is a rollback, pass it through.
+	// If the EndTxn request is a rollback, pass it through.
 	if !et.Commit {
 		return tc.wrapped.SendLocked(ctx, ba)
 	}
@@ -168,12 +167,12 @@ func (tc *txnCommitter) SendLocked(
 	// sending then re-locks.
 	br, pErr := tc.wrapped.SendLocked(ctx, ba)
 	if pErr != nil {
-		// If the batch resulted in an error but the EndTransaction request
-		// succeeded, staging the transaction record in the process, downgrade
-		// the status back to PENDING. Even though the transaction record may
-		// have a status of STAGING, we know that the transaction failed to
-		// implicitly commit, so interceptors above the txnCommitter in the
-		// stack don't need to be made aware that the record is staging.
+		// If the batch resulted in an error but the EndTxn request succeeded,
+		// staging the transaction record in the process, downgrade the status
+		// back to PENDING. Even though the transaction record may have a status
+		// of STAGING, we know that the transaction failed to implicitly commit,
+		// so interceptors above the txnCommitter in the stack don't need to be
+		// made aware that the record is staging.
 		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
 			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
 		}
@@ -186,13 +185,13 @@ func (tc *txnCommitter) SendLocked(
 		// Continue with STAGING-specific validation and cleanup.
 	case roachpb.COMMITTED:
 		// The transaction is explicitly committed. This is possible if all
-		// in-flight writes were sent to the same range as the EndTransaction
-		// request, in a single batch. In this case, a range can determine that
-		// all in-flight writes will succeed with the EndTransaction and can
-		// decide to skip the STAGING state.
+		// in-flight writes were sent to the same range as the EndTxn request,
+		// in a single batch. In this case, a range can determine that all
+		// in-flight writes will succeed with the EndTxn and can decide to skip
+		// the STAGING state.
 		//
-		// This is also possible if we never attached any in-flight writes to the
-		// EndTransaction request, either because canCommitInParallelWithWrites
+		// This is also possible if we never attached any in-flight writes to
+		// the EndTxn request, either because canCommitInParallelWithWrites
 		// returned false or because there were no unproven in-flight writes
 		// (see txnPipeliner) and there were no writes in the batch request.
 		return br, nil
@@ -201,12 +200,12 @@ func (tc *txnCommitter) SendLocked(
 	}
 
 	// Determine whether the transaction needs to either retry or refresh. When
-	// the EndTransaction request evaluated while STAGING the transaction
-	// record, it performed this check. However, the transaction proto may have
-	// changed due to writes evaluated concurrently with the EndTransaction even
-	// if none of those writes returned an error. Remember that the transaction
-	// proto we see here could be a combination of protos from responses, all
-	// merged by DistSender.
+	// the EndTxn request evaluated while STAGING the transaction record, it
+	// performed this check. However, the transaction proto may have changed due
+	// to writes evaluated concurrently with the EndTxn even if none of those
+	// writes returned an error. Remember that the transaction proto we see here
+	// could be a combination of protos from responses, all merged by
+	// DistSender.
 	if pErr := needTxnRetryAfterStaging(br); pErr != nil {
 		return nil, pErr
 	}
@@ -227,19 +226,19 @@ func (tc *txnCommitter) SendLocked(
 	return br, nil
 }
 
-// sendLockedWithElidedEndTransaction sends the provided batch without its
-// EndTransaction request. However, if the EndTransaction request is alone in
-// the batch, nothing will be sent at all. Either way, the result of the
-// EndTransaction will be synthesized and returned in the batch response.
+// sendLockedWithElidedEndTxn sends the provided batch without its EndTxn
+// request. However, if the EndTxn request is alone in the batch, nothing will
+// be sent at all. Either way, the result of the EndTxn will be synthesized and
+// returned in the batch response.
 //
 // The method is used for read-only transactions, which never need to write a
 // transaction record.
-func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
+func (tc *txnCommitter) sendLockedWithElidedEndTxn(
+	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Send the batch without its final request, which we know to be the
-	// EndTransaction request that we're eliding. If this would result in us
-	// sending an empty batch, mock out a reply instead of sending anything.
+	// Send the batch without its final request, which we know to be the EndTxn
+	// request that we're eliding. If this would result in us sending an empty
+	// batch, mock out a reply instead of sending anything.
 	ba.Requests = ba.Requests[:len(ba.Requests)-1]
 	if len(ba.Requests) > 0 {
 		br, pErr = tc.wrapped.SendLocked(ctx, ba)
@@ -260,25 +259,24 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 	}
 
 	// Update the response's transaction proto. This normally happens on the
-	// server and is sent back in response headers, but in this case the
-	// EndTransaction request was optimized away. The caller may still inspect
-	// the transaction struct, so we manually update it here to emulate a true
-	// transaction.
+	// server and is sent back in response headers, but in this case the EndTxn
+	// request was optimized away. The caller may still inspect the transaction
+	// struct, so we manually update it here to emulate a true transaction.
 	status := roachpb.ABORTED
 	if et.Commit {
 		status = roachpb.COMMITTED
 	}
 	br.Txn = cloneWithStatus(br.Txn, status)
 
-	// Synthesize and append an EndTransaction response.
-	br.Add(&roachpb.EndTransactionResponse{})
+	// Synthesize and append an EndTxn response.
+	br.Add(&roachpb.EndTxnResponse{})
 	return br, nil
 }
 
 // canCommitInParallelWithWrites determines whether the batch can issue its
-// committing EndTransaction in parallel with other in-flight writes.
+// committing EndTxn in parallel with other in-flight writes.
 func (tc *txnCommitter) canCommitInParallelWithWrites(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
+	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
 ) bool {
 	if !cluster.Version.IsActive(ctx, tc.st, cluster.VersionParallelCommits) {
 		return false
@@ -332,12 +330,12 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 		return roachpb.NewErrorf("no responses in BatchResponse: %v", br)
 	}
 	lastResp := br.Responses[len(br.Responses)-1].GetInner()
-	etResp, ok := lastResp.(*roachpb.EndTransactionResponse)
+	etResp, ok := lastResp.(*roachpb.EndTxnResponse)
 	if !ok {
 		return roachpb.NewErrorf("unexpected response in BatchResponse: %v", lastResp)
 	}
 	if etResp.StagingTimestamp.IsEmpty() {
-		return roachpb.NewErrorf("empty StagingTimestamp in EndTransactionResponse: %v", etResp)
+		return roachpb.NewErrorf("empty StagingTimestamp in EndTxnResponse: %v", etResp)
 	}
 	if etResp.StagingTimestamp.Less(br.Txn.WriteTimestamp) {
 		// If the timestamp that the transaction record was staged at
@@ -365,7 +363,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 // makeTxnCommitExplicitAsync launches an async task that attempts to move the
 // transaction from implicitly committed (STAGING status with all intents
 // written) to explicitly committed (COMMITTED status). It does so by sending a
-// second EndTransactionRequest, this time with no InFlightWrites attached.
+// second EndTxnRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 	ctx context.Context, txn *roachpb.Transaction, intentSpans []roachpb.Span, noRefreshSpans bool,
 ) {
@@ -398,10 +396,10 @@ func makeTxnCommitExplicitLocked(
 	// Clone the txn to prevent data races.
 	txn = txn.Clone()
 
-	// Construct a new batch with just an EndTransaction request.
+	// Construct a new batch with just an EndTxn request.
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn}
-	et := roachpb.EndTransactionRequest{Commit: true}
+	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.IntentSpans = intentSpans
 	et.NoRefreshSpans = noRefreshSpans

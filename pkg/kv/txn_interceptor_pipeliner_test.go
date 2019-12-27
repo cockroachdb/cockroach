@@ -88,7 +88,7 @@ func makeTxnProto() roachpb.Transaction {
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
 // transactions are not pipelined by the txnPipeliner and that the interceptor
-// attaches the writes as intent spans to the EndTransaction request.
+// attaches the writes as intent spans to the EndTxn request.
 func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -102,15 +102,15 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 	putArgs.Sequence = 1
 	ba.Add(&putArgs)
-	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
+	ba.Add(&roachpb.EndTxnRequest{Commit: true})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
 		require.Len(t, etReq.IntentSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
@@ -223,14 +223,14 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	require.Equal(t, delArgs.Key, wMax.Key)
 	require.Equal(t, delArgs.Sequence, wMax.Sequence)
 
-	// Send a final write, along with an EndTransaction request. Should attempt
-	// to prove all in-flight writes. Should NOT use async consensus.
+	// Send a final write, along with an EndTxn request. Should attempt to prove
+	// all in-flight writes. Should NOT use async consensus.
 	keyD := roachpb.Key("d")
 	ba.Requests = nil
 	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}}
 	putArgs2.Sequence = 6
 	ba.Add(&putArgs2)
-	etArgs := roachpb.EndTransactionRequest{Commit: true}
+	etArgs := roachpb.EndTxnRequest{Commit: true}
 	etArgs.Sequence = 7
 	ba.Add(&etArgs)
 
@@ -241,7 +241,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[3].GetInner())
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[4].GetInner())
 
 		qiReq1 := ba.Requests[1].GetInner().(*roachpb.QueryIntentRequest)
 		qiReq2 := ba.Requests[2].GetInner().(*roachpb.QueryIntentRequest)
@@ -253,7 +253,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
 
-		etReq := ba.Requests[4].GetInner().(*roachpb.EndTransactionRequest)
+		etReq := ba.Requests[4].GetInner().(*roachpb.EndTxnRequest)
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
 		expInFlight := []roachpb.SequencedWrite{
 			{Key: keyA, Sequence: 2},
@@ -625,9 +625,9 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 }
 
 // TestTxnPipelinerTransactionAbort tests that a txnPipeliner allows an aborting
-// EndTransactionRequest to proceed without attempting to prove all in-flight
-// writes. It also tests that the interceptor attaches intent spans to these
-// EndTransactionRequests.
+// EndTxnRequest to proceed without attempting to prove all in-flight writes. It
+// also tests that the interceptor attaches intent spans to these
+// EndTxnRequests.
 func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -657,23 +657,23 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
-	// Send an EndTransaction request with commit=false. Should NOT attempt
-	// to prove all in-flight writes because its attempting to abort the
-	// txn anyway. Should NOT use async consensus.
+	// Send an EndTxn request with commit=false. Should NOT attempt to prove all
+	// in-flight writes because its attempting to abort the txn anyway. Should
+	// NOT use async consensus.
 	//
-	// We'll unrealistically return a PENDING transaction, which won't allow
-	// the txnPipeliner to clean up.
+	// We'll unrealistically return a PENDING transaction, which won't allow the
+	// txnPipeliner to clean up.
 	ba.Requests = nil
-	etArgs := roachpb.EndTransactionRequest{Commit: false}
+	etArgs := roachpb.EndTxnRequest{Commit: false}
 	etArgs.Sequence = 2
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 		require.Len(t, etReq.IntentSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
@@ -688,20 +688,20 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len()) // nothing proven
 
-	// Send EndTransaction request with commit=false again. Same deal. This
-	// time, return ABORTED transaction. This will allow the txnPipeliner to
-	// remove all in-flight writes because they are now uncommittable.
+	// Send EndTxn request with commit=false again. Same deal. This time, return
+	// ABORTED transaction. This will allow the txnPipeliner to remove all
+	// in-flight writes because they are now uncommittable.
 	ba.Requests = nil
-	etArgs = roachpb.EndTransactionRequest{Commit: false}
+	etArgs = roachpb.EndTxnRequest{Commit: false}
 	etArgs.Sequence = 2
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 		require.Len(t, etReq.IntentSpans, 0)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
@@ -888,7 +888,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	// Commit the txn. Again with pipeling disabled. Again, in-flight writes
 	// should be proven first.
 	ba.Requests = nil
-	etArgs := roachpb.EndTransactionRequest{Commit: true}
+	etArgs := roachpb.EndTxnRequest{Commit: true}
 	etArgs.Sequence = 5
 	ba.Add(&etArgs)
 
@@ -896,13 +896,13 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyC, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
 
-		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
 		require.Equal(t, []roachpb.SequencedWrite{{Key: keyC, Sequence: 3}}, etReq.InFlightWrites)
 

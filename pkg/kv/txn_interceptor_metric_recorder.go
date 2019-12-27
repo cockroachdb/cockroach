@@ -49,7 +49,7 @@ func (m *txnMetricRecorder) SendLocked(
 	}
 
 	if length := len(br.Responses); length > 0 {
-		if et := br.Responses[length-1].GetEndTransaction(); et != nil {
+		if et := br.Responses[length-1].GetEndTxn(); et != nil {
 			// Check for 1-phase commit.
 			m.onePCCommit = et.OnePhaseCommit
 

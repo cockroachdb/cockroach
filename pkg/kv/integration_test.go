@@ -54,7 +54,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 
 	// The txn id whose commit we're going to reject. A uuid.UUID.
 	var txnID atomic.Value
-	// The EndTransaction proposal that we want to reject. A string.
+	// The EndTxn proposal that we want to reject. A string.
 	var commitCmdID atomic.Value
 	readerBlocked := make(chan struct{}, 2)
 	// txnUpdate is signaled once the txn wait queue is updated for our
@@ -73,11 +73,11 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					// We'll recognize the attempt to commit our transaction and store the
 					// respective command id.
 					ba := args.Req
-					etReq, ok := ba.GetArg(roachpb.EndTransaction)
+					etReq, ok := ba.GetArg(roachpb.EndTxn)
 					if !ok {
 						return nil
 					}
-					if !etReq.(*roachpb.EndTransactionRequest).Commit {
+					if !etReq.(*roachpb.EndTxnRequest).Commit {
 						return nil
 					}
 					v := txnID.Load()
