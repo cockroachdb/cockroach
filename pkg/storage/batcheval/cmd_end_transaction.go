@@ -163,10 +163,12 @@ func EndTransaction(
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
-
-	// If a 1PC txn was required and we're in EndTransaction, something went wrong.
 	if args.Require1PC {
+		// If a 1PC txn was required and we're in EndTransaction, something went wrong.
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+	}
+	if args.Commit && args.Poison {
+		return result.Result{}, errors.Errorf("cannot poison during a committing EndTxn request")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
