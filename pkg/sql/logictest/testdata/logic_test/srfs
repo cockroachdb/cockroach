@@ -204,7 +204,7 @@ INSERT INTO t VALUES ('cat')
 statement ok
 INSERT INTO u VALUES ('bird')
 
-query TTII colnames
+query TTII colnames,rowsort
 SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
 a    b     generate_series generate_series
