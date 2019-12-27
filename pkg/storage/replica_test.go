@@ -6689,7 +6689,7 @@ func TestIntentIntersect(t *testing.T) {
 		{intent: iLc, from: "a", to: "z", exp: []string{kl1, kl2}},
 	} {
 		var all []string
-		in, out := storagebase.IntersectSpan(tc.intent, roachpb.RangeDescriptor{
+		in, out := storagebase.IntersectSpan(tc.intent, &roachpb.RangeDescriptor{
 			StartKey: roachpb.RKey(tc.from),
 			EndKey:   roachpb.RKey(tc.to),
 		})

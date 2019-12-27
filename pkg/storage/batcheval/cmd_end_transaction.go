@@ -483,7 +483,7 @@ func resolveLocalIntents(
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
-				if !storagebase.ContainsKey(*desc, span.Key) {
+				if !storagebase.ContainsKey(desc, span.Key) {
 					externalIntents = append(externalIntents, span)
 					return nil
 				}
@@ -494,7 +494,7 @@ func resolveLocalIntents(
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
-			inSpan, outSpans := storagebase.IntersectSpan(span, *desc)
+			inSpan, outSpans := storagebase.IntersectSpan(span, desc)
 			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
