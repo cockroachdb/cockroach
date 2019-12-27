@@ -260,12 +260,21 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	rel.NotNullCols = inputProps.NotNullCols.Copy()
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
-	// Also add any column that projects a constant value, since the optimizer
-	// sometimes constructs these in order to guarantee a not-null column.
 	for i := range prj.Projections {
 		item := &prj.Projections[i]
+		// Also add any column that projects a constant value, since the optimizer
+		// sometimes constructs these in order to guarantee a not-null column.
 		if opt.IsConstValueOp(item.Element) {
 			if ExtractConstDatum(item.Element) != tree.DNull {
+				rel.NotNullCols.Add(item.Col)
+			}
+		}
+		// Also add any column that is a direct reference to a non-null column.  The
+		// optimizer sometimes constructs these in order to generate different
+		// column IDs; they can also show up after constant-folding e.g. an ORDER BY
+		// expression.
+		if variable, ok := item.Element.(*VariableExpr); ok {
+			if inputProps.NotNullCols.Contains(variable.Col) {
 				rel.NotNullCols.Add(item.Col)
 			}
 		}
@@ -284,6 +293,13 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
 	for i := range prj.Projections {
 		item := &prj.Projections[i]
+		if variable, ok := item.Element.(*VariableExpr); ok {
+			// Handle any column that is a direct reference to another column. The
+			// optimizer sometimes constructs these in order to generate different
+			// column IDs; they can also show up after constant-folding e.g. an ORDER
+			// BY expression.
+			rel.FuncDeps.AddEquivalency(variable.Col, item.Col)
+		}
 		if !item.scalar.CanHaveSideEffects {
 			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
 
