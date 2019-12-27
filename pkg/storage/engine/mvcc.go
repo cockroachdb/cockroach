@@ -930,7 +930,7 @@ func mvccGetInternal(
 	}
 	var ignoredIntent *roachpb.Intent
 	metaTimestamp := hlc.Timestamp(meta.Timestamp)
-	if !consistent && meta.Txn != nil && !timestamp.Less(metaTimestamp) {
+	if !consistent && meta.Txn != nil && metaTimestamp.LessEq(timestamp) {
 		// If we're doing inconsistent reads and there's an intent, we
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
@@ -955,7 +955,7 @@ func mvccGetInternal(
 		if checkUncertainty {
 			maxVisibleTimestamp = txn.MaxTimestamp
 		}
-		if !maxVisibleTimestamp.Less(metaTimestamp) {
+		if metaTimestamp.LessEq(maxVisibleTimestamp) {
 			return nil, nil, safeValue, &roachpb.WriteIntentError{
 				Intents: []roachpb.Intent{{
 					Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn,
@@ -966,7 +966,7 @@ func mvccGetInternal(
 
 	seekKey := metaKey
 	checkValueTimestamp := false
-	if !timestamp.Less(metaTimestamp) || ownIntent {
+	if metaTimestamp.LessEq(timestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
@@ -999,7 +999,7 @@ func mvccGetInternal(
 		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
 		// occurs, leading to a clock uncertainty error if a version exists in
 		// that time interval.
-		if !txn.MaxTimestamp.Less(metaTimestamp) {
+		if metaTimestamp.LessEq(txn.MaxTimestamp) {
 			// Second case: Our read timestamp is behind the latest write, but the
 			// latest write could possibly have happened before our read in
 			// absolute time if the writer had a fast clock.
@@ -1593,7 +1593,7 @@ func mvccPutInternal(
 			} else {
 				buf.newMeta.IntentHistory = nil
 			}
-		} else if !metaTimestamp.Less(readTimestamp) {
+		} else if readTimestamp.LessEq(metaTimestamp) {
 			// This is the case where we're trying to write under a committed
 			// value. Obviously we can't do that, but we can increment our
 			// timestamp to one logical tick past the existing value and go on
@@ -2137,7 +2137,7 @@ func MVCCClearTimeRange(
 				return nil, err
 			}
 			ts := hlc.Timestamp(meta.Timestamp)
-			if meta.Txn != nil && startTime.Less(ts) && !endTime.Less(ts) {
+			if meta.Txn != nil && startTime.Less(ts) && ts.LessEq(endTime) {
 				err := &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{{Span: roachpb.Span{Key: append([]byte{}, k.Key...)},
 						Status: roachpb.PENDING, Txn: *meta.Txn,
@@ -2146,7 +2146,7 @@ func MVCCClearTimeRange(
 			}
 		}
 
-		if startTime.Less(k.Timestamp) && !endTime.Less(k.Timestamp) {
+		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
 			if batchSize >= maxBatchSize {
 				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
 				break
@@ -2675,7 +2675,7 @@ func mvccResolveWriteIntent(
 	// replays of intent resolution make this configuration a possibility. We
 	// treat such intents as uncommitted.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := !intent.Txn.WriteTimestamp.Less(hlc.Timestamp(meta.Timestamp))
+	timestampsValid := hlc.Timestamp(meta.Timestamp).LessEq(intent.Txn.WriteTimestamp)
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow
@@ -3009,7 +3009,7 @@ func MVCCGarbageCollect(
 		// being removed. We had this faulty functionality at some point; it
 		// should no longer be necessary since the higher levels already make
 		// sure each individual GCRequest does bounded work.
-		if !gcKey.Timestamp.Less(hlc.Timestamp(meta.Timestamp)) {
+		if hlc.Timestamp(meta.Timestamp).LessEq(gcKey.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra
@@ -3067,7 +3067,7 @@ func MVCCGarbageCollect(
 			if !unsafeIterKey.IsValue() {
 				break
 			}
-			if !gcKey.Timestamp.Less(unsafeIterKey.Timestamp) {
+			if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
 				if ms != nil {
 					// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
 					// when it's a deletion.
@@ -3535,7 +3535,7 @@ func checkForKeyCollisionsGo(
 			//
 			// If the ts of the sst key is less than that of the tombstone it is
 			// changing existing data, and we treat this as a collision.
-			if len(existingValue) == 0 && !sstKey.Timestamp.Less(existingKey.Timestamp) {
+			if len(existingValue) == 0 && existingKey.Timestamp.LessEq(sstKey.Timestamp) {
 				existingIter.NextKey()
 				ok, extErr = existingIter.Valid()
 				ok2, sstErr = sstIter.Valid()

@@ -2200,7 +2200,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
-	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); !a.Less(lt) {
+	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
 	}
 
@@ -2228,7 +2228,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); !a.Less(lt) {
+	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
 }

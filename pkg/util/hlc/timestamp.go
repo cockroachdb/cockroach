@@ -29,9 +29,14 @@ var (
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
 )
 
-// Less compares two timestamps.
+// Less returns whether the receiver is less than the parameter.
 func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
+}
+
+// LessEq returns whether the receiver is less than or equal to the parameter.
+func (t Timestamp) LessEq(s Timestamp) bool {
+	return t.Less(s) || t == s
 }
 
 // String implements the fmt.Formatter interface.
@@ -71,7 +76,7 @@ func (t Timestamp) AsOfSystemTime() string {
 	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
 }
 
-// Less compares two timestamps.
+// Less returns whether the receiver is less than the parameter.
 func (t LegacyTimestamp) Less(s LegacyTimestamp) bool {
 	return Timestamp(t).Less(Timestamp(s))
 }

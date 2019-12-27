@@ -60,7 +60,7 @@ func evalExport(
 	// note the supported time bounds for RESTORE AS OF SYSTEM TIME.
 	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
 	if !args.StartTime.IsEmpty() {
-		if !gcThreshold.Less(args.StartTime) {
+		if args.StartTime.LessEq(gcThreshold) {
 			return result.Result{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
 		}
 	} else if args.MVCCFilter == roachpb.MVCCFilter_All {

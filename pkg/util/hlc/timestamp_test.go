@@ -40,6 +40,22 @@ func TestLess(t *testing.T) {
 	}
 }
 
+func TestLessEq(t *testing.T) {
+	a := Timestamp{}
+	b := Timestamp{}
+	if !a.LessEq(b) || !b.LessEq(a) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+	b = makeTS(1, 0)
+	if !a.LessEq(b) || b.LessEq(a) {
+		t.Errorf("expected %+v < %+v", a, b)
+	}
+	a = makeTS(1, 1)
+	if !b.LessEq(a) || a.LessEq(b) {
+		t.Errorf("expected %+v < %+v", b, a)
+	}
+}
+
 func TestTimestampNext(t *testing.T) {
 	testCases := []struct {
 		ts, expNext Timestamp

@@ -63,7 +63,7 @@ func Refresh(
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {
-		if ts := val.Timestamp; !ts.Less(refreshFrom) {
+		if ts := val.Timestamp; refreshFrom.LessEq(ts) {
 			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
 		}
 	}

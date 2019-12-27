@@ -61,7 +61,7 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) (int, hlc.Tim
 	}
 
 	// find the first expired key index using binary search
-	i := sort.Search(len(keys), func(i int) bool { return !gc.Threshold.Less(keys[i].Timestamp) })
+	i := sort.Search(len(keys), func(i int) bool { return keys[i].Timestamp.LessEq(gc.Threshold) })
 
 	if i == len(keys) {
 		return -1, hlc.Timestamp{}

@@ -520,7 +520,7 @@ func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
-	if !edge.Less(ce.ts) {
+	if ce.ts.LessEq(edge) {
 		tc.lowWater = ce.ts
 		return true
 	}

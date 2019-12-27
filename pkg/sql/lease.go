@@ -101,7 +101,7 @@ func (s *tableVersionState) stringLocked() string {
 // hasExpired checks if the table is too old to be used (by a txn operating)
 // at the given timestamp
 func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp) bool {
-	return !timestamp.Less(s.expiration)
+	return s.expiration.LessEq(timestamp)
 }
 
 // hasValidExpiration checks that this table have a larger expiration than
@@ -181,7 +181,7 @@ func (s LeaseStore) acquire(
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.ReadTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
-		if !minExpiration.Less(expiration) {
+		if expiration.LessEq(minExpiration) {
 			// In the rare circumstances where expiration <= minExpiration
 			// use an expiration based on the minExpiration to guarantee
 			// a monotonically increasing expiration.
@@ -558,7 +558,7 @@ func (s LeaseStore) getForExpiration(
 		if tableDesc == nil {
 			return sqlbase.ErrDescriptorNotFound
 		}
-		if !tableDesc.ModificationTime.Less(prevTimestamp) {
+		if prevTimestamp.LessEq(tableDesc.ModificationTime) {
 			return errors.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
 		}
 		if err := tableDesc.MaybeFillInDescriptor(ctx, txn); err != nil {
@@ -757,7 +757,7 @@ func (t *tableState) findForTimestamp(
 	// Walk back the versions to find one that is valid for the timestamp.
 	for i := len(t.mu.active.data) - 1; i >= 0; i-- {
 		// Check to see if the ModificationTime is valid.
-		if table := t.mu.active.data[i]; !timestamp.Less(table.ModificationTime) {
+		if table := t.mu.active.data[i]; table.ModificationTime.LessEq(timestamp) {
 			latest := i+1 == len(t.mu.active.data)
 			if !table.hasExpired(timestamp) {
 				// Existing valid table version.
@@ -799,7 +799,7 @@ func (m *LeaseManager) readOlderVersionForTimestamp(
 		// Walk back the versions to find one that is valid for the timestamp.
 		for i := len(t.mu.active.data) - 1; i >= 0; i-- {
 			// Check to see if the ModificationTime is valid.
-			if table := t.mu.active.data[i]; !timestamp.Less(table.ModificationTime) {
+			if table := t.mu.active.data[i]; table.ModificationTime.LessEq(timestamp) {
 				if timestamp.Less(table.expiration) {
 					// Existing valid table version.
 					return table.expiration, true
@@ -836,7 +836,7 @@ func (m *LeaseManager) readOlderVersionForTimestamp(
 			return nil, err
 		}
 		versions = append(versions, table)
-		if !timestamp.Less(table.ModificationTime) {
+		if table.ModificationTime.LessEq(timestamp) {
 			break
 		}
 		// Set the expiration time for the next table.
@@ -1472,7 +1472,7 @@ func (m *LeaseManager) AcquireByName(
 	// Check if we have cached an ID for this name.
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
-		if !timestamp.Less(tableVersion.ModificationTime) {
+		if tableVersion.ModificationTime.LessEq(timestamp) {
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(tableVersion.expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {

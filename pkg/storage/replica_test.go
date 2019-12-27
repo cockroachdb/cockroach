@@ -886,7 +886,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	minLeaseProposedTS := tc.repl.mu.minLeaseProposedTS
 	leaseStartTS := tc.repl.mu.state.Lease.Start
 	tc.repl.mu.Unlock()
-	if !leaseStartTS.Less(minLeaseProposedTS) {
+	if minLeaseProposedTS.LessEq(leaseStartTS) {
 		t.Fatalf("expected minLeaseProposedTS > lease start. minLeaseProposedTS: %s, "+
 			"leas start: %s", minLeaseProposedTS, leaseStartTS)
 	}
@@ -2134,7 +2134,7 @@ func TestAcquireLease(t *testing.T) {
 				if *lease.DeprecatedStartStasis != *lease.Expiration {
 					t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
 				}
-				if !ts.Less(*lease.Expiration) {
+				if lease.Expiration.LessEq(ts) {
 					t.Errorf("%s already expired: %+v", ts, lease)
 				}
 
@@ -2147,7 +2147,7 @@ func TestAcquireLease(t *testing.T) {
 				// extension, we need to wait for it to go through.
 				testutils.SucceedsSoon(t, func() error {
 					newLease, _ := tc.repl.GetLease()
-					if !lease.Expiration.Less(*newLease.Expiration) {
+					if newLease.Expiration.LessEq(*lease.Expiration) {
 						return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
 					}
 					return nil
@@ -8421,7 +8421,7 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if !txn.WriteTimestamp.Less(resp.Timestamp) {
+		if resp.Timestamp.LessEq(txn.WriteTimestamp) {
 			t.Fatalf("expected txn ts %s < scan TS %s", txn.WriteTimestamp, resp.Timestamp)
 		}
 		return resp.Timestamp

@@ -942,7 +942,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
 				if !requestPending && r.requiresExpiringLeaseRLocked() {
 					renewal := status.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-					if !timestamp.Less(renewal) {
+					if renewal.LessEq(timestamp) {
 						if log.V(2) {
 							log.Infof(ctx, "extending lease %s at %s", status.Lease, timestamp)
 						}

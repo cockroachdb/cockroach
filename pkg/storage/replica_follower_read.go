@@ -63,7 +63,7 @@ func (r *Replica) canServeFollowerRead(
 			ts.Forward(ba.Txn.MaxTimestamp)
 		}
 
-		canServeFollowerRead = !r.maxClosed(ctx).Less(ts)
+		canServeFollowerRead = ts.LessEq(r.maxClosed(ctx))
 		if !canServeFollowerRead {
 			// We can't actually serve the read based on the closed timestamp.
 			// Signal the clients that we want an update so that future requests can succeed.
