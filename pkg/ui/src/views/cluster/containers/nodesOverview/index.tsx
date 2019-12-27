@@ -444,7 +444,7 @@ const decommissionedNodesTableData = createSelector(
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
-    let data = liveNodesTableData(state);
+    const data = liveNodesTableData(state);
     return {
       sortSetting: liveNodesSortSetting.selector(state),
       dataSource: data,
