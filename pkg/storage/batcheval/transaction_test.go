@@ -141,7 +141,8 @@ func TestSetAbortSpan(t *testing.T) {
 		name   string
 		before evalFn
 		run    evalFn
-		exp    *roachpb.AbortSpanEntry // nil if empty
+		exp    *roachpb.AbortSpanEntry // nil if no entry expected
+		expErr string                  // empty if no error expected
 	}{
 		///////////////////////////////////////////////////////////////////////
 		//                       EndTransactionRequest                       //
@@ -200,25 +201,21 @@ func TestSetAbortSpan(t *testing.T) {
 			exp: &prevTxnAbortSpanEntry,
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
-			// should never pass Commit = true and Poison = true.
+			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name: "end txn, commit, poison, intent missing, abort span missing",
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
-			// Poisoning but not aborted, should not add an abort span entry.
-			exp: nil,
+			expErr: "cannot poison during a committing EndTxn request",
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
-			// should never pass Commit = true and Poison = true.
+			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent missing, abort span present",
 			before: addPrevAbortSpanEntry,
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			expErr: "cannot poison during a committing EndTxn request",
 		},
 		{
 			name:   "end txn, rollback, no poison, intent present, abort span missing",
@@ -277,26 +274,22 @@ func TestSetAbortSpan(t *testing.T) {
 			exp: &prevTxnAbortSpanEntry,
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
-			// should never pass Commit = true and Poison = true.
+			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent present, abort span missing",
 			before: addIntent,
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
-			// Poisoning but not aborted, should not add an abort span entry.
-			exp: nil,
+			expErr: "cannot poison during a committing EndTxn request",
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An EndTxn
-			// should never pass Commit = true and Poison = true.
+			// It is an error for EndTxn to pass Commit = true and Poison = true.
 			name:   "end txn, commit, poison, intent present, abort span present",
 			before: compose(addIntent, addPrevAbortSpanEntry),
 			run: func(b engine.ReadWriter, rec EvalContext) error {
 				return endTxn(b, rec, true /* commit */, true /* poison */)
 			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			expErr: "cannot poison during a committing EndTxn request",
 		},
 		///////////////////////////////////////////////////////////////////////
 		//                       ResolveIntentRequest                        //
@@ -758,14 +751,20 @@ func TestSetAbortSpan(t *testing.T) {
 			if c.before != nil {
 				require.NoError(t, c.before(batch, evalCtx))
 			}
-			require.NoError(t, c.run(batch, evalCtx))
 
-			var curEntry roachpb.AbortSpanEntry
-			exists, err := as.Get(ctx, batch, txn.ID, &curEntry)
-			require.NoError(t, err)
-			require.Equal(t, c.exp != nil, exists)
-			if exists {
-				require.Equal(t, *c.exp, curEntry)
+			err := c.run(batch, evalCtx)
+			if c.expErr != "" {
+				require.Regexp(t, c.expErr, err)
+			} else {
+				require.NoError(t, err)
+
+				var curEntry roachpb.AbortSpanEntry
+				exists, err := as.Get(ctx, batch, txn.ID, &curEntry)
+				require.NoError(t, err)
+				require.Equal(t, c.exp != nil, exists)
+				if exists {
+					require.Equal(t, *c.exp, curEntry)
+				}
 			}
 		})
 	}

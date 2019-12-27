@@ -165,6 +165,8 @@ func declareKeysEndTxn(
 
 // EndTxn either commits or aborts (rolls back) an extant transaction according
 // to the args.Commit parameter. Rolling back an already rolled-back txn is ok.
+// TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
+// recent PRs have landed.
 func EndTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -176,10 +178,12 @@ func EndTxn(
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
-
-	// If a 1PC txn was required and we're in EndTxn, something went wrong.
 	if args.Require1PC {
+		// If a 1PC txn was required and we're in EndTxn, something went wrong.
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+	}
+	if args.Commit && args.Poison {
+		return result.Result{}, errors.Errorf("cannot poison during a committing EndTxn request")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
