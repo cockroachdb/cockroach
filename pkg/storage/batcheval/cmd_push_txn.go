@@ -184,7 +184,7 @@ func PushTxn(
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == roachpb.PUSH_TIMESTAMP && !reply.PusheeTxn.WriteTimestamp.Less(args.PushTo) {
+	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}

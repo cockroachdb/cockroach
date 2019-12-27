@@ -353,7 +353,7 @@ func TestAvroEncoder(t *testing.T) {
 			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
 		})
 		resolved := expectResolvedTimestampAvro(t, reg, foo)
-		if ts := parseTimeToHLC(t, ts1); !ts.Less(resolved) {
+		if ts := parseTimeToHLC(t, ts1); resolved.LessEq(ts) {
 			t.Fatalf(`expected a resolved timestamp greater than %s got %s`, ts, resolved)
 		}
 

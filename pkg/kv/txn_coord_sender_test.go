@@ -1188,7 +1188,7 @@ func TestTxnRestartCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	proto := txn.TestingCloneTxn()
-	if !proto.ReadTimestamp.Less(proto.WriteTimestamp) {
+	if proto.WriteTimestamp.LessEq(proto.ReadTimestamp) {
 		t.Errorf("expected timestamp to increase: %s", proto)
 	}
 

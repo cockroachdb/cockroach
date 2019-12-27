@@ -405,7 +405,7 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
 	deadline := ba.Requests[0].GetEndTxn().Deadline
-	if deadline != nil && !tc.mu.txn.WriteTimestamp.Less(*deadline) {
+	if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
 		txn := tc.mu.txn.Clone()
 		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
 		// We need to bump the epoch and transform this retriable error.

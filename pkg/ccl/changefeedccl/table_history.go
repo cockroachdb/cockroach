@@ -96,10 +96,10 @@ func (m *tableHistory) WaitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	m.mu.Lock()
 	highWater := m.mu.highWater
 	var err error
-	if m.mu.errTS != (hlc.Timestamp{}) && !ts.Less(m.mu.errTS) {
+	if m.mu.errTS != (hlc.Timestamp{}) && m.mu.errTS.LessEq(ts) {
 		err = m.mu.err
 	}
-	fastPath := err != nil || !highWater.Less(ts)
+	fastPath := err != nil || ts.LessEq(highWater)
 	if !fastPath {
 		errCh = make(chan error, 1)
 		m.mu.waiters = append(m.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
@@ -204,7 +204,7 @@ func (u *tableHistoryUpdater) PollTableDescs(ctx context.Context) error {
 		}
 
 		startTS, endTS := u.m.HighWater(), u.db.Clock().Now()
-		if !startTS.Less(endTS) {
+		if endTS.LessEq(startTS) {
 			continue
 		}
 		descs, err := fetchTableDescriptorVersions(ctx, u.db, startTS, endTS, u.targets)

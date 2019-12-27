@@ -306,7 +306,7 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if !readTimestamp.Less(expiration) {
+	if expiration.LessEq(readTimestamp) {
 		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
@@ -371,7 +371,7 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 
-	if !readTimestamp.Less(expiration) {
+	if expiration.LessEq(readTimestamp) {
 		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
