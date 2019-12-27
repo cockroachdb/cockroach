@@ -219,11 +219,12 @@ enum TransactionAbortedReason {
   ABORT_REASON_PUSHER_ABORTED = 4,
   ABORT_REASON_ABORT_SPAN = 5,
   ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY = 6,
-  ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY = 7
+  ABORT_REASON_NEW_LEASE_PREVENTS_TXN = 8,
+  ABORT_REASON_TIMESTAMP_CACHE_REJECTED = 7
 };
 bool TransactionAbortedReason_IsValid(int value);
 const TransactionAbortedReason TransactionAbortedReason_MIN = ABORT_REASON_UNKNOWN;
-const TransactionAbortedReason TransactionAbortedReason_MAX = ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY;
+const TransactionAbortedReason TransactionAbortedReason_MAX = ABORT_REASON_NEW_LEASE_PREVENTS_TXN;
 const int TransactionAbortedReason_ARRAYSIZE = TransactionAbortedReason_MAX + 1;
 
 enum TransactionRetryReason {
