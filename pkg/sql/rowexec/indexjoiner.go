@@ -207,11 +207,11 @@ func (ij *indexJoiner) generateSpans(row sqlbase.EncDatumRow) (roachpb.Spans, er
 	// There may be extra values on the row, e.g. to allow an ordered
 	// synchronizer to interleave multiple input streams. Will need at most
 	// numKeyCols.
-	span, err := ij.spanBuilder.SpanFromEncDatums(row, numKeyCols)
+	span, containsNull, err := ij.spanBuilder.SpanFromEncDatums(row, numKeyCols)
 	if err != nil {
 		return nil, err
 	}
-	return ij.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, numKeyCols), nil
+	return ij.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, numKeyCols, containsNull), nil
 }
 
 // outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will

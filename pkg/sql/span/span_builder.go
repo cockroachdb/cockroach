@@ -123,41 +123,40 @@ func (s *Builder) UnsetNeededFamilies() {
 
 // SpanFromEncDatums encodes a span with prefixLen constraint columns from the index.
 // SpanFromEncDatums assumes that the EncDatums in values are in the order of the index columns.
+// It also returns whether or not the input values contain a null value or not, which can be
+// used as input for CanSplitSpanIntoSeparateFamilies.
 func (s *Builder) SpanFromEncDatums(
 	values sqlbase.EncDatumRow, prefixLen int,
-) (roachpb.Span, error) {
+) (_ roachpb.Span, containsNull bool, _ error) {
 	return sqlbase.MakeSpanFromEncDatums(
 		s.KeyPrefix, values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc)
 }
 
 // SpanFromDatumRow generates an index span with prefixLen constraint columns from the index.
 // SpanFromDatumRow assumes that values is a valid table row for the Builder's table.
+// It also returns whether or not the input values contain a null value or not, which can be
+// used as input for CanSplitSpanIntoSeparateFamilies.
 func (s *Builder) SpanFromDatumRow(
 	values tree.Datums, prefixLen int, colMap map[sqlbase.ColumnID]int,
-) (roachpb.Span, error) {
-	span, _, err := sqlbase.EncodePartialIndexSpan(s.table, s.index, prefixLen, colMap, values, s.KeyPrefix)
-	return span, err
+) (_ roachpb.Span, containsNull bool, _ error) {
+	return sqlbase.EncodePartialIndexSpan(s.table, s.index, prefixLen, colMap, values, s.KeyPrefix)
 }
 
-// PointSpanFromDatumRow generates a family specific span for a point lookup.
-func (s *Builder) PointSpanFromDatumRow(
-	values tree.Datums, family sqlbase.FamilyID, colMap map[sqlbase.ColumnID]int,
-) (roachpb.Span, error) {
-	key, _, err := sqlbase.EncodePartialIndexKey(s.table, s.index, len(s.index.ColumnIDs), colMap, values, s.KeyPrefix)
-	if err != nil {
-		return roachpb.Span{}, err
-	}
-	key = keys.MakeFamilyKey(key, uint32(family))
-	return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}, nil
+// SpanToPointSpan converts a span into a span that represents a point lookup on a
+// specific family. It is up to the caller to ensure that this is a safe operation,
+// by calling CanSplitSpanIntoSeparateFamilies before using it.
+func (s *Builder) SpanToPointSpan(span roachpb.Span, family sqlbase.FamilyID) roachpb.Span {
+	key := keys.MakeFamilyKey(span.Key, uint32(family))
+	return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}
 }
 
 // MaybeSplitSpanIntoSeparateFamilies uses the needed columns from SetNeededColumns to maybe split
 // the input span into multiple family specific spans. prefixLen is the number of index columns
 // encoded in the span.
 func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
-	span roachpb.Span, prefixLen int,
+	span roachpb.Span, prefixLen int, containsNull bool,
 ) roachpb.Spans {
-	if s.neededFamilies != nil && s.CanSplitSpanIntoSeparateFamilies(len(s.neededFamilies), prefixLen) {
+	if s.neededFamilies != nil && s.CanSplitSpanIntoSeparateFamilies(len(s.neededFamilies), prefixLen, containsNull) {
 		return sqlbase.SplitSpanIntoSeparateFamilies(span, s.neededFamilies)
 	}
 	return roachpb.Spans{span}
@@ -165,14 +164,27 @@ func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 
 // CanSplitSpanIntoSeparateFamilies returns whether a span encoded with prefixLen keys and numNeededFamilies
 // needed families can be safely split into multiple family specific spans.
-func (s *Builder) CanSplitSpanIntoSeparateFamilies(numNeededFamilies, prefixLen int) bool {
-	// Right now, we can/should only split a span into separate family point lookups if:
-	// * the table has more than one family
-	// * the index is the primary key
-	// * we have all of the columns of the index
-	// * we don't need all of the families
-	return len(s.table.Families) > 1 &&
-		s.index.ID == s.table.PrimaryIndex.ID &&
+func (s *Builder) CanSplitSpanIntoSeparateFamilies(
+	numNeededFamilies, prefixLen int, containsNull bool,
+) bool {
+	// We can only split a span into separate family specific point lookups if:
+	// * We have a unique index.
+	// * The index we are generating spans for actually has multiple families:
+	//   - In the case of the primary index, that means the table itself has
+	//     multiple families.
+	//   - In the case of a secondary index, the table must have multiple families
+	//     and the index must store some columns.
+	// * If we have a secondary index, then containsNull must be false
+	//   and it cannot be an inverted index.
+	// * We have all of the lookup columns of the index.
+	// * We don't need all of the families.
+	return s.index.Unique && len(s.table.Families) > 1 &&
+		(s.index.ID == s.table.PrimaryIndex.ID ||
+			// Secondary index specific checks.
+			(s.index.Version == sqlbase.SecondaryIndexFamilyFormatVersion &&
+				!containsNull &&
+				len(s.index.StoreColumnIDs) > 0 &&
+				s.index.Type == sqlbase.IndexDescriptor_FORWARD)) &&
 		prefixLen == len(s.index.ColumnIDs) &&
 		numNeededFamilies < len(s.table.Families)
 }
@@ -222,8 +234,9 @@ func (s *Builder) appendSpansFromConstraintSpan(
 ) (roachpb.Spans, error) {
 	var span roachpb.Span
 	var err error
+	var containsNull bool
 	// Encode each logical part of the start key.
-	span.Key, err = s.encodeConstraintKey(cs.StartKey())
+	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey())
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +247,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		span.Key = span.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	span.EndKey, err = s.encodeConstraintKey(cs.EndKey())
+	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey())
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +258,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	// deletions to ensure that the entire row is deleted.
 	if !forDelete && needed.Len() > 0 && span.Key.Equal(span.EndKey) {
 		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(s.table.ColumnIdxMap(), s.table.Families, needed)
-		if s.CanSplitSpanIntoSeparateFamilies(len(neededFamilyIDs), cs.StartKey().Length()) {
+		if s.CanSplitSpanIntoSeparateFamilies(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
 			return append(spans, sqlbase.SplitSpanIntoSeparateFamilies(span, neededFamilyIDs)...), nil
 		}
 	}
@@ -263,10 +276,15 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key; interstices[i] is inserted before the i-th value.
-func (s *Builder) encodeConstraintKey(ck constraint.Key) (roachpb.Key, error) {
+func (s *Builder) encodeConstraintKey(
+	ck constraint.Key,
+) (_ roachpb.Key, containsNull bool, _ error) {
 	var key []byte
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
+		if val == tree.DNull {
+			containsNull = true
+		}
 		key = append(key, s.interstices[i]...)
 
 		var err error
@@ -276,26 +294,26 @@ func (s *Builder) encodeConstraintKey(ck constraint.Key) (roachpb.Key, error) {
 		if i < len(s.index.ColumnDirections) {
 			dir, err = s.index.ColumnDirections[i].ToEncodingDirection()
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 
 		if s.index.Type == sqlbase.IndexDescriptor_INVERTED {
 			keys, err := sqlbase.EncodeInvertedIndexTableKeys(val, key)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if len(keys) > 1 {
 				err := errors.AssertionFailedf("trying to use multiple keys in index lookup")
-				return nil, err
+				return nil, false, err
 			}
 			key = keys[0]
 		} else {
 			key, err = sqlbase.EncodeTableKey(key, val, dir)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 	}
-	return key, nil
+	return key, containsNull, nil
 }
