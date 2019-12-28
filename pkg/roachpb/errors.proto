@@ -192,13 +192,8 @@ enum TransactionRetryReason {
   RETRY_REASON_UNKNOWN = 0;
   // A concurrent writer finished first, causing restart.
   RETRY_WRITE_TOO_OLD = 1;
-  reserved 2;
   // A SERIALIZABLE transaction had its timestamp moved forward.
   RETRY_SERIALIZABLE = 3;
-  // A possible replay caused by duplicate begin txn or out-of-order
-  // txn sequence number.
-  // TODO(nvanbenschoten): This is no longer in use. Remove in 2.4.
-  RETRY_POSSIBLE_REPLAY = 4;
   // An asynchronous write was observed to have failed.
   RETRY_ASYNC_WRITE_FAILURE = 5;
   // The transaction exceeded its deadline.

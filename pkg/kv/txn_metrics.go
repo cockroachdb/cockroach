@@ -33,7 +33,6 @@ type TxnMetrics struct {
 	RestartsWriteTooOld           telemetry.CounterWithMetric
 	RestartsWriteTooOldMulti      telemetry.CounterWithMetric
 	RestartsSerializable          telemetry.CounterWithMetric
-	RestartsPossibleReplay        telemetry.CounterWithMetric
 	RestartsAsyncWriteFailure     telemetry.CounterWithMetric
 	RestartsReadWithinUncertainty telemetry.CounterWithMetric
 	RestartsTxnAborted            telemetry.CounterWithMetric
@@ -175,7 +174,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
 		RestartsSerializable:          telemetry.NewCounterWithMetric(metaRestartsSerializable),
-		RestartsPossibleReplay:        telemetry.NewCounterWithMetric(metaRestartsPossibleReplay),
 		RestartsAsyncWriteFailure:     telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
 		RestartsReadWithinUncertainty: telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
 		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),

@@ -852,7 +852,6 @@ bool TransactionRetryReason_IsValid(int value) {
     case 0:
     case 1:
     case 3:
-    case 4:
     case 5:
     case 6:
       return true;

@@ -648,8 +648,6 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsWriteTooOld.Inc()
 		case roachpb.RETRY_SERIALIZABLE:
 			tc.metrics.RestartsSerializable.Inc()
-		case roachpb.RETRY_POSSIBLE_REPLAY:
-			tc.metrics.RestartsPossibleReplay.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
 		default:
