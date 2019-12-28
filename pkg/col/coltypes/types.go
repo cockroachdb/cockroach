@@ -143,7 +143,6 @@ var (
 	_ = Bool.AppendVal
 	_ = Bool.Len
 	_ = Bool.Range
-	_ = Bool.Zero
 	_ = Bool.Window
 )
 
@@ -294,19 +293,6 @@ func (t T) Range(loopVariableIdent, target, start, end string) string {
 		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
 	}
 	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
-}
-
-// Zero is a function that should only be used in templates.
-func (t T) Zero(target string) string {
-	switch t {
-	case Bytes:
-		return fmt.Sprintf("%s.Zero()", target)
-	case Decimal:
-		return fmt.Sprintf(`for n := 0; n < len(%[1]s); n++ {
-    %[1]s[n].SetInt64(0)
-}`, target)
-	}
-	return fmt.Sprintf("for n := 0; n < len(%[1]s); n += copy(%[1]s[n:], zero%sColumn) {}", target, t.String())
 }
 
 // Window is a function that should only be used in templates.
