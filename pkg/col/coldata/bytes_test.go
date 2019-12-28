@@ -262,8 +262,8 @@ func TestBytes(t *testing.T) {
 		// However, it is legal to overwrite the last value.
 		b1.Set(1, []byte("ok"))
 
-		// If we Zero the Bytes, we can Set any index.
-		b1.Zero()
+		// If we Reset the Bytes, we can Set any index.
+		b1.Reset()
 		b1.Set(1, []byte("new usage"))
 		// But not an index before that.
 		require.Panics(
