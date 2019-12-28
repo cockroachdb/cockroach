@@ -34,7 +34,7 @@ func registerTPCHVec(r *testRegistry) {
 
 	var queriesToSkip = map[int]string{
 		// TODO(yuzefovich): remove this once the bug is fixed.
-		10: "incorrect #43323",
+		9:  "incomplete flow shutdown #43269",
 		12: "the query is skipped by tpch workload",
 		15: "unsupported: create view",
 	}
