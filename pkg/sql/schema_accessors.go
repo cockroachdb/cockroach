@@ -82,7 +82,7 @@ type SchemaAccessor interface {
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.
-	// TODO(whomever): when separate schemas are supported, this
+	// TODO(solon): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
 	GetObjectNames(ctx context.Context, txn *client.Txn, db *DatabaseDescriptor, scName string, flags tree.DatabaseListFlags) (TableNames, error)
 

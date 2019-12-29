@@ -250,7 +250,7 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
 		// Try the deprecated system.namespace before returning InvalidID.
-		// TODO(whomever): This can be removed in 20.2.
+		// TODO(solon): This can be removed in 20.2.
 		nameKey = sqlbase.NewDeprecatedDatabaseKey(name)
 		nameVal = dc.systemConfig.GetValue(nameKey.Key())
 		if nameVal == nil {

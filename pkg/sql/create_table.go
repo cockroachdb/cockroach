@@ -359,7 +359,7 @@ func qualifyFKColErrorWithDB(
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
 
-	// TODO(whomever): this ought to use a database cache.
+	// TODO(solon): this ought to use a database cache.
 	db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))

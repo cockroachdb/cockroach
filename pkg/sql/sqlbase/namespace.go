@@ -32,7 +32,7 @@ import (
 // To ensure accesses are seamless across mixed version clusters, >= 20.1 clusters,
 // and during the upgrade process, the following functions should be used
 // for adding/removing entries.
-// TODO(whomever): The fallback semantics will no longer be required in 20.2.
+// TODO(solon): The fallback semantics will no longer be required in 20.2.
 // This code should be cleaned up then, to only access the new system.namespace
 // table.
 
@@ -66,14 +66,14 @@ func RemoveObjectNamespaceEntry(
 	// or the deprecated version. Thus we try to remove the mapping from both.
 	if parentID == keys.RootNamespaceID {
 		toDelete = append(toDelete, NewDatabaseKey(name))
-		// TODO(whomever): This can be completely removed in 20.2.
+		// TODO(solon): This can be completely removed in 20.2.
 		toDelete = append(toDelete, NewDeprecatedDatabaseKey(name))
 	} else if parentSchemaID == keys.RootNamespaceID {
 		// Schemas were introduced in 20.1.
 		toDelete = append(toDelete, NewSchemaKey(parentID, name))
 	} else {
 		toDelete = append(toDelete, NewTableKey(parentID, parentSchemaID, name))
-		// TODO(whomever): This can be completely removed in 20.2.
+		// TODO(solon): This can be completely removed in 20.2.
 		toDelete = append(toDelete, NewDeprecatedTableKey(parentID, name))
 	}
 	for _, delKey := range toDelete {
@@ -117,7 +117,7 @@ func RemoveDatabaseNamespaceEntry(
 func MakeObjectNameKey(
 	ctx context.Context, settings *cluster.Settings, parentID ID, parentSchemaID ID, name string,
 ) DescriptorKey {
-	// TODO(whomever): This if condition can be removed in 20.2
+	// TODO(solon): This if condition can be removed in 20.2
 	if !cluster.Version.IsActive(ctx, settings, cluster.VersionNamespaceTableWithSchemas) {
 		return NewDeprecatedTableKey(parentID, name)
 	}
@@ -170,7 +170,7 @@ func LookupObjectID(
 	}
 	// If the key wasn't found in the new system.namespace table, it may still
 	// exist in the deprecated system.namespace in the case of mixed version clusters.
-	// TODO(whomever): This can be removed in 20.2.
+	// TODO(solon): This can be removed in 20.2.
 
 	// This fallback logic is only required if the table is under the public schema
 	// or we are resolving a database.
