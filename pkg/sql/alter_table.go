@@ -864,6 +864,13 @@ func applyColumnMutation(
 		if col.Nullable {
 			return nil
 		}
+
+		// Prevent a column in a primary key from becoming non-null.
+		if tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+			return pgerror.Newf(pgcode.InvalidTableDefinition,
+				`column "%s" is in a primary index`, col.Name)
+		}
+
 		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
