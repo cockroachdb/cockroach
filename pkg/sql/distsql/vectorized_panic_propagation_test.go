@@ -68,6 +68,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx = flow.SetupCtxCancel(ctx)
 
 	base.SetProcessors([]execinfra.Processor{mat})
 	// This test specifically verifies that a flow doesn't get stuck in Wait for
