@@ -433,6 +433,15 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+func (lj *LookupJoinExpr) init(mem *Memo) {
+	// lookupProps are initialized as necessary by the logical props builder.
+}
+
+func (lj *ZigzagJoinExpr) init(mem *Memo) {
+	// leftProps and rightProps are initialized as necessary by the logical props
+	// builder.
+}
+
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.
 type WindowFrame struct {
