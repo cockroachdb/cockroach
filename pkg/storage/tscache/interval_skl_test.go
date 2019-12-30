@@ -832,7 +832,7 @@ func TestIntervalSklFill2(t *testing.T) {
 	for i := 0; i < n; i++ {
 		val := makeVal(makeTS(int64(i), int32(i)), txnID)
 		s.Add(key, val)
-		require.True(t, !s.LookupTimestamp(key).ts.Less(val.ts))
+		require.True(t, val.ts.LessEq(s.LookupTimestamp(key).ts))
 	}
 }
 

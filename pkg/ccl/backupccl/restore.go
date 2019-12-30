@@ -1449,7 +1449,7 @@ func doRestorePlan(
 		ok := false
 		for _, b := range mainBackupDescs {
 			// Find the backup that covers the requested time.
-			if b.StartTime.Less(endTime) && !b.EndTime.Less(endTime) {
+			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
 				ok = true
 				// Ensure that the backup actually has revision history.
 				if b.MVCCFilter != MVCCFilter_All {
@@ -1462,7 +1462,7 @@ func doRestorePlan(
 				// example if start time is 0 (full backup), the revision history was
 				// only captured since the GC window. Note that the RevisionStartTime is
 				// the latest for ranges backed up.
-				if !b.RevisionStartTime.Less(endTime) {
+				if endTime.LessEq(b.RevisionStartTime) {
 					return errors.Errorf(
 						"incompatible RESTORE timestamp: BACKUP for requested time only has revision history from %v", b.RevisionStartTime,
 					)

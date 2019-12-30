@@ -315,7 +315,7 @@ func checkForcedErr(
 	// so we must perform this check upstream and downstream of raft.
 	// See #14833.
 	ts := raftCmd.ReplicatedEvalResult.Timestamp
-	if !replicaState.GCThreshold.Less(ts) {
+	if ts.LessEq(*replicaState.GCThreshold) {
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
 			Timestamp: ts,
 			Threshold: *replicaState.GCThreshold,

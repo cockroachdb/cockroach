@@ -73,7 +73,7 @@ func (v *orderValidator) NoteRow(
 
 	timestamps := v.keyTimestamps[key]
 	timestampsIdx := sort.Search(len(timestamps), func(i int) bool {
-		return !timestamps[i].Less(updated)
+		return updated.LessEq(timestamps[i])
 	})
 	seen := timestampsIdx < len(timestamps) && timestamps[timestampsIdx] == updated
 
@@ -426,7 +426,7 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
 	if r, ok := v.partitionResolved[partition]; !ok {
 		return errors.Errorf(`unknown partition: %s`, partition)
-	} else if !r.Less(resolved) {
+	} else if resolved.LessEq(r) {
 		return nil
 	}
 	v.partitionResolved[partition] = resolved
@@ -440,7 +440,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 			newResolved = r
 		}
 	}
-	if !v.resolved.Less(newResolved) {
+	if newResolved.LessEq(v.resolved) {
 		return nil
 	}
 	v.resolved = newResolved
@@ -486,7 +486,7 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		v.previousRowUpdateTs = row.updated
 	}
 
-	if !v.firstRowTimestamp.IsEmpty() && !resolved.Less(v.firstRowTimestamp) &&
+	if !v.firstRowTimestamp.IsEmpty() && v.firstRowTimestamp.LessEq(resolved) &&
 		lastFingerprintedAt != resolved {
 		return v.fingerprint(resolved)
 	}

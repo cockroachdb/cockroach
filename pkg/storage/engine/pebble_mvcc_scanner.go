@@ -241,7 +241,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	mvccKey := MVCCKey{p.curKey, p.curTS}
 	if mvccKey.IsValue() {
-		if !p.ts.Less(p.curTS) {
+		if p.curTS.LessEq(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer than
 			// the most recent version's timestamp.
 			return p.addAndAdvance(p.curValue)
@@ -251,7 +251,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// 2. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if !p.txn.MaxTimestamp.Less(p.curTS) {
+			if p.curTS.LessEq(p.txn.MaxTimestamp) {
 				return p.uncertaintyError(p.curTS)
 			}
 
@@ -293,7 +293,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 	// our read timestamp (to avoid erroneously picking up future committed
 	// values); this timestamp is prevTS.
 	prevTS := p.ts
-	if !p.ts.Less(metaTS) {
+	if metaTS.LessEq(p.ts) {
 		prevTS = metaTS.Prev()
 	}
 
@@ -536,7 +536,7 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 			p.incrementItersBeforeSeek()
 			return p.advanceKeyAtNewKey(origKey)
 		}
-		if !ts.Less(p.curTS) {
+		if p.curTS.LessEq(ts) {
 			p.incrementItersBeforeSeek()
 			if uncertaintyCheck && p.ts.Less(p.curTS) {
 				return p.uncertaintyError(p.curTS)
@@ -552,7 +552,7 @@ func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool)
 	if !bytes.Equal(p.curKey, origKey) {
 		return p.advanceKeyAtNewKey(origKey)
 	}
-	if !ts.Less(p.curTS) {
+	if p.curTS.LessEq(ts) {
 		if uncertaintyCheck && p.ts.Less(p.curTS) {
 			return p.uncertaintyError(p.curTS)
 		}

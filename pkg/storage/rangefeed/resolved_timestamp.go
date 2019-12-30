@@ -246,7 +246,7 @@ func (rts *resolvedTimestamp) assertNoChange() {
 // than the current resolved timestamp. A violation of this assertion would
 // indicate a failure of the closed timestamp mechanism.
 func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS hlc.Timestamp) {
-	if !rts.resolvedTS.Less(opTS) {
+	if opTS.LessEq(rts.resolvedTS) {
 		panic(fmt.Sprintf("resolved timestamp %s equal to or above timestamp of operation %v",
 			rts.resolvedTS, op))
 	}

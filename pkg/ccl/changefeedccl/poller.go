@@ -321,7 +321,7 @@ func (p *poller) rangefeedImplIter(ctx context.Context, i int) error {
 					return err
 				}
 				p.mu.Lock()
-				if len(p.mu.scanBoundaries) > 0 && !resolvedTS.Less(p.mu.scanBoundaries[0]) {
+				if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].LessEq(resolvedTS) {
 					boundaryBreak = true
 					resolvedTS = p.mu.scanBoundaries[0]
 				}
@@ -504,7 +504,7 @@ func (p *poller) exportSpan(
 
 func (p *poller) updateTableHistory(ctx context.Context, endTS hlc.Timestamp) error {
 	startTS := p.tableHist.HighWater()
-	if !startTS.Less(endTS) {
+	if endTS.LessEq(startTS) {
 		return nil
 	}
 	descs, err := fetchTableDescriptorVersions(ctx, p.db, startTS, endTS, p.details.Targets)

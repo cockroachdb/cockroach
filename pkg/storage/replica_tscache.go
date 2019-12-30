@@ -469,7 +469,7 @@ func (r *Replica) CanCreateTxnRecord(
 	wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
-	if !wTS.Less(txnMinTS) {
+	if txnMinTS.LessEq(wTS) {
 		switch wTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTxn request sent by
