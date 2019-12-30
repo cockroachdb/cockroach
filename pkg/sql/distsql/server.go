@@ -348,6 +348,7 @@ func (ds *ServerImpl) setupFlow(
 		// to use the RootTxn.
 		opt = flowinfra.FuseAggressively
 	}
+	ctx = f.SetupCtxCancel(ctx)
 	if err := f.Setup(ctx, &req.Flow, opt); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		tracing.FinishSpan(sp)
