@@ -41,6 +41,7 @@ export function Table<T>(props: TableProps<T>) {
       className="crl-table-wrapper"
       columns={columns}
       dataSource={dataSource}
+      expandRowByClick
       pagination={{hideOnSinglePage: true}} />
     </ConfigProvider>
   );
