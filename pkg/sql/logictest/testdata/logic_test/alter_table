@@ -1047,3 +1047,14 @@ COMMIT
 
 statement ok
 DROP TABLE t1
+
+subtest regression_43092
+
+statement ok
+CREATE TABLE t43092(x INT PRIMARY KEY)
+
+statement error pgcode 42P16 column "x" is in a primary index
+ALTER TABLE t43092 ALTER COLUMN x DROP NOT NULL
+
+statement ok
+DROP TABLE t43092
