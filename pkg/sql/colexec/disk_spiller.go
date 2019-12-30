@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -81,9 +82,10 @@ type oneInputDiskSpiller struct {
 	initialized bool
 	spilled     bool
 
-	input        Operator
-	inMemoryOp   bufferingInMemoryOperator
-	diskBackedOp Operator
+	input                  Operator
+	inMemoryOp             bufferingInMemoryOperator
+	inMemoryMemMonitorName string
+	diskBackedOp           Operator
 }
 
 var _ Operator = &oneInputDiskSpiller{}
@@ -95,6 +97,9 @@ var _ Operator = &oneInputDiskSpiller{}
 // - inMemoryOp - the in-memory operator that will be consuming input and doing
 //   computations until it either successfully processes the whole input or
 //   reaches its memory limit.
+// - inMemoryMemMonitorName - the name of the memory monitor of the in-memory
+//   operator. diskSpiller will catch an OOM error only if this name is
+//   contained within the error message.
 // - diskBackedOpConstructor - the function to construct the disk-backed
 //   operator when given an input operator. We take in a constructor rather
 //   than an already created operator in order to hide the complexity of buffer
@@ -103,14 +108,16 @@ func newOneInputDiskSpiller(
 	allocator *Allocator,
 	input Operator,
 	inMemoryOp bufferingInMemoryOperator,
+	inMemoryMemMonitorName string,
 	diskBackedOpConstructor func(input Operator) Operator,
 ) Operator {
 	diskBackedOpInput := newBufferExportingOperator(allocator, inMemoryOp, input)
 	return &oneInputDiskSpiller{
-		allocator:    allocator,
-		input:        input,
-		inMemoryOp:   inMemoryOp,
-		diskBackedOp: diskBackedOpConstructor(diskBackedOpInput),
+		allocator:              allocator,
+		input:                  input,
+		inMemoryOp:             inMemoryOp,
+		inMemoryMemMonitorName: inMemoryMemMonitorName,
+		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
 	}
 }
 
@@ -137,12 +144,14 @@ func (d *oneInputDiskSpiller) Next(ctx context.Context) coldata.Batch {
 			batch = d.inMemoryOp.Next(ctx)
 		},
 	); err != nil {
-		if sqlbase.IsOutOfMemoryError(err) {
+		if sqlbase.IsOutOfMemoryError(err) &&
+			strings.Contains(err.Error(), d.inMemoryMemMonitorName) {
 			d.spilled = true
 			d.diskBackedOp.Init()
 			return d.Next(ctx)
 		}
-		// Not an out of memory error, so we propagate it further.
+		// Either not an out of memory error or an OOM error coming from a
+		// different operator, so we propagate it further.
 		execerror.VectorizedInternalPanic(err)
 	}
 	return batch
