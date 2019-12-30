@@ -769,12 +769,13 @@ func NewColOperator(
 				result.IsStreaming = true
 			} else {
 				// No optimizations possible. Default to the standard sort operator.
+				sorterMemMonitorName := fmt.Sprintf("sort-all-limited-%d", spec.ProcessorID)
 				var sorterMemAccount *mon.BoundAccount
 				if useStreamingMemAccountForBuffering {
 					sorterMemAccount = streamingMemAccount
 				} else {
 					sorterMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, "sort-all-limited",
+						ctx, flowCtx, sorterMemMonitorName,
 					)
 				}
 				inMemorySorter, err := NewSorter(
@@ -795,6 +796,7 @@ func NewColOperator(
 				result.Op = newOneInputDiskSpiller(
 					diskSpillerAllocator,
 					input, inMemorySorter.(bufferingInMemoryOperator),
+					sorterMemMonitorName,
 					func(input Operator) Operator {
 						return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
 					})
