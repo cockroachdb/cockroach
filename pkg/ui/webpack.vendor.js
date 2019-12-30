@@ -23,6 +23,8 @@ module.exports = {
     vendor: prodDependencies,
   },
 
+  mode: "none",
+
   output: {
     filename: "vendor.oss.dll.js",
     path: path.resolve(__dirname, "dist"),
@@ -53,4 +55,11 @@ module.exports = {
       path: path.resolve(__dirname, "vendor.oss.manifest.json"),
     }),
   ],
+
+  // Max size of is set to 4Mb to disable warning message and control
+  // the growing size of bundle over time.
+  performance: {
+    maxEntrypointSize: 4000000,
+    maxAssetSize: 4000000,
+  },
 };
