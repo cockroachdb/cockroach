@@ -374,7 +374,7 @@ func processLocalKeyRange(
 			return err
 		}
 		infoMu.TransactionSpanTotal++
-		if !txn.LastActive().Less(cutoff) {
+		if cutoff.LessEq(txn.LastActive()) {
 			return nil
 		}
 

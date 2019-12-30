@@ -431,7 +431,7 @@ func evaluateCommand(
 	// correctly, but various tests insert versioned data without going through
 	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
 	//
-	// if header.Txn != nil && !header.Txn.Timestamp.Less(h.Timestamp) {
+	// if header.Txn != nil && h.Timestamp.LessEq(header.Txn.Timestamp) {
 	// 	if now := r.store.Clock().Now(); now.Less(header.Txn.Timestamp) {
 	// 		log.Fatalf(ctx, "hlc clock not updated: %s < %s", now, header.Txn.Timestamp)
 	// 	}

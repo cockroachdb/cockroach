@@ -499,7 +499,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	ba.Add(incrementArgs(rhsKey, 1))
 	if br, pErr := lhsStore.Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
-	} else if !readTS.Less(br.Timestamp) {
+	} else if br.Timestamp.LessEq(readTS) {
 		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
 	}
 
@@ -662,7 +662,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	ba.Add(incrementArgs(rhsKey, 1))
 	if br, pErr := mtc.Store(1).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
-	} else if !readTS.Less(br.Timestamp) {
+	} else if br.Timestamp.LessEq(readTS) {
 		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
 	}
 }

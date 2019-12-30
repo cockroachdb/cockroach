@@ -254,7 +254,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 
 	// Check if the (read-only) txn was pushed above its deadline.
 	deadline := et.Deadline
-	if deadline != nil && !br.Txn.WriteTimestamp.Less(*deadline) {
+	if deadline != nil && deadline.LessEq(br.Txn.WriteTimestamp) {
 		return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
 	}
 

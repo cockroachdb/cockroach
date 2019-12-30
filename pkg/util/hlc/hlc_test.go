@@ -79,6 +79,25 @@ func TestHLCLess(t *testing.T) {
 	}
 }
 
+func TestHLCLessEq(t *testing.T) {
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	a := c.Now()
+	b := a
+	if !a.LessEq(b) || !b.LessEq(a) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+	m.Increment(1)
+	b = c.Now()
+	if !a.LessEq(b) || b.LessEq(a) {
+		t.Errorf("expected %+v < %+v", a, b)
+	}
+	a = c.Now() // add one to logical clock from b
+	if !b.LessEq(a) || a.LessEq(b) {
+		t.Errorf("expected %+v < %+v", b, a)
+	}
+}
+
 func TestHLCEqual(t *testing.T) {
 	m := NewManualClock(1)
 	c := NewClock(m.UnixNano, time.Nanosecond)

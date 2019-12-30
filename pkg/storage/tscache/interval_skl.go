@@ -287,7 +287,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 
 	// If floor ts is >= requested timestamp, then no need to perform a search
 	// or add any records.
-	if !s.floorTS.Less(val.ts) {
+	if val.ts.LessEq(s.floorTS) {
 		return nil
 	}
 
@@ -417,7 +417,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	for s.pages.Len() >= s.minPages {
 		bp := back.Value.(*sklPage)
 		bpMaxTS := hlc.Timestamp{WallTime: bp.maxWallTime}
-		if !bpMaxTS.Less(minTSToRetain) {
+		if minTSToRetain.LessEq(bpMaxTS) {
 			// The back page's maximum timestamp is within the time
 			// window we've promised to retain, so we can't evict it.
 			break

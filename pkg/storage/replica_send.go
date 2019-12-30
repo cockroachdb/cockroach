@@ -604,7 +604,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 		txnClone := ba.Txn.Clone()
 		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
 		// is empty, there won't be any uncertainty restarts.
-		if !ba.Txn.ReadTimestamp.Less(obsTS) {
+		if obsTS.LessEq(ba.Txn.ReadTimestamp) {
 			log.Event(ctx, "read has no clock uncertainty")
 		}
 		txnClone.MaxTimestamp.Backward(obsTS)

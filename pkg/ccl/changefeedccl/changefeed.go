@@ -240,7 +240,7 @@ func emitEntries(
 		// it's forwarded before.
 		// TODO(dan): This should be an assertion once we're confident this can never
 		// happen under any circumstance.
-		if !sf.Frontier().Less(row.updated) {
+		if row.updated.LessEq(sf.Frontier()) {
 			log.Errorf(ctx, "cdc ux violation: detected timestamp %s that is less than "+
 				"or equal to the local frontier %s.", cloudStorageFormatTime(row.updated),
 				cloudStorageFormatTime(sf.Frontier()))

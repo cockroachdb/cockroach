@@ -64,7 +64,7 @@ func RefreshRange(
 			Tombstones:   true,
 		},
 		func(kv roachpb.KeyValue) (bool, error) {
-			if ts := kv.Value.Timestamp; !ts.Less(refreshFrom) {
+			if ts := kv.Value.Timestamp; refreshFrom.LessEq(ts) {
 				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
 			}
 			return false, nil
