@@ -51,8 +51,12 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) error {
-	f.SetSpec(spec)
+) (context.Context, error) {
+	var err error
+	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	if err != nil {
+		return ctx, err
+	}
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 	acc := f.EvalCtx.Mon.MakeBoundAccount()
 	f.VectorizedBoundAccount = &acc
@@ -70,14 +74,14 @@ func (f *vectorizedFlow) Setup(
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc, opt)
+	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, &acc, opt)
 	if err == nil {
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
-		return nil
+		return ctx, nil
 	}
 	f.operatorConcurrency = creator.operatorConcurrency
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-	return err
+	return ctx, err
 }
 
 // ConcurrentExecution is part of the Flow interface.
