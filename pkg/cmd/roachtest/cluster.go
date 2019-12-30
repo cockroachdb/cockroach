@@ -1085,6 +1085,19 @@ func (c *cluster) setTest(t testI) {
 	}
 }
 
+// StopNodeForUpgrade stops a running cockroach instance on the requested
+// node before a version upgrade.
+func (c *cluster) StopNodeForUpgrade(ctx context.Context, t *test, node int) {
+	port := fmt.Sprintf("{pgport:%d}", node)
+	// Note that the following command line needs to run against both v2.1
+	// and the current branch. Do not change it in a manner that is
+	// incompatible with 2.1.
+	if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
+		t.Fatal(err)
+	}
+	c.Stop(ctx, c.Node(node))
+}
+
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
 func (c *cluster) Save(ctx context.Context, msg string, l *logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
