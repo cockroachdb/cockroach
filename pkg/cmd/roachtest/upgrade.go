@@ -78,18 +78,6 @@ func registerUpgrade(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		stop := func(node int) error {
-			port := fmt.Sprintf("{pgport:%d}", node)
-			// Note that the following command line needs to run against both v2.1
-			// and the current branch. Do not change it in a manner that is
-			// incompatible with 2.1.
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
-				return err
-			}
-			c.Stop(ctx, c.Node(node))
-			return nil
-		}
-
 		decommissionAndStop := func(node int) error {
 			t.WorkerStatus("decomission")
 			port := fmt.Sprintf("{pgport:%d}", node)
@@ -139,7 +127,7 @@ func registerUpgrade(r *testRegistry) {
 		// Now perform a rolling restart into the new binary, except the last node.
 		for i := 1; i < nodes; i++ {
 			t.WorkerStatus("upgrading ", i)
-			if err := stop(i); err != nil {
+			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
@@ -158,10 +146,10 @@ func registerUpgrade(r *testRegistry) {
 
 		// Now stop a previously started node and upgrade the last node.
 		// Check cluster version is not upgraded.
-		if err := stop(nodes - 1); err != nil {
+		if err := c.StopCockroachGracefullyOnNode(ctx, nodes-1); err != nil {
 			t.Fatal(err)
 		}
-		if err := stop(nodes); err != nil {
+		if err := c.StopCockroachGracefullyOnNode(ctx, nodes); err != nil {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
