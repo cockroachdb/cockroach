@@ -61,6 +61,10 @@ module.exports = (env) => {
       path: path.resolve(__dirname, `dist${env.dist}`),
     },
 
+    mode: "none",
+
+    devtool: "source-map",
+
     resolve: {
       // Add resolvable extensions.
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
@@ -120,7 +124,7 @@ module.exports = (env) => {
         },
 
         // All output ".js" files will have any sourcemaps re-processed by "source-map-loader".
-        { enforce: "pre", test: /\.js$/, loader: "source-map-loader" },
+        // { enforce: "pre", test: /\.js$/, loader: "source-map-loader" },
       ],
     },
 
@@ -128,9 +132,11 @@ module.exports = (env) => {
       new RemoveBrokenDependenciesPlugin(),
       // See "DLLs for speedy builds" in the README for details.
       new webpack.DllReferencePlugin({
+        context: path.resolve(__dirname, `dist${env.dist}`),
         manifest: require(`./protos.${env.dist}.manifest.json`),
       }),
       new webpack.DllReferencePlugin({
+        context: path.resolve(__dirname, `dist${env.dist}`),
         manifest: require("./vendor.oss.manifest.json"),
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
@@ -138,30 +144,25 @@ module.exports = (env) => {
       new VisualizerPlugin({ filename: `../dist/stats.${env.dist}.html` }),
     ],
 
-    // https://webpack.js.org/configuration/stats/
-    stats: {
-      colors: true,
-      chunks: false,
-    },
+    stats: "errors-only",
 
     devServer: {
+      // historyApiFallback: true,
       contentBase: path.join(__dirname, `dist${env.dist}`),
       index: "",
       proxy: {
-        // Note: this shouldn't require a custom bypass function to work;
-        // docs say that setting `index: ''` is sufficient to proxy `/`.
-        // However, that did not work, and may require upgrading to webpack 4.x.
         "/": {
           secure: false,
           target: process.env.TARGET,
-          bypass: (req) => {
-            if (shouldProxy(req.path)) {
-              return false;
-            }
-            return req.path;
-          },
         },
       },
+    },
+
+    // Max size of is set to 4Mb to disable warning message and control
+    // the growing size of bundle over time.
+    performance: {
+      maxEntrypointSize: 4000000,
+      maxAssetSize: 4000000,
     },
   };
 };
