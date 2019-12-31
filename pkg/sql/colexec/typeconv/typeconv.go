@@ -49,6 +49,8 @@ func FromColumnType(ct *types.T) coltypes.T {
 		return coltypes.Float64
 	case types.TimestampFamily:
 		return coltypes.Timestamp
+	case types.TimestampTZFamily:
+		return coltypes.Timestamp
 	}
 	return coltypes.Unhandled
 }
@@ -86,6 +88,8 @@ func ToColumnType(t coltypes.T) *types.T {
 		return types.Int
 	case coltypes.Float64:
 		return types.Float
+	case coltypes.Timestamp:
+		return types.Timestamp
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
 	return nil
@@ -217,6 +221,14 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DTimestamp)
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DTimestamp, found %s", reflect.TypeOf(datum))
+			}
+			return d.Time, nil
+		}
+	case types.TimestampTZFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTimestampTZ)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTimestampTZ, found %s", reflect.TypeOf(datum))
 			}
 			return d.Time, nil
 		}

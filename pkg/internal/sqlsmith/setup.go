@@ -110,10 +110,13 @@ CREATE INVERTED INDEX on seed (_jsonb);
 	vecSeedTable = `
 CREATE TABLE IF NOT EXISTS seed_vec AS
 	SELECT
+		g::INT2 AS _int2,
+		g::INT4 AS _int4,
 		g::INT8 AS _int8,
 		g::FLOAT8 AS _float8,
 		'2001-01-01'::DATE + g AS _date,
 		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
+		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
 		g % 2 = 1 AS _bool,
 		g::DECIMAL AS _decimal,
 		g::STRING AS _string,
