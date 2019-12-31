@@ -97,6 +97,8 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
 		r.conn.bufferErr(r.err)
+		// TODO(yuzefovich): replace the line above once #43301 is merged.
+		//writeErrWithLogging(ctx, r.conn.sv, r.err, &r.conn.msgBuilder, &r.conn.writerState.buf)
 		return
 	}
 
