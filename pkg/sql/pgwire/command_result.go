@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -96,7 +97,11 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
-		r.conn.bufferErr(ctx, r.err)
+		if err := writeErr(
+			ctx, r.conn.sv, r.err, &r.conn.msgBuilder, &r.conn.writerState.buf,
+		); err != nil {
+			log.VErrEvent(ctx, 2 /* level */, err.Error())
+		}
 		return
 	}
 

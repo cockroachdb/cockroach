@@ -1169,13 +1169,6 @@ func (c *conn) bufferPortalSuspended() {
 	}
 }
 
-func (c *conn) bufferErr(ctx context.Context, err error) {
-	if err := writeErr(ctx, c.sv,
-		err, &c.msgBuilder, &c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
-	}
-}
-
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
