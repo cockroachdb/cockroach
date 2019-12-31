@@ -1431,11 +1431,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		pe, ok := payload.(payloadWithError)
 		if ok {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
-		}
-		if resErr == nil && ok {
-			res.SetError(pe.errorCause())
-		} else {
-			ex.recordError(ctx, resErr)
+			if resErr == nil {
+				res.SetError(pe.errorCause())
+			} else {
+				// The result has the error already set, so we record the payload error
+				// with conn executor separately.
+				ex.recordError(ctx, pe.errorCause())
+			}
 		}
 		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 	} else {
