@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1431,11 +1430,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		pe, ok := payload.(payloadWithError)
 		if ok {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
-		}
-		if resErr == nil && ok {
-			res.SetError(pe.errorCause())
-		} else {
-			ex.recordError(ctx, resErr)
+			if resErr == nil {
+				res.SetError(pe.errorCause())
+			}
 		}
 		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
 	} else {
@@ -2130,13 +2127,6 @@ func (ex *connExecutor) initStatementResult(
 		res.SetColumns(ctx, cols)
 	}
 	return nil
-}
-
-// recordError processes an error at the end of query execution.
-// This triggers telemetry and, if the error is an internal error,
-// triggers the emission of a sentry report.
-func (ex *connExecutor) recordError(ctx context.Context, err error) {
-	sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 }
 
 // newStatsCollector returns a sqlStatsCollector that will record stats in the

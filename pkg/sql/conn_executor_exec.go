@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -1151,7 +1152,9 @@ func (ex *connExecutor) runShowSyntax(
 		func(ctx context.Context, field, msg string) {
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 		},
-		ex.recordError, /* reportErr */
+		func(ctx context.Context, err error) {
+			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+		},
 	)
 	return commErr
 }
