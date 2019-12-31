@@ -346,7 +346,7 @@ Loop:
 		case pgwirebase.ClientMsgPassword:
 			// This messages are only acceptable during the auth phase, handled above.
 			err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
-			_ /* err */ = writeErr(
+			writeErrWithLogging(
 				ctx, &sqlServer.GetExecutorConfig().Settings.SV, err,
 				&c.msgBuilder, &c.writerState.buf)
 			break Loop
@@ -455,7 +455,7 @@ Loop:
 		// sent another error for the last query (like a context canceled) is a bad
 		// idead; see #22630. I think we should find a way to return the
 		// AdminShutdown error as the only result of the query.
-		_ /* err */ = writeErr(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
+		writeErrWithLogging(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
 			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder, &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 	}
@@ -539,9 +539,12 @@ func (c *conn) processCommandsAsync(
 					retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
 					// Add a prefix. This also adds a stack trace.
 					retErr = errors.Wrap(retErr, "caught fatal error")
-					_ = writeErr(
+					if err := writeErr(
 						ctx, &sqlServer.GetExecutorConfig().Settings.SV, retErr,
-						&c.msgBuilder, &c.writerState.buf)
+						&c.msgBuilder, &c.writerState.buf,
+					); err != nil {
+						retErr = errors.CombineErrors(retErr, err)
+					}
 					_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 					c.stmtBuf.Close()
 					// Send a ready for query to make sure the client can react.
@@ -603,12 +606,15 @@ func (c *conn) bufferStatusParam(param, value string) error {
 func (c *conn) sendInitialConnData(
 	ctx context.Context, sqlServer *sql.Server,
 ) (sql.ConnectionHandler, error) {
-	connHandler, err := sqlServer.SetupConn(
+	connHandler, retErr := sqlServer.SetupConn(
 		ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
-	if err != nil {
-		_ /* err */ = writeErr(
-			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder, c.conn)
-		return sql.ConnectionHandler{}, err
+	if retErr != nil {
+		if err := writeErr(
+			ctx, &sqlServer.GetExecutorConfig().Settings.SV, retErr, &c.msgBuilder, c.conn,
+		); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
+		return sql.ConnectionHandler{}, retErr
 	}
 
 	// Send the initial "status parameters" to the client.  This
@@ -1169,17 +1175,22 @@ func (c *conn) bufferPortalSuspended() {
 	}
 }
 
-func (c *conn) bufferErr(ctx context.Context, err error) {
-	if err := writeErr(ctx, c.sv,
-		err, &c.msgBuilder, &c.writerState.buf); err != nil {
-		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
-	}
-}
-
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+	}
+}
+
+// writeErrWithLogging is the same as writeErr with the addition of logging the
+// error returned by writeErr.
+func writeErrWithLogging(
+	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
+) {
+	if err := writeErr(
+		ctx, sv, err, msgBuilder, w,
+	); err != nil {
+		log.Warningf(ctx, `error in writeErr(): %v`, err)
 	}
 }
 
@@ -1494,9 +1505,13 @@ func (c *conn) handleAuthentication(
 	auth *hba.Conf,
 	execCfg *sql.ExecutorConfig,
 ) error {
-	sendError := func(err error) error {
-		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
-		return err
+	sendError := func(retErr error) error {
+		if err := writeErr(
+			ctx, &execCfg.Settings.SV, retErr, &c.msgBuilder, c.conn,
+		); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
+		return retErr
 	}
 
 	// Check that the requested user exists and retrieve the hashed
