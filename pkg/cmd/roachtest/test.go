@@ -251,6 +251,16 @@ func (t *test) Fatalf(format string, args ...interface{}) {
 	t.fatalfInner(format, args...)
 }
 
+// FailNow implements the TestingT interface.
+func (t *test) FailNow() {
+	t.Fatal()
+}
+
+// Errorf implements the TestingT interface.
+func (t *test) Errorf(format string, args ...interface{}) {
+	t.Fatalf(format, args...)
+}
+
 func (t *test) fatalfInner(format string, args ...interface{}) {
 	// Skip two frames: our own and the caller.
 	if format != "" {
