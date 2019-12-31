@@ -409,6 +409,7 @@ type httpStorage struct {
 	base     *url.URL
 	client   *http.Client
 	hosts    []string
+	headers  map[string]string
 	settings *cluster.Settings
 }
 
@@ -461,6 +462,7 @@ func makeHTTPStorage(base string, settings *cluster.Settings) (ExternalStorage, 
 		base:     uri,
 		client:   client,
 		hosts:    strings.Split(uri.Host, ","),
+		headers:  map[string]string{"Content-Type": "application/x-ndjson"},
 		settings: settings,
 	}, nil
 }
@@ -666,6 +668,11 @@ func (h *httpStorage) req(
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
+	}
+	if h.headers != nil {
+		for k, v := range h.headers {
+			req.Header.Set(k, v)
+		}
 	}
 	resp, err := h.client.Do(req)
 	if err != nil {
