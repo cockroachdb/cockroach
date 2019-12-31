@@ -129,24 +129,7 @@ func registerVersion(r *testRegistry) {
 			stop := func(node int) error {
 				m.ExpectDeath()
 				l.Printf("stopping node %d\n", node)
-				port := fmt.Sprintf("{pgport:%d}", node)
-				// Note that the following command line needs to run against both v2.0
-				// and the current branch. Do not change it in a manner that is
-				// incompatible with 2.0.
-				if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
-					return err
-				}
-				// NB: we still call Stop to make sure the process is dead when we try
-				// to restart it (or we'll catch an error from the RocksDB dir being
-				// locked). This won't happen unless run with --local due to timing.
-				// However, it serves as a reminder that `./cockroach quit` doesn't yet
-				// work well enough -- ideally all listeners and engines are closed by
-				// the time it returns to the client.
-				//
-				// TODO(tschottdorf): should return an error. I doubt that we want to
-				// call these *testing.T-style methods on goroutines.
-				c.Stop(ctx, c.Node(node))
-				return nil
+				return c.StopCockroachGracefullyOnNode(ctx, node)
 			}
 
 			var oldVersion string

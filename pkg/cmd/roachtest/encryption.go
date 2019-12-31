@@ -33,17 +33,8 @@ func registerEncryption(r *testRegistry) {
 			}
 		}
 
-		stop := func(node int) error {
-			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port); err != nil {
-				return err
-			}
-			c.Stop(ctx, c.Node(node))
-			return nil
-		}
-
 		for i := 1; i <= nodes; i++ {
-			if err := stop(i); err != nil {
+			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
 				t.Fatal(err)
 			}
 		}
