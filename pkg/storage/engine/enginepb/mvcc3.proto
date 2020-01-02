@@ -97,7 +97,7 @@ message TxnMeta {
   // 1. by the transaction itself and by concurrent transactions when
   //    determining whether this transaction's record can be initially
   //    written. The timestamp is compared against the transaction's
-  //    corresponding write timestamp cache entry to ensure that a
+  //    corresponding timestamp cache entry to ensure that a
   //    finalized transaction can never commit, either after a replay
   //    or a transaction abort. See CanCreateTxnRecord.
   // 2. by intent resolution to efficiently scan for intents while

@@ -782,12 +782,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 					return fmt.Errorf("%s: expected gc: %t, but found %s\n%s", strKey, expGC, txn, roachpb.Key(strKey))
 				}
 				// If the transaction record was GCed and didn't begin the test
-				// as finalized, verify that the write timestamp cache was
+				// as finalized, verify that the timestamp cache was
 				// updated (by the corresponding PushTxn that marked the record
 				// as ABORTED) to prevent it from being created again in the
 				// future.
 				if !sp.status.IsFinalized() {
-					tombstoneTimestamp, _ := tc.store.tsCache.GetMaxRead(
+					tombstoneTimestamp, _ := tc.store.tsCache.GetMax(
 						txnTombstoneTSCacheKey, nil /* end */)
 					if min := (hlc.Timestamp{WallTime: sp.orig}); tombstoneTimestamp.Less(min) {
 						return fmt.Errorf("%s: expected tscache entry for tombstone key to be >= %s, "+
