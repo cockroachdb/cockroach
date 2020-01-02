@@ -159,6 +159,7 @@ var Settings = map[string]SettingFunc{
 	"default+rand":      randSetting(Parallel),
 	"no-mutations+rand": randSetting(Parallel, DisableMutations()),
 	"no-ddl+rand":       randSetting(NoParallel, DisableDDLs()),
+	"ddl-nodrop":        randSetting(NoParallel, OnlyNoDropDDLs()),
 }
 
 // SettingVectorize is the setting for vectorizable. It is not included in
