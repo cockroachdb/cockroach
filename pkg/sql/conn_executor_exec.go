@@ -71,6 +71,8 @@ func (ex *connExecutor) execStmt(
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
 		err := ex.runObserverStatement(ctx, stmt, res)
+		// Note that regardless of res.Err(), these observer statements don't
+		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
 	}
 
@@ -1092,15 +1094,12 @@ func (ex *connExecutor) runShowSyntax(
 ) error {
 	res.SetColumns(ctx, sqlbase.ShowSyntaxColumns)
 	var commErr error
-	if err := parser.RunShowSyntax(ctx, stmt,
-		func(ctx context.Context, field, msg string) error {
+	parser.RunShowSyntax(ctx, stmt,
+		func(ctx context.Context, field, msg string) {
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
-			return nil
 		},
 		ex.recordError, /* reportErr */
-	); err != nil {
-		res.SetError(err)
-	}
+	)
 	return commErr
 }
 
