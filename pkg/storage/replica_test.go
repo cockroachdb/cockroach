@@ -1420,14 +1420,13 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, _ := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"))
+		rTS, _ := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil /* end */)
 
 		if test.expLowWater == 0 {
 			continue
 		}
-		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
-			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
+		if rTS.WallTime != test.expLowWater {
+			t.Errorf("%d: expected low water %d; got max=%d", i, test.expLowWater, rTS.WallTime)
 		}
 	}
 }
@@ -2279,17 +2278,17 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	noID := uuid.UUID{}
-	rTS, rTxnID := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	rTS, rTxnID := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || rTxnID != noID {
 		t.Errorf("expected rTS=1s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
 	// Verify the timestamp cache has rTS=2s for "b".
-	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("b"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("b"), nil)
 	if rTS.WallTime != t1.Nanoseconds() || rTxnID != noID {
 		t.Errorf("expected rTS=2s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("c"), nil)
 	if rTS.WallTime != startNanos || rTxnID != noID {
 		t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
@@ -2777,7 +2776,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 }
 
 // TestReplicaUseTSCache verifies that write timestamps are upgraded
-// based on the read timestamp cache.
+// based on the timestamp cache.
 func TestReplicaUseTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -2824,8 +2823,8 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	tsOld := tc.Clock().Now()
 	tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0)
 
-	// Read at tNew to populate the read timestamp cache.
-	// DeleteRange at tNew to populate the write timestamp cache.
+	// Read at tNew to populate the timestamp cache.
+	// DeleteRange at tNew to populate the timestamp cache.
 	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
 	txnNew.ReadTimestamp = tsNew
 	txnNew.WriteTimestamp = tsNew
@@ -3881,7 +3880,7 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 	// Try to let our transaction write its initial record. If this succeeds,
 	// we're in trouble because other written intents may have been aborted,
 	// i.e. the transaction might commit but lose some of its writes. It should
-	// not succeed because the abort is reflected in the write timestamp cache,
+	// not succeed because the abort is reflected in the timestamp cache,
 	// which is consulted when attempting to create the transaction record.
 	{
 		expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
@@ -5247,7 +5246,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	// 2. The second allows the transaction record to be GCed by the EndTxn
 	// request. The effect of this is that the pusher finds no transaction
 	// record but discovers that the transaction has already been finalized
-	// using the write timestamp cache. It doesn't know whether the transaction
+	// using the timestamp cache. It doesn't know whether the transaction
 	// was COMMITTED or ABORTED, so it is forced to be conservative and return
 	// an ABORTED transaction.
 	testutils.RunTrueAndFalse(t, "auto-gc", func(t *testing.T, autoGC bool) {
@@ -10311,7 +10310,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			// If no transaction record exists, the push (timestamp) request does
-			// not create one. It only records its push in the read tscache.
+			// not create one. It only records its push in the tscache.
 			expTxn: noTxnRecord,
 		},
 		{
@@ -10321,7 +10320,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			// If no transaction record exists, the push (abort) request does
-			// not create one. It only records its push in the read tscache.
+			// not create one. It only records its push in the tscache.
 			expTxn: noTxnRecord,
 		},
 		{
@@ -12027,7 +12026,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
-				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4(), true)
+				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
@@ -12042,7 +12041,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
-				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4(), true)
+				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, &ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},

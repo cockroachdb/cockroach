@@ -285,10 +285,10 @@ func PushTxn(
 		}
 	case roachpb.PUSH_TIMESTAMP:
 		// Otherwise, update timestamp to be one greater than the request's
-		// timestamp. This new timestamp will be use to update the read
-		// timestamp cache. If the transaction record was not already present
-		// then we rely on the read timestamp cache to prevent the record from
-		// ever being written with a timestamp beneath this timestamp.
+		// timestamp. This new timestamp will be use to update the read timestamp
+		// cache. If the transaction record was not already present then we rely on
+		// the timestamp cache to prevent the record from ever being written with a
+		// timestamp beneath this timestamp.
 		reply.PusheeTxn.WriteTimestamp.Forward(args.PushTo)
 	default:
 		return result.Result{}, errors.Errorf("unexpected push type: %v", pushType)
@@ -299,8 +299,8 @@ func PushTxn(
 	// transactions to be revived. Instead, we obey the invariant that only the
 	// transaction's own coordinator can issue requests that create its
 	// transaction record. To ensure that a timestamp push or an abort is
-	// respected for transactions without transaction records, we rely on the
-	// read and write timestamp cache, respectively.
+	// respected for transactions without transaction records, we rely on markers
+	// in the timestamp cache.
 	if ok {
 		txnRecord := reply.PusheeTxn.AsRecord()
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {

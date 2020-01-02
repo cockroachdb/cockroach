@@ -60,7 +60,7 @@ func makeVal(ts hlc.Timestamp, txnIDStr string) cacheValue {
 }
 
 func makeSklMetrics() sklMetrics {
-	return makeMetrics().Skl.Read
+	return makeMetrics().Skl
 }
 
 // setMinPages sets the minimum number of pages intervalSkl will evict down to.

@@ -108,7 +108,7 @@ func RecoverTxn(
 			// that transaction records that are GCed after being COMMITTED are
 			// never re-written as ABORTED. We used to allow this to happen when
 			// PushTxn requests found missing transaction records because it was
-			// harmless, but we now use to write timestamp cache to avoid
+			// harmless, but we now use the timestamp cache to avoid
 			// needing to ever do so. If this ever becomes possible again, we'll
 			// need to relax this check.
 			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
