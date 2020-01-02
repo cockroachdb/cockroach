@@ -106,10 +106,16 @@ type txnSpanRefresher struct {
 	knobs   *ClientTestingKnobs
 	wrapped lockedSender
 
-	// See LeafTxnFinalState.RefreshReads and LeafTxnFinalState.RefreshWrites.
+	// refreshReads contains key spans which were read during the  transaction. In
+	// case the transaction's timestamp needs to be pushed, we can avoid a
+	// retriable error by "refreshing" these spans: verifying that there have been
+	// no changes to their data in between the timestamp at which they were read
+	// and the higher timestamp we want to move to.
 	refreshReads  []roachpb.Span
 	refreshWrites []roachpb.Span
-	// See LeafTxnFinalState.RefreshInvalid.
+	// refreshInvalid is set if refresh spans have not been collected (because the
+	// memory budget was exceeded). When set, refreshReads and refreshWrites are
+	// empty.
 	refreshInvalid bool
 	// refreshSpansBytes is the total size in bytes of the spans
 	// encountered during this transaction that need to be refreshed
