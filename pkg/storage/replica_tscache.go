@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -86,7 +85,7 @@ func (r *Replica) updateTimestampCache(
 			// CanCreateTxnRecord.
 			if br.Txn.Status.IsFinalized() {
 				key := transactionTombstoneMarker(start, txnID)
-				addToTSCache(key, nil, ts, txnID, true /* readCache */)
+				addToTSCache(key, nil, ts, txnID)
 			}
 		case *roachpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
@@ -101,14 +100,14 @@ func (r *Replica) updateTimestampCache(
 			recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
 				key := transactionTombstoneMarker(start, recovered.ID)
-				addToTSCache(key, nil, ts, recovered.ID, true /* readCache */)
+				addToTSCache(key, nil, ts, recovered.ID)
 			}
 		case *roachpb.PushTxnRequest:
 			// A successful PushTxn request bumps the timestamp cache for
 			// the pushee's transaction key. The pushee will consult the
 			// timestamp cache when creating its record. If the push left
 			// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
-			// update the read timestamp cache. This will cause the creator
+			// update the timestamp cache. This will cause the creator
 			// of the transaction record to forward its provisional commit
 			// timestamp to honor the result of this push. If the push left
 			// the transaction in an ABORTED state (PUSH_ABORT) then we
@@ -138,20 +137,20 @@ func (r *Replica) updateTimestampCache(
 			} else {
 				key = transactionPushMarker(start, pushee.ID)
 			}
-			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID, true /* readCache */)
+			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID)
 		case *roachpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
 			// intent already protects against writes underneath the read.
 			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID)
 			}
 		case *roachpb.InitPutRequest:
 			// InitPut only updates on ConditionFailedErrors. On other errors,
 			// no information is returned. On successful writes, the intent
 			// already protects against writes underneath the read.
 			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
-				addToTSCache(start, end, ts, txnID, true /* readCache */)
+				addToTSCache(start, end, ts, txnID)
 			}
 		case *roachpb.ScanRequest:
 			resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
@@ -161,7 +160,7 @@ func (r *Replica) updateTimestampCache(
 				// end key for the span to update the timestamp cache.
 				end = resp.ResumeSpan.Key
 			}
-			addToTSCache(start, end, ts, txnID, true /* readCache */)
+			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ReverseScanRequest:
 			resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 			if resp.ResumeSpan != nil {
@@ -171,7 +170,7 @@ func (r *Replica) updateTimestampCache(
 				// the span to update the timestamp cache.
 				start = resp.ResumeSpan.EndKey
 			}
-			addToTSCache(start, end, ts, txnID, true /* readCache */)
+			addToTSCache(start, end, ts, txnID)
 		case *roachpb.QueryIntentRequest:
 			missing := false
 			if pErr != nil {
@@ -201,14 +200,10 @@ func (r *Replica) updateTimestampCache(
 				// an empty transaction ID so that we block the intent
 				// regardless of whether it is part of the current batch's
 				// transaction or not.
-				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{}, true /* readCache */)
+				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
 			}
 		default:
-			if roachpb.UpdatesWriteTimestampCache(args) {
-				// Only requests specially cased above update the write timestamp cache.
-				log.Fatalf(ctx, "unexpected update of the write timestamp cache for request: %s", args)
-			}
-			addToTSCache(start, end, ts, txnID, true /* read */)
+			addToTSCache(start, end, ts, txnID)
 		}
 	}
 }
@@ -221,14 +216,14 @@ func checkedTSCacheUpdate(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
-) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID, bool) {
-	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID) {
+	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
 		if now.Less(ts) {
 			panic(fmt.Sprintf("Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
 				"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
 				"The timestamp cache update could be lost on a lease transfer.", ts, ba, br, pErr, now))
 		}
-		tc.Add(start, end, ts, txnID, readCache)
+		tc.Add(start, end, ts, txnID)
 	}
 }
 
@@ -256,9 +251,9 @@ func init() {
 // timestamp.
 //
 // minReadTS is used as a per-request low water mark for the value returned from
-// the read timestamp cache. That is, if the read timestamp cache returns a
-// value below minReadTS, minReadTS (without an associated txn id) will be used
-// instead to adjust the batch's timestamp.
+// the timestamp cache. That is, if the timestamp cache returns a value below
+// minReadTS, minReadTS (without an associated txn id) will be used instead to
+// adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) bool {
@@ -273,7 +268,7 @@ func (r *Replica) applyTimestampCache(
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			rTS, rTxnID := r.store.tsCache.GetMax(header.Key, header.EndKey)
 			var forwardedToMinReadTS bool
 			if rTS.Forward(minReadTS) {
 				forwardedToMinReadTS = true
@@ -431,7 +426,7 @@ func (r *Replica) CanCreateTxnRecord(
 ) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
-	// The read timestamp cache is used to push the timestamp of transactions
+	// The timestamp cache is used to push the timestamp of transactions
 	// that don't have transaction records. The timestamp cache is used
 	// to abort transactions entirely that don't have transaction records.
 	//
@@ -442,11 +437,11 @@ func (r *Replica) CanCreateTxnRecord(
 	tombstoneKey := transactionTombstoneMarker(txnKey, txnID)
 	pushKey := transactionPushMarker(txnKey, txnID)
 
-	// Look in the read timestamp cache to see if there is an entry for this
+	// Look in the timestamp cache to see if there is an entry for this
 	// transaction, which indicates the minimum timestamp that the transaction
 	// can commit at. This is used by pushers to push the timestamp of a
 	// transaction that hasn't yet written its transaction record.
-	minCommitTS, _ = r.store.tsCache.GetMaxRead(pushKey, nil /* end */)
+	minCommitTS, _ = r.store.tsCache.GetMax(pushKey, nil /* end */)
 
 	// Also look in the timestamp cache to see if there is a tombstone entry for
 	// this transaction, which would indicate this transaction has already been
@@ -455,7 +450,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMaxRead(tombstoneKey, nil /* end */)
+	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
