@@ -271,6 +271,34 @@
     $private
 )
 
+# PushFilterIntoProjectSet pushes filters into a ProjectSet. In particular,
+# the filters that are bound to the output columns of the ProjectSet are
+# pushed down into it, in hopes of being pushed down further into joins
+# and scans underneath the ProjectSet.
+[PushFilterIntoProjectSet, Normalize]
+(Select
+  (ProjectSet
+    $input:*
+    $zip:*
+  )
+  $filters:[
+    ...
+    $item:* & (IsBoundBy $item $projectCols:(OutputCols $input))
+    ...
+  ]
+)
+=>
+(Select
+  (ProjectSet
+    (Select
+      $input
+      (ExtractBoundConditions $filters $projectCols)
+    )
+    $zip
+  )
+  (ExtractUnboundConditions $filters $projectCols)
+)
+
 # SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
 # operator (or a FullJoin to a RightJoin) when it's known that the join's right
 # input never returns zero rows and when there's no join condition. The outer
