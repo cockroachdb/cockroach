@@ -140,7 +140,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	testCases := []struct {
 		name   string
 		before evalFn
-		run    evalFn
+		run    evalFn                  // nil if invalid test case
 		exp    *roachpb.AbortSpanEntry // nil if no entry expected
 		expErr string                  // empty if no error expected
 	}{
@@ -190,15 +190,9 @@ func TestUpdateAbortSpan(t *testing.T) {
 			exp: nil,
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An abort
-			// span shouldn't be present if the transaction is still committable.
-			name:   "end txn, commit, no poison, intent missing, abort span present",
-			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return endTxn(b, rec, true /* commit */, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// NOTE: this request doesn't make sense. An abort span shouldn't be
+			// present if the transaction is still committable.
+			name: "end txn, commit, no poison, intent missing, abort span present",
 		},
 		{
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
@@ -263,15 +257,9 @@ func TestUpdateAbortSpan(t *testing.T) {
 			exp: nil,
 		},
 		{
-			// NOTE: this request doesn't make sense, but we handle it. An abort
-			// span shouldn't be present if the transaction is still committable.
-			name:   "end txn, commit, no poison, intent present, abort span present",
-			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return endTxn(b, rec, true /* commit */, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// NOTE: this request doesn't make sense. An abort span shouldn't be
+			// present if the transaction is still committable.
+			name: "end txn, commit, no poison, intent present, abort span present",
 		},
 		{
 			// It is an error for EndTxn to pass Commit = true and Poison = true.
@@ -444,14 +432,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent, txn committed, no poison, intent missing, abort span present",
-			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntent(b, rec, roachpb.COMMITTED, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent, txn committed, no poison, intent missing, abort span present",
 		},
 		{
 			name:   "resolve intent, txn committed, no poison, intent present, abort span missing",
@@ -464,14 +446,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent, txn committed, no poison, intent present, abort span present",
-			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntent(b, rec, roachpb.COMMITTED, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent, txn committed, no poison, intent present, abort span present",
 		},
 		{
 			name: "resolve intent, txn committed, poison, intent missing, abort span missing",
@@ -483,14 +459,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent, txn committed, poison, intent missing, abort span present",
-			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntent(b, rec, roachpb.COMMITTED, true /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent, txn committed, poison, intent missing, abort span present",
 		},
 		{
 			name:   "resolve intent, txn committed, poison, intent present, abort span missing",
@@ -503,14 +473,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent, txn committed, poison, intent present, abort span present",
-			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntent(b, rec, roachpb.COMMITTED, true /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent, txn committed, poison, intent present, abort span present",
 		},
 		///////////////////////////////////////////////////////////////////////
 		//                     ResolveIntentRangeRequest                     //
@@ -665,14 +629,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent range, txn committed, no poison, intent missing, abort span present",
-			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntentRange(b, rec, roachpb.COMMITTED, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent range, txn committed, no poison, intent missing, abort span present",
 		},
 		{
 			name:   "resolve intent range, txn committed, no poison, intent present, abort span missing",
@@ -685,14 +643,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent range, txn committed, no poison, intent present, abort span present",
-			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntentRange(b, rec, roachpb.COMMITTED, false /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent range, txn committed, no poison, intent present, abort span present",
 		},
 		{
 			name: "resolve intent range, txn committed, poison, intent missing, abort span missing",
@@ -704,14 +656,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent range, txn committed, poison, intent missing, abort span present",
-			before: addPrevAbortSpanEntry,
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntentRange(b, rec, roachpb.COMMITTED, true /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent range, txn committed, poison, intent missing, abort span present",
 		},
 		{
 			name:   "resolve intent range, txn committed, poison, intent present, abort span missing",
@@ -724,18 +670,16 @@ func TestUpdateAbortSpan(t *testing.T) {
 		},
 		{
 			// NOTE: this case doesn't make sense. It shouldn't be possible for a committed
-			// txn to have an abort span before its intents are cleaned up. Test it anyway.
-			name:   "resolve intent range, txn committed, poison, intent present, abort span present",
-			before: compose(addIntent, addPrevAbortSpanEntry),
-			run: func(b engine.ReadWriter, rec EvalContext) error {
-				return resolveIntentRange(b, rec, roachpb.COMMITTED, true /* poison */)
-			},
-			// Not aborted, don't touch abort span.
-			exp: &prevTxnAbortSpanEntry,
+			// txn to have an abort span before its intents are cleaned up.
+			name: "resolve intent range, txn committed, poison, intent present, abort span present",
 		},
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
+			if c.run == nil {
+				t.Skip("invalid test case")
+			}
+
 			db := engine.NewDefaultInMem()
 			defer db.Close()
 			batch := db.NewBatch()
