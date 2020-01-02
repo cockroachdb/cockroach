@@ -516,7 +516,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	ba.Add(hb)
 	var expReason roachpb.TransactionAbortedReason
 	if disjointLeaseholders {
-		expReason = roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
+		expReason = roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 	} else {
 		expReason = roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}

@@ -768,15 +768,14 @@ func (tc *TxnCoordSender) updateStateLocked(
 		return roachpb.NewError(err)
 	}
 
-	// This is the non-retriable error case.
+	// This is the non-retriable error case. The client is expected to send a
+	// rollback.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
 		tc.mu.txnState = txnError
 		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
 			PrevError: pErr.String(),
 		})
-		// Cleanup.
 		tc.mu.txn.Update(errTxn)
-		tc.cleanupTxnLocked(ctx)
 	}
 	return pErr
 }
