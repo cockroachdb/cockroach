@@ -136,7 +136,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	// copied into the newer system.namespace. Objects created in this window
 	// will only be present in the older system.namespace. To account for this
 	// scenario, we must do this filtering logic.
-	// TODO(whomever): This complexity can be removed in  20.2.
+	// TODO(solon): This complexity can be removed in  20.2.
 	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.ID, "").Key()
 	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
 	if err != nil {

@@ -38,7 +38,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		// we explicitly set the SchemaName to `public` for temporary tables, as
 		// the public schema is guaranteed to exist. This ensures the FQN can be
 		// resolved correctly.
-		// TODO(whomever): Once it is possible to drop schemas, it will no longer be
+		// TODO(solon): Once it is possible to drop schemas, it will no longer be
 		// safe to set the schema name to `public`, as it may have been dropped.
 		ct.Table.TableNamePrefix.SchemaName = tree.PublicSchemaName
 		ct.Temporary = true
