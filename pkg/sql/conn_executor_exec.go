@@ -1092,15 +1092,12 @@ func (ex *connExecutor) runShowSyntax(
 ) error {
 	res.SetColumns(ctx, sqlbase.ShowSyntaxColumns)
 	var commErr error
-	if err := parser.RunShowSyntax(ctx, stmt,
-		func(ctx context.Context, field, msg string) error {
+	parser.RunShowSyntax(ctx, stmt,
+		func(ctx context.Context, field, msg string) {
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
-			return nil
 		},
 		ex.recordError, /* reportErr */
-	); err != nil {
-		res.SetError(err)
-	}
+	)
 	return commErr
 }
 
