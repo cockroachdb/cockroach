@@ -62,7 +62,7 @@ func (p *planner) createDatabase(
 ) (bool, error) {
 	shouldCreatePublicSchema := true
 	dKey := sqlbase.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, desc.Name)
-	// TODO(whomever): This conditional can be removed in 20.2. Every database
+	// TODO(solon): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
 	// the `shouldCreatePublicSchema` logic as well.
 	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
@@ -88,7 +88,7 @@ func (p *planner) createDatabase(
 		return true, err
 	}
 
-	// TODO(whomever): This check should be removed and a public schema should
+	// TODO(solon): This check should be removed and a public schema should
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
@@ -252,7 +252,7 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 	// See the comment in physical_schema_accessors.go,
 	// func (a UncachedPhysicalAccessor) GetObjectNames. Same concept
 	// applies here.
-	// TODO(whomever): This complexity can be removed in 20.2.
+	// TODO(solon): This complexity can be removed in 20.2.
 	nameKey = sqlbase.NewDeprecatedDatabaseKey("" /* name */).Key()
 	dkvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {

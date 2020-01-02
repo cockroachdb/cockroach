@@ -141,7 +141,7 @@ type TableCollection struct {
 
 	// settings are required to correctly resolve system.namespace accesses in
 	// mixed version (19.2/20.1) clusters.
-	// TODO(whomever): This field could maybe be removed in 20.2.
+	// TODO(solon): This field could maybe be removed in 20.2.
 	settings *cluster.Settings
 }
 
