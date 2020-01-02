@@ -110,7 +110,9 @@ type Iterator func(*ptpb.Record) (wantMore bool)
 type Cache interface {
 
 	// Iterate examines the records with spans which overlap with [from, to).
-	// Nil values for from or to are equivalent to Key{}.
+	// Nil values for from or to are equivalent to Key{}. The order of records
+	// between independent calls to Iterate is not defined; the order of records
+	// may differ even for the same key range that occurs at the same timestamp.
 	Iterate(_ context.Context, from, to roachpb.Key, it Iterator) (asOf hlc.Timestamp)
 
 	// QueryRecord determines whether a Record with the provided ID exists in
