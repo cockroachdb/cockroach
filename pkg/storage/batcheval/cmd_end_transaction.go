@@ -529,7 +529,7 @@ func resolveLocalIntents(
 
 	removedAny := resolveAllowance != intentResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
-		if err := SetAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, args.Poison); err != nil {
+		if err := UpdateAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, args.Poison); err != nil {
 			return nil, err
 		}
 	}
