@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -56,8 +56,8 @@ var _ = math.MaxInt64
 // Dummy import to pull in "time" package.
 var _ time.Time
 
-// Dummy import to pull in "coltypes" package.
-var _ = coltypes.Bool
+// Dummy import to pull in "colphystypes" package.
+var _ = colphystypes.Bool
 
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -236,8 +236,8 @@ func (p *_OP_NAME) Init() {
 // {{end}}
 
 // {{/*
-// The outer range is a coltypes.T (the left type). The middle range is also a
-// coltypes.T (the right type). The inner is the overloads associated with
+// The outer range is a colphystypes.T (the left type). The middle range is also a
+// colphystypes.T (the right type). The inner is the overloads associated with
 // those two types.
 // */}}
 // {{range .}}
@@ -269,10 +269,10 @@ func GetSelectionConstOperator(
 	}
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
+	case colphystypes._L_TYP_VAR:
 		switch rightType := typeconv.FromColumnType(constColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
+		case colphystypes._R_TYP_VAR:
 			switch cmpOp {
 			// {{range $overloads}}
 			case tree._NAME:
@@ -308,10 +308,10 @@ func GetSelectionOperator(
 	}
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
+	case colphystypes._L_TYP_VAR:
 		switch rightType := typeconv.FromColumnType(rightColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
+		case colphystypes._R_TYP_VAR:
 			switch cmpOp {
 			// {{range $overloads}}
 			case tree._NAME:

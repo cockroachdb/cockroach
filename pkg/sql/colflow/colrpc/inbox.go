@@ -18,8 +18,8 @@ import (
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -46,7 +46,7 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	colexec.ZeroInputNode
-	typs []coltypes.T
+	typs []colphystypes.T
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -117,7 +117,7 @@ var _ colexec.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, typs []colphystypes.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {

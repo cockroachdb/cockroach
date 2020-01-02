@@ -13,7 +13,7 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +73,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		})
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
-		typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
+		typs := []colphystypes.T{colphystypes.Int64, colphystypes.Int64}
 		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), 1 /* usableCount */)
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)

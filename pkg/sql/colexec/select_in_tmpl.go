@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// */}}
@@ -49,8 +49,8 @@ var _ apd.Decimal
 // Dummy import to pull in "time" package.
 var _ time.Time
 
-// Dummy import to pull in "coltypes" package
-var _ coltypes.T
+// Dummy import to pull in "colphystypes" package
+var _ colphystypes.T
 
 // Dummy import to pull in "bytes" package
 var _ bytes.Buffer
@@ -88,7 +88,7 @@ func GetInProjectionOperator(
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case coltypes._TYPE:
+	case colphystypes._TYPE:
 		obj := &projectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
 			allocator:    allocator,
@@ -113,7 +113,7 @@ func GetInOperator(
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
-	case coltypes._TYPE:
+	case colphystypes._TYPE:
 		obj := &selectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
@@ -268,7 +268,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
 	if pi.outputIdx == batch.Width() {
-		pi.allocator.AppendColumn(batch, coltypes.Bool)
+		pi.allocator.AppendColumn(batch, colphystypes.Bool)
 	}
 	if batch.Length() == 0 {
 		return batch

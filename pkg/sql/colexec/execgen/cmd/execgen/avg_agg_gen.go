@@ -18,13 +18,13 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type avgAggTmplInfo struct {
-	Type      coltypes.T
+	Type      colphystypes.T
 	assignAdd func(string, string, string) string
 }
 
@@ -34,7 +34,7 @@ func (a avgAggTmplInfo) AssignAdd(target, l, r string) string {
 
 func (a avgAggTmplInfo) AssignDivInt64(target, l, r string) string {
 	switch a.Type {
-	case coltypes.Decimal:
+	case colphystypes.Decimal:
 		return fmt.Sprintf(
 			`%s.SetInt64(%s)
 if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
@@ -42,7 +42,7 @@ if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
 		}`,
 			target, r, target, l, target,
 		)
-	case coltypes.Float64:
+	case colphystypes.Float64:
 		return fmt.Sprintf("%s = %s / float64(%s)", target, l, r)
 	default:
 		execerror.VectorizedInternalPanic("unsupported avg agg type")
@@ -66,7 +66,7 @@ func genAvgAgg(wr io.Writer) error {
 	s := string(t)
 
 	s = strings.Replace(s, "_GOTYPE", "{{.Type.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.Type}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "colphystypes.{{.Type}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.Type}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.Type}}", -1)
 
@@ -83,9 +83,9 @@ func genAvgAgg(wr io.Writer) error {
 		return err
 	}
 
-	// TODO(asubiotto): Support more coltypes.
-	supportedTypes := []coltypes.T{coltypes.Decimal, coltypes.Float64}
-	spm := make(map[coltypes.T]int)
+	// TODO(asubiotto): Support more colphystypes.
+	supportedTypes := []colphystypes.T{colphystypes.Decimal, colphystypes.Float64}
+	spm := make(map[colphystypes.T]int)
 	for i, typ := range supportedTypes {
 		spm[typ] = i
 	}

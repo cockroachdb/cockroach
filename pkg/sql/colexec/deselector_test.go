@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -24,37 +24,37 @@ import (
 func TestDeselector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
-		colTypes []coltypes.T
+		colTypes []colphystypes.T
 		tuples   []tuple
 		sel      []uint16
 		expected []tuple
 	}{
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			colTypes: []colphystypes.T{colphystypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      nil,
 			expected: tuples{{0}, {1}, {2}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			colTypes: []colphystypes.T{colphystypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []uint16{},
 			expected: tuples{},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			colTypes: []colphystypes.T{colphystypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []uint16{1},
 			expected: tuples{{1}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			colTypes: []colphystypes.T{colphystypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []uint16{0, 2},
 			expected: tuples{{0}, {2}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			colTypes: []colphystypes.T{colphystypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []uint16{0, 1, 2},
 			expected: tuples{{0}, {1}, {2}},
@@ -78,10 +78,10 @@ func BenchmarkDeselector(b *testing.B) {
 	ctx := context.Background()
 
 	nCols := 1
-	inputTypes := make([]coltypes.T, nCols)
+	inputTypes := make([]colphystypes.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		inputTypes[colIdx] = coltypes.Int64
+		inputTypes[colIdx] = colphystypes.Int64
 	}
 
 	batch := testAllocator.NewMemBatch(inputTypes)

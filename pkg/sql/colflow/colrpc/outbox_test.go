@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,7 +31,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	var (
 		input    = colexec.NewBatchBuffer()
-		typs     = []coltypes.T{coltypes.Int64}
+		typs     = []colphystypes.T{colphystypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	outbox, err := NewOutbox(testAllocator, input, typs, nil)
@@ -81,7 +81,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	var (
 		input = colexec.NewBatchBuffer()
-		typs  = []coltypes.T{coltypes.Int64}
+		typs  = []colphystypes.T{colphystypes.Int64}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a

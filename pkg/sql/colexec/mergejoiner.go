@@ -16,7 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -139,7 +139,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []coltypes.T
+	sourceTypes []colphystypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -178,8 +178,8 @@ func NewMergeJoinOp(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftTypes []colphystypes.T,
+	rightTypes []colphystypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
@@ -265,8 +265,8 @@ func newMergeJoinBase(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftTypes []colphystypes.T,
+	rightTypes []colphystypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
@@ -354,8 +354,8 @@ type mergeJoinBase struct {
 	filter *joinerFilter
 }
 
-func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
-	outColTypes := make([]coltypes.T, 0, len(o.left.outCols)+len(o.right.outCols))
+func (o *mergeJoinBase) getOutColTypes() []colphystypes.T {
+	outColTypes := make([]colphystypes.T, 0, len(o.left.outCols)+len(o.right.outCols))
 	for _, leftOutCol := range o.left.outCols {
 		outColTypes = append(outColTypes, o.left.sourceTypes[leftOutCol])
 	}
@@ -435,7 +435,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	// adjust its length.
 	bufferedGroup.length += uint64(groupLength)
 	for _, v := range bufferedGroup.colVecs {
-		if v.Type() == coltypes.Bytes {
+		if v.Type() == colphystypes.Bytes {
 			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.length)
 		}
 	}

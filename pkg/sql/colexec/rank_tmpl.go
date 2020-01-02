@@ -23,7 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -40,14 +40,14 @@ var _ = execerror.VectorizedInternalPanic
 func NewRankOperator(
 	allocator *Allocator,
 	input Operator,
-	inputTyps []coltypes.T,
+	inputTyps []colphystypes.T,
 	dense bool,
 	orderingCols []uint32,
 	outputColIdx int,
 	partitionColIdx int,
 ) (Operator, error) {
 	if len(orderingCols) == 0 {
-		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
+		return NewConstOp(allocator, input, colphystypes.Int64, int64(1), outputColIdx)
 	}
 	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
 	if err != nil {
@@ -127,11 +127,11 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Bool)
+		r.allocator.AppendColumn(batch, colphystypes.Bool)
 	}
 	// {{ end }}
 	if r.outputColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Int64)
+		r.allocator.AppendColumn(batch, colphystypes.Int64)
 	}
 	if batch.Length() == 0 {
 		return batch

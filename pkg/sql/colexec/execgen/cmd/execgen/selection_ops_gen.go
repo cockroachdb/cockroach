@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 )
 
 func getSelectionOpsTmpl() (*template.Template, error) {
@@ -58,13 +58,13 @@ func genSelectionOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
+	lTypToRTypToOverloads := make(map[colphystypes.T]map[colphystypes.T][]*overload)
 	for _, ov := range comparisonOpOverloads {
 		lTyp := ov.LTyp
 		rTyp := ov.RTyp
 		rTypToOverloads := lTypToRTypToOverloads[lTyp]
 		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
+			rTypToOverloads = make(map[colphystypes.T][]*overload)
 			lTypToRTypToOverloads[lTyp] = rTypToOverloads
 		}
 		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)

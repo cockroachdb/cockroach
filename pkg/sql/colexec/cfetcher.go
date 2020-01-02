@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -284,10 +284,10 @@ func (rf *cFetcher) Init(
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 
-	typs := make([]coltypes.T, len(colDescriptors))
+	typs := make([]colphystypes.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
+		if typs[i] == colphystypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
@@ -624,7 +624,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 
 		case stateResetBatch:
 			for _, colvec := range rf.machine.colvecs {
-				if colvec.Type() != coltypes.Unhandled {
+				if colvec.Type() != colphystypes.Unhandled {
 					colvec.Nulls().UnsetNulls()
 				}
 			}

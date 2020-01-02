@@ -13,7 +13,7 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -33,9 +33,9 @@ func TestConst(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]colphystypes.T{{colphystypes.Int64}}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewConstOp(testAllocator, input[0], coltypes.Int64, int64(9), 1)
+				return NewConstOp(testAllocator, input[0], colphystypes.Int64, int64(9), 1)
 			})
 	}
 }
@@ -56,9 +56,9 @@ func TestConstNull(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]colphystypes.T{{colphystypes.Int64}}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewConstNullOp(testAllocator, input[0], 1, coltypes.Int64), nil
+				return NewConstNullOp(testAllocator, input[0], 1, colphystypes.Int64), nil
 			})
 	}
 }

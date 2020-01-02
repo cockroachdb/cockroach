@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 )
 
 // Batch is the type that columnar operators receive and produce. It
@@ -41,14 +41,14 @@ type Batch interface {
 	// AppendCol appends the given Vec to this batch.
 	AppendCol(Vec)
 	// Reset modifies the caller in-place to have the given length and columns
-	// with the given coltypes. If it's possible, Reset will reuse the existing
+	// with the given colphystypes. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
 	// its Vecs. However, Reset does _not_ zero out the column data.
 	//
 	// NOTE: Reset can allocate a new Batch, so when calling from the vectorized
 	// engine consider either allocating a new Batch explicitly via
 	// colexec.Allocator or calling ResetInternalBatch.
-	Reset(types []coltypes.T, length int)
+	Reset(types []colphystypes.T, length int)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
@@ -68,16 +68,16 @@ func BatchSize() uint16 {
 	return batchSize
 }
 
-// NewMemBatch allocates a new in-memory Batch. A coltypes.Unknown type
+// NewMemBatch allocates a new in-memory Batch. A colphystypes.Unknown type
 // will create a placeholder Vec that may not be accessed.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(types []coltypes.T) Batch {
+func NewMemBatch(types []colphystypes.T) Batch {
 	return NewMemBatchWithSize(types, int(BatchSize()))
 }
 
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
+func NewMemBatchWithSize(types []colphystypes.T, size int) Batch {
 	if max := math.MaxUint16; size > max {
 		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
 	}
@@ -148,7 +148,7 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(n uint16) {
 	m.n = n
 	for _, v := range m.b {
-		if v.Type() == coltypes.Bytes {
+		if v.Type() == colphystypes.Bytes {
 			v.Bytes().UpdateOffsetsToBeNonDecreasing(uint64(n))
 		}
 	}
@@ -160,7 +160,7 @@ func (m *MemBatch) AppendCol(col Vec) {
 }
 
 // Reset implements the Batch interface.
-func (m *MemBatch) Reset(types []coltypes.T, length int) {
+func (m *MemBatch) Reset(types []colphystypes.T, length int) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch
@@ -186,7 +186,7 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 	m.b = m.b[:len(types)]
 	for _, col := range m.ColVecs() {
 		col.Nulls().UnsetNulls()
-		if col.Type() == coltypes.Bytes {
+		if col.Type() == colphystypes.Bytes {
 			col.Bytes().Reset()
 		}
 	}
@@ -196,10 +196,10 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 func (m *MemBatch) ResetInternalBatch() {
 	m.SetSelection(false)
 	for _, v := range m.b {
-		if v.Type() != coltypes.Unhandled {
+		if v.Type() != colphystypes.Unhandled {
 			v.Nulls().UnsetNulls()
 		}
-		if v.Type() == coltypes.Bytes {
+		if v.Type() == colphystypes.Bytes {
 			v.Bytes().Reset()
 		}
 	}

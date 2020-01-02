@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -224,7 +224,7 @@ func TestSetAndUnsetNulls(t *testing.T) {
 func TestNullsSet(t *testing.T) {
 	args := SliceArgs{
 		// Neither type nor the length here matter.
-		Src: NewMemColumn(coltypes.Bool, 0),
+		Src: NewMemColumn(colphystypes.Bool, 0),
 	}
 	for _, destStartIdx := range pos {
 		for _, srcStartIdx := range pos {
@@ -263,7 +263,7 @@ func TestNullsSet(t *testing.T) {
 func TestNullsSetWithSel(t *testing.T) {
 	args := SliceArgs{
 		// Neither type nor the length here matter.
-		Src: NewMemColumn(coltypes.Bool, 0),
+		Src: NewMemColumn(colphystypes.Bool, 0),
 		Sel: make([]uint16, BatchSize()),
 	}
 	// Make a selection vector with every even index. (This turns nulls10 into

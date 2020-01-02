@@ -17,27 +17,27 @@ import (
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
+func randomBatch(allocator *colexec.Allocator) ([]colphystypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
-	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
-	for _, typ := range coltypes.AllTypes {
+	availableTyps := make([]colphystypes.T, 0, len(colphystypes.AllTypes))
+	for _, typ := range colphystypes.AllTypes {
 		// TODO(asubiotto,jordan): We do not support decimal conversion yet.
-		if typ == coltypes.Decimal {
+		if typ == colphystypes.Decimal {
 			continue
 		}
 		availableTyps = append(availableTyps, typ)
 	}
-	typs := make([]coltypes.T, rng.Intn(maxTyps)+1)
+	typs := make([]colphystypes.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
 		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 	}
@@ -55,7 +55,7 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 // interesting than testing a batch with a different capacity of BatchSize() but
 // zero elements).
 func copyBatch(original coldata.Batch) coldata.Batch {
-	typs := make([]coltypes.T, original.Width())
+	typs := make([]colphystypes.T, original.Width())
 	for i, vec := range original.ColVecs() {
 		typs[i] = vec.Type()
 	}
@@ -96,7 +96,7 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 			expectedVec.Nulls().Slice(0, uint64(expected.Length())),
 			actualVec.Nulls().Slice(0, uint64(actual.Length())),
 		)
-		if typ == coltypes.Bytes {
+		if typ == colphystypes.Bytes {
 			// Cannot use require.Equal for this type.
 			// TODO(asubiotto): Again, why not?
 			expectedBytes := expectedVec.Bytes().Window(0, int(expected.Length()))
@@ -107,7 +107,7 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
 				}
 			}
-		} else if typ == coltypes.Timestamp {
+		} else if typ == colphystypes.Timestamp {
 			// Cannot use require.Equal for this type.
 			// TODO(yuzefovich): Again, why not?
 			expectedTimestamp := expectedVec.Timestamp()[0:expected.Length()]
@@ -131,9 +131,9 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	unsupportedTypes := []coltypes.T{coltypes.Decimal}
+	unsupportedTypes := []colphystypes.T{colphystypes.Decimal}
 	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
+		_, err := colserde.NewArrowBatchConverter([]colphystypes.T{typ})
 		require.Error(t, err)
 	}
 }
@@ -212,11 +212,11 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := []coltypes.T{
-		coltypes.Bool,
-		coltypes.Bytes,
-		coltypes.Int64,
-		coltypes.Timestamp,
+	typs := []colphystypes.T{
+		colphystypes.Bool,
+		colphystypes.Bytes,
+		colphystypes.Int64,
+		colphystypes.Timestamp,
 	}
 	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
 	// converting on one iteration of the benchmark for the corresponding type in
@@ -229,11 +229,11 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
+		batch := colexec.RandomBatch(testAllocator, rng, []colphystypes.T{typ}, int(coldata.BatchSize()), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
-		if typ == coltypes.Bytes {
+		if typ == colphystypes.Bytes {
 			// This type has variable length elements, fit all of them to be fixedLen
 			// bytes long so that we can compare results of one benchmark with
 			// another. Since we can't overwrite elements in a Bytes, create a new
@@ -252,7 +252,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			}
 			batch.ColVec(0).SetCol(newBytes)
 		}
-		c, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
+		c, err := colserde.NewArrowBatchConverter([]colphystypes.T{typ})
 		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {

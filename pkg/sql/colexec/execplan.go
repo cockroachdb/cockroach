@@ -16,7 +16,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -142,7 +142,7 @@ func createJoiner(
 	joinType sqlbase.JoinType,
 	createJoinOpWithOnExprPlanning func(
 		result *NewColOperatorResult,
-		leftTypes, rightTypes []coltypes.T,
+		leftTypes, rightTypes []colphystypes.T,
 		leftOutCols, rightOutCols []uint32,
 	) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error),
 ) error {
@@ -157,7 +157,7 @@ func createJoiner(
 
 	post := &spec.Post
 
-	var leftTypes, rightTypes []coltypes.T
+	var leftTypes, rightTypes []colphystypes.T
 	leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 	if err != nil {
 		return err
@@ -549,7 +549,7 @@ func NewColOperator(
 				}
 				result.ColumnTypes[i] = *retType
 			}
-			var typs []coltypes.T
+			var typs []colphystypes.T
 			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
@@ -589,7 +589,7 @@ func NewColOperator(
 			}
 
 			result.ColumnTypes = spec.Input[0].ColumnTypes
-			var typs []coltypes.T
+			var typs []colphystypes.T
 			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
 			if err != nil {
 				return result, err
@@ -607,7 +607,7 @@ func NewColOperator(
 		case core.HashJoiner != nil:
 			createHashJoinerWithOnExprPlanning := func(
 				result *NewColOperatorResult,
-				leftTypes, rightTypes []coltypes.T,
+				leftTypes, rightTypes []colphystypes.T,
 				leftOutCols, rightOutCols []uint32,
 			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
 				var (
@@ -661,7 +661,7 @@ func NewColOperator(
 
 			createMergeJoinerWithOnExprPlanning := func(
 				result *NewColOperatorResult,
-				leftTypes, rightTypes []coltypes.T,
+				leftTypes, rightTypes []colphystypes.T,
 				leftOutCols, rightOutCols []uint32,
 			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
 				var (
@@ -737,7 +737,7 @@ func NewColOperator(
 				return result, err
 			}
 			input := inputs[0]
-			var inputTypes []coltypes.T
+			var inputTypes []colphystypes.T
 			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
@@ -807,7 +807,7 @@ func NewColOperator(
 			}
 			wf := core.Windower.WindowFns[0]
 			input := inputs[0]
-			var typs []coltypes.T
+			var typs []colphystypes.T
 			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err

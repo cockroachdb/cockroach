@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,9 +57,9 @@ func makeDatumFromColOffset(
 		return tree.DNull, nil
 	}
 	switch col.Type() {
-	case coltypes.Bool:
+	case colphystypes.Bool:
 		return tree.MakeDBool(tree.DBool(col.Bool()[rowIdx])), nil
-	case coltypes.Int64:
+	case colphystypes.Int64:
 		switch hint.Family() {
 		case types.IntFamily:
 			return alloc.NewDInt(tree.DInt(col.Int64()[rowIdx])), nil
@@ -67,7 +67,7 @@ func makeDatumFromColOffset(
 			d := *apd.New(col.Int64()[rowIdx], 0)
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case coltypes.Float64:
+	case colphystypes.Float64:
 		switch hint.Family() {
 		case types.FloatFamily:
 			return alloc.NewDFloat(tree.DFloat(col.Float64()[rowIdx])), nil
@@ -78,7 +78,7 @@ func makeDatumFromColOffset(
 			}
 			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
 		}
-	case coltypes.Bytes:
+	case colphystypes.Bytes:
 		switch hint.Family() {
 		case types.BytesFamily:
 			return alloc.NewDBytes(tree.DBytes(col.Bytes().Get(rowIdx))), nil

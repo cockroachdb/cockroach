@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -29,13 +29,13 @@ type sortOverload struct {
 }
 
 type sortOverloads struct {
-	LTyp      coltypes.T
+	LTyp      colphystypes.T
 	Overloads []sortOverload
 }
 
 // typesToSortOverloads maps types to whether nulls are handled to
 // the overload representing the sort direction.
-var typesToSortOverloads map[coltypes.T]map[bool]sortOverloads
+var typesToSortOverloads map[colphystypes.T]map[bool]sortOverloads
 
 func genSortOps(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/colexec/sort_tmpl.go")
@@ -47,7 +47,7 @@ func genSortOps(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{$typ}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "colphystypes.{{$typ}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{$typ}}", -1)
 	s = strings.Replace(s, "_DIR_ENUM", "{{.Dir}}", -1)
 	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
@@ -94,7 +94,7 @@ func genQuickSortOps(wr io.Writer) error {
 func init() {
 	registerGenerator(genSortOps, "sort.eg.go")
 	registerGenerator(genQuickSortOps, "quicksort.eg.go")
-	typesToSortOverloads = make(map[coltypes.T]map[bool]sortOverloads)
+	typesToSortOverloads = make(map[colphystypes.T]map[bool]sortOverloads)
 	for _, o := range sameTypeComparisonOpToOverloads[tree.LT] {
 		typesToSortOverloads[o.LTyp] = make(map[bool]sortOverloads)
 		for _, b := range []bool{true, false} {

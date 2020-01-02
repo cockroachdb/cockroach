@@ -12,7 +12,7 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -223,7 +223,7 @@ func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
 	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
 }
 
-func newMJBufferedGroup(allocator *Allocator, types []coltypes.T) *mjBufferedGroup {
+func newMJBufferedGroup(allocator *Allocator, types []colphystypes.T) *mjBufferedGroup {
 	bg := &mjBufferedGroup{
 		colVecs: make([]coldata.Vec, len(types)),
 	}
@@ -290,8 +290,8 @@ func (bg *mjBufferedGroup) AppendCol(coldata.Vec) {
 
 // Reset is not implemented because mjBufferedGroup is not reused with
 // different column schemas at the moment.
-func (bg *mjBufferedGroup) Reset(types []coltypes.T, length int) {
-	execerror.VectorizedInternalPanic("Reset([]coltypes.T, int) should not be called on mjBufferedGroup")
+func (bg *mjBufferedGroup) Reset(types []colphystypes.T, length int) {
+	execerror.VectorizedInternalPanic("Reset([]colphystypes.T, int) should not be called on mjBufferedGroup")
 }
 
 // ResetInternalBatch is not implemented because mjBufferedGroup is not meant
@@ -310,7 +310,7 @@ func (bg *mjBufferedGroup) reset() {
 		// We do not need to reset the column vectors because those will be just
 		// written over, but we do need to reset the nulls.
 		colVec.Nulls().UnsetNulls()
-		if colVec.Type() == coltypes.Bytes {
+		if colVec.Type() == colphystypes.Bytes {
 			// Bytes type is the only exception to the comment above.
 			colVec.Bytes().Reset()
 		}

@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -25,43 +25,43 @@ import (
 // FromColumnType returns the T that corresponds to the input ColumnType.
 // Note: if you're adding a new type here, add it to
 // colexec.AllSupportedSQLTypes as well.
-func FromColumnType(ct *types.T) coltypes.T {
+func FromColumnType(ct *types.T) colphystypes.T {
 	switch ct.Family() {
 	case types.BoolFamily:
-		return coltypes.Bool
+		return colphystypes.Bool
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
-		return coltypes.Bytes
+		return colphystypes.Bytes
 	case types.DateFamily, types.OidFamily:
-		return coltypes.Int64
+		return colphystypes.Int64
 	case types.DecimalFamily:
-		return coltypes.Decimal
+		return colphystypes.Decimal
 	case types.IntFamily:
 		switch ct.Width() {
 		case 16:
-			return coltypes.Int16
+			return colphystypes.Int16
 		case 32:
-			return coltypes.Int32
+			return colphystypes.Int32
 		case 0, 64:
-			return coltypes.Int64
+			return colphystypes.Int64
 		}
 		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case types.FloatFamily:
-		return coltypes.Float64
+		return colphystypes.Float64
 	case types.TimestampFamily:
-		return coltypes.Timestamp
+		return colphystypes.Timestamp
 	case types.TimestampTZFamily:
-		return coltypes.Timestamp
+		return colphystypes.Timestamp
 	}
-	return coltypes.Unhandled
+	return colphystypes.Unhandled
 }
 
 // FromColumnTypes calls FromColumnType on each element of cts, returning the
 // resulting slice.
-func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
-	typs := make([]coltypes.T, len(cts))
+func FromColumnTypes(cts []types.T) ([]colphystypes.T, error) {
+	typs := make([]colphystypes.T, len(cts))
 	for i := range typs {
 		typs[i] = FromColumnType(&cts[i])
-		if typs[i] == coltypes.Unhandled {
+		if typs[i] == colphystypes.Unhandled {
 			return nil, errors.Errorf("unsupported type %s", cts[i].String())
 		}
 	}
@@ -72,23 +72,23 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 // that due to the fact that multiple types.T's are represented by a single
 // column type, this conversion might return the type that is unexpected.
 // NOTE: this should only be used in tests.
-func ToColumnType(t coltypes.T) *types.T {
+func ToColumnType(t colphystypes.T) *types.T {
 	switch t {
-	case coltypes.Bool:
+	case colphystypes.Bool:
 		return types.Bool
-	case coltypes.Bytes:
+	case colphystypes.Bytes:
 		return types.Bytes
-	case coltypes.Decimal:
+	case colphystypes.Decimal:
 		return types.Decimal
-	case coltypes.Int16:
+	case colphystypes.Int16:
 		return types.Int2
-	case coltypes.Int32:
+	case colphystypes.Int32:
 		return types.Int4
-	case coltypes.Int64:
+	case colphystypes.Int64:
 		return types.Int
-	case coltypes.Float64:
+	case colphystypes.Float64:
 		return types.Float
-	case coltypes.Timestamp:
+	case colphystypes.Timestamp:
 		return types.Timestamp
 	}
 	execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
@@ -97,7 +97,7 @@ func ToColumnType(t coltypes.T) *types.T {
 
 // ToColumnTypes calls ToColumnType on each element of typs returning the
 // resulting slice.
-func ToColumnTypes(typs []coltypes.T) []types.T {
+func ToColumnTypes(typs []colphystypes.T) []types.T {
 	cts := make([]types.T, len(typs))
 	for i := range cts {
 		t := ToColumnType(typs[i])

@@ -14,7 +14,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -65,12 +65,12 @@ type generateLocals struct {
 	uuidAlloc uuid.UUID
 }
 
-var itemColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Bytes,
+var itemColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Float64,
+	colphystypes.Bytes,
 }
 
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -102,16 +102,16 @@ func (w *tpcc) tpccItemStats() []workload.JSONStatistic {
 	}
 }
 
-var warehouseColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Float64,
+var warehouseColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Float64,
+	colphystypes.Float64,
 }
 
 func (w *tpcc) tpccWarehouseInitialRowBatch(
@@ -154,24 +154,24 @@ func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
 	}
 }
 
-var stockColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
+var stockColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
 }
 
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -230,18 +230,18 @@ func (w *tpcc) tpccStockStats() []workload.JSONStatistic {
 	}
 }
 
-var districtColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Float64,
-	coltypes.Int64,
+var districtColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Float64,
+	colphystypes.Float64,
+	colphystypes.Int64,
 }
 
 func (w *tpcc) tpccDistrictInitialRowBatch(
@@ -293,28 +293,28 @@ func (w *tpcc) tpccDistrictStats() []workload.JSONStatistic {
 	}
 }
 
-var customerColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Float64,
-	coltypes.Float64,
-	coltypes.Float64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
+var customerColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Bytes,
+	colphystypes.Float64,
+	colphystypes.Float64,
+	colphystypes.Float64,
+	colphystypes.Float64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
 }
 
 func (w *tpcc) tpccCustomerInitialRowBatch(
@@ -405,16 +405,16 @@ func (w *tpcc) tpccCustomerStats() []workload.JSONStatistic {
 	}
 }
 
-var historyColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Bytes,
+var historyColTypes = []colphystypes.T{
+	colphystypes.Bytes,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Float64,
+	colphystypes.Bytes,
 }
 
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -468,15 +468,15 @@ func (w *tpcc) tpccHistoryStats() []workload.JSONStatistic {
 	}
 }
 
-var orderColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
+var orderColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
 }
 
 func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
@@ -555,10 +555,10 @@ func (w *tpcc) tpccOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var newOrderColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
+var newOrderColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
 }
 
 func (w *tpcc) tpccNewOrderInitialRowBatch(
@@ -585,17 +585,17 @@ func (w *tpcc) tpccNewOrderStats() []workload.JSONStatistic {
 	}
 }
 
-var orderLineColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Float64,
-	coltypes.Bytes,
+var orderLineColTypes = []colphystypes.T{
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Int64,
+	colphystypes.Bytes,
+	colphystypes.Int64,
+	colphystypes.Float64,
+	colphystypes.Bytes,
 }
 
 func (w *tpcc) tpccOrderLineInitialRowBatch(

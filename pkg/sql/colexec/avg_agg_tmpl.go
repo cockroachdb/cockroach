@@ -22,7 +22,7 @@ package colexec
 import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -52,7 +52,7 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t coltypes.T) (aggregateFunc, error) {
+func newAvgAgg(t colphystypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:

@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -28,7 +28,7 @@ import (
 func NewSorter(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	inputTypes []colphystypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
@@ -37,7 +37,7 @@ func NewSorter(
 func newSorter(
 	allocator *Allocator,
 	input spooler,
-	inputTypes []coltypes.T,
+	inputTypes []colphystypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
@@ -93,7 +93,7 @@ type allSpooler struct {
 
 	allocator *Allocator
 	// inputTypes contains the types of all of the columns from the input.
-	inputTypes []coltypes.T
+	inputTypes []colphystypes.T
 	// values stores all the values from the input after spooling. Each Vec in
 	// this slice is the entire column from the input.
 	values []coldata.Vec
@@ -105,7 +105,7 @@ type allSpooler struct {
 
 var _ spooler = &allSpooler{}
 
-func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
+func newAllSpooler(allocator *Allocator, input Operator, inputTypes []colphystypes.T) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -179,7 +179,7 @@ type sortOp struct {
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	inputTypes []colphystypes.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []execinfrapb.Ordering_Column

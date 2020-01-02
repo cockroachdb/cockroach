@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,7 +33,7 @@ type defaultBuiltinFuncOperator struct {
 	argumentCols   []int
 	outputIdx      int
 	outputType     *types.T
-	outputPhysType coltypes.T
+	outputPhysType colphystypes.T
 	converter      func(tree.Datum) (interface{}, error)
 
 	row tree.Datums
@@ -121,7 +121,7 @@ func (s *substringFunctionOperator) Init() {
 func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
 	if s.outputIdx == batch.Width() {
-		s.allocator.AppendColumn(batch, coltypes.Bytes)
+		s.allocator.AppendColumn(batch, colphystypes.Bytes)
 	}
 
 	n := batch.Length()
@@ -210,7 +210,7 @@ func NewBuiltinFunctionOperator(
 	default:
 		outputType := funcExpr.ResolvedType()
 		outputPhysType := typeconv.FromColumnType(outputType)
-		if outputPhysType == coltypes.Unhandled {
+		if outputPhysType == colphystypes.Unhandled {
 			return nil, errors.Errorf(
 				"unsupported output type %q of %s",
 				outputType.String(), funcExpr.String(),

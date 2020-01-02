@@ -17,7 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -235,10 +235,10 @@ type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colexec.Allocator,
 		input colexec.Operator,
-		typs []coltypes.T,
+		typs []colphystypes.T,
 		metadataSources []execinfrapb.MetadataSource,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colexec.Allocator, typs []colphystypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -246,14 +246,14 @@ type vectorizedRemoteComponentCreator struct{}
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colexec.Allocator,
 	input colexec.Operator,
-	typs []coltypes.T,
+	typs []colphystypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(allocator, input, typs, metadataSources)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, typs []colphystypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInbox(allocator, typs, streamID)
 }
@@ -336,7 +336,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	op colexec.Operator,
-	outputTyps []coltypes.T,
+	outputTyps []colphystypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) (execinfra.OpNode, error) {
@@ -379,7 +379,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	input colexec.Operator,
-	outputTyps []coltypes.T,
+	outputTyps []colphystypes.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) error {
@@ -559,7 +559,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
 	op colexec.Operator,
-	opOutputTypes []coltypes.T,
+	opOutputTypes []colphystypes.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 ) error {
 	output := &pspec.Output[0]

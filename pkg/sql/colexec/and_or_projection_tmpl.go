@@ -24,7 +24,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
@@ -109,7 +109,7 @@ func (o *_OP_LOWERProjOp) Init() {
 func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
 	if o.outputIdx == batch.Width() {
-		o.allocator.AppendColumn(batch, coltypes.Bool)
+		o.allocator.AppendColumn(batch, colphystypes.Bool)
 	}
 	origLen := batch.Length()
 	// NB: we don't short-circuit if the batch is length 0 here, because we have

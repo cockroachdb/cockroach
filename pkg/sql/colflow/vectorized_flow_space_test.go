@@ -16,7 +16,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -184,7 +184,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	}
 
 	batch := testAllocator.NewMemBatchWithSize(
-		[]coltypes.T{coltypes.Int64}, 1, /* size */
+		[]colphystypes.T{colphystypes.Int64}, 1, /* size */
 	)
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {

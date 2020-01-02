@@ -16,7 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 )
@@ -24,7 +24,7 @@ import (
 func TestBatchReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	resetAndCheck := func(b coldata.Batch, typs []coltypes.T, n int, shouldReuse bool) {
+	resetAndCheck := func(b coldata.Batch, typs []colphystypes.T, n int, shouldReuse bool) {
 		t.Helper()
 		// Use the data backing the ColVecs slice as a proxy for when things get
 		// reallocated.
@@ -53,12 +53,12 @@ func TestBatchReset(t *testing.T) {
 			vec.Nulls().SetNull(0)
 			assert.True(t, vec.Nulls().NullAt(0))
 			switch vec.Type() {
-			case coltypes.Int64:
+			case colphystypes.Int64:
 				x := vec.Int64()
 				assert.True(t, len(x) >= n)
 				assert.True(t, cap(x) >= selCap)
 				x[0] = 1
-			case coltypes.Bytes:
+			case colphystypes.Bytes:
 				x := vec.Bytes()
 				assert.True(t, x.Len() >= n)
 				x.Set(0, []byte{1})
@@ -68,9 +68,9 @@ func TestBatchReset(t *testing.T) {
 		}
 	}
 
-	typsInt := []coltypes.T{coltypes.Int64}
-	typsBytes := []coltypes.T{coltypes.Bytes}
-	typsIntBytes := []coltypes.T{coltypes.Int64, coltypes.Bytes}
+	typsInt := []colphystypes.T{colphystypes.Int64}
+	typsBytes := []colphystypes.T{colphystypes.Bytes}
+	typsIntBytes := []colphystypes.T{colphystypes.Int64, colphystypes.Bytes}
 	var b coldata.Batch
 
 	// Simple case, reuse

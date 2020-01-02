@@ -13,7 +13,7 @@ package coldata
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ func TestMemColumnWindow(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	c := NewMemColumn(coltypes.Int64, int(BatchSize()))
+	c := NewMemColumn(colphystypes.Int64, int(BatchSize()))
 
 	ints := c.Int64()
 	for i := uint16(0); i < BatchSize(); i++ {
@@ -42,7 +42,7 @@ func TestMemColumnWindow(t *testing.T) {
 		endWindow = uint16(1 + rng.Intn(int(BatchSize())))
 	}
 
-	window := c.Window(coltypes.Int64, uint64(startWindow), uint64(endWindow))
+	window := c.Window(colphystypes.Int64, uint64(startWindow), uint64(endWindow))
 	windowInts := window.Int64()
 	// Verify that every other value is null.
 	for i, j := startWindow, uint16(0); i < endWindow; i, j = i+1, j+1 {
@@ -112,7 +112,7 @@ func TestNullRanges(t *testing.T) {
 		},
 	}
 
-	c := NewMemColumn(coltypes.Int64, int(BatchSize()))
+	c := NewMemColumn(colphystypes.Int64, int(BatchSize()))
 	for _, tc := range tcs {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
@@ -133,7 +133,7 @@ func TestNullRanges(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	src := NewMemColumn(typ, int(BatchSize()))
 	sel := make([]uint16, len(src.Int64()))
@@ -217,7 +217,7 @@ func TestAppend(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	src := NewMemColumn(typ, int(BatchSize()))
 	srcInts := src.Int64()
@@ -304,7 +304,7 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopyNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	// Set up the destination vector.
 	dst := NewMemColumn(typ, int(BatchSize()))
@@ -360,7 +360,7 @@ func TestCopyNulls(t *testing.T) {
 }
 
 func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	// Set up the destination vector. It is all nulls except for a single
 	// non-null at index 0.
@@ -409,7 +409,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 }
 
 func BenchmarkAppend(b *testing.B) {
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	src := NewMemColumn(typ, int(BatchSize()))
 	sel := make([]uint16, len(src.Int64()))
@@ -447,7 +447,7 @@ func BenchmarkAppend(b *testing.B) {
 }
 
 func BenchmarkCopy(b *testing.B) {
-	const typ = coltypes.Int64
+	const typ = colphystypes.Int64
 
 	src := NewMemColumn(typ, int(BatchSize()))
 	sel := make([]uint16, len(src.Int64()))

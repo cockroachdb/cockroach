@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
@@ -29,7 +29,7 @@ type caseOp struct {
 
 	thenIdxs  []int
 	outputIdx int
-	typ       coltypes.T
+	typ       colphystypes.T
 
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to destructively
@@ -78,7 +78,7 @@ func NewCaseOp(
 	elseOp Operator,
 	thenIdxs []int,
 	outputIdx int,
-	typ coltypes.T,
+	typ colphystypes.T,
 ) Operator {
 	return &caseOp{
 		allocator: allocator,

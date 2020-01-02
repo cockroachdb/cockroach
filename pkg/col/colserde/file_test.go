@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -98,7 +98,7 @@ func TestFileIndexing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numInts = 10
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []colphystypes.T{colphystypes.Int64}
 
 	var buf bytes.Buffer
 	s, err := colserde.NewFileSerializer(&buf, typs)
@@ -122,7 +122,7 @@ func TestFileIndexing(t *testing.T) {
 		require.NoError(t, d.GetBatch(batchIdx, b))
 		require.Equal(t, uint16(1), b.Length())
 		require.Equal(t, 1, b.Width())
-		require.Equal(t, coltypes.Int64, b.ColVec(0).Type())
+		require.Equal(t, colphystypes.Int64, b.ColVec(0).Type())
 		require.Equal(t, int64(batchIdx), b.ColVec(0).Int64()[0])
 	}
 }

@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -52,8 +52,8 @@ var _ tree.Datum
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// Dummy import to pull in "colphystypes" package.
+var _ colphystypes.T
 
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
@@ -91,7 +91,7 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
 	if p.outputIdx == batch.Width() {
-		p.allocator.AppendColumn(batch, coltypes._RET_TYP)
+		p.allocator.AppendColumn(batch, colphystypes._RET_TYP)
 	}
 	if n == 0 {
 		return batch
@@ -175,8 +175,8 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // */}}
 
 // {{/*
-// The outer range is a coltypes.T (the left type). The middle range is also a
-// coltypes.T (the right type). The inner is the overloads associated with
+// The outer range is a colphystypes.T (the left type). The middle range is also a
+// colphystypes.T (the right type). The inner is the overloads associated with
 // those two types.
 // */}}
 // {{range .}}
@@ -210,10 +210,10 @@ func GetProjectionOperator(
 	}
 	switch leftType := typeconv.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
+	case colphystypes._L_TYP_VAR:
 		switch rightType := typeconv.FromColumnType(rightColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
+		case colphystypes._R_TYP_VAR:
 			switch op.(type) {
 			case tree.BinaryOperator:
 				switch op {

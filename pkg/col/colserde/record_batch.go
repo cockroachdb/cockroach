@@ -16,8 +16,8 @@ import (
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/pkg/errors"
 )
@@ -31,12 +31,12 @@ const (
 
 // numBuffersForType returns how many buffers are used to represent an array of
 // the given type.
-func numBuffersForType(t coltypes.T) int {
+func numBuffersForType(t colphystypes.T) int {
 	// Nearly all types are represented by 2 memory.Buffers. One buffer for the
 	// null bitmap and one for the values.
 	numBuffers := 2
 	switch t {
-	case coltypes.Bytes, coltypes.Timestamp:
+	case colphystypes.Bytes, colphystypes.Timestamp:
 		// This type has an extra offsets buffer.
 		numBuffers = 3
 	}
@@ -68,7 +68,7 @@ type RecordBatchSerializer struct {
 // NewRecordBatchSerializer creates a new RecordBatchSerializer according to
 // typs. Note that Serializing or Deserializing data that does not follow the
 // passed in schema results in undefined behavior.
-func NewRecordBatchSerializer(typs []coltypes.T) (*RecordBatchSerializer, error) {
+func NewRecordBatchSerializer(typs []colphystypes.T) (*RecordBatchSerializer, error) {
 	if len(typs) == 0 {
 		return nil, errors.Errorf("zero length schema unsupported")
 	}

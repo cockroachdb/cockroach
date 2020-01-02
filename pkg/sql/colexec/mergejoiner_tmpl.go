@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -53,13 +53,13 @@ var _ time.Time
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _TYPES_T is the template type variable for colphystypes.T. It will be replaced by
+// colphystypes.Foo for each type Foo in the colphystypes.T type.
+const _TYPES_T = colphystypes.Unhandled
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// replaced by the Go type equivalent for each type in colphystypes.T, for example
+// int64 for colphystypes.Int64.
 type _GOTYPE interface{}
 
 // _ASSIGN_EQ is the template equality function for assigning the first input

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -185,7 +185,7 @@ func TestOutboxInbox(t *testing.T) {
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
-			typs        = []coltypes.T{coltypes.Int64}
+			typs        = []colphystypes.T{colphystypes.Int64}
 			inputBuffer = colexec.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
@@ -443,7 +443,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			var (
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
-				typs                     = []coltypes.T{coltypes.Int64}
+				typs                     = []colphystypes.T{colphystypes.Int64}
 				input                    = colexec.NewRandomDataOp(
 					testAllocator,
 					rng,
@@ -529,7 +529,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []colphystypes.T{colphystypes.Int64}
 
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
@@ -590,7 +590,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	dialer := &execinfrapb.MockDialer{Addr: addr}
 	defer dialer.Close()
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []colphystypes.T{colphystypes.Int64}
 
 	var inTags *logtags.Buffer
 
@@ -669,7 +669,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			rpcLayer := makeMockFlowStreamRPCLayer()
 
-			typs := []coltypes.T{coltypes.Int64}
+			typs := []colphystypes.T{colphystypes.Int64}
 
 			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)

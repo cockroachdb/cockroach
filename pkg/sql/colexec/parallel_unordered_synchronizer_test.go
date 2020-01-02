@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,7 +36,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var (
 		rng, _     = randutil.NewPseudoRand()
-		typs       = []coltypes.T{coltypes.Int64}
+		typs       = []colphystypes.T{colphystypes.Int64}
 		numInputs  = rng.Intn(maxInputs) + 1
 		numBatches = rng.Intn(maxBatches) + 1
 	)
@@ -117,7 +117,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, []colphystypes.T{colphystypes.Int64}, &wg)
 	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
@@ -127,7 +127,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []colphystypes.T{colphystypes.Int64}
 	inputs := make([]Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, int(coldata.BatchSize()))

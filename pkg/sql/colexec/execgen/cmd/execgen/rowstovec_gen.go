@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -27,10 +27,10 @@ import (
 // columnConversion struct.
 type Width struct {
 	Width    int32
-	ExecType coltypes.T
+	ExecType colphystypes.T
 }
 
-// columnConversion defines a conversion from a coltypes.ColumnType to an
+// columnConversion defines a conversion from a colphystypes.ColumnType to an
 // exec.ColVec.
 type columnConversion struct {
 	// Family is the type family of the ColumnType.
@@ -42,7 +42,7 @@ type columnConversion struct {
 
 	// ExecType is the exec.T to which we're converting. It should correspond to
 	// a method name on exec.ColVec.
-	ExecType coltypes.T
+	ExecType colphystypes.T
 }
 
 func genRowsToVec(wr io.Writer) error {
@@ -68,7 +68,7 @@ func genRowsToVec(wr io.Writer) error {
 	conversionsMap := make(map[types.Family]*columnConversion)
 	for _, ct := range types.OidToType {
 		t := typeconv.FromColumnType(ct)
-		if t == coltypes.Unhandled {
+		if t == colphystypes.Unhandled {
 			continue
 		}
 

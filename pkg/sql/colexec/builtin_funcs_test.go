@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -107,7 +107,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]colphystypes.T{colphystypes.Int64})
 	col := batch.ColVec(0).Int64()
 
 	for i := 0; i < int(coldata.BatchSize()); i++ {
@@ -175,7 +175,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64, coltypes.Bytes})
+	batch := testAllocator.NewMemBatch([]colphystypes.T{colphystypes.Bytes, colphystypes.Int64, colphystypes.Int64, colphystypes.Bytes})
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()
 	eCol := batch.ColVec(2).Int64()
@@ -209,7 +209,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		outputIdx:      3,
 		columnTypes:    typs,
 		outputType:     types.String,
-		outputPhysType: coltypes.Bytes,
+		outputPhysType: colphystypes.Bytes,
 		converter:      typeconv.GetDatumToPhysicalFn(types.String),
 		row:            make(tree.Datums, 3),
 		argumentCols:   inputCols,

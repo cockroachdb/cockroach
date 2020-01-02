@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
@@ -25,7 +25,7 @@ import (
 func newExternalSorter(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	inputTypes []colphystypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) Operator {
 	inMemSorter, err := newSorter(

@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -688,7 +688,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 
 func isSupportedType(typ *types.T) bool {
 	converted := typeconv.FromColumnType(typ)
-	return converted != coltypes.Unhandled
+	return converted != colphystypes.Unhandled
 }
 
 // generateRandomSupportedTypes generates nCols random types that are supported

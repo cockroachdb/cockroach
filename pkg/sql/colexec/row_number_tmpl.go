@@ -23,7 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 )
 
 // TODO(yuzefovich): add benchmarks.
@@ -74,11 +74,11 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
 	// {{ if .HasPartition }}
 	if r.partitionColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Bool)
+		r.allocator.AppendColumn(batch, colphystypes.Bool)
 	}
 	// {{ end }}
 	if r.outputColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Int64)
+		r.allocator.AppendColumn(batch, colphystypes.Int64)
 	}
 	if batch.Length() == 0 {
 		return batch

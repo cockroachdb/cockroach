@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -49,7 +49,7 @@ type Dialer interface {
 type Outbox struct {
 	colexec.OneInputNode
 
-	typs []coltypes.T
+	typs []colphystypes.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -74,7 +74,7 @@ type Outbox struct {
 func NewOutbox(
 	allocator *colexec.Allocator,
 	input colexec.Operator,
-	typs []coltypes.T,
+	typs []colphystypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)

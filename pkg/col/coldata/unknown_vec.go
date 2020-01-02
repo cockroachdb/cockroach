@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 )
 
 // unknown is a Vec that represents an unhandled type. Used when a batch needs a placeholder Vec.
@@ -22,8 +22,8 @@ type unknown struct{}
 
 var _ Vec = &unknown{}
 
-func (u unknown) Type() coltypes.T {
-	return coltypes.Unhandled
+func (u unknown) Type() colphystypes.T {
+	return colphystypes.Unhandled
 }
 
 func (u unknown) Bool() []bool {
@@ -78,11 +78,11 @@ func (u unknown) Copy(CopySliceArgs) {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
-func (u unknown) Window(colType coltypes.T, start uint64, end uint64) Vec {
+func (u unknown) Window(colType colphystypes.T, start uint64, end uint64) Vec {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
-func (u unknown) PrettyValueAt(idx uint16, colType coltypes.T) string {
+func (u unknown) PrettyValueAt(idx uint16, colType colphystypes.T) string {
 	panic("Vec is of unknown type and should not be accessed")
 }
 

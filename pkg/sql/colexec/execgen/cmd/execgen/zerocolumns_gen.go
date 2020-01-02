@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 )
 
 func genZeroColumns(wr io.Writer) error {
@@ -33,7 +33,7 @@ func genZeroColumns(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return tmpl.Execute(wr, coltypes.AllTypes)
+	return tmpl.Execute(wr, colphystypes.AllTypes)
 }
 
 func init() {

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/colphystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -25,13 +25,13 @@ import (
 // maxVarLen specifies a length limit for variable length types (e.g. byte slices).
 const maxVarLen = 64
 
-func randomType(rng *rand.Rand) coltypes.T {
-	return coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
+func randomType(rng *rand.Rand) colphystypes.T {
+	return colphystypes.AllTypes[rng.Intn(len(colphystypes.AllTypes))]
 }
 
-// randomTypes returns an n-length slice of random coltypes.T.
-func randomTypes(rng *rand.Rand, n int) []coltypes.T {
-	typs := make([]coltypes.T, n)
+// randomTypes returns an n-length slice of random colphystypes.T.
+func randomTypes(rng *rand.Rand, n int) []colphystypes.T {
+	typs := make([]colphystypes.T, n)
 	for i := range typs {
 		typs[i] = randomType(rng)
 	}
@@ -62,17 +62,17 @@ func init() {
 // null with a probability of nullProbability. It is assumed that n is in bounds
 // of the given vec.
 // bytesFixedLength (when greater than zero) specifies the fixed length of the
-// bytes slice to be generated. It is used only if typ == coltypes.Bytes.
+// bytes slice to be generated. It is used only if typ == colphystypes.Bytes.
 func RandomVec(
 	rng *rand.Rand,
-	typ coltypes.T,
+	typ colphystypes.T,
 	bytesFixedLength int,
 	vec coldata.Vec,
 	n int,
 	nullProbability float64,
 ) {
 	switch typ {
-	case coltypes.Bool:
+	case colphystypes.Bool:
 		bools := vec.Bool()
 		for i := 0; i < n; i++ {
 			if rng.Float64() < 0.5 {
@@ -81,7 +81,7 @@ func RandomVec(
 				bools[i] = false
 			}
 		}
-	case coltypes.Bytes:
+	case colphystypes.Bytes:
 		bytes := vec.Bytes()
 		for i := 0; i < n; i++ {
 			bytesLen := bytesFixedLength
@@ -93,33 +93,33 @@ func RandomVec(
 			_, _ = rand.Read(randBytes)
 			bytes.Set(i, randBytes)
 		}
-	case coltypes.Decimal:
+	case colphystypes.Decimal:
 		decs := vec.Decimal()
 		for i := 0; i < n; i++ {
 			// int64(rng.Uint64()) to get negative numbers, too
 			decs[i].SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		}
-	case coltypes.Int16:
+	case colphystypes.Int16:
 		ints := vec.Int16()
 		for i := 0; i < n; i++ {
 			ints[i] = int16(rng.Uint64())
 		}
-	case coltypes.Int32:
+	case colphystypes.Int32:
 		ints := vec.Int32()
 		for i := 0; i < n; i++ {
 			ints[i] = int32(rng.Uint64())
 		}
-	case coltypes.Int64:
+	case colphystypes.Int64:
 		ints := vec.Int64()
 		for i := 0; i < n; i++ {
 			ints[i] = int64(rng.Uint64())
 		}
-	case coltypes.Float64:
+	case colphystypes.Float64:
 		floats := vec.Float64()
 		for i := 0; i < n; i++ {
 			floats[i] = rng.Float64()
 		}
-	case coltypes.Timestamp:
+	case colphystypes.Timestamp:
 		timestamps := vec.Timestamp()
 		for i := 0; i < n; i++ {
 			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
@@ -147,7 +147,7 @@ func RandomVec(
 func RandomBatch(
 	allocator *Allocator,
 	rng *rand.Rand,
-	typs []coltypes.T,
+	typs []colphystypes.T,
 	capacity int,
 	length int,
 	nullProbability float64,
@@ -195,7 +195,7 @@ var _ = randomTypes
 func randomBatchWithSel(
 	allocator *Allocator,
 	rng *rand.Rand,
-	typs []coltypes.T,
+	typs []colphystypes.T,
 	n int,
 	nullProbability float64,
 	selProbability float64,
@@ -218,14 +218,14 @@ const (
 // RandomDataOpArgs are arguments passed in to RandomDataOp. All arguments are
 // optional (refer to the constants above this struct definition for the
 // defaults). Bools are false by default and AvailableTyps defaults to
-// coltypes.AllTypes.
+// colphystypes.AllTypes.
 type RandomDataOpArgs struct {
 	// DeterministicTyps, if set, overrides AvailableTyps and MaxSchemaLength,
 	// forcing the RandomDataOp to use this schema.
-	DeterministicTyps []coltypes.T
+	DeterministicTyps []colphystypes.T
 	// AvailableTyps is the pool of types from which the operator's schema will
 	// be generated.
-	AvailableTyps []coltypes.T
+	AvailableTyps []colphystypes.T
 	// MaxSchemaLength is the maximum length of the operator's schema, which will
 	// be at least one type.
 	MaxSchemaLength int
@@ -249,7 +249,7 @@ type RandomDataOp struct {
 	ZeroInputNode
 	allocator        *Allocator
 	batchAccumulator func(b coldata.Batch)
-	typs             []coltypes.T
+	typs             []colphystypes.T
 	rng              *rand.Rand
 	batchSize        int
 	numBatches       int
@@ -261,7 +261,7 @@ type RandomDataOp struct {
 // NewRandomDataOp creates a new RandomDataOp.
 func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
 	var (
-		availableTyps   = coltypes.AllTypes
+		availableTyps   = colphystypes.AllTypes
 		maxSchemaLength = defaultMaxSchemaLength
 		batchSize       = int(coldata.BatchSize())
 		numBatches      = defaultNumBatches
@@ -282,7 +282,7 @@ func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs
 	typs := args.DeterministicTyps
 	if typs == nil {
 		// Generate at least one type.
-		typs = make([]coltypes.T, 1+rng.Intn(maxSchemaLength))
+		typs = make([]colphystypes.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
 			typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 		}
