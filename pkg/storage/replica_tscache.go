@@ -362,7 +362,7 @@ func (r *Replica) applyTimestampCache(
 //            |    |  no txn record  |                          | txn record written |    |
 //            +--->|                 |  EndTxn(STAGING)         |     [pending]      |<---+
 //                 |                 |__  if: v2 < txn.orig     |                    |
-//                 +-----------------+  \__ then: v2 -> txn.ts  +--------------------+
+//                 +-----------------+  \__ then: txn.ts -> v1  +--------------------+
 //                    |            ^       \__ else: fail       _/   |            ^
 //                    |            |          \__             _/     |            |
 // EndTxn(!STAGING)   |            |             \__        _/       | EndTxn(STAGING)
