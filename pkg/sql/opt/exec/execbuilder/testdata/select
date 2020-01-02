@@ -1496,3 +1496,29 @@ WHERE message IN
 querying next range at /Table/73/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/73/1/10
+
+# Test for 42202 -- ensure filters can get pushed down through project-set.
+statement ok
+CREATE TABLE e (x INT PRIMARY KEY, y INT, z STRING);
+CREATE TABLE s (x INT PRIMARY KEY, y INT, z INT)
+
+query TTT
+EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
+----
+·                              distributed  false
+·                              vectorized   false
+render                         ·            ·
+ └── limit                     ·            ·
+      │                        count        10
+      └── sort                 ·            ·
+           │                   order        +z
+           └── project set     ·            ·
+                └── hash-join  ·            ·
+                     │         type         inner
+                     │         equality     (y) = (y)
+                     ├── scan  ·            ·
+                     │         table        e@primary
+                     │         spans        ALL
+                     └── scan  ·            ·
+·                              table        s@primary
+·                              spans        ALL
