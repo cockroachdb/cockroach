@@ -1127,7 +1127,7 @@ func removeDeadReplicas(
 				return nil, err
 			}
 			intent.Status = roachpb.ABORTED
-			if err := engine.MVCCResolveWriteIntent(ctx, batch, &ms, intent); err != nil {
+			if _, err := engine.MVCCResolveWriteIntent(ctx, batch, &ms, intent); err != nil {
 				return nil, err
 			}
 			// With the intent resolved, we can try again.

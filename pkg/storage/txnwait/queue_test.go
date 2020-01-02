@@ -29,43 +29,77 @@ import (
 
 func TestShouldPushImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	min := enginepb.MinTxnPriority
+	max := enginepb.MaxTxnPriority
+	mid := enginepb.TxnPriority(1)
 	testCases := []struct {
+		force      bool
 		typ        roachpb.PushTxnType
 		pusherPri  enginepb.TxnPriority
 		pusheePri  enginepb.TxnPriority
 		shouldPush bool
 	}{
-		{roachpb.PUSH_ABORT, enginepb.MinTxnPriority, enginepb.MinTxnPriority, false},
-		{roachpb.PUSH_ABORT, enginepb.MinTxnPriority, 1, false},
-		{roachpb.PUSH_ABORT, enginepb.MinTxnPriority, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_ABORT, 1, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_ABORT, 1, 1, false},
-		{roachpb.PUSH_ABORT, 1, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_ABORT, enginepb.MaxTxnPriority, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_ABORT, enginepb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_ABORT, enginepb.MaxTxnPriority, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MinTxnPriority, enginepb.MinTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MinTxnPriority, 1, false},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MinTxnPriority, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, 1, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_TIMESTAMP, 1, 1, false},
-		{roachpb.PUSH_TIMESTAMP, 1, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MaxTxnPriority, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_TIMESTAMP, enginepb.MaxTxnPriority, enginepb.MaxTxnPriority, false},
-		{roachpb.PUSH_TOUCH, enginepb.MinTxnPriority, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, enginepb.MinTxnPriority, 1, true},
-		{roachpb.PUSH_TOUCH, enginepb.MinTxnPriority, enginepb.MaxTxnPriority, true},
-		{roachpb.PUSH_TOUCH, 1, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, 1, 1, true},
-		{roachpb.PUSH_TOUCH, 1, enginepb.MaxTxnPriority, true},
-		{roachpb.PUSH_TOUCH, enginepb.MaxTxnPriority, enginepb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, enginepb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_TOUCH, enginepb.MaxTxnPriority, enginepb.MaxTxnPriority, true},
+		{false, roachpb.PUSH_ABORT, min, min, false},
+		{false, roachpb.PUSH_ABORT, min, mid, false},
+		{false, roachpb.PUSH_ABORT, min, max, false},
+		{false, roachpb.PUSH_ABORT, mid, min, true},
+		{false, roachpb.PUSH_ABORT, mid, mid, false},
+		{false, roachpb.PUSH_ABORT, mid, max, false},
+		{false, roachpb.PUSH_ABORT, max, min, true},
+		{false, roachpb.PUSH_ABORT, max, mid, true},
+		{false, roachpb.PUSH_ABORT, max, max, false},
+		{false, roachpb.PUSH_TIMESTAMP, min, min, false},
+		{false, roachpb.PUSH_TIMESTAMP, min, mid, false},
+		{false, roachpb.PUSH_TIMESTAMP, min, max, false},
+		{false, roachpb.PUSH_TIMESTAMP, mid, min, true},
+		{false, roachpb.PUSH_TIMESTAMP, mid, mid, false},
+		{false, roachpb.PUSH_TIMESTAMP, mid, max, false},
+		{false, roachpb.PUSH_TIMESTAMP, max, min, true},
+		{false, roachpb.PUSH_TIMESTAMP, max, mid, true},
+		{false, roachpb.PUSH_TIMESTAMP, max, max, false},
+		{false, roachpb.PUSH_TOUCH, min, min, true},
+		{false, roachpb.PUSH_TOUCH, min, mid, true},
+		{false, roachpb.PUSH_TOUCH, min, max, true},
+		{false, roachpb.PUSH_TOUCH, mid, min, true},
+		{false, roachpb.PUSH_TOUCH, mid, mid, true},
+		{false, roachpb.PUSH_TOUCH, mid, max, true},
+		{false, roachpb.PUSH_TOUCH, max, min, true},
+		{false, roachpb.PUSH_TOUCH, max, mid, true},
+		{false, roachpb.PUSH_TOUCH, max, max, true},
+		// Force pushes always push immediately.
+		{true, roachpb.PUSH_ABORT, min, min, true},
+		{true, roachpb.PUSH_ABORT, min, mid, true},
+		{true, roachpb.PUSH_ABORT, min, max, true},
+		{true, roachpb.PUSH_ABORT, mid, min, true},
+		{true, roachpb.PUSH_ABORT, mid, mid, true},
+		{true, roachpb.PUSH_ABORT, mid, max, true},
+		{true, roachpb.PUSH_ABORT, max, min, true},
+		{true, roachpb.PUSH_ABORT, max, mid, true},
+		{true, roachpb.PUSH_ABORT, max, max, true},
+		{true, roachpb.PUSH_TIMESTAMP, min, min, true},
+		{true, roachpb.PUSH_TIMESTAMP, min, mid, true},
+		{true, roachpb.PUSH_TIMESTAMP, min, max, true},
+		{true, roachpb.PUSH_TIMESTAMP, mid, min, true},
+		{true, roachpb.PUSH_TIMESTAMP, mid, mid, true},
+		{true, roachpb.PUSH_TIMESTAMP, mid, max, true},
+		{true, roachpb.PUSH_TIMESTAMP, max, min, true},
+		{true, roachpb.PUSH_TIMESTAMP, max, mid, true},
+		{true, roachpb.PUSH_TIMESTAMP, max, max, true},
+		{true, roachpb.PUSH_TOUCH, min, min, true},
+		{true, roachpb.PUSH_TOUCH, min, mid, true},
+		{true, roachpb.PUSH_TOUCH, min, max, true},
+		{true, roachpb.PUSH_TOUCH, mid, min, true},
+		{true, roachpb.PUSH_TOUCH, mid, mid, true},
+		{true, roachpb.PUSH_TOUCH, mid, max, true},
+		{true, roachpb.PUSH_TOUCH, max, min, true},
+		{true, roachpb.PUSH_TOUCH, max, mid, true},
+		{true, roachpb.PUSH_TOUCH, max, max, true},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
 			req := roachpb.PushTxnRequest{
+				Force:    test.force,
 				PushType: test.typ,
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{

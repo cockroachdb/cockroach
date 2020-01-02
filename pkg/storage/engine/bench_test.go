@@ -137,7 +137,7 @@ func setupMVCCData(
 		key := keys[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
+		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.Intent{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,

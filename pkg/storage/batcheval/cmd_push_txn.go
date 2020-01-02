@@ -123,6 +123,11 @@ func PushTxn(
 		// This condition must hold for the timestamp cache access/update to be safe.
 		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
 	}
+	now := cArgs.EvalCtx.Clock().Now()
+	if now.Less(h.Timestamp) {
+		// The batch's timestamp should have been used to update the clock.
+		return result.Result{}, errors.Errorf("request timestamp %s less than current clock time %s", h.Timestamp, now)
+	}
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s", args.Key, args.PusheeTxn.Key)
 	}
@@ -217,7 +222,7 @@ func PushTxn(
 	var reason string
 
 	switch {
-	case txnwait.IsExpired(h.Timestamp, &reply.PusheeTxn):
+	case txnwait.IsExpired(now, &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).

@@ -39,7 +39,9 @@ func declareKeysResolveIntentCombined(
 		status = t.Status
 		txnID = t.IntentTxn.ID
 	}
-	if WriteAbortSpanOnResolve(status) {
+	if status == roachpb.ABORTED {
+		// We don't always write to the abort span when resolving an ABORTED
+		// intent, but we can't tell whether we will or not ahead of time.
 		spans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
 	}
 }
@@ -52,7 +54,7 @@ func declareKeysResolveIntent(
 
 func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.Metrics {
 	var typ result.Metrics
-	if WriteAbortSpanOnResolve(status) {
+	if status == roachpb.ABORTED {
 		if poison {
 			typ.ResolvePoison = 1
 		} else {
@@ -82,15 +84,16 @@ func ResolveIntent(
 		Txn:    args.IntentTxn,
 		Status: args.Status,
 	}
-	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
+	ok, err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent)
+	if err != nil {
 		return result.Result{}, err
 	}
 
 	var res result.Result
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
-	if WriteAbortSpanOnResolve(args.Status) {
-		if err := SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {
+		if err := UpdateAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
 			return result.Result{}, err
 		}
 	}
