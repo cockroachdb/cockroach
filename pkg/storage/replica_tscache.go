@@ -42,7 +42,7 @@ func setTimestampCacheLowWaterMark(
 // mark for the timestamp at which mutations to keys overlapping the provided
 // request can write, such that they don't re-write history.
 func (r *Replica) updateTimestampCache(
-	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
 	addToTSCache := r.store.tsCache.Add
 	if util.RaceEnabled {
@@ -206,7 +206,7 @@ func (r *Replica) updateTimestampCache(
 		default:
 			if roachpb.UpdatesWriteTimestampCache(args) {
 				// Only requests specially cased above update the write timestamp cache.
-				log.Fatalf(context.TODO(), "unexpected update of the write timestamp cache for request: %s", args)
+				log.Fatalf(ctx, "unexpected update of the write timestamp cache for request: %s", args)
 			}
 			addToTSCache(start, end, ts, txnID, true /* read */)
 		}

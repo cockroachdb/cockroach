@@ -10,6 +10,8 @@
 
 package apply
 
+import "context"
+
 // Command is a command that has been successfully replicated through raft
 // by being durably committed to the raft log of a quorum of peers in a raft
 // group.
@@ -56,7 +58,7 @@ type AppliedCommand interface {
 	// entry application, so one must only be returned if the state machine
 	// is no longer able to make progress. The method will be called exactly
 	// once per Command.
-	FinishAndAckOutcome() error
+	FinishAndAckOutcome(context.Context) error
 }
 
 // CommandIteratorBase is a common interface extended by all iterator and
@@ -204,10 +206,12 @@ func forEachCheckedCmdIter(iter CheckedCommandIterator, fn func(CheckedCommand) 
 
 // forEachAppliedCmdIter calls a closure on each command in the provided
 // iterator. The function closes the provided iterator.
-func forEachAppliedCmdIter(iter AppliedCommandIterator, fn func(AppliedCommand) error) error {
+func forEachAppliedCmdIter(
+	ctx context.Context, iter AppliedCommandIterator, fn func(context.Context, AppliedCommand) error,
+) error {
 	defer iter.Close()
 	for iter.Valid() {
-		if err := fn(iter.CurApplied()); err != nil {
+		if err := fn(ctx, iter.CurApplied()); err != nil {
 			return err
 		}
 		iter.Next()
