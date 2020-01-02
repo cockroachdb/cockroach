@@ -115,3 +115,437 @@ Final best expression
    ├── constraint: /2/1: [/1 - /1]
    ├── key: (1)
    └── fd: ()-->(2)
+
+exec-ddl
+CREATE TABLE customers (
+    id INT8 NOT NULL,
+    name STRING NOT NULL,
+    address STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    FAMILY "primary" (id, name, address)
+)
+----
+
+exec-ddl
+CREATE TABLE orders (
+    id INT8 NOT NULL,
+    customer_id INT8 NULL,
+    status STRING NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    CONSTRAINT fk_customer_id_ref_customers FOREIGN KEY (customer_id) REFERENCES customers(id),
+    INDEX orders_auto_index_fk_customer_id_ref_customers (customer_id ASC),
+    FAMILY "primary" (id, customer_id, status),
+    CONSTRAINT check_status CHECK (status IN ('open':::STRING, 'complete':::STRING, 'cancelled':::STRING))
+)
+----
+
+# Verify that we don't crash when a normalization rule runs on a constraint
+# expression that is attached to the TableMeta but otherwise not used.
+# In this example, the rule is NormalizeInConst.
+optsteps
+SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
+----
+================================================================================
+Initial expression
+  Cost: 2160.05
+================================================================================
+  left-join (hash)
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── key: (1,4)
+   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── scan orders
+   │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── in [type=bool]
+   │    │         ├── variable: status [type=string]
+   │    │         └── tuple [type=tuple{string, string, string}]
+   │    │              ├── const: 'open' [type=string]
+   │    │              ├── const: 'complete' [type=string]
+   │    │              └── const: 'cancelled' [type=string]
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2,3)
+   ├── scan customers
+   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+   │    ├── key: (4)
+   │    └── fd: (4)-->(5,6)
+   └── filters
+        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+             ├── variable: customer_id [type=int]
+             └── variable: customers.id [type=int]
+================================================================================
+NormalizeInConst
+  Cost: 2160.05
+================================================================================
+   left-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+  - │    │              ├── const: 'open' [type=string]
+  + │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+  - │    │              └── const: 'cancelled' [type=string]
+  + │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+    ├── scan customers
+    │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+    │    ├── key: (4)
+    │    └── fd: (4)-->(5,6)
+    └── filters
+         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+              ├── variable: customer_id [type=int]
+              └── variable: customers.id [type=int]
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (hash)
+  +right-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+  + ├── scan customers
+  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  + │    ├── key: (4)
+  + │    └── fd: (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+    │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+    │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+  - ├── scan customers
+  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  - │    ├── key: (4)
+  - │    └── fd: (4)-->(5,6)
+    └── filters
+         └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+              ├── variable: customer_id [type=int]
+              └── variable: customers.id [type=int]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoins (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (hash)
+  +left-join (lookup customers)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  + ├── key columns: [2] = [4]
+  + ├── lookup columns are key
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool]
+    │    │         ├── variable: status [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+    │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+    │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+  - ├── scan customers
+  - │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  - │    ├── key: (4)
+  - │    └── fd: (4)-->(5,6)
+  - └── filters
+  -      └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+  -           ├── variable: customer_id [type=int]
+  -           └── variable: customers.id [type=int]
+  + └── filters (true)
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (lookup customers)
+  +right-join (merge)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+  - ├── key columns: [2] = [4]
+  - ├── lookup columns are key
+  + ├── left ordering: +4
+  + ├── right ordering: +2
+    ├── key: (1,4)
+    ├── fd: (1)-->(2,3), (4)-->(5,6)
+  - ├── scan orders
+  + ├── scan customers
+  + │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+  + │    ├── key: (4)
+  + │    ├── fd: (4)-->(5,6)
+  + │    └── ordering: +4
+  + ├── sort
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │    ├── check constraint expressions
+  - │    │    └── in [type=bool]
+  - │    │         ├── variable: status [type=string]
+  - │    │         └── tuple [type=tuple{string, string, string}]
+  - │    │              ├── const: 'cancelled' [type=string]
+  - │    │              ├── const: 'complete' [type=string]
+  - │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+  - │    └── fd: (1)-->(2,3)
+  + │    ├── fd: (1)-->(2,3)
+  + │    ├── ordering: +2
+  + │    └── scan orders
+  + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │         ├── check constraint expressions
+  + │         │    └── in [type=bool]
+  + │         │         ├── variable: status [type=string]
+  + │         │         └── tuple [type=tuple{string, string, string}]
+  + │         │              ├── const: 'cancelled' [type=string]
+  + │         │              ├── const: 'complete' [type=string]
+  + │         │              └── const: 'open' [type=string]
+  + │         ├── key: (1)
+  + │         └── fd: (1)-->(2,3)
+    └── filters (true)
+================================================================================
+Final best expression
+  Cost: 2160.05
+================================================================================
+  left-join (hash)
+   ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
+   ├── key: (1,4)
+   ├── fd: (1)-->(2,3), (4)-->(5,6)
+   ├── scan orders
+   │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+   │    ├── check constraint expressions
+   │    │    └── in [type=bool]
+   │    │         ├── variable: status [type=string]
+   │    │         └── tuple [type=tuple{string, string, string}]
+   │    │              ├── const: 'cancelled' [type=string]
+   │    │              ├── const: 'complete' [type=string]
+   │    │              └── const: 'open' [type=string]
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2,3)
+   ├── scan customers
+   │    ├── columns: customers.id:4(int!null) name:5(string!null) address:6(string)
+   │    ├── key: (4)
+   │    └── fd: (4)-->(5,6)
+   └── filters
+        └── eq [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+             ├── variable: customer_id [type=int]
+             └── variable: customers.id [type=int]
+
+exec-ddl
+CREATE TABLE comp (
+  k INT,
+  c BOOL AS (k IN (1,3,2)) STORED,
+  INDEX (c, k)
+)
+----
+
+# Verify that we don't crash when a normalization rule runs on a computed
+# column expression that is attached to the TableMeta but otherwise not used.
+# In this example, the rule is NormalizeInConst.
+optsteps
+SELECT * FROM comp WHERE k=1
+----
+================================================================================
+Initial expression
+  Cost: 1070.14
+================================================================================
+  project
+   ├── columns: k:1(int!null) c:2(bool)
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+        ├── key: (3)
+        ├── fd: ()-->(1), (3)-->(2)
+        ├── scan comp
+        │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+        │    ├── computed column expressions
+        │    │    └── c:2(bool)
+        │    │         └── in [type=bool]
+        │    │              ├── variable: k [type=int]
+        │    │              └── tuple [type=tuple{int, int, int}]
+        │    │                   ├── const: 1 [type=int]
+        │    │                   ├── const: 3 [type=int]
+        │    │                   └── const: 2 [type=int]
+        │    ├── key: (3)
+        │    └── fd: (3)-->(1,2)
+        └── filters
+             └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+                  ├── variable: k [type=int]
+                  └── const: 1 [type=int]
+================================================================================
+NormalizeInConst
+  Cost: 1070.14
+================================================================================
+   project
+    ├── columns: k:1(int!null) c:2(bool)
+    ├── fd: ()-->(1)
+    └── select
+         ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+         ├── key: (3)
+         ├── fd: ()-->(1), (3)-->(2)
+         ├── scan comp
+         │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+         │    ├── computed column expressions
+         │    │    └── c:2(bool)
+         │    │         └── in [type=bool]
+         │    │              ├── variable: k [type=int]
+         │    │              └── tuple [type=tuple{int, int, int}]
+         │    │                   ├── const: 1 [type=int]
+  -      │    │                   ├── const: 3 [type=int]
+  -      │    │                   └── const: 2 [type=int]
+  +      │    │                   ├── const: 2 [type=int]
+  +      │    │                   └── const: 3 [type=int]
+         │    ├── key: (3)
+         │    └── fd: (3)-->(1,2)
+         └── filters
+              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+                   ├── variable: k [type=int]
+                   └── const: 1 [type=int]
+================================================================================
+PruneSelectCols
+  Cost: 1060.14
+================================================================================
+   project
+    ├── columns: k:1(int!null) c:2(bool)
+    ├── fd: ()-->(1)
+    └── select
+  -      ├── columns: k:1(int!null) c:2(bool) rowid:3(int!null)
+  -      ├── key: (3)
+  -      ├── fd: ()-->(1), (3)-->(2)
+  +      ├── columns: k:1(int!null) c:2(bool)
+  +      ├── fd: ()-->(1)
+         ├── scan comp
+  -      │    ├── columns: k:1(int) c:2(bool) rowid:3(int!null)
+  -      │    ├── computed column expressions
+  -      │    │    └── c:2(bool)
+  -      │    │         └── in [type=bool]
+  -      │    │              ├── variable: k [type=int]
+  -      │    │              └── tuple [type=tuple{int, int, int}]
+  -      │    │                   ├── const: 1 [type=int]
+  -      │    │                   ├── const: 2 [type=int]
+  -      │    │                   └── const: 3 [type=int]
+  -      │    ├── key: (3)
+  -      │    └── fd: (3)-->(1,2)
+  +      │    ├── columns: k:1(int) c:2(bool)
+  +      │    └── computed column expressions
+  +      │         └── c:2(bool)
+  +      │              └── in [type=bool]
+  +      │                   ├── variable: k [type=int]
+  +      │                   └── tuple [type=tuple{int, int, int}]
+  +      │                        ├── const: 1 [type=int]
+  +      │                        ├── const: 2 [type=int]
+  +      │                        └── const: 3 [type=int]
+         └── filters
+              └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+                   ├── variable: k [type=int]
+                   └── const: 1 [type=int]
+================================================================================
+EliminateProject
+  Cost: 1060.03
+================================================================================
+  -project
+  +select
+    ├── columns: k:1(int!null) c:2(bool)
+    ├── fd: ()-->(1)
+  - └── select
+  -      ├── columns: k:1(int!null) c:2(bool)
+  -      ├── fd: ()-->(1)
+  -      ├── scan comp
+  -      │    ├── columns: k:1(int) c:2(bool)
+  -      │    └── computed column expressions
+  -      │         └── c:2(bool)
+  -      │              └── in [type=bool]
+  -      │                   ├── variable: k [type=int]
+  -      │                   └── tuple [type=tuple{int, int, int}]
+  -      │                        ├── const: 1 [type=int]
+  -      │                        ├── const: 2 [type=int]
+  -      │                        └── const: 3 [type=int]
+  -      └── filters
+  -           └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+  -                ├── variable: k [type=int]
+  -                └── const: 1 [type=int]
+  + ├── scan comp
+  + │    ├── columns: k:1(int) c:2(bool)
+  + │    └── computed column expressions
+  + │         └── c:2(bool)
+  + │              └── in [type=bool]
+  + │                   ├── variable: k [type=int]
+  + │                   └── tuple [type=tuple{int, int, int}]
+  + │                        ├── const: 1 [type=int]
+  + │                        ├── const: 2 [type=int]
+  + │                        └── const: 3 [type=int]
+  + └── filters
+  +      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+  +           ├── variable: k [type=int]
+  +           └── const: 1 [type=int]
+--------------------------------------------------------------------------------
+GenerateIndexScans (higher cost)
+--------------------------------------------------------------------------------
+   select
+    ├── columns: k:1(int!null) c:2(bool)
+    ├── fd: ()-->(1)
+  - ├── scan comp
+  - │    ├── columns: k:1(int) c:2(bool)
+  - │    └── computed column expressions
+  - │         └── c:2(bool)
+  - │              └── in [type=bool]
+  - │                   ├── variable: k [type=int]
+  - │                   └── tuple [type=tuple{int, int, int}]
+  - │                        ├── const: 1 [type=int]
+  - │                        ├── const: 2 [type=int]
+  - │                        └── const: 3 [type=int]
+  + ├── scan comp@secondary
+  + │    └── columns: k:1(int) c:2(bool)
+    └── filters
+         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+              ├── variable: k [type=int]
+              └── const: 1 [type=int]
+--------------------------------------------------------------------------------
+GenerateZigzagJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateConstrainedScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+FoldComparison
+  Cost: 10.51
+================================================================================
+  -select
+  +scan comp@secondary
+    ├── columns: k:1(int!null) c:2(bool)
+  - ├── fd: ()-->(1)
+  - ├── scan comp
+  - │    ├── columns: k:1(int) c:2(bool)
+  - │    └── computed column expressions
+  - │         └── c:2(bool)
+  - │              └── in [type=bool]
+  - │                   ├── variable: k [type=int]
+  - │                   └── tuple [type=tuple{int, int, int}]
+  - │                        ├── const: 1 [type=int]
+  - │                        ├── const: 2 [type=int]
+  - │                        └── const: 3 [type=int]
+  - └── filters
+  -      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+  -           ├── variable: k [type=int]
+  -           └── const: 1 [type=int]
+  + ├── constraint: /2/1/3: [/true/1 - /true/1]
+  + └── fd: ()-->(1)
+================================================================================
+Final best expression
+  Cost: 10.51
+================================================================================
+  scan comp@secondary
+   ├── columns: k:1(int!null) c:2(bool)
+   ├── constraint: /2/1/3: [/true/1 - /true/1]
+   └── fd: ()-->(1)
