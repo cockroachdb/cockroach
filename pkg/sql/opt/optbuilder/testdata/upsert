@@ -111,7 +111,12 @@ upsert abc
       │    │    │    │              ├── variable: y [type=int]
       │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── scan abc
-      │    │    │    │    └── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+      │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c:12(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: x [type=int]
@@ -202,7 +207,12 @@ project
            │    │    │    │              ├── variable: y [type=int]
            │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── scan abc
-           │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+           │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+           │    │    │    │    └── computed column expressions
+           │    │    │    │         └── c:11(int)
+           │    │    │    │              └── plus [type=int]
+           │    │    │    │                   ├── variable: b [type=int]
+           │    │    │    │                   └── const: 1 [type=int]
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool]
            │    │    │         │    ├── variable: y [type=int]
@@ -297,7 +307,12 @@ upsert abc
       │    │    │    │    │              ├── variable: y [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
       │    │    │    │    ├── scan abc
-      │    │    │    │    │    └── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+      │    │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── c:12(int)
+      │    │    │    │    │              └── plus [type=int]
+      │    │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │    │                   └── const: 1 [type=int]
       │    │    │    │    └── filters
       │    │    │    │         └── eq [type=bool]
       │    │    │    │              ├── variable: x [type=int]
@@ -407,7 +422,12 @@ sort
       │              │    │    │    │              ├── variable: column2 [type=int]
       │              │    │    │    │              └── const: 1 [type=int]
       │              │    │    │    ├── scan abc
-      │              │    │    │    │    └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+      │              │    │    │    │    ├── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+      │              │    │    │    │    └── computed column expressions
+      │              │    │    │    │         └── abc.c:11(int)
+      │              │    │    │    │              └── plus [type=int]
+      │              │    │    │    │                   ├── variable: abc.b [type=int]
+      │              │    │    │    │                   └── const: 1 [type=int]
       │              │    │    │    └── filters
       │              │    │    │         └── eq [type=bool]
       │              │    │    │              ├── variable: column1 [type=int]
@@ -501,7 +521,12 @@ upsert tab
       │    │    │    │              ├── variable: column2 [type=int]
       │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── scan tab
-      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c:11(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -873,7 +898,12 @@ upsert abc
       │    │    │    │              ├── variable: column2 [type=int]
       │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── scan abc
-      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c:11(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -977,7 +1007,12 @@ upsert abc
       │    │    │    │              ├── variable: column2 [type=int]
       │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── scan abc
-      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c:11(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: b [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -1073,7 +1108,11 @@ upsert mutation
       │    │    │    │    │              ├── variable: column8 [type=int]
       │    │    │    │    │              └── variable: column2 [type=int]
       │    │    │    │    ├── scan mutation
-      │    │    │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    │    └── check constraint expressions
+      │    │    │    │    │         └── gt [type=bool]
+      │    │    │    │    │              ├── variable: m [type=int]
+      │    │    │    │    │              └── const: 0 [type=int]
       │    │    │    │    └── filters
       │    │    │    │         └── eq [type=bool]
       │    │    │    │              ├── variable: column1 [type=int]
@@ -1233,7 +1272,12 @@ with &1
  │              │    │              ├── variable: column2 [type=int]
  │              │    │              └── const: 1 [type=int]
  │              │    ├── scan abc
- │              │    │    └── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+ │              │    │    ├── columns: abc.a:9(int!null) abc.b:10(int) abc.c:11(int) rowid:12(int!null)
+ │              │    │    └── computed column expressions
+ │              │    │         └── abc.c:11(int)
+ │              │    │              └── plus [type=int]
+ │              │    │                   ├── variable: abc.b [type=int]
+ │              │    │                   └── const: 1 [type=int]
  │              │    └── filters
  │              │         └── eq [type=bool]
  │              │              ├── variable: column7 [type=int]
@@ -1353,7 +1397,19 @@ upsert checks
       │    │    │              ├── variable: column3 [type=int]
       │    │    │              └── const: 1 [type=int]
       │    │    ├── scan checks
-      │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    └── gt [type=bool]
+      │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │         └── const: 0 [type=int]
+      │    │    │    └── computed column expressions
+      │    │    │         └── d:12(int)
+      │    │    │              └── plus [type=int]
+      │    │    │                   ├── variable: c [type=int]
+      │    │    │                   └── const: 1 [type=int]
       │    │    └── filters
       │    │         └── eq [type=bool]
       │    │              ├── variable: column1 [type=int]
@@ -1417,7 +1473,11 @@ upsert mutation
       │    │    │    │              ├── variable: column8 [type=int]
       │    │    │    │              └── variable: column2 [type=int]
       │    │    │    ├── scan mutation
-      │    │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── gt [type=bool]
+      │    │    │    │              ├── variable: m [type=int]
+      │    │    │    │              └── const: 0 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -1498,7 +1558,11 @@ upsert mutation
       │    │    │    │              ├── variable: column8 [type=int]
       │    │    │    │              └── variable: column2 [type=int]
       │    │    │    ├── scan mutation
-      │    │    │    │    └── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    ├── columns: m:10(int!null) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── gt [type=bool]
+      │    │    │    │              ├── variable: m [type=int]
+      │    │    │    │              └── const: 0 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -1592,7 +1656,19 @@ upsert checks
       │    │    │    │    │              ├── variable: column7 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
       │    │    │    │    ├── scan checks
-      │    │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    │    │    └── gt [type=bool]
+      │    │    │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:12(int)
+      │    │    │    │    │              └── plus [type=int]
+      │    │    │    │    │                   ├── variable: c [type=int]
+      │    │    │    │    │                   └── const: 1 [type=int]
       │    │    │    │    └── filters
       │    │    │    │         └── eq [type=bool]
       │    │    │    │              ├── variable: column1 [type=int]
@@ -1682,7 +1758,19 @@ insert checks
       │         │    │              ├── variable: column7 [type=int]
       │         │    │              └── const: 1 [type=int]
       │         │    ├── scan checks
-      │         │    │    └── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │         │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │         │    │    ├── check constraint expressions
+      │         │    │    │    ├── lt [type=bool]
+      │         │    │    │    │    ├── variable: b [type=int]
+      │         │    │    │    │    └── variable: d [type=int]
+      │         │    │    │    └── gt [type=bool]
+      │         │    │    │         ├── variable: a [type=int]
+      │         │    │    │         └── const: 0 [type=int]
+      │         │    │    └── computed column expressions
+      │         │    │         └── d:12(int)
+      │         │    │              └── plus [type=int]
+      │         │    │                   ├── variable: c [type=int]
+      │         │    │                   └── const: 1 [type=int]
       │         │    └── filters
       │         │         └── eq [type=bool]
       │         │              ├── variable: column1 [type=int]
@@ -1741,7 +1829,19 @@ upsert checks
       │    │    │    │              ├── variable: column7 [type=int]
       │    │    │    │              └── const: 1 [type=int]
       │    │    │    ├── scan checks
-      │    │    │    │    └── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) d:12(int)
+      │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    │    ├── variable: b [type=int]
+      │    │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    │    └── gt [type=bool]
+      │    │    │    │    │         ├── variable: a [type=int]
+      │    │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── d:12(int)
+      │    │    │    │              └── plus [type=int]
+      │    │    │    │                   ├── variable: c [type=int]
+      │    │    │    │                   └── const: 1 [type=int]
       │    │    │    └── filters
       │    │    │         └── eq [type=bool]
       │    │    │              ├── variable: column1 [type=int]
@@ -1820,7 +1920,12 @@ upsert checks
       │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: abc.a:5(int!null) abc.b:6(int)
       │    │    │    │    │    │    │    └── scan abc
-      │    │    │    │    │    │    │         └── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) rowid:8(int!null)
+      │    │    │    │    │    │    │         ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int) rowid:8(int!null)
+      │    │    │    │    │    │    │         └── computed column expressions
+      │    │    │    │    │    │    │              └── abc.c:7(int)
+      │    │    │    │    │    │    │                   └── plus [type=int]
+      │    │    │    │    │    │    │                        ├── variable: abc.b [type=int]
+      │    │    │    │    │    │    │                        └── const: 1 [type=int]
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── cast: INT8 [type=int]
       │    │    │    │    │    │              └── null [type=unknown]
@@ -1829,7 +1934,19 @@ upsert checks
       │    │    │    │    │              ├── variable: column9 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
       │    │    │    │    ├── scan checks
-      │    │    │    │    │    └── columns: checks.a:11(int!null) checks.b:12(int) checks.c:13(int) d:14(int)
+      │    │    │    │    │    ├── columns: checks.a:11(int!null) checks.b:12(int) checks.c:13(int) d:14(int)
+      │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    ├── lt [type=bool]
+      │    │    │    │    │    │    │    ├── variable: checks.b [type=int]
+      │    │    │    │    │    │    │    └── variable: d [type=int]
+      │    │    │    │    │    │    └── gt [type=bool]
+      │    │    │    │    │    │         ├── variable: checks.a [type=int]
+      │    │    │    │    │    │         └── const: 0 [type=int]
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── d:14(int)
+      │    │    │    │    │              └── plus [type=int]
+      │    │    │    │    │                   ├── variable: checks.c [type=int]
+      │    │    │    │    │                   └── const: 1 [type=int]
       │    │    │    │    └── filters
       │    │    │    │         └── eq [type=bool]
       │    │    │    │              ├── variable: abc.a [type=int]

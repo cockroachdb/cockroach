@@ -122,6 +122,11 @@ project
            │    │    │    │              └── const: 1 [type=int]
            │    │    │    ├── scan abc
            │    │    │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── c:12(int)
+           │    │    │    │    │         └── plus [type=int]
+           │    │    │    │    │              ├── variable: b [type=int]
+           │    │    │    │    │              └── const: 1 [type=int]
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │    │    │    │    ├── prune: (10-13)
@@ -299,6 +304,11 @@ project
                 │    │         │    │         │    │              └── const: 1 [type=int]
                 │    │         │    │         │    ├── scan abc
                 │    │         │    │         │    │    ├── columns: a:10(int!null) b:11(int) c:12(int) rowid:13(int!null)
+                │    │         │    │         │    │    ├── computed column expressions
+                │    │         │    │         │    │    │    └── c:12(int)
+                │    │         │    │         │    │    │         └── plus [type=int]
+                │    │         │    │         │    │    │              ├── variable: b [type=int]
+                │    │         │    │         │    │    │              └── const: 1 [type=int]
                 │    │         │    │         │    │    ├── key: (13)
                 │    │         │    │         │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
                 │    │         │    │         │    │    ├── prune: (10-13)
@@ -313,6 +323,11 @@ project
                 │    │         │    │                   └── null [type=unknown]
                 │    │         │    ├── scan abc
                 │    │         │    │    ├── columns: a:14(int!null) b:15(int) c:16(int) rowid:17(int!null)
+                │    │         │    │    ├── computed column expressions
+                │    │         │    │    │    └── c:16(int)
+                │    │         │    │    │         └── plus [type=int]
+                │    │         │    │    │              ├── variable: b [type=int]
+                │    │         │    │    │              └── const: 1 [type=int]
                 │    │         │    │    ├── key: (17)
                 │    │         │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
                 │    │         │    │    ├── prune: (14-17)
@@ -327,6 +342,11 @@ project
                 │    │                   └── null [type=unknown]
                 │    ├── scan abc
                 │    │    ├── columns: a:18(int!null) b:19(int) c:20(int) rowid:21(int!null)
+                │    │    ├── computed column expressions
+                │    │    │    └── c:20(int)
+                │    │    │         └── plus [type=int]
+                │    │    │              ├── variable: b [type=int]
+                │    │    │              └── const: 1 [type=int]
                 │    │    ├── key: (21)
                 │    │    ├── fd: (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
                 │    │    ├── prune: (18-21)
@@ -422,6 +442,11 @@ project
  │         │    │    │              └── const: 1 [type=int]
  │         │    │    ├── scan abc
  │         │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int) rowid:12(int!null)
+ │         │    │    │    ├── computed column expressions
+ │         │    │    │    │    └── c:11(int)
+ │         │    │    │    │         └── plus [type=int]
+ │         │    │    │    │              ├── variable: b [type=int]
+ │         │    │    │    │              └── const: 1 [type=int]
  │         │    │    │    ├── key: (12)
  │         │    │    │    ├── fd: (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12)
  │         │    │    │    ├── prune: (9-12)

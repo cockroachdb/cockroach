@@ -44,7 +44,16 @@ delete abcde
  ├── columns: <none>
  ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
  └── scan abcde
-      └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      └── computed column expressions
+           ├── d:10(int)
+           │    └── plus [type=int]
+           │         ├── plus [type=int]
+           │         │    ├── variable: b [type=int]
+           │         │    └── variable: c [type=int]
+           │         └── const: 1 [type=int]
+           └── e:11(int)
+                └── variable: a [type=int]
 
 # Use WHERE, ORDER BY, LIMIT.
 build
@@ -63,7 +72,16 @@ delete abcde
       │    └── select
       │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │         ├── scan abcde
-      │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    └── computed column expressions
+      │         │         ├── d:10(int)
+      │         │         │    └── plus [type=int]
+      │         │         │         ├── plus [type=int]
+      │         │         │         │    ├── variable: b [type=int]
+      │         │         │         │    └── variable: c [type=int]
+      │         │         │         └── const: 1 [type=int]
+      │         │         └── e:11(int)
+      │         │              └── variable: a [type=int]
       │         └── filters
       │              └── gt [type=bool]
       │                   ├── variable: a [type=int]
@@ -87,7 +105,16 @@ delete foo
       │    └── select
       │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │         ├── scan foo
-      │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+      │         │    └── computed column expressions
+      │         │         ├── d:10(int)
+      │         │         │    └── plus [type=int]
+      │         │         │         ├── plus [type=int]
+      │         │         │         │    ├── variable: b [type=int]
+      │         │         │         │    └── variable: c [type=int]
+      │         │         │         └── const: 1 [type=int]
+      │         │         └── e:11(int)
+      │         │              └── variable: a [type=int]
       │         └── filters
       │              └── gt [type=bool]
       │                   ├── variable: a [type=int]
@@ -206,7 +233,16 @@ with &1 (cte)
       └── select
            ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
            ├── scan abcde
-           │    └── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    ├── columns: a:10(int!null) b:11(int) c:12(int) d:13(int) e:14(int) rowid:15(int!null)
+           │    └── computed column expressions
+           │         ├── d:13(int)
+           │         │    └── plus [type=int]
+           │         │         ├── plus [type=int]
+           │         │         │    ├── variable: b [type=int]
+           │         │         │    └── variable: c [type=int]
+           │         │         └── const: 1 [type=int]
+           │         └── e:14(int)
+           │              └── variable: a [type=int]
            └── filters
                 └── exists [type=bool]
                      └── with-scan &1 (cte)
@@ -239,7 +275,16 @@ with &1
  │         └── select
  │              ├── columns: abcde.a:7(int!null) abcde.b:8(int!null) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
  │              ├── scan abcde
- │              │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │    └── computed column expressions
+ │              │         ├── abcde.d:10(int)
+ │              │         │    └── plus [type=int]
+ │              │         │         ├── plus [type=int]
+ │              │         │         │    ├── variable: abcde.b [type=int]
+ │              │         │         │    └── variable: abcde.c [type=int]
+ │              │         │         └── const: 1 [type=int]
+ │              │         └── abcde.e:11(int)
+ │              │              └── variable: abcde.a [type=int]
  │              └── filters
  │                   └── eq [type=bool]
  │                        ├── variable: abcde.a [type=int]
@@ -261,7 +306,16 @@ with &1
            └── select
                 ├── columns: abcde.a:24(int!null) abcde.b:25(int!null) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
                 ├── scan abcde
-                │    └── columns: abcde.a:24(int!null) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                │    ├── columns: abcde.a:24(int!null) abcde.b:25(int) abcde.c:26(int) abcde.d:27(int) abcde.e:28(int) rowid:29(int!null)
+                │    └── computed column expressions
+                │         ├── abcde.d:27(int)
+                │         │    └── plus [type=int]
+                │         │         ├── plus [type=int]
+                │         │         │    ├── variable: abcde.b [type=int]
+                │         │         │    └── variable: abcde.c [type=int]
+                │         │         └── const: 1 [type=int]
+                │         └── abcde.e:28(int)
+                │              └── variable: abcde.a [type=int]
                 └── filters
                      └── eq [type=bool]
                           ├── variable: abcde.a [type=int]
@@ -295,7 +349,16 @@ project
       └── select
            ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            ├── scan abcde
-           │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    └── computed column expressions
+           │         ├── d:10(int)
+           │         │    └── plus [type=int]
+           │         │         ├── plus [type=int]
+           │         │         │    ├── variable: b [type=int]
+           │         │         │    └── variable: c [type=int]
+           │         │         └── const: 1 [type=int]
+           │         └── e:11(int)
+           │              └── variable: a [type=int]
            └── filters
                 └── eq [type=bool]
                      ├── variable: a [type=int]
@@ -313,7 +376,16 @@ project
  │    └── select
  │         ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
  │         ├── scan foo
- │         │    └── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+ │         │    └── computed column expressions
+ │         │         ├── d:10(int)
+ │         │         │    └── plus [type=int]
+ │         │         │         ├── plus [type=int]
+ │         │         │         │    ├── variable: b [type=int]
+ │         │         │         │    └── variable: c [type=int]
+ │         │         │         └── const: 1 [type=int]
+ │         │         └── e:11(int)
+ │         │              └── variable: a [type=int]
  │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: a [type=int]
@@ -347,7 +419,16 @@ with &1
  │              │    └── select
  │              │         ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
  │              │         ├── scan abcde
- │              │         │    └── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         │    ├── columns: abcde.a:7(int!null) abcde.b:8(int) abcde.c:9(int) abcde.d:10(int) abcde.e:11(int) rowid:12(int!null)
+ │              │         │    └── computed column expressions
+ │              │         │         ├── abcde.d:10(int)
+ │              │         │         │    └── plus [type=int]
+ │              │         │         │         ├── plus [type=int]
+ │              │         │         │         │    ├── variable: abcde.b [type=int]
+ │              │         │         │         │    └── variable: abcde.c [type=int]
+ │              │         │         │         └── const: 1 [type=int]
+ │              │         │         └── abcde.e:11(int)
+ │              │         │              └── variable: abcde.a [type=int]
  │              │         └── filters
  │              │              └── gt [type=bool]
  │              │                   ├── variable: abcde.a [type=int]

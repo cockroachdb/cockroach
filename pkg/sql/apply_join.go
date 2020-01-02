@@ -270,7 +270,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
 				// expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
-				explainOpt := memo.FormatExpr(newRightSide, fmtFlags, nil /* catalog */)
+				explainOpt := a.optimizer.FormatExpr(newRightSide, fmtFlags)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}
 			return false, err

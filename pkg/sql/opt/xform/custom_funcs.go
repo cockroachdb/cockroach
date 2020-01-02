@@ -55,9 +55,7 @@ func (c *CustomFuncs) Init(e *explorer) {
 // IsCanonicalScan returns true if the given ScanPrivate is an original
 // unaltered primary index Scan operator (i.e. unconstrained and not limited).
 func (c *CustomFuncs) IsCanonicalScan(scan *memo.ScanPrivate) bool {
-	return scan.Index == cat.PrimaryIndex &&
-		scan.Constraint == nil &&
-		scan.HardLimit == 0
+	return scan.IsCanonical()
 }
 
 // GenerateIndexScans enumerates all secondary indexes on the given Scan

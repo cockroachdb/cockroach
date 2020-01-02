@@ -132,6 +132,22 @@ func (g *memoGroups) depthFirstSearch(
 				return r
 			}
 		}
+		// Special hack for scalar expressions that hang off the table meta - we
+		// treat these as children of Scan expressions.
+		if scan, ok := expr.(*memo.ScanExpr); ok {
+			md := scan.Memo().Metadata()
+			meta := md.TableMeta(scan.Table)
+			for i := 0; i < len(meta.Constraints); i++ {
+				if r := g.depthFirstSearch(meta.Constraints[i], target, visited, nextPath); r != nil {
+					return r
+				}
+			}
+			for _, expr := range meta.ComputedCols {
+				if r := g.depthFirstSearch(expr, target, visited, nextPath); r != nil {
+					return r
+				}
+			}
+		}
 	}
 	return nil
 }
