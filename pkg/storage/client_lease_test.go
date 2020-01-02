@@ -411,3 +411,32 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	})
 
 }
+
+// Test the error returned by attempts to create a txn record after a lease
+// transfer.
+func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	key := []byte("a")
+	rangeDesc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+
+	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
+	// there might be already a lease owned by a random node.
+	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(0)))
+
+	// Start a txn and perform a write, so that a txn record has to be created by
+	// the EndTransaction.
+	txn := tc.Servers[0].DB().NewTxn(ctx, "test")
+	require.NoError(t, txn.Put(ctx, "a", "val"))
+	// After starting the transaction, transfer the lease. This will wipe the
+	// timestamp cache, which means that the txn record will not be able to be
+	// created (because someone might have already aborted the txn).
+	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
+
+	err = txn.Commit(ctx)
+	require.Error(t, err, "TransactionAbortedError(ABORT_REASON_NEW_LEASE_PREVENTS_TXN)")
+}

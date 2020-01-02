@@ -476,23 +476,23 @@ func (r *Replica) CanCreateTxnRecord(
 			// our coordinator has already been processed. We might be a replay,
 			// or we raced with an asynchronous abort. Either way, return an
 			// error.
-			return false, minCommitTS, roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
+			return false, hlc.Timestamp{},
+				roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
 		case uuid.Nil:
-			// On lease transfers the timestamp cache is reset with the transfer
-			// time as the low water mark. The timestamp cache may also lose
-			// information when bumping its low water mark due to memory
-			// constraints. If this replica recently obtained the lease or if
-			// the timestamp cache recently bumped its low water mark, this case
-			// will be true for new txns, even if they're not a replay. We force
-			// these txns to retry.
-			return false, minCommitTS, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
+			lease, _ /* nextLease */ := r.GetLease()
+			// Recognize the case where a lease started recently. Lease transfers bump
+			// the ts cache low water mark.
+			if wTS == lease.Start {
+				return false, hlc.Timestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
+			}
+			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 		default:
 			// If we find another transaction's ID then that transaction has
 			// aborted us before our transaction record was written. It obeyed
 			// the restriction that it couldn't create a transaction record for
 			// us, so it bumped the write timestamp cache instead to prevent us
 			// from ever creating a transaction record.
-			return false, minCommitTS, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
 	}
 	return true, minCommitTS, 0
