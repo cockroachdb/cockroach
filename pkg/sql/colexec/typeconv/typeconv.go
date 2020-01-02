@@ -128,14 +128,6 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 		}
 	case types.IntFamily:
 		switch ct.Width() {
-		case 8:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int8(*d), nil
-			}
 		case 16:
 			return func(datum tree.Datum) (interface{}, error) {
 				d, ok := datum.(*tree.DInt)
