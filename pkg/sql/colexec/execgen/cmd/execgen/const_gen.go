@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 func genConstOps(wr io.Writer) error {
@@ -29,7 +29,7 @@ func genConstOps(wr io.Writer) error {
 
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "phystypes.{{.}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.}}", -1)
 	s = replaceManipulationFuncs("", s)
@@ -40,7 +40,7 @@ func genConstOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, coltypes.AllTypes)
+	return tmpl.Execute(wr, phystypes.AllTypes)
 }
 func init() {
 	registerGenerator(genConstOps, "const.eg.go")

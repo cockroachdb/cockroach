@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +38,7 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input Operator, distinctCols []uint32, typs []coltypes.T,
+	input Operator, distinctCols []uint32, typs []phystypes.T,
 ) (Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
@@ -73,9 +73,9 @@ type distinctChainOps struct {
 var _ resettableOperator = &distinctChainOps{}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
-// input columns with the given coltypes.
+// input columns with the given phystypes.
 func NewOrderedDistinct(
-	input Operator, distinctCols []uint32, typs []coltypes.T,
+	input Operator, distinctCols []uint32, typs []phystypes.T,
 ) (Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
@@ -107,18 +107,18 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// replaced by the Go type equivalent for each type in phystypes.T, for example
+// int64 for phystypes.Int64.
 type _GOTYPE interface{}
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// will be replaced by the Go slice representation for each type in phystypes.T, for
+// example []int64 for phystypes.Int64.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _TYPES_T is the template type variable for phystypes.T. It will be replaced by
+// phystypes.Foo for each type Foo in the phystypes.T type.
+const _TYPES_T = phystypes.Unhandled
 
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
@@ -132,7 +132,7 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 var _ interface{} = execgen.UNSAFEGET
 
 func newSingleOrderedDistinct(
-	input Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
+	input Operator, distinctColIdx int, outputCol []bool, t phystypes.T,
 ) (Operator, error) {
 	switch t {
 	// {{range .}}
@@ -166,7 +166,7 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t coltypes.T) (partitioner, error) {
+func newPartitioner(t phystypes.T) (partitioner, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:

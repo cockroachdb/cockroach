@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -76,11 +76,11 @@ type overload struct {
 	BinOp tree.BinaryOperator
 	// OpStr is the string form of whichever of CmpOp and BinOp are set.
 	OpStr     string
-	LTyp      coltypes.T
-	RTyp      coltypes.T
+	LTyp      phystypes.T
+	RTyp      phystypes.T
 	LGoType   string
 	RGoType   string
-	RetTyp    coltypes.T
+	RetTyp    phystypes.T
 	RetGoType string
 
 	AssignFunc  assignFunc
@@ -163,8 +163,8 @@ func (o overload) UnaryAssign(target, v string) string {
 }
 
 type castOverload struct {
-	FromTyp    coltypes.T
-	ToTyp      coltypes.T
+	FromTyp    phystypes.T
+	ToTyp      phystypes.T
 	ToGoTyp    string
 	AssignFunc castAssignFunc
 }
@@ -228,14 +228,14 @@ func floatToDecimal(to, from string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-var castOverloads map[coltypes.T][]castOverload
+var castOverloads map[phystypes.T][]castOverload
 
 func init() {
 	registerTypeCustomizers()
 	registerBinOpOutputTypes()
 
-	// Build overload definitions for basic coltypes.
-	inputTypes := coltypes.AllTypes
+	// Build overload definitions for basic phystypes.
+	inputTypes := phystypes.AllTypes
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 	sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
@@ -243,7 +243,7 @@ func init() {
 	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	for _, leftType := range inputTypes {
-		for _, rightType := range coltypes.CompatibleTypes[leftType] {
+		for _, rightType := range phystypes.CompatibleTypes[leftType] {
 			customizer := typeCustomizers[coltypePair{leftType, rightType}]
 			for _, op := range binOps {
 				// Skip types that don't have associated binary ops.
@@ -285,8 +285,8 @@ func init() {
 					RTyp:      rightType,
 					LGoType:   leftType.GoTypeName(),
 					RGoType:   rightType.GoTypeName(),
-					RetTyp:    coltypes.Bool,
-					RetGoType: coltypes.Bool.GoTypeName(),
+					RetTyp:    phystypes.Bool,
+					RetGoType: phystypes.Bool.GoTypeName(),
 				}
 				if customizer != nil {
 					if b, ok := customizer.(cmpOpTypeCustomizer); ok {
@@ -334,17 +334,17 @@ func init() {
 	}
 
 	// Build cast overloads. We omit cases of type casts that we do not support.
-	castOverloads = make(map[coltypes.T][]castOverload)
+	castOverloads = make(map[phystypes.T][]castOverload)
 	for _, from := range inputTypes {
 		switch from {
-		case coltypes.Bool:
+		case phystypes.Bool:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = castIdentity
-				case coltypes.Int16, coltypes.Int32,
-					coltypes.Int64, coltypes.Float64:
+				case phystypes.Int16, phystypes.Int32,
+					phystypes.Int64, phystypes.Float64:
 					ov.AssignFunc = func(to, from string) string {
 						convStr := `
 							%[1]s = 0
@@ -357,7 +357,7 @@ func init() {
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Bytes:
+		case phystypes.Bytes:
 			// TODO (rohany): It's unclear what to do here in the bytes case.
 			// There are different conversion rules for the multiple things
 			// that a bytes type can implemented, but we don't know each of the
@@ -369,82 +369,82 @@ func init() {
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Decimal:
+		case phystypes.Decimal:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = func(to, from string) string {
 						convStr := `
 							%[1]s = %[2]s.Sign() != 0
 						`
 						return fmt.Sprintf(convStr, to, from)
 					}
-				case coltypes.Decimal:
+				case phystypes.Decimal:
 					ov.AssignFunc = castIdentity
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Int16:
+		case phystypes.Int16:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
+				case phystypes.Decimal:
 					ov.AssignFunc = intToDecimal
-				case coltypes.Int16:
+				case phystypes.Int16:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float64:
+				case phystypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Int32:
+		case phystypes.Int32:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
+				case phystypes.Decimal:
 					ov.AssignFunc = intToDecimal
-				case coltypes.Int32:
+				case phystypes.Int32:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float64:
+				case phystypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Int64:
+		case phystypes.Int64:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
+				case phystypes.Decimal:
 					ov.AssignFunc = intToDecimal
-				case coltypes.Int64:
+				case phystypes.Int64:
 					ov.AssignFunc = castIdentity
-				case coltypes.Float64:
+				case phystypes.Float64:
 					ov.AssignFunc = intToFloat(64)
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
-		case coltypes.Float64:
+		case phystypes.Float64:
 			for _, to := range inputTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
-				case coltypes.Bool:
+				case phystypes.Bool:
 					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
+				case phystypes.Decimal:
 					ov.AssignFunc = floatToDecimal
-				case coltypes.Int16:
+				case phystypes.Int16:
 					ov.AssignFunc = floatToInt(16, 64)
-				case coltypes.Int32:
+				case phystypes.Int32:
 					ov.AssignFunc = floatToInt(32, 64)
-				case coltypes.Int64:
+				case phystypes.Int64:
 					ov.AssignFunc = floatToInt(64, 64)
-				case coltypes.Float64:
+				case phystypes.Float64:
 					ov.AssignFunc = castIdentity
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
@@ -463,13 +463,13 @@ type typeCustomizer interface{}
 
 // coltypePair is used to key a map that holds all typeCustomizers.
 type coltypePair struct {
-	leftType  coltypes.T
-	rightType coltypes.T
+	leftType  phystypes.T
+	rightType phystypes.T
 }
 
 var typeCustomizers map[coltypePair]typeCustomizer
 
-var binOpOutputTypes map[tree.BinaryOperator]map[coltypePair]coltypes.T
+var binOpOutputTypes map[tree.BinaryOperator]map[coltypePair]phystypes.T
 
 // registerTypeCustomizer registers a particular type customizer to a
 // pair of types, for usage by templates.
@@ -1032,81 +1032,81 @@ func (timestampCustomizer) getHashAssignFunc() assignFunc {
 
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[coltypePair]typeCustomizer)
-	registerTypeCustomizer(coltypePair{coltypes.Bool, coltypes.Bool}, boolCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
-	for _, leftFloatType := range coltypes.FloatTypes {
-		for _, rightFloatType := range coltypes.FloatTypes {
+	registerTypeCustomizer(coltypePair{phystypes.Bool, phystypes.Bool}, boolCustomizer{})
+	registerTypeCustomizer(coltypePair{phystypes.Bytes, phystypes.Bytes}, bytesCustomizer{})
+	registerTypeCustomizer(coltypePair{phystypes.Decimal, phystypes.Decimal}, decimalCustomizer{})
+	registerTypeCustomizer(coltypePair{phystypes.Timestamp, phystypes.Timestamp}, timestampCustomizer{})
+	for _, leftFloatType := range phystypes.FloatTypes {
+		for _, rightFloatType := range phystypes.FloatTypes {
 			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
 		}
 	}
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightIntType := range coltypes.IntTypes {
+	for _, leftIntType := range phystypes.IntTypes {
+		for _, rightIntType := range phystypes.IntTypes {
 			registerTypeCustomizer(coltypePair{leftIntType, rightIntType}, intCustomizer{width: 64})
 		}
 	}
 	// Use a customizer of appropriate width when widths are the same.
-	registerTypeCustomizer(coltypePair{coltypes.Float64, coltypes.Float64}, floatCustomizer{width: 64})
-	registerTypeCustomizer(coltypePair{coltypes.Int16, coltypes.Int16}, intCustomizer{width: 16})
-	registerTypeCustomizer(coltypePair{coltypes.Int32, coltypes.Int32}, intCustomizer{width: 32})
-	registerTypeCustomizer(coltypePair{coltypes.Int64, coltypes.Int64}, intCustomizer{width: 64})
+	registerTypeCustomizer(coltypePair{phystypes.Float64, phystypes.Float64}, floatCustomizer{width: 64})
+	registerTypeCustomizer(coltypePair{phystypes.Int16, phystypes.Int16}, intCustomizer{width: 16})
+	registerTypeCustomizer(coltypePair{phystypes.Int32, phystypes.Int32}, intCustomizer{width: 32})
+	registerTypeCustomizer(coltypePair{phystypes.Int64, phystypes.Int64}, intCustomizer{width: 64})
 
-	for _, rightFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
+	for _, rightFloatType := range phystypes.FloatTypes {
+		registerTypeCustomizer(coltypePair{phystypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
 	}
-	for _, rightIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightIntType}, decimalIntCustomizer{})
+	for _, rightIntType := range phystypes.IntTypes {
+		registerTypeCustomizer(coltypePair{phystypes.Decimal, rightIntType}, decimalIntCustomizer{})
 	}
-	for _, leftFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Decimal}, floatDecimalCustomizer{})
+	for _, leftFloatType := range phystypes.FloatTypes {
+		registerTypeCustomizer(coltypePair{leftFloatType, phystypes.Decimal}, floatDecimalCustomizer{})
 	}
-	for _, leftIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Decimal}, intDecimalCustomizer{})
+	for _, leftIntType := range phystypes.IntTypes {
+		registerTypeCustomizer(coltypePair{leftIntType, phystypes.Decimal}, intDecimalCustomizer{})
 	}
-	for _, leftFloatType := range coltypes.FloatTypes {
-		for _, rightIntType := range coltypes.IntTypes {
+	for _, leftFloatType := range phystypes.FloatTypes {
+		for _, rightIntType := range phystypes.IntTypes {
 			registerTypeCustomizer(coltypePair{leftFloatType, rightIntType}, floatIntCustomizer{})
 		}
 	}
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightFloatType := range coltypes.FloatTypes {
+	for _, leftIntType := range phystypes.IntTypes {
+		for _, rightFloatType := range phystypes.FloatTypes {
 			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
 		}
 	}
 }
 
 func registerBinOpOutputTypes() {
-	binOpOutputTypes = make(map[tree.BinaryOperator]map[coltypePair]coltypes.T)
+	binOpOutputTypes = make(map[tree.BinaryOperator]map[coltypePair]phystypes.T)
 	for binOp := range binaryOpName {
-		binOpOutputTypes[binOp] = make(map[coltypePair]coltypes.T)
-		for _, leftFloatType := range coltypes.FloatTypes {
-			for _, rightFloatType := range coltypes.FloatTypes {
-				binOpOutputTypes[binOp][coltypePair{leftFloatType, rightFloatType}] = coltypes.Float64
+		binOpOutputTypes[binOp] = make(map[coltypePair]phystypes.T)
+		for _, leftFloatType := range phystypes.FloatTypes {
+			for _, rightFloatType := range phystypes.FloatTypes {
+				binOpOutputTypes[binOp][coltypePair{leftFloatType, rightFloatType}] = phystypes.Float64
 			}
 		}
-		for _, leftIntType := range coltypes.IntTypes {
-			for _, rightIntType := range coltypes.IntTypes {
-				binOpOutputTypes[binOp][coltypePair{leftIntType, rightIntType}] = coltypes.Int64
+		for _, leftIntType := range phystypes.IntTypes {
+			for _, rightIntType := range phystypes.IntTypes {
+				binOpOutputTypes[binOp][coltypePair{leftIntType, rightIntType}] = phystypes.Int64
 			}
 		}
 		// Use an output type of the same width when input widths are the same.
-		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
-		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64
-		for _, intType := range coltypes.IntTypes {
-			binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, intType}] = coltypes.Decimal
-			binOpOutputTypes[binOp][coltypePair{intType, coltypes.Decimal}] = coltypes.Decimal
+		binOpOutputTypes[binOp][coltypePair{phystypes.Decimal, phystypes.Decimal}] = phystypes.Decimal
+		binOpOutputTypes[binOp][coltypePair{phystypes.Float64, phystypes.Float64}] = phystypes.Float64
+		binOpOutputTypes[binOp][coltypePair{phystypes.Int16, phystypes.Int16}] = phystypes.Int16
+		binOpOutputTypes[binOp][coltypePair{phystypes.Int32, phystypes.Int32}] = phystypes.Int32
+		binOpOutputTypes[binOp][coltypePair{phystypes.Int64, phystypes.Int64}] = phystypes.Int64
+		for _, intType := range phystypes.IntTypes {
+			binOpOutputTypes[binOp][coltypePair{phystypes.Decimal, intType}] = phystypes.Decimal
+			binOpOutputTypes[binOp][coltypePair{intType, phystypes.Decimal}] = phystypes.Decimal
 		}
 	}
 
 	// There is a special case for division with integers; it should have a
 	// decimal result.
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightIntType := range coltypes.IntTypes {
-			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
+	for _, leftIntType := range phystypes.IntTypes {
+		for _, rightIntType := range phystypes.IntTypes {
+			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = phystypes.Decimal
 		}
 	}
 }
@@ -1142,8 +1142,8 @@ func buildDict(values ...interface{}) (map[string]interface{}, error) {
 // intersection is determined to be the maximum common set of LTyp types shared
 // by each overloads.
 func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
-	inputTypes := coltypes.AllTypes
-	keepTypes := make(map[coltypes.T]bool, len(inputTypes))
+	inputTypes := phystypes.AllTypes
+	keepTypes := make(map[phystypes.T]bool, len(inputTypes))
 
 	for _, t := range inputTypes {
 		keepTypes[t] = true

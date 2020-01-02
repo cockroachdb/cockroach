@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -26,7 +26,7 @@ import (
 func NewWindowSortingPartitioner(
 	allocator *Allocator,
 	input Operator,
-	inputTyps []coltypes.T,
+	inputTyps []phystypes.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
@@ -73,7 +73,7 @@ func (p *windowSortingPartitioner) Init() {
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	b := p.input.Next(ctx)
 	if p.partitionColIdx == b.Width() {
-		p.allocator.AppendColumn(b, coltypes.Bool)
+		p.allocator.AppendColumn(b, phystypes.Bool)
 	}
 	if b.Length() == 0 {
 		return b

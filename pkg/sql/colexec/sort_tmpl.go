@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -55,13 +55,13 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// will be replaced by the Go slice representation for each type in phystypes.T, for
+// example []int64 for phystypes.Int64.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _TYPES_T is the template type variable for phystypes.T. It will be replaced by
+// phystypes.Foo for each type Foo in the phystypes.T type.
+const _TYPES_T = phystypes.Unhandled
 
 // _ISNULL is the template type variable for whether the sorter handles nulls
 // or not. It will be replaced by the appropriate boolean.
@@ -78,7 +78,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 // Use execgen package to remove unused import warning.
 var _ interface{} = execgen.UNSAFEGET
 
-func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
+func isSorterSupported(t phystypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
@@ -97,7 +97,7 @@ func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) 
 }
 
 func newSingleSorter(
-	t coltypes.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
+	t phystypes.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
 ) colSorter {
 	switch t {
 	// {{range $typ, $ := . }} {{/* for each type */}}

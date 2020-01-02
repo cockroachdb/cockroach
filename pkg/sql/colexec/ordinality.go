@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
@@ -54,7 +54,7 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	bat := c.input.Next(ctx)
 	if c.ordinalityCol == colNotAppended {
 		c.ordinalityCol = bat.Width()
-		c.allocator.AppendColumn(bat, coltypes.Int64)
+		c.allocator.AppendColumn(bat, phystypes.Int64)
 	}
 
 	if bat.Length() == 0 {

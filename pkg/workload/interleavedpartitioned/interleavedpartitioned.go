@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -814,12 +814,12 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
-var childColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var childColTypes = []phystypes.T{
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
 }
 
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
@@ -847,17 +847,17 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	}
 }
 
-var deviceColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var deviceColTypes = []phystypes.T{
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
 }
 
 func (w *interleavedPartitioned) deviceInitialRowBatch(
@@ -893,11 +893,11 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	}
 }
 
-var queryColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var queryColTypes = []phystypes.T{
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
+	phystypes.Bytes,
 }
 
 func (w *interleavedPartitioned) queryInitialRowBatch(

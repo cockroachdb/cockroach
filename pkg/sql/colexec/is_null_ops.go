@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 // isNullProjOp is an Operator that projects into outputIdx Vec whether the
@@ -49,7 +49,7 @@ func (o *isNullProjOp) Init() {
 func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
 	if o.outputIdx == batch.Width() {
-		o.allocator.AppendColumn(batch, coltypes.Bool)
+		o.allocator.AppendColumn(batch, phystypes.Bool)
 	}
 	n := batch.Length()
 	if n == 0 {

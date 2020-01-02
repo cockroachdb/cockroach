@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -94,7 +94,7 @@ func TestSelectInInt64(t *testing.T) {
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]phystypes.T{phystypes.Int64})
 	col1 := batch.ColVec(0).Int64()
 
 	for i := 0; i < int(coldata.BatchSize()); i++ {

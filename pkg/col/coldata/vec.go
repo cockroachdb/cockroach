@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 // column is an interface that represents a raw array of a Go native type.
@@ -24,7 +24,7 @@ type column interface{}
 // SliceArgs represents the arguments passed in to Vec.Append and Nulls.set.
 type SliceArgs struct {
 	// ColType is the type of both the destination and source slices.
-	ColType coltypes.T
+	ColType phystypes.T
 	// Src is the data being appended.
 	Src Vec
 	// Sel is an optional slice specifying indices to append to the destination
@@ -59,7 +59,7 @@ type CopySliceArgs struct {
 // Go native types.
 type Vec interface {
 	// Type returns the type of data stored in this Vec.
-	Type() coltypes.T
+	Type() phystypes.T
 
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
@@ -110,11 +110,11 @@ type Vec interface {
 	// slice of the current Vec from [start, end), but the returned object is NOT
 	// allowed to be modified (the modification might result in an undefined
 	// behavior).
-	Window(colType coltypes.T, start uint64, end uint64) Vec
+	Window(colType phystypes.T, start uint64, end uint64) Vec
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
-	PrettyValueAt(idx uint16, colType coltypes.T) string
+	PrettyValueAt(idx uint16, colType phystypes.T) string
 
 	// MaybeHasNulls returns true if the column possibly has any null values, and
 	// returns false if the column definitely has no null values.
@@ -145,40 +145,40 @@ var _ Vec = &memColumn{}
 // memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
-	t     coltypes.T
+	t     phystypes.T
 	col   column
 	nulls Nulls
 }
 
 // NewMemColumn returns a new memColumn, initialized with a length.
-func NewMemColumn(t coltypes.T, n int) Vec {
+func NewMemColumn(t phystypes.T, n int) Vec {
 	nulls := NewNulls(n)
 
 	switch t {
-	case coltypes.Bool:
+	case phystypes.Bool:
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
-	case coltypes.Bytes:
+	case phystypes.Bytes:
 		return &memColumn{t: t, col: NewBytes(n), nulls: nulls}
-	case coltypes.Int16:
+	case phystypes.Int16:
 		return &memColumn{t: t, col: make([]int16, n), nulls: nulls}
-	case coltypes.Int32:
+	case phystypes.Int32:
 		return &memColumn{t: t, col: make([]int32, n), nulls: nulls}
-	case coltypes.Int64:
+	case phystypes.Int64:
 		return &memColumn{t: t, col: make([]int64, n), nulls: nulls}
-	case coltypes.Float64:
+	case phystypes.Float64:
 		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
-	case coltypes.Decimal:
+	case phystypes.Decimal:
 		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
-	case coltypes.Timestamp:
+	case phystypes.Timestamp:
 		return &memColumn{t: t, col: make([]time.Time, n), nulls: nulls}
-	case coltypes.Unhandled:
+	case phystypes.Unhandled:
 		return unknown{}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
 	}
 }
 
-func (m *memColumn) Type() coltypes.T {
+func (m *memColumn) Type() phystypes.T {
 	return m.t
 }
 
@@ -240,21 +240,21 @@ func (m *memColumn) SetNulls(n *Nulls) {
 
 func (m *memColumn) Length() int {
 	switch m.t {
-	case coltypes.Bool:
+	case phystypes.Bool:
 		return len(m.col.([]bool))
-	case coltypes.Bytes:
+	case phystypes.Bytes:
 		return m.Bytes().Len()
-	case coltypes.Int16:
+	case phystypes.Int16:
 		return len(m.col.([]int16))
-	case coltypes.Int32:
+	case phystypes.Int32:
 		return len(m.col.([]int32))
-	case coltypes.Int64:
+	case phystypes.Int64:
 		return len(m.col.([]int64))
-	case coltypes.Float64:
+	case phystypes.Float64:
 		return len(m.col.([]float64))
-	case coltypes.Decimal:
+	case phystypes.Decimal:
 		return len(m.col.([]apd.Decimal))
-	case coltypes.Timestamp:
+	case phystypes.Timestamp:
 		return len(m.col.([]time.Time))
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
@@ -263,21 +263,21 @@ func (m *memColumn) Length() int {
 
 func (m *memColumn) SetLength(l int) {
 	switch m.t {
-	case coltypes.Bool:
+	case phystypes.Bool:
 		m.col = m.col.([]bool)[:l]
-	case coltypes.Bytes:
+	case phystypes.Bytes:
 		m.Bytes().SetLength(l)
-	case coltypes.Int16:
+	case phystypes.Int16:
 		m.col = m.col.([]int16)[:l]
-	case coltypes.Int32:
+	case phystypes.Int32:
 		m.col = m.col.([]int32)[:l]
-	case coltypes.Int64:
+	case phystypes.Int64:
 		m.col = m.col.([]int64)[:l]
-	case coltypes.Float64:
+	case phystypes.Float64:
 		m.col = m.col.([]float64)[:l]
-	case coltypes.Decimal:
+	case phystypes.Decimal:
 		m.col = m.col.([]apd.Decimal)[:l]
-	case coltypes.Timestamp:
+	case phystypes.Timestamp:
 		m.col = m.col.([]time.Time)[:l]
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
@@ -286,21 +286,21 @@ func (m *memColumn) SetLength(l int) {
 
 func (m *memColumn) Capacity() int {
 	switch m.t {
-	case coltypes.Bool:
+	case phystypes.Bool:
 		return cap(m.col.([]bool))
-	case coltypes.Bytes:
+	case phystypes.Bytes:
 		panic("Capacity should not be called on Vec of Bytes type")
-	case coltypes.Int16:
+	case phystypes.Int16:
 		return cap(m.col.([]int16))
-	case coltypes.Int32:
+	case phystypes.Int32:
 		return cap(m.col.([]int32))
-	case coltypes.Int64:
+	case phystypes.Int64:
 		return cap(m.col.([]int64))
-	case coltypes.Float64:
+	case phystypes.Float64:
 		return cap(m.col.([]float64))
-	case coltypes.Decimal:
+	case phystypes.Decimal:
 		return cap(m.col.([]apd.Decimal))
-	case coltypes.Timestamp:
+	case phystypes.Timestamp:
 		return cap(m.col.([]time.Time))
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))

@@ -53,7 +53,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -129,11 +129,11 @@ func (w *bulkingest) Tables() []workload.Table {
 	}
 	schema += ")"
 
-	var bulkingestColTypes = []coltypes.T{
-		coltypes.Int64,
-		coltypes.Int64,
-		coltypes.Int64,
-		coltypes.Bytes,
+	var bulkingestColTypes = []phystypes.T{
+		phystypes.Int64,
+		phystypes.Int64,
+		phystypes.Int64,
+		phystypes.Bytes,
 	}
 
 	table := workload.Table{

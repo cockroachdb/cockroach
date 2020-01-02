@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/pkg/errors"
 )
@@ -40,13 +40,13 @@ var _ apd.Decimal
 // Dummy import to pull in "time" package.
 var _ time.Time
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _TYPES_T is the template type variable for phystypes.T. It will be replaced by
+// phystypes.Foo for each type Foo in the phystypes.T type.
+const _TYPES_T = phystypes.Unhandled
 
 // _GOTYPE is the template Go type variable for this operator. It will be
-// replaced by the Go type equivalent for each type in coltypes.T, for example
-// int64 for coltypes.Int64.
+// replaced by the Go type equivalent for each type in phystypes.T, for example
+// int64 for phystypes.Int64.
 type _GOTYPE interface{}
 
 // */}}
@@ -57,7 +57,7 @@ var _ interface{} = execgen.UNSAFEGET
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
 func NewConstOp(
-	allocator *Allocator, input Operator, t coltypes.T, constVal interface{}, outputIdx int,
+	allocator *Allocator, input Operator, t phystypes.T, constVal interface{}, outputIdx int,
 ) (Operator, error) {
 	switch t {
 	// {{range .}}
@@ -81,7 +81,7 @@ type const_TYPEOp struct {
 	OneInputNode
 
 	allocator *Allocator
-	typ       coltypes.T
+	typ       phystypes.T
 	outputIdx int
 	constVal  _GOTYPE
 }
@@ -123,7 +123,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
-func NewConstNullOp(allocator *Allocator, input Operator, outputIdx int, typ coltypes.T) Operator {
+func NewConstNullOp(allocator *Allocator, input Operator, outputIdx int, typ phystypes.T) Operator {
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -136,7 +136,7 @@ type constNullOp struct {
 	OneInputNode
 	allocator *Allocator
 	outputIdx int
-	typ       coltypes.T
+	typ       phystypes.T
 }
 
 var _ Operator = &constNullOp{}

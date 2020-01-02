@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -30,7 +30,7 @@ func TestSortChunks(t *testing.T) {
 		description string
 		tuples      tuples
 		expected    tuples
-		typ         []coltypes.T
+		typ         []phystypes.T
 		ordCols     []execinfrapb.Ordering_Column
 		matchLen    int
 	}{
@@ -38,7 +38,7 @@ func TestSortChunks(t *testing.T) {
 			description: `tuples already ordered`,
 			tuples:      tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected:    tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:         []coltypes.T{coltypes.Int64},
+			typ:         []phystypes.T{phystypes.Int64},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			matchLen:    1,
 		},
@@ -46,7 +46,7 @@ func TestSortChunks(t *testing.T) {
 			description: `three chunks`,
 			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
 			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typ:         []phystypes.T{phystypes.Int64, phystypes.Int64},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -54,7 +54,7 @@ func TestSortChunks(t *testing.T) {
 			description: `simple nulls asc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typ:         []phystypes.T{phystypes.Int64, phystypes.Int64},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -62,7 +62,7 @@ func TestSortChunks(t *testing.T) {
 			description: `simple nulls desc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
-			typ:         []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typ:         []phystypes.T{phystypes.Int64, phystypes.Int64},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 			matchLen:    1,
 		},
@@ -82,7 +82,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -102,7 +102,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -122,7 +122,7 @@ func TestSortChunks(t *testing.T) {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -142,7 +142,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -162,7 +162,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 1},
 				{0, 1, 2},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
 			matchLen: 1,
 		},
@@ -186,7 +186,7 @@ func TestSortChunks(t *testing.T) {
 				{1, 1, 2},
 				{1, 2, 2},
 			},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
 			matchLen: 2,
 		},
@@ -204,9 +204,9 @@ func TestSortChunksRandomized(t *testing.T) {
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]coltypes.T, maxCols)
+	typs := make([]phystypes.T, maxCols)
 	for i := range typs {
-		typs[i] = coltypes.Int64
+		typs[i] = phystypes.Int64
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -245,9 +245,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*Allocator, Operator, []coltypes.T, []execinfrapb.Ordering_Column, int) (Operator, error){
+	sorterConstructors := []func(*Allocator, Operator, []phystypes.T, []execinfrapb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
-		func(allocator *Allocator, input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (Operator, error) {
+		func(allocator *Allocator, input Operator, inputTypes []phystypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (Operator, error) {
 			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},
 	}
@@ -267,9 +267,9 @@ func BenchmarkSortChunks(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 								// batch) * nCols (number of columns / row).
 								b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
-								typs := make([]coltypes.T, nCols)
+								typs := make([]phystypes.T, nCols)
 								for i := range typs {
-									typs[i] = coltypes.Int64
+									typs[i] = phystypes.Int64
 								}
 								batch := testAllocator.NewMemBatch(typs)
 								batch.SetLength(coldata.BatchSize())

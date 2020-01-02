@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -58,7 +58,7 @@ var _ flowStreamServer = callbackFlowStreamServer{}
 func TestInboxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []phystypes.T{phystypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
 		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []phystypes.T{phystypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -151,7 +151,7 @@ func TestInboxTimeout(t *testing.T) {
 
 	ctx := context.Background()
 
-	inbox, err := NewInbox(testAllocator, []coltypes.T{coltypes.Int64}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []phystypes.T{phystypes.Int64}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	var (
@@ -199,7 +199,7 @@ func TestInboxShutdown(t *testing.T) {
 		drainMetaSleep     = time.Millisecond * time.Duration(rng.Intn(10))
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
-		typs               = []coltypes.T{coltypes.Int64}
+		typs               = []phystypes.T{phystypes.Int64}
 		batch              = colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
 	)
 

@@ -17,7 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -38,13 +38,13 @@ func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
-func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
+func (a *Allocator) NewMemBatch(types []phystypes.T) coldata.Batch {
 	return a.NewMemBatchWithSize(types, int(coldata.BatchSize()))
 }
 
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
-func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
+func (a *Allocator) NewMemBatchWithSize(types []phystypes.T, size int) coldata.Batch {
 	selVectorSize := size * sizeOfUint16
 	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes(types, size) + selVectorSize)
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
@@ -54,8 +54,8 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 }
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
-func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
-	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, n))
+func (a *Allocator) NewMemColumn(t phystypes.T, n int) coldata.Vec {
+	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]phystypes.T{t}, n))
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
@@ -63,8 +63,8 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 }
 
 // AppendColumn appends a newly allocated coldata.Vec of the given type to b.
-func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
-	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, int(coldata.BatchSize())))
+func (a *Allocator) AppendColumn(b coldata.Batch, t phystypes.T) {
+	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]phystypes.T{t}, int(coldata.BatchSize())))
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
@@ -80,20 +80,20 @@ func (a *Allocator) performOperation(destVecs []coldata.Vec, operation func()) {
 		// To simplify the accounting, we perform the operation first and then will
 		// update the memory account. The minor "drift" in accounting that is
 		// caused by this approach is ok.
-		if dest.Type() == coltypes.Bytes {
+		if dest.Type() == phystypes.Bytes {
 			before += int64(dest.Bytes().Size())
 		} else {
-			before += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
+			before += int64(estimateBatchSizeBytes([]phystypes.T{dest.Type()}, dest.Capacity()))
 		}
 	}
 
 	operation()
 
 	for _, dest := range destVecs {
-		if dest.Type() == coltypes.Bytes {
+		if dest.Type() == phystypes.Bytes {
 			after += int64(dest.Bytes().Size())
 		} else {
-			after += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
+			after += int64(estimateBatchSizeBytes([]phystypes.T{dest.Type()}, dest.Capacity()))
 		}
 	}
 	delta = after - before
@@ -139,16 +139,16 @@ var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint16
 // estimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.
 // WARNING: This only is correct for fixed width types, and returns an
-// estimate for non fixed width coltypes. In future it might be possible to
+// estimate for non fixed width phystypes. In future it might be possible to
 // remove the need for estimation by specifying batch sizes in terms of bytes.
-func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
+func estimateBatchSizeBytes(vecTypes []phystypes.T, batchLength int) int {
 	// acc represents the number of bytes to represent a row in the batch.
 	acc := 0
 	for _, t := range vecTypes {
 		switch t {
-		case coltypes.Bool:
+		case phystypes.Bool:
 			acc += sizeOfBool
-		case coltypes.Bytes:
+		case phystypes.Bytes:
 			// For byte arrays, we initially allocate BytesInitialAllocationFactor
 			// number of bytes (plus an int32 for the offset) for each row, so we use
 			// the sum of two values as the estimate. However, later, the exact
@@ -156,19 +156,19 @@ func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// place, the Allocator will measure the old footprint and the updated
 			// one and will update the memory account accordingly.
 			acc += coldata.BytesInitialAllocationFactor + sizeOfInt32
-		case coltypes.Int16:
+		case phystypes.Int16:
 			acc += sizeOfInt16
-		case coltypes.Int32:
+		case phystypes.Int32:
 			acc += sizeOfInt32
-		case coltypes.Int64:
+		case phystypes.Int64:
 			acc += sizeOfInt64
-		case coltypes.Float64:
+		case phystypes.Float64:
 			acc += sizeOfFloat64
-		case coltypes.Decimal:
+		case phystypes.Decimal:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
 			acc += 50
-		case coltypes.Timestamp:
+		case phystypes.Timestamp:
 			// time.Time consists of two 64 bit integers and a pointer to
 			// time.Location. We will only account for this 3 bytes without paying
 			// attention to the full time.Location struct. The reason is that it is
@@ -177,7 +177,7 @@ func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
 			acc += sizeOfTime
-		case coltypes.Unhandled:
+		case phystypes.Unhandled:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))

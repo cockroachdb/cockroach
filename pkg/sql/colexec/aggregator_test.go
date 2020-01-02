@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -28,13 +28,13 @@ var (
 	defaultGroupCols = []uint32{0}
 	defaultAggCols   = [][]uint32{{1}}
 	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM}
-	defaultColTyps   = []coltypes.T{coltypes.Int64, coltypes.Int64}
+	defaultColTyps   = []phystypes.T{phystypes.Int64, phystypes.Int64}
 )
 
 type aggregatorTestCase struct {
 	// colTypes, aggFns, groupCols, and aggCols will be set to their default
 	// values before running a test if nil.
-	colTypes  []coltypes.T
+	colTypes  []phystypes.T
 	aggFns    []execinfrapb.AggregatorSpec_Func
 	groupCols []uint32
 	aggCols   [][]uint32
@@ -58,7 +58,7 @@ type aggType struct {
 	new func(
 		allocator *Allocator,
 		input Operator,
-		colTypes []coltypes.T,
+		colTypes []phystypes.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
@@ -254,7 +254,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			batchSize:       1,
 			outputBatchSize: 1,
 			name:            "UnusedInputColumns",
-			colTypes:        []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			colTypes:        []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			groupCols:       []uint32{1, 2},
 			aggCols:         [][]uint32{{0}},
 		},
@@ -324,7 +324,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{0, 1, 2},
 				{0, 1, 2},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			colTypes: []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			expected: tuples{
 				{4, 2},
 			},
@@ -341,7 +341,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{0, 1, 0.5},
 				{1, 1, 1.2},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Decimal},
+			colTypes: []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Decimal},
 			expected: tuples{
 				{3.4, 3},
 				{1.2, 1},
@@ -361,7 +361,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{1, 6.21},
 				{1, 2.43},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal},
+			colTypes: []phystypes.T{phystypes.Int64, phystypes.Decimal},
 			expected: tuples{
 				{"1.5333333333333333333", 4.6},
 				{4.32, 8.64},
@@ -400,7 +400,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_MAX,
 			},
 			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {2}, {2}, {2}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
+			colTypes: []phystypes.T{phystypes.Int64, phystypes.Decimal, phystypes.Int64},
 			input: tuples{
 				{0, 3.1, 2},
 				{0, 1.1, 3},
@@ -433,7 +433,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_AVG,
 			},
 			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
+			colTypes: []phystypes.T{phystypes.Int64, phystypes.Decimal, phystypes.Int64},
 			input: tuples{
 				{nil, 1.1, 4},
 				{0, nil, nil},
@@ -482,7 +482,7 @@ func TestAggregatorRandom(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
 						func(t *testing.T) {
 							nTuples := int(coldata.BatchSize()) * numInputBatches
-							typs := []coltypes.T{coltypes.Int64, coltypes.Float64}
+							typs := []phystypes.T{phystypes.Int64, phystypes.Float64}
 							cols := []coldata.Vec{
 								testAllocator.NewMemColumn(typs[0], nTuples),
 								testAllocator.NewMemColumn(typs[1], nTuples),
@@ -635,17 +635,17 @@ func BenchmarkAggregator(b *testing.B) {
 		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
-				for _, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal} {
+				for _, typ := range []phystypes.T{phystypes.Int64, phystypes.Decimal} {
 					for _, groupSize := range []int{1, 2, int(coldata.BatchSize()) / 2, int(coldata.BatchSize())} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
-										colTypes := []coltypes.T{coltypes.Int64, typ}
+										colTypes := []phystypes.T{phystypes.Int64, typ}
 										nTuples := numInputBatches * int(coldata.BatchSize())
 										cols := []coldata.Vec{
-											testAllocator.NewMemColumn(coltypes.Int64, nTuples),
+											testAllocator.NewMemColumn(phystypes.Int64, nTuples),
 											testAllocator.NewMemColumn(typ, nTuples),
 										}
 										groups := cols[0].Int64()
@@ -665,12 +665,12 @@ func BenchmarkAggregator(b *testing.B) {
 											}
 										}
 										switch typ {
-										case coltypes.Int64:
+										case phystypes.Int64:
 											vals := cols[1].Int64()
 											for i := range vals {
 												vals[i] = rng.Int63() % 1024
 											}
-										case coltypes.Decimal:
+										case phystypes.Decimal:
 											vals := cols[1].Decimal()
 											for i := range vals {
 												vals[i].SetInt64(rng.Int63() % 1024)
@@ -737,7 +737,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 3},
 				{0, 7},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			colTypes:  []phystypes.T{phystypes.Int64, phystypes.Int64},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{1}},
 
@@ -754,7 +754,7 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{5},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64},
+			colTypes:  []phystypes.T{phystypes.Int64},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{0}},
 
@@ -773,7 +773,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 5},
 				{hashTableBucketSize, 7},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			colTypes:  []phystypes.T{phystypes.Int64, phystypes.Int64},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{1}},
 
@@ -791,7 +791,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 1, 0.5},
 				{1, 1, 1.2},
 			},
-			colTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Decimal},
+			colTypes:      []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Decimal},
 			convToDecimal: true,
 
 			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
@@ -817,7 +817,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 1, 6, 11},
 				{1, 2, 6, 13},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			colTypes:  []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64, phystypes.Int64},
 			groupCols: []uint32{0, 1},
 			aggCols:   [][]uint32{{3}},
 

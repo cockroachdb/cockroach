@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 // deselectorOp consumes the input operator, and if resulting batches have a
@@ -25,7 +25,7 @@ type deselectorOp struct {
 	OneInputNode
 	NonExplainable
 	allocator  *Allocator
-	inputTypes []coltypes.T
+	inputTypes []phystypes.T
 
 	output coldata.Batch
 }
@@ -33,8 +33,8 @@ type deselectorOp struct {
 var _ Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
-// operator with the given column coltypes.
-func NewDeselectorOp(allocator *Allocator, input Operator, colTypes []coltypes.T) Operator {
+// operator with the given column phystypes.
+func NewDeselectorOp(allocator *Allocator, input Operator, colTypes []phystypes.T) Operator {
 	return &deselectorOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

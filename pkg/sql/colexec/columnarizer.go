@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -38,7 +38,7 @@ type Columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
-	typs            []coltypes.T
+	typs            []phystypes.T
 }
 
 var _ Operator = &Columnarizer{}

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 )
 
@@ -29,7 +29,7 @@ type filterFeedOperator struct {
 
 var _ Operator = &filterFeedOperator{}
 
-func newFilterFeedOperator(allocator *Allocator, inputTypes []coltypes.T) *filterFeedOperator {
+func newFilterFeedOperator(allocator *Allocator, inputTypes []phystypes.T) *filterFeedOperator {
 	return &filterFeedOperator{
 		batch: allocator.NewMemBatchWithSize(inputTypes, 1 /* size */),
 	}
@@ -52,8 +52,8 @@ func (o *filterFeedOperator) reset() {
 
 func newJoinerFilter(
 	allocator *Allocator,
-	leftSourceTypes []coltypes.T,
-	rightSourceTypes []coltypes.T,
+	leftSourceTypes []phystypes.T,
+	rightSourceTypes []phystypes.T,
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (*joinerFilter, error) {
@@ -74,8 +74,8 @@ type joinerFilter struct {
 	Operator
 
 	allocator        *Allocator
-	leftSourceTypes  []coltypes.T
-	rightSourceTypes []coltypes.T
+	leftSourceTypes  []phystypes.T
+	rightSourceTypes []phystypes.T
 	input            *filterFeedOperator
 	// onlyOnLeft indicates whether the ON expression is such that only columns
 	// from the left input are used.
@@ -117,7 +117,7 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 	if lBatch == nil && rBatch == nil {
 		execerror.VectorizedInternalPanic("only one of lBatch and rBatch can be nil")
 	}
-	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
+	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []phystypes.T, idx int) {
 		sel := batch.Selection()
 		if sel != nil {
 			idx = int(sel[idx])

@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -123,10 +123,10 @@ func (b *bank) Hooks() workload.Hooks {
 	}
 }
 
-var bankColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
+var bankColTypes = []phystypes.T{
+	phystypes.Int64,
+	phystypes.Int64,
+	phystypes.Bytes,
 }
 
 // Tables implements the Generator interface.

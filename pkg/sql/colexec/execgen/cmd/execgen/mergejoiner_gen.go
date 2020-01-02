@@ -72,7 +72,7 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "phystypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_L_SEL_IND", "{{$sel.LSelString}}", -1)
 	s = strings.Replace(s, "_R_SEL_IND", "{{$sel.RSelString}}", -1)

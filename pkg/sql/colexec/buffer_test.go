@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ func TestBufferOp(t *testing.T) {
 
 	ctx := context.Background()
 	inputTuples := tuples{{int64(1)}, {int64(2)}, {int64(3)}}
-	input := newOpTestInput(coldata.BatchSize(), inputTuples, []coltypes.T{coltypes.Int64})
+	input := newOpTestInput(coldata.BatchSize(), inputTuples, []phystypes.T{phystypes.Int64})
 	buffer := NewBufferOp(input).(*bufferOp)
 	buffer.Init()
 

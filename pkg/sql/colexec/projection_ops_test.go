@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +82,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]phystypes.T{phystypes.Int64, phystypes.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < int(coldata.BatchSize()); i++ {
 		col[i] = 1
@@ -205,10 +205,10 @@ func TestRandomComparisons(t *testing.T) {
 			continue
 		}
 		typ := typeconv.FromColumnType(ct)
-		if typ == coltypes.Unhandled {
+		if typ == phystypes.Unhandled {
 			continue
 		}
-		typs := []coltypes.T{typ, typ, coltypes.Bool}
+		typs := []phystypes.T{typ, typ, phystypes.Bool}
 		bytesFixedLength := 0
 		if ct.Family() == types.UuidFamily {
 			bytesFixedLength = 16
@@ -291,24 +291,24 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *RepeatableBatchSource, intType coltypes.T) Operator,
+	makeProjOp func(source *RepeatableBatchSource, intType phystypes.T) Operator,
 	useSelectionVector bool,
 	hasNulls bool,
-	intType coltypes.T,
-	outputType coltypes.T,
+	intType phystypes.T,
+	outputType phystypes.T,
 ) {
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{intType, intType, outputType})
+	batch := testAllocator.NewMemBatch([]phystypes.T{intType, intType, outputType})
 	switch intType {
-	case coltypes.Int64:
+	case phystypes.Int64:
 		col1 := batch.ColVec(0).Int64()
 		col2 := batch.ColVec(1).Int64()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			col1[i] = 1
 			col2[i] = 1
 		}
-	case coltypes.Int32:
+	case phystypes.Int32:
 		col1 := batch.ColVec(0).Int32()
 		col2 := batch.ColVec(1).Int32()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
@@ -349,8 +349,8 @@ func benchmarkProjOp(
 }
 
 func BenchmarkProjOp(b *testing.B) {
-	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) Operator{
-		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+	projOpMap := map[string]func(*RepeatableBatchSource, phystypes.T) Operator{
+		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType phystypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
 				allocator:    testAllocator,
@@ -359,11 +359,11 @@ func BenchmarkProjOp(b *testing.B) {
 				outputIdx:    2,
 			}
 			switch intType {
-			case coltypes.Int64:
+			case phystypes.Int64:
 				return &projPlusInt64Int64Op{
 					projOpBase: base,
 				}
-			case coltypes.Int32:
+			case phystypes.Int32:
 				return &projPlusInt32Int32Op{
 					projOpBase: base,
 				}
@@ -372,7 +372,7 @@ func BenchmarkProjOp(b *testing.B) {
 				return nil
 			}
 		},
-		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType phystypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
 				allocator:    testAllocator,
@@ -381,11 +381,11 @@ func BenchmarkProjOp(b *testing.B) {
 				outputIdx:    2,
 			}
 			switch intType {
-			case coltypes.Int64:
+			case phystypes.Int64:
 				return &projMinusInt64Int64Op{
 					projOpBase: base,
 				}
-			case coltypes.Int32:
+			case phystypes.Int32:
 				return &projMinusInt32Int32Op{
 					projOpBase: base,
 				}
@@ -394,7 +394,7 @@ func BenchmarkProjOp(b *testing.B) {
 				return nil
 			}
 		},
-		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+		"projMultIntIntOp": func(source *RepeatableBatchSource, intType phystypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
 				allocator:    testAllocator,
@@ -403,11 +403,11 @@ func BenchmarkProjOp(b *testing.B) {
 				outputIdx:    2,
 			}
 			switch intType {
-			case coltypes.Int64:
+			case phystypes.Int64:
 				return &projMultInt64Int64Op{
 					projOpBase: base,
 				}
-			case coltypes.Int32:
+			case phystypes.Int32:
 				return &projMultInt32Int32Op{
 					projOpBase: base,
 				}
@@ -416,7 +416,7 @@ func BenchmarkProjOp(b *testing.B) {
 				return nil
 			}
 		},
-		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
+		"projDivIntIntOp": func(source *RepeatableBatchSource, intType phystypes.T) Operator {
 			base := projOpBase{
 				OneInputNode: NewOneInputNode(source),
 				allocator:    testAllocator,
@@ -425,11 +425,11 @@ func BenchmarkProjOp(b *testing.B) {
 				outputIdx:    2,
 			}
 			switch intType {
-			case coltypes.Int64:
+			case phystypes.Int64:
 				return &projDivInt64Int64Op{
 					projOpBase: base,
 				}
-			case coltypes.Int32:
+			case phystypes.Int32:
 				return &projDivInt32Int32Op{
 					projOpBase: base,
 				}
@@ -441,14 +441,14 @@ func BenchmarkProjOp(b *testing.B) {
 	}
 
 	for projOp, makeProjOp := range projOpMap {
-		for _, intType := range []coltypes.T{coltypes.Int64, coltypes.Int32} {
+		for _, intType := range []phystypes.T{phystypes.Int64, phystypes.Int32} {
 			for _, useSel := range []bool{true, false} {
 				for _, hasNulls := range []bool{true, false} {
 					b.Run(fmt.Sprintf("op=%s/type=%s/useSel=%t/hasNulls=%t",
 						projOp, intType, useSel, hasNulls), func(b *testing.B) {
 						outputType := intType
 						if projOp == "projDivIntIntOp" {
-							outputType = coltypes.Decimal
+							outputType = phystypes.Decimal
 						}
 						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType, outputType)
 					})

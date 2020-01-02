@@ -16,7 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -43,7 +43,7 @@ type routerOutputOp struct {
 	// input is a reference to our router.
 	input execinfra.OpNode
 
-	types []coltypes.T
+	types []phystypes.T
 
 	// unblockedEventsChan is signaled when a routerOutput changes state from
 	// blocked to unblocked.
@@ -87,7 +87,7 @@ var _ Operator = &routerOutputOp{}
 // unblockedEventsChan is a buffered channel, as the router output will write to
 // it.
 func newRouterOutputOp(
-	allocator *Allocator, types []coltypes.T, unblockedEventsChan chan<- struct{},
+	allocator *Allocator, types []phystypes.T, unblockedEventsChan chan<- struct{},
 ) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
 		allocator, types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, int(coldata.BatchSize()),
@@ -96,7 +96,7 @@ func newRouterOutputOp(
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	allocator *Allocator,
-	types []coltypes.T,
+	types []phystypes.T,
 	unblockedEventsChan chan<- struct{},
 	blockedThreshold int,
 	outputBatchSize int,
@@ -270,8 +270,8 @@ func (o *routerOutputOp) reset() {
 // returned by the constructor.
 type HashRouter struct {
 	OneInputNode
-	// types are the input coltypes.
-	types []coltypes.T
+	// types are the input phystypes.
+	types []phystypes.T
 	// ht is not fully initialized to a hashTable, only the utility methods are
 	// used.
 	ht hashTable
@@ -305,7 +305,7 @@ type HashRouter struct {
 // input and hashes each row according to hashCols to one of numOutputs outputs.
 // These outputs are exposed as Operators.
 func NewHashRouter(
-	allocator *Allocator, input Operator, types []coltypes.T, hashCols []int, numOutputs int,
+	allocator *Allocator, input Operator, types []phystypes.T, hashCols []int, numOutputs int,
 ) (*HashRouter, []Operator) {
 	outputs := make([]routerOutput, numOutputs)
 	outputsAsOps := make([]Operator, numOutputs)
@@ -331,7 +331,7 @@ func NewHashRouter(
 
 func newHashRouterWithOutputs(
 	input Operator,
-	types []coltypes.T,
+	types []phystypes.T,
 	hashCols []int,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,

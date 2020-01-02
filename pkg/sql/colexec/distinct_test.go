@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -25,14 +25,14 @@ func TestSortedDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		distinctCols []uint32
-		colTypes     []coltypes.T
+		colTypes     []phystypes.T
 		numCols      int
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
+			colTypes:     []phystypes.T{phystypes.Float64, phystypes.Int64, phystypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{nil, nil, nil, nil},
@@ -56,7 +56,7 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
+			colTypes:     []phystypes.T{phystypes.Float64, phystypes.Int64, phystypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{nil, nil, nil, nil},
@@ -80,7 +80,7 @@ func TestSortedDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes},
+			colTypes:     []phystypes.T{phystypes.Float64, phystypes.Int64, phystypes.Bytes},
 			numCols:      4,
 			tuples: tuples{
 				{1.0, 2, "30", 4},
@@ -116,7 +116,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64})
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
@@ -136,7 +136,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	source := NewRepeatableBatchSource(batch)
 	source.Init()
 
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []phystypes.T{phystypes.Int64, phystypes.Int64, phystypes.Int64})
 	if err != nil {
 		b.Fatal(err)
 	}

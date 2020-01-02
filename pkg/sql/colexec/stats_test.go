@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -89,8 +89,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			rightInput,
 			[]uint32{0},
 			[]uint32{0},
-			[]coltypes.T{coltypes.Int64},
-			[]coltypes.T{coltypes.Int64},
+			[]phystypes.T{phystypes.Int64},
+			[]phystypes.T{phystypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			nil,   /* filterConstructor */
@@ -131,7 +131,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := testAllocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
+	batch := testAllocator.NewMemBatchWithSize([]phystypes.T{phystypes.Int64}, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)

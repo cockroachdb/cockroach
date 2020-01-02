@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -106,9 +106,9 @@ type orderedAggregator struct {
 	done      bool
 
 	aggCols  [][]uint32
-	aggTypes [][]coltypes.T
+	aggTypes [][]phystypes.T
 
-	outputTypes []coltypes.T
+	outputTypes []phystypes.T
 
 	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
@@ -156,7 +156,7 @@ var _ Operator = &orderedAggregator{}
 func NewOrderedAggregator(
 	allocator *Allocator,
 	input Operator,
-	colTypes []coltypes.T,
+	colTypes []phystypes.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
@@ -221,10 +221,10 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	allocator *Allocator, aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
-) ([]aggregateFunc, []coltypes.T, error) {
+	allocator *Allocator, aggTyps [][]phystypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
+) ([]aggregateFunc, []phystypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
-	outTyps := make([]coltypes.T, len(aggFns))
+	outTyps := make([]phystypes.T, len(aggFns))
 
 	for i := range aggFns {
 		var err error
@@ -252,7 +252,7 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_COUNT_ROWS, execinfrapb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
-			outTyps[i] = coltypes.Int64
+			outTyps[i] = phystypes.Int64
 		default:
 			// Output types are the input types for now.
 			outTyps[i] = aggTyps[i][0]
@@ -423,11 +423,11 @@ func (a *orderedAggregator) reset() {
 
 // extractAggTypes returns a nested array representing the input types
 // corresponding to each aggregation function.
-func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
-	aggTyps := make([][]coltypes.T, len(aggCols))
+func extractAggTypes(aggCols [][]uint32, colTypes []phystypes.T) [][]phystypes.T {
+	aggTyps := make([][]phystypes.T, len(aggCols))
 
 	for aggIdx := range aggCols {
-		aggTyps[aggIdx] = make([]coltypes.T, len(aggCols[aggIdx]))
+		aggTyps[aggIdx] = make([]phystypes.T, len(aggCols[aggIdx]))
 		for i, colIdx := range aggCols[aggIdx] {
 			aggTyps[aggIdx][i] = colTypes[colIdx]
 		}
@@ -440,7 +440,7 @@ func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
 // column of type 'inputType' (which can be nil in case of COUNT_ROWS) is
 // supported.
 func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
-	var aggType []coltypes.T
+	var aggType []phystypes.T
 	if inputType != nil {
 		aggType = append(aggType, typeconv.FromColumnType(inputType))
 	}
@@ -461,7 +461,7 @@ func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *type
 	}
 	_, _, err := makeAggregateFuncs(
 		nil, /* allocator */
-		[][]coltypes.T{aggType},
+		[][]phystypes.T{aggType},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
 	if err != nil {

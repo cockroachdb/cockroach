@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -24,11 +24,11 @@ import (
 
 func columnByteSize(col coldata.Vec) int64 {
 	switch col.Type() {
-	case coltypes.Int64:
+	case phystypes.Int64:
 		return int64(len(col.Int64()) * 8)
-	case coltypes.Float64:
+	case phystypes.Float64:
 		return int64(len(col.Float64()) * 8)
-	case coltypes.Bytes:
+	case phystypes.Bytes:
 		// We subtract the overhead to be in line with Int64 and Float64 cases.
 		return int64(col.Bytes().Size() - coldata.FlatBytesOverhead)
 	default:

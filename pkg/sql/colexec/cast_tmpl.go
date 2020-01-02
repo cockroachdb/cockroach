@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -90,11 +90,11 @@ func GetCastOperator(
 	}
 	switch from := typeconv.FromColumnType(fromType); from {
 	// {{ range $typ, $overloads := . }}
-	case coltypes._ALLTYPES:
+	case phystypes._ALLTYPES:
 		switch to := typeconv.FromColumnType(toType); to {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
-		case coltypes._OVERLOADTYPES:
+		case phystypes._OVERLOADTYPES:
 			return &castOp_FROMTYPE_TOTYPE{
 				OneInputNode: NewOneInputNode(input),
 				allocator:    allocator,
@@ -119,7 +119,7 @@ type castOpNullAny struct {
 	allocator *Allocator
 	colIdx    int
 	outputIdx int
-	toType    coltypes.T
+	toType    phystypes.T
 }
 
 var _ Operator = &castOpNullAny{}
@@ -171,8 +171,8 @@ type castOp_FROMTYPE_TOTYPE struct {
 	allocator *Allocator
 	colIdx    int
 	outputIdx int
-	fromType  coltypes.T
-	toType    coltypes.T
+	fromType  phystypes.T
+	toType    phystypes.T
 }
 
 var _ Operator = &castOp_FROMTYPE_TOTYPE{}
@@ -188,7 +188,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 	if c.outputIdx == batch.Width() {
-		c.allocator.AppendColumn(batch, coltypes._TOTYPE)
+		c.allocator.AppendColumn(batch, phystypes._TOTYPE)
 	}
 	vec := batch.ColVec(c.colIdx)
 	col := vec._FROMTYPE()

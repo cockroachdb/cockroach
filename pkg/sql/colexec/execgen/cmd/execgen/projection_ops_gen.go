@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 )
 
 // getProjConstOpTmplString returns a "projConstOp" template with isConstLeft
@@ -106,18 +106,18 @@ func genProjNonConstOps(wr io.Writer) error {
 	return tmpl.Execute(wr, getLTypToRTypToOverloads())
 }
 
-func getLTypToRTypToOverloads() map[coltypes.T]map[coltypes.T][]*overload {
+func getLTypToRTypToOverloads() map[phystypes.T]map[phystypes.T][]*overload {
 	var allOverloads []*overload
 	allOverloads = append(allOverloads, binaryOpOverloads...)
 	allOverloads = append(allOverloads, comparisonOpOverloads...)
 
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
+	lTypToRTypToOverloads := make(map[phystypes.T]map[phystypes.T][]*overload)
 	for _, ov := range allOverloads {
 		lTyp := ov.LTyp
 		rTyp := ov.RTyp
 		rTypToOverloads := lTypToRTypToOverloads[lTyp]
 		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
+			rTypToOverloads = make(map[phystypes.T][]*overload)
 			lTypToRTypToOverloads[lTyp] = rTypToOverloads
 		}
 		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)

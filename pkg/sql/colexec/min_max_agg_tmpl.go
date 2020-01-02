@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// */}}
@@ -54,8 +54,8 @@ var _ tree.Datum
 var _ = math.MaxInt64
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// will be replaced by the Go slice representation for each type in phystypes.T, for
+// example []int64 for phystypes.Int64.
 type _GOTYPESLICE interface{}
 
 // _ASSIGN_CMP is the template function for assigning true to the first input
@@ -75,7 +75,7 @@ var _ interface{} = execgen.UNSAFEGET
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(allocator *Allocator, t phystypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .Overloads}}
 	case _TYPES_T:

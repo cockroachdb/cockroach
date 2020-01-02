@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -28,7 +28,7 @@ import (
 func NewSortChunks(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	inputTypes []phystypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
 ) (Operator, error) {
@@ -160,7 +160,7 @@ type chunker struct {
 
 	allocator *Allocator
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	inputTypes []phystypes.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
 	// alreadySortedCols indicates the columns on which the input is already
@@ -204,7 +204,7 @@ var _ spooler = &chunker{}
 func newChunker(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	inputTypes []phystypes.T,
 	alreadySortedCols []execinfrapb.Ordering_Column,
 ) (*chunker, error) {
 	var err error

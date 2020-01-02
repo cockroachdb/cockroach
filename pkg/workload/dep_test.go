@@ -25,7 +25,7 @@ func TestDepWhitelist(t *testing.T) {
 	buildutil.VerifyTransitiveWhitelist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
-			`github.com/cockroachdb/cockroach/pkg/col/coltypes`,
+			`github.com/cockroachdb/cockroach/pkg/col/phystypes`,
 			`github.com/cockroachdb/cockroach/pkg/util/bufalloc`,
 			`github.com/cockroachdb/cockroach/pkg/util/encoding/csv`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,

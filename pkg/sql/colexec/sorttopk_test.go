@@ -13,7 +13,7 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -26,14 +26,14 @@ func TestTopKSorter(t *testing.T) {
 		tuples   tuples
 		expected tuples
 		ordCols  []execinfrapb.Ordering_Column
-		typ      []coltypes.T
+		typ      []phystypes.T
 		k        uint16
 	}{
 		{
 			name:     "k < input length",
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}},
-			typ:      []coltypes.T{coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        3,
 		},
@@ -41,7 +41,7 @@ func TestTopKSorter(t *testing.T) {
 			name:     "k > input length",
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typ:      []coltypes.T{coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        10,
 		},
@@ -49,7 +49,7 @@ func TestTopKSorter(t *testing.T) {
 			name:     "nulls",
 			tuples:   tuples{{1}, {2}, {nil}, {3}, {4}, {5}, {6}, {7}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}},
-			typ:      []coltypes.T{coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:        3,
 		},
@@ -57,7 +57,7 @@ func TestTopKSorter(t *testing.T) {
 			name:     "descending",
 			tuples:   tuples{{0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {1, 5}},
 			expected: tuples{{0, 5}, {1, 5}, {0, 4}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typ:      []phystypes.T{phystypes.Int64, phystypes.Int64},
 			ordCols: []execinfrapb.Ordering_Column{
 				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
 				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},

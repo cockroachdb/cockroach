@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
@@ -32,7 +32,7 @@ const (
 func NewTopKSorter(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	inputTypes []phystypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
 ) Operator {
@@ -64,7 +64,7 @@ type topKSorter struct {
 
 	allocator    *Allocator
 	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []coltypes.T
+	inputTypes   []phystypes.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.
