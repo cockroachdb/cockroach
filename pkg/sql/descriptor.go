@@ -263,6 +263,12 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 	descIDs := make([]sqlbase.ID, 0, len(kvs))
 	alreadySeen := make(map[sqlbase.ID]bool)
 	for _, kv := range kvs {
+		if kv.Value.GetTag() == roachpb.ValueType_TUPLE {
+			// Ignore sentinel (column family 0) KV pairs, which get written when old
+			// namespace entries are migrated. We only care about the KVs for the id
+			// column family, whose values are encoded as ints.
+			continue
+		}
 		ID := sqlbase.ID(kv.ValueInt())
 		if alreadySeen[ID] {
 			continue
