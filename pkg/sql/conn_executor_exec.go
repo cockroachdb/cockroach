@@ -71,6 +71,8 @@ func (ex *connExecutor) execStmt(
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
 		err := ex.runObserverStatement(ctx, stmt, res)
+		// Note that regardless of res.Err(), these observer statements don't
+		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
 	}
 
