@@ -54,19 +54,16 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 	// it's OK if we only deal with that case well for now and, for the
 	// time being, forget/ignore errors when SHOW SYNTAX is used as data
 	// source. This can be added later if deemed useful or necessary.
-	if err := parser.RunShowSyntax(
+	parser.RunShowSyntax(
 		d.ctx, n.Statement,
-		func(ctx context.Context, field, msg string) error {
+		func(ctx context.Context, field, msg string) {
 			fmt.Fprintf(&query, "%s('%s', ", comma, field)
 			lex.EncodeSQLString(&query, msg)
 			query.WriteByte(')')
 			comma = ", "
-			return nil
 		},
 		nil, /* reportErr */
-	); err != nil {
-		return nil, err
-	}
+	)
 	query.WriteByte(')')
 	return parse(query.String())
 }

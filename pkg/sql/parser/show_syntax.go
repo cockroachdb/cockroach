@@ -28,9 +28,9 @@ import (
 func RunShowSyntax(
 	ctx context.Context,
 	stmt string,
-	report func(ctx context.Context, field, msg string) error,
+	report func(ctx context.Context, field, msg string),
 	reportErr func(ctx context.Context, err error),
-) error {
+) {
 	stmts, err := Parse(stmt)
 	if err != nil {
 		if reportErr != nil {
@@ -38,46 +38,28 @@ func RunShowSyntax(
 		}
 
 		pqErr := pgerror.Flatten(err)
-		if err := report(ctx, "error", pqErr.Message); err != nil {
-			return err
-		}
-		if err := report(ctx, "code", pqErr.Code); err != nil {
-			return err
-		}
+		report(ctx, "error", pqErr.Message)
+		report(ctx, "code", pqErr.Code)
 		if pqErr.Source != nil {
 			if pqErr.Source.File != "" {
-				if err := report(ctx, "file", pqErr.Source.File); err != nil {
-					return err
-				}
+				report(ctx, "file", pqErr.Source.File)
 			}
 			if pqErr.Source.Line > 0 {
-				if err := report(ctx, "line", fmt.Sprintf("%d", pqErr.Source.Line)); err != nil {
-					return err
-				}
+				report(ctx, "line", fmt.Sprintf("%d", pqErr.Source.Line))
 			}
 			if pqErr.Source.Function != "" {
-				if err := report(ctx, "function", pqErr.Source.Function); err != nil {
-					return err
-				}
+				report(ctx, "function", pqErr.Source.Function)
 			}
 		}
 		if pqErr.Detail != "" {
-			if err := report(ctx, "detail", pqErr.Detail); err != nil {
-				return err
-			}
+			report(ctx, "detail", pqErr.Detail)
 		}
 		if pqErr.Hint != "" {
-			if err := report(ctx, "hint", pqErr.Hint); err != nil {
-				return err
-			}
+			report(ctx, "hint", pqErr.Hint)
 		}
 	} else {
 		for i := range stmts {
-			str := tree.AsStringWithFlags(stmts[i].AST, tree.FmtParsable)
-			if err := report(ctx, "sql", str); err != nil {
-				return err
-			}
+			report(ctx, "sql", tree.AsStringWithFlags(stmts[i].AST, tree.FmtParsable))
 		}
 	}
-	return nil
 }
