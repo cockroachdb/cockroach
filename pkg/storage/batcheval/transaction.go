@@ -75,11 +75,10 @@ func WriteAbortSpanOnResolve(status roachpb.TransactionStatus, poison, removedIn
 	return removedIntents
 }
 
-// SetAbortSpan clears any AbortSpan entry if poison is false.
-// Otherwise, if poison is true, creates an entry for this transaction
-// in the AbortSpan to prevent future reads or writes from
-// spuriously succeeding on this range.
-func SetAbortSpan(
+// UpdateAbortSpan clears any AbortSpan entry if poison is false. Otherwise, if
+// poison is true, it creates an entry for this transaction in the AbortSpan to
+// prevent future reads or writes from spuriously succeeding on this range.
+func UpdateAbortSpan(
 	ctx context.Context,
 	rec EvalContext,
 	batch engine.ReadWriter,
