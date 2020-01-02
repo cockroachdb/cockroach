@@ -631,28 +631,15 @@ message LeafTxnFinalState {
   // Populated only for compatibility with pre-20.1 nodes.
   // TODO(knz,andrei): Remove this in 20.2.
   int32 deprecated_command_count = 3;
-  // refresh_reads stores key spans which were read
-  // or, less frequently, written during a transaction. This field
-  // is utilized for SERIALIZABLE transactions in the event a
-  // transaction experiences a retry error. In that case, the
-  // coordinator uses the Refresh and RefreshRange RPCs to verify that
-  // no write has occurred to the spans more recently than the txn's
-  // original timestamp, and updates the affected timestamp caches to
-  // the transaction's refreshed timestamp. On failure, the retry
-  // error is propagated. On success, the transaction's original and
-  // current timestamps are forwarded to the refresh timestamp, and
-  // the transaction can continue.
+  // refresh_reads contains the key spans read by the leaf. The root will add
+  // them to its own tracking of reads.
   repeated Span refresh_reads = 4 [(gogoproto.nullable) = false];
   reserved 5;
   reserved 6;
-  // refresh_invalid indicates that spans were discarded or not
-  // collected (i.e.  because the memory budget for tracking reads was
-  // exceeded).
-  // It is also true if the original LeafTxnInputState also hard
-  // refresh_invalid = false.
-  // If false, all spans encountered during the transaction which need
-  // refreshing have been collected to the refresh_reads and
-  // refresh_writes span slices.
+  // refresh_invalid is set if refresh spans have not been collected. In this
+  // case, refresh_reads is empty. It may be set because the leaf was asked not
+  // to collect spans or because the leaf's reads exceeded the tracking memory
+  // budget.
   bool refresh_invalid = 7;
   reserved 8;
 }
