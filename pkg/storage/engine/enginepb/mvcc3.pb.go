@@ -103,7 +103,7 @@ type TxnMeta struct {
 	// 1. by the transaction itself and by concurrent transactions when
 	//    determining whether this transaction's record can be initially
 	//    written. The timestamp is compared against the transaction's
-	//    corresponding write timestamp cache entry to ensure that a
+	//    corresponding timestamp cache entry to ensure that a
 	//    finalized transaction can never commit, either after a replay
 	//    or a transaction abort. See CanCreateTxnRecord.
 	// 2. by intent resolution to efficiently scan for intents while
@@ -123,7 +123,7 @@ type TxnMeta struct {
 func (m *TxnMeta) Reset()      { *m = TxnMeta{} }
 func (*TxnMeta) ProtoMessage() {}
 func (*TxnMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{0}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{0}
 }
 func (m *TxnMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -172,7 +172,7 @@ func (m *MVCCStatsDelta) Reset()         { *m = MVCCStatsDelta{} }
 func (m *MVCCStatsDelta) String() string { return proto.CompactTextString(m) }
 func (*MVCCStatsDelta) ProtoMessage()    {}
 func (*MVCCStatsDelta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{1}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{1}
 }
 func (m *MVCCStatsDelta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -222,7 +222,7 @@ func (m *MVCCPersistentStats) Reset()         { *m = MVCCPersistentStats{} }
 func (m *MVCCPersistentStats) String() string { return proto.CompactTextString(m) }
 func (*MVCCPersistentStats) ProtoMessage()    {}
 func (*MVCCPersistentStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{2}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{2}
 }
 func (m *MVCCPersistentStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -267,7 +267,7 @@ func (m *RangeAppliedState) Reset()         { *m = RangeAppliedState{} }
 func (m *RangeAppliedState) String() string { return proto.CompactTextString(m) }
 func (*RangeAppliedState) ProtoMessage()    {}
 func (*RangeAppliedState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{3}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{3}
 }
 func (m *RangeAppliedState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -305,7 +305,7 @@ func (m *MVCCWriteValueOp) Reset()         { *m = MVCCWriteValueOp{} }
 func (m *MVCCWriteValueOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteValueOp) ProtoMessage()    {}
 func (*MVCCWriteValueOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{4}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{4}
 }
 func (m *MVCCWriteValueOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -343,7 +343,7 @@ func (m *MVCCWriteIntentOp) Reset()         { *m = MVCCWriteIntentOp{} }
 func (m *MVCCWriteIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCWriteIntentOp) ProtoMessage()    {}
 func (*MVCCWriteIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{5}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{5}
 }
 func (m *MVCCWriteIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -379,7 +379,7 @@ func (m *MVCCUpdateIntentOp) Reset()         { *m = MVCCUpdateIntentOp{} }
 func (m *MVCCUpdateIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCUpdateIntentOp) ProtoMessage()    {}
 func (*MVCCUpdateIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{6}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{6}
 }
 func (m *MVCCUpdateIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -418,7 +418,7 @@ func (m *MVCCCommitIntentOp) Reset()         { *m = MVCCCommitIntentOp{} }
 func (m *MVCCCommitIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCCommitIntentOp) ProtoMessage()    {}
 func (*MVCCCommitIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{7}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{7}
 }
 func (m *MVCCCommitIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -458,7 +458,7 @@ func (m *MVCCAbortIntentOp) Reset()         { *m = MVCCAbortIntentOp{} }
 func (m *MVCCAbortIntentOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortIntentOp) ProtoMessage()    {}
 func (*MVCCAbortIntentOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{8}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{8}
 }
 func (m *MVCCAbortIntentOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -494,7 +494,7 @@ func (m *MVCCAbortTxnOp) Reset()         { *m = MVCCAbortTxnOp{} }
 func (m *MVCCAbortTxnOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCAbortTxnOp) ProtoMessage()    {}
 func (*MVCCAbortTxnOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{9}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{9}
 }
 func (m *MVCCAbortTxnOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -533,7 +533,7 @@ func (m *MVCCLogicalOp) Reset()         { *m = MVCCLogicalOp{} }
 func (m *MVCCLogicalOp) String() string { return proto.CompactTextString(m) }
 func (*MVCCLogicalOp) ProtoMessage()    {}
 func (*MVCCLogicalOp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_mvcc3_975116ebc9352733, []int{10}
+	return fileDescriptor_mvcc3_bde9941189a794a0, []int{10}
 }
 func (m *MVCCLogicalOp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3994,10 +3994,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_975116ebc9352733)
+	proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptor_mvcc3_bde9941189a794a0)
 }
 
-var fileDescriptor_mvcc3_975116ebc9352733 = []byte{
+var fileDescriptor_mvcc3_bde9941189a794a0 = []byte{
 	// 1135 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
 	0x14, 0xf7, 0x7a, 0xd7, 0x89, 0x3d, 0x76, 0x12, 0x7b, 0x5a, 0x09, 0xab, 0xa8, 0xde, 0xd4, 0x48,
