@@ -284,7 +284,10 @@ func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 	}
 
 	// Finish and acknowledge the outcome of each command.
-	return forEachAppliedCmdIter(appliedIter, AppliedCommand.FinishAndAckOutcome)
+	return forEachAppliedCmdIter(ctx, appliedIter,
+		func(ctx context.Context, cmd AppliedCommand) error {
+			return cmd.FinishAndAckOutcome(ctx)
+		})
 }
 
 // trivialPolicy encodes a batching policy that allows a batch to consist of
