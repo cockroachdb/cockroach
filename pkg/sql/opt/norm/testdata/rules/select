@@ -1451,3 +1451,81 @@ select
       ├── column1 = 0 [type=bool, outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
       ├── column1::STRING = '0.00' [type=bool, outer=(1)]
       └── column2 = 'b' [type=bool, outer=(2), constraints=(/2: [/'b' - /'b']; tight), fd=()-->(2)]
+
+
+# --------------------------------------------------
+# PushSelectIntoProjectSet
+# --------------------------------------------------
+norm expect=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE k = 1
+----
+project-set
+ ├── columns: k:1(int!null) g:6(int)
+ ├── side-effects
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: k:1(int!null)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── filters
+ │         └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ └── zip
+      └── function: generate_series [type=int, outer=(1), side-effects]
+           ├── const: 0 [type=int]
+           ├── variable: k [type=int]
+           └── const: 10 [type=int]
+
+# Make sure that filters aren't pushed down when not bound by the input, so PushSelectIntoProjectSet is not triggered.
+norm expect-not=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1
+----
+select
+ ├── columns: k:1(int!null) g:6(int!null)
+ ├── side-effects
+ ├── project-set
+ │    ├── columns: k:1(int!null) generate_series:6(int)
+ │    ├── side-effects
+ │    ├── scan a
+ │    │    ├── columns: k:1(int!null)
+ │    │    └── key: (1)
+ │    └── zip
+ │         └── function: generate_series [type=int, outer=(1), side-effects]
+ │              ├── const: 0 [type=int]
+ │              ├── variable: k [type=int]
+ │              └── const: 10 [type=int]
+ └── filters
+      └── generate_series > 1 [type=bool, outer=(6), constraints=(/6: [/2 - ]; tight)]
+
+# Expect that only the applicable filters are pushed down into the project-set.
+norm expect=PushSelectIntoProjectSet
+SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1 AND k = 1
+----
+select
+ ├── columns: k:1(int!null) g:6(int!null)
+ ├── side-effects
+ ├── fd: ()-->(1)
+ ├── project-set
+ │    ├── columns: k:1(int!null) generate_series:6(int)
+ │    ├── side-effects
+ │    ├── fd: ()-->(1)
+ │    ├── select
+ │    │    ├── columns: k:1(int!null)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1(int!null)
+ │    │    │    └── key: (1)
+ │    │    └── filters
+ │    │         └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    └── zip
+ │         └── function: generate_series [type=int, outer=(1), side-effects]
+ │              ├── const: 0 [type=int]
+ │              ├── variable: k [type=int]
+ │              └── const: 10 [type=int]
+ └── filters
+      └── generate_series > 1 [type=bool, outer=(6), constraints=(/6: [/2 - ]; tight)]
