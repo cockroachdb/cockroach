@@ -142,7 +142,7 @@ func TestProposalBuffer(t *testing.T) {
 	// the increase accordingly.
 	mlai, err = b.Insert(pd, data)
 	require.Nil(t, err)
-	expMlai = uint64(p.lai + 1)
+	expMlai = p.lai + 1
 	require.Equal(t, expMlai, mlai)
 	require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
 	require.Equal(t, expMlai, b.LastAssignedLeaseIndexRLocked())

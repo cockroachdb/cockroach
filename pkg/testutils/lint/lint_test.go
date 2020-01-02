@@ -1261,79 +1261,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestVet", func(t *testing.T) {
-		runVet := func(t *testing.T, args ...string) {
-			args = append(append([]string{"vet"}, args...), pkgScope)
-			vetCmd(t, crdb.Dir, "go", args, []stream.Filter{
-				stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
-				stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
-				stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
-				// This exception is for hash.go, which re-implements runtime.noescape
-				// for efficient hashing.
-				stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
-				stream.GrepNot(`^#`), // comment line
-				// This exception is for the colexec generated files.
-				stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
-			})
-		}
-		printfuncs := strings.Join([]string{
-			"ErrEvent",
-			"ErrEventf",
-			"Error",
-			"Errorf",
-			"ErrorfDepth",
-			"Event",
-			"Eventf",
-			"Fatal",
-			"Fatalf",
-			"FatalfDepth",
-			"Info",
-			"Infof",
-			"InfofDepth",
-			"AssertionFailedf",
-			"AssertionFailedWithDepthf",
-			"NewAssertionErrorWithWrappedErrf",
-			"DangerousStatementf",
-			"pgerror.New",
-			"pgerror.NewWithDepthf",
-			"pgerror.Newf",
-			"SetDetailf",
-			"SetHintf",
-			"Unimplemented",
-			"Unimplementedf",
-			"UnimplementedWithDepthf",
-			"UnimplementedWithIssueDetailf",
-			"UnimplementedWithIssuef",
-			"VEvent",
-			"VEventf",
-			"Warning",
-			"Warningf",
-			"WarningfDepth",
-			"Wrapf",
-			"WrapWithDepthf",
-		}, ",")
-
-		// Unfortunately if an analyzer is passed via -vettool like shadow, it seems
-		// we cannot also run the core analyzers (or at least cannot pass them flags
-		// like -printfuncs).
-		t.Run("shadow", func(t *testing.T) { runVet(t, "-vettool=bin/shadow") })
-		// The -printfuncs functionality is interesting and
-		// under-documented. It checks two things:
-		//
-		// - that functions that accept formatting specifiers are given
-		//   arguments of the proper type.
-		// - that functions that don't accept formatting specifiers
-		//   are not given any.
-		//
-		// Whether a function takes a format string or not is determined
-		// as follows: (comment taken from the source of `go vet`)
-		//
-		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
-		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
-		//    Otherwise it may be a Print wrapper.
-		t.Run("vet", func(t *testing.T) { runVet(t, "-all", "-printfuncs", printfuncs) })
-	})
-
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
@@ -1552,5 +1479,92 @@ func TestLint(t *testing.T) {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
 		}
+	})
+	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
+	// RoachVet includes all of the passes of `go vet` plus first-party additions.
+	// See pkg/cmd/roachvet.
+	t.Run("TestRoachVet", func(t *testing.T) {
+		// The -printfuncs functionality is interesting and
+		// under-documented. It checks two things:
+		//
+		// - that functions that accept formatting specifiers are given
+		//   arguments of the proper type.
+		// - that functions that don't accept formatting specifiers
+		//   are not given any.
+		//
+		// Whether a function takes a format string or not is determined
+		// as follows: (comment taken from the source of `go vet`)
+		//
+		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
+		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
+		//    Otherwise it may be a Print wrapper.
+		printfuncs := strings.Join([]string{
+			"ErrEvent",
+			"ErrEventf",
+			"Error",
+			"Errorf",
+			"ErrorfDepth",
+			"Event",
+			"Eventf",
+			"Fatal",
+			"Fatalf",
+			"FatalfDepth",
+			"Info",
+			"Infof",
+			"InfofDepth",
+			"AssertionFailedf",
+			"AssertionFailedWithDepthf",
+			"NewAssertionErrorWithWrappedErrf",
+			"DangerousStatementf",
+			"pgerror.New",
+			"pgerror.NewWithDepthf",
+			"pgerror.Newf",
+			"SetDetailf",
+			"SetHintf",
+			"Unimplemented",
+			"Unimplementedf",
+			"UnimplementedWithDepthf",
+			"UnimplementedWithIssueDetailf",
+			"UnimplementedWithIssuef",
+			"VEvent",
+			"VEventf",
+			"Warning",
+			"Warningf",
+			"WarningfDepth",
+			"Wrapf",
+			"WrapWithDepthf",
+		}, ",")
+
+		filters := []stream.Filter{
+			// Ignore generated files.
+			stream.GrepNot(`pkg/.*\.pb\.go:`),
+			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
+			stream.GrepNot(`pkg/sql/colexec/.*\.eg\.go:`),
+			stream.GrepNot(`pkg/sql/colexec/.*_generated\.go:`),
+			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
+
+			// Ignore types that can change by system.
+			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
+
+			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
+			stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
+			stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
+			// This exception is for hash.go, which re-implements runtime.noescape
+			// for efficient hashing.
+			stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
+			stream.GrepNot(`^#`), // comment line
+			// This exception is for the colexec generated files.
+			stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
+		}
+
+		roachlint, err := exec.LookPath("roachvet")
+		if err != nil {
+			t.Fatalf("failed to find roachvet: %v", err)
+		}
+		vetCmd(t, crdb.Dir, "go",
+			[]string{"vet", "-vettool", roachlint, "-all", "-printf.funcs", printfuncs, pkgScope},
+			filters)
+
 	})
 }

@@ -67,7 +67,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 
 	post := &execinfrapb.PostProcessSpec{}
 	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(1000, 1))
-	aggSpec := execinfrapb.AggregatorSpec_Func(execinfrapb.AggregatorSpec_ARRAY_AGG)
+	aggSpec := execinfrapb.AggregatorSpec_ARRAY_AGG
 	spec := execinfrapb.WindowerSpec{
 		PartitionBy: []uint32{},
 		WindowFns: []execinfrapb.WindowerSpec_WindowFn{{

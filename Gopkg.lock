@@ -1769,7 +1769,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d135e09e7eba1cee20690a3d6e193e505753b705d8b991da1087e984194cc103"
+  digest = "1:20cf3983a6c6db4b53ec9a57dc04a5185224050b607f4a2622b24e2fb6f943ad"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1781,7 +1781,6 @@
     "go/analysis/internal/analysisflags",
     "go/analysis/internal/checker",
     "go/analysis/internal/facts",
-    "go/analysis/multichecker",
     "go/analysis/passes/asmdecl",
     "go/analysis/passes/assign",
     "go/analysis/passes/atomic",
@@ -1791,6 +1790,7 @@
     "go/analysis/passes/composite",
     "go/analysis/passes/copylock",
     "go/analysis/passes/ctrlflow",
+    "go/analysis/passes/errorsas",
     "go/analysis/passes/httpresponse",
     "go/analysis/passes/inspect",
     "go/analysis/passes/internal/analysisutil",
@@ -2166,9 +2166,32 @@
     "golang.org/x/tools/container/intsets",
     "golang.org/x/tools/go/analysis",
     "golang.org/x/tools/go/analysis/analysistest",
-    "golang.org/x/tools/go/analysis/multichecker",
+    "golang.org/x/tools/go/analysis/passes/asmdecl",
+    "golang.org/x/tools/go/analysis/passes/assign",
+    "golang.org/x/tools/go/analysis/passes/atomic",
+    "golang.org/x/tools/go/analysis/passes/bools",
+    "golang.org/x/tools/go/analysis/passes/buildtag",
+    "golang.org/x/tools/go/analysis/passes/cgocall",
+    "golang.org/x/tools/go/analysis/passes/composite",
+    "golang.org/x/tools/go/analysis/passes/copylock",
+    "golang.org/x/tools/go/analysis/passes/errorsas",
+    "golang.org/x/tools/go/analysis/passes/httpresponse",
     "golang.org/x/tools/go/analysis/passes/inspect",
+    "golang.org/x/tools/go/analysis/passes/loopclosure",
+    "golang.org/x/tools/go/analysis/passes/lostcancel",
+    "golang.org/x/tools/go/analysis/passes/nilfunc",
+    "golang.org/x/tools/go/analysis/passes/printf",
+    "golang.org/x/tools/go/analysis/passes/shadow",
     "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
+    "golang.org/x/tools/go/analysis/passes/shift",
+    "golang.org/x/tools/go/analysis/passes/stdmethods",
+    "golang.org/x/tools/go/analysis/passes/structtag",
+    "golang.org/x/tools/go/analysis/passes/tests",
+    "golang.org/x/tools/go/analysis/passes/unmarshal",
+    "golang.org/x/tools/go/analysis/passes/unreachable",
+    "golang.org/x/tools/go/analysis/passes/unsafeptr",
+    "golang.org/x/tools/go/analysis/passes/unusedresult",
+    "golang.org/x/tools/go/analysis/unitchecker",
     "golang.org/x/tools/go/ast/astutil",
     "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",

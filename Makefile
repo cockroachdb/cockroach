@@ -1064,7 +1064,7 @@ lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-lint: bin/returncheck bin/roachlint
+lint: bin/returncheck bin/roachvet
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
@@ -1075,7 +1075,7 @@ lint: bin/returncheck bin/roachlint
 .PHONY: lintshort
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
-lintshort: bin/roachlint
+lintshort: bin/roachvet
 	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
@@ -1609,7 +1609,7 @@ bins = \
   bin/publish-provisional-artifacts \
   bin/optgen \
   bin/returncheck \
-  bin/roachlint \
+  bin/roachvet \
   bin/roachprod \
   bin/roachprod-stress \
   bin/roachtest \

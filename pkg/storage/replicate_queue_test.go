@@ -600,14 +600,14 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	})
 	<-workerReady
 	// Wait until we see remote making progress
-	leaseHolderRepl, err := leaseHolderStore.GetReplica(roachpb.RangeID(rangeID))
+	leaseHolderRepl, err := leaseHolderStore.GetReplica(rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var remoteRepl *storage.Replica
 	testutils.SucceedsSoon(t, func() error {
-		remoteRepl, err = remoteStore.GetReplica(roachpb.RangeID(rangeID))
+		remoteRepl, err = remoteStore.GetReplica(rangeID)
 		return err
 	})
 	testutils.SucceedsSoon(t, func() error {
