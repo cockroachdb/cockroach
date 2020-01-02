@@ -80,7 +80,7 @@ func (r *Replica) evalAndPropose(
 	proposal.ec = ec.move()
 	defer func() {
 		if pErr != nil {
-			proposal.ec.done(ba, nil /* br */, pErr)
+			proposal.ec.done(ctx, ba, nil /* br */, pErr)
 		}
 	}()
 
@@ -105,7 +105,7 @@ func (r *Replica) evalAndPropose(
 			EncounteredIntents: intents,
 			EndTxns:            endTxns,
 		}
-		proposal.finishApplication(pr)
+		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, 0, nil
 	}
 
@@ -756,7 +756,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	if refreshReason != noReason {
 		r.mu.Lock()
-		r.refreshProposalsLocked(0, refreshReason)
+		r.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, refreshReason)
 		r.mu.Unlock()
 	}
 
@@ -878,7 +878,7 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 		// RaftElectionTimeoutTicks to refreshProposalsLocked means that commands
 		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
-		r.refreshProposalsLocked(refreshAtDelta, reasonTicks)
+		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
 	return true, nil
 }
@@ -913,9 +913,11 @@ const (
 // a command must be for it to be inspected; the usual value is the number of
 // ticks of an election timeout (affect only proposals that have had ample time
 // to apply but didn't).
-func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftReason) {
+func (r *Replica) refreshProposalsLocked(
+	ctx context.Context, refreshAtDelta int, reason refreshRaftReason,
+) {
 	if refreshAtDelta != 0 && reason != reasonTicks {
-		log.Fatalf(context.TODO(), "refreshAtDelta specified for reason %s != reasonTicks", reason)
+		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
 	var reproposals pendingCmdSlice
@@ -927,7 +929,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
-			p.finishApplication(proposalResult{Err: roachpb.NewError(
+			p.finishApplication(ctx, proposalResult{Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
@@ -943,7 +945,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-				p.finishApplication(proposalResult{Err: roachpb.NewError(
+				p.finishApplication(ctx, proposalResult{Err: roachpb.NewError(
 					roachpb.NewAmbiguousResultError(
 						fmt.Sprintf("unable to determine whether command was applied via snapshot")))})
 			}
@@ -964,7 +966,6 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	}
 
 	if log.V(1) && len(reproposals) > 0 {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Infof(ctx,
 			"pending commands: reproposing %d (at %d.%d) %s",
 			len(reproposals), r.mu.state.RaftAppliedIndex,
@@ -981,7 +982,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(p); err != nil {
 			r.cleanupFailedProposalLocked(p)
-			p.finishApplication(proposalResult{
+			p.finishApplication(ctx, proposalResult{
 				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err.Error())),
 			})
 		}

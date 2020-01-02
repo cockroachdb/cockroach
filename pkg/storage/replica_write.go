@@ -71,7 +71,7 @@ func (r *Replica) executeWriteBatch(
 	ec := endCmds{repl: r, lg: lg}
 	defer func() {
 		// No-op if we move ec into evalAndPropose.
-		ec.done(ba, br, pErr)
+		ec.done(ctx, ba, br, pErr)
 	}()
 
 	// Determine the lease under which to evaluate the write.

@@ -132,8 +132,8 @@ type ProposalData struct {
 //
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
-func (proposal *ProposalData) finishApplication(pr proposalResult) {
-	proposal.ec.done(proposal.Request, pr.Reply, pr.Err)
+func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposalResult) {
+	proposal.ec.done(ctx, proposal.Request, pr.Reply, pr.Err)
 	proposal.signalProposalResult(pr)
 	if proposal.sp != nil {
 		tracing.FinishSpan(proposal.sp)
