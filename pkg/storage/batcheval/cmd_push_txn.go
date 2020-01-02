@@ -299,8 +299,8 @@ func PushTxn(
 	// transactions to be revived. Instead, we obey the invariant that only the
 	// transaction's own coordinator can issue requests that create its
 	// transaction record. To ensure that a timestamp push or an abort is
-	// respected for transactions without transaction records, we rely on the
-	// read and write timestamp cache, respectively.
+	// respected for transactions without transaction records, we rely on markers
+	// in the read timestamp cache.
 	if ok {
 		txnRecord := reply.PusheeTxn.AsRecord()
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {

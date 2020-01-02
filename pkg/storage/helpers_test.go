@@ -318,7 +318,7 @@ func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.Repli
 func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
-	t, _ := r.store.tsCache.GetMaxRead(start, end)
+	t, _ := r.store.tsCache.GetMax(start, end)
 	return t
 }
 

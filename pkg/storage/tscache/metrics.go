@@ -48,18 +48,6 @@ var (
 		Measurement: "Page Rotations",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaSklWritePages = metric.Metadata{
-		Name:        "tscache.skl.write.pages",
-		Help:        "Number of pages in the write timestamp cache",
-		Measurement: "Pages",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaSklWriteRotations = metric.Metadata{
-		Name:        "tscache.skl.write.rotations",
-		Help:        "Number of page rotations in the write timestamp cache",
-		Measurement: "Page Rotations",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 func makeMetrics() Metrics {
@@ -68,10 +56,6 @@ func makeMetrics() Metrics {
 			Read: sklMetrics{
 				Pages:         metric.NewGauge(metaSklReadPages),
 				PageRotations: metric.NewCounter(metaSklReadRotations),
-			},
-			Write: sklMetrics{
-				Pages:         metric.NewGauge(metaSklWritePages),
-				PageRotations: metric.NewCounter(metaSklWriteRotations),
 			},
 		},
 	}

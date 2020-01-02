@@ -102,10 +102,9 @@ func (r *Replica) executeWriteBatch(
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
-	// Examine the read and write timestamp caches for preceding
-	// commands which require this command to move its timestamp
-	// forward. Or, in the case of a transactional write, the txn
-	// timestamp and possible write-too-old bool.
+	// Examine the read timestamp cache for preceding commands which require this
+	// command to move its timestamp forward. Or, in the case of a transactional
+	// write, the txn timestamp and possible write-too-old bool.
 	if bumped := r.applyTimestampCache(ctx, ba, minTS); bumped {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
