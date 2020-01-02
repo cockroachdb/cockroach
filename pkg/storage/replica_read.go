@@ -35,7 +35,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// evaluation to its value when returning.
 	ec := endCmds{repl: r, lg: lg}
 	defer func() {
-		ec.done(ba, br, pErr)
+		ec.done(ctx, ba, br, pErr)
 	}()
 
 	// If the read is not inconsistent, the read requires the range lease or

@@ -7835,7 +7835,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	atomic.StoreInt32(&dropAll, 0)
-	tc.repl.refreshProposalsLocked(0, reasonTicks)
+	tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonTicks)
 	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
 		t.Fatal(err)
 	}
@@ -8082,8 +8082,8 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
 		t.Fatal(err)
 	}
-	repl.refreshProposalsLocked(0, reasonNewLeader)
-	repl.refreshProposalsLocked(0, reasonNewLeader)
+	repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeader)
+	repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeader)
 	repl.mu.Unlock()
 
 	// Wait for our proposal to apply. The two refreshed proposals above
@@ -8763,9 +8763,10 @@ func TestReplicaMetrics(t *testing.T) {
 func TestCancelPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	// Install a proposal function which drops all increment commands on
@@ -8789,7 +8790,7 @@ func TestCancelPendingCommands(t *testing.T) {
 	errChan := make(chan *roachpb.Error, 1)
 	go func() {
 		incArgs := incrementArgs(roachpb.Key("a"), 1)
-		_, pErr := client.SendWrapped(context.Background(), tc.Sender(), &incArgs)
+		_, pErr := client.SendWrapped(ctx, tc.Sender(), &incArgs)
 		errChan <- pErr
 	}()
 
@@ -8803,7 +8804,7 @@ func TestCancelPendingCommands(t *testing.T) {
 
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
-	tc.repl.cancelPendingCommandsLocked()
+	tc.repl.cancelPendingCommandsLocked(ctx)
 	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 
@@ -11839,7 +11840,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
 			t.Fatal(err)
 		}
-		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
 	}()
 	tc.repl.RaftUnlock()
 
@@ -11937,11 +11938,11 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
 			t.Fatal(err)
 		}
-		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
 		if err := tc.repl.mu.proposalBuf.flushLocked(); err != nil {
 			t.Fatal(err)
 		}
-		tc.repl.refreshProposalsLocked(0, reasonNewLeaderOrConfigChange)
+		tc.repl.refreshProposalsLocked(ctx, 0 /* refreshAtDelta */, reasonNewLeaderOrConfigChange)
 	}()
 	tc.repl.RaftUnlock()
 

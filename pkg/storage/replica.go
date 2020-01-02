@@ -1167,7 +1167,9 @@ func (ec *endCmds) move() endCmds {
 //
 // No-op if the receiver has been zeroed out by a call to move.
 // Idempotent and is safe to call more than once.
-func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (ec *endCmds) done(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) {
 	if ec.repl == nil {
 		// The endCmds were cleared.
 		return
@@ -1178,7 +1180,7 @@ func (ec *endCmds) done(ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pEr
 	// request is considered in turn; only those marked as affecting the cache are
 	// processed. Inconsistent reads are excluded.
 	if ba.ReadConsistency == roachpb.CONSISTENT {
-		ec.repl.updateTimestampCache(ba, br, pErr)
+		ec.repl.updateTimestampCache(ctx, ba, br, pErr)
 	}
 
 	// Release the latches acquired by the request back to the spanlatch
