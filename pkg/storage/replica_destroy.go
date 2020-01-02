@@ -177,7 +177,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 // cancelPendingCommandsLocked cancels all outstanding proposals.
 // It requires that both mu and raftMu are held.
-func (r *Replica) cancelPendingCommandsLocked() {
+func (r *Replica) cancelPendingCommandsLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
 	r.mu.proposalBuf.FlushLockedWithoutProposing()
@@ -185,7 +185,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 		r.cleanupFailedProposalLocked(p)
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
-		p.finishApplication(proposalResult{
+		p.finishApplication(ctx, proposalResult{
 			Err: roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 		})
 	}

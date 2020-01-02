@@ -63,7 +63,7 @@ func (c *checkedCmd) AckSuccess() error {
 	}
 	return nil
 }
-func (c *appliedCmd) FinishAndAckOutcome() error {
+func (c *appliedCmd) FinishAndAckOutcome(context.Context) error {
 	c.finished = true
 	if c.acked {
 		if logging {
