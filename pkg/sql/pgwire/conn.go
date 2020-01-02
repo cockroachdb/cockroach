@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1603,14 +1606,20 @@ var connAuthConf = func() *settings.StringSetting {
 			for _, entry := range conf.Entries {
 				for _, db := range entry.Database {
 					if !db.IsSpecial("all") {
-						return errors.New("database must be specified as all")
+						return errors.WithHint(
+							unimplemented.New("hba-per-db", "per-database HBA rules are not supported"),
+							"Use the special value 'all' (without quotes) to match all databases.")
 					}
 				}
 				if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
-					return errors.New("host addresses not supported")
+					return errors.WithHint(
+						unimplemented.New("hba-hostnames", "hostname-based HBA rules are not supported"),
+						"List the numeric CIDR notation instead, for example: 127.0.0.1/8.")
 				}
 				if hbaAuthMethods[entry.Method] == nil {
-					return errors.Errorf("unknown auth method %q", entry.Method)
+					return errors.WithHintf(unimplemented.Newf("hba-method-"+entry.Method,
+						"unknown auth method %q", entry.Method),
+						"Supported methods: %s", listSupportedMethods())
 				}
 				if check := hbaCheckHBAEntries[entry.Method]; check != nil {
 					if err := check(entry); err != nil {
@@ -1772,6 +1781,15 @@ func RegisterAuthMethod(method string, fn AuthMethod, checkEntry CheckHBAEntry) 
 	if checkEntry != nil {
 		hbaCheckHBAEntries[method] = checkEntry
 	}
+}
+
+func listSupportedMethods() string {
+	methods := make([]string, 0, len(hbaAuthMethods))
+	for method := range hbaAuthMethods {
+		methods = append(methods, method)
+	}
+	sort.Strings(methods)
+	return strings.Join(methods, ", ")
 }
 
 func passwordString(pwdData []byte) (string, error) {
