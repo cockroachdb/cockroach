@@ -207,11 +207,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
 			intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
-			if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
 				t.Fatal(err)
 			}
 			intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
-			if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
@@ -295,11 +295,11 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
 
 			intent1 := roachpb.Intent{Span: roachpb.Span{Key: testKey1}, Txn: txn1.TxnMeta, Status: roachpb.COMMITTED}
-			if err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
 				t.Fatal(err)
 			}
 			intent2 := roachpb.Intent{Span: roachpb.Span{Key: testKey2}, Txn: txn2.TxnMeta, Status: roachpb.ABORTED}
-			if err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
 			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))

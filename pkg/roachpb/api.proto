@@ -624,11 +624,11 @@ message EndTxnRequest {
   // accummulated no refresh spans. This allows the executing server
   // to retry it locally on the fast path.
   bool no_refresh_spans = 8;
-  // True to indicate that intent spans should be resolved with
-  // poison=true.  This is used when the transaction is being aborted
-  // independently of the main thread of client operation, as in the
-  // case of an asynchronous abort from the TxnCoordSender on a failed
-  // heartbeat.
+  // True to indicate that intent spans should be resolved with poison=true.
+  // This is used when the transaction is being aborted independently of the
+  // main thread of client operation, as in the case of an asynchronous abort
+  // from the TxnCoordSender on a failed heartbeat. It should only be set to
+  // true when commit=false.
   bool poison = 9;
   reserved 7;
 }

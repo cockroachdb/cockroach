@@ -107,6 +107,7 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 	endTxns := make([]result.EndTxnIntents, len(txns))
 	for i, txn := range txns {
 		endTxns[i].Txn = txn
+		endTxns[i].Poison = true
 	}
 	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
 }

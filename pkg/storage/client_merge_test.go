@@ -476,7 +476,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
 	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
 	ba = roachpb.BatchRequest{}
-	ba.Timestamp = readTS
+	ba.Timestamp = mtc.clock.Now()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, roachpb.PUSH_ABORT))
 	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
