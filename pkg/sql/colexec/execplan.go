@@ -17,8 +17,8 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -158,11 +158,11 @@ func createJoiner(
 	post := &spec.Post
 
 	var leftTypes, rightTypes []phystypes.T
-	leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+	leftTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 	if err != nil {
 		return err
 	}
-	rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
+	rightTypes, err = colexectypes.FromColumnTypes(spec.Input[1].ColumnTypes)
 	if err != nil {
 		return err
 	}
@@ -550,7 +550,7 @@ func NewColOperator(
 				result.ColumnTypes[i] = *retType
 			}
 			var typs []phystypes.T
-			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			typs, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
@@ -590,7 +590,7 @@ func NewColOperator(
 
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			var typs []phystypes.T
-			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
+			typs, err = colexectypes.FromColumnTypes(result.ColumnTypes)
 			if err != nil {
 				return result, err
 			}
@@ -738,7 +738,7 @@ func NewColOperator(
 			}
 			input := inputs[0]
 			var inputTypes []phystypes.T
-			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			inputTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
@@ -808,7 +808,7 @@ func NewColOperator(
 			wf := core.Windower.WindowFns[0]
 			input := inputs[0]
 			var typs []phystypes.T
-			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			typs, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
@@ -1297,7 +1297,7 @@ func planTypedMaybeNullProjectionOperators(
 ) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
-		op = NewConstNullOp(NewAllocator(ctx, acc), input, resultIdx, typeconv.FromColumnType(exprTyp))
+		op = NewConstNullOp(NewAllocator(ctx, acc), input, resultIdx, colexectypes.FromColumnType(exprTyp))
 		ct = append(columnTypes, *exprTyp)
 		return op, resultIdx, ct, internalMemUsed, nil
 	}
@@ -1392,8 +1392,8 @@ func planProjectionOperators(
 		if datumType.Family() == types.UnknownFamily {
 			return nil, resultIdx, ct, internalMemUsed, errors.New("cannot plan null type unknown")
 		}
-		typ := typeconv.FromColumnType(datumType)
-		constVal, err := typeconv.GetDatumToPhysicalFn(datumType)(t)
+		typ := colexectypes.FromColumnType(datumType)
+		constVal, err := colexectypes.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
@@ -1410,7 +1410,7 @@ func planProjectionOperators(
 		buffer := NewBufferOp(input)
 		internalMemUsed += buffer.(InternalMemoryOperator).InternalMemoryUsage()
 		caseOps := make([]Operator, len(t.Whens))
-		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
+		caseOutputType := colexectypes.FromColumnType(t.ResolvedType())
 		caseOutputIdx := len(columnTypes)
 		ct = append(columnTypes, *t.ResolvedType())
 		thenIdxs := make([]int, len(t.Whens)+1)

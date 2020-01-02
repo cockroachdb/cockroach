@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -189,7 +189,7 @@ func TestEval(t *testing.T) {
 			// inputTyps has no relation to the actual expression result type. Used
 			// for generating a batch.
 			inputTyps := []types.T{*types.Int}
-			inputColTyps, err := typeconv.FromColumnTypes(inputTyps)
+			inputColTyps, err := colexectypes.FromColumnTypes(inputTyps)
 			require.NoError(t, err)
 
 			batchesReturned := 0

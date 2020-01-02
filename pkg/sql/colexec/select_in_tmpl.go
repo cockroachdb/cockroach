@@ -28,11 +28,11 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -64,9 +64,6 @@ func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
 
 // */}}
 
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
-
 // Enum used to represent comparison results
 type comparisonResult int
 
@@ -86,7 +83,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch t := colexectypes.FromColumnType(ct); t {
 	// {{range .}}
 	case phystypes._TYPE:
 		obj := &projectInOp_TYPE{
@@ -111,7 +108,7 @@ func GetInOperator(
 	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch t := colexectypes.FromColumnType(ct); t {
 	// {{range .}}
 	case phystypes._TYPE:
 		obj := &selectInOp_TYPE{
@@ -153,7 +150,7 @@ type projectInOp_TYPE struct {
 var _ Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := typeconv.GetDatumToPhysicalFn(ct)
+	conv := colexectypes.GetDatumToPhysicalFn(ct)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

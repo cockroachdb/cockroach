@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -286,7 +286,7 @@ func (rf *cFetcher) Init(
 
 	typs := make([]phystypes.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
+		typs[i] = colexectypes.FromColumnType(&colDescriptors[i].Type)
 		if typs[i] == phystypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.

@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +82,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			columnarizer, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
 			require.NoError(t, err)
 
-			coltyps, err := typeconv.FromColumnTypes(typs)
+			coltyps, err := colexectypes.FromColumnTypes(typs)
 			require.NoError(t, err)
 			c, err := colserde.NewArrowBatchConverter(coltyps)
 			require.NoError(t, err)

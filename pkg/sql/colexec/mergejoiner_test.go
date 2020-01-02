@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -101,8 +101,8 @@ func createSpecForMergeJoiner(tc mjTestCase) *execinfrapb.ProcessorSpec {
 	}
 	return &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{
-			{ColumnTypes: typeconv.ToColumnTypes(tc.leftTypes)},
-			{ColumnTypes: typeconv.ToColumnTypes(tc.rightTypes)},
+			{ColumnTypes: colexectypes.ToColumnTypes(tc.leftTypes)},
+			{ColumnTypes: colexectypes.ToColumnTypes(tc.rightTypes)},
 		},
 		Core: execinfrapb.ProcessorCoreUnion{
 			MergeJoiner: mjSpec,

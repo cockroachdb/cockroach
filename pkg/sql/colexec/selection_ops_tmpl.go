@@ -28,11 +28,11 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -259,7 +259,7 @@ func GetSelectionConstOperator(
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := typeconv.GetDatumToPhysicalFn(constColType)(constArg)
+	c, err := colexectypes.GetDatumToPhysicalFn(constColType)(constArg)
 	if err != nil {
 		return nil, err
 	}
@@ -267,10 +267,10 @@ func GetSelectionConstOperator(
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(constColType); rightType {
+		switch rightType := colexectypes.FromColumnType(constColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch cmpOp {
@@ -306,10 +306,10 @@ func GetSelectionOperator(
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch rightType := colexectypes.FromColumnType(rightColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch cmpOp {

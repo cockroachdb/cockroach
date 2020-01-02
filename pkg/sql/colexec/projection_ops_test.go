@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -204,7 +204,7 @@ func TestRandomComparisons(t *testing.T) {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
 			continue
 		}
-		typ := typeconv.FromColumnType(ct)
+		typ := colexectypes.FromColumnType(ct)
 		if typ == phystypes.Unhandled {
 			continue
 		}

@@ -25,9 +25,9 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,7 +53,7 @@ func _ROWS_TO_COL_VEC(
 ) error { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec._TemplateType()
-	datumToPhysicalFn := typeconv.GetDatumToPhysicalFn(columnType)
+	datumToPhysicalFn := colexectypes.GetDatumToPhysicalFn(columnType)
 	for i := range rows {
 		row := rows[i]
 		if row[columnIdx].Datum == nil {

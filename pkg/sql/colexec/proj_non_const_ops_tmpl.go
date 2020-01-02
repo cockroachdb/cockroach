@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -208,10 +208,10 @@ func GetProjectionOperator(
 		col2Idx:      col2Idx,
 		outputIdx:    outputIdx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch rightType := colexectypes.FromColumnType(rightColType); rightType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch op.(type) {

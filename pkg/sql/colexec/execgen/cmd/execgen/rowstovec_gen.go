@@ -17,7 +17,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -67,7 +67,7 @@ func genRowsToVec(wr io.Writer) error {
 	// Build the list of supported column conversions.
 	conversionsMap := make(map[types.Family]*columnConversion)
 	for _, ct := range types.OidToType {
-		t := typeconv.FromColumnType(ct)
+		t := colexectypes.FromColumnType(ct)
 		if t == phystypes.Unhandled {
 			continue
 		}

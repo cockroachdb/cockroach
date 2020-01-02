@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -442,7 +442,7 @@ func extractAggTypes(aggCols [][]uint32, colTypes []phystypes.T) [][]phystypes.T
 func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
 	var aggType []phystypes.T
 	if inputType != nil {
-		aggType = append(aggType, typeconv.FromColumnType(inputType))
+		aggType = append(aggType, colexectypes.FromColumnType(inputType))
 	}
 	switch aggFn {
 	case execinfrapb.AggregatorSpec_SUM:

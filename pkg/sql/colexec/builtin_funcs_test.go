@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -210,7 +210,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		columnTypes:    typs,
 		outputType:     types.String,
 		outputPhysType: phystypes.Bytes,
-		converter:      typeconv.GetDatumToPhysicalFn(types.String),
+		converter:      colexectypes.GetDatumToPhysicalFn(types.String),
 		row:            make(tree.Datums, 3),
 		argumentCols:   inputCols,
 	}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +34,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	typs := make([]phystypes.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandType(rng)
-		et := typeconv.FromColumnType(ct)
+		et := colexectypes.FromColumnType(ct)
 		if et == phystypes.Unhandled {
 			i--
 			continue

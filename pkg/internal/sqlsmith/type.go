@@ -12,7 +12,7 @@ package sqlsmith
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +66,7 @@ func (s *Smither) randType() *types.T {
 // vectorization).
 func (s *Smither) allowedType(types ...*types.T) bool {
 	for _, t := range types {
-		if s.vectorizable && typeconv.FromColumnType(t) == phystypes.Unhandled {
+		if s.vectorizable && colexectypes.FromColumnType(t) == phystypes.Unhandled {
 			return false
 		}
 	}

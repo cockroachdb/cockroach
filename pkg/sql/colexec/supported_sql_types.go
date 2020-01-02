@@ -13,7 +13,7 @@ package colexec
 import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // allSupportedSQLTypes is a slice of all SQL types that the vectorized engine
-// currently supports. It should be kept in sync with typeconv.FromColumnType().
+// currently supports. It should be kept in sync with colexectypes.FromColumnType().
 var allSupportedSQLTypes = []types.T{
 	*types.Bool,
 	*types.Bytes,

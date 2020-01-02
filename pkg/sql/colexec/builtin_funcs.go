@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -209,7 +209,7 @@ func NewBuiltinFunctionOperator(
 		}, nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		outputPhysType := typeconv.FromColumnType(outputType)
+		outputPhysType := colexectypes.FromColumnType(outputType)
 		if outputPhysType == phystypes.Unhandled {
 			return nil, errors.Errorf(
 				"unsupported output type %q of %s",
@@ -225,7 +225,7 @@ func NewBuiltinFunctionOperator(
 			columnTypes:    columnTypes,
 			outputType:     outputType,
 			outputPhysType: outputPhysType,
-			converter:      typeconv.GetDatumToPhysicalFn(outputType),
+			converter:      colexectypes.GetDatumToPhysicalFn(outputType),
 			row:            make(tree.Datums, len(argumentCols)),
 			argumentCols:   argumentCols,
 		}, nil

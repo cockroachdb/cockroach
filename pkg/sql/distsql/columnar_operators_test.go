@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -687,7 +687,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 }
 
 func isSupportedType(typ *types.T) bool {
-	converted := typeconv.FromColumnType(typ)
+	converted := colexectypes.FromColumnType(typ)
 	return converted != phystypes.Unhandled
 }
 

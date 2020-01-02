@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -85,13 +85,13 @@ func GetCastOperator(
 			allocator:    allocator,
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
-			toType:       typeconv.FromColumnType(toType),
+			toType:       colexectypes.FromColumnType(toType),
 		}, nil
 	}
-	switch from := typeconv.FromColumnType(fromType); from {
+	switch from := colexectypes.FromColumnType(fromType); from {
 	// {{ range $typ, $overloads := . }}
 	case phystypes._ALLTYPES:
-		switch to := typeconv.FromColumnType(toType); to {
+		switch to := colexectypes.FromColumnType(toType); to {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
 		case phystypes._OVERLOADTYPES:

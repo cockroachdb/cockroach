@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -477,7 +477,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			if err := s.checkInboundStreamID(inputStream.StreamID); err != nil {
 				return nil, nil, err
 			}
-			typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
+			typs, err := colexectypes.FromColumnTypes(input.ColumnTypes)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -514,7 +514,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	op = inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
-		typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
+		typs, err := colexectypes.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -756,7 +756,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			// when vectorize=auto.
 			return nil, errors.Errorf("hash router encountered when vectorize=auto")
 		}
-		opOutputTypes, err := typeconv.FromColumnTypes(result.ColumnTypes)
+		opOutputTypes, err := colexectypes.FromColumnTypes(result.ColumnTypes)
 		if err != nil {
 			return nil, err
 		}
