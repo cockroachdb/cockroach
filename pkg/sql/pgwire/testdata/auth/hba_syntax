@@ -16,25 +16,37 @@ ERROR: invalid CIDR address: 1.1.1/0
 set_hba
 host all all 0.0.0.0/0 invalid
 ----
-ERROR: unknown auth method "invalid"
+ERROR: unimplemented: unknown auth method "invalid" (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Supported methods: cert, cert-password, password
 
 
 # CockroachDB does not (yet?) support per-db HBA rules.
 set_hba
 host db all 0.0.0.0/0 cert
 ----
-ERROR: database must be specified as all
+ERROR: unimplemented: per-database HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Use the special value 'all' (without quotes) to match all databases.
 
 
 # quoted "all" isn't ok since it strips the special meaning.
 set_hba
 host "all" all 0.0.0.0/0 cert
 ----
-ERROR: database must be specified as all
+ERROR: unimplemented: per-database HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+Use the special value 'all' (without quotes) to match all databases.
 
 
 # CockroachDB does not (yet?) support hostname-based HBA rules.
 set_hba
 host all all hostname cert
 ----
-ERROR: host addresses not supported
+ERROR: unimplemented: hostname-based HBA rules are not supported (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
+--
+List the numeric CIDR notation instead, for example: 127.0.0.1/8.
