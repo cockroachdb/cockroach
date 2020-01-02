@@ -23,9 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSetAbortSpan tests the different ways that request can set, update, and
-// delete AbortSpan entries.
-func TestSetAbortSpan(t *testing.T) {
+// TestUpdateAbortSpan tests the different ways that request can set, update,
+// and delete AbortSpan entries.
+func TestUpdateAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -65,7 +65,7 @@ func TestSetAbortSpan(t *testing.T) {
 		return engine.MVCCPut(ctx, b, nil /* ms */, intentKey, txn.ReadTimestamp, val, &txn)
 	}
 	addPrevAbortSpanEntry := func(b engine.ReadWriter, rec EvalContext) error {
-		return SetAbortSpan(ctx, rec, b, nil /* ms */, prevTxn.TxnMeta, true /* poison */)
+		return UpdateAbortSpan(ctx, rec, b, nil /* ms */, prevTxn.TxnMeta, true /* poison */)
 	}
 	compose := func(fns ...evalFn) evalFn {
 		return func(b engine.ReadWriter, rec EvalContext) error {
