@@ -1540,7 +1540,12 @@ func (c *conn) handleAuthentication(
 					}
 				case hba.String:
 					if !a.IsSpecial("all") {
-						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
+						// A hostname-based rule is present. This is possible if
+						// hostname-based auth is implemented in the next version and
+						// we are running in a mixed-version cluster.
+						// In any case, it's not supported on this server, so
+						// the rule does not match.
+						continue
 					}
 				default:
 					return sendError(errors.Errorf("unexpected address type %T", a))
@@ -1557,11 +1562,16 @@ func (c *conn) handleAuthentication(
 					}
 				}
 				if !match {
+					// The user does not match.
 					continue
 				}
 				methodFn = hbaAuthMethods[entry.Method]
 				if methodFn == nil {
-					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
+					// The rule is for a method that does not exist.
+					// This is possible if the method is implemented in the next
+					// version and we are running in a mixed-version cluster.
+					// The rule does not match.
+					continue
 				}
 				hbaEntry = &entry
 				break
