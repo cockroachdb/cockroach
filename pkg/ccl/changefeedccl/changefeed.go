@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -225,7 +226,7 @@ func kvsToRows(
 func emitEntries(
 	settings *cluster.Settings,
 	details jobspb.ChangefeedDetails,
-	sf *spanFrontier,
+	sf *span.Frontier,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
@@ -359,7 +360,7 @@ func emitEntries(
 func checkpointResolvedTimestamp(
 	ctx context.Context,
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
-	sf *spanFrontier,
+	sf *span.Frontier,
 ) error {
 	resolved := sf.Frontier()
 	var resolvedSpans []jobspb.ResolvedSpan
