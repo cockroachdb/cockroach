@@ -127,7 +127,7 @@ func GenerateServerCert(
 		return nil, err
 	}
 
-	// Only server authentication is allowed.
+	// Both server and client authentication are allowed (for inter-node RPC).
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
