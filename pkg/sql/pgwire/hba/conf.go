@@ -19,6 +19,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
 
@@ -35,16 +36,18 @@ func Parse(input string) (*Conf, error) {
 
 //line conf.go:36
 	var _scanner_actions []byte = []byte{
-		0, 1, 0, 1, 3, 1, 10, 1, 14,
-		1, 15, 1, 16, 2, 1, 4, 2,
-		1, 5, 2, 2, 4, 2, 2, 5,
-		2, 2, 9, 2, 2, 13, 2, 6,
-		8, 2, 7, 8, 2, 16, 17, 3,
-		1, 4, 11, 3, 1, 4, 12, 3,
-		1, 5, 11, 3, 1, 5, 12, 3,
-		2, 4, 11, 3, 2, 4, 12, 3,
-		2, 5, 11, 3, 2, 5, 12, 3,
-		2, 13, 14, 4, 7, 8, 2, 13,
+		0, 1, 0, 1, 3, 1, 14, 1, 15,
+		1, 16, 1, 17, 1, 18, 2, 1,
+		4, 2, 1, 5, 2, 2, 4, 2,
+		2, 5, 2, 2, 9, 2, 2, 13,
+		2, 6, 8, 2, 7, 8, 2, 10,
+		16, 2, 18, 19, 3, 1, 4, 12,
+		3, 1, 5, 12, 3, 2, 4, 12,
+		3, 2, 5, 12, 3, 2, 13, 14,
+		4, 1, 4, 11, 17, 4, 1, 5,
+		11, 17, 4, 2, 4, 11, 17, 4,
+		2, 5, 11, 17, 4, 7, 8, 2,
+		13,
 	}
 
 	var _scanner_key_offsets []int16 = []int16{
@@ -174,27 +177,27 @@ func Parse(input string) (*Conf, error) {
 	}
 
 	var _scanner_trans_actions []byte = []byte{
-		0, 0, 11, 0, 0, 0, 5, 1,
-		0, 3, 0, 56, 19, 1, 0, 3,
-		0, 60, 19, 0, 1, 1, 1, 25,
-		0, 1, 0, 0, 28, 28, 28, 0,
-		0, 0, 1, 0, 0, 0, 7, 7,
-		7, 0, 0, 0, 0, 34, 0, 31,
-		25, 0, 0, 1, 76, 0, 0, 1,
-		0, 0, 0, 72, 72, 72, 1, 3,
-		0, 68, 22, 0, 0, 52, 16, 0,
-		0, 44, 13, 1, 3, 0, 64, 22,
-		0, 0, 48, 16, 0, 0, 40, 13,
-		37, 0, 9, 9, 9,
+		0, 0, 13, 0, 0, 0, 39, 1,
+		9, 3, 0, 75, 21, 1, 11, 3,
+		0, 53, 21, 0, 1, 1, 1, 27,
+		0, 1, 0, 0, 30, 30, 30, 0,
+		0, 0, 1, 0, 0, 0, 5, 5,
+		5, 0, 0, 0, 0, 36, 0, 33,
+		27, 0, 0, 1, 85, 0, 0, 1,
+		0, 0, 0, 61, 61, 61, 1, 3,
+		0, 57, 24, 0, 0, 49, 18, 0,
+		0, 45, 15, 1, 3, 0, 80, 24,
+		0, 0, 70, 18, 0, 0, 65, 15,
+		42, 0, 7, 7, 7,
 	}
 
 	var _scanner_eof_actions []byte = []byte{
-		0, 0, 11, 11, 11, 11, 11, 11,
-		11, 11, 11, 11, 11, 11, 11, 11,
-		11, 11, 11, 11, 11, 11, 11, 11,
-		11, 11, 11, 11, 11, 11, 11, 11,
-		11, 11, 11, 11, 11, 11, 11, 11,
-		11, 11, 11, 0, 9,
+		0, 0, 13, 13, 13, 13, 13, 13,
+		13, 13, 13, 13, 13, 13, 13, 13,
+		13, 13, 13, 13, 13, 13, 13, 13,
+		13, 13, 13, 13, 13, 13, 13, 13,
+		13, 13, 13, 13, 13, 13, 13, 13,
+		13, 13, 13, 0, 7,
 	}
 
 	const scanner_start int = 43
@@ -212,8 +215,10 @@ func Parse(input string) (*Conf, error) {
 
 	var (
 		mark   int
-		ms     []String
-		s      String
+		ms     []tree.Name
+		mall   bool
+		s      tree.Name
+		all    bool
 		ipn    *net.IPNet
 		e      Entry
 		err    error
@@ -222,12 +227,12 @@ func Parse(input string) (*Conf, error) {
 		conf   Conf
 	)
 
-//line conf.go:228
+//line conf.go:232
 	{
 		cs = scanner_start
 	}
 
-//line conf.go:233
+//line conf.go:237
 	{
 		var _klen int
 		var _trans int
@@ -308,42 +313,52 @@ func Parse(input string) (*Conf, error) {
 			_acts++
 			switch _scanner_actions[_acts-1] {
 			case 0:
-//line conf.rl:53
+//line conf.rl:55
 				mark = p
 			case 1:
-//line conf.rl:55
+//line conf.rl:57
 
-				s = String{
-					Value:  string(data[mark : p-1]),
-					Quoted: true,
-				}
+				all = false
+				s = tree.Name(data[mark : p-1])
 
 			case 2:
 //line conf.rl:61
 
-				s = String{Value: string(data[mark:p])}
+				s = tree.Name(string(data[mark:p]))
+				all = false
+				if s == "all" {
+					s = ""
+					ms = nil
+					all = true
+				}
 
 			case 3:
-//line conf.rl:65
+//line conf.rl:71
 				mark = p + 1
 			case 4:
-//line conf.rl:76
-				ms = []String{s}
+//line conf.rl:82
+				mall = all
+				if !mall {
+					ms = []tree.Name{s}
+				}
 			case 5:
-//line conf.rl:77
-				ms = append(ms, s)
+//line conf.rl:83
+				mall = mall || all
+				if !mall {
+					ms = append(ms, s)
+				}
 			case 6:
-//line conf.rl:80
+//line conf.rl:86
 
 				d = string(data[mark:p])
 
 			case 7:
-//line conf.rl:83
+//line conf.rl:89
 
 				d = strings.Join(strings.Fields(string(data[mark:p])), "/")
 
 			case 8:
-//line conf.rl:86
+//line conf.rl:92
 
 				_, ipn, err = net.ParseCIDR(d)
 				if err != nil {
@@ -352,48 +367,60 @@ func Parse(input string) (*Conf, error) {
 				e.Address = ipn
 
 			case 9:
-//line conf.rl:93
+//line conf.rl:99
 
-				e.Address = s
+				if all {
+					e.Address = AnyAddr{}
+				} else {
+					e.Address = s
+				}
 
 			case 10:
-//line conf.rl:109
+//line conf.rl:119
 
 				e = Entry{Type: "host"}
 
 			case 11:
-//line conf.rl:112
+//line conf.rl:122
 
+				e.AnyDatabase = mall
 				e.Database = ms
 
 			case 12:
-//line conf.rl:115
+//line conf.rl:126
 
+				e.AnyUser = mall
 				e.User = ms
 
 			case 13:
-//line conf.rl:118
+//line conf.rl:130
 
 				e.Method = string(data[mark:p])
 
 			case 14:
-//line conf.rl:121
+//line conf.rl:133
 
 				copy(option[:], strings.Split(string(data[mark:p]), "="))
 				e.Options = append(e.Options, option)
 
 			case 15:
-//line conf.rl:131
+//line conf.rl:143
 
 				conf.Entries = append(conf.Entries, e)
 
 			case 16:
-//line conf.rl:146
-				return nil, errors.Errorf("entry %d invalid", len(conf.Entries)+1)
+//line conf.rl:148
+				mall = false
 			case 17:
-//line conf.rl:152
+//line conf.rl:149
+				mall = false
+			case 18:
+//line conf.rl:158
+				return nil, errors.Errorf("entry %d invalid", len(conf.Entries)+1)
+			case 19:
+//line conf.rl:164
 				return nil, errors.New("invalid")
-//line conf.go:398
+//line conf.go:418
 			}
 		}
 
@@ -416,14 +443,14 @@ func Parse(input string) (*Conf, error) {
 				__acts++
 				switch _scanner_actions[__acts-1] {
 				case 15:
-//line conf.rl:131
+//line conf.rl:143
 
 					conf.Entries = append(conf.Entries, e)
 
-				case 16:
-//line conf.rl:146
+				case 18:
+//line conf.rl:158
 					return nil, errors.Errorf("entry %d invalid", len(conf.Entries)+1)
-//line conf.go:425
+//line conf.go:445
 				}
 			}
 		}
@@ -433,11 +460,7 @@ func Parse(input string) (*Conf, error) {
 		}
 	}
 
-//line conf.rl:160
-
-	if len(conf.Entries) == 0 {
-		return nil, errors.New("no entries")
-	}
+//line conf.rl:172
 
 	return &conf, nil
 }

@@ -36,8 +36,10 @@ func Parse(input string) (*Conf, error) {
 
 	var (
 		mark   int
-		ms     []String
-		s      String
+		ms     []tree.Name
+		mall   bool
+		s      tree.Name
+		all    bool
 		ipn    *net.IPNet
 		e      Entry
 		err    error
@@ -53,13 +55,17 @@ func Parse(input string) (*Conf, error) {
 		action mark { mark = p }
 
 		action quotedString {
-			s = String{
-				Value: string(data[mark:p-1]),
-				Quoted: true,
-			}
+			all = false
+			s = tree.Name(data[mark:p-1])
 		}
 		action string {
-			s = String{Value: string(data[mark:p])}
+			s = tree.Name(string(data[mark:p]))
+			all = false
+			if s == "all" {
+			   s = ""
+			   ms = nil
+			   all = true
+			}
 		}
 		quotedString =
 			('"' @{ mark = p+1 })
@@ -73,8 +79,8 @@ func Parse(input string) (*Conf, error) {
 		    string | quotedString
 			;
 		multiString =
-			(stringer     %{ ms = []String{s} })
-			(',' stringer %{ ms = append(ms, s) })*
+			(stringer     %{ mall = all; if !mall { ms = []tree.Name{s} } })
+			(',' stringer %{ mall = mall || all; if !mall { ms = append(ms, s); } })*
 			;
 
 		action addressSlash {
@@ -91,7 +97,11 @@ func Parse(input string) (*Conf, error) {
 			e.Address = ipn
 		}
 		action addressString {
-			e.Address = s
+			if all {
+			   e.Address = AnyAddr{}
+			} else {
+			   e.Address = s
+			}
 		}
 		address =
 				(xdigit | '.' | ':')+
@@ -110,9 +120,11 @@ func Parse(input string) (*Conf, error) {
 			e = Entry{Type: "host"}
 		}
 		action database {
+			e.AnyDatabase = mall
 			e.Database = ms
 		}
 		action user {
+			e.AnyUser = mall
 			e.User = ms
 		}
 		action method {
@@ -133,8 +145,8 @@ func Parse(input string) (*Conf, error) {
 		}
 		host =
 			'host' %newHost ws
-			multiString %database ws
-			multiString %user ws
+			@{mall=false} multiString %database ws
+			@{mall=false} multiString %user ws
 			address >mark ws
 			method >mark %method
 			(
@@ -158,10 +170,6 @@ func Parse(input string) (*Conf, error) {
 		write init;
 		write exec;
 	}%%
-
-	if len(conf.Entries) == 0 {
-		return nil, errors.New("no entries")
-	}
 
 	return &conf, nil
 }

@@ -1,0 +1,46 @@
+subtest empty_conf
+
+hba
+# nothing
+----
+# (empty configuration)
+
+hba
+----
+# (empty configuration)
+
+subtest end
+
+subtest unicode_normalization
+
+hba
+host all Ὀδυσσεύς all cert-password
+----
+# TYPE DATABASE USER     ADDRESS METHOD        OPTIONS
+host   all      ὀδυσσεύς all     cert-password
+
+subtest end
+
+subtest db_normalization
+
+hba
+host some foo all cert-password
+host some,more bar all cert-password
+----
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      foo  all     cert-password
+host   all      bar  all     cert-password
+
+subtest end
+
+subtest rule_expansion
+
+hba
+host all a,b,c all cert-password
+----
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      a    all     cert-password
+host   all      b    all     cert-password
+host   all      c    all     cert-password
+
+subtest end
