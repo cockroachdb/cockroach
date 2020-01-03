@@ -241,29 +241,11 @@ func MakeServer(
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.Unlock()
 
-	connAuthConf.SetOnChange(&st.SV, func() {
-		val := connAuthConf.Get(&st.SV)
-		server.auth.Lock()
-		defer server.auth.Unlock()
-		if val == "" {
-			server.auth.conf = nil
-			return
-		}
-		conf, err := hba.Parse(val)
-		if err != nil {
-			log.Warningf(ambientCtx.AnnotateCtx(context.Background()), "invalid %s: %v", serverHBAConfSetting, err)
-			conf = nil
-		}
-		// Usernames are normalized during session init. Normalize the HBA usernames
-		// in the same way.
-		for _, entry := range conf.Entries {
-			for iu := range entry.User {
-				user := &entry.User[iu]
-				user.Value = tree.Name(user.Value).Normalize()
-			}
-		}
-		server.auth.conf = conf
-	})
+	connAuthConf.SetOnChange(&st.SV,
+		func() {
+			loadLocalAuthConfigUponRemoteSettingChange(
+				ambientCtx.AnnotateCtx(context.Background()), server, st)
+		})
 
 	return server
 }
