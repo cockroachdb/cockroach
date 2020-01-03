@@ -20,7 +20,12 @@ package hba
 
 import (
 	"fmt"
+	"net"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
+	"github.com/olekukonko/tablewriter"
 )
 
 // Conf is a parsed configuration.
@@ -28,24 +33,58 @@ type Conf struct {
 	Entries []Entry
 }
 
+// Entry is a single line of a configuration.
+type Entry struct {
+	Type string
+	// Database is the list of databases to match. An empty list means
+	// "match any database".
+	Database []String
+	// User is the list of users to match. An empty list means "match
+	// any user".
+	User []String
+	// Address is either AnyAddr, *net.IPNet or (unsupported) String for a hostname.
+	Address interface{}
+	Method  string
+	// MethodFn is populated during name resolution of Method.
+	MethodFn interface{}
+	Options  [][2]string
+}
+
 func (c Conf) String() string {
-	var sb strings.Builder
-	for _, e := range c.Entries {
-		fmt.Fprintf(&sb, "%s\n", e)
+	if len(c.Entries) == 0 {
+		return "# (empty configuration)\n"
 	}
+	var sb strings.Builder
+	table := tablewriter.NewWriter(&sb)
+	table.SetAutoWrapText(false)
+	table.SetReflowDuringAutoWrap(false)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.SetBorder(false)
+	table.SetNoWhiteSpace(true)
+	table.SetTrimWhiteSpaceAtEOL(true)
+	table.SetTablePadding(" ")
+
+	row := []string{"# TYPE", "DATABASE", "USER", "ADDRESS", "METHOD", "OPTIONS"}
+	table.Append(row)
+	for _, e := range c.Entries {
+		row[0] = e.Type
+		row[1] = e.DatabaseString()
+		row[2] = e.UserString()
+		row[3] = e.AddressString()
+		row[4] = e.Method
+		row[5] = e.OptionsString()
+		table.Append(row)
+	}
+	table.Render()
 	return sb.String()
 }
 
-// Entry is a single line of a configuration.
-type Entry struct {
-	Type     string
-	Database []String
-	User     []String
-	// Address is either a String or *net.IPNet.
-	Address interface{}
-	Method  string
-	Options [][2]string
-}
+// AnyAddr represents "any address" and is used when parsing "all" for
+// the "Address" field.
+type AnyAddr struct{}
+
+// String implements the fmt.Formatter interface.
+func (AnyAddr) String() string { return "all" }
 
 // GetOption returns the value of option name if there is exactly one
 // occurrence of name in the options list, otherwise the empty string.
@@ -74,32 +113,93 @@ func (h Entry) GetOptions(name string) []string {
 	return val
 }
 
-func (h Entry) String() string {
+// UserMatches returns true iff the provided username matches the an
+// entry in the User list or if the user list is empty (the entry
+// matches all).
+//
+// The provided username must be normalized already.
+// The function assumes the entry was normalized to contain only
+// one user and its username normalized. See ParseAndNormalize().
+func (h Entry) UserMatches(userName string) bool {
+	if h.User == nil {
+		return true
+	}
+	for _, u := range h.User {
+		if u.Value == userName {
+			return true
+		}
+	}
+	return false
+}
+
+// AddressMatches returns true iff the provided address matches the
+// entry. The function assumes the entry was normalized already.
+// See ParseAndNormalize.
+func (h Entry) AddressMatches(addr net.IP) (bool, error) {
+	switch a := h.Address.(type) {
+	case AnyAddr:
+		return true, nil
+	case *net.IPNet:
+		return a.Contains(addr), nil
+	default:
+		// This is where name-based validation can occur later.
+		return false, errors.Newf("unknown address type: %T", addr)
+	}
+}
+
+// DatabaseString returns a string that describes the database field.
+func (h Entry) DatabaseString() string {
+	if h.Database == nil {
+		return "all"
+	}
 	var sb strings.Builder
-	sb.WriteString(h.Type)
-	sb.WriteByte(' ')
 	comma := ""
 	for _, s := range h.Database {
 		sb.WriteString(comma)
 		sb.WriteString(s.String())
 		comma = ","
 	}
-	sb.WriteByte(' ')
-	comma = ""
+	return sb.String()
+}
+
+// UserString returns a string that describes the username field.
+func (h Entry) UserString() string {
+	if h.User == nil {
+		return "all"
+	}
+	var sb strings.Builder
+	comma := ""
 	for _, s := range h.User {
 		sb.WriteString(comma)
 		sb.WriteString(s.String())
 		comma = ","
 	}
-	if h.Type != "local" {
-		fmt.Fprintf(&sb, " %s", h.Address)
+	return sb.String()
+}
+
+// AddressString returns a string that describes the address field.
+func (h Entry) AddressString() string {
+	if h.Address == nil {
+		// This is possible for conn type "local".
+		return ""
 	}
-	sb.WriteByte(' ')
-	sb.WriteString(h.Method)
+	return fmt.Sprintf("%s", h.Address)
+}
+
+// OptionsString returns a string that describes the option field.
+func (h Entry) OptionsString() string {
+	var sb strings.Builder
+	sp := ""
 	for _, opt := range h.Options {
-		fmt.Fprintf(&sb, " %s=%s", opt[0], opt[1])
+		fmt.Fprintf(&sb, "%s%s=%s", sp, opt[0], opt[1])
+		sp = " "
 	}
 	return sb.String()
+}
+
+// String implements the fmt.Formatter interface.
+func (h Entry) String() string {
+	return Conf{Entries: []Entry{h}}.String()
 }
 
 // String is a possibly quoted string.
@@ -108,9 +208,10 @@ type String struct {
 	Quoted bool
 }
 
+// String implements the fmt.Formatter interface.
 func (s String) String() string {
 	if s.Quoted {
-		return fmt.Sprintf(`"%s"`, s.Value)
+		return `"` + s.Value + `"`
 	}
 	return s.Value
 }
@@ -121,4 +222,62 @@ func (s String) Empty() bool { return s.IsKeyword("") }
 // IsKeyword returns whether s is the non-quoted string v.
 func (s String) IsKeyword(v string) bool {
 	return !s.Quoted && s.Value == v
+}
+
+// ParseAndNormalize parses the HBA configuration from the provided
+// string and performs two tasks:
+//
+// - it unicode-normalizes the usernames. Since usernames are
+//   initialized during pgwire session initialization, this
+//   ensures that string comparisons can be used to match usernames.
+//
+// - it ensures there is one entry per username. This simplifies
+//   the code in the authentication logic.
+//
+func ParseAndNormalize(val string) (*Conf, error) {
+	conf, err := Parse(val)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := conf.Entries[:0]
+	entriesCopied := false
+outer:
+	for i := range conf.Entries {
+		entry := conf.Entries[i]
+
+		// The database field is not supported yet in CockroachDB.
+		entry.Database = nil
+
+		// Normalize the 'all' keyword into AnyAddr.
+		if addr, ok := entry.Address.(String); ok && addr.IsKeyword("all") {
+			entry.Address = AnyAddr{}
+		}
+
+		// If we're observing an "any" entry, just keep that and move
+		// along.
+		for _, iu := range entry.User {
+			if iu.IsKeyword("all") {
+				entry.User = nil
+				entries = append(entries, entry)
+				continue outer
+			}
+		}
+
+		// If we're about to change the size of the slice, first copy the
+		// result entries.
+		if len(entry.User) != 1 && !entriesCopied {
+			entries = append([]Entry(nil), conf.Entries[:len(entries)]...)
+			entriesCopied = true
+		}
+		// Expand and normalize the usernames.
+		allUsers := entry.User
+		for userIdx, iu := range allUsers {
+			entry.User = allUsers[userIdx : userIdx+1]
+			entry.User[0].Value = tree.Name(iu.Value).Normalize()
+			entries = append(entries, entry)
+		}
+	}
+	conf.Entries = entries
+	return conf, nil
 }

@@ -10,8 +10,10 @@ subtest nomatch
 set_hba
 host all all 0.0.0.0/32 cert
 ----
-# Cache of the HBA configuration on this node:
-host all all 0.0.0.0/32 cert
+# Active authentication configuration on this node:
+# TYPE DATABASE USER ADDRESS    METHOD OPTIONS
+host   all      root all        cert
+host   all      all  0.0.0.0/32 cert
 
 connect user=testuser
 ----
@@ -38,8 +40,10 @@ subtest match_net
 set_hba
 host all all 127.0.0.0/8 cert
 ----
-# Cache of the HBA configuration on this node:
-host all all 127.0.0.0/8 cert
+# Active authentication configuration on this node:
+# TYPE DATABASE USER ADDRESS     METHOD OPTIONS
+host   all      root all         cert
+host   all      all  127.0.0.0/8 cert
 
 connect user=testuser
 ----
