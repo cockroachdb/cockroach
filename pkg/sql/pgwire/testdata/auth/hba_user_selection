@@ -21,8 +21,10 @@ subtest root
 set_hba
 host all root 0.0.0.0/0 cert
 ----
-# Cache of the HBA configuration on this node:
-host all root 0.0.0.0/0 cert
+# Active authentication configuration on this node:
+# TYPE DATABASE USER ADDRESS   METHOD OPTIONS
+host   all      root all       cert
+host   all      root 0.0.0.0/0 cert
 
 connect user=root
 ----
@@ -48,8 +50,10 @@ subtest testuser
 set_hba
 host all testuser 0.0.0.0/0 cert
 ----
-# Cache of the HBA configuration on this node:
-host all testuser 0.0.0.0/0 cert
+# Active authentication configuration on this node:
+# TYPE DATABASE USER     ADDRESS   METHOD OPTIONS
+host   all      root     all       cert
+host   all      testuser 0.0.0.0/0 cert
 
 connect user=testuser
 ----
@@ -68,6 +72,23 @@ ok defaultdb
 subtest end testuser
 
 
+subtest quoted_users
+
+set_hba
+host all "a","b","testuser" 0.0.0.0/0 cert
+----
+# Active authentication configuration on this node:
+# TYPE DATABASE USER       ADDRESS   METHOD OPTIONS
+host   all      root       all       cert
+host   all      "a"        0.0.0.0/0 cert
+host   all      "b"        0.0.0.0/0 cert
+host   all      "testuser" 0.0.0.0/0 cert
+
+connect user=testuser
+----
+ok defaultdb
+
+subtest end
 
 subtest side_by_side
 
@@ -75,9 +96,11 @@ set_hba
 host all testuser 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 cert-password
 ----
-# Cache of the HBA configuration on this node:
-host all testuser 0.0.0.0/0 cert
-host all passworduser 0.0.0.0/0 cert-password
+# Active authentication configuration on this node:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert
+host   all      testuser     0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 cert-password
 
 connect user=testuser
 ----
@@ -101,8 +124,11 @@ subtest multiple
 set_hba
 host all testuser,passworduser 0.0.0.0/0 cert-password
 ----
-# Cache of the HBA configuration on this node:
-host all testuser,passworduser 0.0.0.0/0 cert-password
+# Active authentication configuration on this node:
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert
+host   all      testuser     0.0.0.0/0 cert-password
+host   all      passworduser 0.0.0.0/0 cert-password
 
 connect user=testuser
 ----
@@ -134,9 +160,11 @@ set_hba
 host all testuser,all 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
-# Cache of the HBA configuration on this node:
-host all testuser,all 0.0.0.0/0 cert
-host all passworduser 0.0.0.0/0 password
+# Active authentication configuration on this node:
+# TYPE DATABASE USER         ADDRESS   METHOD   OPTIONS
+host   all      root         all       cert
+host   all      all          0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 password
 
 connect user=testuser
 ----
@@ -154,9 +182,12 @@ set_hba
 host all testuser,"all" 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
-# Cache of the HBA configuration on this node:
-host all testuser,"all" 0.0.0.0/0 cert
-host all passworduser 0.0.0.0/0 password
+# Active authentication configuration on this node:
+# TYPE DATABASE USER         ADDRESS   METHOD   OPTIONS
+host   all      root         all       cert
+host   all      testuser     0.0.0.0/0 cert
+host   all      "all"        0.0.0.0/0 cert
+host   all      passworduser 0.0.0.0/0 password
 
 connect user=testuser
 ----
