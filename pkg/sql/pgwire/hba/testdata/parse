@@ -107,7 +107,8 @@ host a,b,c all all trust
         {
             Type:     "host",
             Database: {
-                {Value:"a,b", Quoted:false},
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
                 {Value:"c", Quoted:false},
             },
             User: {
@@ -131,7 +132,8 @@ host all a,b,c all trust
                 {Value:"all", Quoted:false},
             },
             User: {
-                {Value:"a,b", Quoted:false},
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
                 {Value:"c", Quoted:false},
             },
             Address: hba.String{Value:"all", Quoted:false},
@@ -149,11 +151,13 @@ host a,b,c d,e,f all trust
         {
             Type:     "host",
             Database: {
-                {Value:"a,b", Quoted:false},
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
                 {Value:"c", Quoted:false},
             },
             User: {
-                {Value:"d,e", Quoted:false},
+                {Value:"d", Quoted:false},
+                {Value:"e", Quoted:false},
                 {Value:"f", Quoted:false},
             },
             Address: hba.String{Value:"all", Quoted:false},
@@ -175,7 +179,7 @@ host all testuser,"all" 0.0.0.0/0 cert
             },
             User: {
                 {Value:"testuser", Quoted:false},
-                {Value:"all\"", Quoted:false},
+                {Value:"all", Quoted:true},
             },
             Address: &net.IPNet{
                 IP:   {0x0, 0x0, 0x0, 0x0},
@@ -201,8 +205,7 @@ host "all","test space",something some,"us ers" all cert
             },
             User: {
                 {Value:"some", Quoted:false},
-                {Value:"us", Quoted:false},
-                {Value:"ers", Quoted:true},
+                {Value:"us ers", Quoted:true},
             },
             Address: hba.String{Value:"all", Quoted:false},
             Method:  "cert",
