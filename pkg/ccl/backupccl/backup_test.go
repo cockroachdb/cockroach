@@ -438,14 +438,21 @@ func backupAndRestore(
 
 	// Start a new cluster to restore into.
 	{
-		// Check where the back up is
+		// If the backup is on nodelocal, we need to determine which node it's on.
+		// Othewise, default to 0.
+		backupNodeID := 0
 		uri, err := url.Parse(backupURIs[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		backupNodeID, err := strconv.Atoi(uri.Host)
-		if err != nil && uri.Host != "" {
-			t.Fatal(err)
+		if uri.Scheme == "nodelocal" && uri.Host != "" {
+			// If the backup is on nodelocal and has specified a host, expect it to
+			// be an integer.
+			var err error
+			backupNodeID, err = strconv.Atoi(uri.Host)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		args := base.TestServerArgs{ExternalIODir: tc.Servers[backupNodeID].ClusterSettings().ExternalIODir}
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
