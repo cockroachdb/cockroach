@@ -47,6 +47,9 @@ func Parse(input string) (*Conf, error) {
 	)
 
 	%%{
+		ws = (' ' | '\t')+;
+		comment = '#' ^'\n'* '\n';
+
 		action mark { mark = p }
 
 		action quotedString {
@@ -59,19 +62,19 @@ func Parse(input string) (*Conf, error) {
 			s = String{Value: string(data[mark:p])}
 		}
 		quotedString =
-			'"'
-			^'"'* >mark
+			('"' @{ mark = p+1 })
+			^('"' | '\n' )*
 			'"' %quotedString
 			;
-		string = ^('"' | space) >mark ^space+ %string;
+		string =
+		  ^('"' | space | '#' | ',') @mark
+		  ^(space | ',' | '#')* %string;
 		stringer =
-			quotedString
-			| string
+		    string | quotedString
 			;
-		action multiString { ms = append(ms, s) }
 		multiString =
-			stringer >{ms = nil} %multiString
-			(',' stringer %multiString)*
+			(stringer     %{ ms = []String{s} })
+			(',' stringer %{ ms = append(ms, s) })*
 			;
 
 		action addressSlash {
@@ -90,8 +93,6 @@ func Parse(input string) (*Conf, error) {
 		action addressString {
 			e.Address = s
 		}
-		ws = (' ' | '\t')+;
-		comment = '#' ^'\n'* '\n';
 		address =
 				(xdigit | '.' | ':')+
 				(
