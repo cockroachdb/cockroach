@@ -256,6 +256,19 @@ func (sr *ScanResponse) combine(c combinable) error {
 	return nil
 }
 
+var _ combinable = &AdminVerifyProtectedTimestampResponse{}
+
+func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
+	other := c.(*AdminVerifyProtectedTimestampResponse)
+	if avptr != nil {
+		avptr.FailedRanges = append(avptr.FailedRanges, other.FailedRanges...)
+		if err := avptr.ResponseHeader.combine(other.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var _ combinable = &ScanResponse{}
 
 // combine implements the combinable interface.
@@ -597,6 +610,9 @@ func (*SubsumeRequest) Method() Method { return Subsume }
 // Method implements the Request interface.
 func (*RangeStatsRequest) Method() Method { return RangeStats }
 
+// Method implements the Request interface.
+func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerifyProtectedTimestamp }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -855,6 +871,12 @@ func (r *RangeStatsRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
 	return &GetRequest{
@@ -1109,13 +1131,14 @@ func (*TransferLeaseRequest) flags() int {
 	// lease holder.
 	return isWrite | isAlone | skipLeaseCheck
 }
-func (*RecomputeStatsRequest) flags() int   { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() int  { return isWrite }
-func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
-func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
-func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
-func (*ImportRequest) flags() int           { return isAdmin | isAlone }
-func (*AdminScatterRequest) flags() int     { return isAdmin | isRange | isAlone }
+func (*RecomputeStatsRequest) flags() int                { return isWrite | isAlone }
+func (*ComputeChecksumRequest) flags() int               { return isWrite }
+func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRange }
+func (*WriteBatchRequest) flags() int                    { return isWrite | isRange }
+func (*ExportRequest) flags() int                        { return isRead | isRange | updatesReadTSCache }
+func (*ImportRequest) flags() int                        { return isAdmin | isAlone }
+func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
+func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
 func (*AddSSTableRequest) flags() int {
 	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
 }

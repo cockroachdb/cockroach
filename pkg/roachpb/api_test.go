@@ -13,80 +13,125 @@ package roachpb
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestCombinable tests the correct behavior of some types that implement
 // the combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
 func TestCombinable(t *testing.T) {
-	// Test that GetResponse doesn't have anything to do with combinable.
-	if _, ok := interface{}(&GetResponse{}).(combinable); ok {
-		t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
-	}
-	// Test that {Scan,DeleteRange}Response properly implement it.
-	sr1 := &ScanResponse{
-		Rows: []KeyValue{
-			{Key: Key("A"), Value: MakeValueFromString("V")},
-		},
-		IntentRows: []KeyValue{
-			{Key: Key("Ai"), Value: MakeValueFromString("X")},
-		},
-	}
+	t.Run("Get", func(t *testing.T) {
+		// Test that GetResponse doesn't have anything to do with combinable.
+		if _, ok := interface{}(&GetResponse{}).(combinable); ok {
+			t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
+		}
+	})
+	t.Run("Scan", func(t *testing.T) {
 
-	if _, ok := interface{}(sr1).(combinable); !ok {
-		t.Fatalf("ScanResponse does not implement combinable")
-	}
+		// Test that {Scan,DeleteRange}Response properly implement it.
+		sr1 := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("A"), Value: MakeValueFromString("V")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			},
+		}
 
-	sr2 := &ScanResponse{
-		Rows: []KeyValue{
-			{Key: Key("B"), Value: MakeValueFromString("W")},
-		},
-		IntentRows: []KeyValue{
-			{Key: Key("Bi"), Value: MakeValueFromString("Z")},
-		},
-	}
+		if _, ok := interface{}(sr1).(combinable); !ok {
+			t.Fatalf("ScanResponse does not implement combinable")
+		}
 
-	wantedSR := &ScanResponse{
-		Rows:       append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
-		IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
-	}
+		sr2 := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("B"), Value: MakeValueFromString("W")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			},
+		}
 
-	if err := sr1.combine(sr2); err != nil {
-		t.Fatal(err)
-	}
-	if err := sr1.combine(&ScanResponse{}); err != nil {
-		t.Fatal(err)
-	}
+		wantedSR := &ScanResponse{
+			Rows:       append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
+			IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
+		}
 
-	if !reflect.DeepEqual(sr1, wantedSR) {
-		t.Errorf("wanted %v, got %v", wantedSR, sr1)
-	}
+		if err := sr1.combine(sr2); err != nil {
+			t.Fatal(err)
+		}
+		if err := sr1.combine(&ScanResponse{}); err != nil {
+			t.Fatal(err)
+		}
 
-	dr1 := &DeleteRangeResponse{
-		Keys: []Key{[]byte("1")},
-	}
-	if _, ok := interface{}(dr1).(combinable); !ok {
-		t.Fatalf("DeleteRangeResponse does not implement combinable")
-	}
-	dr2 := &DeleteRangeResponse{
-		Keys: []Key{[]byte("2")},
-	}
-	dr3 := &DeleteRangeResponse{
-		Keys: nil,
-	}
-	wantedDR := &DeleteRangeResponse{
-		Keys: []Key{[]byte("1"), []byte("2")},
-	}
-	if err := dr2.combine(dr3); err != nil {
-		t.Fatal(err)
-	}
-	if err := dr1.combine(dr2); err != nil {
-		t.Fatal(err)
-	}
+		if !reflect.DeepEqual(sr1, wantedSR) {
+			t.Errorf("wanted %v, got %v", wantedSR, sr1)
+		}
+	})
 
-	if !reflect.DeepEqual(dr1, wantedDR) {
-		t.Errorf("wanted %v, got %v", wantedDR, dr1)
-	}
+	t.Run("DeleteRange", func(t *testing.T) {
+		dr1 := &DeleteRangeResponse{
+			Keys: []Key{[]byte("1")},
+		}
+		if _, ok := interface{}(dr1).(combinable); !ok {
+			t.Fatalf("DeleteRangeResponse does not implement combinable")
+		}
+		dr2 := &DeleteRangeResponse{
+			Keys: []Key{[]byte("2")},
+		}
+		dr3 := &DeleteRangeResponse{
+			Keys: nil,
+		}
+		wantedDR := &DeleteRangeResponse{
+			Keys: []Key{[]byte("1"), []byte("2")},
+		}
+		if err := dr2.combine(dr3); err != nil {
+			t.Fatal(err)
+		}
+		if err := dr1.combine(dr2); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(dr1, wantedDR) {
+			t.Errorf("wanted %v, got %v", wantedDR, dr1)
+		}
+	})
+
+	t.Run("AdminVerifyProtectedTimestamp", func(t *testing.T) {
+		v1 := &AdminVerifyProtectedTimestampResponse{
+			ResponseHeader: ResponseHeader{},
+			Verified:       false,
+			FailedRanges: []RangeDescriptor{
+				{RangeID: 1},
+			},
+		}
+
+		if _, ok := interface{}(v1).(combinable); !ok {
+			t.Fatal("AdminVerifyProtectedTimestampResponse unexpectedly does not implement combinable")
+		}
+		v2 := &AdminVerifyProtectedTimestampResponse{
+			ResponseHeader: ResponseHeader{},
+			Verified:       true,
+			FailedRanges:   nil,
+		}
+		v3 := &AdminVerifyProtectedTimestampResponse{
+			ResponseHeader: ResponseHeader{},
+			Verified:       false,
+			FailedRanges: []RangeDescriptor{
+				{RangeID: 2},
+			},
+		}
+		require.NoError(t, v1.combine(v2))
+		require.NoError(t, v1.combine(v3))
+		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
+			Verified: false,
+			FailedRanges: []RangeDescriptor{
+				{RangeID: 1},
+				{RangeID: 2},
+			},
+		}, v1)
+
+	})
 }
 
 // TestMustSetInner makes sure that calls to MustSetInner correctly reset the
