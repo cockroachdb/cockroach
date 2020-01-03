@@ -190,6 +190,7 @@ type Server struct {
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *sql.LeaseManager
 	blobService      *blobs.Service
+	debug            *debug.Server
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry     *sql.SessionRegistry
@@ -813,6 +814,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node.InitLogger(&execCfg)
 	s.cfg.DefaultZoneConfig = cfg.DefaultZoneConfig
 
+	s.debug = debug.NewServer(s.ClusterSettings(), s.pgServer.HBADebugFn())
+
 	return s, nil
 }
 
@@ -1237,7 +1240,7 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	// TODO(marc): when cookie-based authentication exists, apply it to all web
 	// endpoints.
-	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
+	s.mux.Handle(debug.Endpoint, s.debug)
 
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
