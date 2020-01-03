@@ -1,0 +1,24 @@
+config insecure
+----
+
+# Regardless of the contents of hba.conf,
+# all users can always log in, even without a cert.
+
+set_hba
+host all root 0.0.0.0/0 cert
+----
+ok
+
+connect user=root sslmode=disable
+----
+ok
+
+connect user=testuser sslmode=disable
+----
+ok
+
+# If a password is provided, it is ignored.
+
+connect user=testuser password=abc sslmode=disable
+----
+ok

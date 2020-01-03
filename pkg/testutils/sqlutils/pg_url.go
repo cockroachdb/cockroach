@@ -37,6 +37,14 @@ import (
 // Args:
 //  prefix: A prefix to be prepended to the temp file names generated, for debugging.
 func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.URL, func()) {
+	return PGUrlWithOptionalClientCerts(t, servingAddr, prefix, user, true /* withCerts */)
+}
+
+// PGUrlWithOptionalClientCerts is like PGUrl but the caller can
+// customize whether the client certificates are loaded on-disk and in the URL.
+func PGUrlWithOptionalClientCerts(
+	t testing.TB, servingAddr, prefix string, user *url.Userinfo, withClientCerts bool,
+) (url.URL, func()) {
 	host, port, err := net.SplitHostPort(servingAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -50,19 +58,24 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 	}
 
 	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
-	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
-
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
 	tempCAPath := securitytest.RestrictedCopy(t, caPath, tempDir, "ca")
-	tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
-	tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
 	options := url.Values{}
-	options.Add("sslmode", "verify-full")
 	options.Add("sslrootcert", tempCAPath)
-	options.Add("sslcert", tempCertPath)
-	options.Add("sslkey", tempKeyPath)
+
+	if withClientCerts {
+		certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
+		keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
+
+		// Copy these assets to disk from embedded strings, so this test can
+		// run from a standalone binary.
+		tempCertPath := securitytest.RestrictedCopy(t, certPath, tempDir, "cert")
+		tempKeyPath := securitytest.RestrictedCopy(t, keyPath, tempDir, "key")
+		options.Add("sslcert", tempCertPath)
+		options.Add("sslkey", tempKeyPath)
+		options.Add("sslmode", "verify-full")
+	} else {
+		options.Add("sslmode", "verify-ca")
+	}
 
 	return url.URL{
 			Scheme:   "postgres",
