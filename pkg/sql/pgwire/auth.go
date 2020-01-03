@@ -72,60 +72,10 @@ func (c *conn) handleAuthentication(
 
 	if tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
-		var methodFn AuthMethod
-		var hbaEntry *hba.Entry
 
-		if auth == nil {
-			methodFn = authCertPassword
-		} else if c.sessionArgs.User == security.RootUser {
-			// If a hba.conf file is specified, hard code the root user to always use
-			// cert auth. This prevents users from shooting themselves in the foot and
-			// making root not able to login, thus disallowing anyone from fixing the
-			// hba.conf file.
-			methodFn = authCert
-		} else {
-			addr, _, err := net.SplitHostPort(c.conn.RemoteAddr().String())
-			if err != nil {
-				return sendError(err)
-			}
-			ip := net.ParseIP(addr)
-			for _, entry := range auth.Entries {
-				switch a := entry.Address.(type) {
-				case *net.IPNet:
-					if !a.Contains(ip) {
-						continue
-					}
-				case hba.String:
-					if !a.IsKeyword("all") {
-						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
-					}
-				default:
-					return sendError(errors.Errorf("unexpected address type %T", a))
-				}
-				match := false
-				for _, u := range entry.User {
-					if u.IsKeyword("all") {
-						match = true
-						break
-					}
-					if u.Value == c.sessionArgs.User {
-						match = true
-						break
-					}
-				}
-				if !match {
-					continue
-				}
-				methodFn = hbaAuthMethods[entry.Method]
-				if methodFn == nil {
-					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
-				}
-				hbaEntry = &entry
-				break
-			}
-			if methodFn == nil {
-				return sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
-			}
+		methodFn, hbaEntry, err := c.lookupAuthenticationMethod(auth)
+		if err != nil {
+			return sendError(err)
 		}
 
 		authenticationHook, err := methodFn(ac, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
@@ -140,6 +90,41 @@ func (c *conn) handleAuthentication(
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
 	return c.msgBuilder.finishMsg(c.conn)
+}
+
+func (c *conn) lookupAuthenticationMethod(
+	auth *hba.Conf,
+) (methodFn AuthMethod, entry *hba.Entry, err error) {
+	// Extract the IP address of the client.
+	tcpAddr, ok := c.conn.RemoteAddr().(*net.TCPAddr)
+	if !ok {
+		return nil, nil, errors.AssertionFailedf("client address type %T unsupported", c.conn.RemoteAddr())
+	}
+	ip := tcpAddr.IP
+
+	// Look up the method.
+	for i := range auth.Entries {
+		entry := &auth.Entries[i]
+		addrMatch, err := entry.AddressMatches(ip)
+		if err != nil {
+			// TODO(knz): Determine if an error should be reported
+			// upon unknown address formats.
+			// See: https://github.com/cockroachdb/cockroach/issues/43716
+			return nil, nil, err
+		}
+		if !addrMatch {
+			// The address does not match.
+			continue
+		}
+		if !entry.UserMatches(c.sessionArgs.User) {
+			// The user does not match.
+			continue
+		}
+		return entry.MethodFn.(AuthMethod), entry, nil
+	}
+
+	// No match.
+	return nil, nil, errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, ip, c.sessionArgs.User)
 }
 
 // authenticatorIO is the interface used by the connection to pass password data

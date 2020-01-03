@@ -13,6 +13,7 @@ package hba
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
@@ -28,7 +29,10 @@ func TestParse(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
-				return fmt.Sprintf("%# v", pretty.Formatter(conf))
+				var out strings.Builder
+				fmt.Fprintf(&out, "# String render check:\n%s", conf)
+				fmt.Fprintf(&out, "# Detail:\n%# v", pretty.Formatter(conf))
+				return out.String()
 
 			case "line":
 				tokens, err := tokenize(td.Input)
@@ -48,6 +52,23 @@ func TestParse(t *testing.T) {
 			default:
 				return fmt.Sprintf("unknown directive: %s", td.Cmd)
 			}
+		})
+}
+
+func TestParseAndNormalizeAuthConfig(t *testing.T) {
+	datadriven.RunTest(t, filepath.Join("testdata", "normalization"),
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "hba":
+				conf, err := ParseAndNormalize(td.Input)
+				if err != nil {
+					return fmt.Sprintf("error: %v\n", err)
+				}
+				return conf.String()
+			default:
+				t.Fatalf("unknown directive: %s", td.Cmd)
+			}
+			return ""
 		})
 }
 

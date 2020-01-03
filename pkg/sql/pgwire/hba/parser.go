@@ -55,10 +55,6 @@ func Parse(input string) (*Conf, error) {
 		entries = append(entries, entry)
 	}
 
-	if len(entries) == 0 {
-		return nil, errors.New("no entries")
-	}
-
 	return &Conf{Entries: entries}, nil
 }
 
@@ -125,7 +121,7 @@ func parseHbaLine(line [][]String) (Entry, error) {
 					hostname = ""
 				}
 				if hostname != "" {
-					entry.Address = String{Value: addr, Quoted: false}
+					entry.Address = String{Value: addr, Quoted: token.Quoted}
 				} else {
 					// First field was an IP address.
 					fieldIdx++
