@@ -209,7 +209,7 @@ func NewBuiltinFunctionOperator(
 		}, nil
 	default:
 		outputType := funcExpr.ResolvedType()
-		outputPhysType := colexectypes.FromColumnType(outputType)
+		outputPhysType := colexectypes.FromColumnType(outputType).T
 		if outputPhysType == phystypes.Unhandled {
 			return nil, errors.Errorf(
 				"unsupported output type %q of %s",

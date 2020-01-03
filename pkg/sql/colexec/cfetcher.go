@@ -286,7 +286,7 @@ func (rf *cFetcher) Init(
 
 	typs := make([]phystypes.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = colexectypes.FromColumnType(&colDescriptors[i].Type)
+		typs[i] = colexectypes.FromColumnType(&colDescriptors[i].Type).T
 		if typs[i] == phystypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.

@@ -34,7 +34,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	typs := make([]phystypes.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandType(rng)
-		et := colexectypes.FromColumnType(ct)
+		et := colexectypes.FromColumnType(ct).T
 		if et == phystypes.Unhandled {
 			i--
 			continue

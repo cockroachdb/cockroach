@@ -483,7 +483,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
 				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
-				typs, inputStream.StreamID,
+				colexectypes.AsPhysTypes(typs), inputStream.StreamID,
 			)
 			if err != nil {
 				return nil, nil, err
@@ -514,20 +514,21 @@ func (s *vectorizedFlowCreator) setupInput(
 	op = inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
-		typs, err := colexectypes.FromColumnTypes(input.ColumnTypes)
+		execTyps, err := colexectypes.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
 			return nil, nil, err
 		}
+		physTypes := colexectypes.AsPhysTypes(execTyps)
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
 				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
-				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				inputStreamOps, physTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 		} else {
 			if opt == flowinfra.FuseAggressively {
-				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
+				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, physTypes)
 			} else {
-				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, physTypes, s.waitGroup)
 				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection
@@ -761,7 +762,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, err
 		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
+			ctx, flowCtx, pspec, op, colexectypes.AsPhysTypes(opOutputTypes), metadataSourcesQueue,
 		); err != nil {
 			return nil, err
 		}

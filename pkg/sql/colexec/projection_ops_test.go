@@ -204,7 +204,7 @@ func TestRandomComparisons(t *testing.T) {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
 			continue
 		}
-		typ := colexectypes.FromColumnType(ct)
+		typ := colexectypes.FromColumnType(ct).T
 		if typ == phystypes.Unhandled {
 			continue
 		}

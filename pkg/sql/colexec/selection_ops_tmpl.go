@@ -267,10 +267,10 @@ func GetSelectionConstOperator(
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
-	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType.T {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := colexectypes.FromColumnType(constColType); rightType {
+		switch rightType := colexectypes.FromColumnType(constColType); rightType.T {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch cmpOp {
@@ -306,10 +306,10 @@ func GetSelectionOperator(
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}
-	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType.T {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := colexectypes.FromColumnType(rightColType); rightType {
+		switch rightType := colexectypes.FromColumnType(rightColType); rightType.T {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch cmpOp {

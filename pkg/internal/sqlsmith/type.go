@@ -66,7 +66,7 @@ func (s *Smither) randType() *types.T {
 // vectorization).
 func (s *Smither) allowedType(types ...*types.T) bool {
 	for _, t := range types {
-		if s.vectorizable && colexectypes.FromColumnType(t) == phystypes.Unhandled {
+		if s.vectorizable && colexectypes.FromColumnType(t).T == phystypes.Unhandled {
 			return false
 		}
 	}

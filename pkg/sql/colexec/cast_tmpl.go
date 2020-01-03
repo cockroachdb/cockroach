@@ -85,13 +85,13 @@ func GetCastOperator(
 			allocator:    allocator,
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
-			toType:       colexectypes.FromColumnType(toType),
+			toType:       colexectypes.FromColumnType(toType).T,
 		}, nil
 	}
-	switch from := colexectypes.FromColumnType(fromType); from {
+	switch from := colexectypes.FromColumnType(fromType).T; from {
 	// {{ range $typ, $overloads := . }}
 	case phystypes._ALLTYPES:
-		switch to := colexectypes.FromColumnType(toType); to {
+		switch to := colexectypes.FromColumnType(toType).T; to {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
 		case phystypes._OVERLOADTYPES:

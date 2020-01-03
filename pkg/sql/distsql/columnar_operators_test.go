@@ -687,7 +687,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 }
 
 func isSupportedType(typ *types.T) bool {
-	converted := colexectypes.FromColumnType(typ)
+	converted := colexectypes.FromColumnType(typ).T
 	return converted != phystypes.Unhandled
 }
 

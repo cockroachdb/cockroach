@@ -67,7 +67,7 @@ func genRowsToVec(wr io.Writer) error {
 	// Build the list of supported column conversions.
 	conversionsMap := make(map[types.Family]*columnConversion)
 	for _, ct := range types.OidToType {
-		t := colexectypes.FromColumnType(ct)
+		t := colexectypes.FromColumnType(ct).T
 		if t == phystypes.Unhandled {
 			continue
 		}

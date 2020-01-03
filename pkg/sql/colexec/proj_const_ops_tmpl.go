@@ -213,10 +213,10 @@ func GetProjection_CONST_SIDEConstOperator(
 	if err != nil {
 		return nil, err
 	}
-	switch leftType := colexectypes.FromColumnType(leftColType); leftType {
+	switch leftType := colexectypes.FromColumnType(leftColType); leftType.T {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case phystypes._L_TYP_VAR:
-		switch rightType := colexectypes.FromColumnType(rightColType); rightType {
+		switch rightType := colexectypes.FromColumnType(rightColType); rightType.T {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case phystypes._R_TYP_VAR:
 			switch op.(type) {

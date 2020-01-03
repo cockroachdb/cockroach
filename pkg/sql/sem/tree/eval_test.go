@@ -210,7 +210,7 @@ func TestEval(t *testing.T) {
 					&colexec.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							// It doesn't matter what types we create the input batch with.
-							batch := coldata.NewMemBatch(inputColTyps)
+							batch := coldata.NewMemBatch(colexectypes.AsPhysTypes(inputColTyps))
 							if batchesReturned > 0 {
 								batch.SetLength(0)
 								return batch

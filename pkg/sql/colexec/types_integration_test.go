@@ -82,11 +82,12 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			columnarizer, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
 			require.NoError(t, err)
 
-			coltyps, err := colexectypes.FromColumnTypes(typs)
+			execTypes, err := colexectypes.FromColumnTypes(typs)
 			require.NoError(t, err)
-			c, err := colserde.NewArrowBatchConverter(coltyps)
+			physTypes := colexectypes.AsPhysTypes(execTypes)
+			c, err := colserde.NewArrowBatchConverter(physTypes)
 			require.NoError(t, err)
-			r, err := colserde.NewRecordBatchSerializer(coltyps)
+			r, err := colserde.NewRecordBatchSerializer(physTypes)
 			require.NoError(t, err)
 			arrowOp := newArrowTestOperator(columnarizer, c, r)
 

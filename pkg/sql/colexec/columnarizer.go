@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/phystypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -38,7 +37,7 @@ type Columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
-	typs            []phystypes.T
+	typs            []colexectypes.T
 }
 
 var _ Operator = &Columnarizer{}
@@ -76,7 +75,7 @@ func NewColumnarizer(
 
 // Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
-	c.batch = c.allocator.NewMemBatch(c.typs)
+	c.batch = c.allocator.NewMemBatch(colexectypes.AsPhysTypes(c.typs))
 	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))

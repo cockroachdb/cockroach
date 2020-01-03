@@ -157,18 +157,23 @@ func createJoiner(
 
 	post := &spec.Post
 
-	var leftTypes, rightTypes []phystypes.T
-	leftTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
+	var (
+		leftPhysTypes, rightPhysTypes []phystypes.T
+		leftExecTypes, rightExecTypes []colexectypes.T
+	)
+	leftExecTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 	if err != nil {
 		return err
 	}
-	rightTypes, err = colexectypes.FromColumnTypes(spec.Input[1].ColumnTypes)
+	leftPhysTypes = colexectypes.AsPhysTypes(leftExecTypes)
+	rightExecTypes, err = colexectypes.FromColumnTypes(spec.Input[1].ColumnTypes)
 	if err != nil {
 		return err
 	}
+	rightPhysTypes = colexectypes.AsPhysTypes(rightExecTypes)
 
-	nLeftCols := uint32(len(leftTypes))
-	nRightCols := uint32(len(rightTypes))
+	nLeftCols := uint32(len(leftPhysTypes))
+	nRightCols := uint32(len(rightPhysTypes))
 
 	leftOutCols := make([]uint32, 0)
 	rightOutCols := make([]uint32, 0)
@@ -217,7 +222,7 @@ func createJoiner(
 	}
 
 	if !post.Filter.Empty() {
-		planningState.postFilterPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
+		planningState.postFilterPlanning = makeFilterPlanningState(len(leftPhysTypes), len(rightPhysTypes))
 		leftOutCols, rightOutCols, err = planningState.postFilterPlanning.renderAllNeededCols(
 			post.Filter, leftOutCols, rightOutCols,
 		)
@@ -231,7 +236,7 @@ func createJoiner(
 		onExprPlanning filterPlanningState
 	)
 	onExpr, onExprPlanning, leftOutCols, rightOutCols, err = createJoinOpWithOnExprPlanning(
-		result, leftTypes, rightTypes, leftOutCols, rightOutCols,
+		result, leftPhysTypes, rightPhysTypes, leftOutCols, rightOutCols,
 	)
 	if err != nil {
 		return err
@@ -549,23 +554,27 @@ func NewColOperator(
 				}
 				result.ColumnTypes[i] = *retType
 			}
-			var typs []phystypes.T
-			typs, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
+			var (
+				physTypes []phystypes.T
+				execTypes []colexectypes.T
+			)
+			execTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
+			physTypes = colexectypes.AsPhysTypes(execTypes)
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
 					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator-limited")
 				}
 				result.Op, err = NewHashAggregator(
-					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
+					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], physTypes, aggFns,
 					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 				)
 			} else {
 				result.Op, err = NewOrderedAggregator(
-					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
+					NewAllocator(ctx, streamingMemAccount), inputs[0], physTypes, aggFns,
 					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
 				)
 				result.IsStreaming = true
@@ -589,12 +598,16 @@ func NewColOperator(
 			}
 
 			result.ColumnTypes = spec.Input[0].ColumnTypes
-			var typs []phystypes.T
-			typs, err = colexectypes.FromColumnTypes(result.ColumnTypes)
+			var (
+				physTypes []phystypes.T
+				execTypes []colexectypes.T
+			)
+			execTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
-			result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+			physTypes = colexectypes.AsPhysTypes(execTypes)
+			result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, physTypes)
 			result.IsStreaming = true
 
 		case core.Ordinality != nil:
@@ -737,11 +750,15 @@ func NewColOperator(
 				return result, err
 			}
 			input := inputs[0]
-			var inputTypes []phystypes.T
-			inputTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
+			var (
+				physTypes []phystypes.T
+				execTypes []colexectypes.T
+			)
+			execTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
+			physTypes = colexectypes.AsPhysTypes(execTypes)
 			orderingCols := core.Sorter.OutputOrdering.Columns
 			matchLen := core.Sorter.OrderingMatchLen
 			if matchLen > 0 {
@@ -754,7 +771,7 @@ func NewColOperator(
 					sortChunksMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks-limited")
 				}
 				result.Op, err = NewSortChunks(
-					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
+					NewAllocator(ctx, sortChunksMemAccount), input, physTypes,
 					orderingCols, int(matchLen),
 				)
 			} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
@@ -763,7 +780,7 @@ func NewColOperator(
 				// which uses a heap to avoid storing more rows than necessary.
 				k := uint16(post.Limit + post.Offset)
 				result.Op = NewTopKSorter(
-					NewAllocator(ctx, streamingMemAccount), input, inputTypes,
+					NewAllocator(ctx, streamingMemAccount), input, physTypes,
 					orderingCols, k,
 				)
 				result.IsStreaming = true
@@ -778,7 +795,7 @@ func NewColOperator(
 					)
 				}
 				inMemorySorter, err := NewSorter(
-					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
+					NewAllocator(ctx, sorterMemAccount), input, physTypes, orderingCols,
 				)
 				if err != nil {
 					return result, err
@@ -796,7 +813,7 @@ func NewColOperator(
 					diskSpillerAllocator,
 					input, inMemorySorter.(bufferingInMemoryOperator),
 					func(input Operator) Operator {
-						return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
+						return newExternalSorter(diskSpillerAllocator, input, physTypes, orderingCols)
 					})
 			}
 			result.ColumnTypes = spec.Input[0].ColumnTypes
@@ -807,11 +824,15 @@ func NewColOperator(
 			}
 			wf := core.Windower.WindowFns[0]
 			input := inputs[0]
-			var typs []phystypes.T
-			typs, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
+			var (
+				physTypes []phystypes.T
+				execTypes []colexectypes.T
+			)
+			execTypes, err = colexectypes.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
+			physTypes = colexectypes.AsPhysTypes(execTypes)
 			tempPartitionColOffset, partitionColIdx := 0, -1
 			if len(core.Windower.PartitionBy) > 0 {
 				// TODO(yuzefovich): add support for hashing partitioner (probably by
@@ -822,7 +843,7 @@ func NewColOperator(
 					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner-limited")
 				}
 				input, err = NewWindowSortingPartitioner(
-					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
+					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, physTypes,
 					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
 				)
 				tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
@@ -833,7 +854,7 @@ func NewColOperator(
 						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter-limited")
 					}
 					input, err = NewSorter(
-						NewAllocator(ctx, windowSorterMemAccount), input, typs,
+						NewAllocator(ctx, windowSorterMemAccount), input, physTypes,
 						wf.Ordering.Columns,
 					)
 				}
@@ -852,9 +873,9 @@ func NewColOperator(
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			case execinfrapb.WindowerSpec_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, physTypes, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			case execinfrapb.WindowerSpec_DENSE_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, physTypes, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			}
 
 			if partitionColIdx != -1 {
@@ -1297,7 +1318,7 @@ func planTypedMaybeNullProjectionOperators(
 ) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
-		op = NewConstNullOp(NewAllocator(ctx, acc), input, resultIdx, colexectypes.FromColumnType(exprTyp))
+		op = NewConstNullOp(NewAllocator(ctx, acc), input, resultIdx, colexectypes.FromColumnType(exprTyp).T)
 		ct = append(columnTypes, *exprTyp)
 		return op, resultIdx, ct, internalMemUsed, nil
 	}
@@ -1392,7 +1413,7 @@ func planProjectionOperators(
 		if datumType.Family() == types.UnknownFamily {
 			return nil, resultIdx, ct, internalMemUsed, errors.New("cannot plan null type unknown")
 		}
-		typ := colexectypes.FromColumnType(datumType)
+		typ := colexectypes.FromColumnType(datumType).T
 		constVal, err := colexectypes.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
 			return nil, resultIdx, ct, internalMemUsed, err
@@ -1410,7 +1431,7 @@ func planProjectionOperators(
 		buffer := NewBufferOp(input)
 		internalMemUsed += buffer.(InternalMemoryOperator).InternalMemoryUsage()
 		caseOps := make([]Operator, len(t.Whens))
-		caseOutputType := colexectypes.FromColumnType(t.ResolvedType())
+		caseOutputType := colexectypes.FromColumnType(t.ResolvedType()).T
 		caseOutputIdx := len(columnTypes)
 		ct = append(columnTypes, *t.ResolvedType())
 		thenIdxs := make([]int, len(t.Whens)+1)

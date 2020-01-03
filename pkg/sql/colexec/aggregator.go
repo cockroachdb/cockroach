@@ -442,7 +442,7 @@ func extractAggTypes(aggCols [][]uint32, colTypes []phystypes.T) [][]phystypes.T
 func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
 	var aggType []phystypes.T
 	if inputType != nil {
-		aggType = append(aggType, colexectypes.FromColumnType(inputType))
+		aggType = append(aggType, colexectypes.FromColumnType(inputType).T)
 	}
 	switch aggFn {
 	case execinfrapb.AggregatorSpec_SUM:

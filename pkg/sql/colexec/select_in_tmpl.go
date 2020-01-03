@@ -83,7 +83,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := colexectypes.FromColumnType(ct); t {
+	switch t := colexectypes.FromColumnType(ct); t.T {
 	// {{range .}}
 	case phystypes._TYPE:
 		obj := &projectInOp_TYPE{
@@ -108,7 +108,7 @@ func GetInOperator(
 	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := colexectypes.FromColumnType(ct); t {
+	switch t := colexectypes.FromColumnType(ct); t.T {
 	// {{range .}}
 	case phystypes._TYPE:
 		obj := &selectInOp_TYPE{
