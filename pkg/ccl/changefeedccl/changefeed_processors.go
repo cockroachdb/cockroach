@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -73,7 +74,7 @@ type timestampLowerBoundOracle interface {
 }
 
 type changeAggregatorLowerBoundOracle struct {
-	sf                         *spanFrontier
+	sf                         *span.Frontier
 	initialInclusiveLowerBound hlc.Timestamp
 }
 
@@ -164,7 +165,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// This object is used to filter out some previously emitted rows, and
 	// by the cloudStorageSink to name its output files in lexicographically
 	// monotonic fashion.
-	sf := makeSpanFrontier(spans...)
+	sf := span.MakeFrontier(spans...)
 	for _, watch := range ca.spec.Watches {
 		sf.Forward(watch.Span, watch.InitialResolved)
 	}
@@ -355,7 +356,7 @@ type changeFrontier struct {
 
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
-	sf *spanFrontier
+	sf *span.Frontier
 	// encoder is the Encoder to use for resolved timestamp serialization.
 	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
@@ -407,7 +408,7 @@ func newChangeFrontierProcessor(
 		spec:    spec,
 		memAcc:  memMonitor.MakeBoundAccount(),
 		input:   input,
-		sf:      makeSpanFrontier(spec.TrackedSpans...),
+		sf:      span.MakeFrontier(spec.TrackedSpans...),
 	}
 	if err := cf.Init(
 		cf, &execinfrapb.PostProcessSpec{},
@@ -655,7 +656,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		const slowSpanMaxFrequency = 10 * time.Second
 		if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
 			cf.lastSlowSpanLog = now
-			s := cf.sf.peekFrontierSpan()
+			s := cf.sf.PeekFrontierSpan()
 			log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 		}
 	}
