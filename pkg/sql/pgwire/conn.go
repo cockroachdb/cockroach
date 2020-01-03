@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -44,11 +42,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
-)
-
-const (
-	authOK                int32 = 0
-	authCleartextPassword int32 = 3
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -97,14 +90,6 @@ type conn struct {
 	msgBuilder writeBuffer
 
 	sv *settings.Values
-}
-
-type authOptions struct {
-	skipAuth bool                            // test-only
-	authHook func(ctx context.Context) error // test-only
-	insecure bool
-	auth     *hba.Conf
-	ie       *sql.InternalExecutor
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -253,7 +238,7 @@ func (c *conn) serveImpl(
 
 	// We'll build an authPipe to communicate with the authentication process.
 	authPipe := newAuthPipe(c)
-	var authenticator authenticator = authPipe
+	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
 	// the command processor.
@@ -1480,371 +1465,6 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 		r.conn.metrics.BytesInCount.Inc(1)
 	}
 	return b, err
-}
-
-// handleAuthentication checks the connection's user. Errors are sent to the
-// client and also returned.
-//
-// TODO(knz): handleAuthentication should discuss with the client to arrange
-// authentication and update c.sessionArgs with the authenticated user's name,
-// if different from the one given initially.
-func (c *conn) handleAuthentication(
-	ctx context.Context,
-	ac AuthConn,
-	insecure bool,
-	ie *sql.InternalExecutor,
-	auth *hba.Conf,
-	execCfg *sql.ExecutorConfig,
-) error {
-	sendError := func(err error) error {
-		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
-		return err
-	}
-
-	// Check that the requested user exists and retrieve the hashed
-	// password in case password authentication is needed.
-	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
-	)
-	if err != nil {
-		return sendError(err)
-	}
-	if !exists {
-		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
-	}
-
-	if tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn); ok {
-		tlsState := tlsConn.ConnectionState()
-		var methodFn AuthMethod
-		var hbaEntry *hba.Entry
-
-		if auth == nil {
-			methodFn = authCertPassword
-		} else if c.sessionArgs.User == security.RootUser {
-			// If a hba.conf file is specified, hard code the root user to always use
-			// cert auth. This prevents users from shooting themselves in the foot and
-			// making root not able to login, thus disallowing anyone from fixing the
-			// hba.conf file.
-			methodFn = authCert
-		} else {
-			addr, _, err := net.SplitHostPort(c.conn.RemoteAddr().String())
-			if err != nil {
-				return sendError(err)
-			}
-			ip := net.ParseIP(addr)
-			for _, entry := range auth.Entries {
-				switch a := entry.Address.(type) {
-				case *net.IPNet:
-					if !a.Contains(ip) {
-						continue
-					}
-				case hba.String:
-					if !a.IsSpecial("all") {
-						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
-					}
-				default:
-					return sendError(errors.Errorf("unexpected address type %T", a))
-				}
-				match := false
-				for _, u := range entry.User {
-					if u.IsSpecial("all") {
-						match = true
-						break
-					}
-					if u.Value == c.sessionArgs.User {
-						match = true
-						break
-					}
-				}
-				if !match {
-					continue
-				}
-				methodFn = hbaAuthMethods[entry.Method]
-				if methodFn == nil {
-					return sendError(errors.Errorf("unknown auth method %s", entry.Method))
-				}
-				hbaEntry = &entry
-				break
-			}
-			if methodFn == nil {
-				return sendError(errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, addr, c.sessionArgs.User))
-			}
-		}
-
-		authenticationHook, err := methodFn(ac, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
-		if err != nil {
-			return sendError(err)
-		}
-		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
-			return sendError(err)
-		}
-	}
-
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
-	c.msgBuilder.putInt32(authOK)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-const serverHBAConfSetting = "server.host_based_authentication.configuration"
-
-var connAuthConf = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		serverHBAConfSetting,
-		"host-based authentication configuration to use during connection authentication",
-		"",
-		func(values *settings.Values, s string) error {
-			if s == "" {
-				return nil
-			}
-			conf, err := hba.Parse(s)
-			if err != nil {
-				return err
-			}
-			for _, entry := range conf.Entries {
-				for _, db := range entry.Database {
-					if !db.IsSpecial("all") {
-						return errors.New("database must be specified as all")
-					}
-				}
-				if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
-					return errors.New("host addresses not supported")
-				}
-				if hbaAuthMethods[entry.Method] == nil {
-					return errors.Errorf("unknown auth method %q", entry.Method)
-				}
-				if check := hbaCheckHBAEntries[entry.Method]; check != nil {
-					if err := check(entry); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
-
-// authenticator is the interface used by the connection to pass password data
-// to the authenticator and expect an authentication decision from it.
-type authenticator interface {
-	// sendPwdData is used to push authentication data into the authenticator.
-	// This call is blocking; authenticators are supposed to consume data hastily
-	// once they've requested it.
-	sendPwdData(data []byte) error
-	// noMorePwdData is used to inform the authenticator that the client is not
-	// sending any more authentication data. This method can be called multiple
-	// times.
-	noMorePwdData()
-	// authResult blocks for an authentication decision. This call also informs
-	// the authenticator that no more auth data is coming from the client;
-	// noMorePwdData() is called internally.
-	//
-	// The auth result is either an unqualifiedIntSizer (in case the auth
-	// succeeded) or an auth error.
-	authResult() (unqualifiedIntSizer, error)
-}
-
-// AuthConn is the interface used by the authenticator for interacting with the
-// pgwire connection.
-type AuthConn interface {
-	// SendAuthRequest send a request for authentication information. After
-	// calling this, the authenticator needs to call GetPwdData() quickly, as the
-	// connection's goroutine will be blocked on providing us the requested data.
-	SendAuthRequest(authType int32, data []byte) error
-	// GetPwdData returns authentication info that was previously requested with
-	// SendAuthRequest. The call blocks until such data is available.
-	// An error is returned if the client connection dropped or if the client
-	// didn't respect the protocol. After an error has been returned, GetPwdData()
-	// cannot be called any more.
-	GetPwdData() ([]byte, error)
-	// AuthOK declares that authentication succeeded and provides a
-	// unqualifiedIntSizer, to be returned by authenticator.authResult(). Future
-	// authenticator.sendPwdData() calls fail.
-	AuthOK(unqualifiedIntSizer)
-	// AuthFail declares that authentication has failed and provides an error to
-	// be returned by authenticator.authResult(). Future
-	// authenticator.sendPwdData() calls fail. The error has already been written
-	// to the client connection.
-	AuthFail(err error)
-}
-
-// authPipe is the implementation for the authenticator and AuthConn interfaces.
-// A single authPipe will serve as both an AuthConn and an authenticator; the
-// two represent the two "ends" of the pipe and we'll pass data between them.
-type authPipe struct {
-	c *conn // Only used for writing, not for reading.
-
-	ch chan []byte
-	// writerDone is a channel closed by noMorePwdData().
-	// Nil if noMorePwdData().
-	writerDone chan struct{}
-	readerDone chan authRes
-}
-
-type authRes struct {
-	intSizer unqualifiedIntSizer
-	err      error
-}
-
-func newAuthPipe(c *conn) *authPipe {
-	ap := &authPipe{
-		c:          c,
-		ch:         make(chan []byte),
-		writerDone: make(chan struct{}),
-		readerDone: make(chan authRes, 1),
-	}
-	return ap
-}
-
-var _ authenticator = &authPipe{}
-var _ AuthConn = &authPipe{}
-
-func (p *authPipe) sendPwdData(data []byte) error {
-	select {
-	case p.ch <- data:
-		return nil
-	case <-p.readerDone:
-		return pgwirebase.NewProtocolViolationErrorf("unexpected auth data")
-	}
-}
-
-func (p *authPipe) noMorePwdData() {
-	if p.writerDone == nil {
-		return
-	}
-	// A reader blocked in GetPwdData() gets unblocked with an error.
-	close(p.writerDone)
-	p.writerDone = nil
-}
-
-// GetPwdData is part of the AuthConn interface.
-func (p *authPipe) GetPwdData() ([]byte, error) {
-	select {
-	case data := <-p.ch:
-		return data, nil
-	case <-p.writerDone:
-		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
-	}
-}
-
-// AuthOK is part of the AuthConn interface.
-func (p *authPipe) AuthOK(intSizer unqualifiedIntSizer) {
-	p.readerDone <- authRes{intSizer: intSizer}
-}
-
-func (p *authPipe) AuthFail(err error) {
-	p.readerDone <- authRes{err: err}
-}
-
-// authResult is part of the authenticator interface.
-func (p *authPipe) authResult() (unqualifiedIntSizer, error) {
-	p.noMorePwdData()
-	res := <-p.readerDone
-	return res.intSizer, res.err
-}
-
-// SendAuthRequest is part of the AuthConn interface.
-func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
-	c := p.c
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
-	c.msgBuilder.putInt32(authType)
-	c.msgBuilder.write(data)
-	return c.msgBuilder.finishMsg(c.conn)
-}
-
-type (
-	// AuthMethod defines a method for authentication of a connection.
-	AuthMethod func(c AuthConn, tlsState tls.ConnectionState, insecure bool, hashedPassword []byte, execCfg *sql.ExecutorConfig, entry *hba.Entry) (security.UserAuthHook, error)
-
-	// CheckHBAEntry defines a method for error checking an hba Entry.
-	CheckHBAEntry func(hba.Entry) error
-)
-
-var (
-	hbaAuthMethods     = map[string]AuthMethod{}
-	hbaCheckHBAEntries = map[string]CheckHBAEntry{}
-)
-
-// RegisterAuthMethod registers an AuthMethod for pgwire authentication.
-func RegisterAuthMethod(method string, fn AuthMethod, checkEntry CheckHBAEntry) {
-	hbaAuthMethods[method] = fn
-	if checkEntry != nil {
-		hbaCheckHBAEntries[method] = checkEntry
-	}
-}
-
-func passwordString(pwdData []byte) (string, error) {
-	// Make a string out of the byte array.
-	if bytes.IndexByte(pwdData, 0) != len(pwdData)-1 {
-		return "", fmt.Errorf("expected 0-terminated byte array")
-	}
-	return string(pwdData[:len(pwdData)-1]), nil
-}
-
-func authPassword(
-	c AuthConn,
-	tlsState tls.ConnectionState,
-	insecure bool,
-	hashedPassword []byte,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
-) (security.UserAuthHook, error) {
-	if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
-		return nil, err
-	}
-	pwdData, err := c.GetPwdData()
-	if err != nil {
-		return nil, err
-	}
-	password, err := passwordString(pwdData)
-	if err != nil {
-		return nil, err
-	}
-	return security.UserAuthPasswordHook(
-		insecure, password, hashedPassword,
-	), nil
-}
-
-func authCert(
-	_ AuthConn,
-	tlsState tls.ConnectionState,
-	insecure bool,
-	hashedPassword []byte,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
-) (security.UserAuthHook, error) {
-	if len(tlsState.PeerCertificates) == 0 {
-		return nil, errors.New("no TLS peer certificates, but required for auth")
-	}
-	// Normalize the username contained in the certificate.
-	tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
-		tlsState.PeerCertificates[0].Subject.CommonName,
-	).Normalize()
-	return security.UserAuthCertHook(insecure, &tlsState)
-}
-
-func authCertPassword(
-	c AuthConn,
-	tlsState tls.ConnectionState,
-	insecure bool,
-	hashedPassword []byte,
-	execCfg *sql.ExecutorConfig,
-	entry *hba.Entry,
-) (security.UserAuthHook, error) {
-	var fn AuthMethod
-	if len(tlsState.PeerCertificates) == 0 {
-		fn = authPassword
-	} else {
-		fn = authCert
-	}
-	return fn(c, tlsState, insecure, hashedPassword, execCfg, entry)
-}
-
-func init() {
-	RegisterAuthMethod("password", authPassword, nil)
-	RegisterAuthMethod("cert", authCert, nil)
-	RegisterAuthMethod("cert-password", authCertPassword, nil)
 }
 
 // statusReportParams is a list of session variables that are also

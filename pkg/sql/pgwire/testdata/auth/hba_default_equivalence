@@ -1,0 +1,91 @@
+# This verifies that the behavior with an empty HBA config
+# is equivalent to:
+#     host all root 0.0.0.0/0 cert
+#     host all all  0.0.0.0/0 cert-password
+# by using that explicit string and reproducing the tests
+# in the test file "empty_hba".
+
+config secure
+----
+
+set_hba
+host all root 0.0.0.0/0 cert
+host all all 0.0.0.0/0 cert-password
+----
+ok
+
+subtest root
+
+# Root can always connect regardless.
+connect user=root
+----
+ok
+
+# The rule has method "cert" so a cert is required in any case.
+connect user=root password=foo sslmode=verify-ca sslcert=
+----
+ERROR: no TLS peer certificates, but required for auth
+
+subtest end root
+
+subtest normaluser_cert
+
+# User need no password, and we're presenting a client cert. All good.
+connect user=testuser
+----
+ok
+
+# Make the user need a password.
+sql
+ALTER USER testuser WITH PASSWORD 'pass';
+----
+ok
+
+# Password now needed, but as long as we're presenting a cert it's good.
+connect user=testuser
+----
+ok
+
+# If we don't present the client certificate, the password is required.
+connect user=testuser password=invalid sslmode=verify-ca sslcert=
+----
+ERROR: password authentication failed for user testuser
+
+connect user=testuser password=pass sslmode=verify-ca sslcert=
+----
+ok
+
+# Reset the test user to no password.
+sql
+DROP USER testuser; CREATE USER testuser
+----
+ok
+
+subtest end normaluser_cert
+
+subtest normaluser_nocert
+
+# This other test user has no default cert.
+sql
+CREATE USER testuser_nocert;
+----
+ok
+
+# Since there is no cert, no cert is going to be presented by the client
+# and password auth becomes required.
+connect user=testuser_nocert
+----
+ERROR: password authentication failed for user testuser_nocert
+
+# Even though the user has no password, trying to present the
+# empty password fails. The user simply cannot log in.
+connect user=testuser_nocert password=
+----
+ERROR: password authentication failed for user testuser_nocert
+
+sql
+DROP USER testuser_nocert
+----
+ok
+
+subtest end normaluser_nocert

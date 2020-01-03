@@ -836,9 +836,15 @@ func RandCreateTables(
 
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
-	for i := 1; i <= num; i++ {
-		t := RandCreateTable(rng, prefix, i)
-		tables[i-1] = t
+	for i := 0; i < num; i++ {
+		var interleave *tree.CreateTable
+		// 50% chance of interleaving past the first table. Interleaving doesn't
+		// make anything harder to do for tests - so prefer to do it a lot.
+		if i > 0 && rng.Intn(2) == 0 {
+			interleave = tables[rng.Intn(i)].(*tree.CreateTable)
+		}
+		t := RandCreateTableWithInterleave(rng, prefix, i+1, interleave)
+		tables[i] = t
 	}
 
 	for _, m := range mutators {
@@ -850,40 +856,107 @@ func RandCreateTables(
 
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTable {
+	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil)
+}
+
+// RandCreateTableWithInterleave creates a random CreateTable definition,
+// interleaved into the given other CreateTable definition.
+func RandCreateTableWithInterleave(
+	rng *rand.Rand, prefix string, tableIdx int, interleaveInto *tree.CreateTable,
+) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
-	columnDefs := make([]*tree.ColumnTableDef, randutil.RandIntInRange(rng, 1, 20))
+	nColumns := randutil.RandIntInRange(rng, 1, 20)
+	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
 	// defs contains the list of Columns and other attributes (indexes, column
 	// families, etc) we'll add to our table.
-	defs := make(tree.TableDefs, len(columnDefs))
+	defs := make(tree.TableDefs, 0, len(columnDefs))
 
-	for i := range columnDefs {
-		columnDef := randColumnTableDef(rng, i)
-		columnDefs[i] = columnDef
-		defs[i] = columnDef
+	// Find columnDefs from previous create table.
+	interleaveIntoColumnDefs := make(map[tree.Name]*tree.ColumnTableDef)
+	var interleaveIntoPK *tree.UniqueConstraintTableDef
+	if interleaveInto != nil {
+		for i := range interleaveInto.Defs {
+			switch d := interleaveInto.Defs[i].(type) {
+			case *tree.ColumnTableDef:
+				interleaveIntoColumnDefs[d.Name] = d
+			case *tree.UniqueConstraintTableDef:
+				if d.PrimaryKey {
+					interleaveIntoPK = d
+				}
+			}
+		}
 	}
+	var interleaveDef *tree.InterleaveDef
+	if interleaveIntoPK != nil && len(interleaveIntoPK.Columns) > 0 {
+		// Make the interleave prefix, which has to be exactly the columns in the
+		// parent's primary index.
+		prefixLength := len(interleaveIntoPK.Columns)
+		fields := make(tree.NameList, prefixLength)
+		for i := range interleaveIntoPK.Columns[:prefixLength] {
+			def := interleaveIntoColumnDefs[interleaveIntoPK.Columns[i].Column]
+			columnDefs = append(columnDefs, def)
+			defs = append(defs, def)
+			fields[i] = def.Name
+		}
 
-	// Shuffle our column definitions.
-	rng.Shuffle(len(columnDefs), func(i, j int) {
-		columnDefs[i], columnDefs[j] = columnDefs[j], columnDefs[i]
-	})
+		extraCols := make([]*tree.ColumnTableDef, nColumns)
+		// Add more columns to the table.
+		for i := range extraCols {
+			extraCol := randColumnTableDef(rng, tableIdx, i+prefixLength)
+			extraCols[i] = extraCol
+			columnDefs = append(columnDefs, extraCol)
+			defs = append(defs, extraCol)
+		}
 
-	// Make a random primary key with high likelihood.
-	if rng.Intn(8) != 0 {
-		indexDef := randIndexTableDefFromCols(rng, columnDefs)
-		if len(indexDef.Columns) > 0 {
-			defs = append(defs, &tree.UniqueConstraintTableDef{
-				PrimaryKey:    true,
-				IndexTableDef: indexDef,
+		rng.Shuffle(nColumns, func(i, j int) {
+			extraCols[i], extraCols[j] = extraCols[j], extraCols[i]
+		})
+
+		// Create the primary key to interleave, maybe add some new columns to the
+		// one we're interleaving.
+		pk := &tree.UniqueConstraintTableDef{
+			PrimaryKey: true,
+			IndexTableDef: tree.IndexTableDef{
+				Columns: interleaveIntoPK.Columns[:prefixLength:prefixLength],
+			},
+		}
+		for i := range extraCols[:rng.Intn(len(extraCols))] {
+			pk.Columns = append(pk.Columns, tree.IndexElem{
+				Column:    extraCols[i].Name,
+				Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
 			})
 		}
-		// Although not necessary for Cockroach to function correctly,
-		// but for ease of use for any code that introspects on the
-		// AST data structure (instead of the descriptor which doesn't
-		// exist yet), explicitly set all PK cols as NOT NULL.
-		for _, col := range columnDefs {
-			for _, elem := range indexDef.Columns {
-				if col.Name == elem.Column {
-					col.Nullable.Nullability = tree.NotNull
+		defs = append(defs, pk)
+		interleaveDef = &tree.InterleaveDef{
+			Parent: interleaveInto.Table,
+			Fields: fields,
+		}
+	} else {
+		// Make new defs from scratch.
+		for i := 0; i < nColumns; i++ {
+			columnDef := randColumnTableDef(rng, tableIdx, i)
+			columnDefs = append(columnDefs, columnDef)
+			defs = append(defs, columnDef)
+		}
+
+		// Make a random primary key with high likelihood.
+		if rng.Intn(8) != 0 {
+			indexDef := randIndexTableDefFromCols(rng, columnDefs)
+			if len(indexDef.Columns) > 0 {
+				defs = append(defs, &tree.UniqueConstraintTableDef{
+					PrimaryKey:    true,
+					IndexTableDef: indexDef,
+				})
+			}
+			// Although not necessary for Cockroach to function correctly,
+			// but for ease of use for any code that introspects on the
+			// AST data structure (instead of the descriptor which doesn't
+			// exist yet), explicitly set all PK cols as NOT NULL.
+			for _, col := range columnDefs {
+				for _, elem := range indexDef.Columns {
+					if col.Name == elem.Column {
+						col.Nullable.Nullability = tree.NotNull
+					}
 				}
 			}
 		}
@@ -907,8 +980,9 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 	}
 
 	ret := &tree.CreateTable{
-		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
-		Defs:  defs,
+		Table:      tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
+		Defs:       defs,
+		Interleave: interleaveDef,
 	}
 
 	// Create some random column families.
@@ -1105,9 +1179,11 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
 // nullability.
-func randColumnTableDef(rand *rand.Rand, colIdx int) *tree.ColumnTableDef {
+func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
 	columnDef := &tree.ColumnTableDef{
-		Name: tree.Name(fmt.Sprintf("col%d", colIdx)),
+		// We make a unique name for all columns by prefixing them with the table
+		// index to make it easier to reference columns from different tables.
+		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
 		Type: RandSortingType(rand),
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))

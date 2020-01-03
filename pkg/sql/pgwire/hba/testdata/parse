@@ -3,17 +3,216 @@ host all all 0.0.0.0/0 trust
 # comment
 
 host all all ::1 0 reject # ip and cidr with space
-host "all","test space",something some,"us ers" fe80::7a31:c1ff:0000:0000/96 cert
+host all all fe80::7a31:c1ff:0000:0000/96 cert
 host all all all trust
 host all all hostname trust
 host all all 1.1.1.1 1 trust
 ----
-host all all 0.0.0.0/0 trust
-host all all ::/0 reject
-host "all","test space",something some,us,"ers" fe80::7a31:c1ff:0:0/96 cert
-host all all all trust
-host all all hostname trust
-host all all 0.0.0.0/1 trust
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0},
+            },
+            Method:  "trust",
+            Options: nil,
+        },
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+            },
+            Method:  "reject",
+            Options: nil,
+        },
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: &net.IPNet{
+                IP:   {0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7a, 0x31, 0xc1, 0xff, 0x0, 0x0, 0x0, 0x0},
+                Mask: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0, 0x0, 0x0, 0x0},
+            },
+            Method:  "cert",
+            Options: nil,
+        },
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: hba.String{Value:"hostname", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x80, 0x0, 0x0, 0x0},
+            },
+            Method:  "trust",
+            Options: nil,
+        },
+    },
+}
+
+# Comma-separated lists.
+
+parse
+host a,b,c all all trust
+----
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
+    },
+}
+
+parse
+host all a,b,c all trust
+----
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
+    },
+}
+
+parse
+host a,b,c d,e,f all trust
+----
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            User: {
+                {Value:"d", Quoted:false},
+                {Value:"e", Quoted:false},
+                {Value:"f", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
+    },
+}
+
+parse
+host all testuser,"all" 0.0.0.0/0 cert
+----
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"testuser", Quoted:false},
+                {Value:"all", Quoted:true},
+            },
+            Address: &net.IPNet{
+                IP:   {0x0, 0x0, 0x0, 0x0},
+                Mask: {0x0, 0x0, 0x0, 0x0},
+            },
+            Method:  "cert",
+            Options: nil,
+        },
+    },
+}
+
+parse
+host "all","test space",something some,"us ers" all cert
+----
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:true},
+                {Value:"test space", Quoted:true},
+                {Value:"something", Quoted:false},
+            },
+            User: {
+                {Value:"some", Quoted:false},
+                {Value:"us ers", Quoted:true},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "cert",
+            Options: nil,
+        },
+    },
+}
 
 parse
 ----
@@ -46,4 +245,23 @@ error: entry 1 invalid
 parse
 host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
 ----
-host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
+&hba.Conf{
+    Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "gss",
+            Options: {
+                {"krb_realm", "other"},
+                {"include_realm", "0"},
+                {"krb_realm", "te-st12.COM"},
+            },
+        },
+    },
+}
