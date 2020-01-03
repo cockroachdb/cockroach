@@ -1,12 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
 
-package changefeedccl
+package span
 
 import (
 	"container/heap"
@@ -20,9 +22,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s *spanFrontier) entriesStr() string {
+func (f *Frontier) entriesStr() string {
 	var buf strings.Builder
-	s.Entries(func(sp roachpb.Span, ts hlc.Timestamp) {
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
@@ -44,7 +46,7 @@ func TestSpanFrontier(t *testing.T) {
 	spBD := roachpb.Span{Key: keyB, EndKey: keyD}
 	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
 
-	f := makeSpanFrontier(spAD)
+	f := MakeFrontier(spAD)
 	require.Equal(t, hlc.Timestamp{}, f.Frontier())
 	require.Equal(t, `{a-d}@0`, f.entriesStr())
 
@@ -156,7 +158,7 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 	spCE := roachpb.Span{Key: keyC, EndKey: keyE}
 	spDF := roachpb.Span{Key: keyD, EndKey: keyF}
 
-	f := makeSpanFrontier(spAB, spCE)
+	f := MakeFrontier(spAB, spCE)
 	require.Equal(t, hlc.Timestamp{}, f.Frontier())
 	require.Equal(t, `{a-b}@0 {c-e}@0`, f.entriesStr())
 
@@ -190,37 +192,37 @@ func TestSpanFrontierHeap(t *testing.T) {
 	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
 	spBC := roachpb.Span{Key: keyB, EndKey: keyC}
 
-	var sfh spanFrontierHeap
+	var fh frontierHeap
 
-	eAB1 := &spanFrontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 1}}
-	eBC1 := &spanFrontierEntry{span: spBC, ts: hlc.Timestamp{WallTime: 1}}
-	eAB2 := &spanFrontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 2}}
+	eAB1 := &frontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 1}}
+	eBC1 := &frontierEntry{span: spBC, ts: hlc.Timestamp{WallTime: 1}}
+	eAB2 := &frontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 2}}
 
 	// Push one
-	heap.Push(&sfh, eAB1)
-	require.Equal(t, eAB1, heap.Pop(&sfh))
+	heap.Push(&fh, eAB1)
+	require.Equal(t, eAB1, heap.Pop(&fh))
 
 	// Push different spans and times
-	heap.Push(&sfh, eAB1)
-	heap.Push(&sfh, eBC1)
-	heap.Push(&sfh, eAB2)
-	require.Equal(t, eAB1, heap.Pop(&sfh))
-	require.Equal(t, eBC1, heap.Pop(&sfh))
-	require.Equal(t, eAB2, heap.Pop(&sfh))
+	heap.Push(&fh, eAB1)
+	heap.Push(&fh, eBC1)
+	heap.Push(&fh, eAB2)
+	require.Equal(t, eAB1, heap.Pop(&fh))
+	require.Equal(t, eBC1, heap.Pop(&fh))
+	require.Equal(t, eAB2, heap.Pop(&fh))
 
 	// Push in a different span order
-	heap.Push(&sfh, eBC1)
-	heap.Push(&sfh, eAB1)
-	heap.Push(&sfh, eAB2)
-	require.Equal(t, eAB1, heap.Pop(&sfh))
-	require.Equal(t, eBC1, heap.Pop(&sfh))
-	require.Equal(t, eAB2, heap.Pop(&sfh))
+	heap.Push(&fh, eBC1)
+	heap.Push(&fh, eAB1)
+	heap.Push(&fh, eAB2)
+	require.Equal(t, eAB1, heap.Pop(&fh))
+	require.Equal(t, eBC1, heap.Pop(&fh))
+	require.Equal(t, eAB2, heap.Pop(&fh))
 
 	// Push in a different time order
-	heap.Push(&sfh, eAB2)
-	heap.Push(&sfh, eAB1)
-	heap.Push(&sfh, eBC1)
-	require.Equal(t, eAB1, heap.Pop(&sfh))
-	require.Equal(t, eBC1, heap.Pop(&sfh))
-	require.Equal(t, eAB2, heap.Pop(&sfh))
+	heap.Push(&fh, eAB2)
+	heap.Push(&fh, eAB1)
+	heap.Push(&fh, eBC1)
+	require.Equal(t, eAB1, heap.Pop(&fh))
+	require.Equal(t, eBC1, heap.Pop(&fh))
+	require.Equal(t, eAB2, heap.Pop(&fh))
 }
