@@ -10,7 +10,8 @@ subtest nomatch
 set_hba
 host all all 0.0.0.0/32 cert
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all all 0.0.0.0/32 cert
 
 connect user=testuser
 ----
@@ -37,7 +38,8 @@ subtest match_net
 set_hba
 host all all 127.0.0.0/8 cert
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all all 127.0.0.0/8 cert
 
 connect user=testuser
 ----

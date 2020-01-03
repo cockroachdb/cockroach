@@ -84,7 +84,7 @@ type Server struct {
 }
 
 // NewServer sets up a debug server.
-func NewServer(st *cluster.Settings) *Server {
+func NewServer(st *cluster.Settings, hbaConfDebugFn http.HandlerFunc) *Server {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
@@ -110,6 +110,12 @@ func NewServer(st *cluster.Settings) *Server {
 	mux.Handle("/debug/metrics", exp.ExpHandler(metrics.DefaultRegistry))
 	// Also register /debug/vars (even though /debug/metrics is better).
 	mux.Handle("/debug/vars", expvar.Handler())
+
+	if hbaConfDebugFn != nil {
+		// Expose the processed HBA configuration through the debug
+		// interface for inspection during troubleshooting.
+		mux.HandleFunc("/debug/hba_conf", hbaConfDebugFn)
+	}
 
 	// Register the stopper endpoint, which lists all active tasks.
 	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
@@ -157,7 +163,6 @@ func NewServer(st *cluster.Settings) *Server {
 		mux: mux,
 		spy: spy,
 	}
-
 }
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access

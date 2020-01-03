@@ -21,7 +21,8 @@ subtest root
 set_hba
 host all root 0.0.0.0/0 cert
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all root 0.0.0.0/0 cert
 
 connect user=root
 ----
@@ -47,7 +48,8 @@ subtest testuser
 set_hba
 host all testuser 0.0.0.0/0 cert
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all testuser 0.0.0.0/0 cert
 
 connect user=testuser
 ----
@@ -73,7 +75,9 @@ set_hba
 host all testuser 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 cert-password
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all testuser 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 cert-password
 
 connect user=testuser
 ----
@@ -97,7 +101,8 @@ subtest multiple
 set_hba
 host all testuser,passworduser 0.0.0.0/0 cert-password
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all testuser,passworduser 0.0.0.0/0 cert-password
 
 connect user=testuser
 ----
@@ -129,7 +134,9 @@ set_hba
 host all testuser,all 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all testuser,all 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 password
 
 connect user=testuser
 ----
@@ -147,7 +154,9 @@ set_hba
 host all testuser,"all" 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all testuser,"all" 0.0.0.0/0 cert
+host all passworduser 0.0.0.0/0 password
 
 connect user=testuser
 ----

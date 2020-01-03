@@ -18,7 +18,8 @@ subtest root_always_enabled
 set_hba
 host all root 0.0.0.0/0 cert
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all root 0.0.0.0/0 cert
 
 connect user=root sslmode=disable
 ----
