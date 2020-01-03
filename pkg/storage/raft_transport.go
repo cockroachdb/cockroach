@@ -477,7 +477,7 @@ func (t *RaftTransport) processQueue(
 		return err
 	}
 
-	var raftIdleTimer timeutil.Timer
+	raftIdleTimer := timeutil.NewTimer()
 	defer raftIdleTimer.Stop()
 	batch := &RaftMessageRequestBatch{}
 	for {

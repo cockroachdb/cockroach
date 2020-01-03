@@ -124,7 +124,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 	}
 	closedts.TargetDuration.SetOnChange(&p.cfg.Settings.SV, confChanged)
 
-	var t timeutil.Timer
+	t := timeutil.NewTimer()
 	defer t.Stop()
 	for {
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)

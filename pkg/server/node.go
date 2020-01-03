@@ -762,7 +762,7 @@ func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
 	pm := metric.MakePrometheusExporter()
 
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
-		var timer timeutil.Timer
+		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		for {
 			timer.Reset(graphiteInterval.Get(&st.SV))

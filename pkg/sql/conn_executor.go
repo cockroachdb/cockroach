@@ -679,7 +679,7 @@ var maxSQLStatReset = settings.RegisterPublicNonNegativeDurationSetting(
 // the diagnostics.forced_stat_reset.interval limit.
 func (s *Server) PeriodicallyClearSQLStats(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		var timer timeutil.Timer
+		timer := timeutil.NewTimer()
 		for {
 
 			s.sqlStats.Lock()

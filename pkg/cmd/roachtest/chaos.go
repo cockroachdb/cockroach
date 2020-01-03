@@ -61,7 +61,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 		defer func() {
 			l.Printf("chaos stopping: %v", err)
 		}()
-		t := timeutil.Timer{}
+		t := timeutil.NewTimer()
 		{
 			p, _ := ch.Timer.Timing()
 			t.Reset(p)

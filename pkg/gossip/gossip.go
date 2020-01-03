@@ -1322,7 +1322,7 @@ func (g *Gossip) bootstrap() {
 	ctx := g.AnnotateCtx(context.Background())
 	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
 		ctx = logtags.AddTag(ctx, "bootstrap", nil)
-		var bootstrapTimer timeutil.Timer
+		bootstrapTimer := timeutil.NewTimer()
 		defer bootstrapTimer.Stop()
 		for {
 			if g.server.stopper.RunTask(ctx, "gossip.Gossip: bootstrap ", func(ctx context.Context) {

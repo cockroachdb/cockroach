@@ -493,7 +493,7 @@ func (q *Queue) MaybeWaitForPush(
 	defer slowTimer.Stop()
 	slowTimer.Reset(slowTimerThreshold)
 
-	var pusheeTxnTimer timeutil.Timer
+	pusheeTxnTimer := timeutil.NewTimer()
 	defer pusheeTxnTimer.Stop()
 	// The first time we want to check the pushee's txn record immediately:
 	// the pushee might be gone by the time the pusher gets here if it cleaned

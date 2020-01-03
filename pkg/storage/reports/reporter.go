@@ -115,7 +115,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 		stats.frequencyMu.interval = ReporterInterval.Get(&stats.settings.SV)
 	})
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		var timer timeutil.Timer
+		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		ctx = logtags.AddTag(ctx, "replication-reporter", nil /* value */)
 

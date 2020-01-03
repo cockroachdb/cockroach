@@ -210,7 +210,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	defer spy.setIntercept(ctx, nil)
 
 	const flushInterval = time.Second
-	var flushTimer timeutil.Timer
+	flushTimer := timeutil.NewTimer()
 	defer flushTimer.Stop()
 	flushTimer.Reset(flushInterval)
 

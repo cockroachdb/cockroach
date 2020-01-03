@@ -107,7 +107,7 @@ func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
 		nextUpdateCheck := s.startTime
 		nextDiagnosticReport := s.startTime
 
-		var timer timeutil.Timer
+		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		for {
 			now := timeutil.Now()

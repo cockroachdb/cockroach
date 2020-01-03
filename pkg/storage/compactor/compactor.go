@@ -107,7 +107,7 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 	// may still access it even though the stopper has allowed it to close.
 	_ = stopper.RunTask(ctx, "compactor", func(ctx context.Context) {
 		stopper.RunWorker(ctx, func(ctx context.Context) {
-			var timer timeutil.Timer
+			timer := timeutil.NewTimer()
 			defer timer.Stop()
 
 			// The above timer will either be on c.minInterval() or c.maxAge(). The

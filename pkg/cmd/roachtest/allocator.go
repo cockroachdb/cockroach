@@ -215,7 +215,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 	const statsInterval = 2 * time.Second
 	const stableSeconds = 3 * 60
 
-	var statsTimer timeutil.Timer
+	statsTimer := timeutil.NewTimer()
 	defer statsTimer.Stop()
 	statsTimer.Reset(statsInterval)
 	for {
