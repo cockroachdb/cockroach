@@ -171,6 +171,15 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
 			},
 		},
+		&UnaryOp{
+			Typ:        types.Cidr,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				//TODO(jeb) impl me
+				ipAddr := MustBeDIPAddr(d).IPAddr
+				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
+			},
+		},
 	},
 })
 
@@ -423,6 +432,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
 		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Cidr,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(JEB) impl me
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.And(&other)
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
 	},
 
 	Bitor: {
@@ -454,6 +475,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.INet,
 			ReturnType: types.INet,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.Or(&other)
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Cidr,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				//TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Or(&other)
@@ -755,6 +788,30 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
 		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Int,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				//TODO(jeb) impl me
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				i := MustBeDInt(right)
+				newIPAddr, err := ipAddr.Add(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
+		&BinOp{
+			LeftType:   types.Int,
+			RightType:  types.Cidr,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				//TODO(jeb) impl me
+				i := MustBeDInt(left)
+				ipAddr := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.Add(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
 	},
 
 	Minus: {
@@ -1029,6 +1086,31 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.INet,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				i := MustBeDInt(right)
+				newIPAddr, err := ipAddr.Sub(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Cidr,
+			ReturnType: types.Int,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(jeb) impl me
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				diff, err := ipAddr.SubIPAddr(&other)
+				return NewDInt(DInt(diff)), err
+			},
+		},
+		&BinOp{
+			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883.
+			LeftType:   types.Cidr,
+			RightType:  types.Int,
+			ReturnType: types.Cidr,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Sub(int64(i))
@@ -1482,6 +1564,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return MakeDBool(DBool(ipAddr.ContainedBy(&other))), nil
 			},
 		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Cidr,
+			ReturnType: types.Bool,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(jeb) impl me
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.ContainedBy(&other))), nil
+			},
+		},
 	},
 
 	RShift: {
@@ -1515,6 +1608,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.INet,
 			ReturnType: types.Bool,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.Contains(&other))), nil
+			},
+		},
+		&BinOp{
+			LeftType:   types.Cidr,
+			RightType:  types.Cidr,
+			ReturnType: types.Bool,
+			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.Contains(&other))), nil
@@ -1821,6 +1925,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// Single-type comparisons.
 		makeEqFn(types.Bool, types.Bool),
 		makeEqFn(types.Bytes, types.Bytes),
+		makeEqFn(types.Cidr, types.Cidr),
 		makeEqFn(types.Date, types.Date),
 		makeEqFn(types.Decimal, types.Decimal),
 		makeEqFn(types.AnyCollatedString, types.AnyCollatedString),
@@ -1868,6 +1973,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// Single-type comparisons.
 		makeLtFn(types.Bool, types.Bool),
 		makeLtFn(types.Bytes, types.Bytes),
+		makeLtFn(types.Cidr, types.Cidr),
 		makeLtFn(types.Date, types.Date),
 		makeLtFn(types.Decimal, types.Decimal),
 		makeLtFn(types.AnyCollatedString, types.AnyCollatedString),
@@ -1914,6 +2020,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// Single-type comparisons.
 		makeLeFn(types.Bool, types.Bool),
 		makeLeFn(types.Bytes, types.Bytes),
+		makeLeFn(types.Cidr, types.Cidr),
 		makeLeFn(types.Date, types.Date),
 		makeLeFn(types.Decimal, types.Decimal),
 		makeLeFn(types.AnyCollatedString, types.AnyCollatedString),
@@ -1968,6 +2075,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// Single-type comparisons.
 		makeIsFn(types.Bool, types.Bool),
 		makeIsFn(types.Bytes, types.Bytes),
+		makeIsFn(types.Cidr, types.Cidr),
 		makeIsFn(types.Date, types.Date),
 		makeIsFn(types.Decimal, types.Decimal),
 		makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
@@ -2018,6 +2126,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	In: {
 		makeEvalTupleIn(types.Bool),
 		makeEvalTupleIn(types.Bytes),
+		makeEvalTupleIn(types.Cidr),
 		makeEvalTupleIn(types.Date),
 		makeEvalTupleIn(types.Decimal),
 		makeEvalTupleIn(types.AnyCollatedString),
@@ -2226,6 +2335,16 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.INet,
 			RightType: types.INet,
 			Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
+			},
+		},
+		&CmpOp{
+			LeftType:  types.Cidr,
+			RightType: types.Cidr,
+			Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
+				// TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
@@ -3530,6 +3649,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		}
 
 	case types.INetFamily:
+		// TODO(jeb) add paths for CIDR
 		switch t := d.(type) {
 		case *DString:
 			return ParseDIPAddrFromINetString(string(*t))

@@ -79,6 +79,7 @@ import (
 // | OID               | OID            | T_oid         | 0         | 0     |
 // | UUID              | UUID           | T_uuid        | 0         | 0     |
 // | INET              | INET           | T_inet        | 0         | 0     |
+// | CIDR              | INET           | T_cidr        | 0         | 0     |
 // | TIME              | TIME           | T_time        | 0         | 0     |
 // | TIMETZ            | TIMETZ         | T_timetz      | 0         | 0     |
 // | JSON              | JSONB          | T_jsonb       | 0         | 0     |
@@ -325,6 +326,10 @@ var (
 	INet = &T{InternalType: InternalType{
 		Family: INetFamily, Oid: oid.T_inet, Locale: &emptyLocale}}
 
+	// TODO(jeb) add comment
+	Cidr = &T{InternalType: InternalType{
+		Family: INetFamily, Oid: oid.T_cidr, Locale: &emptyLocale}}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -345,6 +350,7 @@ var (
 		Oid,
 		Uuid,
 		INet,
+		Cidr,
 		Time,
 		TimeTZ,
 		Jsonb,
@@ -1001,7 +1007,14 @@ func (t *T) Name() string {
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
 	case INetFamily:
-		return "inet"
+		switch t.Oid() {
+		case oid.T_inet:
+			return "inet"
+		case oid.T_cidr:
+			return "cidr"
+		default:
+			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+		}
 	case IntFamily:
 		switch t.Width() {
 		case 64:
@@ -1011,7 +1024,7 @@ func (t *T) Name() string {
 		case 16:
 			return "int2"
 		default:
-			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
+			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
 	case IntervalFamily:
 		return "interval"
@@ -1163,7 +1176,14 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
 	case INetFamily:
-		return "inet"
+		switch t.Oid() {
+		case oid.T_inet:
+			return "inet"
+		case oid.T_cidr:
+			return "cidr"
+		default:
+			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+		}
 	case IntFamily:
 		switch t.Width() {
 		case 16:
@@ -2076,7 +2096,6 @@ func TypeForNonKeywordTypeName(name string) (*T, bool, int) {
 // PostgreSQL types that are already implemented in CockroachDB.
 var postgresPredefinedTypeIssues = map[string]int{
 	"box":           21286,
-	"cidr":          18846,
 	"circle":        21286,
 	"line":          21286,
 	"lseg":          21286,
