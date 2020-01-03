@@ -517,10 +517,6 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			baseSQLMemoryBudget, err)
 	}
 
-	s.auth.RLock()
-	auth := s.auth.conf
-	s.auth.RUnlock()
-
 	var authHook func(context.Context) error
 	if k := s.execCfg.PGWireTestingKnobs; k != nil {
 		authHook = k.AuthHook
@@ -533,7 +529,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		authOptions{
 			insecure: s.cfg.Insecure,
 			ie:       s.execCfg.InternalExecutor,
-			auth:     auth,
+			auth:     s.GetAuthenticationConfiguration(),
 			authHook: authHook,
 		},
 		s.stopper)
