@@ -39,6 +39,8 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 					allocator:    testAllocator,
 					colIdx:       0,
 					outputIdx:    1,
+					colLogType:   types.Int,
+					constLogType: types.Int,
 				},
 				constArg: 1,
 			}, nil
@@ -57,6 +59,8 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 					col1Idx:      0,
 					col2Idx:      1,
 					outputIdx:    2,
+					col1LogType:  types.Int,
+					col2LogType:  types.Int,
 				},
 			}, nil
 		})
@@ -74,6 +78,8 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 					col1Idx:      0,
 					col2Idx:      1,
 					outputIdx:    2,
+					col1LogType:  types.Float,
+					col2LogType:  types.Float,
 				},
 			}, nil
 		})
@@ -111,6 +117,8 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 			allocator:    testAllocator,
 			colIdx:       0,
 			outputIdx:    1,
+			colLogType:   types.Int,
+			constLogType: types.Int,
 		},
 		constArg: 1,
 	}
@@ -140,7 +148,8 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(testAllocator, types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
+	logType := types.Float
+	op, err := GetProjectionRConstOperator(testAllocator, logType, logType, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -150,6 +159,8 @@ func TestGetProjectionConstOperator(t *testing.T) {
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
+			colLogType:   logType,
+			constLogType: logType,
 		},
 		constArg: constVal,
 	}
@@ -166,7 +177,8 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(testAllocator, types.Int, types.Int2, binOp, input, colIdx, constArg, outputIdx)
+	colLogType, constLogType := types.Int, types.Int2
+	op, err := GetProjectionRConstOperator(testAllocator, colLogType, constLogType, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -176,6 +188,8 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
+			colLogType:   colLogType,
+			constLogType: constLogType,
 		},
 		constArg: constVal,
 	}
@@ -265,13 +279,13 @@ func TestRandomComparisons(t *testing.T) {
 
 func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ct := types.Int2
+	logType := types.Int2
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
-	op, err := GetProjectionOperator(testAllocator, ct, ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	op, err := GetProjectionOperator(testAllocator, logType, logType, binOp, input, col1Idx, col2Idx, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -282,6 +296,8 @@ func TestGetProjectionOperator(t *testing.T) {
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
 			outputIdx:    outputIdx,
+			col1LogType:  logType,
+			col2LogType:  logType,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -360,10 +376,14 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 			switch intType {
 			case coltypes.Int64:
+				base.col1LogType = types.Int
+				base.col2LogType = types.Int
 				return &projPlusInt64Int64Op{
 					projOpBase: base,
 				}
 			case coltypes.Int32:
+				base.col1LogType = types.Int4
+				base.col2LogType = types.Int4
 				return &projPlusInt32Int32Op{
 					projOpBase: base,
 				}
@@ -382,10 +402,14 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 			switch intType {
 			case coltypes.Int64:
+				base.col1LogType = types.Int
+				base.col2LogType = types.Int
 				return &projMinusInt64Int64Op{
 					projOpBase: base,
 				}
 			case coltypes.Int32:
+				base.col1LogType = types.Int4
+				base.col2LogType = types.Int4
 				return &projMinusInt32Int32Op{
 					projOpBase: base,
 				}
@@ -404,10 +428,14 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 			switch intType {
 			case coltypes.Int64:
+				base.col1LogType = types.Int
+				base.col2LogType = types.Int
 				return &projMultInt64Int64Op{
 					projOpBase: base,
 				}
 			case coltypes.Int32:
+				base.col1LogType = types.Int4
+				base.col2LogType = types.Int4
 				return &projMultInt32Int32Op{
 					projOpBase: base,
 				}
@@ -426,10 +454,14 @@ func BenchmarkProjOp(b *testing.B) {
 			}
 			switch intType {
 			case coltypes.Int64:
+				base.col1LogType = types.Int
+				base.col2LogType = types.Int
 				return &projDivInt64Int64Op{
 					projOpBase: base,
 				}
 			case coltypes.Int32:
+				base.col1LogType = types.Int4
+				base.col2LogType = types.Int4
 				return &projDivInt32Int32Op{
 					projOpBase: base,
 				}

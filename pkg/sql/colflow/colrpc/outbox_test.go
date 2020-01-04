@@ -30,11 +30,11 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input    = colexec.NewBatchBuffer()
-		typs     = []coltypes.T{coltypes.Int64}
-		rpcLayer = makeMockFlowStreamRPCLayer()
+		input     = colexec.NewBatchBuffer()
+		physTypes = []coltypes.T{coltypes.Int64}
+		rpcLayer  = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(testAllocator, input, typs, nil)
+	outbox, err := NewOutbox(testAllocator, input, physTypes, nil)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -53,7 +53,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
 	inbox, err := NewInbox(
-		colexec.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
+		colexec.NewAllocator(ctx, &inboxMemAccount), physTypes, execinfrapb.StreamID(0),
 	)
 	require.NoError(t, err)
 
@@ -80,8 +80,8 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input = colexec.NewBatchBuffer()
-		typs  = []coltypes.T{coltypes.Int64}
+		input     = colexec.NewBatchBuffer()
+		physTypes = []coltypes.T{coltypes.Int64}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a
@@ -91,7 +91,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outbox, err := NewOutbox(
 			allocator,
 			input,
-			typs,
+			physTypes,
 			[]execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
@@ -116,7 +116,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		b := testAllocator.NewMemBatch(typs)
+		b := testAllocator.NewMemBatch(physTypes)
 		b.SetLength(0)
 		input.Add(b)
 

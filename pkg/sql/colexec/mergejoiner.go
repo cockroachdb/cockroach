@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // group is an ADT representing a contiguous set of rows that match on their
@@ -139,9 +140,10 @@ type mergeJoinInput struct {
 	// len(eqCols) == len(directions).
 	directions []execinfrapb.Ordering_Column_Direction
 
-	// sourceTypes specify the types of the input columns of the source table for
-	// the merge joiner.
-	sourceTypes []coltypes.T
+	// logTypes and physTypes specify the types of the input columns of the
+	// source table for the merge joiner.
+	logTypes  []types.T
+	physTypes []coltypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -178,8 +180,10 @@ func NewMergeJoinOp(
 	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftLogTypes []types.T,
+	rightLogTypes []types.T,
+	leftPhysTypes []coltypes.T,
+	rightPhysTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
@@ -187,11 +191,11 @@ func NewMergeJoinOp(
 ) (Operator, error) {
 	// TODO(yuzefovich): get rid off "outCols" entirely and plumb the assumption
 	// of outputting all columns into the merge joiner itself.
-	leftOutCols := make([]uint32, len(leftTypes))
+	leftOutCols := make([]uint32, len(leftLogTypes))
 	for i := range leftOutCols {
 		leftOutCols[i] = uint32(i)
 	}
-	rightOutCols := make([]uint32, len(rightTypes))
+	rightOutCols := make([]uint32, len(rightLogTypes))
 	for i := range rightOutCols {
 		rightOutCols[i] = uint32(i)
 	}
@@ -204,8 +208,10 @@ func NewMergeJoinOp(
 		right,
 		leftOutCols,
 		rightOutCols,
-		leftTypes,
-		rightTypes,
+		leftLogTypes,
+		rightLogTypes,
+		leftPhysTypes,
+		rightPhysTypes,
 		leftOrdering,
 		rightOrdering,
 		filterConstructor,
@@ -278,8 +284,10 @@ func newMergeJoinBase(
 	right Operator,
 	leftOutCols []uint32,
 	rightOutCols []uint32,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftLogTypes []types.T,
+	rightLogTypes []types.T,
+	leftPhysTypes []coltypes.T,
+	rightPhysTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	filterConstructor func(Operator) (Operator, error),
@@ -303,30 +311,32 @@ func newMergeJoinBase(
 		twoInputNode: newTwoInputNode(left, right),
 		allocator:    allocator,
 		left: mergeJoinInput{
-			source:      left,
-			outCols:     leftOutCols,
-			sourceTypes: leftTypes,
-			eqCols:      lEqCols,
-			directions:  lDirections,
+			source:     left,
+			outCols:    leftOutCols,
+			logTypes:   leftLogTypes,
+			physTypes:  leftPhysTypes,
+			eqCols:     lEqCols,
+			directions: lDirections,
 		},
 		right: mergeJoinInput{
-			source:      right,
-			outCols:     rightOutCols,
-			sourceTypes: rightTypes,
-			eqCols:      rEqCols,
-			directions:  rDirections,
+			source:     right,
+			outCols:    rightOutCols,
+			logTypes:   rightLogTypes,
+			physTypes:  rightPhysTypes,
+			eqCols:     rEqCols,
+			directions: rDirections,
 		},
 	}
 	var err error
 	base.left.distincterInput = &feedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
-		base.left.distincterInput, lEqCols, leftTypes)
+		base.left.distincterInput, lEqCols, leftLogTypes)
 	if err != nil {
 		return base, err
 	}
 	base.right.distincterInput = &feedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
-		base.right.distincterInput, rEqCols, rightTypes)
+		base.right.distincterInput, rEqCols, rightLogTypes)
 	if err != nil {
 		return base, err
 	}
@@ -334,8 +344,8 @@ func newMergeJoinBase(
 	if filterConstructor != nil {
 		base.filter, err = newJoinerFilter(
 			base.allocator,
-			leftTypes,
-			rightTypes,
+			leftPhysTypes,
+			rightPhysTypes,
 			filterConstructor,
 			filterOnlyOnLeft,
 		)
@@ -377,10 +387,10 @@ type mergeJoinBase struct {
 func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
 	outColTypes := make([]coltypes.T, 0, len(o.left.outCols)+len(o.right.outCols))
 	for _, leftOutCol := range o.left.outCols {
-		outColTypes = append(outColTypes, o.left.sourceTypes[leftOutCol])
+		outColTypes = append(outColTypes, o.left.physTypes[leftOutCol])
 	}
 	for _, rightOutCol := range o.right.outCols {
-		outColTypes = append(outColTypes, o.right.sourceTypes[rightOutCol])
+		outColTypes = append(outColTypes, o.right.physTypes[rightOutCol])
 	}
 	return outColTypes
 }
@@ -405,8 +415,8 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 		o.outputBatchSize = 1<<16 - 1
 	}
 
-	o.proberState.lBufferedGroup = newBufferedBatch(o.allocator, o.left.sourceTypes, int(coldata.BatchSize()))
-	o.proberState.rBufferedGroup = newBufferedBatch(o.allocator, o.right.sourceTypes, int(coldata.BatchSize()))
+	o.proberState.lBufferedGroup = newBufferedBatch(o.allocator, o.left.physTypes, int(coldata.BatchSize()))
+	o.proberState.rBufferedGroup = newBufferedBatch(o.allocator, o.right.physTypes, int(coldata.BatchSize()))
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -438,7 +448,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	destStartIdx := bufferedGroup.length
 	groupEndIdx := groupStartIdx + groupLength
 	o.allocator.PerformOperation(bufferedGroup.colVecs, func() {
-		for cIdx, cType := range input.sourceTypes {
+		for cIdx, cType := range input.physTypes {
 			bufferedGroup.colVecs[cIdx].Append(
 				coldata.SliceArgs{
 					ColType:     cType,

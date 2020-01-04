@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +38,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
 
 // _ASSIGN_DIV_INT64 is the template division function for assigning the first
 // input to the result of the second input / the third input, where the third
@@ -52,14 +57,14 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newAvgAgg(logType *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(logType) {
 	// {{range .}}
 	case _TYPES_T:
-		return &avg_TYPEAgg{}, nil
+		return &avg_TYPEAgg{logType: logType}, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported avg agg type %s", t)
+		return nil, errors.Errorf("unsupported avg agg type %s", logType)
 	}
 }
 
@@ -69,6 +74,7 @@ type avg_TYPEAgg struct {
 	done bool
 
 	groups  []bool
+	logType *types.T
 	scratch struct {
 		curIdx int
 		// curSum keeps track of the sum of elements belonging to the current group,

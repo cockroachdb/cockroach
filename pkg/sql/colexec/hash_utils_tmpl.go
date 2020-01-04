@@ -109,14 +109,14 @@ func _REHASH_BODY(
 func rehash(
 	ctx context.Context,
 	buckets []uint64,
-	t coltypes.T,
+	physType coltypes.T,
 	col coldata.Vec,
 	nKeys uint64,
 	sel []uint16,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
 ) {
-	switch t {
+	switch physType {
 	// {{range $hashType := .}}
 	case _TYPES_T:
 		keys, nulls := col._TemplateType(), col.Nulls()
@@ -136,6 +136,6 @@ func rehash(
 
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
 	}
 }

@@ -24,8 +24,8 @@ import (
 type deselectorOp struct {
 	OneInputNode
 	NonExplainable
-	allocator  *Allocator
-	inputTypes []coltypes.T
+	allocator *Allocator
+	physTypes []coltypes.T
 
 	output coldata.Batch
 }
@@ -34,11 +34,11 @@ var _ Operator = &deselectorOp{}
 
 // NewDeselectorOp creates a new deselector operator on the given input
 // operator with the given column coltypes.
-func NewDeselectorOp(allocator *Allocator, input Operator, colTypes []coltypes.T) Operator {
+func NewDeselectorOp(allocator *Allocator, input Operator, physTypes []coltypes.T) Operator {
 	return &deselectorOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
-		inputTypes:   colTypes,
+		physTypes:    physTypes,
 	}
 }
 
@@ -55,7 +55,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 
 	sel := batch.Selection()
 	p.allocator.PerformOperation(p.output.ColVecs(), func() {
-		for i, t := range p.inputTypes {
+		for i, t := range p.physTypes {
 			toCol := p.output.ColVec(i)
 			fromCol := batch.ColVec(i)
 			toCol.Copy(
@@ -76,7 +76,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 
 func (p *deselectorOp) resetOutput() {
 	if p.output == nil {
-		p.output = p.allocator.NewMemBatch(p.inputTypes)
+		p.output = p.allocator.NewMemBatch(p.physTypes)
 	} else {
 		p.output.ResetInternalBatch()
 	}

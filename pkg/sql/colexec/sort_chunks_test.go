@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 var sortChunksTestCases []sortTestCase
@@ -189,7 +190,7 @@ func TestSortChunks(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return NewSortChunks(testAllocator, input[0], physTypes, tc.ordCols, tc.matchLen)
+			return NewSortChunks(testAllocator, input[0], tc.logTypes, physTypes, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -200,9 +201,9 @@ func TestSortChunksRandomized(t *testing.T) {
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]coltypes.T, maxCols)
-	for i := range typs {
-		typs[i] = coltypes.Int64
+	logTypes := make([]types.T, maxCols)
+	for i := range logTypes {
+		logTypes[i] = *types.Int
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -230,7 +231,11 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
+					physTypes, err := typeconv.FromColumnTypes(logTypes[:nCols])
+					if err != nil {
+						return nil, err
+					}
+					return NewSortChunks(testAllocator, input[0], logTypes[:nCols], physTypes, ordCols, matchLen)
 				})
 			}
 		}
@@ -241,10 +246,15 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*Allocator, Operator, []coltypes.T, []execinfrapb.Ordering_Column, int) (Operator, error){
+	sorterConstructors := []func(
+		*Allocator, Operator, []types.T, []coltypes.T,
+		[]execinfrapb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
-		func(allocator *Allocator, input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (Operator, error) {
-			return NewSorter(allocator, input, inputTypes, orderingCols)
+		func(
+			allocator *Allocator, input Operator, logTypes []types.T,
+			physTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int,
+		) (Operator, error) {
+			return NewSorter(allocator, input, logTypes, physTypes, orderingCols)
 		},
 	}
 	sorterNames := []string{"CHUNKS", "ALL"}
@@ -263,11 +273,13 @@ func BenchmarkSortChunks(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 								// batch) * nCols (number of columns / row).
 								b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
-								typs := make([]coltypes.T, nCols)
-								for i := range typs {
-									typs[i] = coltypes.Int64
+								logTypes := make([]types.T, nCols)
+								for i := range logTypes {
+									logTypes[i] = *types.Int
 								}
-								batch := testAllocator.NewMemBatch(typs)
+								physTypes, err := typeconv.FromColumnTypes(logTypes)
+								require.NoError(b, err)
+								batch := testAllocator.NewMemBatch(physTypes)
 								batch.SetLength(coldata.BatchSize())
 								ordCols := make([]execinfrapb.Ordering_Column, nCols)
 								for i := range ordCols {
@@ -294,7 +306,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := newFiniteChunksSource(batch, nBatches, matchLen)
-									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
+									sorter, err := sorterConstructor(testAllocator, source, logTypes, physTypes, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)
 									}

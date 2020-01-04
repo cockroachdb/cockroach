@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
@@ -67,8 +68,10 @@ type hashTable struct {
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
 	vals *bufferedBatch
-	// valTypes stores the corresponding types of the val columns.
-	valTypes []coltypes.T
+	// valLogTypes stores the corresponding "logical" types of the val columns.
+	valLogTypes []types.T
+	// valPhysTypes stores the corresponding types of the val columns.
+	valPhysTypes []coltypes.T
 	// valCols stores the union of the keyCols and outCols.
 	valCols []uint32
 	// keyCols stores the corresponding types of key columns.
@@ -120,14 +123,15 @@ var _ resetter = &hashTable{}
 func newHashTable(
 	allocator *Allocator,
 	numBuckets uint64,
-	sourceTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	eqCols []uint32,
 	outCols []uint32,
 	allowNullEquality bool,
 ) *hashTable {
 	// Compute the union of eqCols and outCols and compress vals to only keep the
 	// important columns.
-	nCols := len(sourceTypes)
+	nCols := len(physTypes)
 	keepCol := make([]bool, nCols)
 	compressed := make([]uint32, nCols)
 
@@ -142,12 +146,14 @@ func newHashTable(
 	// Extract the important columns and discard the rest.
 	nKeep := uint32(0)
 
-	keepTypes := make([]coltypes.T, 0, nCols)
+	keepLogTypes := make([]types.T, 0, nCols)
+	keepPhysTypes := make([]coltypes.T, 0, nCols)
 	keepCols := make([]uint32, 0, nCols)
 
 	for i := 0; i < nCols; i++ {
 		if keepCol[i] {
-			keepTypes = append(keepTypes, sourceTypes[i])
+			keepLogTypes = append(keepLogTypes, logTypes[i])
+			keepPhysTypes = append(keepPhysTypes, physTypes[i])
 			keepCols = append(keepCols, uint32(i))
 
 			compressed[i] = nKeep
@@ -160,7 +166,7 @@ func newHashTable(
 	keyTypes := make([]coltypes.T, nKeys)
 	keys := make([]uint32, nKeys)
 	for i, colIdx := range eqCols {
-		keyTypes[i] = sourceTypes[colIdx]
+		keyTypes[i] = physTypes[colIdx]
 		keys[i] = compressed[colIdx]
 	}
 
@@ -168,7 +174,7 @@ func newHashTable(
 	outTypes := make([]coltypes.T, nOutCols)
 	outs := make([]uint32, nOutCols)
 	for i, colIdx := range outCols {
-		outTypes[i] = sourceTypes[colIdx]
+		outTypes[i] = physTypes[colIdx]
 		outs[i] = compressed[colIdx]
 	}
 
@@ -176,13 +182,14 @@ func newHashTable(
 		allocator: allocator,
 		first:     make([]uint64, numBuckets),
 
-		vals:     newBufferedBatch(allocator, keepTypes, 0 /* initialSize */),
-		valTypes: keepTypes,
-		valCols:  keepCols,
-		keyTypes: keyTypes,
-		keyCols:  keys,
-		outCols:  outs,
-		outTypes: outTypes,
+		vals:         newBufferedBatch(allocator, keepPhysTypes, 0 /* initialSize */),
+		valLogTypes:  keepLogTypes,
+		valPhysTypes: keepPhysTypes,
+		valCols:      keepCols,
+		keyTypes:     keyTypes,
+		keyCols:      keys,
+		outCols:      outs,
+		outTypes:     outTypes,
 
 		numBuckets: numBuckets,
 
@@ -241,7 +248,7 @@ func (ht *hashTable) findSameTuples(ctx context.Context) {
 		batchSize := uint16(batchEnd - batchStart)
 
 		for i := 0; i < nKeyCols; i++ {
-			ht.keys[i] = ht.vals.colVecs[ht.keyCols[i]].Window(ht.valTypes[ht.keyCols[i]], batchStart, batchEnd)
+			ht.keys[i] = ht.vals.colVecs[ht.keyCols[i]].Window(ht.valPhysTypes[ht.keyCols[i]], batchStart, batchEnd)
 		}
 
 		ht.lookupInitial(ctx, ht.keyTypes, batchSize, nil)
@@ -274,7 +281,7 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 		for i, colIdx := range ht.valCols {
 			ht.vals.colVecs[i].Append(
 				coldata.SliceArgs{
-					ColType:   ht.valTypes[i],
+					ColType:   ht.valPhysTypes[i],
 					Src:       batch.ColVec(int(colIdx)),
 					Sel:       batch.Selection(),
 					DestIdx:   ht.vals.length,

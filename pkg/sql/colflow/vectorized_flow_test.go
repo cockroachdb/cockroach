@@ -184,7 +184,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		newOutboxFn: func(
 			allocator *colexec.Allocator,
 			op colexec.Operator,
-			typs []coltypes.T,
+			physTypes []coltypes.T,
 			sources []execinfrapb.MetadataSource,
 		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
@@ -195,11 +195,11 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, op, typs, sources)
+			return colrpc.NewOutbox(allocator, op, physTypes, sources)
 		},
-		newInboxFn: func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
-			inboxToNumInputTypes[inbox] = typs
+		newInboxFn: func(allocator *colexec.Allocator, physTypes []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+			inbox, err := colrpc.NewInbox(allocator, physTypes, streamID)
+			inboxToNumInputTypes[inbox] = physTypes
 			return inbox, err
 		},
 	}

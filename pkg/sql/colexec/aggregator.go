@@ -107,9 +107,8 @@ type orderedAggregator struct {
 	allocator *Allocator
 	done      bool
 
-	aggCols  [][]uint32
-	aggTypes [][]coltypes.T
-
+	aggCols     [][]uint32
+	logTypes    []types.T
 	outputTypes []coltypes.T
 
 	// scratch is the Batch to output and variables related to it. Aggregate
@@ -158,7 +157,7 @@ var _ Operator = &orderedAggregator{}
 func NewOrderedAggregator(
 	allocator *Allocator,
 	input Operator,
-	colTypes []coltypes.T,
+	logTypes []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
@@ -173,9 +172,7 @@ func NewOrderedAggregator(
 			)
 	}
 
-	aggTypes := extractAggTypes(aggCols, colTypes)
-
-	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, colTypes)
+	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, logTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -206,12 +203,14 @@ func NewOrderedAggregator(
 
 		allocator: allocator,
 		aggCols:   aggCols,
-		aggTypes:  aggTypes,
+		logTypes:  logTypes,
 		groupCol:  groupCol,
 		isScalar:  isScalar,
 	}
 
-	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
+	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(
+		a.allocator, logTypes, aggCols, aggFns,
+	)
 
 	if err != nil {
 		return nil, errors.AssertionFailedf(
@@ -223,7 +222,10 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	allocator *Allocator, aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
+	allocator *Allocator,
+	logTypes []types.T,
+	aggCols [][]uint32,
+	aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]aggregateFunc, []coltypes.T, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
 	outTyps := make([]coltypes.T, len(aggFns))
@@ -232,19 +234,19 @@ func makeAggregateFuncs(
 		var err error
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
-			funcs[i], err = newAnyNotNullAgg(allocator, aggTyps[i][0])
+			funcs[i], err = newAnyNotNullAgg(allocator, &logTypes[aggCols[i][0]])
 		case execinfrapb.AggregatorSpec_AVG:
-			funcs[i], err = newAvgAgg(aggTyps[i][0])
+			funcs[i], err = newAvgAgg(&logTypes[aggCols[i][0]])
 		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
-			funcs[i], err = newSumAgg(aggTyps[i][0])
+			funcs[i], err = newSumAgg(&logTypes[aggCols[i][0]])
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			funcs[i] = newCountRowAgg()
 		case execinfrapb.AggregatorSpec_COUNT:
 			funcs[i] = newCountAgg()
 		case execinfrapb.AggregatorSpec_MIN:
-			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
+			funcs[i], err = newMinAgg(allocator, &logTypes[aggCols[i][0]])
 		case execinfrapb.AggregatorSpec_MAX:
-			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
+			funcs[i], err = newMaxAgg(allocator, &logTypes[aggCols[i][0]])
 		case execinfrapb.AggregatorSpec_BOOL_AND:
 			funcs[i] = newBoolAndAgg()
 		case execinfrapb.AggregatorSpec_BOOL_OR:
@@ -261,7 +263,7 @@ func makeAggregateFuncs(
 			outTyps[i] = coltypes.Int64
 		default:
 			// Output types are the input types for now.
-			outTyps[i] = aggTyps[i][0]
+			outTyps[i] = typeconv.FromColumnType(&logTypes[aggCols[i][0]])
 		}
 
 		if err != nil {
@@ -430,34 +432,23 @@ func (a *orderedAggregator) reset() {
 	}
 }
 
-// extractAggTypes returns a nested array representing the input types
-// corresponding to each aggregation function.
-func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
-	aggTyps := make([][]coltypes.T, len(aggCols))
-
-	for aggIdx := range aggCols {
-		aggTyps[aggIdx] = make([]coltypes.T, len(aggCols[aggIdx]))
-		for i, colIdx := range aggCols[aggIdx] {
-			aggTyps[aggIdx][i] = colTypes[colIdx]
-		}
-	}
-
-	return aggTyps
-}
-
 // isAggregateSupported returns whether the aggregate function that operates on
-// columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
+// columns of types 'logTypes' (which can be empty in case of COUNT_ROWS) is
 // supported.
 func isAggregateSupported(
-	aggFn execinfrapb.AggregatorSpec_Func, inputTypes []types.T,
+	aggFn execinfrapb.AggregatorSpec_Func, logTypes []types.T, aggInputCols []uint32,
 ) (bool, error) {
-	aggTypes, err := typeconv.FromColumnTypes(inputTypes)
+	aggArgLogTypes := make([]types.T, len(aggInputCols))
+	for i, colIdx := range aggInputCols {
+		aggArgLogTypes[i] = logTypes[colIdx]
+	}
+	_, err := typeconv.FromColumnTypes(aggArgLogTypes)
 	if err != nil {
 		return false, err
 	}
 	switch aggFn {
 	case execinfrapb.AggregatorSpec_SUM:
-		switch inputTypes[0].Family() {
+		switch aggArgLogTypes[0].Family() {
 		case types.IntFamily:
 			// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 			// at the end, mod issues with overflow. Perhaps to avoid the overflow
@@ -466,19 +457,19 @@ func isAggregateSupported(
 		}
 	case execinfrapb.AggregatorSpec_SUM_INT:
 		// TODO(yuzefovich): support this case through vectorize.
-		if inputTypes[0].Width() != 64 {
+		if aggArgLogTypes[0].Width() != 64 {
 			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
 		}
 	}
 	_, outputTypes, err := makeAggregateFuncs(
 		nil, /* allocator */
-		[][]coltypes.T{aggTypes},
+		logTypes, [][]uint32{aggInputCols},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
 	if err != nil {
 		return false, err
 	}
-	_, retType, err := execinfrapb.GetAggregateInfo(aggFn, inputTypes...)
+	_, retType, err := execinfrapb.GetAggregateInfo(aggFn, aggArgLogTypes...)
 	if err != nil {
 		return false, err
 	}

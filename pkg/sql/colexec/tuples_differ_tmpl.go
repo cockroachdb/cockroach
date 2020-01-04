@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -66,14 +68,14 @@ func _ASSIGN_NE(_, _, _ string) bool {
 // tuplesDiffer takes in two ColVecs as well as tuple indices to check whether
 // the tuples differ.
 func tuplesDiffer(
-	t coltypes.T,
+	logType *types.T,
 	aColVec coldata.Vec,
 	aTupleIdx int,
 	bColVec coldata.Vec,
 	bTupleIdx int,
 	differ *bool,
 ) error {
-	switch t {
+	switch typeconv.FromColumnType(logType) {
 	// {{range .}}
 	case _TYPES_T:
 		aCol := aColVec._TemplateType()
@@ -86,6 +88,6 @@ func tuplesDiffer(
 		return nil
 	// {{end}}
 	default:
-		return errors.Errorf("unsupported tuplesDiffer type %s", t)
+		return errors.Errorf("unsupported tuplesDiffer type %s", logType)
 	}
 }

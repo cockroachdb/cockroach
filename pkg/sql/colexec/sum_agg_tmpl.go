@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -41,6 +43,9 @@ var _ tree.Datum
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
+
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _ string) {
@@ -49,14 +54,14 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newSumAgg(t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newSumAgg(logType *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(logType) {
 	// {{range .}}
 	case _TYPES_T:
-		return &sum_TYPEAgg{}, nil
+		return &sum_TYPEAgg{logType: logType}, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported sum agg type %s", t)
+		return nil, errors.Errorf("unsupported sum agg type %s", logType)
 	}
 }
 
@@ -66,6 +71,7 @@ type sum_TYPEAgg struct {
 	done bool
 
 	groups  []bool
+	logType *types.T
 	scratch struct {
 		curIdx int
 		// curAgg holds the running total, so we can index into the slice once per

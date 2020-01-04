@@ -19,16 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewSortChunks returns a new sort chunks operator, which sorts its input on
-// the columns given in orderingCols. The inputTypes must correspond 1-1 with
+// the columns given in orderingCols. The physTypes must correspond 1-1 with
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
 ) (Operator, error) {
@@ -38,11 +40,11 @@ func NewSortChunks(
 				"already ordered on at least one column but not fully ordered; "+
 				"num ordering cols = %d, matchLen = %d", len(orderingCols), matchLen))
 	}
-	chunker, err := newChunker(allocator, input, inputTypes, orderingCols[:matchLen])
+	chunker, err := newChunker(allocator, input, logTypes, physTypes, orderingCols[:matchLen])
 	if err != nil {
 		return nil, err
 	}
-	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:])
+	sorter, err := newSorter(allocator, chunker, logTypes, physTypes, orderingCols[matchLen:])
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,7 @@ var _ bufferingInMemoryOperator = &sortChunksOp{}
 func (c *sortChunksOp) Init() {
 	c.input.init()
 	c.sorter.Init()
-	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, int(coldata.BatchSize()))
+	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.physTypes, int(coldata.BatchSize()))
 }
 
 func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
@@ -110,7 +112,7 @@ func (c *sortChunksOp) ExportBuffered(Operator) coldata.Batch {
 			if newExportedFromBuffer > c.input.bufferedTuples.length {
 				newExportedFromBuffer = c.input.bufferedTuples.length
 			}
-			for i, t := range c.input.inputTypes {
+			for i, t := range c.input.physTypes {
 				window := c.input.bufferedTuples.colVecs[i].Window(t, c.exportedFromBuffer, newExportedFromBuffer)
 				c.windowedBatch.ReplaceCol(window, i)
 			}
@@ -125,7 +127,7 @@ func (c *sortChunksOp) ExportBuffered(Operator) coldata.Batch {
 	// batch that hasn't been "processed" and should be the first to be exported.
 	firstTupleIdx := c.input.exportState.numProcessedTuplesFromBatch
 	if c.input.batch != nil && firstTupleIdx+c.exportedFromBatch < c.input.batch.Length() {
-		makeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.inputTypes)
+		makeWindowIntoBatch(c.windowedBatch, c.input.batch, firstTupleIdx, c.input.physTypes)
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}
@@ -193,8 +195,10 @@ type chunker struct {
 	NonExplainable
 
 	allocator *Allocator
-	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	// logTypes and physTypes contains the types of all of the columns from
+	// input.
+	logTypes  []types.T
+	physTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
 	// alreadySortedCols indicates the columns on which the input is already
@@ -245,22 +249,24 @@ var _ spooler = &chunker{}
 func newChunker(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	alreadySortedCols []execinfrapb.Ordering_Column,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(inputTypes[col.ColIdx])
+		partitioners[i], err = newPartitioner(&logTypes[col.ColIdx])
 		if err != nil {
 			return nil, err
 		}
 	}
-	deselector := NewDeselectorOp(allocator, input, inputTypes)
+	deselector := NewDeselectorOp(allocator, input, physTypes)
 	return &chunker{
 		OneInputNode:      NewOneInputNode(deselector),
 		allocator:         allocator,
-		inputTypes:        inputTypes,
+		logTypes:          logTypes,
+		physTypes:         physTypes,
 		alreadySortedCols: alreadySortedCols,
 		partitioners:      partitioners,
 		state:             chunkerReading,
@@ -269,7 +275,7 @@ func newChunker(
 
 func (s *chunker) init() {
 	s.input.Init()
-	s.bufferedTuples = newBufferedBatch(s.allocator, s.inputTypes, 0 /* initialSize */)
+	s.bufferedTuples = newBufferedBatch(s.allocator, s.physTypes, 0 /* initialSize */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]uint64, 0, 16)
 }
@@ -335,7 +341,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 				differ := false
 				for _, col := range s.alreadySortedCols {
 					if err := tuplesDiffer(
-						s.inputTypes[col.ColIdx],
+						&s.logTypes[col.ColIdx],
 						s.bufferedTuples.colVecs[col.ColIdx],
 						0, /*aTupleIdx */
 						s.batch.ColVec(int(col.ColIdx)),
@@ -417,7 +423,7 @@ func (s *chunker) buffer(start uint16, end uint16) {
 		for i := 0; i < len(s.bufferedTuples.colVecs); i++ {
 			s.bufferedTuples.colVecs[i].Append(
 				coldata.SliceArgs{
-					ColType:     s.inputTypes[i],
+					ColType:     s.physTypes[i],
 					Src:         s.batch.ColVec(i),
 					DestIdx:     s.bufferedTuples.length,
 					SrcStartIdx: uint64(start),
@@ -436,9 +442,9 @@ func (s *chunker) spool(ctx context.Context) {
 func (s *chunker) getValues(i int) coldata.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
-		return s.bufferedTuples.colVecs[i].Window(s.inputTypes[i], 0 /* start */, s.bufferedTuples.length)
+		return s.bufferedTuples.colVecs[i].Window(s.physTypes[i], 0 /* start */, s.bufferedTuples.length)
 	case chunkerReadFromBatch:
-		return s.batch.ColVec(i).Window(s.inputTypes[i], s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
+		return s.batch.ColVec(i).Window(s.physTypes[i], s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected chunkerReadingState in getValues: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.

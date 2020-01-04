@@ -32,7 +32,9 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -57,6 +59,9 @@ var _ tree.Datum
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
 
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
@@ -87,8 +92,9 @@ type vecComparator interface {
 
 // {{range .}}
 type _TYPEVecComparator struct {
-	vecs  []_GOTYPESLICE
-	nulls []*coldata.Nulls
+	vecs    []_GOTYPESLICE
+	nulls   []*coldata.Nulls
+	logType *types.T
 }
 
 func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int {
@@ -135,17 +141,18 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16
 
 // {{end}}
 
-func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
-	switch t {
+func GetVecComparator(logType *types.T, numVecs int) vecComparator {
+	switch typeconv.FromColumnType(logType) {
 	// {{range .}}
 	case coltypes._TYPE:
 		return &_TYPEVecComparator{
-			vecs:  make([]_GOTYPESLICE, numVecs),
-			nulls: make([]*coldata.Nulls, numVecs),
+			vecs:    make([]_GOTYPESLICE, numVecs),
+			nulls:   make([]*coldata.Nulls, numVecs),
+			logType: logType,
 		}
 		// {{end}}
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %v", t))
+	execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %v", logType))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const (
@@ -27,19 +28,21 @@ const (
 )
 
 // NewTopKSorter returns a new sort operator, which sorts its input on the
-// columns given in orderingCols and returns the first K rows. The inputTypes
+// columns given in orderingCols and returns the first K rows. The logTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
 ) Operator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
-		inputTypes:   inputTypes,
+		logTypes:     logTypes,
+		physTypes:    physTypes,
 		orderingCols: orderingCols,
 		k:            k,
 	}
@@ -64,7 +67,8 @@ type topKSorter struct {
 
 	allocator    *Allocator
 	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []coltypes.T
+	logTypes     []types.T
+	physTypes    []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.
@@ -93,13 +97,12 @@ type topKSorter struct {
 
 func (t *topKSorter) Init() {
 	t.input.Init()
-	t.topK = t.allocator.NewMemBatchWithSize(t.inputTypes, 0 /* size */)
-	t.comparators = make([]vecComparator, len(t.inputTypes))
-	for i := range t.inputTypes {
-		typ := t.inputTypes[i]
-		t.comparators[i] = GetVecComparator(typ, 2)
+	t.topK = t.allocator.NewMemBatchWithSize(t.physTypes, 0 /* size */)
+	t.comparators = make([]vecComparator, len(t.physTypes))
+	for i, typ := range t.logTypes {
+		t.comparators[i] = GetVecComparator(&typ, 2)
 	}
-	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, int(coldata.BatchSize()))
+	t.windowedBatch = coldata.NewMemBatchNoCols(t.physTypes, int(coldata.BatchSize()))
 }
 
 func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
@@ -138,10 +141,10 @@ func (t *topKSorter) spool(ctx context.Context) {
 		}
 		t.firstUnprocessedTupleIdx = fromLength
 		t.allocator.PerformOperation(t.topK.ColVecs(), func() {
-			for i := range t.inputTypes {
+			for i := range t.physTypes {
 				destVec := t.topK.ColVec(i)
 				vec := t.inputBatch.ColVec(i)
-				colType := t.inputTypes[i]
+				colType := t.physTypes[i]
 				destVec.Append(
 					coldata.SliceArgs{
 						ColType:   colType,
@@ -185,7 +188,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 					}
 					maxIdx := t.heap[0]
 					if t.compareRow(inputVecIdx, topKVecIdx, idx, maxIdx) < 0 {
-						for j := range t.inputTypes {
+						for j := range t.physTypes {
 							t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 						}
 						heap.Fix(t, 0)
@@ -210,7 +213,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 
 func (t *topKSorter) resetOutput() {
 	if t.output == nil {
-		t.output = t.allocator.NewMemBatchWithSize(t.inputTypes, int(coldata.BatchSize()))
+		t.output = t.allocator.NewMemBatchWithSize(t.physTypes, int(coldata.BatchSize()))
 	} else {
 		t.output.ResetInternalBatch()
 	}
@@ -226,7 +229,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	for i := range t.inputTypes {
+	for i := range t.physTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do
 		// this Copy outside of the allocator - the work has been done, but
@@ -236,7 +239,7 @@ func (t *topKSorter) emit() coldata.Batch {
 		vec.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:     t.inputTypes[i],
+					ColType:     t.physTypes[i],
 					Src:         t.topK.ColVec(i),
 					Sel:         t.sel,
 					SrcStartIdx: uint64(t.emitted),
@@ -269,7 +272,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) i
 }
 
 func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
-	for i := range t.inputTypes {
+	for i := range t.physTypes {
 		t.comparators[i].setVec(vecIdx, batch.ColVec(i))
 	}
 }
@@ -282,7 +285,7 @@ func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
 		if newExportedFromTopK > topKLen {
 			newExportedFromTopK = topKLen
 		}
-		for i, typ := range t.inputTypes {
+		for i, typ := range t.physTypes {
 			window := t.topK.ColVec(i).Window(typ, t.exportedFromTopK, newExportedFromTopK)
 			t.windowedBatch.ReplaceCol(window, i)
 		}
@@ -294,7 +297,7 @@ func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
 	// Next, we check whether we have exported all tuples from the last read
 	// batch.
 	if t.inputBatch != nil && t.firstUnprocessedTupleIdx+t.exportedFromBatch < t.inputBatch.Length() {
-		makeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.inputTypes)
+		makeWindowIntoBatch(t.windowedBatch, t.inputBatch, t.firstUnprocessedTupleIdx, t.physTypes)
 		t.exportedFromBatch = t.windowedBatch.Length()
 		return t.windowedBatch
 	}

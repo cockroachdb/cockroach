@@ -28,18 +28,20 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newAnyNotNullAgg(allocator *Allocator, logType *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(logType) {
 	// {{range .}}
 	case _TYPES_T:
 		return &anyNotNull_TYPEAgg{allocator: allocator}, nil
 		// {{end}}
 	default:
-		return nil, errors.Errorf("unsupported any not null agg type %s", t)
+		return nil, errors.Errorf("unsupported any not null agg type %s", logType)
 	}
 }
 

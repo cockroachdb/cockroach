@@ -27,21 +27,21 @@ import (
 // semtype ct. Note that this function handles nulls as well, so there is no
 // need for a separate null check.
 func PhysicalTypeColElemToDatum(
-	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct *types.T,
+	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, logType *types.T,
 ) tree.Datum {
 	if col.MaybeHasNulls() {
 		if col.Nulls().NullAt(rowIdx) {
 			return tree.DNull
 		}
 	}
-	switch ct.Family() {
+	switch logType.Family() {
 	case types.BoolFamily:
 		if col.Bool()[rowIdx] {
 			return tree.DBoolTrue
 		}
 		return tree.DBoolFalse
 	case types.IntFamily:
-		switch ct.Width() {
+		switch logType.Width() {
 		case 16:
 			return da.NewDInt(tree.DInt(col.Int16()[rowIdx]))
 		case 32:
@@ -57,7 +57,7 @@ func PhysicalTypeColElemToDatum(
 		return tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 	case types.StringFamily:
 		b := col.Bytes().Get(int(rowIdx))
-		if ct.Oid() == oid.T_name {
+		if logType.Oid() == oid.T_name {
 			return da.NewDName(tree.DString(string(b)))
 		}
 		return da.NewDString(tree.DString(string(b)))
@@ -78,7 +78,7 @@ func PhysicalTypeColElemToDatum(
 	case types.IntervalFamily:
 		return da.NewDInterval(tree.DInterval{Duration: col.Interval()[rowIdx]})
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", logType.String()))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

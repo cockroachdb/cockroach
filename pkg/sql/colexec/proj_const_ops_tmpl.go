@@ -202,8 +202,8 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
 	allocator *Allocator,
-	leftColType *types.T,
-	rightColType *types.T,
+	leftLogType *types.T,
+	rightLogType *types.T,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
@@ -217,17 +217,21 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:    outputIdx,
 	}
 	// {{if _IS_CONST_LEFT}}
-	c, err := typeconv.GetDatumToPhysicalFn(leftColType)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(leftLogType)(constArg)
+	projConstOpBase.constLogType = leftLogType
+	projConstOpBase.colLogType = rightLogType
 	// {{else}}
-	c, err := typeconv.GetDatumToPhysicalFn(rightColType)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(rightLogType)(constArg)
+	projConstOpBase.constLogType = rightLogType
+	projConstOpBase.colLogType = leftLogType
 	// {{end}}
 	if err != nil {
 		return nil, err
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftPhysType := typeconv.FromColumnType(leftLogType); leftPhysType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch rightPhysType := typeconv.FromColumnType(rightLogType); rightPhysType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch op.(type) {
@@ -272,10 +276,10 @@ func GetProjection_CONST_SIDEConstOperator(
 			}
 		// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
+			return nil, errors.Errorf("unhandled right type: %s", rightPhysType)
 		}
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
+		return nil, errors.Errorf("unhandled left type: %s", leftPhysType)
 	}
 }

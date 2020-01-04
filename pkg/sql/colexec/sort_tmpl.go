@@ -33,8 +33,10 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -81,8 +83,8 @@ func _ASSIGN_LT(_, _, _ string) bool {
 
 // */}}
 
-func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
-	switch t {
+func isSorterSupported(logType *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
+	switch typeconv.FromColumnType(logType) {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
 		switch dir {
@@ -100,9 +102,9 @@ func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) 
 }
 
 func newSingleSorter(
-	t coltypes.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
+	logType *types.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
 ) colSorter {
-	switch t {
+	switch typeconv.FromColumnType(logType) {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
 		switch hasNulls {
@@ -111,7 +113,7 @@ func newSingleSorter(
 			switch dir {
 			// {{range .Overloads}} {{/* for each direction */}}
 			case _DIR_ENUM:
-				return &sort_TYPE_DIR_HANDLES_NULLSOp{}
+				return &sort_TYPE_DIR_HANDLES_NULLSOp{logType: logType}
 			// {{end}}
 			default:
 				execerror.VectorizedInternalPanic("nulls switch failed")
@@ -134,6 +136,7 @@ func newSingleSorter(
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 	sortCol       _GOTYPESLICE
+	logType       *types.T
 	nulls         *coldata.Nulls
 	order         []uint64
 	cancelChecker CancelChecker

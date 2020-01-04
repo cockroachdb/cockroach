@@ -175,6 +175,8 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 type selConstOpBase struct {
 	OneInputNode
 	colIdx         int
+	colLogType     *types.T
+	constLogType   *types.T
 	decimalScratch decimalOverloadScratch
 }
 
@@ -183,6 +185,8 @@ type selOpBase struct {
 	OneInputNode
 	col1Idx        int
 	col2Idx        int
+	col1LogType    *types.T
+	col2LogType    *types.T
 	decimalScratch decimalOverloadScratch
 }
 
@@ -289,25 +293,27 @@ func (p *_OP_NAME) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	leftColType *types.T,
-	constColType *types.T,
+	colLogType *types.T,
+	constLogType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := typeconv.GetDatumToPhysicalFn(constColType)(constArg)
+	c, err := typeconv.GetDatumToPhysicalFn(constLogType)(constArg)
 	if err != nil {
 		return nil, err
 	}
 	selConstOpBase := selConstOpBase{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
+		colLogType:   colLogType,
+		constLogType: constLogType,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftPhysType := typeconv.FromColumnType(colLogType); leftPhysType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(constColType); rightType {
+		switch rightPhysType := typeconv.FromColumnType(constLogType); rightPhysType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch cmpOp {
@@ -320,19 +326,19 @@ func GetSelectionConstOperator(
 			}
 			// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
+			return nil, errors.Errorf("unhandled right type: %s", rightPhysType)
 		}
 		// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
+		return nil, errors.Errorf("unhandled left type: %s", leftPhysType)
 	}
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	leftColType *types.T,
-	rightColType *types.T,
+	leftLogType *types.T,
+	rightLogType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	col1Idx int,
@@ -342,11 +348,13 @@ func GetSelectionOperator(
 		OneInputNode: NewOneInputNode(input),
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
+		col1LogType:  leftLogType,
+		col2LogType:  rightLogType,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch leftPhysType := typeconv.FromColumnType(leftLogType); leftPhysType {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch rightPhysType := typeconv.FromColumnType(rightLogType); rightPhysType {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch cmpOp {
@@ -359,10 +367,10 @@ func GetSelectionOperator(
 			}
 			// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
+			return nil, errors.Errorf("unhandled right type: %s", rightPhysType)
 		}
 		// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
+		return nil, errors.Errorf("unhandled left type: %s", leftPhysType)
 	}
 }

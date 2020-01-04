@@ -78,13 +78,13 @@ func BenchmarkDeselector(b *testing.B) {
 	ctx := context.Background()
 
 	nCols := 1
-	inputTypes := make([]coltypes.T, nCols)
+	physTypes := make([]coltypes.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		inputTypes[colIdx] = coltypes.Int64
+		physTypes[colIdx] = coltypes.Int64
 	}
 
-	batch := testAllocator.NewMemBatch(inputTypes)
+	batch := testAllocator.NewMemBatch(physTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
@@ -104,7 +104,7 @@ func BenchmarkDeselector(b *testing.B) {
 				copy(batch.Selection(), sel)
 				batch.SetLength(batchLen)
 				input := NewRepeatableBatchSource(testAllocator, batch)
-				op := NewDeselectorOp(testAllocator, input, inputTypes)
+				op := NewDeselectorOp(testAllocator, input, physTypes)
 				op.Init()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

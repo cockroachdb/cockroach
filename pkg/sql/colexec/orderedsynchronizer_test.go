@@ -18,9 +18,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Adapted from the same-named test in the rowflow package.
@@ -137,16 +140,19 @@ func TestOrderedSync(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		numCols := len(tc.sources[0][0])
-		columnTypes := make([]coltypes.T, numCols)
-		for i := range columnTypes {
-			columnTypes[i] = coltypes.Int64
+		logTypes := make([]types.T, numCols)
+		for i := range logTypes {
+			logTypes[i] = *types.Int
 		}
+		physTypes, err := typeconv.FromColumnTypes(logTypes)
+		require.NoError(t, err)
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []Operator) (Operator, error) {
 			return &OrderedSynchronizer{
-				allocator:   testAllocator,
-				inputs:      inputs,
-				ordering:    tc.ordering,
-				columnTypes: columnTypes,
+				allocator: testAllocator,
+				inputs:    inputs,
+				ordering:  tc.ordering,
+				logTypes:  logTypes,
+				physTypes: physTypes,
 			}, nil
 		})
 	}
@@ -195,7 +201,8 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 				Direction: encoding.Ascending,
 			},
 		},
-		columnTypes: []coltypes.T{coltypes.Int64},
+		logTypes:  []types.T{*types.Int},
+		physTypes: []coltypes.T{coltypes.Int64},
 	}
 	op.Init()
 	out := newOpTestOutput(&op, expected)
@@ -229,7 +236,8 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},
 		},
-		columnTypes: []coltypes.T{coltypes.Int64},
+		logTypes:  []types.T{*types.Int},
+		physTypes: []coltypes.T{coltypes.Int64},
 	}
 	op.Init()
 

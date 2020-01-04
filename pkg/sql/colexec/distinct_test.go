@@ -17,21 +17,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
 		distinctCols []uint32
-		colTypes     []coltypes.T
+		logTypes     []types.T
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
+			logTypes:     []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
@@ -54,7 +57,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{1, 0, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
+			logTypes:     []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
@@ -77,7 +80,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []coltypes.T{coltypes.Float64, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
+			logTypes:     []types.T{*types.Float, *types.Int, *types.Bytes, *types.Int},
 			tuples: tuples{
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 4},
@@ -103,11 +106,15 @@ func TestDistinct(t *testing.T) {
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
+				return NewOrderedDistinct(input[0], tc.distinctCols, tc.logTypes)
 			})
 		runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.colTypes), nil
+				physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
+				if err != nil {
+					return nil, err
+				}
+				return NewUnorderedDistinct(testAllocator, input[0], tc.distinctCols, tc.logTypes, physTypes), nil
 			})
 	}
 }
@@ -116,7 +123,10 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	logTypes := []types.T{*types.Int, *types.Int, *types.Int}
+	physTypes, err := typeconv.FromColumnTypes(logTypes)
+	require.NoError(b, err)
+	batch := testAllocator.NewMemBatch(physTypes)
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
@@ -136,7 +146,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	source := NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, logTypes)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -170,21 +180,25 @@ func BenchmarkUnorderedDistinct(b *testing.B) {
 					fmt.Sprintf(
 						"numCols=%d/nulls=%t/numBatches=%d", numCols, nulls, numBatches,
 					), func(b *testing.B) {
-						var typs []coltypes.T
-						var distinctCols []uint32
+						var (
+							logTypes     []types.T
+							physTypes    []coltypes.T
+							distinctCols []uint32
+						)
 						for i := 0; i < numCols; i++ {
-							typs = append(typs, coltypes.Int64)
+							logTypes = append(logTypes, *types.Int)
+							physTypes = append(physTypes, coltypes.Int64)
 							distinctCols = append(distinctCols, uint32(i))
 						}
 						b.SetBytes(int64(8 * int(coldata.BatchSize()) * numCols * numBatches))
 						b.ResetTimer()
 						for i := 0; i < b.N; i++ {
 							source := NewRandomDataOp(testAllocator, rng, RandomDataOpArgs{
-								DeterministicTyps: typs,
+								DeterministicTyps: physTypes,
 								Nulls:             nulls,
 								NumBatches:        numBatches,
 							})
-							distinct := NewUnorderedDistinct(testAllocator, source, distinctCols, typs)
+							distinct := NewUnorderedDistinct(testAllocator, source, distinctCols, logTypes, physTypes)
 							b.StartTimer()
 							for b := distinct.Next(ctx); b.Length() != 0; b = distinct.Next(ctx) {
 							}

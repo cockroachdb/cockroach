@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for mergejoinerbase.eg.go. It's formatted
+// This file is the execgen template for mergejoinbase.eg.go. It's formatted
 // in a special way, so it's both valid Go and a valid text/template input.
 // This permits editing this file with editor support.
 //
@@ -96,9 +96,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		colTyp := input.sourceTypes[colIdx]
+		physType := input.physTypes[colIdx]
 
-		switch colTyp {
+		switch physType {
 		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the last
@@ -124,7 +124,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colTyp))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
 		}
 	}
 	return false

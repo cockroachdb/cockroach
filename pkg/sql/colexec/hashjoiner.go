@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -63,9 +64,10 @@ type hashJoinerSourceSpec struct {
 	// hash joiner.
 	outCols []uint32
 
-	// sourceTypes specify the types of the input columns of the source table for
-	// the hash joiner.
-	sourceTypes []coltypes.T
+	// logTypes and physTypes specify the types of the input columns of the
+	// source table for the hash joiner.
+	logTypes  []types.T
+	physTypes []coltypes.T
 
 	// outer specifies whether an outer join is required over the input.
 	outer bool
@@ -228,13 +230,14 @@ func (hj *hashJoiner) Init() {
 	hj.ht = newHashTable(
 		hj.allocator,
 		hashTableNumBuckets,
-		hj.spec.right.sourceTypes,
+		hj.spec.right.logTypes,
+		hj.spec.right.physTypes,
 		hj.spec.right.eqCols,
 		hj.spec.right.outCols,
 		false, /* allowNullEquality */
 	)
 
-	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)
+	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.physTypes, 0 /* size */)
 	hj.state = hjBuilding
 }
 
@@ -305,7 +308,7 @@ func (hj *hashJoiner) emitUnmatched() {
 	for outColIdx, inColIdx := range hj.ht.outCols {
 		outCol := outCols[outColIdx]
 		valCol := hj.ht.vals.colVecs[inColIdx]
-		colType := hj.ht.valTypes[inColIdx]
+		colType := hj.ht.valPhysTypes[inColIdx]
 		// NOTE: this Copy is not accounted for because we don't want for memory
 		// limit error to occur at this point - we have already built the hash
 		// table and now are only consuming the left source one batch at a time,
@@ -464,7 +467,7 @@ func (hj *hashJoiner) congregate(nResults uint16, batch coldata.Batch, batchSize
 		for outColIdx, inColIdx := range hj.ht.outCols {
 			outCol := outCols[outColIdx]
 			valCol := hj.ht.vals.colVecs[inColIdx]
-			colType := hj.ht.valTypes[inColIdx]
+			colType := hj.ht.valPhysTypes[inColIdx]
 			// Note that if for some index i, probeRowUnmatched[i] is true, then
 			// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
 			// hash table, but we will set the NULL value below.
@@ -497,7 +500,7 @@ func (hj *hashJoiner) congregate(nResults uint16, batch coldata.Batch, batchSize
 	for outColIdx, inColIdx := range hj.spec.left.outCols {
 		outCol := outCols[outColIdx]
 		valCol := batch.ColVec(int(inColIdx))
-		colType := hj.spec.left.sourceTypes[inColIdx]
+		colType := hj.spec.left.physTypes[inColIdx]
 
 		outCol.Copy(
 			coldata.CopySliceArgs{
@@ -548,7 +551,7 @@ func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
 		b := hj.exportBufferedState.rightWindowedBatch
 		// We don't need to worry about selection vectors on hj.ht.vals because the
 		// tuples have been already selected during building of the hash table.
-		for i, t := range hj.spec.right.sourceTypes {
+		for i, t := range hj.spec.right.physTypes {
 			window := hj.ht.vals.colVecs[i].Window(t, startIdx, endIdx)
 			b.ReplaceCol(window, i)
 		}
@@ -568,10 +571,10 @@ func (hj *hashJoiner) resetOutput() {
 	if hj.output == nil {
 		var outColTypes []coltypes.T
 		for _, probeOutCol := range hj.spec.left.outCols {
-			outColTypes = append(outColTypes, hj.spec.left.sourceTypes[probeOutCol])
+			outColTypes = append(outColTypes, hj.spec.left.physTypes[probeOutCol])
 		}
 		for _, buildOutCol := range hj.spec.right.outCols {
-			outColTypes = append(outColTypes, hj.spec.right.sourceTypes[buildOutCol])
+			outColTypes = append(outColTypes, hj.spec.right.physTypes[buildOutCol])
 		}
 		hj.output = hj.allocator.NewMemBatch(outColTypes)
 	} else {
@@ -607,8 +610,10 @@ func makeHashJoinerSpec(
 	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftLogTypes []types.T,
+	rightLogTypes []types.T,
+	leftPhysTypes []coltypes.T,
+	rightPhysTypes []coltypes.T,
 	rightDistinct bool,
 ) (hashJoinerSpec, error) {
 	var (
@@ -617,11 +622,11 @@ func makeHashJoinerSpec(
 	)
 	// TODO(yuzefovich): get rid of "outCols" entirely and plumb the assumption
 	// of outputting all columns into the hash joiner itself.
-	leftOutCols := make([]uint32, len(leftTypes))
+	leftOutCols := make([]uint32, len(leftPhysTypes))
 	for i := range leftOutCols {
 		leftOutCols[i] = uint32(i)
 	}
-	rightOutCols := make([]uint32, len(rightTypes))
+	rightOutCols := make([]uint32, len(rightPhysTypes))
 	for i := range rightOutCols {
 		rightOutCols[i] = uint32(i)
 	}
@@ -651,16 +656,18 @@ func makeHashJoinerSpec(
 	}
 
 	left := hashJoinerSourceSpec{
-		eqCols:      leftEqCols,
-		outCols:     leftOutCols,
-		sourceTypes: leftTypes,
-		outer:       leftOuter,
+		eqCols:    leftEqCols,
+		outCols:   leftOutCols,
+		logTypes:  leftLogTypes,
+		physTypes: leftPhysTypes,
+		outer:     leftOuter,
 	}
 	right := hashJoinerSourceSpec{
-		eqCols:      rightEqCols,
-		outCols:     rightOutCols,
-		sourceTypes: rightTypes,
-		outer:       rightOuter,
+		eqCols:    rightEqCols,
+		outCols:   rightOutCols,
+		logTypes:  rightLogTypes,
+		physTypes: rightPhysTypes,
+		outer:     rightOuter,
 	}
 	spec = hashJoinerSpec{
 		joinType:      joinType,
@@ -689,7 +696,7 @@ func newHashJoiner(
 	}
 	hj.probeState.keyTypes = make([]coltypes.T, len(spec.left.eqCols))
 	for i, colIdx := range spec.left.eqCols {
-		hj.probeState.keyTypes[i] = spec.left.sourceTypes[colIdx]
+		hj.probeState.keyTypes[i] = spec.left.physTypes[colIdx]
 	}
 	return hj
 }

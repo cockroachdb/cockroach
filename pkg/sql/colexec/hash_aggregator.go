@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -58,9 +60,9 @@ type hashAggregator struct {
 
 	allocator *Allocator
 
-	aggCols  [][]uint32
-	aggTypes [][]coltypes.T
-	aggFuncs []execinfrapb.AggregatorSpec_Func
+	inputLogTypes []types.T
+	aggCols       [][]uint32
+	aggFuncs      []execinfrapb.AggregatorSpec_Func
 
 	outputTypes []coltypes.T
 
@@ -69,10 +71,12 @@ type hashAggregator struct {
 	// corresponds to the group the aggregation function operates on. This is to
 	// handle hash collisions.
 	aggFuncMap hashAggFuncMap
-
-	// valTypes stores the column types of grouping columns and aggregating
-	// columns.
-	valTypes []coltypes.T
+	// valLogTypes stores the logical column types of grouping columns and
+	// aggregating columns.
+	valLogTypes []types.T
+	// valPhysTypes stores the physical column types of grouping columns and
+	// aggregating columns.
+	valPhysTypes []coltypes.T
 
 	// valCols stores the column indices of grouping columns and aggregating
 	// columns.
@@ -156,16 +160,18 @@ var _ Operator = &hashAggregator{}
 func NewHashAggregator(
 	allocator *Allocator,
 	input Operator,
-	colTypes []coltypes.T,
+	logTypes []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
 ) (Operator, error) {
-	aggTyps := extractAggTypes(aggCols, colTypes)
-
 	// Only keep relevant output columns, those that are used as input to an
 	// aggregation.
-	nCols := uint32(len(colTypes))
+	nCols := uint32(len(logTypes))
+	physTypes, err := typeconv.FromColumnTypes(logTypes)
+	if err != nil {
+		return nil, err
+	}
 	var keepCol util.FastIntSet
 
 	// compressed represents a mapping between each original column and its index
@@ -186,10 +192,12 @@ func NewHashAggregator(
 	// Map the corresponding aggCols to the new output column indices.
 	nOutCols := uint32(0)
 	compressedInputCols := make([]uint32, 0)
-	compressedValTypes := make([]coltypes.T, 0)
+	compressedValLogTypes := make([]types.T, 0)
+	compressedValPhysTypes := make([]coltypes.T, 0)
 	keepCol.ForEach(func(i int) {
 		compressedInputCols = append(compressedInputCols, uint32(i))
-		compressedValTypes = append(compressedValTypes, colTypes[i])
+		compressedValLogTypes = append(compressedValLogTypes, logTypes[i])
+		compressedValPhysTypes = append(compressedValPhysTypes, physTypes[i])
 		compressed[i] = nOutCols
 		nOutCols++
 	})
@@ -202,7 +210,7 @@ func NewHashAggregator(
 		}
 	}
 
-	_, outputTypes, err := makeAggregateFuncs(allocator, aggTyps, aggFns)
+	_, outputTypes, err := makeAggregateFuncs(allocator, logTypes, aggCols, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
@@ -211,7 +219,7 @@ func NewHashAggregator(
 
 	groupTypes := make([]coltypes.T, len(groupCols))
 	for i, colIdx := range groupCols {
-		groupTypes[i] = colTypes[colIdx]
+		groupTypes[i] = physTypes[colIdx]
 	}
 
 	// We picked value this as the result of our benchmark.
@@ -221,18 +229,19 @@ func NewHashAggregator(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 
-		aggCols:    mappedAggCols,
-		aggFuncs:   aggFns,
-		aggTypes:   aggTyps,
-		aggFuncMap: make(hashAggFuncMap),
+		inputLogTypes: logTypes,
+		aggCols:       mappedAggCols,
+		aggFuncs:      aggFns,
+		aggFuncMap:    make(hashAggFuncMap),
 
 		batchTupleLimit: tupleLimit,
 
 		state:       hashAggregatorBuffering,
 		outputTypes: outputTypes,
 
-		valTypes: compressedValTypes,
-		valCols:  compressedInputCols,
+		valLogTypes:  compressedValLogTypes,
+		valPhysTypes: compressedValPhysTypes,
+		valCols:      compressedInputCols,
 
 		groupCols:  groupCols,
 		groupTypes: groupTypes,
@@ -248,7 +257,7 @@ func (op *hashAggregator) Init() {
 	// op.batchTupleLimit. This is because we perform checks after appending the
 	// input tuples to the scratch buffer.
 	op.scratch.Batch =
-		op.allocator.NewMemBatchWithSize(op.valTypes, op.batchTupleLimit+int(coldata.BatchSize()))
+		op.allocator.NewMemBatchWithSize(op.valPhysTypes, op.batchTupleLimit+int(coldata.BatchSize()))
 	op.scratch.sels = make(map[uint64][]uint16)
 	op.scratch.group = make([]bool, op.batchTupleLimit+int(coldata.BatchSize()))
 
@@ -357,7 +366,7 @@ func (op *hashAggregator) bufferBatch(ctx context.Context) bool {
 			for i, colIdx := range op.valCols {
 				op.scratch.ColVec(i).Append(
 					coldata.SliceArgs{
-						ColType:   op.valTypes[i],
+						ColType:   op.valPhysTypes[i],
 						Src:       b.ColVec(int(colIdx)),
 						Sel:       b.Selection(),
 						DestIdx:   uint64(op.scratch.Length()),
@@ -381,7 +390,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
-			op.valTypes[colIdx],
+			op.valPhysTypes[colIdx],
 			op.scratch.ColVec(int(colIdx)),
 			uint64(nKeys),
 			nil, /* sel */
@@ -466,7 +475,7 @@ func (op *hashAggregator) onlineAgg() {
 					// performance.
 					keyMappingVecs[keyIdx].Append(coldata.SliceArgs{
 						Src:         scratchBufferVecs[colIdx],
-						ColType:     op.valTypes[colIdx],
+						ColType:     op.valPhysTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
 						SrcStartIdx: uint64(remaining[0]),
 						SrcEndIdx:   uint64(remaining[0] + 1),
@@ -475,7 +484,7 @@ func (op *hashAggregator) onlineAgg() {
 			})
 
 			aggFunc.fns, _, _ =
-				makeAggregateFuncs(op.allocator, op.aggTypes, op.aggFuncs)
+				makeAggregateFuncs(op.allocator, op.inputLogTypes, op.aggCols, op.aggFuncs)
 			op.aggFuncMap[hashCode] = append(op.aggFuncMap[hashCode], aggFunc)
 
 			// Select rest of the tuples that matches the current key. We don't need

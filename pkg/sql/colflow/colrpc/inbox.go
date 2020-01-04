@@ -46,7 +46,7 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	colexec.ZeroInputNode
-	typs []coltypes.T
+	physTypes []coltypes.T
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -117,18 +117,18 @@ var _ colexec.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, physTypes []coltypes.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(physTypes)
 	if err != nil {
 		return nil, err
 	}
-	s, err := colserde.NewRecordBatchSerializer(typs)
+	s, err := colserde.NewRecordBatchSerializer(physTypes)
 	if err != nil {
 		return nil, err
 	}
 	i := &Inbox{
-		typs:       typs,
+		physTypes:  physTypes,
 		converter:  c,
 		serializer: s,
 		streamID:   streamID,
@@ -137,8 +137,8 @@ func NewInbox(
 		timeoutCh:  make(chan error, 1),
 		errCh:      make(chan error, 1),
 	}
-	i.scratch.data = make([]*array.Data, len(typs))
-	i.scratch.b = allocator.NewMemBatch(typs)
+	i.scratch.data = make([]*array.Data, len(physTypes))
+	i.scratch.b = allocator.NewMemBatch(physTypes)
 	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
 	i.stateMu.nextExited = sync.NewCond(&i.stateMu)
 	return i, nil

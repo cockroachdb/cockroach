@@ -71,7 +71,7 @@ func TestTopKSorter(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				return NewTopKSorter(testAllocator, input[0], physTypes, tc.ordCols, tc.k), nil
+				return NewTopKSorter(testAllocator, input[0], tc.logTypes, physTypes, tc.ordCols, tc.k), nil
 			})
 		})
 	}

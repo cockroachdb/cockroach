@@ -79,7 +79,7 @@ const (
 
 func GetInProjectionOperator(
 	allocator *Allocator,
-	ct *types.T,
+	logType *types.T,
 	input Operator,
 	colIdx int,
 	resultIdx int,
@@ -87,7 +87,7 @@ func GetInProjectionOperator(
 	negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch physType := typeconv.FromColumnType(logType); physType {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
@@ -96,38 +96,40 @@ func GetInProjectionOperator(
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
 			negate:       negate,
+			logType:      logType,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(logType, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", physType)
 	}
 }
 
 func GetInOperator(
-	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	logType *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch physType := typeconv.FromColumnType(logType); physType {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &selectInOp_TYPE{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
 			negate:       negate,
+			logType:      logType,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(logType, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", physType)
 	}
 }
 
@@ -139,6 +141,7 @@ type selectInOp_TYPE struct {
 	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
+	logType   *types.T
 }
 
 type projectInOp_TYPE struct {
@@ -149,12 +152,13 @@ type projectInOp_TYPE struct {
 	filterRow []_GOTYPE
 	hasNulls  bool
 	negate    bool
+	logType   *types.T
 }
 
 var _ Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := typeconv.GetDatumToPhysicalFn(ct)
+func fillDatumRow_TYPE(logType *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := typeconv.GetDatumToPhysicalFn(logType)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

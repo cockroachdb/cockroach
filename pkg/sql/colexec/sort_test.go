@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 var sortAllTestCases []sortTestCase
@@ -144,7 +145,7 @@ func TestSort(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return NewSorter(testAllocator, input[0], physTypes, tc.ordCols)
+			return NewSorter(testAllocator, input[0], tc.logTypes, physTypes, tc.ordCols)
 		})
 	}
 }
@@ -155,10 +156,12 @@ func TestSortRandomized(t *testing.T) {
 	nTups := int(coldata.BatchSize()*2 + 1)
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]coltypes.T, maxCols)
-	for i := range typs {
-		typs[i] = coltypes.Int64
+	logTypes := make([]types.T, maxCols)
+	for i := range logTypes {
+		logTypes[i] = *types.Int
 	}
+	physTypes, err := typeconv.FromColumnTypes(logTypes)
+	require.NoError(t, err)
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 			for _, k := range []uint16{0, uint16(rng.Intn(nTups)) + 1} {
@@ -171,9 +174,9 @@ func TestSortRandomized(t *testing.T) {
 					}
 					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []Operator) (Operator, error) {
 						if topK {
-							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
+							return NewTopKSorter(testAllocator, input[0], logTypes[:nCols], physTypes[:nCols], ordCols, k), nil
 						}
-						return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
+						return NewSorter(testAllocator, input[0], logTypes[:nCols], physTypes[:nCols], ordCols)
 					})
 				})
 			}
@@ -291,11 +294,13 @@ func BenchmarkSort(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
 					b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols))
-					typs := make([]coltypes.T, nCols)
-					for i := range typs {
-						typs[i] = coltypes.Int64
+					logTypes := make([]types.T, nCols)
+					for i := range logTypes {
+						logTypes[i] = *types.Int
 					}
-					batch := testAllocator.NewMemBatch(typs)
+					physTypes, err := typeconv.FromColumnTypes(logTypes)
+					require.NoError(b, err)
+					batch := testAllocator.NewMemBatch(physTypes)
 					batch.SetLength(coldata.BatchSize())
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
@@ -312,10 +317,10 @@ func BenchmarkSort(b *testing.B) {
 						source := newFiniteBatchSource(batch, nBatches)
 						var sorter Operator
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
+							sorter = NewTopKSorter(testAllocator, source, logTypes, physTypes, ordCols, k)
 						} else {
 							var err error
-							sorter, err = NewSorter(testAllocator, source, typs, ordCols)
+							sorter, err = NewSorter(testAllocator, source, logTypes, physTypes, ordCols)
 							if err != nil {
 								b.Fatal(err)
 							}

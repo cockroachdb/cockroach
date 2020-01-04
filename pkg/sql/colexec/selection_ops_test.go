@@ -38,6 +38,8 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 			selConstOpBase: selConstOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
 				colIdx:       0,
+				colLogType:   types.Int,
+				constLogType: types.Int,
 			},
 			constArg: 2,
 		}, nil
@@ -61,6 +63,8 @@ func TestSelLTInt64Int64(t *testing.T) {
 				OneInputNode: NewOneInputNode(input[0]),
 				col1Idx:      0,
 				col2Idx:      1,
+				col1LogType:  types.Int,
+				col2LogType:  types.Int,
 			},
 		}, nil
 	})
@@ -73,7 +77,8 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
-	op, err := GetSelectionConstOperator(types.Date, types.Date, cmpOp, input, colIdx, constArg)
+	logType := types.Date
+	op, err := GetSelectionConstOperator(logType, logType, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -81,6 +86,8 @@ func TestGetSelectionConstOperator(t *testing.T) {
 		selConstOpBase: selConstOpBase{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
+			colLogType:   logType,
+			constLogType: logType,
 		},
 		constArg: constVal,
 	}
@@ -96,7 +103,8 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
-	op, err := GetSelectionConstOperator(types.Int, types.Int2, cmpOp, input, colIdx, constArg)
+	colLogType, constLogType := types.Int, types.Int2
+	op, err := GetSelectionConstOperator(colLogType, constLogType, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -104,6 +112,8 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 		selConstOpBase: selConstOpBase{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
+			colLogType:   colLogType,
+			constLogType: constLogType,
 		},
 		constArg: constVal,
 	}
@@ -114,12 +124,12 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 
 func TestGetSelectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ct := types.Int2
+	logType := types.Int2
 	cmpOp := tree.GE
 	var input Operator
 	col1Idx := 5
 	col2Idx := 7
-	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx)
+	op, err := GetSelectionOperator(logType, logType, cmpOp, input, col1Idx, col2Idx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -128,6 +138,8 @@ func TestGetSelectionOperator(t *testing.T) {
 			OneInputNode: NewOneInputNode(input),
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
+			col1LogType:  logType,
+			col2LogType:  logType,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -169,6 +181,8 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 		selConstOpBase: selConstOpBase{
 			OneInputNode: NewOneInputNode(source),
 			colIdx:       0,
+			colLogType:   types.Int,
+			constLogType: types.Int,
 		},
 		constArg: 0,
 	}
@@ -230,6 +244,8 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 			OneInputNode: NewOneInputNode(source),
 			col1Idx:      0,
 			col2Idx:      1,
+			col1LogType:  types.Int,
+			col2LogType:  types.Int,
 		},
 	}
 	plusOp.Init()

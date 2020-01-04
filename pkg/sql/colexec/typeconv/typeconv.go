@@ -25,8 +25,8 @@ import (
 // FromColumnType returns the T that corresponds to the input ColumnType.
 // Note: if you're adding a new type here, add it to
 // colexec.allSupportedSQLTypes as well.
-func FromColumnType(ct *types.T) coltypes.T {
-	switch ct.Family() {
+func FromColumnType(logType *types.T) coltypes.T {
+	switch logType.Family() {
 	case types.BoolFamily:
 		return coltypes.Bool
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
@@ -36,7 +36,7 @@ func FromColumnType(ct *types.T) coltypes.T {
 	case types.DecimalFamily:
 		return coltypes.Decimal
 	case types.IntFamily:
-		switch ct.Width() {
+		switch logType.Width() {
 		case 16:
 			return coltypes.Int16
 		case 32:
@@ -44,7 +44,7 @@ func FromColumnType(ct *types.T) coltypes.T {
 		case 0, 64:
 			return coltypes.Int64
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", logType.Width()))
 	case types.FloatFamily:
 		return coltypes.Float64
 	case types.TimestampFamily:
@@ -70,50 +70,10 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 	return typs, nil
 }
 
-// ToColumnType converts a types.T that corresponds to the column type. Note
-// that due to the fact that multiple types.T's are represented by a single
-// column type, this conversion might return the type that is unexpected.
-// NOTE: this should only be used in tests.
-func ToColumnType(t coltypes.T) *types.T {
-	switch t {
-	case coltypes.Bool:
-		return types.Bool
-	case coltypes.Bytes:
-		return types.Bytes
-	case coltypes.Decimal:
-		return types.Decimal
-	case coltypes.Int16:
-		return types.Int2
-	case coltypes.Int32:
-		return types.Int4
-	case coltypes.Int64:
-		return types.Int
-	case coltypes.Float64:
-		return types.Float
-	case coltypes.Timestamp:
-		return types.Timestamp
-	case coltypes.Interval:
-		return types.Interval
-	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
-	return nil
-}
-
-// ToColumnTypes calls ToColumnType on each element of typs returning the
-// resulting slice.
-func ToColumnTypes(typs []coltypes.T) []types.T {
-	cts := make([]types.T, len(typs))
-	for i := range cts {
-		t := ToColumnType(typs[i])
-		cts[i] = *t
-	}
-	return cts
-}
-
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
-// ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
-	switch ct.Family() {
+// logical type to the corresponding Go type.
+func GetDatumToPhysicalFn(logType *types.T) func(tree.Datum) (interface{}, error) {
+	switch logType.Family() {
 	case types.BoolFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
@@ -131,7 +91,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
 	case types.IntFamily:
-		switch ct.Width() {
+		switch logType.Width() {
 		case 16:
 			return func(datum tree.Datum) (interface{}, error) {
 				d, ok := datum.(*tree.DInt)
@@ -157,7 +117,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return int64(*d), nil
 			}
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled INT width %d", logType.Width()))
 	case types.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)
@@ -242,6 +202,6 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 	// invoked immediately after GetDatumToPhysicalFn is called, this works just
 	// as well and makes the error handling less messy for the caller.
 	return func(datum tree.Datum) (interface{}, error) {
-		return nil, errors.Errorf("unhandled type %s", ct.DebugString())
+		return nil, errors.Errorf("unhandled type %s", logType.DebugString())
 	}
 }

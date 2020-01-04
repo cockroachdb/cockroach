@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Use execerror package to remove unused import warning.
@@ -40,7 +41,7 @@ var _ = execerror.VectorizedInternalPanic
 func NewRankOperator(
 	allocator *Allocator,
 	input Operator,
-	inputTyps []coltypes.T,
+	logTypes []types.T,
 	dense bool,
 	orderingCols []uint32,
 	outputColIdx int,
@@ -49,7 +50,7 @@ func NewRankOperator(
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
-	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
+	op, outputCol, err := OrderedDistinctColsToOperators(input, orderingCols, logTypes)
 	if err != nil {
 		return nil, err
 	}

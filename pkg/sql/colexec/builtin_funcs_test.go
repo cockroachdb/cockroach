@@ -52,31 +52,31 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	_ = builtins.AllBuiltinNames
 
 	testCases := []struct {
-		desc         string
-		expr         string
-		inputCols    []int
-		inputTuples  tuples
-		inputTypes   []types.T
-		outputTypes  []types.T
-		outputTuples tuples
+		desc           string
+		expr           string
+		inputCols      []int
+		inputTuples    tuples
+		inputLogTypes  []types.T
+		outputLogTypes []types.T
+		outputTuples   tuples
 	}{
 		{
-			desc:         "AbsVal",
-			expr:         "abs(@1)",
-			inputCols:    []int{0},
-			inputTuples:  tuples{{1}, {-1}},
-			inputTypes:   []types.T{*types.Int},
-			outputTuples: tuples{{1, 1}, {-1, 1}},
-			outputTypes:  []types.T{*types.Int, *types.Int},
+			desc:           "AbsVal",
+			expr:           "abs(@1)",
+			inputCols:      []int{0},
+			inputTuples:    tuples{{1}, {-1}},
+			inputLogTypes:  []types.T{*types.Int},
+			outputTuples:   tuples{{1, 1}, {-1, 1}},
+			outputLogTypes: []types.T{*types.Int, *types.Int},
 		},
 		{
-			desc:         "StringLen",
-			expr:         "length(@1)",
-			inputCols:    []int{0},
-			inputTuples:  tuples{{"Hello"}, {"The"}},
-			inputTypes:   []types.T{*types.String},
-			outputTuples: tuples{{"Hello", 5}, {"The", 3}},
-			outputTypes:  []types.T{*types.String, *types.Int},
+			desc:           "StringLen",
+			expr:           "length(@1)",
+			inputCols:      []int{0},
+			inputTuples:    tuples{{"Hello"}, {"The"}},
+			inputLogTypes:  []types.T{*types.String},
+			outputTuples:   tuples{{"Hello", 5}, {"The", 3}},
+			outputLogTypes: []types.T{*types.String, *types.Int},
 		},
 	}
 
@@ -91,13 +91,13 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					p := &mockTypeContext{typs: tc.inputTypes}
+					p := &mockTypeContext{typs: tc.inputLogTypes}
 					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
 					if err != nil {
 						t.Fatal(err)
 					}
 
-					return NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), tc.outputTypes, tc.inputCols, 1, input[0])
+					return NewBuiltinFunctionOperator(testAllocator, tctx, typedExpr.(*tree.FuncExpr), tc.outputLogTypes, tc.inputCols, 1, input[0])
 				})
 		})
 	}

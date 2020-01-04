@@ -249,14 +249,14 @@ func init() {
 	registerBinOpOutputTypes()
 
 	// Build overload definitions for basic coltypes.
-	inputTypes := coltypes.AllTypes
+	physTypes := coltypes.AllTypes
 	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
 	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 	sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
 	anyTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
 	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
 	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
-	for _, leftType := range inputTypes {
+	for _, leftType := range physTypes {
 		for _, rightType := range coltypes.CompatibleTypes[leftType] {
 			customizer := typeCustomizers[coltypePair{leftType, rightType}]
 			for _, op := range binOps {
@@ -352,10 +352,10 @@ func init() {
 
 	// Build cast overloads. We omit cases of type casts that we do not support.
 	castOverloads = make(map[coltypes.T][]castOverload)
-	for _, from := range inputTypes {
+	for _, from := range physTypes {
 		switch from {
 		case coltypes.Bool:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -380,14 +380,14 @@ func init() {
 			// that a bytes type can implemented, but we don't know each of the
 			// things is contained here. Additionally, we don't really know
 			// what to do even if it is a bytes to bytes operation here.
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				}
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
 		case coltypes.Decimal:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -403,7 +403,7 @@ func init() {
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
 		case coltypes.Int16:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -422,7 +422,7 @@ func init() {
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
 		case coltypes.Int32:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -439,7 +439,7 @@ func init() {
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
 		case coltypes.Int64:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -454,7 +454,7 @@ func init() {
 				castOverloads[from] = append(castOverloads[from], ov)
 			}
 		case coltypes.Float64:
-			for _, to := range inputTypes {
+			for _, to := range physTypes {
 				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
 				switch to {
 				case coltypes.Bool:
@@ -1414,11 +1414,11 @@ func buildDict(values ...interface{}) (map[string]interface{}, error) {
 // intersection is determined to be the maximum common set of LTyp types shared
 // by each overloads.
 func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
-	inputTypes := coltypes.AllTypes
-	keepTypes := make(map[coltypes.T]bool, len(inputTypes))
+	physTypes := coltypes.AllTypes
+	keepPhysTypes := make(map[coltypes.T]bool, len(physTypes))
 
-	for _, t := range inputTypes {
-		keepTypes[t] = true
+	for _, t := range physTypes {
+		keepPhysTypes[t] = true
 		for _, overloads := range allOverloads {
 			found := false
 			for _, ov := range overloads {
@@ -1428,7 +1428,7 @@ func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
 			}
 
 			if !found {
-				keepTypes[t] = false
+				keepPhysTypes[t] = false
 			}
 		}
 	}
@@ -1436,7 +1436,7 @@ func intersectOverloads(allOverloads ...[]*overload) [][]*overload {
 	for i, overloads := range allOverloads {
 		newOverloads := make([]*overload, 0, cap(overloads))
 		for _, ov := range overloads {
-			if keepTypes[ov.LTyp] {
+			if keepPhysTypes[ov.LTyp] {
 				newOverloads = append(newOverloads, ov)
 			}
 		}

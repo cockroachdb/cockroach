@@ -168,15 +168,15 @@ func _CHECK_COL_WITH_NULLS(
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
 func (ht *hashTable) checkCol(
-	probeType, buildType coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16,
+	probePhysType, buildPhysType coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// `decimalScratch` local variable of type `decimalOverloadScratch`.
 	decimalScratch := ht.decimalScratch
-	switch probeType {
+	switch probePhysType {
 	// {{range $lTyp, $rTypToOverload := .}}
 	case _PROBE_TYPE:
-		switch buildType {
+		switch buildPhysType {
 		// {{range $rTyp, $overload := $rTypToOverload}}
 		case _BUILD_TYPE:
 			probeVec := ht.keys[keyColIdx]
@@ -201,10 +201,10 @@ func (ht *hashTable) checkCol(
 			}
 			// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", buildType))
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", buildPhysType))
 		}
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", probeType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", probePhysType))
 	}
 }

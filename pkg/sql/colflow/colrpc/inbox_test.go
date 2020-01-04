@@ -58,9 +58,9 @@ var _ flowStreamServer = callbackFlowStreamServer{}
 func TestInboxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typs := []coltypes.T{coltypes.Int64}
+	physTypes := []coltypes.T{coltypes.Int64}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, physTypes, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 		// Cancel the context.
@@ -75,7 +75,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, physTypes, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 
@@ -106,7 +106,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("StreamHandlerWaitingForReader", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, physTypes, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		ctx, cancelFn := context.WithCancel(context.Background())
@@ -199,8 +199,8 @@ func TestInboxShutdown(t *testing.T) {
 		drainMetaSleep     = time.Millisecond * time.Duration(rng.Intn(10))
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
-		typs               = []coltypes.T{coltypes.Int64}
-		batch              = colexec.RandomBatch(testAllocator, rng, typs, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
+		physTypes          = []coltypes.T{coltypes.Int64}
+		batch              = colexec.RandomBatch(testAllocator, rng, physTypes, int(coldata.BatchSize()), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {
@@ -224,12 +224,12 @@ func TestInboxShutdown(t *testing.T) {
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(
 						colexec.NewAllocator(inboxCtx, &inboxMemAccount),
-						typs, execinfrapb.StreamID(0),
+						physTypes, execinfrapb.StreamID(0),
 					)
 					require.NoError(t, err)
-					c, err := colserde.NewArrowBatchConverter(typs)
+					c, err := colserde.NewArrowBatchConverter(physTypes)
 					require.NoError(t, err)
-					r, err := colserde.NewRecordBatchSerializer(typs)
+					r, err := colserde.NewRecordBatchSerializer(physTypes)
 					require.NoError(t, err)
 
 					goroutines := []struct {

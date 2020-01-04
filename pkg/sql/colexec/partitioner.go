@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewWindowSortingPartitioner creates a new exec.Operator that orders input
@@ -26,7 +27,8 @@ import (
 func NewWindowSortingPartitioner(
 	allocator *Allocator,
 	input Operator,
-	inputTyps []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
@@ -36,13 +38,13 @@ func NewWindowSortingPartitioner(
 		partitionAndOrderingCols[i] = execinfrapb.Ordering_Column{ColIdx: idx}
 	}
 	copy(partitionAndOrderingCols[len(partitionIdxs):], ordCols)
-	input, err = NewSorter(allocator, input, inputTyps, partitionAndOrderingCols)
+	input, err = NewSorter(allocator, input, logTypes, physTypes, partitionAndOrderingCols)
 	if err != nil {
 		return nil, err
 	}
 
 	var distinctCol []bool
-	input, distinctCol, err = OrderedDistinctColsToOperators(input, partitionIdxs, inputTyps)
+	input, distinctCol, err = OrderedDistinctColsToOperators(input, partitionIdxs, logTypes)
 	if err != nil {
 		return nil, err
 	}

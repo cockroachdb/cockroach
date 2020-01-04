@@ -133,7 +133,7 @@ func _PROBE_SWITCH(
 	// {{ $sel := $.SelPermutation }}
 	// {{ $mjOverloads := $.Global.MJOverloads }}
 	// {{ $filterInfo := $.FilterInfo }}
-	switch colType {
+	switch physType {
 	// {{range $mjOverload := $.Global.MJOverloads }}
 	case _TYPES_T:
 		lKeys := lVec._TemplateType()
@@ -305,7 +305,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
 	}
 	// {{end}}
 	// {{/*
@@ -591,9 +591,9 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftPhysType := o.left.sourceTypes[leftColIdx]
-		rightPhysType := o.right.sourceTypes[rightColIdx]
-		colType := leftPhysType
+		leftPhysType := o.left.physTypes[leftColIdx]
+		rightPhysType := o.right.physTypes[rightColIdx]
+		physType := leftPhysType
 		// Merge joiner only supports the case when the physical types in the
 		// equality columns in both inputs are the same. If that is not the case,
 		// we need to cast one of the vectors to another's physical type putting
@@ -629,7 +629,7 @@ EqLoop:
 			if castLeftToRight {
 				cast(leftPhysType, rightPhysType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
 				lVec = tempVec
-				colType = o.right.sourceTypes[rightColIdx]
+				physType = o.right.physTypes[rightColIdx]
 			} else {
 				cast(rightPhysType, leftPhysType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
 				rVec = tempVec
@@ -663,7 +663,7 @@ EqLoop:
 // the main body of buildLeftGroups()).
 func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "leftSwitch"}}
-	switch colType {
+	switch physType {
 	// {{ range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
@@ -750,7 +750,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
 	}
 	// {{end}}
 	// {{/*
@@ -803,7 +803,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 				if batch.Length() > 0 {
 					src = batch.ColVec(int(inColIdx))
 				}
-				colType := input.sourceTypes[inColIdx]
+				physType := input.physTypes[inColIdx]
 
 				if sel != nil {
 					if src != nil && src.MaybeHasNulls() {
@@ -834,7 +834,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "rightSwitch"}}
 
-	switch colType {
+	switch physType {
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
@@ -895,7 +895,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						out.Copy(
 							coldata.CopySliceArgs{
 								SliceArgs: coldata.SliceArgs{
-									ColType:     colType,
+									ColType:     physType,
 									Src:         src,
 									Sel:         sel,
 									DestIdx:     uint64(outStartIdx),
@@ -928,7 +928,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colType))
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
 	}
 	// {{end}}
 	// {{/*
@@ -981,7 +981,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
 				if batch.Length() > 0 {
 					src = batch.ColVec(int(inColIdx))
 				}
-				colType := input.sourceTypes[inColIdx]
+				physType := input.physTypes[inColIdx]
 
 				if sel != nil {
 					if src != nil && src.MaybeHasNulls() {

@@ -16,12 +16,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -81,13 +82,15 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 	nCols := 4
-	sourceTypes := make([]coltypes.T, nCols)
+	logTypes := make([]types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = coltypes.Int64
+		logTypes[colIdx] = *types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	physTypes, err := typeconv.FromColumnTypes(logTypes)
+	require.NoError(b, err)
+	batch := testAllocator.NewMemBatch(physTypes)
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
@@ -126,13 +129,13 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						joinType = sqlbase.JoinType_FULL_OUTER
 					}
 					spec := createSpecForHashJoiner(joinTestCase{
-						joinType:     joinType,
-						leftTypes:    sourceTypes,
-						leftOutCols:  []uint32{0, 1},
-						leftEqCols:   []uint32{0, 2},
-						rightTypes:   sourceTypes,
-						rightOutCols: []uint32{2, 3},
-						rightEqCols:  []uint32{0, 1},
+						joinType:      joinType,
+						leftLogTypes:  logTypes,
+						leftOutCols:   []uint32{0, 1},
+						leftEqCols:    []uint32{0, 2},
+						rightLogTypes: logTypes,
+						rightOutCols:  []uint32{2, 3},
+						rightEqCols:   []uint32{0, 1},
 					})
 					b.Run(name, func(b *testing.B) {
 						// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /

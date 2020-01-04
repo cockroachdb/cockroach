@@ -19,36 +19,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
 // NewSorter returns a new sort operator, which sorts its input on the columns
-// given in orderingCols. The inputTypes must correspond 1-1 with the columns
+// given in orderingCols. The logTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
 	allocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (Operator, error) {
-	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
+	return newSorter(
+		allocator, newAllSpooler(allocator, input, physTypes),
+		logTypes, physTypes, orderingCols,
+	)
 }
 
 func newSorter(
 	allocator *Allocator,
 	input spooler,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
 	for i, ord := range orderingCols {
-		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
-			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
+		if !isSorterSupported(&logTypes[ord.ColIdx], ord.Direction) {
+			return nil, errors.Errorf(
+				"sorter for type: %s and direction: %s not supported",
+				logTypes[ord.ColIdx].Name(), ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
+			partitioners[i], err = newPartitioner(&logTypes[ord.ColIdx])
 			if err != nil {
 				return nil, err
 			}
@@ -58,7 +66,8 @@ func newSorter(
 	return &sortOp{
 		allocator:    allocator,
 		input:        input,
-		inputTypes:   inputTypes,
+		logTypes:     logTypes,
+		physTypes:    physTypes,
 		sorters:      make([]colSorter, len(orderingCols)),
 		partitioners: partitioners,
 		orderingCols: orderingCols,
@@ -100,8 +109,8 @@ type allSpooler struct {
 	NonExplainable
 
 	allocator *Allocator
-	// inputTypes contains the types of all of the columns from the input.
-	inputTypes []coltypes.T
+	// physTypes contains the types of all of the columns from the input.
+	physTypes []coltypes.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this slice is the entire column from the input.
 	bufferedTuples *bufferedBatch
@@ -113,18 +122,18 @@ type allSpooler struct {
 var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
-func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
+func newAllSpooler(allocator *Allocator, input Operator, physTypes []coltypes.T) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
-		inputTypes:   inputTypes,
+		physTypes:    physTypes,
 	}
 }
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = newBufferedBatch(p.allocator, p.inputTypes, 0 /* initialSize */)
-	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
+	p.bufferedTuples = newBufferedBatch(p.allocator, p.physTypes, 0 /* initialSize */)
+	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.physTypes, 0 /* size */)
 }
 
 func (p *allSpooler) spool(ctx context.Context) {
@@ -137,7 +146,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 			for i := 0; i < len(p.bufferedTuples.colVecs); i++ {
 				p.bufferedTuples.colVecs[i].Append(
 					coldata.SliceArgs{
-						ColType:   p.inputTypes[i],
+						ColType:   p.physTypes[i],
 						Src:       batch.ColVec(i),
 						Sel:       batch.Selection(),
 						DestIdx:   p.bufferedTuples.length,
@@ -175,7 +184,7 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
 	// We don't need to worry about selection vectors here because if these were
 	// present on the original input batches, they have been removed when we were
 	// buffering up tuples.
-	for i, t := range p.inputTypes {
+	for i, t := range p.physTypes {
 		window := p.bufferedTuples.colVecs[i].Window(t, startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
@@ -195,8 +204,10 @@ type sortOp struct {
 	allocator *Allocator
 	input     spooler
 
-	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	// logTypes contains the types of all of the columns from input.
+	logTypes []types.T
+	// physTypes contains coltypes.T equivalent of logTypes.
+	physTypes []coltypes.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []execinfrapb.Ordering_Column
@@ -279,7 +290,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		}
 
 		p.resetOutput()
-		for j := 0; j < len(p.inputTypes); j++ {
+		for j := 0; j < len(p.physTypes); j++ {
 			// At this point, we have already fully sorted the input. It is ok to do
 			// this Copy outside of the allocator - the work has been done, but
 			// theoretically it is possible to hit the limit here (mainly with
@@ -288,7 +299,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			p.output.ColVec(j).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     p.inputTypes[j],
+						ColType:     p.physTypes[j],
 						Src:         p.input.getValues(j),
 						SrcStartIdx: p.emitted,
 						SrcEndIdx:   newEmitted,
@@ -328,7 +339,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
-		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
+		p.sorters[i] = newSingleSorter(&p.logTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
 		p.sorters[i].init(inputVec, p.order)
 	}
 
@@ -405,7 +416,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 func (p *sortOp) resetOutput() {
 	if p.output == nil {
-		p.output = p.allocator.NewMemBatch(p.inputTypes)
+		p.output = p.allocator.NewMemBatch(p.physTypes)
 	} else {
 		p.output.ResetInternalBatch()
 	}

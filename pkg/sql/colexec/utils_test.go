@@ -221,12 +221,12 @@ func runTestsWithTyps(
 		}
 		opConstructor := func(injectAllNulls bool) Operator {
 			inputSources := make([]Operator, len(tups))
-			var inputTypes []coltypes.T
+			var physTypes []coltypes.T
 			for i, tup := range tups {
 				if typs != nil {
-					inputTypes = typs[i]
+					physTypes = typs[i]
 				}
-				input := newOpTestInput(1 /* batchSize */, tup, inputTypes)
+				input := newOpTestInput(1 /* batchSize */, tup, physTypes)
 				input.injectAllNulls = injectAllNulls
 				inputSources[i] = input
 			}
@@ -312,15 +312,15 @@ func runTestsWithoutAllNullsInjection(
 		// doesn't have to restore anything on a zero-length batch).
 		var (
 			secondBatchHasSelection, secondBatchHasNulls bool
-			inputTypes                                   []coltypes.T
+			physTypes                                    []coltypes.T
 		)
 		for round := 0; round < 2; round++ {
 			inputSources := make([]Operator, len(tups))
 			for i, tup := range tups {
 				if typs != nil {
-					inputTypes = typs[i]
+					physTypes = typs[i]
 				}
-				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, inputTypes)
+				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, physTypes)
 			}
 			op, err := constructor(inputSources)
 			if err != nil {
@@ -380,12 +380,12 @@ func runTestsWithoutAllNullsInjection(
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]Operator, len(tups))
-		var inputTypes []coltypes.T
+		var physTypes []coltypes.T
 		for i, tup := range tups {
 			if typs != nil {
-				inputTypes = typs[i]
+				physTypes = typs[i]
 			}
-			input := newOpTestInput(1 /* batchSize */, tup, inputTypes)
+			input := newOpTestInput(1 /* batchSize */, tup, physTypes)
 			input.injectRandomNulls = true
 			inputSources[i] = input
 		}
@@ -433,20 +433,20 @@ func runTestsWithFn(
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
-				var inputTypes []coltypes.T
+				var physTypes []coltypes.T
 				if useSel {
 					for i, tup := range tups {
 						if typs != nil {
-							inputTypes = typs[i]
+							physTypes = typs[i]
 						}
-						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, inputTypes)
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, physTypes)
 					}
 				} else {
 					for i, tup := range tups {
 						if typs != nil {
-							inputTypes = typs[i]
+							physTypes = typs[i]
 						}
-						inputSources[i] = newOpTestInput(batchSize, tup, inputTypes)
+						inputSources[i] = newOpTestInput(batchSize, tup, physTypes)
 					}
 				}
 				test(t, inputSources)
@@ -1244,12 +1244,12 @@ type joinTestCase struct {
 	description           string
 	joinType              sqlbase.JoinType
 	leftTuples            []tuple
-	leftTypes             []coltypes.T
+	leftLogTypes          []types.T
 	leftOutCols           []uint32
 	leftEqCols            []uint32
 	leftDirections        []execinfrapb.Ordering_Column_Direction
 	rightTuples           []tuple
-	rightTypes            []coltypes.T
+	rightLogTypes         []types.T
 	rightOutCols          []uint32
 	rightEqCols           []uint32
 	rightDirections       []execinfrapb.Ordering_Column_Direction
@@ -1267,14 +1267,14 @@ func (tc *joinTestCase) init() {
 	}
 
 	if len(tc.leftDirections) == 0 {
-		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftTypes))
+		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftLogTypes))
 		for i := range tc.leftDirections {
 			tc.leftDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
 
 	if len(tc.rightDirections) == 0 {
-		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightTypes))
+		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightLogTypes))
 		for i := range tc.rightDirections {
 			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
 		}

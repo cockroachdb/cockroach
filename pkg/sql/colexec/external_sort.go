@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Partitioner is the abstraction for on-disk storage.
@@ -120,7 +121,8 @@ type externalSorter struct {
 	memoryLimit        int64
 	state              externalSorterState
 	inputDone          bool
-	inputTypes         []coltypes.T
+	logTypes           []types.T
+	physTypes          []coltypes.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
 	partitioner        Partitioner
@@ -157,7 +159,8 @@ func newExternalSorter(
 	unlimitedAllocator *Allocator,
 	standaloneAllocator *Allocator,
 	input Operator,
-	inputTypes []coltypes.T,
+	logTypes []types.T,
+	physTypes []coltypes.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
@@ -167,8 +170,8 @@ func newExternalSorter(
 ) Operator {
 	inputPartitioner := newInputPartitioningOperator(standaloneAllocator, input, memoryLimit)
 	inMemSorter, err := newSorter(
-		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
-		inputTypes, ordering.Columns,
+		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, physTypes),
+		logTypes, physTypes, ordering.Columns,
 	)
 	if err != nil {
 		execerror.VectorizedInternalPanic(err)
@@ -177,7 +180,7 @@ func newExternalSorter(
 		// Each disk queue will use up to BufferSizeBytes of RAM, so we will give
 		// it almost all of the available memory (except for a single output batch
 		// that mergers will use).
-		batchMemSize := estimateBatchSizeBytes(inputTypes, int(coldata.BatchSize()))
+		batchMemSize := estimateBatchSizeBytes(physTypes, int(coldata.BatchSize()))
 		// TODO(yuzefovich): we currently allocate a full-sized batch in
 		// partitionerToOperator, but once we use actual disk-backed queues, we
 		// should allocate zero-sized batch in there and all memory will be
@@ -194,8 +197,9 @@ func newExternalSorter(
 		unlimitedAllocator:  unlimitedAllocator,
 		memoryLimit:         memoryLimit,
 		inMemSorter:         inMemSorter,
-		partitioner:         newDummyPartitioner(diskQueuesUnlimitedAllocator, inputTypes),
-		inputTypes:          inputTypes,
+		partitioner:         newDummyPartitioner(diskQueuesUnlimitedAllocator, physTypes),
+		logTypes:            logTypes,
+		physTypes:           physTypes,
 		ordering:            ordering,
 		maxNumberPartitions: maxNumberPartitions,
 		cfg:                 cfg,
@@ -287,7 +291,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				continue
 			} else if s.numPartitions == 1 {
 				s.emitter = newPartitionerToOperator(
-					s.unlimitedAllocator, s.inputTypes, s.partitioner, s.firstPartitionIdx,
+					s.unlimitedAllocator, s.physTypes, s.partitioner, s.firstPartitionIdx,
 				)
 			} else {
 				s.emitter = s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
@@ -319,13 +323,14 @@ func (s *externalSorter) createMergerForPartitions(firstIdx, numPartitions int) 
 	syncInputs := make([]Operator, numPartitions)
 	for i := range syncInputs {
 		syncInputs[i] = newPartitionerToOperator(
-			s.unlimitedAllocator, s.inputTypes, s.partitioner, firstIdx+i,
+			s.unlimitedAllocator, s.physTypes, s.partitioner, firstIdx+i,
 		)
 	}
 	return NewOrderedSynchronizer(
 		s.unlimitedAllocator,
 		syncInputs,
-		s.inputTypes,
+		s.logTypes,
+		s.physTypes,
 		execinfrapb.ConvertToColumnOrdering(s.ordering),
 	)
 }

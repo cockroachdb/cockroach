@@ -29,9 +29,9 @@ type filterFeedOperator struct {
 
 var _ Operator = &filterFeedOperator{}
 
-func newFilterFeedOperator(allocator *Allocator, inputTypes []coltypes.T) *filterFeedOperator {
+func newFilterFeedOperator(allocator *Allocator, physTypes []coltypes.T) *filterFeedOperator {
 	return &filterFeedOperator{
-		batch: allocator.NewMemBatchWithSize(inputTypes, 1 /* size */),
+		batch: allocator.NewMemBatchWithSize(physTypes, 1 /* size */),
 	}
 }
 
@@ -52,20 +52,20 @@ func (o *filterFeedOperator) reset() {
 
 func newJoinerFilter(
 	allocator *Allocator,
-	leftSourceTypes []coltypes.T,
-	rightSourceTypes []coltypes.T,
+	leftPhysTypes []coltypes.T,
+	rightPhysTypes []coltypes.T,
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (*joinerFilter, error) {
-	input := newFilterFeedOperator(allocator, append(leftSourceTypes, rightSourceTypes...))
+	input := newFilterFeedOperator(allocator, append(leftPhysTypes, rightPhysTypes...))
 	filter, err := filterConstructor(input)
 	return &joinerFilter{
-		Operator:         filter,
-		allocator:        allocator,
-		leftSourceTypes:  leftSourceTypes,
-		rightSourceTypes: rightSourceTypes,
-		input:            input,
-		onlyOnLeft:       filterOnlyOnLeft,
+		Operator:       filter,
+		allocator:      allocator,
+		leftPhysTypes:  leftPhysTypes,
+		rightPhysTypes: rightPhysTypes,
+		input:          input,
+		onlyOnLeft:     filterOnlyOnLeft,
 	}, err
 }
 
@@ -73,10 +73,10 @@ func newJoinerFilter(
 type joinerFilter struct {
 	Operator
 
-	allocator        *Allocator
-	leftSourceTypes  []coltypes.T
-	rightSourceTypes []coltypes.T
-	input            *filterFeedOperator
+	allocator      *Allocator
+	leftPhysTypes  []coltypes.T
+	rightPhysTypes []coltypes.T
+	input          *filterFeedOperator
 	// onlyOnLeft indicates whether the ON expression is such that only columns
 	// from the left input are used.
 	onlyOnLeft bool
@@ -117,7 +117,7 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 	if lBatch == nil && rBatch == nil {
 		execerror.VectorizedInternalPanic("only one of lBatch and rBatch can be nil")
 	}
-	setOneSide := func(colOffset int, batch coldata.Batch, sourceTypes []coltypes.T, idx int) {
+	setOneSide := func(colOffset int, batch coldata.Batch, physTypes []coltypes.T, idx int) {
 		sel := batch.Selection()
 		if sel != nil {
 			idx = int(sel[idx])
@@ -127,7 +127,7 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 				f.input.batch.ColVec(colOffset + colIdx).Append(
 					coldata.SliceArgs{
 						Src:         batch.ColVec(colIdx),
-						ColType:     sourceTypes[colIdx],
+						ColType:     physTypes[colIdx],
 						DestIdx:     0,
 						SrcStartIdx: uint64(idx),
 						SrcEndIdx:   uint64(idx + 1),
@@ -136,10 +136,10 @@ func (f *joinerFilter) setInputBatch(lBatch, rBatch coldata.Batch, lIdx, rIdx in
 		})
 	}
 	if lBatch != nil {
-		setOneSide(0 /* colOffset */, lBatch, f.leftSourceTypes, lIdx)
+		setOneSide(0 /* colOffset */, lBatch, f.leftPhysTypes, lIdx)
 	}
 	if rBatch != nil {
-		setOneSide(len(f.leftSourceTypes), rBatch, f.rightSourceTypes, rIdx)
+		setOneSide(len(f.leftPhysTypes), rBatch, f.rightPhysTypes, rIdx)
 	}
 	f.input.batch.SetLength(1)
 	f.input.batch.SetSelection(false)

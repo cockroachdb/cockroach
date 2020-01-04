@@ -117,13 +117,13 @@ func newExternalHashJoiner(
 	// TODO(yuzefovich): remove this once actual disk queues are in-place.
 	diskQueuesUnlimitedAllocator *Allocator,
 ) Operator {
-	leftPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.left.sourceTypes)
+	leftPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.left.physTypes)
 	leftInMemHashJoinerInput := newPartitionerToOperator(
-		allocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
+		allocator, spec.left.physTypes, leftPartitioner, 0, /* partitionIdx */
 	)
-	rightPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.right.sourceTypes)
+	rightPartitioner := newDummyPartitioner(diskQueuesUnlimitedAllocator, spec.right.physTypes)
 	rightInMemHashJoinerInput := newPartitionerToOperator(
-		allocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
+		allocator, spec.right.physTypes, rightPartitioner, 0, /* partitionIdx */
 	)
 	ehj := &externalHashJoiner{
 		twoInputNode:              newTwoInputNode(leftInput, rightInput),
@@ -138,10 +138,10 @@ func newExternalHashJoiner(
 			allocator, spec, leftInMemHashJoinerInput, rightInMemHashJoinerInput,
 		).(*hashJoiner),
 	}
-	ehj.scratch.leftBatch = allocator.NewMemBatch(spec.left.sourceTypes)
-	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
-	for i, leftType := range spec.left.sourceTypes {
-		if i < len(spec.right.sourceTypes) && leftType != spec.right.sourceTypes[i] {
+	ehj.scratch.leftBatch = allocator.NewMemBatch(spec.left.physTypes)
+	sameSourcesSchema := len(spec.left.physTypes) == len(spec.right.physTypes)
+	for i, leftType := range spec.left.physTypes {
+		if i < len(spec.right.physTypes) && leftType != spec.right.physTypes[i] {
 			sameSourcesSchema = false
 		}
 	}
@@ -150,7 +150,7 @@ func newExternalHashJoiner(
 		// scratch batch.
 		ehj.scratch.rightBatch = ehj.scratch.leftBatch
 	} else {
-		ehj.scratch.rightBatch = allocator.NewMemBatch(spec.right.sourceTypes)
+		ehj.scratch.rightBatch = allocator.NewMemBatch(spec.right.physTypes)
 	}
 	return ehj
 }
@@ -179,7 +179,7 @@ func (hj *externalHashJoiner) partitionBatch(
 		return
 	}
 	selections := hj.tupleDistributor.distribute(
-		ctx, batch, sourceSpec.sourceTypes, sourceSpec.eqCols,
+		ctx, batch, sourceSpec.physTypes, sourceSpec.eqCols,
 	)
 	for partitionIdx, sel := range selections {
 		if len(sel) > 0 {
@@ -191,7 +191,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				for i, colvec := range scratchBatch.ColVecs() {
 					colvec.Copy(coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   sourceSpec.sourceTypes[i],
+							ColType:   sourceSpec.physTypes[i],
 							Src:       batch.ColVec(i),
 							Sel:       sel,
 							SrcEndIdx: uint64(len(sel)),

@@ -185,7 +185,7 @@ func TestOutboxInbox(t *testing.T) {
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
-			typs        = []coltypes.T{coltypes.Int64}
+			physTypes   = []coltypes.T{coltypes.Int64}
 			inputBuffer = colexec.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
@@ -199,7 +199,7 @@ func TestOutboxInbox(t *testing.T) {
 		// over data. Nulls and types are not worth testing as those are tested in
 		// colserde.
 		args := colexec.RandomDataOpArgs{
-			DeterministicTyps: typs,
+			DeterministicTyps: physTypes,
 			NumBatches:        64,
 			Selection:         true,
 			BatchAccumulator:  inputBuffer.Add,
@@ -221,14 +221,14 @@ func TestOutboxInbox(t *testing.T) {
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
 		outbox, err := NewOutbox(
-			colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
+			colexec.NewAllocator(ctx, &outboxMemAcc), input, physTypes, nil,
 		)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
 		inbox, err := NewInbox(
-			colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+			colexec.NewAllocator(ctx, &inboxMemAcc), physTypes, execinfrapb.StreamID(0),
 		)
 		require.NoError(t, err)
 
@@ -267,7 +267,7 @@ func TestOutboxInbox(t *testing.T) {
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
 		defer deselectorMemAcc.Close(ctx)
 		inputBatches := colexec.NewDeselectorOp(
-			colexec.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+			colexec.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, physTypes,
 		)
 		inputBatches.Init()
 		outputBatches := colexec.NewBatchBuffer()
@@ -286,12 +286,12 @@ func TestOutboxInbox(t *testing.T) {
 				if outputBatch == coldata.ZeroBatch {
 					outputBatches.Add(coldata.ZeroBatch)
 				} else {
-					batchCopy := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
+					batchCopy := testAllocator.NewMemBatchWithSize(physTypes, int(outputBatch.Length()))
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
-						for i := range typs {
+						for i := range physTypes {
 							batchCopy.ColVec(i).Append(
 								coldata.SliceArgs{
-									ColType:   typs[i],
+									ColType:   physTypes[i],
 									Src:       outputBatch.ColVec(i),
 									SrcEndIdx: uint64(outputBatch.Length()),
 								},
@@ -331,11 +331,11 @@ func TestOutboxInbox(t *testing.T) {
 				if outputBatch.Length() == 0 {
 					break
 				}
-				for i := range typs {
+				for i := range physTypes {
 					require.Equal(
 						t,
-						inputBatch.ColVec(i).Window(typs[i], 0, uint64(inputBatch.Length())),
-						outputBatch.ColVec(i).Window(typs[i], 0, uint64(outputBatch.Length())),
+						inputBatch.ColVec(i).Window(physTypes[i], 0, uint64(inputBatch.Length())),
+						outputBatch.ColVec(i).Window(physTypes[i], 0, uint64(outputBatch.Length())),
 						"batchNum: %d", batchNum,
 					)
 				}
@@ -444,12 +444,12 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			var (
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
-				typs                     = []coltypes.T{coltypes.Int64}
+				physTypes                = []coltypes.T{coltypes.Int64}
 				input                    = colexec.NewRandomDataOp(
 					testAllocator,
 					rng,
 					colexec.RandomDataOpArgs{
-						DeterministicTyps: typs,
+						DeterministicTyps: physTypes,
 						NumBatches:        tc.numBatches,
 						Selection:         true,
 					},
@@ -463,7 +463,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			outbox, err := NewOutbox(
 				colexec.NewAllocator(ctx, &outboxMemAcc),
 				input,
-				typs,
+				physTypes,
 				[]execinfrapb.MetadataSource{
 					execinfrapb.CallbackMetadataSource{
 						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
@@ -478,7 +478,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			defer inboxMemAcc.Close(ctx)
 			inbox, err := NewInbox(
 				colexec.NewAllocator(ctx, &inboxMemAcc),
-				typs, execinfrapb.StreamID(0),
+				physTypes, execinfrapb.StreamID(0),
 			)
 			require.NoError(t, err)
 
@@ -530,9 +530,9 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
-	typs := []coltypes.T{coltypes.Int64}
+	physTypes := []coltypes.T{coltypes.Int64}
 
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatch(physTypes)
 	batch.SetLength(coldata.BatchSize())
 
 	input := colexec.NewRepeatableBatchSource(testAllocator, batch)
@@ -541,14 +541,14 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colexec.NewAllocator(ctx, &outboxMemAcc),
-		input, typs, nil, /* metadataSources */
+		input, physTypes, nil, /* metadataSources */
 	)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
 	inbox, err := NewInbox(
-		colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+		colexec.NewAllocator(ctx, &inboxMemAcc), physTypes, execinfrapb.StreamID(0),
 	)
 	require.NoError(b, err)
 
@@ -591,13 +591,13 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	dialer := &execinfrapb.MockDialer{Addr: addr}
 	defer dialer.Close()
 
-	typs := []coltypes.T{coltypes.Int64}
+	physTypes := []coltypes.T{coltypes.Int64}
 
 	var inTags *logtags.Buffer
 
 	nextDone := make(chan struct{})
 	input := &colexec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
-		b := testAllocator.NewMemBatchWithSize(typs, 0)
+		b := testAllocator.NewMemBatchWithSize(physTypes, 0)
 		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}
@@ -607,7 +607,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
-		colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
+		colexec.NewAllocator(ctx, &outboxMemAcc), input, physTypes, nil,
 	)
 	require.NoError(t, err)
 
@@ -670,9 +670,9 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			rpcLayer := makeMockFlowStreamRPCLayer()
 
-			typs := []coltypes.T{coltypes.Int64}
+			physTypes := []coltypes.T{coltypes.Int64}
 
-			inbox, err := NewInbox(testAllocator, typs, streamID)
+			inbox, err := NewInbox(testAllocator, physTypes, streamID)
 			require.NoError(t, err)
 
 			ctxExtract := make(chan struct{})

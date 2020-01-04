@@ -74,22 +74,22 @@ type Outbox struct {
 func NewOutbox(
 	allocator *colexec.Allocator,
 	input colexec.Operator,
-	typs []coltypes.T,
+	physTypes []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 ) (*Outbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(physTypes)
 	if err != nil {
 		return nil, err
 	}
-	s, err := colserde.NewRecordBatchSerializer(typs)
+	s, err := colserde.NewRecordBatchSerializer(physTypes)
 	if err != nil {
 		return nil, err
 	}
 	o := &Outbox{
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
-		OneInputNode:    colexec.NewOneInputNode(colexec.NewDeselectorOp(allocator, input, typs)),
-		typs:            typs,
+		OneInputNode:    colexec.NewOneInputNode(colexec.NewDeselectorOp(allocator, input, physTypes)),
+		typs:            physTypes,
 		converter:       c,
 		serializer:      s,
 		metadataSources: metadataSources,

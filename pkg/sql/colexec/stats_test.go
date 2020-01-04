@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -85,10 +86,9 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mergeJoiner, err := NewMergeJoinOp(
 			testAllocator,
 			sqlbase.InnerJoin,
-			leftInput,
-			rightInput,
-			[]coltypes.T{coltypes.Int64},
-			[]coltypes.T{coltypes.Int64},
+			leftInput, rightInput,
+			[]types.T{*types.Int}, []types.T{*types.Int},
+			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			nil,   /* filterConstructor */

@@ -304,10 +304,10 @@ type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colexec.Allocator,
 		input colexec.Operator,
-		typs []coltypes.T,
+		physTypes []coltypes.T,
 		metadataSources []execinfrapb.MetadataSource,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colexec.Allocator, physTypes []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -315,16 +315,16 @@ type vectorizedRemoteComponentCreator struct{}
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colexec.Allocator,
 	input colexec.Operator,
-	typs []coltypes.T,
+	physTypes []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, metadataSources)
+	return colrpc.NewOutbox(allocator, input, physTypes, metadataSources)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colexec.Allocator, physTypes []coltypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(allocator, typs, streamID)
+	return colrpc.NewInbox(allocator, physTypes, streamID)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -609,20 +609,21 @@ func (s *vectorizedFlowCreator) setupInput(
 	op = inputStreamOps[0]
 	if len(inputStreamOps) > 1 {
 		statsInputs := inputStreamOps
-		typs, err := typeconv.FromColumnTypes(input.ColumnTypes)
+		physTypes, err := typeconv.FromColumnTypes(input.ColumnTypes)
 		if err != nil {
 			return nil, nil, err
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
 				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
-				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				inputStreamOps, input.ColumnTypes, physTypes,
+				execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 		} else {
 			if opt == flowinfra.FuseAggressively {
-				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, typs)
+				op = colexec.NewSerialUnorderedSynchronizer(inputStreamOps, physTypes)
 			} else {
-				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, typs, s.waitGroup)
+				op = colexec.NewParallelUnorderedSynchronizer(inputStreamOps, physTypes, s.waitGroup)
 				s.operatorConcurrency = true
 			}
 			// Don't use the unordered synchronizer's inputs for stats collection

@@ -44,7 +44,7 @@ func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	inputs []Operator,
-	inputTypes [][]types.T,
+	logTypes [][]types.T,
 	acc *mon.BoundAccount,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 ) (*Columnarizer, error) {
@@ -65,7 +65,7 @@ func wrapRowSources(
 				flowCtx,
 				processorID,
 				input,
-				inputTypes[i],
+				logTypes[i],
 				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
@@ -156,11 +156,8 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			if len(agg.Arguments) > 0 {
 				return false, errors.Newf("aggregates with arguments not supported")
 			}
-			var inputTypes []types.T
-			for _, colIdx := range agg.ColIdx {
-				inputTypes = append(inputTypes, spec.Input[0].ColumnTypes[colIdx])
-			}
-			if supported, err := isAggregateSupported(agg.Func, inputTypes); !supported {
+			logTypes := spec.Input[0].ColumnTypes
+			if supported, err := isAggregateSupported(agg.Func, logTypes, agg.ColIdx); !supported {
 				return false, err
 			}
 		}
@@ -282,19 +279,19 @@ func NewColOperator(
 
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
 		var (
-			c          *Columnarizer
-			inputTypes [][]types.T
+			c        *Columnarizer
+			logTypes [][]types.T
 		)
 
 		for _, input := range spec.Input {
-			inputTypes = append(inputTypes, input.ColumnTypes)
+			logTypes = append(logTypes, input.ColumnTypes)
 		}
 
 		c, err = wrapRowSources(
 			ctx,
 			flowCtx,
 			inputs,
-			inputTypes,
+			logTypes,
 			streamingMemAccount,
 			func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 				// We provide a slice with a single nil as 'outputs' parameter because
@@ -413,6 +410,7 @@ func NewColOperator(
 				return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 			}
 
+			logTypes := spec.Input[0].ColumnTypes
 			aggTyps := make([][]types.T, len(aggSpec.Aggregations))
 			aggCols := make([][]uint32, len(aggSpec.Aggregations))
 			aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
@@ -420,7 +418,7 @@ func NewColOperator(
 			for i, agg := range aggSpec.Aggregations {
 				aggTyps[i] = make([]types.T, len(agg.ColIdx))
 				for j, colIdx := range agg.ColIdx {
-					aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
+					aggTyps[i][j] = logTypes[colIdx]
 				}
 				aggCols[i] = agg.ColIdx
 				aggFns[i] = agg.Func
@@ -430,8 +428,7 @@ func NewColOperator(
 				}
 				result.ColumnTypes[i] = *retType
 			}
-			var typs []coltypes.T
-			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			_, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
 				return result, err
 			}
@@ -441,13 +438,14 @@ func NewColOperator(
 					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				result.Op, err = NewHashAggregator(
-					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
+					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], logTypes, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
 			} else {
 				result.Op, err = NewOrderedAggregator(
-					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
-					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+					NewAllocator(ctx, streamingMemAccount), inputs[0], logTypes,
+					aggFns, aggSpec.GroupCols, aggCols,
+					execinfrapb.IsScalarAggregate(aggSpec),
 				)
 				result.IsStreaming = true
 			}
@@ -473,22 +471,24 @@ func NewColOperator(
 				return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 			}
 
-			result.ColumnTypes = spec.Input[0].ColumnTypes
-			var typs []coltypes.T
-			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
+			logTypes := spec.Input[0].ColumnTypes
+			result.ColumnTypes = logTypes
+			var physTypes []coltypes.T
+			physTypes, err = typeconv.FromColumnTypes(result.ColumnTypes)
 			if err != nil {
 				return result, err
 			}
 			// TODO(yuzefovich): implement the distinct on partially ordered columns.
 			if allSorted {
-				result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+				result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, logTypes)
 				result.IsStreaming = true
 			} else {
 				result.Op = NewUnorderedDistinct(
 					NewAllocator(ctx, streamingMemAccount), inputs[0],
-					core.Distinct.DistinctColumns, typs,
+					core.Distinct.DistinctColumns, logTypes, physTypes,
 				)
 			}
+
 		case core.Ordinality != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
@@ -530,6 +530,8 @@ func NewColOperator(
 				core.HashJoiner.Type,
 				core.HashJoiner.LeftEqColumns,
 				core.HashJoiner.RightEqColumns,
+				leftLogTypes,
+				rightLogTypes,
 				leftPhysTypes,
 				rightPhysTypes,
 				rightEqColsAreKey,
@@ -653,6 +655,8 @@ func NewColOperator(
 				core.MergeJoiner.Type,
 				inputs[0],
 				inputs[1],
+				leftLogTypes,
+				rightLogTypes,
 				leftPhysTypes,
 				rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns,
@@ -684,12 +688,13 @@ func NewColOperator(
 				return result, err
 			}
 			input := inputs[0]
+			logTypes := spec.Input[0].ColumnTypes
 			var (
-				inputTypes           []coltypes.T
+				physTypes            []coltypes.T
 				sorterMemMonitorName string
 				inMemorySorter       Operator
 			)
-			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			physTypes, err = typeconv.FromColumnTypes(logTypes)
 			if err != nil {
 				return result, err
 			}
@@ -711,8 +716,8 @@ func NewColOperator(
 					)
 				}
 				inMemorySorter, err = NewSortChunks(
-					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
-					orderingCols, int(matchLen),
+					NewAllocator(ctx, sortChunksMemAccount), input, logTypes,
+					physTypes, orderingCols, int(matchLen),
 				)
 			} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
 				// There is a limit specified with no post-process filter, so we know
@@ -729,7 +734,7 @@ func NewColOperator(
 				}
 				k := uint16(post.Limit + post.Offset)
 				inMemorySorter = NewTopKSorter(
-					NewAllocator(ctx, topKSorterMemAccount), input, inputTypes,
+					NewAllocator(ctx, topKSorterMemAccount), input, logTypes, physTypes,
 					orderingCols, k,
 				)
 			} else {
@@ -744,7 +749,8 @@ func NewColOperator(
 					)
 				}
 				inMemorySorter, err = NewSorter(
-					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
+					NewAllocator(ctx, sorterMemAccount), input,
+					logTypes, physTypes, orderingCols,
 				)
 			}
 			if err != nil {
@@ -778,7 +784,7 @@ func NewColOperator(
 						return newExternalSorter(
 							unlimitedAllocator,
 							standaloneAllocator,
-							input, inputTypes, core.Sorter.OutputOrdering,
+							input, logTypes, physTypes, core.Sorter.OutputOrdering,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							args.TestingKnobs.MaxNumberPartitions,
 							diskQueuesUnlimitedAllocator,
@@ -796,8 +802,9 @@ func NewColOperator(
 			}
 			wf := core.Windower.WindowFns[0]
 			input := inputs[0]
-			var typs []coltypes.T
-			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+			logTypes := spec.Input[0].ColumnTypes
+			var physTypes []coltypes.T
+			physTypes, err = typeconv.FromColumnTypes(logTypes)
 			if err != nil {
 				return result, err
 			}
@@ -811,8 +818,9 @@ func NewColOperator(
 					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner")
 				}
 				input, err = NewWindowSortingPartitioner(
-					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
-					core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+					NewAllocator(ctx, windowSortingPartitionerMemAccount), input,
+					logTypes, physTypes, core.Windower.PartitionBy,
+					wf.Ordering.Columns, int(wf.OutputColIdx),
 				)
 				tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
 			} else {
@@ -822,8 +830,8 @@ func NewColOperator(
 						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter")
 					}
 					input, err = NewSorter(
-						NewAllocator(ctx, windowSorterMemAccount), input, typs,
-						wf.Ordering.Columns,
+						NewAllocator(ctx, windowSorterMemAccount), input, logTypes,
+						physTypes, wf.Ordering.Columns,
 					)
 				}
 				// TODO(yuzefovich): when both PARTITION BY and ORDER BY clauses are
@@ -841,9 +849,9 @@ func NewColOperator(
 			case execinfrapb.WindowerSpec_ROW_NUMBER:
 				result.Op = NewRowNumberOperator(NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			case execinfrapb.WindowerSpec_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, logTypes, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			case execinfrapb.WindowerSpec_DENSE_RANK:
-				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
+				result.Op, err = NewRankOperator(NewAllocator(ctx, streamingMemAccount), input, logTypes, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 			}
 
 			if partitionColIdx != -1 {
@@ -1423,7 +1431,7 @@ func planProjectionOperators(
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
 		return op, caseOutputIdx, ct, internalMemUsed, err
 	case *tree.AndExpr, *tree.OrExpr:
-		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc)
+		return planLogProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc)
 	default:
 		return nil, resultIdx, nil, internalMemUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
@@ -1539,9 +1547,9 @@ func planProjectionExpr(
 	return op, resultIdx, ct, internalMemUsed, err
 }
 
-// planLogicalProjectionOp plans all the needed operators for a projection of
+// planLogProjectionOp plans all the needed operators for a projection of
 // a logical operation (either AND or OR).
-func planLogicalProjectionOp(
+func planLogProjectionOp(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	expr tree.TypedExpr,
