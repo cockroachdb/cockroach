@@ -84,7 +84,7 @@ func tuplesDiffer(
 		var unique bool
 		arg1 := execgen.UNSAFEGET(aCol, aTupleIdx)
 		arg2 := execgen.UNSAFEGET(bCol, bTupleIdx)
-		_ASSIGN_NE("unique", "arg1", "arg2")
+		_ASSIGN_NE(unique, arg1, arg2)
 		*differ = *differ || unique
 		return nil
 	// {{end}}

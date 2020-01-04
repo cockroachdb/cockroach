@@ -1462,3 +1462,16 @@ func makeFunctionRegex(funcName string, numArgs int) *regexp.Regexp {
 
 	return regexp.MustCompile(`(?s)` + funcName + `\(` + argsRegex + `\)`)
 }
+
+// makeTemplateFunctionCall makes a string representing a function call in the
+// template language. For example, it will return
+//   `{{.Assign "$1" "$2" "$3"}}`
+// if funcName is `Assign` and numArgs is 3.
+func makeTemplateFunctionCall(funcName string, numArgs int) string {
+	res := "{{." + funcName
+	for i := 1; i <= numArgs; i++ {
+		res += fmt.Sprintf(" \"$%d\"", i)
+	}
+	res += "}}"
+	return res
+}

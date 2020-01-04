@@ -33,7 +33,7 @@ func genMergeJoinBase(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Eq.Assign", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 

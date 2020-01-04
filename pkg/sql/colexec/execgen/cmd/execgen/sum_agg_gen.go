@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -33,8 +32,8 @@ func genSumAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
-	assignAddRe := regexp.MustCompile(`_ASSIGN_ADD\((.*),(.*),(.*)\)`)
-	s = assignAddRe.ReplaceAllString(s, "{{.Global.Assign $1 $2 $3}}")
+	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 3)
+	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)

@@ -119,7 +119,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			col := batch.ColVec(int(colIdx))._TemplateType()
 			curVal = execgen.UNSAFEGET(col, int(tupleToLookAtIdx))
 			var match bool
-			_ASSIGN_EQ("match", "prevVal", "curVal")
+			_ASSIGN_EQ(match, prevVal, curVal)
 			if !match {
 				return true
 			}

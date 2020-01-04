@@ -73,9 +73,9 @@ func genBooleanAgg(wr io.Writer) error {
 	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" .}}`)
 
 	assignBoolRe := makeFunctionRegex("_ASSIGN_BOOL_OP", 3)
-	s = assignBoolRe.ReplaceAllString(s, `{{.AssignBoolOp "$1" "$2" "$3"}}`)
+	s = assignBoolRe.ReplaceAllString(s, makeTemplateFunctionCall(`AssignBoolOp`, 3))
 
-	tmpl, err := template.New("boolean_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
+	tmpl, err := template.New("bool_and_or_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

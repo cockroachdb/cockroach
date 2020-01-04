@@ -104,7 +104,7 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint
 	left := execgen.UNSAFEGET(c.vecs[vecIdx1], int(valIdx1))
 	right := execgen.UNSAFEGET(c.vecs[vecIdx2], int(valIdx2))
 	var cmp int
-	_COMPARE("cmp", "left", "right")
+	_COMPARE(cmp, left, right)
 	return cmp
 }
 

@@ -26,7 +26,7 @@ func genCastOperators(wr io.Writer) error {
 	s := string(t)
 
 	assignCast := makeFunctionRegex("_ASSIGN_CAST", 2)
-	s = assignCast.ReplaceAllString(s, `{{.Assign "$1" "$2"}}`)
+	s = assignCast.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 2))
 	s = strings.Replace(s, "_ALLTYPES", "{{$typ}}", -1)
 	s = strings.Replace(s, "_FROMTYPE", "{{.FromTyp}}", -1)
 	s = strings.Replace(s, "_TOTYPE", "{{.ToTyp}}", -1)
