@@ -17,6 +17,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
+func TestFuncDeps_DowngradeKey(t *testing.T) {
+	fd1 := &props.FuncDepSet{}
+	fd1.AddStrictKey(c(1), c(1, 2, 3))
+	fd1.DowngradeKey()
+	fd1.Verify()
+	verifyFD(t, fd1, "lax-key(1); (1)-->(2,3)")
+
+	// Downgrading an empty strict key should not result in an empty lax key,
+	// which is invalid.
+	fd2 := &props.FuncDepSet{}
+	fd2.AddStrictKey(opt.ColSet{}, c(1, 2, 3))
+	fd2.DowngradeKey()
+	fd2.Verify()
+	verifyFD(t, fd2, "()-->(1-3)")
+}
+
 // Other tests also exercise the ColsAreKey methods.
 func TestFuncDeps_ColsAreKey(t *testing.T) {
 	// CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
