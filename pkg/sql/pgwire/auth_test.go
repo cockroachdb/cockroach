@@ -194,8 +194,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return fmtErr(err)
 				}
 				defer dbSQL.Close()
-				_, err = dbSQL.Exec("SHOW TABLES")
-				return fmtErr(err)
+				row := dbSQL.QueryRow("SELECT current_catalog")
+				var dbName string
+				if err := row.Scan(&dbName); err != nil {
+					return fmtErr(err)
+				}
+				return "ok " + dbName
 
 			default:
 				td.Fatalf(t, "unknown command: %s", td.Cmd)
