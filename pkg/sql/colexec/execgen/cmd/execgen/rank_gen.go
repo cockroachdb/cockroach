@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 )
@@ -68,10 +67,10 @@ func genRankOps(wr io.Writer) error {
 
 	s = strings.Replace(s, "_RANK_STRING", "{{.String}}", -1)
 
-	updateRankRe := regexp.MustCompile(`_UPDATE_RANK_\(\)`)
-	s = updateRankRe.ReplaceAllString(s, "{{.UpdateRank}}")
-	updateRankIncrementRe := regexp.MustCompile(`_UPDATE_RANK_INCREMENT\(\)`)
-	s = updateRankIncrementRe.ReplaceAllString(s, "{{.UpdateRankIncrement}}")
+	updateRankRe := makeFunctionRegex("_UPDATE_RANK", 0)
+	s = updateRankRe.ReplaceAllString(s, makeTemplateFunctionCall("UpdateRank", 0))
+	updateRankIncrementRe := makeFunctionRegex("_UPDATE_RANK_INCREMENT", 0)
+	s = updateRankIncrementRe.ReplaceAllString(s, makeTemplateFunctionCall("UpdateRankIncrement", 0))
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("rank_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

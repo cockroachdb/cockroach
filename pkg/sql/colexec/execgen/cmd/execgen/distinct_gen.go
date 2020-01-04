@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -35,14 +34,14 @@ func genDistinctOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
-	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, `{{.Assign "$1" "$2" "$3"}}`)
+	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
-	innerLoopRe := regexp.MustCompile(`_CHECK_DISTINCT\(.*\)`)
+	innerLoopRe := makeFunctionRegex("_CHECK_DISTINCT", 5)
 	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" .}}`)
 	s = replaceManipulationFuncs(".LTyp", s)
 
-	innerLoopNullsRe := regexp.MustCompile(`_CHECK_DISTINCT_WITH_NULLS\(.*\)`)
+	innerLoopNullsRe := makeFunctionRegex("_CHECK_DISTINCT_WITH_NULLS", 7)
 	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" .}}`)
 
 	// Now, generate the op, from the template.

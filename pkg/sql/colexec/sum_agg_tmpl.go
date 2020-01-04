@@ -200,7 +200,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 	isNull = false
 	// {{ end }}
 	if !isNull {
-		_ASSIGN_ADD("a.scratch.curAgg", "a.scratch.curAgg", "col[i]")
+		_ASSIGN_ADD(a.scratch.curAgg, a.scratch.curAgg, col[i])
 		a.scratch.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

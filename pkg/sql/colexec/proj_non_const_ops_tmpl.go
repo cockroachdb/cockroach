@@ -198,7 +198,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		// {{end}}
 		arg1 := _L_UNSAFEGET(col1, int(i))
 		arg2 := _R_UNSAFEGET(col2, int(i))
-		_ASSIGN("projCol[i]", "arg1", "arg2")
+		_ASSIGN(projCol[i], arg1, arg2)
 		// {{if _HAS_NULLS }}
 	}
 	// {{end}}

@@ -28,7 +28,7 @@ func genSelectIn(wr io.Writer) error {
 	s := string(t)
 
 	assignEq := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEq.ReplaceAllString(s, `{{.Assign "$1" "$2" "$3"}}`)
+	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 	s = strings.Replace(s, "_GOTYPE", "{{.LGoType}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)

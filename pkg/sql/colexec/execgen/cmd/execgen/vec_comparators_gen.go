@@ -13,7 +13,6 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -28,8 +27,8 @@ func genVecComparators(wr io.Writer) error {
 	s := string(d)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	compareRe := regexp.MustCompile(`_COMPARE\((.*),(.*),(.*)\)`)
-	s = compareRe.ReplaceAllString(s, "{{.Compare $1 $2 $3}}")
+	compareRe := makeFunctionRegex("_COMPARE", 3)
+	s = compareRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 

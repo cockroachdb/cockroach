@@ -32,7 +32,7 @@ func genHashAggregator(wr io.Writer) error {
 	s = replaceManipulationFuncs(".Global.LTyp", s)
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignCmpRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
+	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
 	matchLoop := makeFunctionRegex("_MATCH_LOOP", 8)
 	s = matchLoop.ReplaceAllString(
