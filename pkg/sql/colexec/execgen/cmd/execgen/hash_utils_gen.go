@@ -30,7 +30,7 @@ func genHashUtils(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
-	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
+	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 2))
 
 	rehash := makeFunctionRegex("_REHASH_BODY", 8)
 	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $7 "HasNulls" $8}}`)

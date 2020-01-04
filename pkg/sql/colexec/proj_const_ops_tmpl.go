@@ -169,9 +169,9 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		// {{end}}
 		arg := execgen.UNSAFEGET(col, int(i))
 		// {{if _IS_CONST_LEFT}}
-		_ASSIGN("projCol[i]", "p.constArg", "arg")
+		_ASSIGN(projCol[i], p.constArg, arg)
 		// {{else}}
-		_ASSIGN("projCol[i]", "arg", "p.constArg")
+		_ASSIGN(projCol[i], arg, p.constArg)
 		// {{end}}
 		// {{if _HAS_NULLS }}
 	}

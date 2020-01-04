@@ -239,7 +239,7 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		} else {
 			var cmp bool
 			candidate := execgen.UNSAFEGET(col, int(i))
-			_ASSIGN_CMP("cmp", "candidate", "a.curAgg")
+			_ASSIGN_CMP(cmp, candidate, a.curAgg)
 			if cmp {
 				a.curAgg = candidate
 			}

@@ -197,7 +197,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// We always indirect via the order vector.
 	arg1 := execgen.UNSAFEGET(s.sortCol, int(s.order[i]))
 	arg2 := execgen.UNSAFEGET(s.sortCol, int(s.order[j]))
-	_ASSIGN_LT("lt", "arg1", "arg2")
+	_ASSIGN_LT(lt, arg1, arg2)
 	return lt
 }
 
