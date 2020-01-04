@@ -1535,3 +1535,31 @@ right-join (merge)
       └── gt [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
            ├── variable: y [type=int]
            └── variable: v [type=int]
+
+# Regression test #43651: outer join with empty key.
+opt
+SELECT a FROM
+    (VALUES (NULL)) AS t1(a)
+  FULL JOIN
+    (VALUES ('23:59:59.999999':::TIME)) AS t2(b)
+  ON false
+----
+full-join
+ ├── columns: a:1(unknown)
+ ├── cardinality: [2 - 2]
+ ├── prune: (1)
+ ├── reject-nulls: (1)
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple{}]
+ └── filters
+      └── false [type=bool]
