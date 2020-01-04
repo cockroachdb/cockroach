@@ -85,6 +85,12 @@ ignored = [
   source = "https://github.com/cockroachdb/yaml"
   branch = "v2-encoding-style"
 
+# We want https://github.com/olekukonko/tablewriter/pull/148
+[[constraint]]
+  name = "github.com/olekukonko/tablewriter"
+  source = "https://github.com/cockroachdb/tablewriter"
+  branch = "master"
+
 [[constraint]]
   name = "github.com/abourget/teamcity"
   source = "https://github.com/cockroachdb/teamcity"

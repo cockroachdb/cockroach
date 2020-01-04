@@ -1312,12 +1312,13 @@
   version = "v0.4.0"
 
 [[projects]]
-  digest = "1:abcdbf03ca6ca13d3697e2186edc1f33863bbdac2b3a44dfa39015e8903f7409"
+  branch = "master"
+  digest = "1:b6e102cb76dcc7fb051e885ef5f7c2fe886d9a4cf6ac4ee6d292685e20a93c76"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e6d60cf7ba1f42d86d54cdf5508611c4aafb3970"
-  version = "v0.0.1"
+  revision = "bd15540e88470a2a7abfd3d457874fbee6702218"
+  source = "https://github.com/cockroachdb/tablewriter"
 
 [[projects]]
   digest = "1:ee4d4af67d93cc7644157882329023ce9a7bcfce956a079069a9405521c7cc8d"
@@ -2029,6 +2030,7 @@
     "github.com/cockroachdb/datadriven",
     "github.com/cockroachdb/errors",
     "github.com/cockroachdb/errors/errorspb",
+    "github.com/cockroachdb/errors/stdstrings",
     "github.com/cockroachdb/errors/testutils",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
