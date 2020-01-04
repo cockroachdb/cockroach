@@ -378,9 +378,9 @@ type FuncDepSet struct {
 	//  - strictKey if the relation has no duplicate rows, which means at least
 	//    one subset of its columns form a key (all columns, if no other subset).
 	//    The key field contains one such key. See the "Keys" section above for
-	//    more details.
+	//    more details. A strict key can be empty.
 	//  - laxKey if there is a at least one subset of columns that form a lax key.
-	//    The key field contains one such key.
+	//    The key field contains one such key. A lax key cannot be empty.
 	//
 	// See the "Keys" section above for more details.
 	hasKey keyType
@@ -481,7 +481,12 @@ func (f *FuncDepSet) HasMax1Row() bool {
 // key, it becomes a lax key.
 func (f *FuncDepSet) DowngradeKey() {
 	if f.hasKey == strictKey {
-		f.hasKey = laxKey
+		if f.key.Empty() {
+			// There is no such thing as an empty lax key.
+			f.hasKey = noKey
+		} else {
+			f.hasKey = laxKey
+		}
 	}
 }
 
@@ -1282,6 +1287,10 @@ func (f *FuncDepSet) Verify() {
 			if !f.ComputeClosure(f.key).Equals(allCols) {
 				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", log.Safe(f)))
 			}
+		}
+
+		if f.hasKey == laxKey && f.key.Empty() {
+			panic(errors.AssertionFailedf("expected lax key to be not empty"))
 		}
 	} else {
 		if !f.key.Empty() {
