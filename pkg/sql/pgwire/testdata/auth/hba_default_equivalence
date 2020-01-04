@@ -19,7 +19,7 @@ subtest root
 # Root can always connect regardless.
 connect user=root
 ----
-ok
+ok defaultdb
 
 # The rule has method "cert" so a cert is required in any case.
 connect user=root password=foo sslmode=verify-ca sslcert=
@@ -33,7 +33,7 @@ subtest normaluser_cert
 # User need no password, and we're presenting a client cert. All good.
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 # Make the user need a password.
 sql
@@ -44,7 +44,7 @@ ok
 # Password now needed, but as long as we're presenting a cert it's good.
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 # If we don't present the client certificate, the password is required.
 connect user=testuser password=invalid sslmode=verify-ca sslcert=
@@ -53,7 +53,7 @@ ERROR: password authentication failed for user testuser
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
-ok
+ok defaultdb
 
 # Reset the test user to no password.
 sql
