@@ -57,18 +57,38 @@ func (m *memColumn) Append(args SliceArgs) {
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
+		// NOTE: it is unfortunate that we always append whole slice without paying
+		// attention to whether the values are NULL. However, if we do start paying
+		// attention, the performance suffers dramatically, so we choose to copy
+		// over "actual" as well as "garbage" values.
 		if args.Sel == nil {
 			execgen.APPENDSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 		} else {
 			sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-			// TODO(asubiotto): We could be more efficient for fixed width types by
-			// preallocating a destination slice (not so for variable length types).
-			// Improve this.
 			// {{if eq .LTyp.String "Bytes"}}
 			// We need to truncate toCol before appending to it, so in case of Bytes,
 			// we append an empty slice.
 			execgen.APPENDSLICE(toCol, toCol, int(args.DestIdx), 0, 0)
+			// We will be getting all values below to be appended, regardless of
+			// whether the value is NULL. It is possible that Bytes' invariant of
+			// non-decreasing offsets on the source is currently not maintained, so
+			// we explicitly enforce it.
+			maxIdx := uint16(0)
+			for _, selIdx := range sel {
+				if selIdx > maxIdx {
+					maxIdx = selIdx
+				}
+			}
+			fromCol.UpdateOffsetsToBeNonDecreasing(uint64(maxIdx + 1))
 			// {{else}}
+			// Ensure that the slice has the capacity for all non-variable width
+			// types.
+			desiredCap := args.DestIdx + args.SrcEndIdx - args.SrcStartIdx
+			if uint64(cap(toCol)) < desiredCap {
+				newToCol := make([]_GOTYPE, desiredCap)
+				copy(newToCol, toCol[:args.DestIdx])
+				toCol = newToCol
+			}
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
 			// {{end}}
 			for _, selIdx := range sel {
