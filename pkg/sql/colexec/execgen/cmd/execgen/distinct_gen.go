@@ -35,17 +35,17 @@ func genDistinctOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
+	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
 	innerLoopRe := makeFunctionRegex("_CHECK_DISTINCT", 5)
-	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" .}}`)
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" buildDict "Global" . "LTyp" .LTyp}}`)
 
 	innerLoopNullsRe := makeFunctionRegex("_CHECK_DISTINCT_WITH_NULLS", 7)
-	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" .}}`)
+	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" buildDict "Global" . "LTyp" .LTyp}}`)
+	s = replaceManipulationFuncs(".LTyp", s)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("distinct_op").Parse(s)
+	tmpl, err := template.New("distinct_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

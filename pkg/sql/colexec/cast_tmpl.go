@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,9 +68,6 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 }
 
 // */}}
-
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
 
 func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n uint16, sel []uint16) {
 	switch fromType {

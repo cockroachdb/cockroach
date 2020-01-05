@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
@@ -72,9 +74,6 @@ func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
 
 // */}}
 
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
-
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to input continues in batch.
 func (o *mergeJoinBase) isBufferedGroupFinished(
@@ -100,7 +99,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 		colTyp := input.sourceTypes[colIdx]
 
 		switch colTyp {
-		// {{ range $.MJOverloads }}
+		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the last
 			// buffered tuple regardless of the join type since it is done only once
