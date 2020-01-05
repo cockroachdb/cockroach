@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -83,9 +85,6 @@ func _ROWS_TO_COL_VEC(
 }
 
 // */}}
-
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
 
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.

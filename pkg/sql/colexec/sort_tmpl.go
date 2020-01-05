@@ -30,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -78,9 +80,6 @@ func _ASSIGN_LT(_, _, _ string) bool {
 }
 
 // */}}
-
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
 
 func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
 	switch t {

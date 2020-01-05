@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -64,9 +66,6 @@ type _GOTYPESLICE interface{}
 const _TYPES_T = coltypes.Unhandled
 
 // */}}
-
-// Use execgen package to remove unused import warning.
-var _ interface{} = execgen.UNSAFEGET
 
 // {{range .}}
 
