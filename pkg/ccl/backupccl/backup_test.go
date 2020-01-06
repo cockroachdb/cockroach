@@ -71,6 +71,28 @@ const (
 	localFoo                    = "nodelocal:///foo"
 )
 
+func backupRestoreTestSetupEmptyWithParams(
+	t testing.TB,
+	clusterSize int,
+	dir string,
+	init func(tc *testcluster.TestCluster),
+	params base.TestClusterArgs,
+) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	ctx = context.Background()
+
+	params.ServerArgs.ExternalIODir = dir
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
+	init(tc)
+
+	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	cleanupFn := func() {
+		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
+	}
+
+	return ctx, tc, sqlDB, cleanupFn
+}
+
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
 	clusterSize int,
@@ -147,6 +169,12 @@ func backupRestoreTestSetup(
 	cleanup func(),
 ) {
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+}
+
+func backupRestoreTestSetupEmpty(
+	t testing.TB, clusterSize int, tempDir string, init func(*testcluster.TestCluster),
+) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, base.TestClusterArgs{})
 }
 
 func verifyBackupRestoreStatementResult(

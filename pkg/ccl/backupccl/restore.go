@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"runtime"
 	"sort"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -56,6 +58,10 @@ const (
 	restoreOptSkipMissingFKs       = "skip_missing_foreign_keys"
 	restoreOptSkipMissingSequences = "skip_missing_sequences"
 	restoreOptSkipMissingViews     = "skip_missing_views"
+
+	// The temporary database system tables will be restored into for full
+	// cluster backups.
+	restoreTempSystemDB = "crdb_temp_system"
 )
 
 var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
@@ -202,14 +208,43 @@ func loadSQLDescsFromBackupsAtTime(
 	return allDescs, lastBackupDesc
 }
 
+func fullClusterTargetsRestore(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	if err != nil {
+		return nil, nil, err
+	}
+	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
+	for _, desc := range fullClusterDescs {
+		if _, isDefaultDB := defaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != sqlbase.SystemDB.ID {
+			filteredDescs = append(filteredDescs, desc)
+		}
+	}
+	filteredDBs := make([]*sqlbase.DatabaseDescriptor, 0, len(fullClusterDBs))
+	for _, db := range fullClusterDBs {
+		if _, isDefaultDB := defaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != sqlbase.SystemDB.ID {
+			filteredDBs = append(filteredDBs, db)
+		}
+	}
+
+	return filteredDescs, filteredDBs, nil
+}
+
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
 	backupDescs []BackupDescriptor,
 	targets tree.TargetList,
+	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	allDescs, lastBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, asOf)
+
+	if descriptorCoverage == tree.AllDescriptors {
+		return fullClusterTargetsRestore(allDescs)
+	}
+
 	matched, err := descriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
 	if err != nil {
@@ -297,7 +332,7 @@ func maybeFilterMissingViews(
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
 // for each table in sqlDescs and returns a mapping from old ID to said
 // TableRewrite. It first validates that the provided sqlDescs can be restored
-// into their original database (or the database specified in opst) to avoid
+// into their original database (or the database specified in opts) to avoid
 // leaking table IDs if we can be sure the restore would fail.
 func allocateTableRewrites(
 	ctx context.Context,
@@ -305,6 +340,7 @@ func allocateTableRewrites(
 	databasesByID map[sqlbase.ID]*sql.DatabaseDescriptor,
 	tablesByID map[sqlbase.ID]*sql.TableDescriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
+	descriptorCoverage tree.DescriptorCoverage,
 	opts map[string]string,
 ) (TableRewriteMap, error) {
 	tableRewrites := make(TableRewriteMap)
@@ -324,7 +360,11 @@ func allocateTableRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
+	maxDescIDInBackup := uint32(0)
 	for _, table := range tablesByID {
+		if uint32(table.ID) > maxDescIDInBackup {
+			maxDescIDInBackup = uint32(table.ID)
+		}
 		// Check that foreign key targets exist.
 		for i := range table.OutboundFKs {
 			fk := &table.OutboundFKs[i]
@@ -356,17 +396,41 @@ func allocateTableRewrites(
 
 	needsNewParentIDs := make(map[string][]sqlbase.ID)
 
+	// Increment the DescIDGenerator so that it is higher than the max desc ID in
+	// the backup. This generator keeps produced the next descriptor ID.
+	var tempSysDBID sqlbase.ID
+	if descriptorCoverage == tree.AllDescriptors {
+		var err error
+		maxDefaultID := keys.MinUserDescID + len(defaultUserDBs)
+		numberOfIncrements := maxDescIDInBackup - uint32(maxDefaultID)
+		for i := uint32(0); i <= numberOfIncrements; i++ {
+			_, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Generate one more desc ID for the ID of the temporary system db.
+		tempSysDBID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		if err != nil {
+			return nil, err
+		}
+		tableRewrites[tempSysDBID] = &jobspb.RestoreDetails_TableRewrite{TableID: tempSysDBID}
+	}
+
 	// Fail fast if the necessary databases don't exist or are otherwise
 	// incompatible with this restore.
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			found, _, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+			found, foundID, err := sqlbase.LookupDatabaseID(ctx, txn, name)
 			if err != nil {
 				return err
 			}
-			if found {
-				return errors.Errorf("database %q already exists", name)
+			if found && descriptorCoverage == tree.AllDescriptors {
+				if foundID > 52 {
+					return errors.Errorf("database %q already exists", name)
+				}
 			}
 		}
 
@@ -374,6 +438,28 @@ func allocateTableRewrites(
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
+			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < keys.MinUserDescID+sqlbase.ID(len(defaultUserDBs)) {
+				// This is a table that is in a database that already existed at
+				// cluster creation time.
+				defaultDBID, err := lookupDatabaseID(ctx, txn, sessiondata.DefaultDatabaseName)
+				if err != nil {
+					return err
+				}
+				postgresDBID, err := lookupDatabaseID(ctx, txn, sessiondata.PgDatabaseName)
+				if err != nil {
+					return err
+				}
+
+				if table.ParentID == sqlbase.SystemDB.ID {
+					// For full cluster backups, put the system tables in the temporary
+					// system table.
+					targetDB = restoreTempSystemDB
+					tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: tempSysDBID}
+				} else if table.ParentID == defaultDBID {
+					targetDB = sessiondata.DefaultDatabaseName
+				} else if table.ParentID == postgresDBID {
+					targetDB = sessiondata.PgDatabaseName
+				}
 			} else {
 				database, ok := databasesByID[table.ParentID]
 				if !ok {
@@ -385,6 +471,12 @@ func allocateTableRewrites(
 
 			if _, ok := restoreDBNames[targetDB]; ok {
 				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], table.ID)
+			} else if descriptorCoverage == tree.AllDescriptors {
+				// Set the remapped ID to the original parent ID, except for system tables which
+				// should be RESTOREd to the temporary system database.
+				if targetDB != restoreTempSystemDB {
+					tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: table.ParentID}
+				}
 			} else {
 				var parentID sqlbase.ID
 				{
@@ -398,7 +490,6 @@ func allocateTableRewrites(
 					}
 					parentID = newParentID
 				}
-
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
 				if err := CheckTableExists(ctx, txn, parentID, table.Name); err != nil {
@@ -442,30 +533,64 @@ func allocateTableRewrites(
 	// it would be a big performance hit.
 
 	for _, db := range restoreDBs {
-		newID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-		if err != nil {
-			return nil, err
+		var newID sqlbase.ID
+		var err error
+		if descriptorCoverage == tree.AllDescriptors {
+			newID = db.ID
+		} else {
+			newID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			if err != nil {
+				return nil, err
+			}
 		}
+
 		tableRewrites[db.ID] = &jobspb.RestoreDetails_TableRewrite{TableID: newID}
 		for _, tableID := range needsNewParentIDs[db.Name] {
 			tableRewrites[tableID] = &jobspb.RestoreDetails_TableRewrite{ParentID: newID}
 		}
 	}
 
-	tables := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
+	// tablesToRemap usually contains all tables that are being restored. In a
+	// full cluster restore this should only include the system tables that need
+	// to be remapped to the temporary table. All other tables in a full cluster
+	// backup should have the same ID as they do in the backup.
+	tablesToRemap := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
-		tables = append(tables, table)
+		if descriptorCoverage == tree.AllDescriptors {
+			if table.ParentID == sqlbase.SystemDB.ID {
+				// This is a system table that should be marked for descriptor creation.
+				tablesToRemap = append(tablesToRemap, table)
+			} else {
+				// This table does not need to be remapped.
+				tableRewrites[table.ID].TableID = table.ID
+			}
+		} else {
+			tablesToRemap = append(tablesToRemap, table)
+		}
 	}
-	sort.Sort(sqlbase.TableDescriptors(tables))
-	for _, table := range tables {
+
+	// Generate new IDs for the tables that need to be remapped.
+	for _, table := range tablesToRemap {
 		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 		if err != nil {
 			return nil, err
 		}
 		tableRewrites[table.ID].TableID = newTableID
 	}
+	sort.Sort(sqlbase.TableDescriptors(tablesToRemap))
 
 	return tableRewrites, nil
+}
+
+func lookupDatabaseID(ctx context.Context, txn *client.Txn, name string) (sqlbase.ID, error) {
+	found, id, err := sqlbase.LookupDatabaseID(ctx, txn, name)
+	if err != nil {
+		return sqlbase.InvalidID, err
+	}
+	if !found {
+		return sqlbase.InvalidID, errors.Errorf("could not find ID for database %s", name)
+	}
+	return id, nil
 }
 
 // CheckTableExists returns an error if a table already exists with given
@@ -1249,7 +1374,7 @@ func restore(
 	// readyForImportCh to indicate it's ready for Import. Since import is so
 	// much slower, we buffer the channel to keep the split/scatter work from
 	// getting too far ahead. This both naturally rate limits the split/scatters
-	// and bounds the number of empty ranges crated if the RESTORE fails (or is
+	// and bounds the number of empty ranges created if the RESTORE fails (or is
 	// canceled).
 	const presplitLeadLimit = 10
 	readyForImportCh := make(chan importEntry, presplitLeadLimit)
@@ -1440,6 +1565,26 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
+	// Validate that the table coverage of the backup matches that of the restore.
+	// This prevents FULL CLUSTER backups to be restored as anything but full
+	// cluster restores and vice-versa.
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupDescs[0].DescriptorCoverage == tree.RequestedDescriptors {
+		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
+	}
+
+	// Ensure that no user table descriptors exist for a full cluster restore.
+	descCount, err := userDescriptorCount(ctx, p.ExecCfg().DB, p.ExecCfg().Clock.Now())
+	if err != nil {
+		return errors.Wrap(err, "looking up user descriptors during restore")
+	}
+	if descCount != 0 && restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		return errors.Errorf(
+			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors",
+			descCount,
+		)
+	}
+
 	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
 	if err := maybeUpgradeTableDescsInBackupDescriptors(ctx, mainBackupDescs, skipMissingFKs); err != nil {
 		return err
@@ -1476,7 +1621,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupDescs, restoreStmt.Targets, endTime)
+	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupDescs, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return err
 	}
@@ -1494,7 +1639,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	tableRewrites, err := allocateTableRewrites(ctx, p, databasesByID, filteredTablesByID, restoreDBs, opts)
+	tableRewrites, err := allocateTableRewrites(ctx, p, databasesByID, filteredTablesByID, restoreDBs, restoreStmt.DescriptorCoverage, opts)
 	if err != nil {
 		return err
 	}
@@ -1527,6 +1672,7 @@ func doRestorePlan(
 			BackupLocalityInfo: localityInfo,
 			TableDescs:         tables,
 			OverrideDB:         opts[restoreOptIntoDB],
+			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 		},
 		Progress: jobspb.RestoreProgress{},
 	})
@@ -1534,6 +1680,29 @@ func doRestorePlan(
 		return err
 	}
 	return <-errCh
+}
+
+func userDescriptorCount(ctx context.Context, db *client.DB, asOf hlc.Timestamp) (int, error) {
+	allDescs, err := loadAllDescs(ctx, db, asOf)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, desc := range allDescs {
+		if t := desc.Table(hlc.Timestamp{}); t != nil {
+			// Don't count the default tables or system tables.
+			if t.ParentID != sqlbase.SystemDB.ID {
+				count++
+			}
+		} else if db := desc.GetDatabase(); db != nil {
+			if db.ID != sqlbase.SystemDB.ID && db.ID >= keys.MinUserDescID+sqlbase.ID(len(defaultUserDBs)) {
+				count++
+			}
+		}
+	}
+
+	return count, nil
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
@@ -1572,17 +1741,18 @@ func loadBackupSQLDescs(
 }
 
 type restoreResumer struct {
-	job         *jobs.Job
-	settings    *cluster.Settings
-	res         roachpb.BulkOpSummary
-	databases   []*sqlbase.DatabaseDescriptor
-	tables      []*sqlbase.TableDescriptor
-	latestStats []*stats.TableStatisticProto
-	execCfg     *sql.ExecutorConfig
+	job                *jobs.Job
+	settings           *cluster.Settings
+	res                roachpb.BulkOpSummary
+	databases          []*sqlbase.DatabaseDescriptor
+	tables             []*sqlbase.TableDescriptor
+	descriptorCoverage tree.DescriptorCoverage
+	latestStats        []*stats.TableStatisticProto
+	execCfg            *sql.ExecutorConfig
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
-// from those they had in the backed-up database to what they should be
+// from those they had in the backed up database to what they should be
 // in the restored database.
 // It also selects only the statistics which belong to one of the tables
 // being restored. If the tableRewrites can re-write the table ID, then that
@@ -1674,6 +1844,15 @@ func createImportingTables(
 			}
 		}
 	}
+	var tempSystemDBID sqlbase.ID
+	for id := range details.TableRewrites {
+		if uint32(id) > uint32(tempSystemDBID) {
+			tempSystemDBID = id
+		}
+	}
+	if details.DescriptorCoverage == tree.AllDescriptors {
+		databases = append(databases, &sqlbase.DatabaseDescriptor{ID: tempSystemDBID, Name: restoreTempSystemDB})
+	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
@@ -1697,7 +1876,7 @@ func createImportingTables(
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
 			if err := WriteTableDescs(ctx, txn, databases, tables, r.job.Payload().Username, r.settings, nil); err != nil {
-				return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
 			details.PrepareCompleted = true
@@ -1735,6 +1914,7 @@ func (r *restoreResumer) Resume(
 		return err
 	}
 	r.tables = tables
+	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
 	r.latestStats = remapRelevantStatistics(latestBackupDesc, details.TableRewrites)
@@ -1790,11 +1970,11 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		tableDesc.State = sqlbase.TableDescriptor_DROP
 		err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tbl.ParentID, tbl.Name)
 		if err != nil {
-			return errors.Wrap(err, "dropping tables")
+			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")
 		}
 		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 		if err != nil {
-			return errors.Wrap(err, "dropping tables")
+			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
 		b.CPut(
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
@@ -1802,9 +1982,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 			existingDescVal,
 		)
 	}
+
 	// Drop the database descriptors that were created at the start of the
 	// restore if they are now empty (i.e. no user created a table in this
-	// database during the restore.
+	// database during the restore).
 	var isDBEmpty bool
 	var err error
 	ignoredTables := make(map[sqlbase.ID]struct{})
@@ -1825,7 +2006,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 		}
 	}
 	if err := txn.Run(ctx, b); err != nil {
-		return errors.Wrap(err, "dropping tables")
+		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
 	}
 
 	return nil
@@ -1841,7 +2022,8 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
-	b := txn.NewBatch()
+	descriptorTxn := r.execCfg.DB.NewTxn(ctx, "descriptor-txn")
+	b := descriptorTxn.NewBatch()
 	for _, tbl := range r.tables {
 		tableDesc := *tbl
 		tableDesc.Version++
@@ -1856,8 +2038,16 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 			existingDescVal,
 		)
 	}
-	if err := txn.Run(ctx, b); err != nil {
+	if err := descriptorTxn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "publishing tables")
+	}
+	descriptorTxn.Commit(ctx)
+
+	if r.descriptorCoverage == tree.AllDescriptors {
+		err := r.restoreSystemTables(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -1865,6 +2055,45 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	// sure that stats always get created/refreshed here.
 	for i := range r.tables {
 		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].ID, math.MaxInt32 /* rowsAffected */)
+	}
+
+	return nil
+}
+
+// restoreSystemTables atomically replaces the contents of the system tables
+// with the data from the restored system tables.
+func (r *restoreResumer) restoreSystemTables(ctx context.Context) error {
+	executor := r.execCfg.InternalExecutor
+	var err error
+	for _, systemTable := range fullClusterSystemTables {
+		systemTxn := r.execCfg.DB.NewTxn(ctx, "system-restore-txn")
+		txnDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
+		// Don't clear the jobs table as to not delete the jobs that are performing
+		// the restore.
+		if systemTable != sqlbase.JobsTable.Name {
+			deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
+			_, err = executor.Exec(ctx, txnDebugName+"-data-deletion", systemTxn, deleteQuery)
+			if err != nil {
+				return errors.Wrapf(err, "restoring system.%s", systemTable)
+			}
+		}
+		restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s.%s);", systemTable, restoreTempSystemDB, systemTable)
+		_, err = executor.Exec(ctx, txnDebugName+"-data-insert", systemTxn, restoreQuery)
+		if err != nil {
+			return errors.Wrap(err, "restoring system tables")
+		}
+		err = systemTxn.Commit(ctx)
+		if err != nil {
+			return errors.Wrap(err, "committing system systemTable restoration")
+		}
+	}
+
+	// After restoring the system tables, the temporary database holding the
+	// system tables.
+	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
+	_, err = executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery)
+	if err != nil {
+		return errors.Wrap(err, "dropping temporary system db")
 	}
 
 	return nil

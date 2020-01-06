@@ -65,10 +65,11 @@ func (node *Backup) Format(ctx *FmtCtx) {
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets TargetList
-	From    []PartitionedBackup
-	AsOf    AsOfClause
-	Options KVOptions
+	Targets            TargetList
+	DescriptorCoverage DescriptorCoverage
+	From               []PartitionedBackup
+	AsOf               AsOfClause
+	Options            KVOptions
 }
 
 var _ Statement = &Restore{}
@@ -76,7 +77,9 @@ var _ Statement = &Restore{}
 // Format implements the NodeFormatter interface.
 func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
-	ctx.FormatNode(&node.Targets)
+	if node.DescriptorCoverage == RequestedDescriptors {
+		ctx.FormatNode(&node.Targets)
+	}
 	ctx.WriteString(" FROM ")
 	for i := range node.From {
 		if i > 0 {
