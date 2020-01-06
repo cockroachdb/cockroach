@@ -25,7 +25,7 @@ import (
 // RangeLookups and since this is how they currently collect intent values, this
 // is ok for now.
 func CollectIntentRows(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, intents []roachpb.Intent,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, intents []roachpb.Intent,
 ) ([]roachpb.KeyValue, error) {
 	if len(intents) == 0 {
 		return nil, nil

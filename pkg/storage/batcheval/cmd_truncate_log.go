@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.TruncateLog, declareKeysTruncateLog, TruncateLog)
+	RegisterReadWriteCommand(roachpb.TruncateLog, declareKeysTruncateLog, TruncateLog)
 }
 
 func declareKeysTruncateLog(
