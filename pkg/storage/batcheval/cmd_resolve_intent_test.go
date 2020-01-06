@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +71,7 @@ func (m *mockEvalCtx) GetLimiters() *Limiters {
 func (m *mockEvalCtx) AbortSpan() *abortspan.AbortSpan {
 	return m.abortSpan
 }
-func (m *mockEvalCtx) GetTxnWaitQueue() *txnwait.Queue {
+func (m *mockEvalCtx) GetConcurrencyManager() concurrency.Manager {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) NodeID() roachpb.NodeID {

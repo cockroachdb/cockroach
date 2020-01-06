@@ -883,9 +883,7 @@ func (ir *IntentResolver) ResolveIntents(
 	}
 	var resolveReqs []resolveReq
 	var resolveRangeReqs []roachpb.Request
-	for i := range intents {
-		intent := intents[i] // avoids a race in `i, intent := range ...`
-
+	for _, intent := range intents {
 		if len(intent.EndKey) == 0 {
 			resolveReqs = append(resolveReqs,
 				resolveReq{

@@ -85,9 +85,9 @@ func (s *Store) MergeRange(
 		leftRepl.writeStats.resetRequestCounts()
 	}
 
-	// Clear the wait queue to redirect the queued transactions to the
-	// left-hand replica, if necessary.
-	rightRepl.txnWaitQueue.Clear(true /* disable */)
+	// Clear the concurrency manager's txn wait queue to redirect the queued
+	// transactions to the left-hand replica, if necessary.
+	rightRepl.concMgr.OnMerge()
 
 	leftLease, _ := leftRepl.GetLease()
 	rightLease, _ := rightRepl.GetLease()
