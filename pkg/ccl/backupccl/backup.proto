@@ -102,6 +102,7 @@ message BackupDescriptor {
   repeated string partition_descriptor_filenames = 19;
   repeated string locality_kvs = 20 [(gogoproto.customname) = "LocalityKVs"];
   repeated sql.stats.TableStatisticProto statistics = 21;
+  int32 table_coverage = 22;
 }
 
 message BackupPartitionDescriptor{
