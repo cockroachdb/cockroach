@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,6 +60,7 @@ func TestSetups(t *testing.T) {
 // sometimes put them into bad states that the parser would never do.
 func TestGenerateParse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -96,6 +98,7 @@ func TestGenerateParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer smither.Close()
 
 	seen := map[string]bool{}
 	for i := 0; i < *flagNum; i++ {
