@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"strings"
@@ -42,15 +43,17 @@ import (
 //       security mode. (The default is `config secure insecure` i.e.
 //       the test file is applicable to both.)
 //
-// sql
-// <sql input>
-//       Execute the specified SQL statement using the default root
-//       connection provided by StartServer().
-//
 // set_hba
 // <hba config>
 //       Load the provided HBA configuration via the cluster setting
 //       server.host_based_authentication.configuration.
+//       The expected output is the configuration after parsing
+//       and reloading in the server.
+//
+// sql
+// <sql input>
+//       Execute the specified SQL statement using the default root
+//       connection provided by StartServer().
 //
 // connect [key=value ...]
 //       Attempt a SQL connection using the provided connection
@@ -80,8 +83,9 @@ import (
 //       sslmode also gets a default of "verify-full". For other
 //       users, sslmode is initialized by default to "verify-ca".
 //
-// For each of these directives, he expected output can be either "ok"
-// (no error) or "ERRROR:" followed by the expected error string.
+// For the directives "sql" and "connect", the expected output can be
+// either "ok" (no error) or "ERRROR:" followed by the expected error
+// string.
 //
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -92,9 +96,18 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 }
 
 func hbaRunTest(t *testing.T, insecure bool) {
+	httpScheme := "http://"
+	if !insecure {
+		httpScheme = "https://"
+	}
 	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
 		s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: insecure})
 		defer s.Stopper().Stop(context.TODO())
+		httpClient, err := s.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
 		if _, err := conn.ExecContext(context.Background(), `CREATE USER $1`, server.TestUser); err != nil {
 			t.Fatal(err)
@@ -121,7 +134,22 @@ func hbaRunTest(t *testing.T, insecure bool) {
 			case "set_hba":
 				_, err := conn.ExecContext(context.Background(),
 					`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, td.Input)
-				return fmtErr(err)
+				if err != nil {
+					return fmtErr(err)
+				}
+
+				// Verify the HBA configuration was processed properly by
+				// reporting the resulting cached configuration.
+				resp, err := httpClient.Get(httpHBAUrl)
+				if err != nil {
+					return fmtErr(err)
+				}
+				defer resp.Body.Close()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return fmtErr(err)
+				}
+				return string(body)
 
 			case "sql":
 				_, err := conn.ExecContext(context.Background(), td.Input)

@@ -12,6 +12,7 @@ package pgwire
 
 import (
 	"context"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -166,3 +167,22 @@ var (
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.
 type CheckHBAEntry func(hba.Entry) error
+
+// HBADebugFn exposes the computed HBA configuration via the debug
+// interface, for inspection by tests.
+func (s *Server) HBADebugFn() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		s.auth.RLock()
+		auth := s.auth.conf
+		s.auth.RUnlock()
+
+		_, _ = w.Write([]byte("# Cache of the HBA configuration on this node:\n"))
+		if auth == nil {
+			_, _ = w.Write([]byte("# (configuration is empty)"))
+		} else {
+			_, _ = w.Write([]byte(auth.String()))
+		}
+	}
+}

@@ -12,7 +12,9 @@ set_hba
 host all root 0.0.0.0/0 cert
 host all all 0.0.0.0/0 cert-password
 ----
-ok
+# Cache of the HBA configuration on this node:
+host all root 0.0.0.0/0 cert
+host all all 0.0.0.0/0 cert-password
 
 subtest root
 
