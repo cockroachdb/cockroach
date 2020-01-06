@@ -1,4 +1,7 @@
 restore_stmt ::=
-	'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list opt_as_of_clause 'WITH' kv_option_list
+	'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause 'WITH' kv_option_list
+	| 'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause 
+	| 'RESTORE' 'FROM' partitioned_backup_list opt_as_of_clause 
+	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list opt_as_of_clause 'WITH' kv_option_list
 	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list opt_as_of_clause 
 	| 'RESTORE' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' partitioned_backup_list opt_as_of_clause 
