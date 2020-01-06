@@ -25,7 +25,7 @@ subtest root
 # Root can always connect regardless.
 connect user=root
 ----
-ok
+ok defaultdb
 
 # When no client cert is presented, the server would otherwise require
 # password auth. However, root password auth is rejected in any case.
@@ -41,7 +41,7 @@ subtest normaluser_cert
 # User need no password, and we're presenting a client cert. All good.
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 # Make the user need a password.
 sql
@@ -52,7 +52,7 @@ ok
 # Password now needed, but as long as we're presenting a cert it's good.
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 # If we don't present the client certificate, the password is required.
 connect user=testuser password=invalid sslmode=verify-ca sslcert=
@@ -61,7 +61,7 @@ ERROR: password authentication failed for user testuser
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
-ok
+ok defaultdb
 
 # Reset the test user to no password.
 sql
@@ -97,3 +97,34 @@ DROP USER testuser_nocert
 ok
 
 subtest end normaluser_nocert
+
+subtest unicode_user_and_username_normalization
+
+sql
+CREATE USER ὀδυσσεύς WITH PASSWORD '蟑♫螂';
+----
+ok
+
+# Check that the user can log in.
+connect user=(ὀδυσσεύς) password=(蟑♫螂)
+----
+ok defaultdb
+
+# Verify auth fails without password.
+#
+# Also verify that the username gets normalized: the username
+# is created as 'ὀ' and we provide 'Ὀ'.
+#
+# (The parentheses are required so that the datadriven runner
+# accepts the unicode characters.)
+#
+connect user=(Ὀδυσσεύς) password=
+----
+ERROR: password authentication failed for user ὀδυσσεύς
+
+# The unicode password succeeds, with user normalization.
+connect user=(Ὀδυσσεύς) password=(蟑♫螂)
+----
+ok defaultdb
+
+subtest end
