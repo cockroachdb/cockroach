@@ -36,10 +36,10 @@ const (
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
 type sklImpl struct {
-	rCache, wCache *intervalSkl
-	clock          *hlc.Clock
-	pageSize       uint32
-	metrics        Metrics
+	cache    *intervalSkl
+	clock    *hlc.Clock
+	pageSize uint32
+	metrics  Metrics
 }
 
 var _ Cache = &sklImpl{}
@@ -56,62 +56,39 @@ func newSklImpl(clock *hlc.Clock, pageSize uint32) *sklImpl {
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Read)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Write)
-	tc.rCache.floorTS = lowWater
-	tc.wCache.floorTS = lowWater
-}
-
-// getSkl returns either the read or write intervalSkl.
-func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
-	if readCache {
-		return tc.rCache
-	}
-	return tc.wCache
+	tc.cache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl)
+	tc.cache.floorTS = lowWater
 }
 
 // Add implements the Cache interface.
-func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
 	start, end = tc.boundKeyLengths(start, end)
 
-	skl := tc.getSkl(readCache)
 	val := cacheValue{ts: ts, txnID: txnID}
 	if len(end) == 0 {
-		skl.Add(nonNil(start), val)
+		tc.cache.Add(nonNil(start), val)
 	} else {
-		skl.AddRange(nonNil(start), end, excludeTo, val)
+		tc.cache.AddRange(nonNil(start), end, excludeTo, val)
 	}
 }
 
 // SetLowWater implements the Cache interface.
 func (tc *sklImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.Add(start, end, ts, noTxnID, false /* readCache */)
-	tc.Add(start, end, ts, noTxnID, true /* readCache */)
+	tc.Add(start, end, ts, noTxnID)
 }
 
 // getLowWater implements the Cache interface.
-func (tc *sklImpl) getLowWater(readCache bool) hlc.Timestamp {
-	return tc.getSkl(readCache).FloorTS()
+func (tc *sklImpl) getLowWater() hlc.Timestamp {
+	return tc.cache.FloorTS()
 }
 
-// GetMaxRead implements the Cache interface.
-func (tc *sklImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	return tc.getMax(start, end, true /* readCache */)
-}
-
-// GetMaxWrite implements the Cache interface.
-func (tc *sklImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	return tc.getMax(start, end, false /* readCache */)
-}
-
-func (tc *sklImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
-	skl := tc.getSkl(readCache)
-
+// GetMax implements the Cache interface.
+func (tc *sklImpl) GetMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
 	var val cacheValue
 	if len(end) == 0 {
-		val = skl.LookupTimestamp(nonNil(start))
+		val = tc.cache.LookupTimestamp(nonNil(start))
 	} else {
-		val = skl.LookupTimestampRange(nonNil(start), end, excludeTo)
+		val = tc.cache.LookupTimestampRange(nonNil(start), end, excludeTo)
 	}
 	return val.ts, val.txnID
 }

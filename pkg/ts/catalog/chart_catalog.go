@@ -674,15 +674,13 @@ var charts = []sectionDescription{
 			{
 				Title: "Page Counts",
 				Metrics: []string{
-					"tscache.skl.read.pages",
-					"tscache.skl.write.pages",
+					"tscache.skl.pages",
 				},
 			},
 			{
 				Title: "Page Rotations",
 				Metrics: []string{
-					"tscache.skl.read.rotations",
-					"tscache.skl.write.rotations",
+					"tscache.skl.rotations",
 				},
 			},
 		},

@@ -106,10 +106,14 @@ type txnSpanRefresher struct {
 	knobs   *ClientTestingKnobs
 	wrapped lockedSender
 
-	// See LeafTxnFinalState.RefreshReads and LeafTxnFinalState.RefreshWrites.
-	refreshReads  []roachpb.Span
-	refreshWrites []roachpb.Span
-	// See LeafTxnFinalState.RefreshInvalid.
+	// refreshSpans contains key spans which were read during the  transaction. In
+	// case the transaction's timestamp needs to be pushed, we can avoid a
+	// retriable error by "refreshing" these spans: verifying that there have been
+	// no changes to their data in between the timestamp at which they were read
+	// and the higher timestamp we want to move to.
+	refreshSpans []roachpb.Span
+	// refreshInvalid is set if refresh spans have not been collected (because the
+	// memory budget was exceeded). When set, refreshSpans is empty.
 	refreshInvalid bool
 	// refreshSpansBytes is the total size in bytes of the spans
 	// encountered during this transaction that need to be refreshed
@@ -149,7 +153,7 @@ func (sr *txnSpanRefresher) SendLocked(
 
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 		et := rArgs.(*roachpb.EndTxnRequest)
-		if !sr.refreshInvalid && len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
+		if !sr.refreshInvalid && len(sr.refreshSpans) == 0 {
 			et.NoRefreshSpans = true
 		}
 	}
@@ -188,8 +192,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// doesn't exceed the max threshold.
 	if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
 		log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
-		sr.refreshReads = nil
-		sr.refreshWrites = nil
+		sr.refreshSpans = nil
 		sr.refreshInvalid = true
 		sr.refreshSpansBytes = 0
 	}
@@ -290,7 +293,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
 		return false
-	} else if len(sr.refreshReads) == 0 && len(sr.refreshWrites) == 0 {
+	} else if len(sr.refreshSpans) == 0 {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
 		return true
@@ -300,7 +303,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// TODO(nvanbenschoten): actually merge spans.
 	refreshSpanBa := roachpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshTxn
-	addRefreshes := func(refreshes []roachpb.Span, write bool) {
+	addRefreshes := func(refreshes []roachpb.Span) {
 		// We're going to check writes between the previous refreshed timestamp, if
 		// any, and the timestamp we want to bump the transaction to. Note that if
 		// we've already refreshed the transaction before, we don't need to check
@@ -317,13 +320,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
-					Write:         write,
 					RefreshFrom:   sr.refreshedTimestamp,
 				}
 			} else {
 				req = &roachpb.RefreshRangeRequest{
 					RequestHeader: roachpb.RequestHeaderFromSpan(u),
-					Write:         write,
 					RefreshFrom:   sr.refreshedTimestamp,
 				}
 			}
@@ -332,8 +333,7 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 				req.Header().Span(), sr.refreshedTimestamp, refreshTxn.WriteTimestamp)
 		}
 	}
-	addRefreshes(sr.refreshReads, false /* write */)
-	addRefreshes(sr.refreshWrites, true /* write */)
+	addRefreshes(sr.refreshSpans)
 
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.sendHelper(ctx, refreshSpanBa); batchErr != nil {
@@ -366,15 +366,9 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 			errors.Safe(batchTimestamp), errors.Safe(sr.refreshedTimestamp), ba)
 	}
 
-	ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) {
-		if log.V(3) {
-			log.Infof(ctx, "refresh: %s write=%t", span, write)
-		}
-		if write {
-			sr.refreshWrites = append(sr.refreshWrites, span)
-		} else {
-			sr.refreshReads = append(sr.refreshReads, span)
-		}
+	ba.RefreshSpanIterate(br, func(span roachpb.Span) {
+		log.VEventf(ctx, 3, "recording span to refresh: %s", span)
+		sr.refreshSpans = append(sr.refreshSpans, span)
 		sr.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
 	})
 	return nil
@@ -393,7 +387,7 @@ func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalStat
 	tfs.RefreshInvalid = sr.refreshInvalid
 	if !sr.refreshInvalid {
 		// Copy mutable state so access is safe for the caller.
-		tfs.RefreshReads = append([]roachpb.Span(nil), sr.refreshReads...)
+		tfs.RefreshSpans = append([]roachpb.Span(nil), sr.refreshSpans...)
 	}
 }
 
@@ -402,26 +396,24 @@ func (sr *txnSpanRefresher) importLeafFinalState(tfs *roachpb.LeafTxnFinalState)
 	// Do not modify existing span slices when copying.
 	if tfs.RefreshInvalid {
 		sr.refreshInvalid = true
-		sr.refreshReads = nil
-		sr.refreshWrites = nil
+		sr.refreshSpans = nil
 	} else if !sr.refreshInvalid {
-		if tfs.RefreshReads != nil {
-			sr.refreshReads, _ = roachpb.MergeSpans(
-				append(append([]roachpb.Span(nil), sr.refreshReads...), tfs.RefreshReads...),
+		if tfs.RefreshSpans != nil {
+			sr.refreshSpans, _ = roachpb.MergeSpans(
+				append(append([]roachpb.Span(nil), sr.refreshSpans...), tfs.RefreshSpans...),
 			)
 		}
 	}
 	// Recompute the size of the refreshes.
 	sr.refreshSpansBytes = 0
-	for _, u := range sr.refreshReads {
+	for _, u := range sr.refreshSpans {
 		sr.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
 	}
 }
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) epochBumpedLocked() {
-	sr.refreshReads = nil
-	sr.refreshWrites = nil
+	sr.refreshSpans = nil
 	sr.refreshInvalid = false
 	sr.refreshSpansBytes = 0
 	sr.refreshedTimestamp.Reset()

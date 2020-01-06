@@ -155,7 +155,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
-	rep.cancelPendingCommandsLocked()
+	rep.cancelPendingCommandsLocked(ctx)
 	rep.mu.internalRaftGroup = nil
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
@@ -221,7 +221,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 
 	rep.readOnlyCmdMu.Lock()
 	rep.mu.Lock()
-	rep.cancelPendingCommandsLocked()
+	rep.cancelPendingCommandsLocked(ctx)
 	rep.mu.internalRaftGroup = nil
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()

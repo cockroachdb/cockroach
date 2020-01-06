@@ -3805,7 +3805,7 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 
 	// The schema change below can occasionally take more than
 	// 5 seconds and gets pushed by the closed timestamp mechanism
-	// in the read timestamp cache. Setting the closed timestamp
+	// in the timestamp cache. Setting the closed timestamp
 	// target duration to a higher value.
 	// TODO(vivek): Remove the need to do this by removing the use of
 	// txn.CommitTimestamp() in schema changes.

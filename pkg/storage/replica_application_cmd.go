@@ -154,10 +154,10 @@ func (c *replicatedCmd) AckSuccess() error {
 }
 
 // FinishAndAckOutcome implements the apply.AppliedCommand interface.
-func (c *replicatedCmd) FinishAndAckOutcome() error {
+func (c *replicatedCmd) FinishAndAckOutcome(ctx context.Context) error {
 	tracing.FinishSpan(c.sp)
 	if c.IsLocal() {
-		c.proposal.finishApplication(c.response)
+		c.proposal.finishApplication(ctx, c.response)
 	}
 	return nil
 }

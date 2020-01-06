@@ -445,13 +445,27 @@ message Transaction {
   // slice should be treated as immutable and all updates should be performed
   // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
-  // If this is true, the transaction must retry. Relevant only for
-  // SNAPSHOT transactions: a SERIALIZABLE transaction would have to
-  // retry anyway due to its commit timestamp having moved forward (whenever
-  // write_too_old is set, meta.Timestamp has been pushed above read_timestamp).
-  // This bool is set instead of immediately returning a txn retry
-  // error so that intents can continue to be laid down, minimizing
-  // work required on txn restart.
+  // If set, a write performed by the transaction could not be performed at the
+  // transaction's write timestamp because a newer value was present. Had our
+  // write been performed, it would have overwritten the other value even though
+  // that value might not have been read by a previous read in the transaction.
+  // Thus, this flag indicates that, if the key in question had been read
+  // previously by the transaction, a refresh of the transaction's read span
+  // will surely fail. As of Dec 2019, the client does not take advantage of
+  // this flag to avoid hopeless refreshes.
+  // Note that this flag is not set when a write runs into the write timestamp
+  // cache (indicating a more recent DeleteRange that did not actually delete
+  // the respective key. In this case, a there's no reason to think that a
+  // refresh will not succeed.
+  //
+  // When this flag is set, the transaction's write timestamp is also bumped.
+  //
+  // Historically, this field was also important for SNAPSHOT transactions which
+  // could commit in other situations when the write timestamp is bumped, but
+  // not when this flag is set (since lost updates cannot be tolerated even in
+  // SNAPSHOT). In SERIALIZABLE isolation, transactions generally don't commit
+  // with a bumped write timestamp, so this flag stopped telling us anything
+  // more than ReadTimestamp != WriteTimestamp.
   bool write_too_old = 12;
   // Set of spans that the transaction has written intents into. These
   // are spans which must be resolved on txn completion. Note that these
@@ -642,28 +656,15 @@ message LeafTxnFinalState {
   // Populated only for compatibility with pre-20.1 nodes.
   // TODO(knz,andrei): Remove this in 20.2.
   int32 deprecated_command_count = 3;
-  // refresh_reads stores key spans which were read
-  // or, less frequently, written during a transaction. This field
-  // is utilized for SERIALIZABLE transactions in the event a
-  // transaction experiences a retry error. In that case, the
-  // coordinator uses the Refresh and RefreshRange RPCs to verify that
-  // no write has occurred to the spans more recently than the txn's
-  // original timestamp, and updates the affected timestamp caches to
-  // the transaction's refreshed timestamp. On failure, the retry
-  // error is propagated. On success, the transaction's original and
-  // current timestamps are forwarded to the refresh timestamp, and
-  // the transaction can continue.
-  repeated Span refresh_reads = 4 [(gogoproto.nullable) = false];
+  // refresh_spans contains the key spans read by the leaf. The root will add
+  // them to its own tracking of reads.
+  repeated Span refresh_spans = 4 [(gogoproto.nullable) = false];
   reserved 5;
   reserved 6;
-  // refresh_invalid indicates that spans were discarded or not
-  // collected (i.e.  because the memory budget for tracking reads was
-  // exceeded).
-  // It is also true if the original LeafTxnInputState also hard
-  // refresh_invalid = false.
-  // If false, all spans encountered during the transaction which need
-  // refreshing have been collected to the refresh_reads and
-  // refresh_writes span slices.
+  // refresh_invalid is set if refresh spans have not been collected. In this
+  // case, refresh_spans is empty. It may be set because the leaf was asked not
+  // to collect spans or because the leaf's reads exceeded the tracking memory
+  // budget.
   bool refresh_invalid = 7;
   reserved 8;
 }

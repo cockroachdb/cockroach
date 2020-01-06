@@ -66,7 +66,7 @@ func cacheEntrySize(start, end interval.Comparable) uint64 {
 type treeImpl struct {
 	syncutil.RWMutex
 
-	rCache, wCache   *cache.IntervalCache
+	cache            *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
 
 	bytes    uint64
@@ -79,16 +79,13 @@ var _ Cache = &treeImpl{}
 // newTreeImpl returns a new treeImpl with the supplied hybrid clock.
 func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc := &treeImpl{
-		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
+		cache:    cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		maxBytes: uint64(defaultTreeImplSize),
 		metrics:  makeMetrics(),
 	}
 	tc.clear(clock.Now())
-	tc.rCache.Config.ShouldEvict = tc.shouldEvict
-	tc.wCache.Config.ShouldEvict = tc.shouldEvict
-	tc.rCache.Config.OnEvicted = tc.onEvicted
-	tc.wCache.Config.OnEvicted = tc.onEvicted
+	tc.cache.Config.ShouldEvict = tc.shouldEvict
+	tc.cache.Config.OnEvicted = tc.onEvicted
 	return tc
 }
 
@@ -96,8 +93,7 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 	tc.Lock()
 	defer tc.Unlock()
-	tc.rCache.Clear()
-	tc.wCache.Clear()
+	tc.cache.Clear()
 	tc.lowWater = lowWater
 	tc.latest = tc.lowWater
 }
@@ -106,11 +102,11 @@ func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 func (tc *treeImpl) len() int {
 	tc.RLock()
 	defer tc.RUnlock()
-	return tc.rCache.Len() + tc.wCache.Len()
+	return tc.cache.Len()
 }
 
 // Add implements the Cache interface.
-func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
@@ -124,22 +120,18 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(ts) {
-		tcache := tc.wCache
-		if readCache {
-			tcache = tc.rCache
-		}
 
 		addRange := func(r interval.Range) {
 			value := cacheValue{ts: ts, txnID: txnID}
-			key := tcache.MakeKey(r.Start, r.End)
+			key := tc.cache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
 			tc.bytes += cacheEntrySize(r.Start, r.End)
-			tcache.AddEntry(entry)
+			tc.cache.AddEntry(entry)
 		}
 		addEntryAfter := func(entry, after *cache.Entry) {
 			ck := entry.Key.(*cache.IntervalKey)
 			tc.bytes += cacheEntrySize(ck.Start, ck.End)
-			tcache.AddEntryAfter(entry, after)
+			tc.cache.AddEntryAfter(entry, after)
 		}
 
 		r := interval.Range{
@@ -150,7 +142,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 		// Check existing, overlapping entries and truncate/split/remove if
 		// superseded and in the past. If existing entries are in the future,
 		// subtract from the range/ranges that need to be added to cache.
-		for _, entry := range tcache.GetOverlaps(r.Start, r.End) {
+		for _, entry := range tc.cache.GetOverlaps(r.Start, r.End) {
 			cv := entry.Value.(*cacheValue)
 			key := entry.Key.(*cache.IntervalKey)
 			sCmp := r.Start.Compare(key.Start)
@@ -175,7 +167,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					// New: ------------
 					// Old:
 					*cv = cacheValue{ts: ts, txnID: txnID}
-					tcache.MoveToEnd(entry)
+					tc.cache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
 					// New contains or is equal to old; delete old.
@@ -185,7 +177,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					//
 					// New: ------------      ------------      ------------
 					// Old:
-					tcache.DelEntry(entry)
+					tc.cache.DelEntry(entry)
 					continue // DelEntry adjusted tc.bytes, don't do it again
 				case sCmp > 0 && eCmp < 0:
 					// Old contains new; split up old into two.
@@ -198,7 +190,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					oldEnd := key.End
 					key.End = r.Start
 
-					newKey := tcache.MakeKey(r.End, oldEnd)
+					newKey := tc.cache.MakeKey(r.End, oldEnd)
 					newEntry := makeCacheEntry(newKey, *cv)
 					addEntryAfter(newEntry, entry)
 				case eCmp >= 0:
@@ -292,7 +284,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					//
 					// New: ------------      ------------      ------------
 					// Old:
-					tcache.DelEntry(entry)
+					tc.cache.DelEntry(entry)
 					continue // DelEntry adjusted tc.bytes, don't do it again
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
@@ -368,7 +360,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					// Old:
 					cv.txnID = noTxnID
 
-					newKey := tcache.MakeKey(r.Start, key.Start)
+					newKey := tc.cache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{ts: ts, txnID: txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
@@ -386,7 +378,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					oldEnd := key.End
 					key.End = r.Start
 
-					newKey := tcache.MakeKey(r.End, oldEnd)
+					newKey := tc.cache.MakeKey(r.End, oldEnd)
 					newEntry := makeCacheEntry(newKey, *cv)
 					addEntryAfter(newEntry, entry)
 				case eCmp == 0:
@@ -424,7 +416,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					// Old: ----
 					key.End, r.Start = r.Start, key.End
 
-					newKey := tcache.MakeKey(key.End, r.Start)
+					newKey := tc.cache.MakeKey(key.End, r.Start)
 					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
@@ -440,7 +432,7 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 					// Old:         ----
 					key.Start, r.End = r.End, key.Start
 
-					newKey := tcache.MakeKey(r.End, key.Start)
+					newKey := tc.cache.MakeKey(r.End, key.Start)
 					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
@@ -456,30 +448,22 @@ func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUI
 
 // SetLowWater implements the Cache interface.
 func (tc *treeImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.Add(start, end, ts, noTxnID, false)
-	tc.Add(start, end, ts, noTxnID, true)
+	tc.Add(start, end, ts, noTxnID)
 }
 
 // getLowWater implements the Cache interface.
-func (tc *treeImpl) getLowWater(readCache bool) hlc.Timestamp {
-	// The lowWater timestamp is shared between the read
-	// and write caches, so ignore the readCache argument.
+func (tc *treeImpl) getLowWater() hlc.Timestamp {
 	tc.RLock()
 	defer tc.RUnlock()
 	return tc.lowWater
 }
 
-// GetMaxRead implements the Cache interface.
-func (tc *treeImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	return tc.getMax(start, end, true)
+// GetMax implements the Cache interface.
+func (tc *treeImpl) GetMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
+	return tc.getMax(start, end)
 }
 
-// GetMaxWrite implements the Cache interface.
-func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	return tc.getMax(start, end, false)
-}
-
-func (tc *treeImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
+func (tc *treeImpl) getMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
 	tc.Lock()
 	defer tc.Unlock()
 	if len(end) == 0 {
@@ -487,11 +471,7 @@ func (tc *treeImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestam
 	}
 	maxTS := tc.lowWater
 	maxTxnID := noTxnID
-	cache := tc.wCache
-	if readCache {
-		cache = tc.rCache
-	}
-	for _, o := range cache.GetOverlaps(start, end) {
+	for _, o := range tc.cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
 		if maxTS.Less(ce.ts) {
 			maxTS = ce.ts

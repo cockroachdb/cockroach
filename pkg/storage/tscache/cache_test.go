@@ -59,60 +59,60 @@ func TestTimestampCache(t *testing.T) {
 		baseTS := manual.UnixNano()
 
 		// First simulate a read of just "a" at time 50.
-		tc.Add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, noTxnID, true)
+		tc.Add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, noTxnID)
 		// Verify GetMax returns the lowWater mark.
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"notincache\"; txnID=%s", rTxnID)
 		}
 
 		// Advance the clock and verify same low water mark.
 		manual.Increment(100)
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"notincache\"; txnID=%s", rTxnID)
 		}
 
 		// Sim a read of "b"-"c" at a time above the low-water mark.
 		ts := clock.Now()
-		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID, true)
+		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID)
 
 		// Verify all permutations of direct and range access.
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("b"), nil); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("b"), nil); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"b\"; got %s; txnID=%s", rTS, rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("bb"), nil); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("bb"), nil); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bb\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("c"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"c\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("b"), roachpb.Key("c")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"b\"-\"c\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("bb"), roachpb.Key("bz")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("bb"), roachpb.Key("bz")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bb\"-\"bz\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"-\"b\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("bb")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("bb")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"a\"-\"bb\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("d")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("d")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"a\"-\"d\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("c")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("bz"), roachpb.Key("c")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bz\"-\"c\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("d")); rTS != ts || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("bz"), roachpb.Key("d")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bz\"-\"d\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"c\"-\"d\"; txnID=%s", rTxnID)
 		}
 	})
@@ -141,7 +141,7 @@ func assertTS(
 	} else {
 		keys = fmt.Sprintf("%q-%q", start, end)
 	}
-	ts, txnID := tc.GetMaxRead(start, end)
+	ts, txnID := tc.GetMax(start, end)
 	if ts != expectedTS {
 		t.Errorf("expected %s to have timestamp %v, found %v", keys, expectedTS, ts)
 	}
@@ -153,7 +153,7 @@ func assertTS(
 // zeroIfSimul returns a zero UUID if this test involves multiple transactions
 // with the same timestamp (i.e. the timestamps in txns are identical but the
 // transaction ids are not), and the given txnID if they are not. This is
-// because timestampCache.GetMaxRead must not return a transaction ID when two
+// because timestampCache.GetMax must not return a transaction ID when two
 // different transactions have the same timestamp.
 func zeroIfSimul(txns []txnState, txnID uuid.UUID) uuid.UUID {
 	if txns[0].ts == txns[1].ts && txns[0].id != txns[1].id {
@@ -239,7 +239,7 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), nil, bcTx.ts, zeroIfSimul(txns, bcTx.id))
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
@@ -263,7 +263,7 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, acTx.id)
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), acTx.ts, acTx.id)
@@ -346,11 +346,11 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 
 							if reverse {
 								for i := len(testCase.spans) - 1; i >= 0; i-- {
-									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id)
 								}
 							} else {
 								for i := range testCase.spans {
-									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id)
 								}
 							}
 							testCase.validator(t, tc, txns)
@@ -369,7 +369,7 @@ func TestTimestampCacheClear(t *testing.T) {
 		key := roachpb.Key("a")
 
 		ts := clock.Now()
-		tc.Add(key, nil, ts, noTxnID, true)
+		tc.Add(key, nil, ts, noTxnID)
 
 		manual.Increment(5000000)
 
@@ -379,37 +379,10 @@ func TestTimestampCacheClear(t *testing.T) {
 		tc.clear(expTS)
 
 		// Fetching any keys should give current time.
-		if rTS, rTxnID := tc.GetMaxRead(key, nil); rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(key, nil); rTxnID != noTxnID {
 			t.Errorf("%s unexpectedly associated to txn %s", key, rTxnID)
 		} else if rTS != expTS {
 			t.Errorf("expected %s, got %s", rTS, expTS)
-		}
-	})
-}
-
-// TestTimestampCacheReadVsWrite verifies that the timestamp cache
-// can differentiate between read and write timestamp.
-func TestTimestampCacheReadVsWrite(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
-		// Add read-only non-txn entry at current time.
-		ts1 := clock.Now()
-		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, noTxnID, true)
-
-		// Add two successive txn entries; one read-only and one read-write.
-		txn1ID := uuid.MakeV4()
-		txn2ID := uuid.MakeV4()
-		ts2 := clock.Now()
-		tc.Add(roachpb.Key("a"), nil, ts2, txn1ID, true)
-		ts3 := clock.Now()
-		tc.Add(roachpb.Key("a"), nil, ts3, txn2ID, false)
-
-		rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, wTxnID := tc.GetMaxWrite(roachpb.Key("a"), nil)
-		if rTS != ts2 || wTS != ts3 || rTxnID != txn1ID || wTxnID != txn2ID {
-			t.Errorf("expected (%s,%s) and (%s,%s); got (%s,%s) and (%s,%s)",
-				ts2, txn1ID, ts3, txn2ID, rTS, rTxnID, wTS, wTxnID)
 		}
 	})
 }
@@ -426,16 +399,16 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 
 		// Add two non-overlapping transactions at the same timestamp.
 		ts1 := clock.Now()
-		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1, true)
-		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2, true)
+		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1)
+		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2)
 
 		// When querying either side separately, the transaction ID is returned.
-		if ts, txn := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); ts != ts1 {
+		if ts, txn := tc.GetMax(roachpb.Key("a"), roachpb.Key("b")); ts != ts1 {
 			t.Errorf("expected 'a'-'b' to have timestamp %s, but found %s", ts1, ts)
 		} else if txn != txn1 {
 			t.Errorf("expected 'a'-'b' to have txn id %s, but found %s", txn1, txn)
 		}
-		if ts, txn := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); ts != ts1 {
+		if ts, txn := tc.GetMax(roachpb.Key("b"), roachpb.Key("c")); ts != ts1 {
 			t.Errorf("expected 'b'-'c' to have timestamp %s, but found %s", ts1, ts)
 		} else if txn != txn2 {
 			t.Errorf("expected 'b'-'c' to have txn id %s, but found %s", txn2, txn)
@@ -443,7 +416,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 
 		// Querying a span that overlaps both returns a nil txn ID; neither
 		// can proceed here.
-		if ts, txn := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("c")); ts != ts1 {
+		if ts, txn := tc.GetMax(roachpb.Key("a"), roachpb.Key("c")); ts != ts1 {
 			t.Errorf("expected 'a'-'c' to have timestamp %s, but found %s", ts1, ts)
 		} else if txn != (noTxnID) {
 			t.Errorf("expected 'a'-'c' to have zero txn id, but found %s", txn)
@@ -463,8 +436,8 @@ func TestTimestampCacheLargeKeys(t *testing.T) {
 		ts1 := clock.Now()
 		txn1 := uuid.MakeV4()
 
-		tc.Add(keyStart, keyEnd, ts1, txn1, true)
-		if ts, txn := tc.GetMaxRead(keyStart, keyEnd); ts != ts1 {
+		tc.Add(keyStart, keyEnd, ts1, txn1)
+		if ts, txn := tc.GetMax(keyStart, keyEnd); ts != ts1 {
 			t.Errorf("expected key range to have timestamp %s, but found %s", ts1, ts)
 		} else if txn != txn1 {
 			t.Errorf("expected key range to have txn id %s, but found %s", txn1, txn)
@@ -581,7 +554,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 					for _, tc := range caches {
 						// This is a lot of log output so only un-comment to debug.
 						// t.Logf("adding (%T) [%s,%s) = %s", tc, string(from), string(to), newVal)
-						tc.Add(from, to, ts, txnID, true /* readCache */)
+						tc.Add(from, to, ts, txnID)
 					}
 
 					// Return semaphore.
@@ -654,7 +627,7 @@ func identicalAndRatcheted(
 ) (cacheValue, error) {
 	var vals []cacheValue
 	for _, tc := range caches {
-		keyTS, keyTxnID := tc.GetMaxRead(from, to)
+		keyTS, keyTxnID := tc.GetMax(from, to)
 		vals = append(vals, cacheValue{ts: keyTS, txnID: keyTxnID})
 	}
 
@@ -684,15 +657,15 @@ func BenchmarkTimestampCacheInsertion(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()
-		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
+		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID)
 
 		beTS := clock.Now()
-		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, noTxnID, true)
+		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, noTxnID)
 
 		adTS := clock.Now()
-		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, noTxnID, true)
+		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, noTxnID)
 
 		cfTS := clock.Now()
-		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, noTxnID, true)
+		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, noTxnID)
 	}
 }

@@ -1525,10 +1525,9 @@ message AddSSTableResponse {
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
 // write has occurred since the refresh_from timestamp to the specified key.
-// Either the read or write timestamp cache is updated according to the write
-// parameter. A transaction must be supplied with this request. If the key has
-// been written more recently than the provided txn timestamp, an error is
-// returned and the timestamp cache is not updated.
+// The timestamp cache is updated. A transaction must be supplied with this
+// request. If the key has been written more recently than the provided txn
+// timestamp, an error is returned and the timestamp cache is not updated.
 //
 // The timestamp cache is updated to txn.read_timestamp, like it is for all
 // requests.
@@ -1536,10 +1535,7 @@ message RefreshRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If set, indicates that the write timestamp cache should be
-  // updated. This handles the case of DeleteRange, which must set the
-  // write too old flag on transactions which attempt earlier writes.
-  bool write = 2;
+  reserved 2;
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
@@ -1558,10 +1554,7 @@ message RefreshRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If set, indicates that the write timestamp cache should be
-  // updated. This handles the case of DeleteRange, which must set the
-  // write too old flag on transactions which attempt earlier writes.
-  bool write = 2;
+  reserved 2;
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
