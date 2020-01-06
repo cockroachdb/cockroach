@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -69,7 +68,7 @@ func (m *memStorage) String() string {
 	tw.SetRowLine(false)
 	tw.SetColumnSeparator(" ")
 	tw.SetBorder(true)
-
+	tw.SetTrimWhiteSpaceAtEOL(true)
 	rangeIDs := make([]roachpb.RangeID, 0, len(m.mu.buckets[0].MLAI))
 	for rangeID := range m.mu.buckets[0].MLAI {
 		rangeIDs = append(rangeIDs, rangeID)
@@ -93,18 +92,7 @@ func (m *memStorage) String() string {
 	}
 
 	tw.Render()
-
-	// It's apparently impossible to write passing Example tests when
-	// intermediate lines have trailing whitespace (💩), so remove all of
-	// that.
-	//
-	// See https://github.com/golang/go/issues/6416.
-	s := strings.Split(buf.String(), "\n")
-	for i := range s {
-		s[i] = strings.TrimRight(s[i], " ")
-	}
-	return strings.Join(s, "\n")
-
+	return buf.String()
 }
 
 func (m *memStorage) bucketMaxAge(index int) time.Duration {

@@ -218,12 +218,8 @@ func (c *cliTest) cleanup() {
 }
 
 func (c cliTest) Run(line string) {
-	redirectOutput(func() { c.runUnredirected(line) })
-}
-
-func (c cliTest) runUnredirected(line string) {
 	a := strings.Fields(line)
-	c.runWithArgsUnredirected(a)
+	c.RunWithArgs(a)
 }
 
 // RunWithCapture runs c and returns a string containing the output of c
@@ -232,76 +228,14 @@ func (c cliTest) runUnredirected(line string) {
 // the output of c.
 func (c cliTest) RunWithCapture(line string) (out string, err error) {
 	return captureOutput(func() {
-		c.runUnredirected(line)
+		c.Run(line)
 	})
 }
 
 func (c cliTest) RunWithCaptureArgs(args []string) (string, error) {
 	return captureOutput(func() {
-		c.runWithArgsUnredirected(args)
+		c.RunWithArgs(args)
 	})
-}
-
-// stripWhitespaces removes whitespaces before each newline character.
-// We need to strip whitespace because otherwise we get test failures
-// in Example_tests: some tests produce whitespace at the end of each
-// line, the reference output is in Go comments here, and most text
-// editor remove trailing whitespaces in source files.
-func stripWhitespaces(s string) string {
-	start := 0
-	var res strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\n' {
-			continue
-		}
-		end := i
-		for ; end > start && s[end-1] == ' '; end-- {
-		}
-		res.WriteString(s[start:end])
-		res.WriteByte('\n')
-		start = i + 1
-	}
-	end := len(s)
-	for ; end > start && s[end-1] == ' '; end-- {
-	}
-	res.WriteString(s[start:end])
-	return res.String()
-}
-
-func TestStripWhitespaces(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testData := []struct {
-		in, out string
-	}{
-		{" ", ""},
-		{" \n", "\n"},
-		{"abc", "abc"},
-		{"abc  ", "abc"},
-		{"abc  \n", "abc\n"},
-		{"abc  \nxyz", "abc\nxyz"},
-	}
-	for _, test := range testData {
-		t.Run(test.in, func(t *testing.T) {
-			res := stripWhitespaces(test.in)
-			if res != test.out {
-				t.Errorf("%q: got %q, expected %q", test.in, res, test.out)
-			}
-		})
-	}
-}
-
-// redirectOutput runs f and prints out either its output, or the
-// error if one was produed. We use redirectOutput for the various
-// Run functions because this ensures that trailing whitespace
-// on each line is properly stripped out; otherwise Example_ tests
-// don't work properly.
-func redirectOutput(f func()) {
-	out, err := captureOutput(f)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-	} else {
-		fmt.Print(out)
-	}
 }
 
 // captureOutput runs f and returns a string containing the output and any
@@ -328,8 +262,7 @@ func captureOutput(f func()) (out string, err error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		r.Close()
-		s := stripWhitespaces(buf.String())
-		outC <- captureResult{s, err}
+		outC <- captureResult{buf.String(), err}
 	}()
 
 	// Clean up and record output in separate function to handle panics.
@@ -348,10 +281,6 @@ func captureOutput(f func()) (out string, err error) {
 	// Run the command. The output will be returned in the defer block.
 	f()
 	return
-}
-
-func (c cliTest) RunWithArgs(origArgs []string) {
-	redirectOutput(func() { c.runWithArgsUnredirected(origArgs) })
 }
 
 func isSQLCommand(args []string) bool {
@@ -376,7 +305,7 @@ func isSQLCommand(args []string) bool {
 	}
 }
 
-func (c cliTest) runWithArgsUnredirected(origArgs []string) {
+func (c cliTest) RunWithArgs(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -412,10 +341,6 @@ func (c cliTest) runWithArgsUnredirected(origArgs []string) {
 }
 
 func (c cliTest) RunWithCAArgs(origArgs []string) {
-	redirectOutput(func() { c.runWithCAArgsUnredirected(origArgs) })
-}
-
-func (c cliTest) runWithCAArgsUnredirected(origArgs []string) {
 	TestingReset()
 
 	if err := func() error {
@@ -502,7 +427,7 @@ func Example_demo() {
 	// $ cockroach demo
 	// demo --format=table -e show database
 	//   database
-	// +----------+
+	// ------------
 	//   movr
 	// (1 row)
 	// demo -e select 1 as "1" -e select 3 as "3"
@@ -527,7 +452,7 @@ func Example_demo() {
 	// system
 	// demo startrek -e show databases --format=table
 	//   database_name
-	// +---------------+
+	// -----------------
 	//   defaultdb
 	//   postgres
 	//   startrek
@@ -844,7 +769,7 @@ func Example_sql_empty_table() {
 	// x
 	// sql --format=table -e select * from t.norows
 	//   x
-	// +---+
+	// -----
 	// (0 rows)
 	// sql --format=records -e select * from t.norows
 	// sql --format=sql -e select * from t.norows
@@ -1175,7 +1100,7 @@ func Example_sql_table() {
 	// 12	123123213	12313",tabs
 	// sql --format=table -e select * from t.t
 	//            s          |               d
-	// +---------------------+--------------------------------+
+	// ----------------------+---------------------------------
 	//   foo                 | printable ASCII
 	//   "foo                | printable ASCII with quotes
 	//   \foo                | printable ASCII with backslash
@@ -1393,12 +1318,12 @@ func Example_misc_table() {
 	// CREATE TABLE
 	// sql --format=table -e select '  hai' as x
 	//     x
-	// +-------+
+	// ---------
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
 	//     tree    |    field    | description
-	// +-----------+-------------+-------------+
+	// ------------+-------------+--------------
 	//             | distributed | true
 	//             | vectorized  | false
 	//   render    |             |
@@ -1453,7 +1378,7 @@ func Example_user() {
 	// user ls --format=table
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//   user_name
-	// +-----------+
+	// -------------
 	//   root
 	// (1 row)
 	// user ls --format=tsv
@@ -1525,7 +1450,7 @@ func Example_user() {
 	// user ls --format=table
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
-	// +-----------------------------------------------------------------+
+	// -------------------------------------------------------------------
 	//   0123
 	//   0foo
 	//   _foo
@@ -1546,7 +1471,7 @@ func Example_user() {
 	// user ls --format=table
 	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
 	//                              user_name
-	// +-----------------------------------------------------------------+
+	// -------------------------------------------------------------------
 	//   0123
 	//   0foo
 	//   _foo
@@ -1702,7 +1627,7 @@ func Example_node() {
 	// 1
 	// node ls --format=table
 	//   id
-	// +----+
+	// ------
 	//    1
 	// (1 row)
 	// node status 10000
@@ -2329,7 +2254,7 @@ func Example_pretty_print_numerical_strings() {
 	// INSERT 1
 	// sql --format=table -e select * from t.t
 	//     s   |             d
-	// +-------+---------------------------+
+	// --------+----------------------------
 	//   0     | positive numerical string
 	//   -1    | negative numerical string
 	//   1.0   | decimal numerical string
