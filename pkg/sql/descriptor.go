@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,6 +40,16 @@ var (
 	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
 )
+
+// DefaultUserDBs is a set of the databases which are present in a new cluster.
+var DefaultUserDBs = map[string]struct{}{
+	sessiondata.DefaultDatabaseName: {},
+	sessiondata.PgDatabaseName:      {},
+}
+
+// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
+// new cluster.
+var MaxDefaultDescriptorID = keys.MaxReservedDescID + sqlbase.ID(len(DefaultUserDBs))
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
 // the counter. The incrementing is non-transactional, and the counter could be
@@ -256,6 +267,30 @@ func getDescriptorByID(
 		*t = *database
 	}
 	return nil
+}
+
+// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
+// present at the time of starting a cluster.
+func IsDefaultCreatedDescriptor(descID sqlbase.ID) bool {
+	return descID <= MaxDefaultDescriptorID
+}
+
+// CountUserDescriptors returns the number of descriptors present that were
+// created by the user (i.e. not present when the cluster started).
+func CountUserDescriptors(ctx context.Context, txn *client.Txn) (int, error) {
+	allDescs, err := GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, desc := range allDescs {
+		if !IsDefaultCreatedDescriptor(desc.GetID()) {
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
