@@ -166,7 +166,8 @@ CREATE TABLE b(
     b_id INT,
     a_id INT,
     FOREIGN KEY (a_id) REFERENCES a(a_id) ON UPDATE CASCADE ON DELETE CASCADE,
-    PRIMARY KEY(a_id, b_id)
+    PRIMARY KEY(a_id, b_id),
+    FAMILY "primary" (a_id, b_id)
 ) INTERLEAVE IN PARENT a(a_id)
 
 statement ok
@@ -175,7 +176,8 @@ CREATE TABLE c(
     a_id INT,
     b_id INT,
     FOREIGN KEY (a_id, b_id) REFERENCES b(a_id, b_id) ON UPDATE CASCADE ON DELETE CASCADE,
-    PRIMARY KEY(a_id, b_id, c_id)
+    PRIMARY KEY(a_id, b_id, c_id),
+    FAMILY "primary" (a_id, b_id, c_id)
 ) INTERLEAVE IN PARENT b(a_id, b_id)
 
 statement ok

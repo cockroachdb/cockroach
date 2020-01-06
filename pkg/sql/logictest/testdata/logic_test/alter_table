@@ -745,7 +745,7 @@ foo
 
 # Create a table with a computed column that we'll de-compute
 statement ok
-CREATE TABLE decomputed_column (a INT PRIMARY KEY, b INT AS ( a + 1 ) STORED)
+CREATE TABLE decomputed_column (a INT PRIMARY KEY, b INT AS ( a + 1 ) STORED, FAMILY "primary" (a, b))
 
 statement ok
 INSERT INTO decomputed_column VALUES (1), (2)

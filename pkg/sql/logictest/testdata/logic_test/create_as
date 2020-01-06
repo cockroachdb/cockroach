@@ -184,7 +184,7 @@ statement error generate insert row: null value in column "x" violates not-null 
 CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
 
 statement ok
-BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty) AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50); END
+BEGIN; CREATE TABLE foo8 (item PRIMARY KEY, qty, FAMILY "primary" (item, qty)) AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50); END
 
 query TT
 SHOW CREATE TABLE foo8
@@ -217,7 +217,7 @@ foo9  CREATE TABLE foo9 (
     )
 
 statement ok
-CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c) AS SELECT * FROM foo9
+CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
 
 query TT
 SHOW CREATE TABLE foo10

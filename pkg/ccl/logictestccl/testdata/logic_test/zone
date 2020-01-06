@@ -9,7 +9,8 @@ CREATE TABLE t (
     k INT PRIMARY KEY,
     v STRING,
     INDEX secondary (k) STORING (v),
-    INDEX tertiary (k) STORING (v)
+    INDEX tertiary (k) STORING (v),
+    FAMILY (k, v)
 );
 
 # ------------------------------------------------------------------------------
@@ -38,6 +39,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -80,6 +82,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -142,6 +145,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -243,6 +247,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -295,6 +300,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -358,7 +364,8 @@ CREATE TABLE t36642 (
     k INT PRIMARY KEY,
     v STRING,
     INDEX secondary (k) STORING (v),
-    INDEX tertiary (k) STORING (v)
+    INDEX tertiary (k) STORING (v),
+    FAMILY (k, v)
 );
 
 statement ok
@@ -394,6 +401,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM t
 TABLE t
  ├── k int not null
  ├── v string
+ ├── FAMILY fam_0_k_v (k, v)
  ├── INDEX primary
  │    ├── k int not null
  │    └── ZONE
@@ -424,7 +432,8 @@ CREATE TABLE t36644 (
     k INT PRIMARY KEY,
     v STRING,
     INDEX secondary (k) STORING (v),
-    INDEX tertiary (k) STORING (v)
+    INDEX tertiary (k) STORING (v),
+    FAMILY (k, v)
 );
 
 statement ok

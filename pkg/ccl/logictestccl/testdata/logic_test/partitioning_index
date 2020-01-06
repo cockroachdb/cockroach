@@ -6,7 +6,8 @@ CREATE TABLE ok1 (
     INDEX (b) PARTITION BY LIST (b) (
         PARTITION p1 VALUES IN (1),
         PARTITION pu VALUES IN (NULL)
-    )
+    ),
+    FAMILY "primary" (a, b)
 )
 
 query TT
@@ -34,7 +35,8 @@ CREATE TABLE ok2 (
     a INT PRIMARY KEY, b INT,
     UNIQUE (b) PARTITION BY LIST (b) (
         PARTITION p1 VALUES IN (1)
-    )
+    ),
+    FAMILY "primary" (a, b)
 )
 
 query TT
@@ -56,7 +58,8 @@ CREATE TABLE ok3 (
     a INT PRIMARY KEY, b INT,
     UNIQUE INDEX (b) PARTITION BY LIST (b) (
         PARTITION p1 VALUES IN (1)
-    )
+    ),
+    FAMILY "primary" (a, b)
 )
 
 statement ok
@@ -85,7 +88,7 @@ ok3  CREATE TABLE ok3 (
 -- Warning: Partitioned table with no zone configurations.
 
 statement ok
-CREATE TABLE indexes (a INT PRIMARY KEY, b INT)
+CREATE TABLE indexes (a INT PRIMARY KEY, b INT, FAMILY "primary" (a, b))
 
 statement ok
 INSERT INTO indexes VALUES (1,1), (2,2), (3,3)

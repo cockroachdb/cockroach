@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -1228,6 +1229,23 @@ func MakeTableDesc(
 
 	if err := desc.AllocateIDs(); err != nil {
 		return desc, err
+	}
+
+	// If any nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
+	// if a primary key column is not in column family 0.
+	if st != nil {
+		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
+			!version.IsActive(cluster.VersionPrimaryKeyColumnsOutOfFamilyZero) {
+			var colsInFamZero util.FastIntSet
+			for _, colID := range desc.Families[0].ColumnIDs {
+				colsInFamZero.Add(int(colID))
+			}
+			for _, colID := range desc.PrimaryIndex.ColumnIDs {
+				if !colsInFamZero.Contains(int(colID)) {
+					return desc, errors.Errorf("primary key column %d is not in column family 0", colID)
+				}
+			}
+		}
 	}
 
 	if n.Interleave != nil {

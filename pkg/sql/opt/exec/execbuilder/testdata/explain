@@ -391,7 +391,8 @@ render                ·            ·            ("?column?")                  
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
-  v INT
+  v INT,
+  FAMILY "primary" (k, v)
 )
 
 query TTT

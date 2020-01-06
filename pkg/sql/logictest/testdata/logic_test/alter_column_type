@@ -42,7 +42,7 @@ DROP TABLE t
 subtest ManualGeneralChange
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY, b STRING)
+CREATE TABLE t (a INT PRIMARY KEY, b STRING, FAMILY "primary" (a, b))
 
 statement ok
 CREATE INDEX idx ON t (b)
