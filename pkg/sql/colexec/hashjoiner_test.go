@@ -924,11 +924,11 @@ func TestHashJoiner(t *testing.T) {
 			runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
 				spec := createSpecForHashJoiner(tc)
 				args := NewColOperatorArgs{
-					Spec:                               spec,
-					Inputs:                             sources,
-					StreamingMemAccount:                testMemAcc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                spec,
+					Inputs:              sources,
+					StreamingMemAccount: testMemAcc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
@@ -1141,11 +1141,11 @@ func TestHashJoinerProjection(t *testing.T) {
 	leftSource := newOpTestInput(1, leftTuples, leftColTypes)
 	rightSource := newOpTestInput(1, rightTuples, rightColTypes)
 	args := NewColOperatorArgs{
-		Spec:                               spec,
-		Inputs:                             []Operator{leftSource, rightSource},
-		StreamingMemAccount:                testMemAcc,
-		UseStreamingMemAccountForBuffering: true,
+		Spec:                spec,
+		Inputs:              []Operator{leftSource, rightSource},
+		StreamingMemAccount: testMemAcc,
 	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	hjOp, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
