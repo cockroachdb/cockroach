@@ -163,6 +163,7 @@ func (p *allSpooler) getPartitionsCol() []bool {
 
 func (p *allSpooler) reset() {
 	p.bufferedTuples.reset()
+	p.spooled = false
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
 	}
@@ -218,7 +219,6 @@ type colSorter interface {
 
 func (p *sortOp) Init() {
 	p.input.init()
-	p.output = p.allocator.NewMemBatch(p.inputTypes)
 }
 
 // sortState represents the state of the sort operator.
@@ -251,7 +251,11 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
-		p.output.ResetInternalBatch()
+		if p.output == nil {
+			p.output = p.allocator.NewMemBatch(p.inputTypes)
+		} else {
+			p.output.ResetInternalBatch()
+		}
 		if newEmitted == p.emitted {
 			return coldata.ZeroBatch
 		}
@@ -409,7 +413,11 @@ func (p *sortOp) ExportBuffered(allocator *Allocator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
-	p.output.ResetInternalBatch()
+	if p.output == nil {
+		p.output = allocator.NewMemBatch(p.inputTypes)
+	} else {
+		p.output.ResetInternalBatch()
+	}
 	newExported := p.exported + uint64(coldata.BatchSize())
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()

@@ -78,7 +78,6 @@ type bufferingInMemoryOperator interface {
 type oneInputDiskSpiller struct {
 	NonExplainable
 
-	allocator   *Allocator
 	initialized bool
 	spilled     bool
 
@@ -113,7 +112,6 @@ func newOneInputDiskSpiller(
 ) Operator {
 	diskBackedOpInput := newBufferExportingOperator(allocator, inMemoryOp, input)
 	return &oneInputDiskSpiller{
-		allocator:              allocator,
 		input:                  input,
 		inMemoryOp:             inMemoryOp,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,

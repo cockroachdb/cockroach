@@ -557,7 +557,7 @@ func NewColOperator(
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator-limited")
+					hashAggregatorMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				result.Op, err = NewHashAggregator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
@@ -627,7 +627,7 @@ func NewColOperator(
 
 				hashJoinerMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner-limited")
+					hashJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner")
 				}
 				result.Op, err = NewEqHashJoinerOp(
 					NewAllocator(ctx, hashJoinerMemAccount),
@@ -708,7 +708,7 @@ func NewColOperator(
 				mergeJoinerMemAccount := streamingMemAccount
 				if !result.IsStreaming && !useStreamingMemAccountForBuffering {
 					// Whether the merge joiner is streaming is already set above.
-					mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner-limited")
+					mergeJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "merge-joiner")
 				}
 				result.Op, err = NewMergeJoinOp(
 					NewAllocator(ctx, mergeJoinerMemAccount),
@@ -751,7 +751,7 @@ func NewColOperator(
 				if useStreamingMemAccountForBuffering {
 					sortChunksMemAccount = streamingMemAccount
 				} else {
-					sortChunksMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks-limited")
+					sortChunksMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "sort-chunks")
 				}
 				result.Op, err = NewSortChunks(
 					NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
@@ -769,7 +769,7 @@ func NewColOperator(
 				result.IsStreaming = true
 			} else {
 				// No optimizations possible. Default to the standard sort operator.
-				sorterMemMonitorName := fmt.Sprintf("sort-all-limited-%d", spec.ProcessorID)
+				sorterMemMonitorName := fmt.Sprintf("sort-all-%d", spec.ProcessorID)
 				var sorterMemAccount *mon.BoundAccount
 				if useStreamingMemAccountForBuffering {
 					sorterMemAccount = streamingMemAccount
@@ -788,8 +788,8 @@ func NewColOperator(
 				if useStreamingMemAccountForBuffering {
 					diskSpillerMemAccount = streamingMemAccount
 				} else {
-					diskSpillerMemAccount = result.createBufferingMemAccount(
-						ctx, flowCtx, "disk-spiller-sort-all-limited",
+					diskSpillerMemAccount = result.createBufferingUnlimitedMemAccount(
+						ctx, flowCtx, "disk-spiller-sort-all",
 					)
 				}
 				diskSpillerAllocator := NewAllocator(ctx, diskSpillerMemAccount)
@@ -798,7 +798,24 @@ func NewColOperator(
 					input, inMemorySorter.(bufferingInMemoryOperator),
 					sorterMemMonitorName,
 					func(input Operator) Operator {
-						return newExternalSorter(diskSpillerAllocator, input, inputTypes, orderingCols)
+						monitorNamePrefix := "external-sorter-"
+						inMemSorterUnlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix+"in-memory-sort",
+							))
+						mergerUnlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix+"merger",
+							))
+						diskQueuesUnlimitedAllocator := NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(
+								ctx, flowCtx, monitorNamePrefix+"disk-queues",
+							))
+						return newExternalSorter(
+							inMemSorterUnlimitedAllocator, mergerUnlimitedAllocator, input, inputTypes,
+							core.Sorter.OutputOrdering, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+							diskQueuesUnlimitedAllocator,
+						)
 					})
 			}
 			result.ColumnTypes = spec.Input[0].ColumnTypes
@@ -821,7 +838,7 @@ func NewColOperator(
 				// which kind of partitioner to use should come from the optimizer.
 				windowSortingPartitionerMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner-limited")
+					windowSortingPartitionerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorting-partitioner")
 				}
 				input, err = NewWindowSortingPartitioner(
 					NewAllocator(ctx, windowSortingPartitionerMemAccount), input, typs,
@@ -832,7 +849,7 @@ func NewColOperator(
 				if len(wf.Ordering.Columns) > 0 {
 					windowSorterMemAccount := streamingMemAccount
 					if !useStreamingMemAccountForBuffering {
-						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter-limited")
+						windowSorterMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "window-sorter")
 					}
 					input, err = NewSorter(
 						NewAllocator(ctx, windowSorterMemAccount), input, typs,
@@ -1097,10 +1114,25 @@ func (r *NewColOperatorResult) createBufferingMemAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name,
+		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name+"-limited",
 	)
 	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
+	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
+	return &bufferingMemAccount
+}
+
+// createBufferingUnlimitedMemAccount instantiates an unlimited memory monitor
+// and a memory account to be used with a buffering disk-backed Operator. The
+// receiver is updated to have references to both objects.
+func (r *NewColOperatorResult) createBufferingUnlimitedMemAccount(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) *mon.BoundAccount {
+	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
+		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
+	)
+	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpUnlimitedMemMonitor)
+	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
 	return &bufferingMemAccount
 }

@@ -21,97 +21,101 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestSort(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+type sortTestCase struct {
+	tuples   tuples
+	expected tuples
+	ordCols  []execinfrapb.Ordering_Column
+	logTypes []types.T
+}
 
-	tcs := []struct {
-		tuples   tuples
-		expected tuples
-		ordCols  []execinfrapb.Ordering_Column
-		typ      []coltypes.T
-	}{
+var sortTestCases []sortTestCase
+
+func init() {
+	sortTestCases = []sortTestCase{
 		{
 			tuples:   tuples{{1}, {2}, {nil}, {4}, {5}, {nil}},
 			expected: tuples{{nil}, {nil}, {1}, {2}, {4}, {5}},
-			typ:      []coltypes.T{coltypes.Int64},
+			logTypes: []types.T{*types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{1, nil}, {1, 1}, {1, 2}, {2, nil}, {2, nil}, {2, 3}, {5, 1}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1, 2}, {1, 1}, {1, nil}, {2, nil}, {2, 3}, {2, nil}, {5, 1}},
 			expected: tuples{{5, 1}, {2, 3}, {2, nil}, {2, nil}, {1, 2}, {1, 1}, {1, nil}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_DESC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 		},
 		{
 			tuples:   tuples{{nil, nil}, {nil, 3}, {1, nil}, {nil, 1}, {1, 2}, {nil, nil}, {5, nil}},
 			expected: tuples{{nil, nil}, {nil, nil}, {nil, 1}, {nil, 3}, {1, nil}, {1, 2}, {5, nil}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 		},
 		{
 			tuples:   tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected: tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			typ:      []coltypes.T{coltypes.Int64},
+			logTypes: []types.T{*types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expected: tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-			typ:      []coltypes.T{coltypes.Int64},
+			logTypes: []types.T{*types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {3, 2}, {2, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
 			expected: tuples{{1, 1}, {2, 3}, {3, 2}, {4, 4}, {5, 5}, {6, 6}, {7, 7}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1, 1}, {5, 2}, {3, 3}, {7, 4}, {2, 5}, {6, 6}, {4, 7}},
 			expected: tuples{{1, 1}, {2, 5}, {3, 3}, {4, 7}, {5, 2}, {6, 6}, {7, 4}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{1}, {5}, {3}, {3}, {2}, {6}, {4}},
 			expected: tuples{{1}, {2}, {3}, {3}, {4}, {5}, {6}},
-			typ:      []coltypes.T{coltypes.Int64},
+			logTypes: []types.T{*types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{false}, {true}},
 			expected: tuples{{false}, {true}},
-			typ:      []coltypes.T{coltypes.Bool},
+			logTypes: []types.T{*types.Bool},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{true}, {false}},
 			expected: tuples{{false}, {true}},
-			typ:      []coltypes.T{coltypes.Bool},
+			logTypes: []types.T{*types.Bool},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 		{
 			tuples:   tuples{{3.2}, {2.0}, {2.4}, {math.NaN()}, {math.Inf(-1)}, {math.Inf(1)}},
 			expected: tuples{{math.NaN()}, {math.Inf(-1)}, {2.0}, {2.4}, {3.2}, {math.Inf(1)}},
-			typ:      []coltypes.T{coltypes.Float64},
+			logTypes: []types.T{*types.Float},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}},
 		},
 
 		{
 			tuples:   tuples{{0, 1, 0}, {1, 2, 0}, {2, 3, 2}, {3, 7, 1}, {4, 2, 2}},
 			expected: tuples{{0, 1, 0}, {1, 2, 0}, {3, 7, 1}, {4, 2, 2}, {2, 3, 2}},
-			typ:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}},
 		},
 
@@ -133,13 +137,21 @@ func TestSort(t *testing.T) {
 				{0, 1, 0},
 				{0, 1, 1},
 			},
-			typ:     []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			ordCols: []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
+			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
 	}
-	for _, tc := range tcs {
+}
+
+func TestSort(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, tc := range sortTestCases {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
-			return NewSorter(testAllocator, input[0], tc.typ, tc.ordCols)
+			physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
+			if err != nil {
+				return nil, err
+			}
+			return NewSorter(testAllocator, input[0], physTypes, tc.ordCols)
 		})
 	}
 }
@@ -147,8 +159,8 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
-	nTups := coldata.BatchSize()*2 + 1
-	k := uint16(rng.Intn(int(nTups))) + 1
+	nTups := int(coldata.BatchSize()*2 + 1)
+	k := uint16(rng.Intn(nTups)) + 1
 	maxCols := 3
 	// TODO(yuzefovich): randomize types as well.
 	typs := make([]coltypes.T, maxCols)
@@ -161,26 +173,7 @@ func TestSortRandomized(t *testing.T) {
 			for _, topK := range []bool{false, true} {
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
 				t.Run(name, func(t *testing.T) {
-					ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
-					tups := make(tuples, nTups)
-					for i := range tups {
-						tups[i] = make(tuple, nCols)
-						for j := range tups[i] {
-							// Small range so we can test partitioning
-							if rng.Float64() < nullProbability {
-								tups[i][j] = nil
-							} else {
-								tups[i][j] = rng.Int63() % 2048
-							}
-						}
-						// Enforce that the last ordering column is always unique. Otherwise
-						// there would be multiple valid sort orders.
-						tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
-					}
-
-					expected := make(tuples, nTups)
-					copy(expected, tups)
-					sort.Slice(expected, less(expected, ordCols))
+					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
 					if topK {
 						expected = expected[:k]
 					}
@@ -195,6 +188,37 @@ func TestSortRandomized(t *testing.T) {
 			}
 		}
 	}
+}
+
+// generateRandomDataForTestSort is a utility function that generates data to
+// be used in randomized unit test of a sort operation. It returns:
+// - tups - the data to be sorted
+// - expected - the same data but already sorted
+// - ordCols - ordering columns used in the sort operation.
+func generateRandomDataForTestSort(
+	rng *rand.Rand, nTups, nCols, nOrderingCols int,
+) (tups, expected tuples, ordCols []execinfrapb.Ordering_Column) {
+	ordCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+	tups = make(tuples, nTups)
+	for i := range tups {
+		tups[i] = make(tuple, nCols)
+		for j := range tups[i] {
+			// Small range so we can test partitioning
+			if rng.Float64() < nullProbability {
+				tups[i][j] = nil
+			} else {
+				tups[i][j] = rng.Int63() % 2048
+			}
+		}
+		// Enforce that the last ordering column is always unique. Otherwise
+		// there would be multiple valid sort orders.
+		tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
+	}
+
+	expected = make(tuples, nTups)
+	copy(expected, tups)
+	sort.Slice(expected, less(expected, ordCols))
+	return tups, expected, ordCols
 }
 
 func TestAllSpooler(t *testing.T) {

@@ -31,12 +31,15 @@ import (
 //
 // anyOrder determines whether the results should be matched in order (when
 // anyOrder is false) or as sets (when anyOrder is true).
+// memoryLimit specifies the desired memory limit on the testing knob (in
+// bytes). If it is 0, then the default limit of 64MiB will be used.
 func verifyColOperator(
 	anyOrder bool,
 	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
 	outputTypes []types.T,
 	pspec *execinfrapb.ProcessorSpec,
+	memoryLimit int64,
 ) error {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -58,6 +61,7 @@ func verifyColOperator(
 			DiskMonitor: diskMonitor,
 		},
 	}
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 
 	inputsProc := make([]execinfra.RowSource, len(inputs))
 	inputsColOp := make([]execinfra.RowSource, len(inputs))
@@ -88,10 +92,13 @@ func verifyColOperator(
 	}
 
 	args := colexec.NewColOperatorArgs{
-		Spec:                               pspec,
-		Inputs:                             columnarizers,
-		StreamingMemAccount:                &acc,
-		UseStreamingMemAccountForBuffering: true,
+		Spec:                pspec,
+		Inputs:              columnarizers,
+		StreamingMemAccount: &acc,
+		// When non-zero memory limit is specified, we want to simulate
+		// "real-world" scenario of creating separate memory accounts. This is
+		// needed to trigger spilling to disk.
+		UseStreamingMemAccountForBuffering: memoryLimit == 0,
 		ProcessorConstructor:               rowexec.NewProcessor,
 	}
 	result, err := colexec.NewColOperator(ctx, flowCtx, args)
