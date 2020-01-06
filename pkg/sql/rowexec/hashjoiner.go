@@ -179,10 +179,7 @@ func newHashJoiner(
 	if h.useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
-		limit := h.FlowCtx.Cfg.TestingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = execinfra.SettingWorkMemBytes.Get(&st.SV)
-		}
+		limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
 		h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hashjoiner-limited")
 		h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "hashjoiner-disk")
 		// Override initialBufferSize to be half of this processor's memory
