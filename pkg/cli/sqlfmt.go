@@ -69,6 +69,7 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	cfg.TabWidth = sqlfmtCtx.tabWidth
 	cfg.Simplify = !sqlfmtCtx.noSimplify
 	cfg.Align = tree.PrettyNoAlign
+	cfg.JSONFmt = true
 	if sqlfmtCtx.align {
 		cfg.Align = tree.PrettyAlignAndDeindent
 	}

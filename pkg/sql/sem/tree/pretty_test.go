@@ -33,6 +33,11 @@ import (
 
 var (
 	flagWritePretty = flag.Bool("rewrite-pretty", false, "rewrite pretty test outputs")
+	testPrettyCfg   = func() tree.PrettyCfg {
+		cfg := tree.DefaultPrettyCfg()
+		cfg.JSONFmt = true
+		return cfg
+	}()
 )
 
 // TestPrettyData reads in a single SQL statement from a file, formats
@@ -49,7 +54,7 @@ func TestPrettyDataShort(t *testing.T) {
 	if *flagWritePretty {
 		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite-pretty flag too!")
 	}
-	cfg := tree.DefaultPrettyCfg()
+	cfg := testPrettyCfg
 	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
 		runTestPrettyData(t, "ref", cfg, matches, true /*short*/)
