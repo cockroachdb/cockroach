@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.ReverseScan, DefaultDeclareKeys, ReverseScan)
+	RegisterReadOnlyCommand(roachpb.ReverseScan, DefaultDeclareKeys, ReverseScan)
 }
 
 // ReverseScan scans the key range specified by start key through
@@ -28,7 +28,7 @@ func init() {
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func ReverseScan(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ReverseScanRequest)
 	h := cArgs.Header

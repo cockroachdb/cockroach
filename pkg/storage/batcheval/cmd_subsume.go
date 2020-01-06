@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Subsume, declareKeysSubsume, Subsume)
+	RegisterReadWriteCommand(roachpb.Subsume, declareKeysSubsume, Subsume)
 }
 
 func declareKeysSubsume(

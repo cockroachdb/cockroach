@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.QueryIntent, declareKeysQueryIntent, QueryIntent)
+	RegisterReadOnlyCommand(roachpb.QueryIntent, declareKeysQueryIntent, QueryIntent)
 }
 
 func declareKeysQueryIntent(
@@ -43,7 +43,7 @@ func declareKeysQueryIntent(
 // request is special-cased to return a SERIALIZABLE retry error if a transaction
 // queries its own intent and finds it has been pushed.
 func QueryIntent(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryIntentRequest)
 	h := cArgs.Header
