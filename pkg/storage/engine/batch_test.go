@@ -176,19 +176,19 @@ func TestReadOnlyBasics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			b := e.NewReadOnly()
-			if b.Closed() {
+			ro := e.NewReadOnly()
+			if ro.Closed() {
 				t.Fatal("read-only is expectedly found to be closed")
 			}
 			a := mvccKey("a")
 			getVal := &roachpb.Value{}
 			successTestCases := []func(){
-				func() { _, _ = b.Get(a) },
-				func() { _, _, _, _ = b.GetProto(a, getVal) },
-				func() { _ = b.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-				func() { b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+				func() { _, _ = ro.Get(a) },
+				func() { _, _, _, _ = ro.GetProto(a, getVal) },
+				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
-					b.NewIterator(IterOptions{
+					ro.NewIterator(IterOptions{
 						MinTimestampHint: hlc.MinTimestamp,
 						MaxTimestampHint: hlc.MaxTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -196,15 +196,15 @@ func TestReadOnlyBasics(t *testing.T) {
 				},
 			}
 			defer func() {
-				b.Close()
-				if !b.Closed() {
+				ro.Close()
+				if !ro.Closed() {
 					t.Fatal("even after calling Close, a read-only should not be closed")
 				}
 				name := "rocksDBReadOnly"
 				if engineImpl.name == "pebble" {
 					name = "pebbleReadOnly"
 				}
-				shouldPanic(t, func() { b.Close() }, "Close", "closing an already-closed "+name)
+				shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed "+name)
 				for i, f := range successTestCases {
 					shouldPanic(t, f, string(i), "using a closed "+name)
 				}
@@ -216,12 +216,12 @@ func TestReadOnlyBasics(t *testing.T) {
 
 			// For a read-only ReadWriter, all Writer methods should panic.
 			failureTestCases := []func(){
-				func() { _ = b.ApplyBatchRepr(nil, false) },
-				func() { _ = b.Clear(a) },
-				func() { _ = b.SingleClear(a) },
-				func() { _ = b.ClearRange(a, a) },
-				func() { _ = b.Merge(a, nil) },
-				func() { _ = b.Put(a, nil) },
+				func() { _ = ro.ApplyBatchRepr(nil, false) },
+				func() { _ = ro.Clear(a) },
+				func() { _ = ro.SingleClear(a) },
+				func() { _ = ro.ClearRange(a, a) },
+				func() { _ = ro.Merge(a, nil) },
+				func() { _ = ro.Put(a, nil) },
 			}
 			for i, f := range failureTestCases {
 				shouldPanic(t, f, string(i), "not implemented")

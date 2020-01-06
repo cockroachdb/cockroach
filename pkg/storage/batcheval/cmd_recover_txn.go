@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RecoverTxn, declareKeysRecoverTransaction, RecoverTxn)
+	RegisterReadWriteCommand(roachpb.RecoverTxn, declareKeysRecoverTransaction, RecoverTxn)
 }
 
 func declareKeysRecoverTransaction(

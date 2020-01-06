@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.LeaseInfo, declareKeysLeaseInfo, LeaseInfo)
+	RegisterReadOnlyCommand(roachpb.LeaseInfo, declareKeysLeaseInfo, LeaseInfo)
 }
 
 func declareKeysLeaseInfo(
@@ -32,7 +32,7 @@ func declareKeysLeaseInfo(
 
 // LeaseInfo returns information about the lease holder for the range.
 func LeaseInfo(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.LeaseInfoResponse)
 	lease, nextLease := cArgs.EvalCtx.GetLease()

@@ -34,7 +34,7 @@ func declareKeysTransferLease(
 }
 
 func init() {
-	RegisterCommand(roachpb.TransferLease, declareKeysTransferLease, TransferLease)
+	RegisterReadWriteCommand(roachpb.TransferLease, declareKeysTransferLease, TransferLease)
 }
 
 // TransferLease sets the lease holder for the range.

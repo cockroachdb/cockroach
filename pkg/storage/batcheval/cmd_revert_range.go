@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RevertRange, declareKeysRevertRange, RevertRange)
+	RegisterReadWriteCommand(roachpb.RevertRange, declareKeysRevertRange, RevertRange)
 }
 
 func declareKeysRevertRange(

@@ -21,13 +21,13 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
+	RegisterReadOnlyCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
 }
 
 // Refresh checks whether the key has any values written in the interval
 // [args.RefreshFrom, header.Timestamp].
 func Refresh(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRequest)
 	h := cArgs.Header

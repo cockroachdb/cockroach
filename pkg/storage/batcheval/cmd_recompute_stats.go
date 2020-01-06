@@ -26,7 +26,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RecomputeStats, declareKeysRecomputeStats, RecomputeStats)
+	RegisterReadOnlyCommand(roachpb.RecomputeStats, declareKeysRecomputeStats, RecomputeStats)
 }
 
 func declareKeysRecomputeStats(
@@ -54,7 +54,7 @@ func declareKeysRecomputeStats(
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
 // returning the MVCCStats delta obtained in the process.
 func RecomputeStats(
-	ctx context.Context, _ engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, _ engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	desc := cArgs.EvalCtx.Desc()
 	args := cArgs.Args.(*roachpb.RecomputeStatsRequest)

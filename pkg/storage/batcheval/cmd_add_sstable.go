@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
+	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareKeys, EvalAddSSTable)
 }
 
 // EvalAddSSTable evaluates an AddSSTable command.

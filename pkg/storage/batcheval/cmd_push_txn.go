@@ -26,7 +26,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.PushTxn, declareKeysPushTransaction, PushTxn)
+	RegisterReadWriteCommand(roachpb.PushTxn, declareKeysPushTransaction, PushTxn)
 }
 
 func declareKeysPushTransaction(
