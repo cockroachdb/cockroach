@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.GC, declareKeysGC, GC)
+	RegisterReadWriteCommand(roachpb.GC, declareKeysGC, GC)
 }
 
 func declareKeysGC(

@@ -711,10 +711,11 @@ func (p *Pebble) NewBatch() Batch {
 	return newPebbleBatch(p.db, p.db.NewIndexedBatch())
 }
 
-// NewReadOnly implements the Engine interface.
-func (p *Pebble) NewReadOnly() ReadWriter {
-	return &pebbleReadOnly{
-		parent: p,
+// NewIterCacher returns a new Engine wrapping this Pebble engine that caches
+// its iterators.
+func (p *Pebble) NewIterCacher() Engine {
+	return &pebbleIterCacher{
+		Pebble: p,
 	}
 }
 
@@ -889,69 +890,36 @@ func (p *Pebble) GetSSTables() (sstables SSTableInfos) {
 	return sstables
 }
 
-type pebbleReadOnly struct {
-	parent     *Pebble
+type pebbleIterCacher struct {
+	*Pebble
 	prefixIter pebbleIterator
 	normalIter pebbleIterator
 	closed     bool
 }
 
-var _ ReadWriter = &pebbleReadOnly{}
+var _ ReadWriter = &pebbleIterCacher{}
 
-func (p *pebbleReadOnly) Close() {
+func (p *pebbleIterCacher) Close() {
 	if p.closed {
-		panic("closing an already-closed pebbleReadOnly")
+		panic("closing an already-closed pebbleIterCacher")
 	}
 	p.closed = true
 	p.prefixIter.destroy()
 	p.normalIter.destroy()
 }
 
-func (p *pebbleReadOnly) Closed() bool {
+func (p *pebbleIterCacher) Closed() bool {
 	return p.closed
 }
 
-// ExportToSst is part of the engine.Reader interface.
-func (p *pebbleReadOnly) ExportToSst(
-	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
-	exportAllRevisions bool,
-	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
-}
-
-func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
+func (p *pebbleIterCacher) NewIterator(opts IterOptions) Iterator {
 	if p.closed {
-		panic("using a closed pebbleReadOnly")
-	}
-	return p.parent.Get(key)
-}
-
-func (p *pebbleReadOnly) GetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	if p.closed {
-		panic("using a closed pebbleReadOnly")
-	}
-	return p.parent.GetProto(key, msg)
-}
-
-func (p *pebbleReadOnly) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
-	if p.closed {
-		panic("using a closed pebbleReadOnly")
-	}
-	return iterateOnReader(p, start, end, f)
-}
-
-func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
-	if p.closed {
-		panic("using a closed pebbleReadOnly")
+		panic("using a closed pebbleIterCacher")
 	}
 
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
 		// Iterators that specify timestamp bounds cannot be cached.
-		return newPebbleIterator(p.parent.db, opts)
+		return newPebbleIterator(p.db, opts)
 	}
 
 	iter := &p.normalIter
@@ -965,52 +933,12 @@ func (p *pebbleReadOnly) NewIterator(opts IterOptions) Iterator {
 	if iter.iter != nil {
 		iter.setOptions(opts)
 	} else {
-		iter.init(p.parent.db, opts)
+		iter.init(p.db, opts)
 		iter.reusable = true
 	}
 
 	iter.inuse = true
 	return iter
-}
-
-// Writer methods are not implemented for pebbleReadOnly. Ideally, the code
-// could be refactored so that a Reader could be supplied to evaluateBatch
-
-// Writer is the write interface to an engine's data.
-func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) Clear(key MVCCKey) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) SingleClear(key MVCCKey) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) ClearRange(start, end MVCCKey) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) Put(key MVCCKey, value []byte) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) LogData(data []byte) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	panic("not implemented")
 }
 
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().

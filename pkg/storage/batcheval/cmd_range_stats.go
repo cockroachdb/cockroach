@@ -19,12 +19,12 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RangeStats, DefaultDeclareKeys, RangeStats)
+	RegisterReadOnlyCommand(roachpb.RangeStats, DefaultDeclareKeys, RangeStats)
 }
 
 // RangeStats returns the MVCC statistics for a range.
 func RangeStats(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()

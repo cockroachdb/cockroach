@@ -39,7 +39,7 @@ type pebbleIterator struct {
 	// SSTables based on MVCC key when true.
 	prefix bool
 	// If reusable is true, Close() does not actually close the underlying
-	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
+	// iterator, but simply marks it as not inuse. Used by pebbleIterCacher.
 	reusable bool
 	inuse    bool
 	// Stat tracking the number of sstables encountered during time-bound

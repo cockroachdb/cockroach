@@ -355,11 +355,9 @@ type Engine interface {
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
-	// NewReadOnly returns a new instance of a ReadWriter that wraps
-	// this engine. This wrapper panics when unexpected operations (e.g., write
-	// operations) are executed on it and caches iterators to avoid the overhead
-	// of creating multiple iterators for batched reads.
-	NewReadOnly() ReadWriter
+	// NewIterCacher returns an engine that wraps this engine. This
+	// wrapper reuses the same iterator object for its lifetime.
+	NewIterCacher() Engine
 	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
 	// this engine. A write-only batch accumulates all mutations and applies them
 	// atomically on a call to Commit(). Read operations return an error.
