@@ -77,8 +77,10 @@ type providerOpts struct {
 	EBSProvisionedIOPs int
 
 	// CreateZones stores the list of zones for used cluster creation.
-	// When specifying the geo flag, nodes will be placed over these zones.
-	// See defaultGeoZones.
+	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
+	// on the geo flag being set.
+	// If no zones specified, defaultCreateZones are used.
+	// See defaultCreateZones.
 	CreateZones []string
 }
 
@@ -96,8 +98,8 @@ var defaultConfig = func() (cfg *awsConfig) {
 }()
 
 // defaultCreateZones is the list of availability zones used by default for
-// cluster creation. If the geo flag is specified, one zone from each region
-// is randomly chosen.
+// cluster creation. If the geo flag is specified, nodes are distributed between
+// regions and then zones.
 var defaultCreateZones = []string{
 	"us-east-2b",
 	"us-west-2b",
@@ -135,8 +137,10 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		1000, "Number of IOPs to provision, only used if "+ProviderName+
 			"-ebs-volume-type=io1")
 
-	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
-		"aws availability zones to use for cluster creation, the cluster will be spread out evenly by region (if geo) and then by AZ within a region")
+	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", []string{},
+		fmt.Sprintf("aws availability zones to use for cluster creation. If > 1 zone specified, the\n"+
+			"cluster will be spread out evenly by region and then by AZ within a region\n"+
+			"whether or not --geo is set (default\n[%s])", strings.Join(defaultCreateZones, ",")))
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -208,6 +212,11 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		return err
 	}
 
+	useDefaultZones := len(p.opts.CreateZones) == 0
+	if useDefaultZones {
+		p.opts.CreateZones = defaultCreateZones
+	}
+
 	regions, err := p.allRegions(p.opts.CreateZones)
 	if err != nil {
 		return err
@@ -217,7 +226,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	var zones []string // contains an az corresponding to each entry in names
-	if !opts.GeoDistributed {
+	if !opts.GeoDistributed && (useDefaultZones || len(p.opts.CreateZones) == 1) {
 		// Only use one zone in the region if we're not creating a geo cluster.
 		regionZones, err := p.regionZones(regions[0], p.opts.CreateZones)
 		if err != nil {
