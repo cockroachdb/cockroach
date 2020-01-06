@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -303,7 +304,172 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAlterPrimaryKey:
-			return unimplemented.NewWithIssue(19141, "primary key changes are unsupported")
+			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
+			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
+			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"all nodes are not the correct version for primary key changes")
+			}
+
+			if !params.p.EvalContext().SessionData.PrimaryKeyChangesEnabled {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"session variable enable_primary_key_changes is set to false, cannot perform primary key change")
+			}
+
+			// Ensure that there is not another primary key change attempted within this transaction.
+			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
+			for i := range n.tableDesc.Mutations {
+				if desc := n.tableDesc.Mutations[i].GetPrimaryKeySwap(); desc != nil &&
+					n.tableDesc.Mutations[i].MutationID == currentMutationID {
+					return unimplemented.NewWithIssue(
+						43376, "multiple primary key changes in the same transaction are unsupported")
+				}
+			}
+
+			for _, elem := range t.Columns {
+				col, dropped, err := n.tableDesc.FindColumnByName(elem.Column)
+				if err != nil {
+					return err
+				}
+				if dropped {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"column %q is being dropped", col.Name)
+				}
+				if col.Nullable {
+					return pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column %q in primary key", col.Name)
+				}
+			}
+
+			nameExists := func(name string) bool {
+				_, _, err := n.tableDesc.FindIndexByName(name)
+				return err == nil
+			}
+
+			// Make a new index that is suitable to be a primary index.
+			baseName, name := "new_primary_key", "new_primary_key"
+			for try := 1; nameExists(name); try++ {
+				name = fmt.Sprintf("%s_%d", baseName, try)
+			}
+			newPrimaryIndexDesc := &sqlbase.IndexDescriptor{
+				Name:              name,
+				Unique:            true,
+				CreatedExplicitly: true,
+				EncodingType:      sqlbase.PrimaryIndexEncoding,
+				Type:              sqlbase.IndexDescriptor_FORWARD,
+			}
+			if err := newPrimaryIndexDesc.FillColumns(t.Columns); err != nil {
+				return err
+			}
+			if err := n.tableDesc.AddIndexMutation(newPrimaryIndexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+				return err
+			}
+			if err := n.tableDesc.AllocateIDs(); err != nil {
+				return err
+			}
+
+			// TODO (rohany,solongordon): Figure out whats going on with interleaved tables later.
+			//  For now, we will disallow primary key change operations on tables that are interleaved
+			//  or have interleaved children.
+			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
+				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
+					return errors.New("table being altered cannot have interleaved children or be interleaved")
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			// TODO (rohany,solongordon): Until it is clear what to do with column families, disallow primary key changes
+			//  on tables with multiple column families.
+			if len(n.tableDesc.Families) > 1 {
+				return errors.New("unable to perform primary key change on tables with multiple column families")
+			}
+
+			// TODO (rohany,solongordon): Until it is clear how to handle foreign keys, disallow primary key changes
+			//  that are referenced by other tables through foreign key relationships.
+			if len(n.tableDesc.InboundFKs) > 0 || len(n.tableDesc.OutboundFKs) > 0 {
+				return errors.New(
+					"unable to perform primary key change on tables that are referenced by FK relationships")
+			}
+
+			// TODO (rohany): gate this behind a flag so it doesn't happen all the time.
+			// Create a new index that indexes everything the old primary index does, but doesn't store anything.
+			// TODO (rohany): is there an easier way of checking if the existing primary index was the
+			//  automatically created one?
+			if len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
+				baseName, name := "old_primary_key", "old_primary_key"
+				for try := 1; nameExists(name); try++ {
+					name = fmt.Sprintf("%s_#%d", baseName, try)
+				}
+				oldPrimaryIndexCopy.Name = name
+				oldPrimaryIndexCopy.StoreColumnIDs = nil
+				oldPrimaryIndexCopy.StoreColumnNames = nil
+				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
+					return err
+				}
+			}
+
+			// We have to rewrite all indexes that either:
+			// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
+			// * don't store or index all columns in the new primary key.
+			shouldRewriteIndex := func(idx *sqlbase.IndexDescriptor) bool {
+				result := false
+				for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+					if !idx.ContainsColumnID(colID) {
+						result = true
+						break
+					}
+					col, err := n.tableDesc.FindColumnByID(colID)
+					if err != nil {
+						panic(err)
+					}
+					if idx.Unique && col.Nullable {
+						result = true
+						break
+					}
+				}
+				return result || !idx.Unique || idx.Type == sqlbase.IndexDescriptor_INVERTED
+			}
+			var indexesToRewrite []*sqlbase.IndexDescriptor
+			for i := range n.tableDesc.Indexes {
+				idx := &n.tableDesc.Indexes[i]
+				if idx.ID != newPrimaryIndexDesc.ID && shouldRewriteIndex(idx) {
+					indexesToRewrite = append(indexesToRewrite, idx)
+				}
+			}
+
+			// Queue up a mutation for each index that needs to be rewritten.
+			// This new index will have an altered ExtraColumnIDs to allow it to be rewritten
+			// using the unique-ifying columns from the new table.
+			var oldIndexIDs, newIndexIDs []sqlbase.IndexID
+			for _, idx := range indexesToRewrite {
+				// Clone the index that we want to rewrite.
+				newIndex := protoutil.Clone(idx).(*sqlbase.IndexDescriptor)
+				name := newIndex.Name + "_rewrite_for_primary_key_change"
+				for try := 1; nameExists(name); try++ {
+					name = fmt.Sprintf("%s#%d", name, try)
+				}
+				newIndex.Name = name
+				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
+					return err
+				}
+				oldIndexIDs = append(oldIndexIDs, idx.ID)
+				newIndexIDs = append(newIndexIDs, newIndex.ID)
+			}
+
+			swapArgs := &sqlbase.PrimaryKeySwap{
+				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
+				NewIndexes:        newIndexIDs,
+				OldIndexes:        oldIndexIDs,
+			}
+			n.tableDesc.AddPrimaryKeySwapMutation(swapArgs)
+
+			// N.B. We don't schedule index deletions here because the existing indexes need to be visible to the user
+			// until the primary key swap actually occurs. Deletions will get enqueued in the phase when the swap happens.
+
+			// Mark descriptorChanged so that a mutation job is scheduled at the end of startExec.
+			descriptorChanged = true
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
@@ -759,6 +925,31 @@ func (p *planner) setAuditMode(
 func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
+
+// addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
+// the index with ExtraColumnIDs from the given index, rather than the table's primary key.
+func addIndexMutationWithSpecificPrimaryKey(
+	table *sqlbase.MutableTableDescriptor,
+	toAdd *sqlbase.IndexDescriptor,
+	primary *sqlbase.IndexDescriptor,
+) error {
+	// Reset the ID so that a call to AllocateIDs will set up the index.
+	toAdd.ID = 0
+	if err := table.AddIndexMutation(toAdd, sqlbase.DescriptorMutation_ADD); err != nil {
+		return err
+	}
+	if err := table.AllocateIDs(); err != nil {
+		return err
+	}
+	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
+	toAdd.ExtraColumnIDs = nil
+	for _, colID := range primary.ColumnIDs {
+		if !toAdd.ContainsColumnID(colID) {
+			toAdd.ExtraColumnIDs = append(toAdd.ExtraColumnIDs, colID)
+		}
+	}
+	return nil
+}
 
 // applyColumnMutation applies the mutation specified in `mut` to the given
 // columnDescriptor, and saves the containing table descriptor. If the column's

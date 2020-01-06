@@ -1686,10 +1686,10 @@ alter_table_cmd:
 | ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
   // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
-| ALTER PRIMARY KEY USING INDEX table_index_name
+| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')'
   {
     $$.val = &tree.AlterTableAlterPrimaryKey{
-      TableIndex: $6.tableIndexName(),
+      Columns: $7.idxElems(),
     }
   }
 | VALIDATE CONSTRAINT constraint_name
