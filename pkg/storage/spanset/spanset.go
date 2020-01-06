@@ -159,6 +159,18 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 	return boundary
 }
 
+// Contains returns whether the SpanSet contains any spans with the specified
+// access mode.
+// TODO(nvanbenschoten): Add unit test.
+func (s *SpanSet) Contains(access SpanAccess) bool {
+	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+		if len(s.GetSpans(access, ss)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.

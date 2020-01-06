@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -29,22 +29,15 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, lg *spanlatch.Guard,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Guarantee we release the provided latches. This is wrapped to delay pErr
-	// evaluation to its value when returning.
-	ec := endCmds{repl: r, lg: lg}
-	defer func() {
-		ec.done(ctx, ba, br, pErr)
-	}()
-
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, g *concurrency.Guard,
+) (br *roachpb.BatchResponse, _ bool, pErr *roachpb.Error) {
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
 	var status storagepb.LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
-				return nil, nErr
+				return nil, false, nErr
 			}
 			r.store.metrics.FollowerReadsCount.Inc(1)
 		}
@@ -56,8 +49,8 @@ func (r *Replica) executeReadOnlyBatch(
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if err := r.checkExecutionCanProceed(ba, ec.lg, &status); err != nil {
-		return nil, roachpb.NewError(err)
+	if err := r.checkExecutionCanProceed(ba, g, &status); err != nil {
+		return nil, false, roachpb.NewError(err)
 	}
 
 	// Evaluate read-only batch command.
@@ -72,13 +65,14 @@ func (r *Replica) executeReadOnlyBatch(
 	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
 		pErr = roachpb.NewError(err)
 	}
+	r.updateTimestampCache(ctx, ba, br, pErr)
 
 	if pErr != nil {
 		log.VErrEvent(ctx, 3, pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
 	}
-	return br, pErr
+	return br, false, pErr
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
@@ -99,6 +93,13 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 			return err
 		}
 		lResult.MaybeWatchForMerge = false
+	}
+
+	if lResult.UpdatedIntents != nil {
+		for _, intent := range lResult.UpdatedIntents {
+			r.concMgr.OnLockAcquired(ctx, intent)
+		}
+		lResult.UpdatedIntents = nil
 	}
 
 	if intents := lResult.DetachEncounteredIntents(); len(intents) > 0 {

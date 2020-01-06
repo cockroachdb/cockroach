@@ -20,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -74,9 +74,9 @@ func (rec *SpanSetReplicaEvalContext) DB() *client.DB {
 	return rec.i.DB()
 }
 
-// GetTxnWaitQueue returns the txnwait.Queue.
-func (rec *SpanSetReplicaEvalContext) GetTxnWaitQueue() *txnwait.Queue {
-	return rec.i.GetTxnWaitQueue()
+// GetConcurrencyManager returns the concurrency.Manager.
+func (rec *SpanSetReplicaEvalContext) GetConcurrencyManager() concurrency.Manager {
+	return rec.i.GetConcurrencyManager()
 }
 
 // NodeID returns the NodeID.

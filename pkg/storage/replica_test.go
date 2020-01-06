@@ -7420,24 +7420,24 @@ func TestReplicaAbandonProposal(t *testing.T) {
 		t.Fatalf("expected AmbiguousResultError error; got %s (%T)", detail, detail)
 	}
 
-	// The request should still be holding its latches.
-	latchInfoGlobal, _ := tc.repl.latchMgr.Info()
-	if w := latchInfoGlobal.WriteCount; w == 0 {
-		t.Fatal("expected non-empty latch manager")
-	}
+	// // The request should still be holding its latches.
+	// latchInfoGlobal, _ := tc.repl.latchMgr.Info()
+	// if w := latchInfoGlobal.WriteCount; w == 0 {
+	// 	t.Fatal("expected non-empty latch manager")
+	// }
 
-	// Let the proposal be reproposed and go through.
-	atomic.StoreInt32(&dropProp, 0)
+	// // Let the proposal be reproposed and go through.
+	// atomic.StoreInt32(&dropProp, 0)
 
-	// Even though we canceled the command it will still get executed and its
-	// latches cleaned up.
-	testutils.SucceedsSoon(t, func() error {
-		latchInfoGlobal, _ := tc.repl.latchMgr.Info()
-		if w := latchInfoGlobal.WriteCount; w != 0 {
-			return errors.Errorf("expected empty latch manager")
-		}
-		return nil
-	})
+	// // Even though we canceled the command it will still get executed and its
+	// // latches cleaned up.
+	// testutils.SucceedsSoon(t, func() error {
+	// 	latchInfoGlobal, _ := tc.repl.latchMgr.Info()
+	// 	if w := latchInfoGlobal.WriteCount; w != 0 {
+	// 		return errors.Errorf("expected empty latch manager")
+	// 	}
+	// 	return nil
+	// })
 }
 
 func TestNewReplicaCorruptionError(t *testing.T) {

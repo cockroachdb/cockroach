@@ -43,6 +43,9 @@ func setTimestampCacheLowWaterMark(
 func (r *Replica) updateTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
+	if ba.ReadConsistency != roachpb.CONSISTENT {
+		return
+	}
 	addToTSCache := r.store.tsCache.Add
 	if util.RaceEnabled {
 		addToTSCache = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)

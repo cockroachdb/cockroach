@@ -254,7 +254,7 @@ func (s *Store) SplitRange(
 	// appropriate. We do this after setDescWithoutProcessUpdate
 	// to ensure that no pre-split commands are inserted into the
 	// txnWaitQueue after we clear it.
-	leftRepl.txnWaitQueue.Clear(false /* disable */)
+	leftRepl.concMgr.OnSplit()
 
 	// The rangefeed processor will no longer be provided logical ops for
 	// its entire range, so it needs to be shut down and all registrations
