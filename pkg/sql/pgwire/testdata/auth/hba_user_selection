@@ -25,7 +25,7 @@ ok
 
 connect user=root
 ----
-ok
+ok defaultdb
 
 connect user=testuser
 ----
@@ -51,7 +51,7 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 connect user=passworduser password=pass
 ----
@@ -61,7 +61,7 @@ ERROR: no server.host_based_authentication.configuration entry for host "127.0.0
 
 connect user=root
 ----
-ok
+ok defaultdb
 
 subtest end testuser
 
@@ -77,16 +77,16 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 connect user=passworduser password=pass
 ----
-ok
+ok defaultdb
 
 # "root" can still log in regardless.
 connect user=root
 ----
-ok
+ok defaultdb
 
 subtest end side_by_side
 
@@ -101,16 +101,16 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 connect user=passworduser password=pass
 ----
-ok
+ok defaultdb
 
 # "root" can still log in regardless.
 connect user=root
 ----
-ok
+ok defaultdb
 
 
 subtest end multiple
@@ -133,7 +133,7 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 connect user=passworduser password=pass
 ----
@@ -151,11 +151,11 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 connect user=passworduser password=pass
 ----
-ok
+ok defaultdb
 
 subtest end priority/unquoted_all
 

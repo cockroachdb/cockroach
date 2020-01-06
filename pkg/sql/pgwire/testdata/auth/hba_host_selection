@@ -22,7 +22,7 @@ subtest nomatch/root_override
 
 connect user=root
 ----
-ok
+ok defaultdb
 
 subtest end nomatch/root_override
 
@@ -41,6 +41,6 @@ ok
 
 connect user=testuser
 ----
-ok
+ok defaultdb
 
 subtest end match_net

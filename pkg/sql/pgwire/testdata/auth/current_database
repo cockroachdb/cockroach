@@ -1,0 +1,14 @@
+# This test verifies that the database in the connection string is
+# used to set the current database inside the client.
+
+config secure
+----
+
+sql
+CREATE DATABASE mydb;
+----
+ok
+
+connect user=root database=mydb
+----
+ok mydb
