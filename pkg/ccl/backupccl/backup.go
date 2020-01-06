@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -91,6 +92,9 @@ var fullClusterSystemTables = []string{
 	sqlbase.JobsTable.Name,
 	// Table statistics are backed up in the backup descriptor for now.
 }
+
+// Databases which are present in the cluster by default.
+var defaultUserDBs = map[string]struct{}{sessiondata.DefaultDatabaseName: {}, sessiondata.PgDatabaseName: {}}
 
 var useTBI = settings.RegisterBoolSetting(
 	"kv.bulk_io_write.experimental_incremental_export_enabled",
