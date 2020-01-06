@@ -20,12 +20,12 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.Get, DefaultDeclareKeys, Get)
+	RegisterReadOnlyCommand(roachpb.Get, DefaultDeclareKeys, Get)
 }
 
 // Get returns the value for a specified key.
 func Get(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GetRequest)
 	h := cArgs.Header
