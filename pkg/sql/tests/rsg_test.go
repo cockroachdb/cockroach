@@ -213,6 +213,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "REVOKE") || strings.Contains(s, "GRANT") {
 			return errors.New("REVOKE and GRANT are unsupported")
 		}
+		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
+			return errors.New("See #43693")
+		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
