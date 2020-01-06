@@ -384,7 +384,7 @@ func TestLint(t *testing.T) {
 					":!acceptance",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/backupccl/backup_cloud_test.go",
-					":!storage/cloud/external_storage_test.go",
+					":!storage/cloud",
 					":!ccl/workloadccl/fixture_test.go",
 					":!cmd",
 					":!nightly",
