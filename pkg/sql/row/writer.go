@@ -121,7 +121,12 @@ func prepareInsertOrUpdateBatch(
 				break
 			}
 		}
-		if !update {
+		// We can have an empty family.ColumnIDs in the following case:
+		// * A table is created with the primary key not in family 0, and another column in family 0.
+		// * The column in family 0 is dropped, leaving the 0'th family empty.
+		// In this case, we must keep the empty 0'th column family in order to ensure that column family 0
+		// is always encoded as the sentinel k/v for a row.
+		if !update && len(family.ColumnIDs) != 0 {
 			continue
 		}
 
@@ -133,7 +138,10 @@ func prepareInsertOrUpdateBatch(
 		}
 
 		*kvKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
+		// We need to ensure that column family 0 contains extra metadata, like composite primary key values.
+		// Additionally, the decoders expect that column family 0 is encoded with a TUPLE value tag, so we
+		// don't want to use the untagged value encoding.
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
 			// Storage optimization to store DefaultColumnID directly as a value. Also
 			// backwards compatible with the original BaseFormatVersion.
 

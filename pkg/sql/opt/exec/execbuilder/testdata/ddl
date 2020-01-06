@@ -10,7 +10,7 @@ statement ok
 INSERT INTO other VALUES (9)
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f))
+CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f), FAMILY (a, f))
 
 statement ok
 INSERT INTO t VALUES (1, 9)

@@ -83,7 +83,8 @@ KV values consist of
 2.  A one-byte value type (see the enumeration `ValueType` in
     [pkg/roachpb/data.proto])
 3.  Data from where the row specified in the KV key intersects the
-    specified column family, excluding primary key data.
+    specified column family, including composite encodings of primary
+    key columns that are members of the specified column family.
 
 The value type defaults to `TUPLE`, which indicates the following
 encoding. (For other values, see subsection Single-column column
@@ -116,6 +117,9 @@ An alternative design would be to teach the KV Inc operation to
 understand SQL value encoding so that the sequence could be encoded
 consistently with tables, but that would break the KV/SQL abstraction
 barrier.
+
+The code that performs generation of keys and values for primary indexes
+can be found in `prepareInsertOrUpdateBatch`([pkg/sql/row/writer.go]).
 
 ### Sentinel KV pairs
 
@@ -332,9 +336,12 @@ The KV value will have value type bytes, and will consist of
 
 Since column family 0 is always included, it contains extra information
 that the index stores in the value, such as composite column values and
-stored primary key columns. All of these fields are optional, so the
-`BYTES` value may be empty. Note that, in a unique index, rows with a NULL
-in an indexed column have their implicit column data stored in both the
+stored primary key columns. Note that this is different than the encoding of
+composite indexed columns values in primary key columns, where the composite
+value component of an indexed column is placed in the KV pair corresponding
+to the column family of the indexed column. All of these fields are optional,
+so the `BYTES` value may be empty. Note that, in a unique index, rows with
+a NULL in an indexed column have their implicit column data stored in both the
 KV key and the KV value. (Ditto for stored column data in the old format.)
 
 For indexes with more than one column family, the remaining column families'

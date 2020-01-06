@@ -4,7 +4,8 @@ statement ok
 CREATE TABLE x (
   a INT PRIMARY KEY,
   b INT,
-  INDEX (b)
+  INDEX (b),
+  FAMILY "primary" (a, b)
 )
 
 statement ok
@@ -29,7 +30,8 @@ statement ok
 CREATE TABLE y (
   u INT PRIMARY KEY,
   v INT REFERENCES x,
-  INDEX (v)
+  INDEX (v),
+  FAMILY "primary" (u, v)
 )
 
 query T

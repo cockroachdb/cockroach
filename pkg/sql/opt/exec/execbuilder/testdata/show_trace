@@ -25,7 +25,7 @@ exec stmt  rows affected: 0
 
 # More KV operations.
 statement ok
-SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT); SET tracing = off
+SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v)); SET tracing = off
 
 query TT
 SELECT operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 'wall_time:...'), 'wall_time:\d+', 'wall_time:...') as message
@@ -233,7 +233,7 @@ exec stmt  rows affected: 0
 subtest autocommit
 
 statement ok
-CREATE TABLE t.kv3(k INT PRIMARY KEY, v INT)
+CREATE TABLE t.kv3(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v))
 
 statement ok
 SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
