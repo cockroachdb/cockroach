@@ -33,3 +33,38 @@ func TestZonePlacement(t *testing.T) {
 		})
 	}
 }
+
+func TestExpandZonesFlag(t *testing.T) {
+	for i, c := range []struct {
+		input, output []string
+		expErr        string
+	}{
+		{
+			input:  []string{"us-east1-b:3", "us-west2-c:2"},
+			output: []string{"us-east1-b", "us-east1-b", "us-east1-b", "us-west2-c", "us-west2-c"},
+		},
+		{
+			input:  []string{"us-east1-b:3", "us-west2-c"},
+			output: []string{"us-east1-b", "us-east1-b", "us-east1-b", "us-west2-c"},
+		},
+		{
+			input:  []string{"us-east1-b", "us-west2-c"},
+			output: []string{"us-east1-b", "us-west2-c"},
+		},
+		{
+			input:  []string{"us-east1-b", "us-west2-c:a2"},
+			expErr: "failed to parse",
+		},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			expanded, err := ExpandZonesFlag(c.input)
+			if c.expErr != "" {
+				if assert.Error(t, err) {
+					assert.Regexp(t, c.expErr, err.Error())
+				}
+			} else {
+				assert.EqualValues(t, c.output, expanded)
+			}
+		})
+	}
+}
