@@ -2605,6 +2605,17 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
   bool refresh_invalid() const;
   void set_refresh_invalid(bool value);
 
+  // bool stepping_mode_enabled = 9;
+  void clear_stepping_mode_enabled();
+  static const int kSteppingModeEnabledFieldNumber = 9;
+  bool stepping_mode_enabled() const;
+  void set_stepping_mode_enabled(bool value);
+
+  void clear_read_seq_num();
+  static const int kReadSeqNumFieldNumber = 10;
+  ::google::protobuf::int32 read_seq_num() const;
+  void set_read_seq_num(::google::protobuf::int32 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.LeafTxnInputState)
  private:
 
@@ -2612,6 +2623,8 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   bool refresh_invalid_;
+  bool stepping_mode_enabled_;
+  ::google::protobuf::int32 read_seq_num_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -5370,6 +5383,33 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Sequenc
 LeafTxnInputState::in_flight_writes() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.LeafTxnInputState.in_flight_writes)
   return in_flight_writes_;
+}
+
+// bool stepping_mode_enabled = 9;
+inline void LeafTxnInputState::clear_stepping_mode_enabled() {
+  stepping_mode_enabled_ = false;
+}
+inline bool LeafTxnInputState::stepping_mode_enabled() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeafTxnInputState.stepping_mode_enabled)
+  return stepping_mode_enabled_;
+}
+inline void LeafTxnInputState::set_stepping_mode_enabled(bool value) {
+  
+  stepping_mode_enabled_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LeafTxnInputState.stepping_mode_enabled)
+}
+
+inline void LeafTxnInputState::clear_read_seq_num() {
+  read_seq_num_ = 0;
+}
+inline ::google::protobuf::int32 LeafTxnInputState::read_seq_num() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeafTxnInputState.read_seq_num)
+  return read_seq_num_;
+}
+inline void LeafTxnInputState::set_read_seq_num(::google::protobuf::int32 value) {
+  
+  read_seq_num_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LeafTxnInputState.read_seq_num)
 }
 
 // -------------------------------------------------------------------
