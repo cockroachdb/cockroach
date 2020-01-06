@@ -1033,7 +1033,7 @@ func backupPlanHook(
 
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to)
 		if err != nil {
-			return nil
+			return err
 		}
 		defaultStore, err := storageccl.ExportStorageFromURI(ctx, defaultURI, p.ExecCfg().Settings)
 		if err != nil {
