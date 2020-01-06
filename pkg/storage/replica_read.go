@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -63,12 +64,16 @@ func (r *Replica) executeReadOnlyBatch(
 	// Evaluate read-only batch command.
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
-	readOnly := r.store.Engine().NewReadOnly()
+
+	// TODO(irfansharif): It's unfortunate that in this read-only code path,
+	// we're stuck with a ReadWriter because of the way evaluateBatch is
+	// designed.
+	var rw engine.ReadWriter = r.store.Engine().NewIterCacher()
 	if util.RaceEnabled {
-		readOnly = spanset.NewReadWriterAt(readOnly, spans, ba.Timestamp)
+		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}
-	defer readOnly.Close()
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
+	defer rw.Close()
+	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
 	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
 		pErr = roachpb.NewError(err)
 	}

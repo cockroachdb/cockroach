@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-	batcheval.RegisterCommand(roachpb.Export, declareKeysExport, evalExport)
+	batcheval.RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
 }
 
 func declareKeysExport(
@@ -41,7 +41,7 @@ func declareKeysExport(
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.Reader, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header

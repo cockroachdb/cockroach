@@ -165,10 +165,9 @@ func shouldNotPanic(t *testing.T, f func(), funcName string) {
 	f()
 }
 
-// TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via
-// engine.NewReadOnly()) all Reader methods work, and all Writer methods panic
-// as "not implemented". Also basic iterating functionality is verified.
-func TestReadOnlyBasics(t *testing.T) {
+// TestIterCacherBasics verifies that an iterator cacher (obtained via
+// engine.NewIterCacher()) can read and iterate successfully.
+func TestIterCacherBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, engineImpl := range mvccEngineImpls {
@@ -176,19 +175,19 @@ func TestReadOnlyBasics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			b := e.NewReadOnly()
-			if b.Closed() {
-				t.Fatal("read-only is expectedly found to be closed")
+			iterCacher := e.NewIterCacher()
+			if iterCacher.Closed() {
+				t.Fatal("iter-cacher is unexpectedly found to be closed")
 			}
 			a := mvccKey("a")
 			getVal := &roachpb.Value{}
 			successTestCases := []func(){
-				func() { _, _ = b.Get(a) },
-				func() { _, _, _, _ = b.GetProto(a, getVal) },
-				func() { _ = b.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-				func() { b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+				func() { _, _ = iterCacher.Get(a) },
+				func() { _, _, _, _ = iterCacher.GetProto(a, getVal) },
+				func() { _ = iterCacher.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+				func() { iterCacher.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
-					b.NewIterator(IterOptions{
+					iterCacher.NewIterator(IterOptions{
 						MinTimestampHint: hlc.MinTimestamp,
 						MaxTimestampHint: hlc.MaxTimestamp,
 						UpperBound:       roachpb.KeyMax,
@@ -196,15 +195,16 @@ func TestReadOnlyBasics(t *testing.T) {
 				},
 			}
 			defer func() {
-				b.Close()
-				if !b.Closed() {
-					t.Fatal("even after calling Close, a read-only should not be closed")
+				iterCacher.Close()
+				if !iterCacher.Closed() {
+					t.Fatal("rocksDBIterCacher is not closed after calling Close")
 				}
-				name := "rocksDBReadOnly"
+				name := "rocksDBIterCacher"
 				if engineImpl.name == "pebble" {
-					name = "pebbleReadOnly"
+					name = "pebbleIterCacher"
 				}
-				shouldPanic(t, func() { b.Close() }, "Close", "closing an already-closed "+name)
+				shouldPanic(t, func() { iterCacher.Close() }, "Close", "closing an already-closed "+name)
+				shouldPanic(t, func() { iterCacher.NewIterator(IterOptions{}).Close() }, "NewIterator", "using a closed "+name)
 				for i, f := range successTestCases {
 					shouldPanic(t, f, string(i), "using a closed "+name)
 				}
@@ -212,19 +212,6 @@ func TestReadOnlyBasics(t *testing.T) {
 
 			for i, f := range successTestCases {
 				shouldNotPanic(t, f, string(i))
-			}
-
-			// For a read-only ReadWriter, all Writer methods should panic.
-			failureTestCases := []func(){
-				func() { _ = b.ApplyBatchRepr(nil, false) },
-				func() { _ = b.Clear(a) },
-				func() { _ = b.SingleClear(a) },
-				func() { _ = b.ClearRange(a, a) },
-				func() { _ = b.Merge(a, nil) },
-				func() { _ = b.Put(a, nil) },
-			}
-			for i, f := range failureTestCases {
-				shouldPanic(t, f, string(i), "not implemented")
 			}
 
 			if err := e.Put(mvccKey("a"), []byte("value")); err != nil {

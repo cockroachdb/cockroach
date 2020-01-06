@@ -164,24 +164,24 @@ func BenchmarkIterOnBatch_RocksDB(b *testing.B) {
 	}
 }
 
-// BenchmarkIterOnReadOnly_RocksDB is a microbenchmark that measures the performance of creating an iterator
-// and seeking to a key if a read-only ReadWriter that caches the RocksDB iterator is used
-func BenchmarkIterOnReadOnly_RocksDB(b *testing.B) {
-	ctx := context.Background()
+// BenchmarkIterOnIterCacher_RocksDB is a microbenchmark that measures the
+// performance of creating an iterator and seeking to a key if the iterator-
+// caching wrapper is used.
+func BenchmarkIterOnIterCacher_RocksDB(b *testing.B) {
 	for _, writes := range []int{10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("writes=%d", writes), func(b *testing.B) {
-			benchmarkIterOnReadWriter(ctx, b, writes, Engine.NewReadOnly, true)
+			benchmarkIterOnReader(b, writes, Engine.NewIterCacher, true)
 		})
 	}
 }
 
-// BenchmarkIterOnEngine_RocksDB is a microbenchmark that measures the performance of creating an iterator
-// and seeking to a key without caching is used (see BenchmarkIterOnReadOnly_RocksDB)
+// BenchmarkIterOnEngine_RocksDB is a microbenchmark that measures the
+// performance of creating an iterator and seeking to a key without caching is
+// used (see BenchmarkIterOnIterCacher_RocksDB).
 func BenchmarkIterOnEngine_RocksDB(b *testing.B) {
-	ctx := context.Background()
 	for _, writes := range []int{10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("writes=%d", writes), func(b *testing.B) {
-			benchmarkIterOnReadWriter(ctx, b, writes, func(e Engine) ReadWriter { return e }, false)
+			benchmarkIterOnReader(b, writes, func(e Engine) Engine { return e }, false)
 		})
 	}
 }
