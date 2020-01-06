@@ -18,7 +18,8 @@ config secure
 # Set HBA to empty in case it wasn't done before.
 set_hba
 ----
-ok
+# Cache of the HBA configuration on this node:
+# (configuration is empty)
 
 subtest root
 
