@@ -85,6 +85,12 @@ func loadLocalAuthConfigUponRemoteSettingChange(
 		log.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
 		conf = nil
 	}
+	NormalizeHBAEntries(conf)
+	server.auth.conf = conf
+}
+
+// NormalizeHBAEntries normalizes the entries in the HBA configuration.
+func NormalizeHBAEntries(conf *hba.Conf) {
 	// Usernames are normalized during session init. Normalize the HBA usernames
 	// in the same way.
 	for _, entry := range conf.Entries {
@@ -93,7 +99,6 @@ func loadLocalAuthConfigUponRemoteSettingChange(
 			user.Value = tree.Name(user.Value).Normalize()
 		}
 	}
-	server.auth.conf = conf
 }
 
 // checkHBASyntaxBeforeUpdatingSetting is run by the SQL gateway each time
@@ -167,6 +172,13 @@ var (
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.
 type CheckHBAEntry func(hba.Entry) error
+
+// TestingGetHBAConf exposes the cached hba.Conf for use in testing.
+func (s *Server) TestingGetHBAConf() *hba.Conf {
+	s.auth.RLock()
+	defer s.auth.RUnlock()
+	return s.auth.conf
+}
 
 // HBADebugFn exposes the computed HBA configuration via the debug
 // interface, for inspection by tests.
