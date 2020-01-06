@@ -31,12 +31,15 @@ import (
 //
 // anyOrder determines whether the results should be matched in order (when
 // anyOrder is false) or as sets (when anyOrder is true).
+// memoryLimit specifies the desired memory limit on the testing knob (in
+// bytes). If it is 0, then the default limit of 64MiB will be used.
 func verifyColOperator(
 	anyOrder bool,
 	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
 	outputTypes []types.T,
 	pspec *execinfrapb.ProcessorSpec,
+	memoryLimit int64,
 ) error {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -58,6 +61,7 @@ func verifyColOperator(
 			DiskMonitor: diskMonitor,
 		},
 	}
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 
 	inputsProc := make([]execinfra.RowSource, len(inputs))
 	inputsColOp := make([]execinfra.RowSource, len(inputs))
@@ -88,11 +92,14 @@ func verifyColOperator(
 	}
 
 	args := colexec.NewColOperatorArgs{
-		Spec:                               pspec,
-		Inputs:                             columnarizers,
-		StreamingMemAccount:                &acc,
-		UseStreamingMemAccountForBuffering: true,
-		ProcessorConstructor:               rowexec.NewProcessor,
+		Spec:                 pspec,
+		Inputs:               columnarizers,
+		StreamingMemAccount:  &acc,
+		ProcessorConstructor: rowexec.NewProcessor,
+	}
+	var spilled bool
+	if memoryLimit > 0 {
+		args.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
 	result, err := colexec.NewColOperator(ctx, flowCtx, args)
 	if err != nil {
@@ -219,6 +226,13 @@ func verifyColOperator(
 					i, expStr, retStr,
 				)
 			}
+		}
+	}
+
+	if memoryLimit > 0 {
+		// Check that the spilling did occur.
+		if !spilled {
+			return errors.Errorf("expected spilling to disk but it did *not* occur")
 		}
 	}
 	return nil

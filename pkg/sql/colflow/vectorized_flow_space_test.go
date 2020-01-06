@@ -93,11 +93,11 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
 				args := colexec.NewColOperatorArgs{
-					Spec:                               tc.spec,
-					Inputs:                             inputs,
-					StreamingMemAccount:                &acc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                tc.spec,
+					Inputs:              inputs,
+					StreamingMemAccount: &acc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := colexec.NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					t.Fatal(err)
@@ -136,6 +136,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	testCases := []struct {
 		desc string
 		spec *execinfrapb.ProcessorSpec
+		// spillingSupported, if set to true, indicates that disk spilling for the
+		// operator is supported and we expect success only.
+		spillingSupported bool
 	}{
 		{
 			desc: "SORTER",
@@ -151,6 +154,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					},
 				},
 			},
+			spillingSupported: true,
 		},
 		{
 			desc: "HASH AGGREGATOR",
@@ -188,7 +192,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	)
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
-			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
+			expected := success || tc.spillingSupported
+			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expected), func(t *testing.T) {
 				inputs := []colexec.Operator{colexec.NewRepeatableBatchSource(batch)}
 				if len(tc.spec.Input) > 1 {
 					inputs = append(inputs, colexec.NewRepeatableBatchSource(batch))
@@ -196,25 +201,37 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
 				} else {
 					memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1))
+					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 1
 				}
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
 				args := colexec.NewColOperatorArgs{
-					Spec:                               tc.spec,
-					Inputs:                             inputs,
-					StreamingMemAccount:                &acc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                tc.spec,
+					Inputs:              inputs,
+					StreamingMemAccount: &acc,
 				}
+				// The disk spilling infrastructure relies on different memory
+				// accounts, so if the spilling is supported, we do *not* want to use
+				// streaming memory account.
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				result, err := colexec.NewColOperator(ctx, flowCtx, args)
 				require.NoError(t, err)
 				err = execerror.CatchVectorizedRuntimeError(func() {
 					result.Op.Init()
 					result.Op.Next(ctx)
+					result.Op.Next(ctx)
 				})
-				if success {
+				for _, memAccount := range result.BufferingOpMemAccounts {
+					memAccount.Close(ctx)
+				}
+				for _, memMonitor := range result.BufferingOpMemMonitors {
+					memMonitor.Stop(ctx)
+				}
+				if success || tc.spillingSupported {
 					require.NoError(t, err, "expected success, found: ", err)
 				} else {
 					require.Error(t, err, "expected memory error, found nothing")

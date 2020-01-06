@@ -78,7 +78,6 @@ type bufferingInMemoryOperator interface {
 type oneInputDiskSpiller struct {
 	NonExplainable
 
-	allocator   *Allocator
 	initialized bool
 	spilled     bool
 
@@ -86,6 +85,7 @@ type oneInputDiskSpiller struct {
 	inMemoryOp             bufferingInMemoryOperator
 	inMemoryMemMonitorName string
 	diskBackedOp           Operator
+	spillingCallbackFn     func()
 }
 
 var _ Operator = &oneInputDiskSpiller{}
@@ -104,20 +104,23 @@ var _ Operator = &oneInputDiskSpiller{}
 //   operator when given an input operator. We take in a constructor rather
 //   than an already created operator in order to hide the complexity of buffer
 //   exporting operator that serves as the input to the disk-backed operator.
+// - spillingCallbackFn will be called when the spilling from in-memory to disk
+//   backed operator occurs. It should only be set in tests.
 func newOneInputDiskSpiller(
 	allocator *Allocator,
 	input Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
 	diskBackedOpConstructor func(input Operator) Operator,
+	spillingCallbackFn func(),
 ) Operator {
 	diskBackedOpInput := newBufferExportingOperator(allocator, inMemoryOp, input)
 	return &oneInputDiskSpiller{
-		allocator:              allocator,
 		input:                  input,
 		inMemoryOp:             inMemoryOp,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
+		spillingCallbackFn:     spillingCallbackFn,
 	}
 }
 
@@ -147,6 +150,9 @@ func (d *oneInputDiskSpiller) Next(ctx context.Context) coldata.Batch {
 		if sqlbase.IsOutOfMemoryError(err) &&
 			strings.Contains(err.Error(), d.inMemoryMemMonitorName) {
 			d.spilled = true
+			if d.spillingCallbackFn != nil {
+				d.spillingCallbackFn()
+			}
 			d.diskBackedOp.Init()
 			return d.Next(ctx)
 		}

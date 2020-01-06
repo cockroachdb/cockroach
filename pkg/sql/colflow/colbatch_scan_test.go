@@ -79,10 +79,10 @@ func BenchmarkColBatchScan(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
 				args := colexec.NewColOperatorArgs{
-					Spec:                               &spec,
-					StreamingMemAccount:                testMemAcc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                &spec,
+					StreamingMemAccount: testMemAcc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				res, err := colexec.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
 					b.Fatal(err)

@@ -208,11 +208,11 @@ func TestAndOrOps(t *testing.T) {
 							},
 						}
 						args := NewColOperatorArgs{
-							Spec:                               spec,
-							Inputs:                             input,
-							StreamingMemAccount:                testMemAcc,
-							UseStreamingMemAccountForBuffering: true,
+							Spec:                spec,
+							Inputs:              input,
+							StreamingMemAccount: testMemAcc,
 						}
+						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 						result, err := NewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
@@ -279,11 +279,11 @@ func benchmarkLogicalProjOp(
 	}
 
 	args := NewColOperatorArgs{
-		Spec:                               spec,
-		Inputs:                             []Operator{input},
-		StreamingMemAccount:                testMemAcc,
-		UseStreamingMemAccountForBuffering: true,
+		Spec:                spec,
+		Inputs:              []Operator{input},
+		StreamingMemAccount: testMemAcc,
 	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	result, err := NewColOperator(ctx, flowCtx, args)
 	if err != nil {
 		b.Fatal(err)
