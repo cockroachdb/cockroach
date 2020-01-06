@@ -503,6 +503,10 @@ func (tp *txnPipeliner) updateWriteTracking(
 					tp.footprint.insert(sp)
 				}
 			}
+		} else if scan, ok := req.(*roachpb.ScanRequest); ok && scan.SelectForUpdate {
+			if sp, ok := roachpb.ActualSpan(req, resp); ok {
+				tp.footprint.insert(sp)
+			}
 		}
 	}
 }

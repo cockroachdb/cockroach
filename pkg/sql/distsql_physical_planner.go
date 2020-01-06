@@ -413,6 +413,10 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.source.plan)
 
 	case *scanNode:
+		if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			return cannotDistribute, newQueryNotSupportedErrorf("can't distribute locking scans")
+		}
+
 		rec := canDistribute
 		if n.softLimit != 0 {
 			// We don't yet recommend distributing plans where soft limits propagate

@@ -48,7 +48,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool inconsistent, bool tombstones)
+              DBTxn txn, bool inconsistent, bool tombstones, bool write_too_old)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -62,6 +62,7 @@ template <bool reverse> class mvccScanner {
         txn_ignored_seqnums_(txn.ignored_seqnums),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
+        write_too_old_(write_too_old),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
@@ -261,6 +262,13 @@ template <bool reverse> class mvccScanner {
     return false;
   }
 
+  bool writeTooOld(DBTimestamp ts) {
+    results_.write_too_old = ts;
+    kvs_->Clear();
+    intents_->Clear();
+    return false;
+  }
+
   bool setStatus(const DBStatus& status) {
     results_.status = status;
     return false;
@@ -274,6 +282,10 @@ template <bool reverse> class mvccScanner {
         // 1. Fast path: there is no intent and our read timestamp is
         // newer than the most recent version's timestamp.
         return addAndAdvance(cur_value_);
+      }
+
+      if (write_too_old_) {
+        return writeTooOld(cur_timestamp_);
       }
 
       if (check_uncertainty_) {
@@ -326,7 +338,7 @@ template <bool reverse> class mvccScanner {
     // Intents for other transactions are visible at or below:
     //   max(txn.max_timestamp, read_timestamp)
     const DBTimestamp max_visible_timestamp = check_uncertainty_ ? txn_max_timestamp_ : timestamp_;
-    if (max_visible_timestamp < meta_timestamp && !own_intent) {
+    if (max_visible_timestamp < meta_timestamp && !own_intent && !write_too_old_) {
       // 5. The key contains an intent, but we're reading before the
       // intent. Seek to the desired version. Note that if we own the
       // intent (i.e. we're reading transactionally) we want to read
@@ -729,6 +741,7 @@ template <bool reverse> class mvccScanner {
   const DBIgnoredSeqNums txn_ignored_seqnums_;
   const bool inconsistent_;
   const bool tombstones_;
+  const bool write_too_old_;
   const bool check_uncertainty_;
   DBScanResults results_;
   std::unique_ptr<chunkedBuffer> kvs_;

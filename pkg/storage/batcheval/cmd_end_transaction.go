@@ -494,8 +494,8 @@ func resolveLocalIntents(
 				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
 				if ok {
 					resolveAllowance--
-					resolvedIntents = append(resolvedIntents, intent)
 				}
+				resolvedIntents = append(resolvedIntents, intent)
 				return err
 			}
 			// For intent ranges, cut into parts inside and outside our key

@@ -407,6 +407,9 @@ func firstWriteIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
 		if roachpb.IsTransactionWrite(args) {
 			return i, nil
 		}
+		if t, ok := args.(*roachpb.ScanRequest); ok && t.SelectForUpdate {
+			return i, nil
+		}
 	}
 	return -1, nil
 }

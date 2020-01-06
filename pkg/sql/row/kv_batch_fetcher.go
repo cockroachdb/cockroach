@@ -246,7 +246,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		for i := range f.spans {
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
-			// TODO(nvanbenschoten): use f.lockStr here.
+			if f.lockStr != sqlbase.ScanLockingStrength_FOR_NONE {
+				scans[i].SelectForUpdate = true
+			}
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}

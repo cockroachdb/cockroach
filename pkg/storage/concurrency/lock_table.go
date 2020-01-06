@@ -81,25 +81,38 @@ func (lt *lockTableImpl) AcquireLock(in roachpb.Intent) {
 func (lt *lockTableImpl) ReleaseLock(in roachpb.Intent) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	lt.tmp1.in = in
-	wqI := lt.qs.Get(&lt.tmp1)
-	if wqI == nil {
-		return
+
+	var toDelete []*perKeyWaitQueue
+	maybeRelease := func(i btree.Item) bool {
+		wq := i.(*perKeyWaitQueue)
+		if !wq.held || wq.in.Txn.ID != in.Txn.ID {
+			return true
+		}
+		if wq.ll.Len() == 0 {
+			toDelete = append(toDelete, wq)
+			return true
+		}
+		wq.in.Txn = enginepb.TxnMeta{}
+		wq.held = false
+		front := wq.ll.Front().Value.(*perKeyWaitQueueElem)
+		if !front.closed {
+			close(front.done)
+			front.closed = true
+		}
+		return true
 	}
-	wq := wqI.(*perKeyWaitQueue)
-	if !wq.held || wq.in.Txn.ID != in.Txn.ID {
-		return
+
+	lt.tmp1.in.Key = in.Key
+	if in.EndKey == nil {
+		if i := lt.qs.Get(&lt.tmp1); i != nil {
+			maybeRelease(i)
+		}
+	} else {
+		lt.tmp2.in.Key = in.EndKey
+		lt.qs.AscendRange(&lt.tmp1, &lt.tmp2, maybeRelease)
 	}
-	if wq.ll.Len() == 0 {
-		lt.qs.Delete(wq)
-		return
-	}
-	wq.in.Txn = enginepb.TxnMeta{}
-	wq.held = false
-	front := wq.ll.Front().Value.(*perKeyWaitQueueElem)
-	if !front.closed {
-		close(front.done)
-		front.closed = true
+	for _, d := range toDelete {
+		lt.qs.Delete(d)
 	}
 }
 

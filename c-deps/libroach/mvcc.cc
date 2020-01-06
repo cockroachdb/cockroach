@@ -276,19 +276,19 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
   mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, txn, inconsistent,
-                             tombstones);
+                             tombstones, false /* write_too_old */);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones) {
+                       bool tombstones, bool write_too_old) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones, write_too_old);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones, write_too_old);
     return scanner.scan();
   }
 }

@@ -348,6 +348,8 @@ message ScanRequest {
   // will set the batch_responses field in the ScanResponse instead of the rows
   // field.
   ScanFormat scan_format = 4;
+
+  bool select_for_update = 5;
 }
 
 // A ScanResponse is the return value from the Scan() method.

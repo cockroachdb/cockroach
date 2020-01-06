@@ -2484,6 +2484,7 @@ func (r *rocksDBIterator) MVCCScan(
 		goToCTimestamp(timestamp), C.int64_t(max),
 		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
 		C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		C.bool(opts.WriteTooOldOnWriteInFuture),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2514,6 +2515,9 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
+	if err := writeTooOldToError(timestamp, state.write_too_old, opts.Txn); err != nil {
+		return nil, 0, nil, nil, err
+	}
 	return kvData, numKVs, resumeSpan, intents, nil
 }
 
@@ -2755,6 +2759,23 @@ func uncertaintyToError(
 				Logical:  int32(existingTS.logical),
 			},
 			txn)
+	}
+	return nil
+}
+
+func writeTooOldToError(
+	readTS hlc.Timestamp, wtoTS C.DBTimestamp, txn *roachpb.Transaction,
+) error {
+	if wtoTS.wall_time != 0 || wtoTS.logical != 0 {
+		wtoTimestamp := hlc.Timestamp{
+			WallTime: int64(wtoTS.wall_time),
+			Logical:  int32(wtoTS.logical),
+		}
+		writeTimestamp := txn.WriteTimestamp
+		writeTimestamp.Forward(wtoTimestamp.Next())
+		return &roachpb.WriteTooOldError{
+			Timestamp: readTS, ActualTimestamp: writeTimestamp,
+		}
 	}
 	return nil
 }
@@ -3293,6 +3314,28 @@ func unlockFile(lock C.DBFileLock) error {
 func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
 	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
 	return MVCCKey{k, ts}, value, orepr, err
+}
+
+// MVCCScanDecodeKeyValues decodes all key/value pairs returned in one or more
+// MVCCScan "batches" (this is not the RocksDB batch repr format). The provided
+// function is called for each key/value pair.
+func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte) error) error {
+	var k MVCCKey
+	var rawBytes []byte
+	var err error
+	for _, data := range repr {
+		for len(data) > 0 {
+			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
+			if err != nil {
+				return err
+			}
+			err = fn(k, rawBytes)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func notFoundErrOrDefault(err error) error {

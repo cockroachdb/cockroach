@@ -99,6 +99,17 @@ func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
+func (ba *BatchRequest) HasSelectForUpdate() bool {
+	for _, union := range ba.Requests {
+		if scan, ok := union.GetInner().(*ScanRequest); ok {
+			if scan.SelectForUpdate {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // RequiresLeaseHolder returns true if the request can only be served by the
 // leaseholders of the ranges it addresses.
 func (ba *BatchRequest) RequiresLeaseHolder() bool {
@@ -359,7 +370,9 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
-			continue
+			if scan, ok := req.(*ScanRequest); !ok || !scan.SelectForUpdate {
+				continue
+			}
 		}
 		var resp Response
 		if br != nil {

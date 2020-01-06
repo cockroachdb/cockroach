@@ -2356,20 +2356,15 @@ func mvccScanToKvs(
 		return nil, nil, nil, err
 	}
 	kvs := make([]roachpb.KeyValue, numKVs)
-	var k MVCCKey
-	var rawBytes []byte
 	var i int
-	for _, data := range kvData {
-		for len(data) > 0 {
-			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			kvs[i].Key = k.Key
-			kvs[i].Value.RawBytes = rawBytes
-			kvs[i].Value.Timestamp = k.Timestamp
-			i++
-		}
+	if err := MVCCScanDecodeKeyValues(kvData, func(key MVCCKey, rawBytes []byte) error {
+		kvs[i].Key = key.Key
+		kvs[i].Value.RawBytes = rawBytes
+		kvs[i].Value.Timestamp = key.Timestamp
+		i++
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
 	}
 	return kvs, resumeSpan, intents, err
 }
@@ -2411,10 +2406,11 @@ type MVCCScanOptions struct {
 	// to return no results.
 
 	// See the documentation for MVCCScan for information on these parameters.
-	Inconsistent bool
-	Tombstones   bool
-	Reverse      bool
-	Txn          *roachpb.Transaction
+	Inconsistent               bool
+	Tombstones                 bool
+	Reverse                    bool
+	Txn                        *roachpb.Transaction
+	WriteTooOldOnWriteInFuture bool
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
