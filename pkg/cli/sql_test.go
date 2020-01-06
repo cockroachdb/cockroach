@@ -92,34 +92,32 @@ select '''
 		// Override the standard input for runInteractive().
 		stdin = f
 
-		redirectOutput(func() {
-			err := runInteractive(conn)
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-			}
-		})
+		err := runInteractive(conn)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+		}
 	}
 
 	// Output:
 	// ?column?
-	// +----------+
+	// ------------
 	//
 	//   \?
 	//   ;
 	//
 	// (1 row)
 	//   ?column?
-	// +----------+
+	// ------------
 	//   '
 	// (1 row)
 	//   ?column?
-	// +----------+
+	// ------------
 	//   '
 	//   ;
 	//   '
 	// (1 row)
 	//   1
-	// +---+
+	// -----
 	//   1
 	// (1 row)
 }

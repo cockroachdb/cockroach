@@ -251,6 +251,7 @@ func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 		p.table.SetBorder(false)
 		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
+		p.table.SetTrimWhiteSpaceAtEOL(true)
 		// This width is sufficient to show a "standard text line width"
 		// on the screen when viewed as a single column on a 80-wide terminal.
 		//
