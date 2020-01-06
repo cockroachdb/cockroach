@@ -260,7 +260,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringSliceVar(&o.Zones, ProviderName+"-zones",
-		[]string{"us-east1-b", "us-west1-b", "europe-west2-b"}, "Zones for cluster")
+		[]string{"us-east1-b", "us-west1-b", "europe-west2-b"},
+		"Zones for cluster; If zones are formatted as "+
+			"AZ:N where N is an integer, the zone will be repeated N times")
 	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20190122a",
 		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
@@ -341,8 +343,12 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 			"`roachprod gc --gce-project=%s` cronjob\n", project)
 	}
 
+	zones, err := vm.ExpandZonesFlag(p.opts.Zones)
+	if err != nil {
+		return err
+	}
 	if !opts.GeoDistributed {
-		p.opts.Zones = []string{p.opts.Zones[0]}
+		zones = []string{zones[0]}
 	}
 
 	// Fixed args.
@@ -402,14 +408,14 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 
 	var g errgroup.Group
 
-	nodeZones := vm.ZonePlacement(len(p.opts.Zones), len(names))
-	zoneHostNames := make([][]string, len(p.opts.Zones))
+	nodeZones := vm.ZonePlacement(len(zones), len(names))
+	zoneHostNames := make([][]string, len(zones))
 	for i, name := range names {
 		zone := nodeZones[i]
 		zoneHostNames[zone] = append(zoneHostNames[zone], name)
 	}
 	for i, zoneHosts := range zoneHostNames {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", p.opts.Zones[i])
+		argsWithZone := append(args[:len(args):len(args)], "--zone", zones[i])
 		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
