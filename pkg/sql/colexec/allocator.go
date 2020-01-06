@@ -108,9 +108,15 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	}
 }
 
-// TODO(yuzefovich): extend Allocator so that it could free up the memory (and
-// resize the memory account accordingly) when the caller is done with the
-// batches.
+// Used returns the number of bytes currently allocated through this allocator.
+func (a *Allocator) Used() int64 {
+	return a.acc.Used()
+}
+
+// Clear clears up the memory account of the allocator.
+func (a *Allocator) Clear() {
+	a.acc.Clear(a.ctx)
+}
 
 const (
 	sizeOfBool    = int(unsafe.Sizeof(true))
