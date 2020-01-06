@@ -400,7 +400,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
 				baseName, name := "old_primary_key", "old_primary_key"
 				for try := 1; nameExists(name); try++ {
-					name = fmt.Sprintf("%s_#%d", baseName, try)
+					name = fmt.Sprintf("%s_%d", baseName, try)
 				}
 				oldPrimaryIndexCopy.Name = name
 				oldPrimaryIndexCopy.StoreColumnIDs = nil
