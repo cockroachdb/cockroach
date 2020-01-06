@@ -1,0 +1,62 @@
+# A cronjob to run the gc subcommand.
+#
+# The various CLI login data can be configured with:
+#
+#  kubectl create secret generic roachprod-gc-cronjob-creds \
+#    --from-file gcloud.json=/path/to.json
+#    --from-literal aws_access_key_id=XYZZY
+#    --from-literal aws_secret_access_key=XYZZY
+#    --from-literal azure_user_id=XYZZY
+#    --from-literal azure_password=XYZZY
+#    --from-literal azure_tenant_id=XYZZY
+#    --from-literal slack_token=XYZZY
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: roachprod-gc-cronjob
+spec:
+  # Disallow concurrent jobs. We impose a maximum runtime below.
+  concurrencyPolicy: Forbid
+  # Run hourly.
+  schedule: "0 * * * *"
+  # Must start within 1 minute of expected time, or we'll skip
+  # to the next tick.
+  startingDeadlineSeconds: 60
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: roachprod-gc-cronjob
+        spec:
+          containers:
+            - name: roachprod-gc-cronjob
+              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:master
+              args:
+                - gc
+                - --slack-token
+                - $(SLACK_TOKEN)
+              env:
+                - name: SLACK_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: roachprod-gc-cronjob-creds
+                      key: slack_token
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: 1
+                  memory: 2Gi
+                limits:
+                  cpu: 1
+                  memory: 2Gi
+              volumeMounts:
+                - mountPath: /secrets
+                  name: secrets
+                  readOnly: true
+          restartPolicy: Never
+          volumes:
+            - name: secrets
+              secret:
+                secretName: roachprod-gc-cronjob-creds
+      backoffLimit: 1
