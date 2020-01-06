@@ -174,6 +174,8 @@ func (sc *SchemaChanger) runBackfill(
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 				}
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
@@ -189,6 +191,8 @@ func (sc *SchemaChanger) runBackfill(
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
 				constraintsToDrop = append(constraintsToDrop, *t.Constraint)
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)

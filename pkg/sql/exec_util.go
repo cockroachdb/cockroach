@@ -145,6 +145,12 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	},
 )
 
+var primaryKeyChangesEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.primary_key_changes.enabled",
+	"default value for enable_primary_key_changes session setting; allows use of primary key changes by default",
+	false,
+)
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
@@ -1825,6 +1831,10 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 
 func (m *sessionDataMutator) SetForceSplitAt(val bool) {
 	m.data.ForceSplitAt = val
+}
+
+func (m *sessionDataMutator) SetPrimaryKeyChangesEnabled(val bool) {
+	m.data.PrimaryKeyChangesEnabled = val
 }
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
