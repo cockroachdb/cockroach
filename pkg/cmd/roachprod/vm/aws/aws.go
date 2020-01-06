@@ -99,15 +99,9 @@ var defaultConfig = func() (cfg *awsConfig) {
 // cluster creation. If the geo flag is specified, one zone from each region
 // is randomly chosen.
 var defaultCreateZones = []string{
-	"us-east-2a",
 	"us-east-2b",
-	"us-east-2c",
-	"us-west-2a",
 	"us-west-2b",
-	"us-west-2c",
-	"eu-west-2a",
 	"eu-west-2b",
-	"eu-west-2c",
 }
 
 // ConfigureCreateFlags is part of the vm.ProviderFlags interface.
@@ -236,21 +230,10 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		}
 	} else {
 		// Distribute the nodes amongst availability zones if geo distributed.
-		zonesPerRegion := len(names) / len(regions)
-		leftover := len(names) % len(regions)
-		for i, region := range regions {
-			regionZones, err := p.regionZones(region, p.opts.CreateZones)
-			if err != nil {
-				return err
-			}
-			totalZonesPerRegion := zonesPerRegion
-			if leftover > i {
-				totalZonesPerRegion++
-			}
-			for j := 0; j < totalZonesPerRegion; j++ {
-				zoneIndex := j % len(regionZones)
-				zones = append(zones, regionZones[zoneIndex])
-			}
+		nodeZones := vm.ZonePlacement(len(p.opts.CreateZones), len(names))
+		zones = make([]string, len(nodeZones))
+		for i := range nodeZones {
+			zones[i] = p.opts.CreateZones[i]
 		}
 	}
 	var g errgroup.Group
