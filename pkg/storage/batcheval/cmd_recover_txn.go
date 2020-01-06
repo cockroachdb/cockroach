@@ -222,6 +222,6 @@ func RecoverTxn(
 	// that, we might need to plumb in a "poison" flag on the RecoverTxn
 	// request.
 	result := result.Result{}
-	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.RecoveredTxn}
+	result.Local.UpdatedTxns = []*roachpb.Transaction{&reply.RecoveredTxn}
 	return result, nil
 }

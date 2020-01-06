@@ -28,13 +28,13 @@ import (
 type LocalResult struct {
 	Reply *roachpb.BatchResponse
 
-	// Intents stores any intents encountered but not conflicted with.
-	// They should be handed off to asynchronous intent processing on the
-	// proposer, so that an attempt to resolve them is made.
-	//
-	// This is a pointer to allow the zero (and as an unwelcome side effect,
-	// all) values to be compared.
-	Intents *[]IntentsWithArg
+	// EncounteredIntents stores any intents encountered but not conflicted
+	// with. They should be handed off to asynchronous intent processing on
+	// the proposer, so that an attempt to resolve them is made.
+	EncounteredIntents []roachpb.Intent
+	// UpdatedTxns stores transaction records that have been updated by
+	// calls to EndTxn, PushTxn, and RecoverTxn.
+	UpdatedTxns []*roachpb.Transaction
 	// EndTxns stores completed transactions. If the transaction
 	// contains unresolved intents, they should be handed off for
 	// asynchronous intent resolution. A bool in each EndTxnIntents
@@ -43,10 +43,7 @@ type LocalResult struct {
 	// resolving intents of a committing txn should not happen if the
 	// commit fails, or we may accidentally make uncommitted values
 	// live.
-	EndTxns *[]EndTxnIntents
-	// Metrics contains counters which are to be passed to the
-	// metrics subsystem.
-	Metrics *Metrics
+	EndTxns []EndTxnIntents
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -60,57 +57,47 @@ type LocalResult struct {
 	// Call maybeWatchForMerge.
 	MaybeWatchForMerge bool
 
-	// Set when transaction record(s) are updated, after calls to
-	// EndTxn or PushTxn. This is a pointer to allow the zero (and
-	// as an unwelcome side effect, all) values to be compared.
-	UpdatedTxns *[]*roachpb.Transaction
+	// Metrics contains counters which are to be passed to the
+	// metrics subsystem.
+	Metrics *Metrics
+}
+
+// IsZero reports whether lResult is the zero value.
+func (lResult *LocalResult) IsZero() bool {
+	// NB: keep in order.
+	return lResult.Reply == nil &&
+		lResult.EncounteredIntents == nil &&
+		lResult.UpdatedTxns == nil &&
+		lResult.EndTxns == nil &&
+		!lResult.GossipFirstRange &&
+		!lResult.MaybeGossipSystemConfig &&
+		lResult.MaybeGossipNodeLiveness == nil &&
+		!lResult.MaybeWatchForMerge &&
+		lResult.Metrics == nil
 }
 
 func (lResult *LocalResult) String() string {
 	if lResult == nil {
 		return "LocalResult: nil"
 	}
-	var numIntents, numEndTxns, numUpdatedTxns int
-	if lResult.Intents != nil {
-		numIntents = len(*lResult.Intents)
-	}
-	if lResult.EndTxns != nil {
-		numEndTxns = len(*lResult.EndTxns)
-	}
-	if lResult.UpdatedTxns != nil {
-		numUpdatedTxns = len(*lResult.UpdatedTxns)
-	}
-	return fmt.Sprintf("LocalResult (reply: %v, #intents: %d, #endTxns: %d #updated txns: %d, "+
+	return fmt.Sprintf("LocalResult (reply: %v, #encountered intents: %d, "+
+		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t MaybeAddToSplitQueue:%t "+
 		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
-		lResult.Reply, numIntents, numEndTxns, numUpdatedTxns, lResult.GossipFirstRange,
-		lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
+		lResult.Reply, len(lResult.EncounteredIntents),
+		len(lResult.UpdatedTxns), len(lResult.EndTxns),
+		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig, lResult.MaybeAddToSplitQueue,
 		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
 
-// DetachMaybeWatchForMerge returns and clears the MaybeWatchForMerge flag
-// from the local result.
-func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
-	if lResult == nil {
-		return false
-	} else if lResult.MaybeWatchForMerge {
-		lResult.MaybeWatchForMerge = false
-		return true
-	}
-	return false
-}
-
-// DetachIntents returns (and removes) those intents from the
-// LocalEvalResult which are supposed to be handled.
-func (lResult *LocalResult) DetachIntents() []IntentsWithArg {
+// DetachEncounteredIntents returns (and removes) those encountered
+// intents from the LocalEvalResult which are supposed to be handled.
+func (lResult *LocalResult) DetachEncounteredIntents() []roachpb.Intent {
 	if lResult == nil {
 		return nil
 	}
-	var r []IntentsWithArg
-	if lResult.Intents != nil {
-		r = *lResult.Intents
-	}
-	lResult.Intents = nil
+	r := lResult.EncounteredIntents
+	lResult.EncounteredIntents = nil
 	return r
 }
 
@@ -123,16 +110,13 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 	if lResult == nil {
 		return nil
 	}
-	var r []EndTxnIntents
-	if lResult.EndTxns != nil {
-		r = *lResult.EndTxns
-		if alwaysOnly {
-			// If alwaysOnly, filter away any !Always EndTxnIntents.
-			r = r[:0]
-			for _, eti := range *lResult.EndTxns {
-				if eti.Always {
-					r = append(r, eti)
-				}
+	r := lResult.EndTxns
+	if alwaysOnly {
+		// If alwaysOnly, filter away any !Always EndTxnIntents.
+		r = r[:0]
+		for _, eti := range lResult.EndTxns {
+			if eti.Always {
+				r = append(r, eti)
 			}
 		}
 	}
@@ -158,7 +142,7 @@ type Result struct {
 
 // IsZero reports whether p is the zero value.
 func (p *Result) IsZero() bool {
-	if p.Local != (LocalResult{}) {
+	if !p.Local.IsZero() {
 		return false
 	}
 	if !p.Replicated.Equal(storagepb.ReplicatedEvalResult{}) {
@@ -293,30 +277,26 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.PrevLeaseProposal = nil
 
-	if q.Local.Intents != nil {
-		if p.Local.Intents == nil {
-			p.Local.Intents = q.Local.Intents
-		} else {
-			*p.Local.Intents = append(*p.Local.Intents, *q.Local.Intents...)
-		}
+	if p.Local.EncounteredIntents == nil {
+		p.Local.EncounteredIntents = q.Local.EncounteredIntents
+	} else {
+		p.Local.EncounteredIntents = append(p.Local.EncounteredIntents, q.Local.EncounteredIntents...)
 	}
-	q.Local.Intents = nil
+	q.Local.EncounteredIntents = nil
 
-	if q.Local.EndTxns != nil {
-		if p.Local.EndTxns == nil {
-			p.Local.EndTxns = q.Local.EndTxns
-		} else {
-			*p.Local.EndTxns = append(*p.Local.EndTxns, *q.Local.EndTxns...)
-		}
+	if p.Local.UpdatedTxns == nil {
+		p.Local.UpdatedTxns = q.Local.UpdatedTxns
+	} else {
+		p.Local.UpdatedTxns = append(p.Local.UpdatedTxns, q.Local.UpdatedTxns...)
+	}
+	q.Local.UpdatedTxns = nil
+
+	if p.Local.EndTxns == nil {
+		p.Local.EndTxns = q.Local.EndTxns
+	} else {
+		p.Local.EndTxns = append(p.Local.EndTxns, q.Local.EndTxns...)
 	}
 	q.Local.EndTxns = nil
-
-	if p.Local.Metrics == nil {
-		p.Local.Metrics = q.Local.Metrics
-	} else if q.Local.Metrics != nil {
-		p.Local.Metrics.Add(*q.Local.Metrics)
-	}
-	q.Local.Metrics = nil
 
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness
@@ -330,14 +310,12 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
 	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
-	if q.Local.UpdatedTxns != nil {
-		if p.Local.UpdatedTxns == nil {
-			p.Local.UpdatedTxns = q.Local.UpdatedTxns
-		} else {
-			*p.Local.UpdatedTxns = append(*p.Local.UpdatedTxns, *q.Local.UpdatedTxns...)
-		}
+	if p.Local.Metrics == nil {
+		p.Local.Metrics = q.Local.Metrics
+	} else if q.Local.Metrics != nil {
+		p.Local.Metrics.Add(*q.Local.Metrics)
 	}
-	q.Local.UpdatedTxns = nil
+	q.Local.Metrics = nil
 
 	if q.LogicalOpLog != nil {
 		if p.LogicalOpLog == nil {

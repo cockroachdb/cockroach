@@ -160,7 +160,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else {
 		log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
 	}
-	cmd.response.Intents = cmd.proposal.Local.DetachIntents()
+	cmd.response.EncounteredIntents = cmd.proposal.Local.DetachEncounteredIntents()
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local

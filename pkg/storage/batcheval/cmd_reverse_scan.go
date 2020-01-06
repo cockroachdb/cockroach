@@ -79,5 +79,5 @@ func ReverseScan(
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
 		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
 	}
-	return result.FromIntents(intents, args), err
+	return result.FromEncounteredIntents(intents), err
 }

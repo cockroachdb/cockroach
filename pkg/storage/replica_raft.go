@@ -95,15 +95,15 @@ func (r *Replica) evalAndPropose(
 	// 2. pErr != nil corresponds to a failed proposal - the command resulted
 	//    in an error.
 	if proposal.command == nil {
-		intents := proposal.Local.DetachIntents()
+		intents := proposal.Local.DetachEncounteredIntents()
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
-		r.handleLocalEvalResult(ctx, *proposal.Local)
+		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
 		pr := proposalResult{
-			Reply:   proposal.Local.Reply,
-			Err:     pErr,
-			Intents: intents,
-			EndTxns: endTxns,
+			Reply:              proposal.Local.Reply,
+			Err:                pErr,
+			EncounteredIntents: intents,
+			EndTxns:            endTxns,
 		}
 		proposal.finishApplication(pr)
 		return proposalCh, func() {}, 0, nil
@@ -129,8 +129,8 @@ func (r *Replica) evalAndPropose(
 		reply := *proposal.Local.Reply
 		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
 		pr := proposalResult{
-			Reply:   &reply,
-			Intents: proposal.Local.DetachIntents(),
+			Reply:              &reply,
+			EncounteredIntents: proposal.Local.DetachEncounteredIntents(),
 		}
 		proposal.signalProposalResult(pr)
 

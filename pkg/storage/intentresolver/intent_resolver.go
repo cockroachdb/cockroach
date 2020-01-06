@@ -500,25 +500,22 @@ func (ir *IntentResolver) runAsyncTask(
 // execution of that command. This occurs during inconsistent
 // reads.
 func (ir *IntentResolver) CleanupIntentsAsync(
-	ctx context.Context, intents []result.IntentsWithArg, allowSyncProcessing bool,
+	ctx context.Context, intents []roachpb.Intent, allowSyncProcessing bool,
 ) error {
-	now := ir.clock.Now()
-	for i := range intents {
-		item := &intents[i] // copy for goroutine
-		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
-			err := contextutil.RunWithTimeout(ctx, "async intent resolution",
-				asyncIntentResolutionTimeout, func(ctx context.Context) error {
-					_, err := ir.CleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH)
-					return err
-				})
-			if err != nil && ir.every.ShouldLog() {
-				log.Warning(ctx, err)
-			}
-		}); err != nil {
-			return err
-		}
+	if len(intents) == 0 {
+		return nil
 	}
-	return nil
+	now := ir.clock.Now()
+	return ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
+		err := contextutil.RunWithTimeout(ctx, "async intent resolution",
+			asyncIntentResolutionTimeout, func(ctx context.Context) error {
+				_, err := ir.CleanupIntents(ctx, intents, now, roachpb.PUSH_TOUCH)
+				return err
+			})
+		if err != nil && ir.every.ShouldLog() {
+			log.Warning(ctx, err)
+		}
+	})
 }
 
 // CleanupIntents processes a collection of intents by pushing each
@@ -612,8 +609,8 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsIntents(et.Txn.IntentSpans, &et.Txn)
-			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, &et.Txn, intents, now, et.Poison, nil); err != nil {
+			intents := roachpb.AsIntents(et.Txn.IntentSpans, et.Txn)
+			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
