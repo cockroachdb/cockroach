@@ -197,13 +197,14 @@ multiline
 host all all 0.0.0.0/0 trust
 # comment
 
+local all all here trust
 host all all ::1 0 reject # ip and cidr with space
 host all all fe80::7a31:c1ff:0000:0000/96 cert
 host all all all trust
 host all all hostname trust
 host all all 1.1.1.1 1 trust
 ----
-error: line 4: invalid IP mask "0": netmask not in IP numeric format
+error: line 4: authentication option not in name=value format: trust
 
 subtest end
 
