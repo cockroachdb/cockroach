@@ -136,7 +136,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"-ebs-volume-type=io1")
 
 	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
-		"aws availability zones to use for cluster creation, the cluster will be spread out evenly by region (if geo) and then by AZ within a region")
+		"aws availability zones to use for cluster creation, the cluster "+
+			" will be spread out evenly by zone (if geo). If zones are formatted as "+
+			"AZ:N where N is an integer, the zone will be repeated N times")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -207,8 +209,11 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if err := p.ConfigSSH(); err != nil {
 		return err
 	}
-
-	regions, err := p.allRegions(p.opts.CreateZones)
+	expandedZones, err := vm.ExpandZonesFlag(p.opts.CreateZones)
+	if err != nil {
+		return err
+	}
+	regions, err := p.allRegions(expandedZones)
 	if err != nil {
 		return err
 	}
@@ -219,7 +224,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	var zones []string // contains an az corresponding to each entry in names
 	if !opts.GeoDistributed {
 		// Only use one zone in the region if we're not creating a geo cluster.
-		regionZones, err := p.regionZones(regions[0], p.opts.CreateZones)
+		regionZones, err := p.regionZones(regions[0], expandedZones)
 		if err != nil {
 			return err
 		}
@@ -230,10 +235,10 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		}
 	} else {
 		// Distribute the nodes amongst availability zones if geo distributed.
-		nodeZones := vm.ZonePlacement(len(p.opts.CreateZones), len(names))
+		nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
 		zones = make([]string, len(nodeZones))
-		for i := range nodeZones {
-			zones[i] = p.opts.CreateZones[i]
+		for i, z := range nodeZones {
+			zones[i] = expandedZones[z]
 		}
 	}
 	var g errgroup.Group
