@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 )
 
 // executeReadOnlyBatch is the execution logic for client requests which do not
@@ -68,17 +69,39 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba, true /* readOnly */)
-
-	// A merge is (likely) about to be carried out, and this replica
-	// needs to block all traffic until the merge either commits or
-	// aborts. See docs/tech-notes/range-merges.md.
-	if result.Local.DetachMaybeWatchForMerge() {
-		if err := r.maybeWatchForMerge(ctx); err != nil {
-			return nil, roachpb.NewError(err)
-		}
+	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
+		pErr = roachpb.NewError(err)
 	}
 
-	if intents := result.Local.DetachIntents(); len(intents) > 0 {
+	if pErr != nil {
+		log.VErrEvent(ctx, 3, pErr.String())
+	} else {
+		log.Event(ctx, "read completed")
+	}
+	return br, pErr
+}
+
+func (r *Replica) handleReadOnlyLocalEvalResult(
+	ctx context.Context, ba *roachpb.BatchRequest, lResult result.LocalResult,
+) error {
+	// Fields for which no action is taken in this method are zeroed so that
+	// they don't trigger an assertion at the end of the method (which checks
+	// that all fields were handled).
+	{
+		lResult.Reply = nil
+	}
+
+	if lResult.MaybeWatchForMerge {
+		// A merge is (likely) about to be carried out, and this replica needs
+		// to block all traffic until the merge either commits or aborts. See
+		// docs/tech-notes/range-merges.md.
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			return err
+		}
+		lResult.MaybeWatchForMerge = false
+	}
+
+	if intents := lResult.DetachEncounteredIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
 		// Intent resolution is async/best-effort for inconsistent requests.
@@ -93,10 +116,9 @@ func (r *Replica) executeReadOnlyBatch(
 			log.Warning(ctx, err)
 		}
 	}
-	if pErr != nil {
-		log.VErrEvent(ctx, 3, pErr.String())
-	} else {
-		log.Event(ctx, "read completed")
+
+	if !lResult.IsZero() {
+		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
-	return br, pErr
+	return nil
 }

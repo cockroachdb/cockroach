@@ -592,19 +592,17 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	testIntentsWithArg := []result.IntentsWithArg{
-		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
-		}},
+	testIntents := []roachpb.Intent{
+		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
 	// requests being sent.
-	err := ir.CleanupIntentsAsync(context.Background(), testIntentsWithArg, false)
+	err := ir.CleanupIntentsAsync(context.Background(), testIntents, false)
 	assert.Equal(t, errors.Cause(err), stop.ErrThrottled)
 	// Running with allowSyncProcessing = true should result in the synchronous
 	// processing of the intents resulting in no error and the consumption of the
 	// sendFuncs.
-	err = ir.CleanupIntentsAsync(context.Background(), testIntentsWithArg, true)
+	err = ir.CleanupIntentsAsync(context.Background(), testIntents, true)
 	assert.Nil(t, err)
 	assert.Equal(t, sf.len(), 0)
 }
@@ -614,33 +612,31 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 func TestCleanupIntentsAsync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type testCase struct {
-		intents   []result.IntentsWithArg
+		intents   []roachpb.Intent
 		sendFuncs []sendFunc
 	}
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
-	testIntentsWithArg := []result.IntentsWithArg{
-		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
-		}},
+	testIntents := []roachpb.Intent{
+		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
 	}
 	cases := []testCase{
 		{
-			intents: testIntentsWithArg,
+			intents: testIntents,
 			sendFuncs: []sendFunc{
 				singlePushTxnSendFunc(t),
 				resolveIntentsSendFunc(t),
 			},
 		},
 		{
-			intents: testIntentsWithArg,
+			intents: testIntents,
 			sendFuncs: []sendFunc{
 				singlePushTxnSendFunc(t),
 				failSendFunc,
 			},
 		},
 		{
-			intents: testIntentsWithArg,
+			intents: testIntents,
 			sendFuncs: []sendFunc{
 				failSendFunc,
 			},
@@ -671,18 +667,14 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	txn1 := newTransaction("txn1", roachpb.Key("a"), 1, clock)
 	txn2 := newTransaction("txn2", roachpb.Key("c"), 1, clock)
-	testIntentsWithArg := []result.IntentsWithArg{
-		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn1.TxnMeta},
-			{Span: roachpb.Span{Key: roachpb.Key("b")}, Txn: txn1.TxnMeta},
-		}},
-		{Intents: []roachpb.Intent{
-			{Span: roachpb.Span{Key: roachpb.Key("c")}, Txn: txn2.TxnMeta},
-			{Span: roachpb.Span{Key: roachpb.Key("d")}, Txn: txn2.TxnMeta},
-		}},
+	testIntents := []roachpb.Intent{
+		{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn1.TxnMeta},
+		{Span: roachpb.Span{Key: roachpb.Key("b")}, Txn: txn1.TxnMeta},
+		{Span: roachpb.Span{Key: roachpb.Key("c")}, Txn: txn2.TxnMeta},
+		{Span: roachpb.Span{Key: roachpb.Key("d")}, Txn: txn2.TxnMeta},
 	}
 
-	// We expect to see a PushTxn req for each pair of intents and a
+	// We expect to see a single PushTxn req for all four intents and a
 	// ResolveIntent req for each intent. However, because these requests are
 	// all async, it's unclear which order these will be issued in. Handle all
 	// orders and record the resolved intents.
@@ -692,26 +684,26 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		resolved []string
 	}
 	pushOrResolveFunc := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if len(ba.Requests) != 1 {
-			return nil, roachpb.NewErrorf("unexpected")
-		}
-		ru := ba.Requests[0]
-		switch ru.GetInner().Method() {
+		switch ba.Requests[0].GetInner().Method() {
 		case roachpb.PushTxn:
-			reqs.Lock()
-			reqs.pushed = append(reqs.pushed, string(ru.GetPushTxn().Key))
-			reqs.Unlock()
+			for _, ru := range ba.Requests {
+				reqs.Lock()
+				reqs.pushed = append(reqs.pushed, string(ru.GetPushTxn().Key))
+				reqs.Unlock()
+			}
 			return pushTxnSendFunc(t, len(ba.Requests))(ba)
 		case roachpb.ResolveIntent:
-			reqs.Lock()
-			reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
-			reqs.Unlock()
+			for _, ru := range ba.Requests {
+				reqs.Lock()
+				reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
+				reqs.Unlock()
+			}
 			return resolveIntentsSendFunc(t)(ba)
 		default:
 			return nil, roachpb.NewErrorf("unexpected")
 		}
 	}
-	sf := newSendFuncs(t, repeat(pushOrResolveFunc, 6)...)
+	sf := newSendFuncs(t, repeat(pushOrResolveFunc, 5)...)
 
 	stopper := stop.NewStopper()
 	cfg := Config{
@@ -724,7 +716,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		},
 	}
 	ir := newIntentResolverWithSendFuncs(cfg, sf)
-	err := ir.CleanupIntentsAsync(ctx, testIntentsWithArg, false)
+	err := ir.CleanupIntentsAsync(ctx, testIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
 	assert.Nil(t, err)
@@ -793,7 +785,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 	}
 	testEndTxnIntents := []result.EndTxnIntents{
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					ID:           uuid.MakeV4(),
 					MinTimestamp: hlc.Timestamp{WallTime: 123},
@@ -862,7 +854,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 	txn2 := newTransaction("txn2", roachpb.Key("c"), 1, clock)
 	testEndTxnIntents := []result.EndTxnIntents{
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: txn1.TxnMeta,
 				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
@@ -871,7 +863,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			},
 		},
 		{
-			Txn: roachpb.Transaction{
+			Txn: &roachpb.Transaction{
 				TxnMeta: txn2.TxnMeta,
 				IntentSpans: []roachpb.Span{
 					{Key: roachpb.Key("c")},

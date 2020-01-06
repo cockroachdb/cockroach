@@ -13,16 +13,20 @@ package pgwire_test
 import (
 	"context"
 	gosql "database/sql"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -103,6 +107,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
 		s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: insecure})
 		defer s.Stopper().Stop(context.TODO())
+
+		pgServer := s.(*server.TestServer).PGServer()
+
 		httpClient, err := s.GetHTTPClient()
 		if err != nil {
 			t.Fatal(err)
@@ -137,6 +144,26 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				if err != nil {
 					return fmtErr(err)
 				}
+
+				// Wait until the configuration has propagated back to the
+				// test client. We need to wait because the cluster setting
+				// change propagates asynchronously.
+				var expConf *hba.Conf
+				if td.Input != "" {
+					expConf, err = hba.Parse(td.Input)
+					if err != nil {
+						// The SET above succeeded so we don't expect a problem here.
+						t.Fatal(err)
+					}
+					pgwire.NormalizeHBAEntries(expConf)
+				}
+				testutils.SucceedsSoon(t, func() error {
+					curConf := pgServer.TestingGetHBAConf()
+					if !reflect.DeepEqual(expConf, curConf) {
+						return errors.New("HBA config not yet loaded")
+					}
+					return nil
+				})
 
 				// Verify the HBA configuration was processed properly by
 				// reporting the resulting cached configuration.

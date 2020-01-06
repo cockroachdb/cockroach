@@ -105,8 +105,8 @@ func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
 	ctx context.Context, txns []roachpb.Transaction,
 ) error {
 	endTxns := make([]result.EndTxnIntents, len(txns))
-	for i, txn := range txns {
-		endTxns[i].Txn = txn
+	for i := range txns {
+		endTxns[i].Txn = &txns[i]
 		endTxns[i].Poison = true
 	}
 	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)

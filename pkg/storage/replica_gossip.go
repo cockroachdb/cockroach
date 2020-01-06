@@ -138,8 +138,8 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
-	if result.Local.Intents != nil && len(*result.Local.Intents) > 0 {
-		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.Intents)
+	if len(result.Local.EncounteredIntents) > 0 {
+		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, result.Local.EncounteredIntents)
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
@@ -179,13 +179,13 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}
-	if intents := result.Local.DetachIntents(); len(intents) > 0 {
+	if intents := result.Local.DetachEncounteredIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		// This is called from handleLocalEvalResult (with raftMu locked),
-		// so disallow synchronous processing (which blocks that mutex for
-		// too long and is a potential deadlock).
+		// This is called from handleReadWriteLocalEvalResult (with raftMu
+		// locked), so disallow synchronous processing (which blocks that mutex
+		// for too long and is a potential deadlock).
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}

@@ -12,20 +12,14 @@ package result
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// IntentsWithArg contains a request and the intents it discovered.
-type IntentsWithArg struct {
-	Arg     roachpb.Request
-	Intents []roachpb.Intent
-}
-
-// FromIntents creates a Result communicating that the intents were encountered
+// FromEncounteredIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
-func FromIntents(intents []roachpb.Intent, args roachpb.Request) Result {
+func FromEncounteredIntents(intents []roachpb.Intent) Result {
 	var pd Result
 	if len(intents) == 0 {
 		return pd
 	}
-	pd.Local.Intents = &[]IntentsWithArg{{Arg: args, Intents: intents}}
+	pd.Local.EncounteredIntents = intents
 	return pd
 }
 
@@ -33,7 +27,7 @@ func FromIntents(intents []roachpb.Intent, args roachpb.Request) Result {
 // which indicates whether the intents should be resolved whether or
 // not the command succeeds through Raft.
 type EndTxnIntents struct {
-	Txn    roachpb.Transaction
+	Txn    *roachpb.Transaction
 	Always bool
 	Poison bool
 }
@@ -45,6 +39,6 @@ func FromEndTxn(txn *roachpb.Transaction, alwaysReturn, poison bool) Result {
 	if len(txn.IntentSpans) == 0 {
 		return pd
 	}
-	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: *txn, Always: alwaysReturn, Poison: poison}}
+	pd.Local.EndTxns = []EndTxnIntents{{Txn: txn, Always: alwaysReturn, Poison: poison}}
 	return pd
 }
