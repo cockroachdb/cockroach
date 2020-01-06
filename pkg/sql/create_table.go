@@ -1230,6 +1230,25 @@ func MakeTableDesc(
 		return desc, err
 	}
 
+	// If all nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
+	// if a primary key column is not in column family 0.
+	if st != nil {
+		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
+			!version.IsActive(cluster.VersionPrimaryKeyColumnsOutOfFamilyZero) {
+			colIDToFamilyID := make(map[sqlbase.ColumnID]sqlbase.FamilyID)
+			for i := range desc.Families {
+				for _, colID := range desc.Families[i].ColumnIDs {
+					colIDToFamilyID[colID] = desc.Families[i].ID
+				}
+			}
+			for _, colID := range desc.PrimaryIndex.ColumnIDs {
+				if colIDToFamilyID[colID] != 0 {
+					return desc, errors.Errorf("primary key column %d is not in column family 0", colID)
+				}
+			}
+		}
+	}
+
 	if n.Interleave != nil {
 		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
 			return desc, err

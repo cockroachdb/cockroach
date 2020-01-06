@@ -1906,13 +1906,6 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 	}
 
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		famID, ok := colIDToFamilyID[colID]
-		if !ok || famID != FamilyID(0) {
-			return fmt.Errorf("primary key column %d is not in column family 0", colID)
-		}
-	}
-
 	return nil
 }
 
@@ -2283,7 +2276,11 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
 				desc.Families[i].ColumnNames = append(
 					desc.Families[i].ColumnNames[:j], desc.Families[i].ColumnNames[j+1:]...)
-				if len(desc.Families[i].ColumnIDs) == 0 {
+				// Due to a complication with allowing primary key columns to not be restricted
+				// to family 0, we might end up deleting all the columns from family 0. We will
+				// allow empty column families now, but will disallow this in the future.
+				// TODO (rohany): remove this once the reliance on sentinel family 0 has been removed.
+				if len(desc.Families[i].ColumnIDs) == 0 && desc.Families[i].ID != 0 {
 					desc.Families = append(desc.Families[:i], desc.Families[i+1:]...)
 				}
 				return
