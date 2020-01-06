@@ -4,6 +4,29 @@
 -
 SELECT
 	CAST(
+		'
+			{
+				"a":
+					"b"
+			}
+		'::JSONB
+			AS STRING
+	)
+
+22:
+----------------------
+SELECT
+	CAST(
+		'
+			{"a": "b"}
+		'::JSONB
+			AS STRING
+	)
+
+27:
+---------------------------
+SELECT
+	CAST(
 		'{"a": "b"}'::JSONB
 			AS STRING
 	)
