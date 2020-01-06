@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,18 +39,27 @@ func loadDefaultMethods() {
 	//
 	// Care should be taken by administrators to only accept this auth
 	// method over secure connections, e.g. those encrypted using SSL.
-	RegisterAuthMethod("password", authPassword, nil)
+	RegisterAuthMethod("password", authPassword, cluster.Version19_1, nil)
 
 	// The "cert" method requires a valid client certificate for the
 	// user attempting to connect.
 	//
 	// This method is only usable over SSL connections.
-	RegisterAuthMethod("cert", authCert, nil)
+	RegisterAuthMethod("cert", authCert, cluster.Version19_1, nil)
 
 	// The "cert-password" method requires either a valid client
 	// certificate for the connecting user, or, if no cert is provided,
 	// a cleartext password.
-	RegisterAuthMethod("cert-password", authCertPassword, nil)
+	RegisterAuthMethod("cert-password", authCertPassword, cluster.Version19_1, nil)
+
+	// The "reject" method rejects any connection attempt that matches
+	// the current rule.
+	RegisterAuthMethod("reject", authReject, cluster.VersionAuthLocalAndTrustRejectMethods, nil)
+
+	// The "trust" method accepts any connection attempt that matches
+	// the current rule.
+	RegisterAuthMethod("trust", authTrust, cluster.VersionAuthLocalAndTrustRejectMethods, nil)
+
 }
 
 // AuthMethod defines a method for authentication of a connection.
@@ -127,4 +137,18 @@ func authCertPassword(
 		fn = authCert
 	}
 	return fn(c, tlsState, insecure, hashedPassword, execCfg, entry)
+}
+
+func authTrust(
+	_ AuthConn, _ tls.ConnectionState, _ bool, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+) (security.UserAuthHook, error) {
+	return func(_ string, _ bool) error { return nil }, nil
+}
+
+func authReject(
+	_ AuthConn, _ tls.ConnectionState, _ bool, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+) (security.UserAuthHook, error) {
+	return func(_ string, _ bool) error {
+		return errors.New("authentication rejected by configuration")
+	}, nil
 }

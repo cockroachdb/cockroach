@@ -52,9 +52,9 @@ const (
 	VersionNamespaceTableWithSchemas
 	VersionProtectedTimestamps
 	VersionPrimaryKeyChanges
+	VersionAuthLocalAndTrustRejectMethods
 
 	// Add new versions here (step one of two).
-
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -356,6 +356,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// It allows online primary key changes of tables.
 		Key:     VersionPrimaryKeyChanges,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 7},
+	},
+	{
+		// VersionAuthLocalAndTrustRejectMethods introduces the HBA rule
+		// prefix 'local' and auth methods 'trust' and 'reject', for use
+		// in server.host_based_authentication.configuration.
+		//
+		// A separate cluster version ensures the new syntax is not
+		// introduced while previous-version nodes are still running, as
+		// this would block any new SQL client.
+		Key:     VersionAuthLocalAndTrustRejectMethods,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 8},
 	},
 
 	// Add new versions here (step two of two).
