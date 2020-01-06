@@ -119,6 +119,9 @@ func Parse(input string) (*Conf, error) {
 		action newHost {
 			e = Entry{Type: "host"}
 		}
+		action newLocal {
+			e = Entry{Type: "local"}
+		}
 		action database {
 			e.AnyDatabase = mall
 			e.Database = ms
@@ -144,7 +147,7 @@ func Parse(input string) (*Conf, error) {
 			conf.Entries = append(conf.Entries, e)
 		}
 		host =
-			'host' %newHost ws
+			('host' %newHost | 'local' %newLocal) ws
 			@{mall=false} multiString %database ws
 			@{mall=false} multiString %user ws
 			address >mark ws

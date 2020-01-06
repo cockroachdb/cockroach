@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -110,6 +112,7 @@ func loadLocalAuthConfigUponRemoteSettingChange(
 
 // checkHBASyntaxBeforeUpdatingSetting is run by the SQL gateway each
 // time a SQL client attempts to update the cluster setting.
+// It is also used when initially loading the default value.
 func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) error {
 	if s == "" {
 		// An empty configuration is always valid.
@@ -121,6 +124,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 	if err != nil {
 		return err
 	}
+
 	if conf.Entries == nil {
 		// If the string was not empty, the user likely intended to have
 		// *something* in the configuration, so us not finding anything
@@ -129,7 +133,26 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		return errors.WithHint(errors.New("no entries"),
 			"To use the default configuration, assign the empty string ('').")
 	}
+
+	// Retrieve the cluster settings. We'll need to check the current cluster version.
+	var st *cluster.Settings
+	if values != nil {
+		st = values.Opaque().(*cluster.Settings)
+	}
+
 	for _, entry := range conf.Entries {
+		if entry.Type == "local" {
+			if st != nil &&
+				!cluster.Version.IsActive(context.TODO(), st, cluster.VersionAuthLocalAndTrustRejectMethods) {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
+					cluster.VersionByKey(cluster.VersionAuthLocalAndTrustRejectMethods),
+				)
+			}
+			// The syntax 'local' is not yet supported.
+			return unimplemented.New("hba-local", "HBA rules for local connections are not supported")
+		}
+
 		// Verify the user is not requesting a database match, which is
 		// not yet implemented.
 		if !entry.AnyDatabase {
@@ -149,10 +172,19 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 					"Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.")
 		}
 		// Verify that the auth method is supported.
-		if hbaAuthMethods[entry.Method] == nil {
+		method, ok := hbaAuthMethods[entry.Method]
+		if !ok || method.fn == nil {
 			return errors.WithHintf(unimplemented.Newf("hba-method-"+entry.Method,
 				"unknown auth method %q", entry.Method),
 				"Supported methods: %s", listRegisteredMethods())
+		}
+		// Verify that the cluster setting is at least the required version.
+		if method.minReqVersion != AnyVersion && st != nil &&
+			!cluster.Version.IsActive(context.TODO(), st, method.minReqVersion) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`authentication method '%s' requires all nodes to be upgraded to %s`,
+				entry.Method,
+				cluster.VersionByKey(method.minReqVersion))
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method]; check != nil {
@@ -187,14 +219,14 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 	// Lookup and cache the auth methods.
 	for i := range conf.Entries {
 		method := conf.Entries[i].Method
-		methodFn, ok := hbaAuthMethods[method]
+		methodEntry, ok := hbaAuthMethods[method]
 		if !ok {
 			// TODO(knz): Determine if an error should be reported
 			// upon unknown auth methods.
 			// See: https://github.com/cockroachdb/cockroach/issues/43716
 			return nil, errors.Errorf("unknown auth method %s", method)
 		}
-		conf.Entries[i].MethodFn = methodFn
+		conf.Entries[i].MethodFn = methodEntry.fn
 	}
 
 	return conf, nil
@@ -247,16 +279,26 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 // RegisterAuthMethod registers an AuthMethod for pgwire
 // authentication and for use in HBA configuration.
 //
+// The minReqVersion, if provided and different from AnyVersion, is
+// called upon configuration to verify whether the current active
+// cluster version is at least the version specified.
+//
 // The checkEntry method, if provided, is called upon configuration
 // the cluster setting in the SQL client which attempts to change the
 // configuration. It can block the configuration if e.g. the syntax is
 // invalid.
-func RegisterAuthMethod(method string, fn AuthMethod, checkEntry CheckHBAEntry) {
-	hbaAuthMethods[method] = fn
+func RegisterAuthMethod(
+	method string, fn AuthMethod, minReqVersion cluster.VersionKey, checkEntry CheckHBAEntry,
+) {
+	hbaAuthMethods[method] = authMethodEntry{minReqVersion, fn}
 	if checkEntry != nil {
 		hbaCheckHBAEntries[method] = checkEntry
 	}
 }
+
+// AnyVersion can be passed as minReqVersion to RegisterAuthMethod()
+// to indicate there is no constraint on the cluster version.
+const AnyVersion cluster.VersionKey = -1
 
 // listsupportedMethods returns a sorted, comma-delimited list
 // of registered AuthMethods.
@@ -270,9 +312,14 @@ func listRegisteredMethods() string {
 }
 
 var (
-	hbaAuthMethods     = map[string]AuthMethod{}
+	hbaAuthMethods     = map[string]authMethodEntry{}
 	hbaCheckHBAEntries = map[string]CheckHBAEntry{}
 )
+
+type authMethodEntry struct {
+	minReqVersion cluster.VersionKey
+	fn            AuthMethod
+}
 
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.

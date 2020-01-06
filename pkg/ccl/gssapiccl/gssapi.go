@@ -188,5 +188,5 @@ func checkEntry(entry hba.Entry) error {
 }
 
 func init() {
-	pgwire.RegisterAuthMethod("gss", authGSS, checkEntry)
+	pgwire.RegisterAuthMethod("gss", authGSS, pgwire.AnyVersion, checkEntry)
 }
