@@ -361,7 +361,7 @@ func EndTxn(
 	// subsequent replay of this EndTxn call because the txn timestamp will be
 	// too old. Replays of requests which attempt to create a new txn record
 	// (HeartbeatTxn or EndTxn) never succeed because EndTxn inserts in the
-	// write timestamp cache in Replica's updateTimestampCache method, forcing
+	// timestamp cache in Replica's updateTimestampCache method, forcing
 	// the call to CanCreateTxnRecord to return false, resulting in a
 	// transaction retry error. If the replay didn't attempt to create a txn
 	// record, any push will immediately succeed as a missing txn record on push

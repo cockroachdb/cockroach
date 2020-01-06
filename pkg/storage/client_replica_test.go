@@ -190,7 +190,7 @@ func TestRejectFutureCommand(t *testing.T) {
 //    Writer txn. The Writer will not actually restart until it tries to commit
 //    the current epoch of the transaction. The Reader updates the timestamp of
 //    the write intent to T+200. The test deliberately fails the Reader get
-//    operation, and cockroach doesn't update its read timestamp cache.
+//    operation, and cockroach doesn't update its timestamp cache.
 // 4) The Writer executes the put operation again. This put operation comes
 //    out-of-order since its timestamp is T+100, while the intent timestamp
 //    updated at Step 3 is T+200.

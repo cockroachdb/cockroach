@@ -472,7 +472,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 
 	// Simulate a txn abort on the RHS from a node with a newer clock. Because
 	// the transaction record for the pushee was not yet written, this will bump
-	// the write timestamp cache to record the abort.
+	// the timestamp cache to record the abort.
 	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
 	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
 	ba = roachpb.BatchRequest{}

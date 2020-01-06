@@ -13133,19 +13133,12 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::util::hlc::Timestamp* mutable_refresh_from();
   void set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from);
 
-  // bool write = 2;
-  void clear_write();
-  static const int kWriteFieldNumber = 2;
-  bool write() const;
-  void set_write(bool value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RefreshRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::util::hlc::Timestamp* refresh_from_;
-  bool write_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -13364,19 +13357,12 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
   ::cockroach::util::hlc::Timestamp* mutable_refresh_from();
   void set_allocated_refresh_from(::cockroach::util::hlc::Timestamp* refresh_from);
 
-  // bool write = 2;
-  void clear_write();
-  static const int kWriteFieldNumber = 2;
-  bool write() const;
-  void set_write(bool value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.RefreshRangeRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::util::hlc::Timestamp* refresh_from_;
-  bool write_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -28245,20 +28231,6 @@ inline void RefreshRequest::set_allocated_header(::cockroach::roachpb::RequestHe
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RefreshRequest.header)
 }
 
-// bool write = 2;
-inline void RefreshRequest::clear_write() {
-  write_ = false;
-}
-inline bool RefreshRequest::write() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RefreshRequest.write)
-  return write_;
-}
-inline void RefreshRequest::set_write(bool value) {
-  
-  write_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RefreshRequest.write)
-}
-
 inline bool RefreshRequest::has_refresh_from() const {
   return this != internal_default_instance() && refresh_from_ != NULL;
 }
@@ -28418,20 +28390,6 @@ inline void RefreshRangeRequest::set_allocated_header(::cockroach::roachpb::Requ
   }
   header_ = header;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RefreshRangeRequest.header)
-}
-
-// bool write = 2;
-inline void RefreshRangeRequest::clear_write() {
-  write_ = false;
-}
-inline bool RefreshRangeRequest::write() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.RefreshRangeRequest.write)
-  return write_;
-}
-inline void RefreshRangeRequest::set_write(bool value) {
-  
-  write_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.RefreshRangeRequest.write)
 }
 
 inline bool RefreshRangeRequest::has_refresh_from() const {

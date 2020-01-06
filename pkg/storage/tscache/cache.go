@@ -53,25 +53,20 @@ const MinRetentionWindow = 10 * time.Second
 type Cache interface {
 	// Add adds the specified timestamp to the cache covering the range of keys
 	// from start to end. If end is nil, the range covers the start key only.
-	// txnID is nil for no transaction. readCache specifies whether the command
-	// adding this timestamp should update the read timestamp; false to update
-	// the write timestamp cache.
-	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool)
+	// txnID is nil for no transaction.
+	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID)
 	// SetLowWater sets the low water mark of the cache for the specified span
 	// to the provided timestamp.
 	SetLowWater(start, end roachpb.Key, ts hlc.Timestamp)
 
-	// GetMaxRead returns the maximum read timestamp which overlaps the interval
-	// spanning from start to end. If that maximum timestamp belongs to a single
-	// transaction, that transaction's ID is returned. Otherwise, if that
-	// maximum is shared between multiple transactions, no transaction ID is
-	// returned. Finally, if no part of the specified range is overlapped by
-	// timestamp intervals from any transactions in the cache, the low water
-	// timestamp is returned for the read timestamps.
-	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
-	// GetMaxWrite behaves like GetMaxRead, but returns the maximum write
-	// timestamp which overlaps the interval spanning from start to end.
-	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
+	// GetMax returns the maximum timestamp which overlaps the interval spanning
+	// from start to end. If that maximum timestamp belongs to a single
+	// transaction, that transaction's ID is returned. Otherwise, if that maximum
+	// is shared between multiple transactions, no transaction ID is returned.
+	// Finally, if no part of the specified range is overlapped by timestamp
+	// intervals from any transactions in the cache, the low water timestamp is
+	// returned for the read timestamps.
+	GetMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
 	// Metrics returns the Cache's metrics struct.
 	Metrics() Metrics
@@ -80,8 +75,8 @@ type Cache interface {
 	//
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
-	// getLowWater return the low water mark for the specified cache.
-	getLowWater(readCache bool) hlc.Timestamp
+	// getLowWater return the low water mark.
+	getLowWater() hlc.Timestamp
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock. If the

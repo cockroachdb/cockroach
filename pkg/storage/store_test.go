@@ -2195,11 +2195,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	}
 
 	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
-	rTS, _ := store.tsCache.GetMaxRead(roachpb.Key("b").Next(), nil)
+	rTS, _ := store.tsCache.GetMax(roachpb.Key("b").Next(), nil)
 	if a, e := rTS, makeTS(t1.Nanoseconds(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
 	}
-	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
 	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
 	}
@@ -2223,11 +2223,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	}
 
 	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
-	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a").Next(), nil)
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("a").Next(), nil)
 	if a, e := rTS, makeTS(t2.Nanoseconds(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
 	}
-	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
 	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}

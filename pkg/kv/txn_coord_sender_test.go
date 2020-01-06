@@ -907,11 +907,9 @@ func TestTxnMultipleCoord(t *testing.T) {
 
 	// Verify presence of both intents.
 	tcs := txn.Sender().(*TxnCoordSender)
-	refreshReads := tcs.interceptorAlloc.txnSpanRefresher.refreshReads
+	refreshSpans := tcs.interceptorAlloc.txnSpanRefresher.refreshSpans
+	require.Equal(t, []roachpb.Span{{Key: key}, {Key: key2}}, refreshSpans)
 
-	if a, e := refreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
-		t.Fatalf("expected read spans %+v; got %+v", e, a)
-	}
 	ba := txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTxnRequest{Commit: true})
 	if err := txn.Run(ctx, ba); err != nil {

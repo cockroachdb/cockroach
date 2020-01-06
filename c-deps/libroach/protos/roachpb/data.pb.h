@@ -2715,16 +2715,16 @@ class LeafTxnFinalState : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // accessors -------------------------------------------------------
 
-  int refresh_reads_size() const;
-  void clear_refresh_reads();
-  static const int kRefreshReadsFieldNumber = 4;
-  ::cockroach::roachpb::Span* mutable_refresh_reads(int index);
+  int refresh_spans_size() const;
+  void clear_refresh_spans();
+  static const int kRefreshSpansFieldNumber = 4;
+  ::cockroach::roachpb::Span* mutable_refresh_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_refresh_reads();
-  const ::cockroach::roachpb::Span& refresh_reads(int index) const;
-  ::cockroach::roachpb::Span* add_refresh_reads();
+      mutable_refresh_spans();
+  const ::cockroach::roachpb::Span& refresh_spans(int index) const;
+  ::cockroach::roachpb::Span* add_refresh_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      refresh_reads() const;
+      refresh_spans() const;
 
   bool has_txn() const;
   void clear_txn();
@@ -2753,7 +2753,7 @@ class LeafTxnFinalState : public ::google::protobuf::MessageLite /* @@protoc_ins
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_reads_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_spans_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 deprecated_command_count_;
   bool refresh_invalid_;
@@ -5483,33 +5483,33 @@ inline void LeafTxnFinalState::set_deprecated_command_count(::google::protobuf::
   // @@protoc_insertion_point(field_set:cockroach.roachpb.LeafTxnFinalState.deprecated_command_count)
 }
 
-inline int LeafTxnFinalState::refresh_reads_size() const {
-  return refresh_reads_.size();
+inline int LeafTxnFinalState::refresh_spans_size() const {
+  return refresh_spans_.size();
 }
-inline void LeafTxnFinalState::clear_refresh_reads() {
-  refresh_reads_.Clear();
+inline void LeafTxnFinalState::clear_refresh_spans() {
+  refresh_spans_.Clear();
 }
-inline ::cockroach::roachpb::Span* LeafTxnFinalState::mutable_refresh_reads(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeafTxnFinalState.refresh_reads)
-  return refresh_reads_.Mutable(index);
+inline ::cockroach::roachpb::Span* LeafTxnFinalState::mutable_refresh_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LeafTxnFinalState.refresh_spans)
+  return refresh_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-LeafTxnFinalState::mutable_refresh_reads() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.LeafTxnFinalState.refresh_reads)
-  return &refresh_reads_;
+LeafTxnFinalState::mutable_refresh_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.LeafTxnFinalState.refresh_spans)
+  return &refresh_spans_;
 }
-inline const ::cockroach::roachpb::Span& LeafTxnFinalState::refresh_reads(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeafTxnFinalState.refresh_reads)
-  return refresh_reads_.Get(index);
+inline const ::cockroach::roachpb::Span& LeafTxnFinalState::refresh_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LeafTxnFinalState.refresh_spans)
+  return refresh_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* LeafTxnFinalState::add_refresh_reads() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.LeafTxnFinalState.refresh_reads)
-  return refresh_reads_.Add();
+inline ::cockroach::roachpb::Span* LeafTxnFinalState::add_refresh_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.LeafTxnFinalState.refresh_spans)
+  return refresh_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-LeafTxnFinalState::refresh_reads() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.LeafTxnFinalState.refresh_reads)
-  return refresh_reads_;
+LeafTxnFinalState::refresh_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.LeafTxnFinalState.refresh_spans)
+  return refresh_spans_;
 }
 
 // bool refresh_invalid = 7;

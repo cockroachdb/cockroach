@@ -26,7 +26,7 @@ import (
 
 // executeReadOnlyBatch is the execution logic for client requests which do not
 // mutate the range's replicated state. The method uses a single RocksDB
-// iterator to evaluate the batch and then updates the read timestamp cache to
+// iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, lg *spanlatch.Guard,
@@ -35,7 +35,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// evaluation to its value when returning.
 	ec := endCmds{repl: r, lg: lg}
 	defer func() {
-		ec.done(ba, br, pErr)
+		ec.done(ctx, ba, br, pErr)
 	}()
 
 	// If the read is not inconsistent, the read requires the range lease or
