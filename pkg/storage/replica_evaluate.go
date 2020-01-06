@@ -290,7 +290,7 @@ func evaluateBatch(
 				// returning of WriteTooOldErrors.
 				// TODO(bdarnell): add read+write requests to the read refresh spans
 				// in TxnCoordSender, and then I think this can go away.
-				if roachpb.IsReadAndWrite(args) {
+				if roachpb.IsReadAndWrite(args) || roachpb.IsReadOnly(args) {
 					mustReturnWriteTooOldErr = true
 				}
 

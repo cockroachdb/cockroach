@@ -3345,12 +3345,19 @@ class ScanRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::ScanFormat scan_format() const;
   void set_scan_format(::cockroach::roachpb::ScanFormat value);
 
+  // bool select_for_update = 5;
+  void clear_select_for_update();
+  static const int kSelectForUpdateFieldNumber = 5;
+  bool select_for_update() const;
+  void set_select_for_update(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ScanRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
   int scan_format_;
+  bool select_for_update_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -18753,6 +18760,20 @@ inline void ScanRequest::set_scan_format(::cockroach::roachpb::ScanFormat value)
   
   scan_format_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.scan_format)
+}
+
+// bool select_for_update = 5;
+inline void ScanRequest::clear_select_for_update() {
+  select_for_update_ = false;
+}
+inline bool ScanRequest::select_for_update() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.select_for_update)
+  return select_for_update_;
+}
+inline void ScanRequest::set_select_for_update(bool value) {
+  
+  select_for_update_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.select_for_update)
 }
 
 // -------------------------------------------------------------------

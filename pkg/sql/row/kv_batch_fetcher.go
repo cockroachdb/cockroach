@@ -239,6 +239,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		for i := range f.spans {
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
+			if len(f.spans) == 2 && i == 1 {
+				scans[i].SelectForUpdate = true
+			}
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}

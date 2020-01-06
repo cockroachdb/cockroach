@@ -2479,6 +2479,7 @@ func (r *rocksDBIterator) MVCCScan(
 		goToCTimestamp(timestamp), C.int64_t(max),
 		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
 		C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		C.bool(opts.WriteTooOldOnWriteInFuture),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2509,6 +2510,9 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
+	if err := writeTooOldToError(timestamp, state.write_too_old, opts.Txn); err != nil {
+		return nil, 0, nil, nil, err
+	}
 	return kvData, numKVs, resumeSpan, intents, nil
 }
 
@@ -2739,6 +2743,23 @@ func uncertaintyToError(
 				Logical:  int32(existingTS.logical),
 			},
 			txn)
+	}
+	return nil
+}
+
+func writeTooOldToError(
+	readTS hlc.Timestamp, wtoTS C.DBTimestamp, txn *roachpb.Transaction,
+) error {
+	if wtoTS.wall_time != 0 || wtoTS.logical != 0 {
+		wtoTimestamp := hlc.Timestamp{
+			WallTime: int64(wtoTS.wall_time),
+			Logical:  int32(wtoTS.logical),
+		}
+		writeTimestamp := txn.WriteTimestamp
+		writeTimestamp.Forward(wtoTimestamp.Next())
+		return &roachpb.WriteTooOldError{
+			Timestamp: readTS, ActualTimestamp: writeTimestamp,
+		}
 	}
 	return nil
 }

@@ -2368,10 +2368,11 @@ type MVCCScanOptions struct {
 	// to return no results.
 
 	// See the documentation for MVCCScan for information on these parameters.
-	Inconsistent bool
-	Tombstones   bool
-	Reverse      bool
-	Txn          *roachpb.Transaction
+	Inconsistent               bool
+	Tombstones                 bool
+	Reverse                    bool
+	Txn                        *roachpb.Transaction
+	WriteTooOldOnWriteInFuture bool
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some

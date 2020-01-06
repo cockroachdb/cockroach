@@ -8126,6 +8126,7 @@ void ScanRequest::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ScanRequest::kHeaderFieldNumber;
 const int ScanRequest::kScanFormatFieldNumber;
+const int ScanRequest::kSelectForUpdateFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ScanRequest::ScanRequest()
@@ -8144,14 +8145,16 @@ ScanRequest::ScanRequest(const ScanRequest& from)
   } else {
     header_ = NULL;
   }
-  scan_format_ = from.scan_format_;
+  ::memcpy(&scan_format_, &from.scan_format_,
+    static_cast<size_t>(reinterpret_cast<char*>(&select_for_update_) -
+    reinterpret_cast<char*>(&scan_format_)) + sizeof(select_for_update_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ScanRequest)
 }
 
 void ScanRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&scan_format_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(scan_format_));
+      reinterpret_cast<char*>(&select_for_update_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(select_for_update_));
 }
 
 ScanRequest::~ScanRequest() {
@@ -8182,7 +8185,9 @@ void ScanRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
-  scan_format_ = 0;
+  ::memset(&scan_format_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&select_for_update_) -
+      reinterpret_cast<char*>(&scan_format_)) + sizeof(select_for_update_));
   _internal_metadata_.Clear();
 }
 
@@ -8228,6 +8233,20 @@ bool ScanRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // bool select_for_update = 5;
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &select_for_update_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8265,6 +8284,11 @@ void ScanRequest::SerializeWithCachedSizes(
       4, this->scan_format(), output);
   }
 
+  // bool select_for_update = 5;
+  if (this->select_for_update() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->select_for_update(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ScanRequest)
@@ -8286,6 +8310,11 @@ size_t ScanRequest::ByteSizeLong() const {
   if (this->scan_format() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->scan_format());
+  }
+
+  // bool select_for_update = 5;
+  if (this->select_for_update() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -8311,6 +8340,9 @@ void ScanRequest::MergeFrom(const ScanRequest& from) {
   if (from.scan_format() != 0) {
     set_scan_format(from.scan_format());
   }
+  if (from.select_for_update() != 0) {
+    set_select_for_update(from.select_for_update());
+  }
 }
 
 void ScanRequest::CopyFrom(const ScanRequest& from) {
@@ -8332,6 +8364,7 @@ void ScanRequest::InternalSwap(ScanRequest* other) {
   using std::swap;
   swap(header_, other->header_);
   swap(scan_format_, other->scan_format_);
+  swap(select_for_update_, other->select_for_update_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

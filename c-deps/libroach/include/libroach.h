@@ -345,6 +345,7 @@ typedef struct {
   DBChunkedBuffer data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
+  DBTimestamp write_too_old;
   DBSlice resume_key;
 } DBScanResults;
 
@@ -352,7 +353,7 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
                       bool inconsistent, bool tombstones);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones);
+                       bool tombstones, bool write_too_old);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {

@@ -213,15 +213,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	err = crdb.ExecuteInTx(
 		ctx, (*workload.PgxTx)(tx),
 		func() error {
-			// Select the district tax rate and next available order number, bumping it.
-			var dNextOID int
-			if err := n.updateDistrict.QueryRowTx(
-				ctx, tx, d.wID, d.dID,
-			).Scan(&d.dTax, &dNextOID); err != nil {
-				return err
-			}
-			d.oID = dNextOID - 1
-
 			// Select the warehouse tax rate.
 			if err := n.selectWarehouseTax.QueryRowTx(
 				ctx, tx, wID,
@@ -362,19 +353,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 			rows.Close()
 
-			// Insert row into the orders and new orders table.
-			if _, err := n.insertOrder.ExecTx(
-				ctx, tx,
-				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
-			); err != nil {
-				return err
-			}
-			if _, err := n.insertNewOrder.ExecTx(
-				ctx, tx, d.oID, d.dID, d.wID,
-			); err != nil {
-				return err
-			}
-
 			// Update the stock table for each item.
 			if _, err := tx.ExecEx(
 				ctx,
@@ -393,6 +371,28 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					strings.Join(stockIDs, ", "),
 				),
 				nil, /* options */
+			); err != nil {
+				return err
+			}
+
+			// Select the district tax rate and next available order number, bumping it.
+			var dNextOID int
+			if err := n.updateDistrict.QueryRowTx(
+				ctx, tx, d.wID, d.dID,
+			).Scan(&d.dTax, &dNextOID); err != nil {
+				return err
+			}
+			d.oID = dNextOID - 1
+
+			// Insert row into the orders and new orders table.
+			if _, err := n.insertOrder.ExecTx(
+				ctx, tx,
+				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
+			); err != nil {
+				return err
+			}
+			if _, err := n.insertNewOrder.ExecTx(
+				ctx, tx, d.oID, d.dID, d.wID,
 			); err != nil {
 				return err
 			}
