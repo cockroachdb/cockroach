@@ -316,3 +316,31 @@
     $input
     (InlineConstVar $filters)
 )
+
+# PushSelectIntoProjectSet pushes filters into a ProjectSet. In particular,
+# the filters that are bound to the input columns of the ProjectSet are
+# pushed down into it, in hopes of being pushed down further into joins
+# and scans underneath the ProjectSet.
+[PushSelectIntoProjectSet, Normalize]
+(Select
+    (ProjectSet
+        $input:*
+        $zip:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
+)
+=>
+(Select
+    (ProjectSet
+        (Select
+            $input
+            (ExtractBoundConditions $filters $inputCols)
+        )
+        $zip
+    )
+    (ExtractUnboundConditions $filters $inputCols)
+)
