@@ -883,10 +883,7 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 func NewLimitedMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
 ) *mon.BytesMonitor {
-	limit := config.TestingKnobs.MemoryLimitBytes
-	if limit <= 0 {
-		limit = SettingWorkMemBytes.Get(&config.Settings.SV)
-	}
+	limit := GetWorkMemLimit(config)
 	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return &limitedMon

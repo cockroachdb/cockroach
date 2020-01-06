@@ -232,3 +232,13 @@ const (
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// GetWorkMemLimit returns the number of bytes determining the amount of RAM
+// available to a single processor or operator.
+func GetWorkMemLimit(config *ServerConfig) int64 {
+	limit := config.TestingKnobs.MemoryLimitBytes
+	if limit <= 0 {
+		limit = SettingWorkMemBytes.Get(&config.Settings.SV)
+	}
+	return limit
+}
