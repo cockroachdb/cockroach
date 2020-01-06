@@ -10,9 +10,26 @@
 
 package tree
 
+type TableCoverage int32
+
+const (
+	// Partial table coverage means that the backup is not guaranteed to have all
+	// of the cluster data. This can be accomplished by backing up a specific
+	// subset of tables/databases. Note that even if all of the tables and
+	// databases have been included in the backup manually, a backup is not said
+	// to have complete table coverage unless it was created by a BACKUP TO
+	// command.
+	Partial TableCoverage = iota
+	// Complete table coverage means that backup is guaranteed to have all the
+	// relevant data in the cluster. These can only be created by running a
+	// full cluster backup with BACKUP TO.
+	Complete
+)
+
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Targets         TargetList
+	TableCoverage   TableCoverage
 	To              PartitionedBackup
 	IncrementalFrom Exprs
 	AsOf            AsOfClause
@@ -24,7 +41,9 @@ var _ Statement = &Backup{}
 // Format implements the NodeFormatter interface.
 func (node *Backup) Format(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
-	ctx.FormatNode(&node.Targets)
+	if node.TableCoverage == Partial {
+		ctx.FormatNode(&node.Targets)
+	}
 	ctx.WriteString(" TO ")
 	ctx.FormatNode(&node.To)
 	if node.AsOf.Expr != nil {
@@ -43,10 +62,11 @@ func (node *Backup) Format(ctx *FmtCtx) {
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets TargetList
-	From    []PartitionedBackup
-	AsOf    AsOfClause
-	Options KVOptions
+	Targets       TargetList
+	TableCoverage TableCoverage
+	From          []PartitionedBackup
+	AsOf          AsOfClause
+	Options       KVOptions
 }
 
 var _ Statement = &Restore{}
@@ -54,7 +74,9 @@ var _ Statement = &Restore{}
 // Format implements the NodeFormatter interface.
 func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
-	ctx.FormatNode(&node.Targets)
+	if node.TableCoverage == Partial {
+		ctx.FormatNode(&node.Targets)
+	}
 	ctx.WriteString(" FROM ")
 	for i := range node.From {
 		if i > 0 {

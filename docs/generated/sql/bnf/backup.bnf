@@ -1,5 +1,17 @@
 backup_stmt ::=
-	'BACKUP' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	'BACKUP' 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TO' partitioned_backup as_of_clause  'WITH' kv_option_list
+	| 'BACKUP' 'TO' partitioned_backup as_of_clause  
+	| 'BACKUP' 'TO' partitioned_backup as_of_clause  
+	| 'BACKUP' 'TO' partitioned_backup  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'TO' partitioned_backup  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TO' partitioned_backup  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TO' partitioned_backup   'WITH' kv_option_list
+	| 'BACKUP' 'TO' partitioned_backup   
+	| 'BACKUP' 'TO' partitioned_backup   
+	| 'BACKUP' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
 	| 'BACKUP' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
 	| 'BACKUP' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'TO' partitioned_backup as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
 	| 'BACKUP' ( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'TO' partitioned_backup as_of_clause  'WITH' kv_option_list

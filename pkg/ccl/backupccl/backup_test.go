@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -70,6 +71,28 @@ const (
 	backupRestoreRowPayloadSize = 100
 	localFoo                    = "nodelocal:///foo"
 )
+
+func backupRestoreTestSetupEmptyWithParams(
+	t testing.TB,
+	clusterSize int,
+	dir string,
+	init func(tc *testcluster.TestCluster),
+	params base.TestClusterArgs,
+) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	ctx = context.Background()
+
+	params.ServerArgs.ExternalIODir = dir
+	tc = testcluster.StartTestCluster(t, clusterSize, params)
+	init(tc)
+
+	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	cleanupFn := func() {
+		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
+	}
+
+	return ctx, tc, sqlDB, cleanupFn
+}
 
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
@@ -147,6 +170,12 @@ func backupRestoreTestSetup(
 	cleanup func(),
 ) {
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+}
+
+func backupRestoreTestSetupFresh(
+	t testing.TB, clusterSize int, tempDir string, init func(*testcluster.TestCluster),
+) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, base.TestClusterArgs{})
 }
 
 func verifyBackupRestoreStatementResult(

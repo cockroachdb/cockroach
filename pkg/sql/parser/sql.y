@@ -1825,7 +1825,11 @@ opt_validate_behavior:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+  BACKUP TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+  {
+    $$.val = &tree.Backup{TableCoverage: tree.Complete, To: $3.partitionedBackup(), IncrementalFrom: $5.exprs(), AsOf: $4.asOfClause(), Options: $6.kvOptions()}
+  }
+| BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
   {
     $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.partitionedBackup(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
@@ -1851,7 +1855,11 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options
+  RESTORE FROM partitioned_backup_list opt_as_of_clause opt_with_options
+  {
+    $$.val = &tree.Restore{TableCoverage: tree.Complete, From: $3.partitionedBackups(), AsOf: $4.asOfClause(), Options: $5.kvOptions()}
+  }
+| RESTORE targets FROM partitioned_backup_list opt_as_of_clause opt_with_options
   {
     $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.partitionedBackups(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
