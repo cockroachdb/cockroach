@@ -168,7 +168,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			ReturnType: types.INet,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(d).IPAddr
-				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
+				return NewDIPAddr(DIPAddr{ipAddr.Complement(), types.INet}), nil
 			},
 		},
 		&UnaryOp{
@@ -177,7 +177,7 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				//TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(d).IPAddr
-				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
+				return NewDIPAddr(DIPAddr{ipAddr.Complement(), types.Cidr}), nil
 			},
 		},
 	},
@@ -429,7 +429,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.And(&other)
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.INet}), err
 			},
 		},
 		&BinOp{
@@ -441,7 +441,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.And(&other)
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.Cidr}), err
 			},
 		},
 	},
@@ -478,7 +478,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Or(&other)
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.INet}), err
 			},
 		},
 		&BinOp{
@@ -490,7 +490,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Or(&other)
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.Cidr}), err
 			},
 		},
 	},
@@ -774,7 +774,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Add(int64(i))
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.INet}), err
 			},
 		},
 		&BinOp{
@@ -785,7 +785,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				i := MustBeDInt(left)
 				ipAddr := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Add(int64(i))
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.INet}), err
 			},
 		},
 		//&BinOp{
@@ -1089,7 +1089,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Sub(int64(i))
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.INet}), err
 			},
 		},
 		&BinOp{
@@ -1114,7 +1114,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				i := MustBeDInt(right)
 				newIPAddr, err := ipAddr.Sub(int64(i))
-				return NewDIPAddr(DIPAddr{newIPAddr}), err
+				return NewDIPAddr(DIPAddr{newIPAddr, types.Cidr}), err
 			},
 		},
 	},

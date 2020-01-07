@@ -1441,6 +1441,13 @@ func (t *T) Equivalent(other *T) bool {
 		if !t.ArrayContents().Equivalent(other.ArrayContents()) {
 			return false
 		}
+
+	case INetFamily:
+		// while INet and CIDR are stored exactly the same, the semantics around use are just divergent enough
+		// that they should not be 'equivalent'
+		if t.Oid() != other.Oid() {
+			return false
+		}
 	}
 
 	return true

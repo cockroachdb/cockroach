@@ -354,8 +354,10 @@ func ParseDIPAddrFromINetString(s string, inetOid oid.Oid) (*DIPAddr, error) {
 	var err error
 	switch inetOid {
 	case oid.T_inet:
-			err = ipaddr.ParseINet(s, &d.IPAddr)
+		d.typ = types.INet
+		err = ipaddr.ParseINet(s, &d.IPAddr)
 	case oid.T_cidr:
+		d.typ = types.Cidr
 		err = ipaddr.ParseCidr(s, &d.IPAddr)
 	default:
 		panic(errors.AssertionFailedf("unexpected OID: %d", inetOid))
@@ -1531,6 +1533,7 @@ func (d *DUuid) Size() uintptr {
 // DIPAddr is the IPAddr Datum.
 type DIPAddr struct {
 	ipaddr.IPAddr
+	typ *types.T
 }
 
 // NewDIPAddr is a helper routine to create a *DIPAddr initialized from its
@@ -1564,8 +1567,8 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DIPAddr) ResolvedType() *types.T {
-	return types.INet
+func (d *DIPAddr) ResolvedType() *types.T {
+	return d.typ
 }
 
 // Compare implements the Datum interface.
@@ -1598,13 +1601,13 @@ func (d *DIPAddr) Prev(_ *EvalContext) (Datum, bool) {
 			return dMaxIPv4Addr, true
 		}
 		// Decrease mask size, wrap IPv6 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: d.Mask - 1}}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: d.Mask - 1}, d.typ}), true
 	} else if d.Family == ipaddr.IPv4family && d.Addr.Equal(dIPv4min) {
 		// Decrease mask size, wrap IPv4 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: d.Mask - 1}}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: d.Mask - 1}, d.typ}), true
 	}
 	// Decrement IP address.
-	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Sub(1), Mask: d.Mask}}), true
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Sub(1), Mask: d.Mask}, d.typ}), true
 }
 
 // Next implements the Datum interface.
@@ -1619,13 +1622,13 @@ func (d *DIPAddr) Next(_ *EvalContext) (Datum, bool) {
 			return dMinIPv6Addr, true
 		}
 		// Increase mask size, wrap IPv4 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: d.Mask + 1}}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: d.Mask + 1}, d.typ}), true
 	} else if d.Family == ipaddr.IPv6family && d.Addr.Equal(dIPv6max) {
 		// Increase mask size, wrap IPv6 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: d.Mask + 1}}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: d.Mask + 1}, d.typ}), true
 	}
 	// Increment IP address.
-	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Add(1), Mask: d.Mask}}), true
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Add(1), Mask: d.Mask}, d.typ}), true
 }
 
 // IsMax implements the Datum interface.
@@ -1648,14 +1651,14 @@ var dIPv6max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:
 
 // dMaxIPv4Addr and dMinIPv6Addr are used as global constants to prevent extra
 // heap extra allocation
-var dMaxIPv4Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: 32}})
-var dMinIPv6Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: 0}})
+var dMaxIPv4Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: 32}, types.INet})
+var dMinIPv6Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: 0}, types.INet})
 
 // DMinIPAddr is the min DIPAddr.
-var DMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}})
+var DMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}, types.INet})
 
 // DMaxIPAddr is the max DIPaddr.
-var DMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
+var DMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}, types.INet})
 
 // Min implements the Datum interface.
 func (*DIPAddr) Min(_ *EvalContext) (Datum, bool) {
