@@ -1,6 +1,6 @@
 # These tests exercise the code when the HBA configuration is empty.
 #
-# An empty config is somewhat equivalent to:
+# An empty config is equivalent to:
 #
 #     host all root 0.0.0.0/0 cert
 #     host all all  0.0.0.0/0 cert-password
@@ -18,8 +18,10 @@ config secure
 # Set HBA to empty in case it wasn't done before.
 set_hba
 ----
-# Cache of the HBA configuration on this node:
-# (configuration is empty)
+# Active authentication configuration on this node:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert
+host   all      all  all     cert-password
 
 subtest root
 
@@ -32,7 +34,7 @@ ok defaultdb
 # password auth. However, root password auth is rejected in any case.
 connect user=root password=foo sslmode=verify-ca sslcert=
 ----
-ERROR: user root must use certificate authentication instead of password authentication
+ERROR: no TLS peer certificates, but required for auth
 
 subtest end root
 

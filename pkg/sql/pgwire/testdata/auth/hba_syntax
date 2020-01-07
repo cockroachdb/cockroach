@@ -7,6 +7,7 @@ set_hba
 #empty
 ----
 ERROR: no entries
+HINT: To use the default configuration, assign the empty string ('').
 
 set_hba
 host all all 1.1.1/0 cert
@@ -50,3 +51,4 @@ ERROR: unimplemented: hostname-based HBA rules are not supported (SQLSTATE 0A000
 HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
 --
 List the numeric CIDR notation instead, for example: 127.0.0.1/8.
+Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.
