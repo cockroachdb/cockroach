@@ -11,9 +11,7 @@
 package cmpconn
 
 import (
-	"context"
 	"math/big"
-	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/apd"
@@ -23,7 +21,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // CompareVals returns an error if a and b differ, specifying what the
@@ -32,33 +29,17 @@ import (
 // postgres). Postgres and Cockroach have subtle differences in their result
 // types and OIDs. This function is aware of those and is able to correctly
 // compare those values.
-func CompareVals(a, b [][]interface{}) error {
+func CompareVals(a, b []interface{}) error {
 	if len(a) != len(b) {
 		return errors.Errorf("size difference: %d != %d", len(a), len(b))
 	}
 	if len(a) == 0 {
 		return nil
 	}
-	g, _ := errgroup.WithContext(context.Background())
-	// Split up the slices into subslices of equal length and compare those in parallel.
-	n := len(a) / runtime.NumCPU()
-	if n < 1 {
-		n = len(a)
+	if diff := cmp.Diff(a, b, cmpOptions...); diff != "" {
+		return errors.New(diff)
 	}
-	for i := 0; i < len(a); i++ {
-		start, end := i, i+n
-		if end > len(a) {
-			end = len(a)
-		}
-		g.Go(func() error {
-			if diff := cmp.Diff(a[start:end], b[start:end], cmpOptions...); diff != "" {
-				return errors.New(diff)
-			}
-			return nil
-		})
-		i += n
-	}
-	return g.Wait()
+	return nil
 }
 
 var (
@@ -127,6 +108,7 @@ var (
 					// Postgres sometimes adds spaces to the end of a string.
 					t = strings.TrimSpace(t)
 					v = strings.Replace(t, "T00:00:00+00:00", "T00:00:00Z", 1)
+					v = strings.Replace(t, ":00+00:00", ":00", 1)
 				case *pgtype.Numeric:
 					if t.Status == pgtype.Present {
 						v = apd.NewWithBigInt(t.Int, t.Exp)
