@@ -1296,6 +1296,14 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // testing.T which may differ from m.t.
 func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expected []int64) {
 	t.Helper()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {

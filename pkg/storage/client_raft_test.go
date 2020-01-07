@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -1067,6 +1068,14 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -1695,6 +1704,14 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 // with a downed node.
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -1859,6 +1876,14 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 }
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 	sc := storage.TestStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
 	// replica GC queue does its work, so we disable the replica gc queue here
@@ -4459,6 +4484,14 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 // traffic on the SystemClass connection.
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
@@ -4740,6 +4773,14 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 	sc := storage.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
