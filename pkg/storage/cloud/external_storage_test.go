@@ -878,3 +878,22 @@ func TestHttpGet(t *testing.T) {
 		})
 	}
 }
+
+func TestHttpGetWithCancelledContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer s.Close()
+
+	store, err := makeHTTPStorage(s.URL, testSettings)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, store.Close())
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = store.ReadFile(ctx, "/something")
+	require.Error(t, context.Canceled, err)
+}
