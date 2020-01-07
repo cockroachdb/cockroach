@@ -34,6 +34,10 @@ var (
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = sqlbase.ColumnFamilyMutator
+
+	// PostgresMutator modifies strings such that they execute identically
+	// in both Postgres and Cockroach.
+	PostgresMutator StatementStringMutator = postgresMutator
 )
 
 // StatementMutator defines a func that can change a statement.
@@ -74,7 +78,31 @@ func Apply(
 	return stmts, changed
 }
 
-// ApplyString executes all mutators on input.
+// StringMutator defines a mutator that works on strings.
+type StringMutator interface {
+	MutateString(*rand.Rand, string) (mutated string, changed bool)
+}
+
+// StatementStringMutator defines a func that mutates a string.
+type StatementStringMutator func(*rand.Rand, string) string
+
+// Mutate implements the Mutator interface.
+func (sm StatementStringMutator) Mutate(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	panic("can only be used with MutateString")
+}
+
+// MutateString implements the StringMutator interface.
+func (sm StatementStringMutator) MutateString(
+	rng *rand.Rand, q string,
+) (mutated string, changed bool) {
+	newq := sm(rng, q)
+	return newq, newq != q
+}
+
+// ApplyString executes all mutators on input. A mutator can also be a
+// StringMutator which will operate after all other mutators.
 func ApplyString(
 	rng *rand.Rand, input string, mutators ...sqlbase.Mutator,
 ) (output string, changed bool) {
@@ -88,17 +116,32 @@ func ApplyString(
 		stmts[i] = p.AST
 	}
 
-	stmts, changed = Apply(rng, stmts, mutators...)
-	if !changed {
-		return input, false
+	var normalMutators []sqlbase.Mutator
+	var stringMutators []StringMutator
+	for _, m := range mutators {
+		if sm, ok := m.(StringMutator); ok {
+			stringMutators = append(stringMutators, sm)
+		} else {
+			normalMutators = append(normalMutators, m)
+		}
 	}
-
-	var sb strings.Builder
-	for _, s := range stmts {
-		sb.WriteString(s.String())
-		sb.WriteString(";\n")
+	stmts, changed = Apply(rng, stmts, normalMutators...)
+	if changed {
+		var sb strings.Builder
+		for _, s := range stmts {
+			sb.WriteString(s.String())
+			sb.WriteString(";\n")
+		}
+		input = sb.String()
 	}
-	return sb.String(), true
+	for _, m := range stringMutators {
+		s, ch := m.MutateString(rng, input)
+		if ch {
+			input = s
+			changed = true
+		}
+	}
+	return input, changed
 }
 
 // randNonNegInt returns a random non-negative integer. It attempts to
@@ -440,4 +483,18 @@ Loop:
 		}
 		return action
 	}
+}
+
+func postgresMutator(_ *rand.Rand, q string) string {
+	for from, to := range map[string]string{
+		":::":    "::",
+		"STRING": "TEXT",
+		"BYTES":  "BYTEA",
+		"FLOAT4": "FLOAT8",
+		"INT2":   "INT8",
+		"INT4":   "INT8",
+	} {
+		q = strings.Replace(q, from, to, -1)
+	}
+	return q
 }
