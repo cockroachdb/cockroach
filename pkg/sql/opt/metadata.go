@@ -93,6 +93,10 @@ type Metadata struct {
 	// needed for EXPLAIN (opt, env).
 	views []cat.View
 
+	// nodes stores information about each metadata node, indexed by
+	// NodeID.index().
+	nodes []NodeMeta
+
 	// NOTE! When adding fields here, update CopyFrom.
 }
 
@@ -139,6 +143,7 @@ func (md *Metadata) Init() {
 	md.tables = md.tables[:0]
 	md.views = md.views[:0]
 	md.deps = md.deps[:0]
+	md.nodes = md.nodes[:0]
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -164,6 +169,7 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 
 	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
+	md.nodes = append(md.nodes, from.nodes...)
 }
 
 // DepByName is used with AddDependency when the data source was looked up using a
@@ -308,12 +314,12 @@ func (md *Metadata) AllTables() []TableMeta {
 	return md.tables
 }
 
-// TableByStableID looks up the catalog table associated with the given
+// TableByStableID looks up the table associated with the given
 // StableID (unique across all tables and stable across queries).
-func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
-	for _, mdTab := range md.tables {
-		if mdTab.Table.ID() == id {
-			return mdTab.Table
+func (md *Metadata) TableByStableID(id cat.StableID) *TableMeta {
+	for i := range md.tables {
+		if md.tables[i].Table.ID() == id {
+			return &md.tables[i]
 		}
 	}
 	return nil
@@ -476,3 +482,36 @@ func (md *Metadata) AllViews() []cat.View {
 // WithID=0 is reserved to mean "unknown expression".
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
+
+// AddNodes adds information about all nodes in the CockroachDB cluster to the
+// metadata.
+func (md *Metadata) AddNodes(catalog cat.Catalog) {
+	if catalog == nil {
+		return
+	}
+
+	md.nodes = make([]NodeMeta, catalog.NodeCount())
+	for i := range md.nodes {
+		catNode := catalog.Node(i)
+		md.nodes[i] = NodeMeta{
+			MetaID:   makeNodeID(i),
+			Node:     catNode,
+			Locality: catNode.Locality(),
+			Attrs:    catNode.Attrs(),
+
+			// TODO(rytaft): consider adding node activity with pairwise latencies.
+		}
+	}
+}
+
+// NodeMeta looks up the metadata for the node associated with the given
+// node id.
+func (md *Metadata) NodeMeta(nodeID NodeID) *NodeMeta {
+	return &md.nodes[nodeID.index()]
+}
+
+// AllNodes returns the metadata for all nodes. The result must not be
+// modified.
+func (md *Metadata) AllNodes() []NodeMeta {
+	return md.nodes
+}

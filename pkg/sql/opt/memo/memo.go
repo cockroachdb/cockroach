@@ -177,6 +177,12 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.curWithID = 0
 }
 
+// AddNodes adds information about all nodes in the CockroachDB cluster to the
+// metadata.
+func (m *Memo) AddNodes(catalog cat.Catalog) {
+	m.metadata.AddNodes(catalog)
+}
+
 // NotifyOnNewGroup sets a callback function which is invoked each time we
 // create a new memo group.
 func (m *Memo) NotifyOnNewGroup(fn func(opt.Expr)) {
