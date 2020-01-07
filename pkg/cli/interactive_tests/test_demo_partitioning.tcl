@@ -21,8 +21,10 @@ expect {
       report "License server could not be reached - skipping with no error"
       exit 0
   }
-  "movr>" {}
+  "Partitioning the demo database, please wait..." {}
 }
+
+eexpect "movr>"
 
 send "SELECT count(*) AS NRPARTS FROM \[SHOW PARTITIONS FROM DATABASE movr\];\r"
 eexpect "nrparts"

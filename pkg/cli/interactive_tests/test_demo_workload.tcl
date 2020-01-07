@@ -34,3 +34,19 @@ if {!$workloadRunning} {
 interrupt
 eexpect eof
 end_test
+
+# Ensure that cockroach demo with the movr workload can control the number of ranges that tables are split into.
+start_test "Check that controlling ranges of the movr dataset works"
+# Reset the timeout.
+set timeout 30
+spawn $argv demo movr --num-ranges=6
+
+eexpect "movr>"
+
+send "SELECT count(*) FROM \[SHOW RANGES FROM TABLE USERS\];\r"
+eexpect "6"
+eexpect "(1 row)"
+
+interrupt
+eexpect eof
+end_test
