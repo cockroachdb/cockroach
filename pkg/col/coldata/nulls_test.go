@@ -226,83 +226,53 @@ func TestNullsSet(t *testing.T) {
 		// Neither type nor the length here matter.
 		Src: NewMemColumn(coltypes.Bool, 0),
 	}
-	for _, destStartIdx := range pos {
-		for _, srcStartIdx := range pos {
-			for _, srcEndIdx := range pos {
-				if destStartIdx <= srcStartIdx && srcStartIdx <= srcEndIdx {
-					toAppend := srcEndIdx - srcStartIdx
-					name := fmt.Sprintf("destStartIdx=%d,srcStartIdx=%d,toAppend=%d", destStartIdx,
-						srcStartIdx, toAppend)
-					t.Run(name, func(t *testing.T) {
-						n := nulls3.Copy()
-						args.Src.SetNulls(&nulls5)
-						args.DestIdx = destStartIdx
-						args.SrcStartIdx = srcStartIdx
-						args.SrcEndIdx = srcEndIdx
-						n.set(args)
-						for i := uint64(0); i < destStartIdx; i++ {
-							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
+	for _, withSel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("WithSel=%t", withSel), func(t *testing.T) {
+			var srcNulls *Nulls
+			if withSel {
+				args.Sel = make([]uint16, BatchSize())
+				// Make a selection vector with every even index. (This turns nulls10 into
+				// nulls5.)
+				for i := range args.Sel {
+					args.Sel[i] = uint16(i) * 2
+				}
+				srcNulls = &nulls10
+			} else {
+				args.Sel = nil
+				srcNulls = &nulls5
+			}
+			for _, destStartIdx := range pos {
+				for _, srcStartIdx := range pos {
+					for _, srcEndIdx := range pos {
+						if destStartIdx <= srcStartIdx && srcStartIdx <= srcEndIdx {
+							toAppend := srcEndIdx - srcStartIdx
+							name := fmt.Sprintf("destStartIdx=%d,srcStartIdx=%d,toAppend=%d", destStartIdx,
+								srcStartIdx, toAppend)
+							t.Run(name, func(t *testing.T) {
+								n := nulls3.Copy()
+								args.Src.SetNulls(srcNulls)
+								args.DestIdx = destStartIdx
+								args.SrcStartIdx = srcStartIdx
+								args.SrcEndIdx = srcEndIdx
+								// Set some garbage values in the destination nulls that should
+								// be overwritten.
+								n.SetNullRange(destStartIdx, destStartIdx+toAppend)
+								n.set(args)
+								for i := uint64(0); i < destStartIdx; i++ {
+									require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
+								}
+								for i := uint64(0); i < toAppend; i++ {
+									require.Equal(t, nulls5.NullAt64(srcStartIdx+i), n.NullAt64(destStartIdx+i))
+								}
+								for i := destStartIdx + toAppend; i < uint64(BatchSize()); i++ {
+									require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
+								}
+							})
 						}
-						for i := uint64(0); i < toAppend; i++ {
-							// TODO(solon): Arguably the null value should also be false if the source
-							// value was false, but that's not how the current implementation works.
-							// Fix this when we replace it with a faster bitwise implementation.
-							if nulls5.NullAt64(srcStartIdx + i) {
-								destIdx := destStartIdx + i
-								require.True(t, n.NullAt64(destIdx),
-									"n.NullAt64(%d) should be true", destIdx)
-							}
-						}
-					})
+					}
 				}
 			}
-		}
-	}
-}
-
-func TestNullsSetWithSel(t *testing.T) {
-	args := SliceArgs{
-		// Neither type nor the length here matter.
-		Src: NewMemColumn(coltypes.Bool, 0),
-		Sel: make([]uint16, BatchSize()),
-	}
-	// Make a selection vector with every even index. (This turns nulls10 into
-	// nulls5.)
-	for i := range args.Sel {
-		args.Sel[i] = uint16(i) * 2
-	}
-
-	for _, destStartIdx := range pos {
-		for _, srcStartIdx := range pos {
-			for _, srcEndIdx := range pos {
-				if destStartIdx <= srcStartIdx && srcStartIdx <= srcEndIdx {
-					toAppend := srcEndIdx - srcStartIdx
-					name := fmt.Sprintf("destStartIdx=%d,srcStartIdx=%d,toAppend=%d", destStartIdx,
-						srcStartIdx, toAppend)
-					t.Run(name, func(t *testing.T) {
-						n := nulls3.Copy()
-						args.Src.SetNulls(&nulls10)
-						args.DestIdx = destStartIdx
-						args.SrcStartIdx = srcStartIdx
-						args.SrcEndIdx = srcEndIdx
-						n.set(args)
-						for i := uint64(0); i < destStartIdx; i++ {
-							require.Equal(t, nulls3.NullAt64(i), n.NullAt64(i))
-						}
-						for i := uint64(0); i < toAppend; i++ {
-							// TODO(solon): Arguably the null value should also be false if the source
-							// value was false, but that's not how the current implementation works.
-							// Fix this when we replace it with a faster bitwise implementation.
-							if nulls5.NullAt64(srcStartIdx + i) {
-								destIdx := destStartIdx + i
-								require.True(t, n.NullAt64(destIdx),
-									"n.NullAt64(%d) should be true", destIdx)
-							}
-						}
-					})
-				}
-			}
-		}
+		})
 	}
 }
 
