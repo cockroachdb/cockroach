@@ -586,7 +586,26 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 ) error {
 	if table.Adding() && table.IsAs() {
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+
 			txn.SetFixedTimestamp(ctx, table.CreateAsOfTime)
+
+			// This is a new table and should be empty, so this ClearRange should be a
+			// noop. However, if there _is_ anything already there, we need to clear
+			// it before backfilling. One such case is if this backfill was restarted:
+			// since the source query can produce different results on each execution,
+			// and our contract is that the created table contains the results of, and
+			// only of, one execution, we need to ensure each attempt to backfill
+			// starts with empty target keyspace.
+			b := &client.Batch{}
+			b.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    table.TableSpan().Key,
+					EndKey: table.TableSpan().EndKey,
+				},
+			})
+			if err := sc.db.Run(ctx, b); err != nil {
+				return err
+			}
 
 			// Create an internal planner as the planner used to serve the user query
 			// would have committed by this point.
