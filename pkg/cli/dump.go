@@ -637,7 +637,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 							return err
 						}
 					case types.INetFamily:
-						d, err = tree.ParseDIPAddrFromINetString(string(t))
+						d, err = tree.ParseDIPAddrFromINetString(string(t), ct.Oid())
 						if err != nil {
 							return err
 						}

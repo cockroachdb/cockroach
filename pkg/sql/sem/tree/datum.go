@@ -348,10 +348,18 @@ func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 }
 
 // ParseDIPAddrFromINetString parses and returns the *DIPAddr Datum value
-// represented by the provided input INet string, or an error.
-func ParseDIPAddrFromINetString(s string) (*DIPAddr, error) {
+// represented by the provided input INet or CIDR string, or an error.
+func ParseDIPAddrFromINetString(s string, inetOid oid.Oid) (*DIPAddr, error) {
 	var d DIPAddr
-	err := ipaddr.ParseINet(s, &d.IPAddr)
+	var err error
+	switch inetOid {
+	case oid.T_inet:
+			err = ipaddr.ParseINet(s, &d.IPAddr)
+	case oid.T_cidr:
+		err = ipaddr.ParseCidr(s, &d.IPAddr)
+	default:
+		panic(errors.AssertionFailedf("unexpected OID: %d", inetOid))
+	}
 	if err != nil {
 		return nil, err
 	}

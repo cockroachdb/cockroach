@@ -374,6 +374,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			continue
 		}
 		switch t := c.resultColumns[i].Typ; t.Family() {
+		// TODO(jeb) add cidr here?
 		case types.BytesFamily,
 			types.DateFamily,
 			types.IntervalFamily,

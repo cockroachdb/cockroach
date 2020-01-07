@@ -72,7 +72,7 @@ func SampleDatum(t *types.T) Datum {
 		u, _ := ParseDUuidFromString("3189ad07-52f2-4d60-83e8-4a8347fef718")
 		return u
 	case types.INetFamily:
-		i, _ := ParseDIPAddrFromINetString("127.0.0.1")
+			i, _ := ParseDIPAddrFromINetString("127.0.0.1", t.Oid())
 		return i
 	case types.JsonFamily:
 		j, _ := ParseDJSON(`{"a": "b"}`)

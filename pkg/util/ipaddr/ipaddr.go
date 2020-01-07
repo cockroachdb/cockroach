@@ -170,6 +170,11 @@ func getFamily(addr string) IPFamily {
 	return IPv4family
 }
 
+func ParseCidr(s string, dest *IPAddr) error {
+	// TODO(jeb) impl me
+	return ParseINet(s, dest)
+}
+
 // ParseINet parses postgres style INET types. See TestIPAddrParseINet for
 // examples.
 func ParseINet(s string, dest *IPAddr) error {

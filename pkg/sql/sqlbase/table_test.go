@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/lib/pq/oid"
 	"math"
 	"reflect"
 	"strconv"
@@ -521,14 +522,14 @@ func TestMarshalColumnValue(t *testing.T) {
 		{
 			typ: types.INet,
 			datum: func() (v tree.Datum) {
-				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
+				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1", oid.T_inet)
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
 				return
 			}(),
 			exp: func() (v roachpb.Value) {
-				ipAddr, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
+				ipAddr, err := tree.ParseDIPAddrFromINetString("192.168.0.1", oid.T_inet)
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
@@ -536,6 +537,7 @@ func TestMarshalColumnValue(t *testing.T) {
 				v.SetBytes(data)
 				return
 			}(),
+			// TODO(jeb) add in some CIDR-related tests
 		},
 	}
 

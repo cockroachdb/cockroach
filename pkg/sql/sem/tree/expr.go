@@ -13,6 +13,7 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"github.com/lib/pq/oid"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1510,7 +1511,7 @@ var (
 	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.VarBit,
 		types.AnyArray, types.AnyTuple,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb})
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb, types.Cidr})
 	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
 	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
@@ -1520,7 +1521,8 @@ var (
 	intervalCastTypes  = annotateCast(types.Interval, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
 	oidCastTypes       = annotateCast(types.Oid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Int, types.Oid})
 	uuidCastTypes      = annotateCast(types.Uuid, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
-	inetCastTypes      = annotateCast(types.INet, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet})
+	inetCastTypes      = annotateCast(types.INet, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet, types.Cidr})
+	cidrCastTypes      = annotateCast(types.Cidr, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet, types.Cidr})
 	arrayCastTypes     = annotateCast(types.AnyArray, []*types.T{types.Unknown, types.String})
 	jsonCastTypes      = annotateCast(types.Jsonb, []*types.T{types.Unknown, types.String, types.Jsonb})
 )
@@ -1557,7 +1559,14 @@ func validCastTypes(t *types.T) []castInfo {
 	case types.UuidFamily:
 		return uuidCastTypes
 	case types.INetFamily:
-		return inetCastTypes
+		switch t.Oid() {
+		case oid.T_inet:
+			return inetCastTypes
+		case oid.T_cidr:
+			return cidrCastTypes
+		default:
+			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
+		}
 	case types.OidFamily:
 		return oidCastTypes
 	case types.ArrayFamily:

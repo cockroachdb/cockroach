@@ -350,7 +350,6 @@ var (
 		Oid,
 		Uuid,
 		INet,
-		Cidr,
 		Time,
 		TimeTZ,
 		Jsonb,
@@ -1013,7 +1012,7 @@ func (t *T) Name() string {
 		case oid.T_cidr:
 			return "cidr"
 		default:
-			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
 	case IntFamily:
 		switch t.Width() {
@@ -1182,7 +1181,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_cidr:
 			return "cidr"
 		default:
-			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
+			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
 	case IntFamily:
 		switch t.Width() {
