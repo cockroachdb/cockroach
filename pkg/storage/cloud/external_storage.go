@@ -559,6 +559,10 @@ func checkHTTPContentRangeHeader(h string, pos int64) error {
 func (r *resumingHTTPReader) sendRequest(
 	reqHeaders map[string]string,
 ) (resp *http.Response, err error) {
+	// Initialize err to the context.Canceled: if our context is canceled, we will
+	// never enter the loop below; in this case we want to return "nil, canceled"
+	err = context.Canceled
+
 	for attempt, retries := 0,
 		retry.StartWithCtx(r.ctx, httpRetryOptions); retries.Next(); attempt++ {
 		resp, err = r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
@@ -570,7 +574,7 @@ func (r *resumingHTTPReader) sendRequest(
 		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
 
 		if _, ok := err.(*retryableHTTPError); !ok {
-			break
+			return
 		}
 	}
 
