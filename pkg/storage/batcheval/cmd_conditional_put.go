@@ -26,23 +26,23 @@ func init() {
 // the expected value matches. If not, the return value contains
 // the actual value.
 func ConditionalPut(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
 	h := cArgs.Header
 
 	if h.DistinctSpans {
-		if b, ok := batch.(engine.Batch); ok {
+		if b, ok := readWriter.(engine.Batch); ok {
 			// Use the distinct batch for both blind and normal ops so that we don't
 			// accidentally flush mutations to make them visible to the distinct
 			// batch.
-			batch = b.Distinct()
-			defer batch.Close()
+			readWriter = b.Distinct()
+			defer readWriter.Close()
 		}
 	}
 	handleMissing := engine.CPutMissingBehavior(args.AllowIfDoesNotExist)
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
+		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
 	}
-	return result.Result{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
+	return result.Result{}, engine.MVCCConditionalPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, handleMissing, h.Txn)
 }
