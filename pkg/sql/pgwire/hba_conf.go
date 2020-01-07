@@ -113,14 +113,17 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		return err
 	}
 	for _, entry := range conf.Entries {
+		if entry.Type != "host" {
+			return unimplemented.Newf("hba-type-"+entry.Type, "unsupported connection type: %s", entry.Type)
+		}
 		for _, db := range entry.Database {
-			if !db.IsSpecial("all") {
+			if !db.IsKeyword("all") {
 				return errors.WithHint(
 					unimplemented.New("hba-per-db", "per-database HBA rules are not supported"),
 					"Use the special value 'all' (without quotes) to match all databases.")
 			}
 		}
-		if addr, ok := entry.Address.(hba.String); ok && !addr.IsSpecial("all") {
+		if addr, ok := entry.Address.(hba.String); ok && !addr.IsKeyword("all") {
 			return errors.WithHint(
 				unimplemented.New("hba-hostnames", "hostname-based HBA rules are not supported"),
 				"List the numeric CIDR notation instead, for example: 127.0.0.1/8.")

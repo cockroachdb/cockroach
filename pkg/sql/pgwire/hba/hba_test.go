@@ -21,12 +21,33 @@ import (
 
 func TestParse(t *testing.T) {
 	datadriven.RunTest(t, filepath.Join("testdata", "parse"),
-		func(t *testing.T, d *datadriven.TestData) string {
-			conf, err := Parse(d.Input)
-			if err != nil {
-				return fmt.Sprintf("error: %v\n", err)
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "multiline":
+				conf, err := Parse(td.Input)
+				if err != nil {
+					return fmt.Sprintf("error: %v\n", err)
+				}
+				return fmt.Sprintf("%# v", pretty.Formatter(conf))
+
+			case "line":
+				tokens, err := tokenize(td.Input)
+				if err != nil {
+					td.Fatalf(t, "%v", err)
+				}
+				if len(tokens.lines) != 1 {
+					td.Fatalf(t, "line parse only valid with one line of input")
+				}
+				prefix := "" // For debugging, use prefix := pretty.Sprint(tokens.lines[0]) + "\n"
+				entry, err := parseHbaLine(tokens.lines[0])
+				if err != nil {
+					return prefix + fmt.Sprintf("error: %v\n", err)
+				}
+				return prefix + entry.String()
+
+			default:
+				return fmt.Sprintf("unknown directive: %s", td.Cmd)
 			}
-			return fmt.Sprintf("%# v", pretty.Formatter(conf))
 		})
 }
 
