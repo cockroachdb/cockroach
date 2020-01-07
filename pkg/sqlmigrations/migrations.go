@@ -689,61 +689,56 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 	return err
 }
 
+// migrateSystemNamespace migrates entries from the deprecated system.namespace
+// table to the new one, which includes a parentSchemaID column. Each database
+// entry is copied to the new table along with a corresponding entry for the
+// 'public' schema. Each table entry is copied over with the public schema as
+// as its parentSchemaID.
+//
+// New database and table entries continue to be written to the deprecated
+// namespace table until VersionNamespaceTableWithSchemas is active. This means
+// that an additional migration will be necessary in 20.2 to catch any new
+// entries which may have been missed by this one. In the meantime, namespace
+// lookups fall back to the deprecated table if a name is not found in the new
+// one.
 func migrateSystemNamespace(ctx context.Context, r runner) error {
-	// In system.namespace_deprecated, all databases have
-	// parentID == RootNamespaceID. When migrating databases over, the
-	// parentSchemaID is set to RootNamespaceID as well.
-	migrateDatabaseQuery := fmt.Sprintf(`
-INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id)
-(SELECT "parentID", %d, name, id FROM [%d AS namespace_deprecated] WHERE "parentID" = %d) 
-ON CONFLICT DO NOTHING`,
-		sqlbase.NamespaceTable.ID, keys.RootNamespaceID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID,
-	)
-	// An entry for the `public` schema is added for every database in the old
-	// system.namespace table. This entry maps to a static ID of 29.
-	addPublicSchemasQuery := fmt.Sprintf(`
-INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id)
-(SELECT id, %d, 'public', %d FROM [%d AS namespace_deprecated] WHERE "parentID" = %d)
-ON CONFLICT DO NOTHING`,
-		sqlbase.NamespaceTable.ID, keys.RootNamespaceID, keys.PublicSchemaID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID)
-	// In system.namespace_deprecated, all tables are implicitly under the
-	// `public` schema. When migrating tables over, the parentSchemaID is set
-	// to 29.
-	migrateTablesQuery := fmt.Sprintf(`
-INSERT INTO [%d AS namespace]("parentID", "parentSchemaID", name, id) 
-(SELECT "parentID", %d, name, id FROM [%d AS namespace_deprecated] WHERE "parentID" != %d)
-ON CONFLICT DO NOTHING`,
-		sqlbase.NamespaceTable.ID, keys.PublicSchemaID, sqlbase.DeprecatedNamespaceTable.ID, keys.RootNamespaceID,
-	)
-	_, err := r.sqlExecutor.ExecWithUser(
-		ctx,
-		"migrate-system-namespace-databases",
-		nil, /* txn */
-		security.NodeUser,
-		migrateDatabaseQuery,
-	)
+	q := fmt.Sprintf(
+		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
+		sqlbase.DeprecatedNamespaceTable.ID)
+	rows, _, err := r.sqlExecutor.QueryWithUser(
+		ctx, "read-deprecated-namespace-table", nil /* txn */, security.NodeUser, q)
 	if err != nil {
 		return err
 	}
-	_, err = r.sqlExecutor.ExecWithUser(
-		ctx,
-		"migrate-system-namespace-add-public-schemas",
-		nil, /* txn */
-		security.NodeUser,
-		addPublicSchemasQuery,
-	)
-	if err != nil {
-		return err
-	}
-	_, err = r.sqlExecutor.ExecWithUser(
-		ctx,
-		"migrate-system-namespace-tables",
-		nil, /* txn */
-		security.NodeUser,
-		migrateTablesQuery,
-	)
-	if err != nil {
-		return err
+	for _, row := range rows {
+		parentID := sqlbase.ID(tree.MustBeDInt(row[0]))
+		name := string(tree.MustBeDString(row[1]))
+		id := sqlbase.ID(tree.MustBeDInt(row[2]))
+		if parentID == keys.RootNamespaceID {
+			// This row represents a database. Add it to the new namespace table.
+			databaseKey := sqlbase.NewDatabaseKey(name)
+			if err := r.db.Put(ctx, databaseKey.Key(), id); err != nil {
+				return err
+			}
+			// Also create a 'public' schema for this database.
+			schemaKey := sqlbase.NewSchemaKey(id, "public")
+			if err := r.db.Put(ctx, schemaKey.Key(), keys.PublicSchemaID); err != nil {
+				return err
+			}
+		} else {
+			// This row represents a table. Add it to the new namespace table with the
+			// schema set to 'public'.
+			if id == keys.DeprecatedNamespaceTableID {
+				// The namespace table itself was already handled in
+				// createNewSystemNamespaceDescriptor. Do not overwrite it with the
+				// deprecated ID.
+				continue
+			}
+			tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
+			if err := r.db.Put(ctx, tableKey.Key(), id); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

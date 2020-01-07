@@ -359,7 +359,10 @@ var (
 		NextMutationID: 1,
 	}
 
-	// NamespaceTable is the descriptor for the namespace table.
+	// NamespaceTable is the descriptor for the namespace table. Note that this
+	// table should only be written to via KV puts, not via the SQL layer. Some
+	// code assumes that it only has KV entries for column family 4, not the
+	// "sentinel" column family 0 which would be written by SQL.
 	NamespaceTable = TableDescriptor{
 		Name:                    "namespace",
 		ID:                      keys.NamespaceTableID,

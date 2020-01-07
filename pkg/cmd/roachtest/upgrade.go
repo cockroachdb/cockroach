@@ -607,6 +607,13 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 				cv, err)
 		}
 		t.l.Printf("%s: querying a table/db created before upgrade works as expected\n", cv)
+
+		// Ensure that introspection queries still succeed as well. Regression test
+		// for #43616.
+		_, err = db.Query("set database = persistent_db; select * from pg_type")
+		if err != nil {
+			t.Fatalf("pg_type introspection query failed in version %s, got %s", cv, err)
+		}
 	}
 
 	for _, node := range nodes {
