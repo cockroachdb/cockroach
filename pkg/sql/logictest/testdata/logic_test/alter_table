@@ -1027,3 +1027,34 @@ ALTER TABLE TEST1 ADD CONSTRAINT duplicate_name FOREIGN KEY (COL3) REFERENCES TE
 
 statement ok
 DROP TABLE test1; DROP TABLE test2
+
+subtest multiple_set_drop_not_null_inside_txn
+
+statement ok
+CREATE TABLE t1(x INT, y INT);
+
+statement ok
+BEGIN;
+ALTER TABLE t1 ALTER COLUMN x SET NOT NULL;
+ALTER TABLE t1 ALTER COLUMN y SET NOT NULL;
+COMMIT
+
+statement ok
+BEGIN;
+ALTER TABLE t1 ALTER COLUMN x DROP NOT NULL;
+ALTER TABLE t1 ALTER COLUMN y DROP NOT NULL;
+COMMIT
+
+statement ok
+DROP TABLE t1
+
+subtest regression_43092
+
+statement ok
+CREATE TABLE t43092(x INT PRIMARY KEY)
+
+statement error pgcode 42P16 column "x" is in a primary index
+ALTER TABLE t43092 ALTER COLUMN x DROP NOT NULL
+
+statement ok
+DROP TABLE t43092
