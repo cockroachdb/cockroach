@@ -27,18 +27,32 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) *config.ZoneConfig {
 	tab := tc.Table(&tabName)
 
 	// Handle special case of primary index.
+	var index *Index
 	if stmt.TableOrIndex.Index == "" {
-		tab.Indexes[0].IdxZone = makeZoneConfig(stmt.Options)
-		return tab.Indexes[0].IdxZone
+		index = tab.Indexes[0]
 	}
 
 	for _, idx := range tab.Indexes {
 		if idx.IdxName == string(stmt.TableOrIndex.Index) {
-			idx.IdxZone = makeZoneConfig(stmt.Options)
-			return idx.IdxZone
+			index = idx
+			break
 		}
 	}
-	panic(fmt.Errorf("\"%q\" is not an index", stmt.TableOrIndex.Index))
+
+	if index == nil {
+		panic(fmt.Errorf("\"%q\" is not an index", stmt.TableOrIndex.Index))
+	}
+
+	zoneConfig := makeZoneConfig(stmt.Options)
+	if stmt.Partition != "" {
+		if index.PartZones == nil {
+			index.PartZones = make(map[string]*config.ZoneConfig)
+		}
+		index.PartZones[string(stmt.Partition)] = zoneConfig
+	} else {
+		index.IdxZone = zoneConfig
+	}
+	return zoneConfig
 }
 
 // makeZoneConfig constructs a ZoneConfig from options provided to the CONFIGURE

@@ -95,6 +95,7 @@ func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 		f.mem = &memo.Memo{}
 	}
 	f.mem.Init(evalCtx)
+	f.mem.AddNodes(catalog)
 
 	f.evalCtx = evalCtx
 	f.catalog = catalog

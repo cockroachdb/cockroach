@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -75,11 +76,16 @@ type coster struct {
 	//
 	locality roachpb.Locality
 
+	// nodeID is the ID of the current node.
+	nodeID roachpb.NodeID
+
 	// perturbation indicates how much to randomly perturb the cost. It is used
 	// to generate alternative plans for testing. For example, if perturbation is
 	// 0.5, and the estimated cost of an expression is c, the cost returned by
 	// ComputeCost will be in the range [c - 0.5 * c, c + 0.5 * c).
 	perturbation float64
+
+	evalCtx *tree.EvalContext
 }
 
 var _ Coster = &coster{}
@@ -128,8 +134,10 @@ const (
 
 // Init initializes a new coster structure with the given memo.
 func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64) {
+	c.evalCtx = evalCtx
 	c.mem = mem
 	c.locality = evalCtx.Locality
+	c.nodeID = evalCtx.NodeID
 	c.perturbation = perturbation
 }
 
@@ -280,6 +288,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
+	additionalCost := c.additionalScanCost(scan.Partitioning, c.nodeID)
 
 	if ordering.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
@@ -295,7 +304,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
 		preferConstrainedScanCost = cpuCostFactor
 	}
-	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
+	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost + additionalCost
 }
 
 func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {
@@ -391,7 +400,10 @@ func (c *coster) computeIndexJoinCost(join *memo.IndexJoinExpr) memo.Cost {
 	// counts as random I/O.
 	perRowCost := cpuCostFactor + randIOCostFactor +
 		c.rowScanCost(join.Table, cat.PrimaryIndex, join.Cols.Len())
-	return memo.Cost(leftRowCount) * perRowCost
+	p := c.primaryIndexPartitioning(join)
+	nodeID := c.inputNode(join)
+	additionalCost := c.additionalScanCost(p, nodeID)
+	return memo.Cost(leftRowCount)*perRowCost + additionalCost
 }
 
 func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
@@ -610,6 +622,22 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	return memo.Cost(numCols+numScannedCols) * costFactor
 }
 
+// additionalScanCost returns the additional cost of scanning an index due to
+// the way data is physically partitioned across nodes. The given nodeID is the
+// node from which the scan request originates.
+func (c *coster) additionalScanCost(
+	partitioning *physical.Partitioning, nodeID roachpb.NodeID,
+) memo.Cost {
+	var additionalCost memo.Cost
+	if c.nodeID != 0 {
+		adjustment := 1.0 - c.nodeMatchScore(partitioning, nodeID)
+		// TODO(rytaft): make this less arbitrary.
+		additionalCost += 10 * randIOCostFactor * memo.Cost(adjustment)
+	}
+
+	return additionalCost
+}
+
 // localityMatchScore returns a number from 0.0 to 1.0 that describes how well
 // the current node's locality matches the given zone constraints and
 // leaseholder preferences, with 0.0 indicating 0% and 1.0 indicating 100%. This
@@ -760,4 +788,90 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 
 	// Weight the constraintScore twice as much as the lease score.
 	return (constraintScore*2 + leaseScore) / 3
+}
+
+func (c *coster) nodeMatchScore(
+	partitioning *physical.Partitioning, nodeID roachpb.NodeID,
+) float64 {
+	nodes := partitioning.Nodes()
+
+	if nodes.Len() == 1 {
+		id, _ := nodes.Next(0)
+		if nodeID == c.mem.Metadata().NodeMeta(opt.NodeID(id)).Node.ID() {
+			return 1
+		}
+	}
+
+	// TODO(rytaft): Fix this to take the locality match into account.
+	return 0
+}
+
+// primaryIndexPartitioning returns the partitioning of the primary index
+// (i.e., the lookup table) for the given index join. If the input is a
+// constrained scan, it may be possible to return a constrained partitioning.
+// Otherwise, primaryIndexPartitioning returns the full partitioning for the
+// primary index.
+func (c *coster) primaryIndexPartitioning(join *memo.IndexJoinExpr) *physical.Partitioning {
+	md := c.mem.Metadata()
+	index := md.Table(join.Table).Index(cat.PrimaryIndex)
+
+	scan, ok := join.Input.(*memo.ScanExpr)
+	if !ok || scan.Constraint == nil {
+		return physical.NewPartitioning(c.evalCtx, md, index)
+	}
+
+	// Try to constrain the primary index based on the input scan constraint.
+	// TODO(rytaft): If possible, use a histogram on the first primary key column
+	// rather than the input scan constraint.
+	var pkCS *constraint.Constraint
+	exactPrefix := scan.Constraint.ExactPrefix(c.evalCtx)
+	var vals tree.Datums
+	var cols []opt.OrderingColumn
+	for i := 0; i < index.ColumnCount(); i++ {
+		found := false
+		for j := 0; j < exactPrefix; j++ {
+			colID := join.Table.ColumnID(i)
+			if scan.Constraint.Columns.Get(j).ID() == colID {
+				// Since this is within the exact prefix, the start and end keys are
+				// the same.
+				vals = append(vals, scan.Constraint.Spans.Get(0).StartKey().Value(j))
+				cols = append(cols, opt.MakeOrderingColumn(colID, index.Column(i).Descending))
+				found = true
+				break
+			}
+		}
+		if !found {
+			break
+		}
+	}
+
+	if len(vals) > 0 {
+		var columns constraint.Columns
+		columns.Init(cols)
+		keyCtx := constraint.MakeKeyContext(&columns, c.evalCtx)
+
+		var pkSpan constraint.Span
+		key := constraint.MakeCompositeKey(vals...)
+		pkSpan.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+
+		var pkCSImpl constraint.Constraint
+		pkCSImpl.InitSingleSpan(&keyCtx, &pkSpan)
+		pkCS = &pkCSImpl
+	}
+
+	return physical.NewConstrainedPartitioning(c.evalCtx, md, index, pkCS)
+}
+
+// inputNode returns the node containing the input to the given index join.
+// If a single node cannot be identified, returns the current node.
+func (c *coster) inputNode(join *memo.IndexJoinExpr) roachpb.NodeID {
+	nodeID := c.nodeID
+	if scan, ok := join.Input.(*memo.ScanExpr); ok {
+		nodes := scan.Partitioning.Nodes()
+		if nodes.Len() == 1 {
+			id, _ := nodes.Next(0)
+			nodeID = c.mem.Metadata().NodeMeta(opt.NodeID(id)).Node.ID()
+		}
+	}
+	return nodeID
 }

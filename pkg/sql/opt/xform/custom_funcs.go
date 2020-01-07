@@ -84,6 +84,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		if iter.isCovering() {
 			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
 			scan.Index = iter.indexOrdinal
+			scan.Partitioning = physical.NewPartitioning(c.e.evalCtx, c.e.mem.Metadata(), iter.index)
 			c.e.mem.AddScanToGroup(&scan, grp)
 			continue
 		}
@@ -103,6 +104,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// the PK columns.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Partitioning = physical.NewPartitioning(c.e.evalCtx, c.e.mem.Metadata(), iter.index)
 		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
 		sb.setScan(&newScanPrivate)
@@ -317,6 +319,9 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
 		newScanPrivate.Constraint = constraint
+		newScanPrivate.Partitioning = physical.NewConstrainedPartitioning(
+			c.e.evalCtx, c.e.mem.Metadata(), iter.index, constraint,
+		)
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = isIndexPartitioned
 
@@ -864,6 +869,9 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
 		newScanPrivate.Constraint = constraint
+		newScanPrivate.Partitioning = physical.NewConstrainedPartitioning(
+			c.e.evalCtx, c.e.mem.Metadata(), iter.index, constraint,
+		)
 
 		// Though the index is marked as containing the JSONB column being
 		// indexed, it doesn't actually, and it's only valid to extract the
@@ -1083,6 +1091,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	for iter.next() {
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Partitioning = physical.NewPartitioning(c.e.evalCtx, c.e.mem.Metadata(), iter.index)
 
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match

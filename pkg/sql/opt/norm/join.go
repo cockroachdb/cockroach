@@ -633,7 +633,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 				continue
 			}
 
-			indexRightCol := rightTab.ColumnID(fkRef.ReferencedColumnOrdinal(fkTable, j))
+			indexRightCol := rightTab.ColumnID(fkRef.ReferencedColumnOrdinal(fkTable.Table, j))
 
 			if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
 				fkMatch = false

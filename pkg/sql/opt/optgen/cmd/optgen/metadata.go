@@ -174,6 +174,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"FuncProps":      {fullName: "*tree.FunctionProperties", isPointer: true, usePointerIntern: true},
 		"FuncOverload":   {fullName: "*tree.Overload", isPointer: true, usePointerIntern: true},
 		"PhysProps":      {fullName: "*physical.Required", isPointer: true},
+		"Partitioning":   {fullName: "*physical.Partitioning", isPointer: true, usePointerIntern: true},
 		"Presentation":   {fullName: "physical.Presentation", passByVal: true},
 		"RelProps":       {fullName: "props.Relational"},
 		"RelPropsPtr":    {fullName: "*props.Relational", isPointer: true, usePointerIntern: true},
