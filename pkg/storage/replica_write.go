@@ -321,7 +321,10 @@ func (r *Replica) evaluateWriteBatch(
 		}
 
 		batch.Close()
-		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2,
+				"1PC execution failed, reverting to regular execution for batch. pErr: %v", pErr.String())
+		}
 	}
 
 	rec := NewReplicaEvalContext(r, spans)
