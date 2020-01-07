@@ -76,6 +76,22 @@ const (
 	defaultLocalityValue     = "default"
 )
 
+// TODO(pbardea): We should move to a model of having the system tables opt-
+// {in,out} of being included in a full cluster backup. See #43781.
+var fullClusterSystemTables = []string{
+	// System config tables.
+	sqlbase.UsersTable.Name,
+	sqlbase.ZonesTable.Name,
+	sqlbase.SettingsTable.Name,
+	// Rest of system tables.
+	sqlbase.LocationsTable.Name,
+	sqlbase.RoleMembersTable.Name,
+	sqlbase.UITable.Name,
+	sqlbase.CommentsTable.Name,
+	sqlbase.JobsTable.Name,
+	// Table statistics are backed up in the backup descriptor for now.
+}
+
 var useTBI = settings.RegisterBoolSetting(
 	"kv.bulk_io_write.experimental_incremental_export_enabled",
 	"use experimental time-bound file filter when exporting in BACKUP",
@@ -629,11 +645,19 @@ func loadAllDescs(
 // ResolveTargetsToDescriptors performs name resolution on a set of targets and
 // returns the resulting descriptors.
 func ResolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
+	ctx context.Context,
+	p sql.PlanHookState,
+	endTime hlc.Timestamp,
+	targets tree.TargetList,
+	descriptorCoverage tree.DescriptorCoverage,
 ) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
 	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if descriptorCoverage == tree.AllDescriptors {
+		return fullClusterTargetsBackup(allDescs)
 	}
 
 	var matched descriptorsMatched
@@ -646,6 +670,60 @@ func ResolveTargetsToDescriptors(
 	// created before their children, simply sorting by ID accomplishes this.
 	sort.Slice(matched.descs, func(i, j int) bool { return matched.descs[i].GetID() < matched.descs[j].GetID() })
 	return matched.descs, matched.expandedDB, nil
+}
+
+// fullClusterTargetsBackup returns the same descriptors referenced in
+// fullClusterTargets, but rather than returning the entire database
+// descriptor as the second argument, it only returns their IDs.
+func fullClusterTargetsBackup(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	fullClusterDBIDs := make([]sqlbase.ID, 0)
+	for _, desc := range fullClusterDBs {
+		fullClusterDBIDs = append(fullClusterDBIDs, desc.GetID())
+	}
+	return fullClusterDescs, fullClusterDBIDs, nil
+}
+
+// fullClusterTargets returns all of the tableDescriptors to be included in a
+// full cluster backup, and all the user databases.
+func fullClusterTargets(
+	allDescs []sqlbase.Descriptor,
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+	fullClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
+	fullClusterDBs := make([]*sqlbase.DatabaseDescriptor, 0)
+
+	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
+	for _, tableName := range fullClusterSystemTables {
+		systemTablesToBackup[tableName] = struct{}{}
+	}
+
+	for _, desc := range allDescs {
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			fullClusterDescs = append(fullClusterDescs, desc)
+			fullClusterDBs = append(fullClusterDBs, dbDesc)
+		}
+		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+			if tableDesc.ParentID == sqlbase.SystemDB.ID {
+				// Add only the system tables that we plan to include in a full cluster
+				// backup.
+				if _, ok := systemTablesToBackup[tableDesc.Name]; ok {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			} else {
+				// Add all user tables that are not in a DROP state.
+				if tableDesc.State != sqlbase.TableDescriptor_DROP {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			}
+		}
+	}
+	return fullClusterDescs, fullClusterDBs, nil
 }
 
 type spanAndTime struct {
@@ -1057,7 +1135,7 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets, backupStmt.DescriptorCoverage)
 		if err != nil {
 			return err
 		}
@@ -1215,19 +1293,20 @@ func backupPlanHook(
 		// of requiring full backups after schema changes remains.
 
 		backupDesc := BackupDescriptor{
-			StartTime:         startTime,
-			EndTime:           endTime,
-			MVCCFilter:        mvccFilter,
-			Descriptors:       targetDescs,
-			DescriptorChanges: revs,
-			CompleteDbs:       completeDBs,
-			Spans:             spans,
-			IntroducedSpans:   newSpans,
-			FormatVersion:     BackupFormatDescriptorTrackingVersion,
-			BuildInfo:         build.GetInfo(),
-			NodeID:            p.ExecCfg().NodeID.Get(),
-			ClusterID:         p.ExecCfg().ClusterID(),
-			Statistics:        tableStatistics,
+			StartTime:          startTime,
+			EndTime:            endTime,
+			MVCCFilter:         mvccFilter,
+			Descriptors:        targetDescs,
+			DescriptorChanges:  revs,
+			CompleteDbs:        completeDBs,
+			Spans:              spans,
+			IntroducedSpans:    newSpans,
+			FormatVersion:      BackupFormatDescriptorTrackingVersion,
+			BuildInfo:          build.GetInfo(),
+			NodeID:             p.ExecCfg().NodeID.Get(),
+			ClusterID:          p.ExecCfg().ClusterID(),
+			Statistics:         tableStatistics,
+			DescriptorCoverage: backupStmt.DescriptorCoverage,
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time

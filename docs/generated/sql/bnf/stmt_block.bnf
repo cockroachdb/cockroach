@@ -95,7 +95,8 @@ alter_stmt ::=
 	| alter_user_stmt
 
 backup_stmt ::=
-	'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+	| 'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
