@@ -27,7 +27,7 @@ func init() {
 // RefreshRange checks whether the key range specified has any values written in
 // the interval [args.RefreshFrom, header.Timestamp].
 func RefreshRange(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRangeRequest)
 	h := cArgs.Header
@@ -58,7 +58,7 @@ func RefreshRange(
 	// that we include tombstones, which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
 	intents, err := engine.MVCCIterate(
-		ctx, batch, args.Key, args.EndKey, refreshTo,
+		ctx, reader, args.Key, args.EndKey, refreshTo,
 		engine.MVCCScanOptions{
 			Inconsistent: true,
 			Tombstones:   true,

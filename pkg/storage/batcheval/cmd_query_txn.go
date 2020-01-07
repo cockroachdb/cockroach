@@ -43,7 +43,7 @@ func declareKeysQueryTransaction(
 // other txns which are waiting on this transaction in order
 // to find dependency cycles.
 func QueryTxn(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryTxnRequest)
 	h := cArgs.Header
@@ -68,7 +68,7 @@ func QueryTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.Timestamp{}, &reply.QueriedTxn, engine.MVCCGetOptions{},
+		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, engine.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {

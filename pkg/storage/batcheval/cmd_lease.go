@@ -90,7 +90,7 @@ func checkCanReceiveLease(newLease *roachpb.Lease, rec EvalContext) error {
 func evalNewLease(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
@@ -157,7 +157,7 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := MakeStateLoader(rec).SetLease(ctx, batch, ms, lease); err != nil {
+	if err := MakeStateLoader(rec).SetLease(ctx, readWriter, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 

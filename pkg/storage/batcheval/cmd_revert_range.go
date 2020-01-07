@@ -62,7 +62,7 @@ func isEmptyKeyTimeRange(
 // Note: this should only be used when there is no user traffic writing to the
 // target span at or above the target time.
 func RevertRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute RevertRange within a transaction")
@@ -78,7 +78,7 @@ func RevertRange(
 	}
 
 	if empty, err := isEmptyKeyTimeRange(
-		batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
+		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	} else if empty {
@@ -89,7 +89,7 @@ func RevertRange(
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resume, err := engine.MVCCClearTimeRange(
-		ctx, batch, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
+		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
 	)
 	if err != nil {
 		return result.Result{}, err
