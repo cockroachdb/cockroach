@@ -1046,7 +1046,8 @@ func applyColumnMutation(
 		// See if there's already a mutation to add a not null constraint
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
-				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL &&
+				constraint.NotNullColumn == col.ID {
 				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint in the middle of being added")
@@ -1071,10 +1072,18 @@ func applyColumnMutation(
 		if col.Nullable {
 			return nil
 		}
+
+		// Prevent a column in a primary key from becoming non-null.
+		if tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+			return pgerror.Newf(pgcode.InvalidTableDefinition,
+				`column "%s" is in a primary index`, col.Name)
+		}
+
 		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
-				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL {
+				constraint.ConstraintType == sqlbase.ConstraintToUpdate_NOT_NULL &&
+				constraint.NotNullColumn == col.ID {
 				if tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_ADD {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint in the middle of being added, try again later")
