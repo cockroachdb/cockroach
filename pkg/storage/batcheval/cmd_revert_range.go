@@ -39,13 +39,13 @@ func declareKeysRevertRange(
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
 func isEmptyKeyTimeRange(
-	batch engine.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
+	readWriter engine.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
 ) (bool, error) {
-	// Use a TBI to check if there is anyting to delete -- the first key Seek hits
+	// Use a TBI to check if there is anything to delete -- the first key Seek hits
 	// may not be in the time range but the fact the TBI found any key indicates
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
-	iter := batch.NewIterator(engine.IterOptions{
+	iter := readWriter.NewIterator(engine.IterOptions{
 		LowerBound: from, UpperBound: to,
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
 	})
@@ -62,7 +62,7 @@ func isEmptyKeyTimeRange(
 // Note: this should only be used when there is no user traffic writing to the
 // target span at or above the target time.
 func RevertRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute RevertRange within a transaction")
@@ -78,7 +78,7 @@ func RevertRange(
 	}
 
 	if empty, err := isEmptyKeyTimeRange(
-		batch, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
+		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	} else if empty {
@@ -89,7 +89,7 @@ func RevertRange(
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resume, err := engine.MVCCClearTimeRange(
-		ctx, batch, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
+		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp, cArgs.MaxKeys,
 	)
 	if err != nil {
 		return result.Result{}, err

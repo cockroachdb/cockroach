@@ -24,7 +24,7 @@ func init() {
 
 // RangeStats returns the MVCC statistics for a range.
 func RangeStats(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	_ context.Context, _ engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()

@@ -25,13 +25,13 @@ func init() {
 
 // Get returns the value for a specified key.
 func Get(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GetRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, engine.MVCCGetOptions{
+	val, intent, err := engine.MVCCGet(ctx, reader, args.Key, h.Timestamp, engine.MVCCGetOptions{
 		Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:          h.Txn,
 	})
@@ -46,7 +46,7 @@ func Get(
 	reply.Value = val
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
-		intentVals, err = CollectIntentRows(ctx, batch, cArgs, intents)
+		intentVals, err = CollectIntentRows(ctx, reader, cArgs, intents)
 		if err == nil {
 			switch len(intentVals) {
 			case 0:

@@ -135,10 +135,6 @@ func optimizePuts(
 // evaluateBatch evaluates a batch request by splitting it up into its
 // individual commands, passing them to evaluateCommand, and combining
 // the results.
-//
-// TODO(irfansharif): We should tease out usages of `engine.Batch` in proposer
-// evaluated KV code-paths that are currently masked under `engine.ReadWriter`,
-// and only accept the more specific interface.
 func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,

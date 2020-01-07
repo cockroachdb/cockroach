@@ -28,7 +28,7 @@ func init() {
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func ReverseScan(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ReverseScanRequest)
 	h := cArgs.Header
@@ -43,7 +43,7 @@ func ReverseScan(
 		var kvData [][]byte
 		var numKvs int64
 		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
-			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
+			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
 			engine.MVCCScanOptions{
 				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 				Txn:          h.Txn,
@@ -57,7 +57,7 @@ func ReverseScan(
 	case roachpb.KEY_VALUES:
 		var rows []roachpb.KeyValue
 		rows, resumeSpan, intents, err = engine.MVCCScan(
-			ctx, batch, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
+			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
 				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 				Txn:          h.Txn,
 				Reverse:      true,
@@ -77,7 +77,7 @@ func ReverseScan(
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
-		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
+		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, intents)
 	}
 	return result.FromEncounteredIntents(intents), err
 }

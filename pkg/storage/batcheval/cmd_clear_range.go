@@ -53,7 +53,7 @@ func declareKeysClearRange(
 // or queried any more, such as after a DROP or TRUNCATE table, or
 // DROP index.
 func ClearRange(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute ClearRange within a transaction")
@@ -67,7 +67,7 @@ func ClearRange(
 	var pd result.Result
 
 	// Before clearing, compute the delta in MVCCStats.
-	statsDelta, err := computeStatsDelta(ctx, batch, cArgs, from, to)
+	statsDelta, err := computeStatsDelta(ctx, readWriter, cArgs, from, to)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -78,9 +78,9 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
-		if err := batch.Iterate(from, to,
+		if err := readWriter.Iterate(from, to,
 			func(kv engine.MVCCKeyValue) (bool, error) {
-				return false, batch.Clear(kv.Key)
+				return false, readWriter.Clear(kv.Key)
 			},
 		); err != nil {
 			return result.Result{}, err
@@ -100,7 +100,7 @@ func ClearRange(
 			},
 		},
 	}
-	if err := batch.ClearRange(engine.MakeMVCCMetadataKey(from),
+	if err := readWriter.ClearRange(engine.MakeMVCCMetadataKey(from),
 		engine.MakeMVCCMetadataKey(to)); err != nil {
 		return result.Result{}, err
 	}
@@ -116,7 +116,7 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
@@ -137,7 +137,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled,
 	// compute stats across the key span to be cleared.
 	if !fast || util.RaceEnabled {
-		iter := batch.NewIterator(engine.IterOptions{UpperBound: to})
+		iter := readWriter.NewIterator(engine.IterOptions{UpperBound: to})
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {
