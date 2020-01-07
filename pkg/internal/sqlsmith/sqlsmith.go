@@ -351,4 +351,8 @@ var PostgresMode = multiOption(
 	// Some func impls differ from postgres, so skip them here.
 	// #41709
 	IgnoreFNs("^sha"),
+	// We use e'XX' instead of E'XX' for hex strings, so ignore these.
+	IgnoreFNs("^quote"),
+	// We have some differences here with empty string and "default"; skip until fixed.
+	IgnoreFNs("^pg_collation_for"),
 )

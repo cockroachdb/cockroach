@@ -20,12 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // Conn holds gosql and pgx connections.
@@ -102,7 +99,7 @@ func (c *Conn) Exec(ctx context.Context, s string) error {
 
 // Values executes prep and exec and returns the results of exec. Mutators
 // passed in during NewConn are applied only to exec.
-func (c *Conn) Values(ctx context.Context, prep, exec string) ([][]interface{}, error) {
+func (c *Conn) Values(ctx context.Context, prep, exec string) (*pgx.Rows, error) {
 	if prep != "" {
 		rows, err := c.PGX.QueryEx(ctx, prep, simpleProtocol)
 		if err != nil {
@@ -111,69 +108,72 @@ func (c *Conn) Values(ctx context.Context, prep, exec string) ([][]interface{}, 
 		rows.Close()
 	}
 	exec, _ = mutations.ApplyString(c.rng, exec, c.sqlMutators...)
-	rows, err := c.PGX.QueryEx(ctx, exec, simpleProtocol)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var vals [][]interface{}
-	for rows.Next() {
-		row, err := rows.Values()
-		if err != nil {
-			return nil, err
-		}
-		vals = append(vals, row)
-	}
-	return vals, rows.Err()
+	return c.PGX.QueryEx(ctx, exec, simpleProtocol)
 }
 
 var simpleProtocol = &pgx.QueryExOptions{SimpleProtocol: true}
 
 // CompareConns executes prep and exec on all connections in conns. If any
-// differ, an error is returned.
+// differ, an error is returned. SQL errors are ignored.
 func CompareConns(
 	ctx context.Context, timeout time.Duration, conns map[string]*Conn, prep, exec string,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	g, ctx := errgroup.WithContext(ctx)
-	vvs := map[string][][]interface{}{}
-	var lock syncutil.Mutex
-	for name := range conns {
-		name := name
-		g.Go(func() error {
-			conn := conns[name]
-			vals, err := conn.Values(ctx, prep, exec)
-			if err != nil {
-				return errors.Wrap(err, name)
-			}
-			lock.Lock()
-			vvs[name] = vals
-			lock.Unlock()
-			return nil
-		})
-	}
-	err := g.Wait()
-	if err != nil {
-		fmt.Println("ERR:", err)
-		// We don't care about SQL errors because sqlsmith sometimes
-		// produces bogus queries.
-		return nil
-	}
-	var first [][]interface{}
-	var firstName string
-	for name, vals := range vvs {
-		if first == nil {
-			first = vals
-			firstName = name
-			continue
-		}
-		compareStart := timeutil.Now()
-		fmt.Printf("comparing %s to %s...", firstName, name)
-		err := CompareVals(first, vals)
-		fmt.Printf(" %s\n", timeutil.Since(compareStart))
+	connRows := make(map[string]*pgx.Rows)
+	for name, conn := range conns {
+		rows, err := conn.Values(ctx, prep, exec)
 		if err != nil {
-			return err
+			return nil //nolint:returnerrcheck
+		}
+		defer rows.Close()
+		connRows[name] = rows
+	}
+	var first []interface{}
+	var firstName string
+	var minCount int
+	rowCounts := make(map[string]int)
+ReadRows:
+	for {
+		first = nil
+		firstName = ""
+		for name, rows := range connRows {
+			if !rows.Next() {
+				minCount = rowCounts[name]
+				break ReadRows
+			}
+			rowCounts[name]++
+			vals, err := rows.Values()
+			if err != nil {
+				// This function can fail if, for example,
+				// a number doesn't fit into a float64. Ignore
+				// them and move along to another query.
+				return nil //nolint:returnerrcheck
+			}
+			if firstName == "" {
+				firstName = name
+				first = vals
+			} else {
+				if err := CompareVals(first, vals); err != nil {
+					return fmt.Errorf("compare %s to %s:\n%v", firstName, name, err)
+				}
+			}
+		}
+	}
+	// Make sure all are empty.
+	for name, rows := range connRows {
+		for rows.Next() {
+			rowCounts[name]++
+		}
+		if err := rows.Err(); err != nil {
+			// Aww someone had a SQL error maybe, so we can't use this query.
+			return nil //nolint:returnerrcheck
+		}
+	}
+	// Ensure each connection returned the same number of rows.
+	for name, count := range rowCounts {
+		if minCount != count {
+			return fmt.Errorf("%s had %d rows, expected %d", name, count, minCount)
 		}
 	}
 	return nil
