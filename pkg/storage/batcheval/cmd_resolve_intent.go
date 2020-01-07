@@ -22,7 +22,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.ResolveIntent, declareKeysResolveIntent, ResolveIntent)
+	RegisterReadWriteCommand(roachpb.ResolveIntent, declareKeysResolveIntent, ResolveIntent)
 }
 
 func declareKeysResolveIntentCombined(

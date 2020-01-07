@@ -372,7 +372,7 @@ func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
 }
 
 func benchmarkIterOnReadWriter(
-	ctx context.Context, b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
+	b *testing.B, writes int, f func(Engine) ReadWriter, closeReadWriter bool,
 ) {
 	engine := createTestRocksDBEngine()
 	defer engine.Close()

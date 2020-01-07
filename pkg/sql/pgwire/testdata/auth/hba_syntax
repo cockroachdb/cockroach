@@ -1,7 +1,7 @@
 set_hba
 bad
 ----
-ERROR: entry 1 invalid
+ERROR: line 1: end-of-line before database specification (SQLSTATE F0000)
 
 set_hba
 #empty
@@ -11,7 +11,7 @@ ERROR: no entries
 set_hba
 host all all 1.1.1/0 cert
 ----
-ERROR: invalid CIDR address: 1.1.1/0
+ERROR: line 1: invalid CIDR address: 1.1.1/0 (SQLSTATE F0000)
 
 set_hba
 host all all 0.0.0.0/0 invalid

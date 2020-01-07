@@ -12216,10 +12216,10 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 	}
 
 	batcheval.UnregisterCommand(roachpb.Put)
-	batcheval.RegisterCommand(roachpb.Put, batcheval.DefaultDeclareKeys, mockPut)
+	batcheval.RegisterReadWriteCommand(roachpb.Put, batcheval.DefaultDeclareKeys, mockPut)
 	return func() {
 		batcheval.UnregisterCommand(roachpb.Put)
-		batcheval.RegisterCommand(roachpb.Put, prev.DeclareKeys, prev.Eval)
+		batcheval.RegisterReadWriteCommand(roachpb.Put, prev.DeclareKeys, prev.EvalRW)
 	}
 }
 
