@@ -1493,6 +1493,7 @@ func (ef *execFactory) ConstructUpsert(
 	returnColOrdSet exec.ColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
+	skipFKChecks bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1501,15 +1502,21 @@ func (ef *execFactory) ConstructUpsert(
 	fetchColDescs := makeColDescList(table, fetchColOrdSet)
 	updateColDescs := makeColDescList(table, updateColOrdSet)
 
+	var fkTables row.FkTableMetadata
+	checkFKs := row.SkipFKs
+	if !skipFKChecks {
+		checkFKs = row.CheckFKs
+	}
 	// Determine the foreign key tables involved in the upsert.
-	fkTables, err := ef.makeFkMetadata(tabDesc, row.CheckUpdates)
+	var err error
+	fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
-		ef.planner.txn, tabDesc, insertColDescs, row.CheckFKs, fkTables, &ef.planner.alloc,
+		ef.planner.txn, tabDesc, insertColDescs, checkFKs, fkTables, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1527,6 +1534,7 @@ func (ef *execFactory) ConstructUpsert(
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
+		// TODO(justin): make this conditional on skipFKChecks once we emit the update checks.
 		row.CheckFKs,
 		ef.planner.EvalContext(),
 		&ef.planner.alloc,
