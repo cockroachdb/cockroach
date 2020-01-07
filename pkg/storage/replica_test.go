@@ -9096,13 +9096,18 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	// the DistSender, because we want to inspect the proposal's result after the
 	// injected error.
 	txn := newTransaction("test", key, roachpb.NormalUserPriority, s.Clock())
+	// Increase the sequence to make it look like there have been some writes.
+	// This fits with the IntentSpans that we're going to set on the EndTxn.
+	// Without properly setting the sequence number, the EndTxn batch would
+	// erroneously execute as a 1PC.
+	txn.Sequence++
 	etArgs, _ := endTxnArgs(txn, true /* commit */)
 	etArgs.IntentSpans = []roachpb.Span{{Key: roachpb.Key("bb")}}
 	var ba roachpb.BatchRequest
-	ba.Timestamp = s.Clock().Now()
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
 	assignSeqNumsForReqs(txn, &etArgs)
+	require.NoError(t, ba.SetActiveTimestamp(func() hlc.Timestamp { return hlc.Timestamp{} }))
 	// Get a reference to the txn's replica.
 	stores := s.GetStores().(*Stores)
 	store, err := stores.GetStore(s.GetFirstStoreID())
