@@ -33,7 +33,7 @@ import (
 // e.g. in the CCL modules to add support for GSS authentication using
 // Kerberos.
 
-func init() {
+func loadDefaultMethods() {
 	// The "password" method requires a clear text password.
 	//
 	// Care should be taken by administrators to only accept this auth

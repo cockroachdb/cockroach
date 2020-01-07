@@ -9,12 +9,13 @@ config secure
 ----
 
 set_hba
-host all root 0.0.0.0/0 cert
-host all all 0.0.0.0/0 cert-password
+host all root all cert
+host all all all cert-password
 ----
-# Cache of the HBA configuration on this node:
-host all root 0.0.0.0/0 cert
-host all all 0.0.0.0/0 cert-password
+# Active authentication configuration on this node:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert
+host   all      all  all     cert-password
 
 subtest root
 
