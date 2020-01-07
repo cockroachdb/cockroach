@@ -99,6 +99,9 @@ func main() {
 	for name, db := range opts.Databases {
 		var err error
 		mutators := enableMutations(opts.Databases[name].AllowMutations, sqlMutators)
+		if opts.Postgres {
+			mutators = append(mutators, mutations.PostgresMutator)
+		}
 		conns[name], err = cmpconn.NewConn(
 			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
 		if err != nil {
@@ -176,20 +179,6 @@ func main() {
 			}
 			fmt.Fprintf(&sb, ");")
 			exec = sb.String()
-		}
-		if opts.Postgres {
-			// TODO(mjibson): move these into sqlsmith.
-			for from, to := range map[string]string{
-				":::":    "::",
-				"STRING": "TEXT",
-				"BYTES":  "BYTEA",
-				"FLOAT4": "FLOAT8",
-				"INT2":   "INT8",
-				"INT4":   "INT8",
-			} {
-				prep = strings.Replace(prep, from, to, -1)
-				exec = strings.Replace(exec, from, to, -1)
-			}
 		}
 		if compare {
 			if err := cmpconn.CompareConns(ctx, timeout, conns, prep, exec); err != nil {
