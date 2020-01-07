@@ -559,17 +559,22 @@ func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Gener
 
 		ctx := context.TODO()
 		var l workloadsql.InsertsDataLoader
+		if cliCtx.isInteractive {
+			fmt.Printf("#\n# Beginning initialization of the %s dataset, please wait...\n", gen.Meta().Name)
+		}
 		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 			return err
 		}
-
 		// Perform partitioning if requested by configuration.
 		if demoCtx.geoPartitionedReplicas {
 			// Wait until the license has been acquired to trigger partitioning.
-			fmt.Println("#\n# Waiting for license acquisition to complete...")
+			if cliCtx.isInteractive {
+				fmt.Println("#\n# Waiting for license acquisition to complete...")
+			}
 			<-licenseDone
-
-			fmt.Println("#\n# Partitioning the demo database, please wait...")
+			if cliCtx.isInteractive {
+				fmt.Println("#\n# Partitioning the demo database, please wait...")
+			}
 
 			db, err := gosql.Open("postgres", c.connURL)
 			if err != nil {
