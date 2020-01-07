@@ -423,12 +423,14 @@ func FindFKReferencedIndex(
 ) (*IndexDescriptor, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
-	if ColumnIDs(referencedTable.PrimaryIndex.ColumnIDs).HasPrefix(referencedColIDs) {
+	if len(referencedTable.PrimaryIndex.ColumnIDs) == len(referencedColIDs) &&
+		ColumnIDs(referencedTable.PrimaryIndex.ColumnIDs).HasPrefix(referencedColIDs) {
 		return &referencedTable.PrimaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
 	for _, idx := range referencedTable.Indexes {
-		if idx.Unique && ColumnIDs(idx.ColumnIDs).HasPrefix(referencedColIDs) {
+		if idx.Unique && len(idx.ColumnIDs) == len(referencedColIDs) &&
+			ColumnIDs(idx.ColumnIDs).HasPrefix(referencedColIDs) {
 			return &idx, nil
 		}
 	}
