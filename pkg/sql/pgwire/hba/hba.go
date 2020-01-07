@@ -76,7 +76,8 @@ func (h Entry) GetOptions(name string) []string {
 
 func (h Entry) String() string {
 	var sb strings.Builder
-	sb.WriteString("host ")
+	sb.WriteString(h.Type)
+	sb.WriteByte(' ')
 	comma := ""
 	for _, s := range h.Database {
 		sb.WriteString(comma)
@@ -90,7 +91,11 @@ func (h Entry) String() string {
 		sb.WriteString(s.String())
 		comma = ","
 	}
-	fmt.Fprintf(&sb, " %s %s", h.Address, h.Method)
+	if h.Type != "local" {
+		fmt.Fprintf(&sb, " %s", h.Address)
+	}
+	sb.WriteByte(' ')
+	sb.WriteString(h.Method)
 	for _, opt := range h.Options {
 		fmt.Fprintf(&sb, " %s=%s", opt[0], opt[1])
 	}
@@ -110,7 +115,10 @@ func (s String) String() string {
 	return s.Value
 }
 
-// IsSpecial returns whether s is the non-quoted string v.
-func (s String) IsSpecial(v string) bool {
+// Empty returns true iff s is the unquoted empty string.
+func (s String) Empty() bool { return s.IsKeyword("") }
+
+// IsKeyword returns whether s is the non-quoted string v.
+func (s String) IsKeyword(v string) bool {
 	return !s.Quoted && s.Value == v
 }

@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
+	RegisterReadWriteCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
 }
 
 func declareKeysResolveIntentRange(

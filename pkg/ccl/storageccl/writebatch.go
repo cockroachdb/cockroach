@@ -25,7 +25,7 @@ import (
 )
 
 func init() {
-	batcheval.RegisterCommand(roachpb.WriteBatch, batcheval.DefaultDeclareKeys, evalWriteBatch)
+	batcheval.RegisterReadWriteCommand(roachpb.WriteBatch, batcheval.DefaultDeclareKeys, evalWriteBatch)
 }
 
 // evalWriteBatch applies the operations encoded in a BatchRepr. Any existing

@@ -22,7 +22,7 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.DeleteRange, declareKeysDeleteRange, DeleteRange)
+	RegisterReadWriteCommand(roachpb.DeleteRange, declareKeysDeleteRange, DeleteRange)
 }
 
 func declareKeysDeleteRange(

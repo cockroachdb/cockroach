@@ -42,7 +42,7 @@ import (
 var TxnAutoGC = true
 
 func init() {
-	RegisterCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
+	RegisterReadWriteCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
 
 // declareKeysWriteTransaction is the shared portion of

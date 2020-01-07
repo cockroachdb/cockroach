@@ -391,7 +391,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				}
 			}
 
-			// After evalAddSSTable, cArgs.Stats contains a diff to the existing
+			// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
 			// stats. Make sure recomputing from scratch gets the same answer as
 			// applying the diff to the stats
 			beforeStats := func() enginepb.MVCCStats {

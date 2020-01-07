@@ -411,7 +411,11 @@ func evaluateCommand(
 			MaxKeys: maxKeys,
 			Stats:   ms,
 		}
-		pd, err = cmd.Eval(ctx, readWriter, cArgs, reply)
+		if cmd.EvalRW != nil {
+			pd, err = cmd.EvalRW(ctx, readWriter, cArgs, reply)
+		} else {
+			pd, err = cmd.EvalRO(ctx, readWriter, cArgs, reply)
+		}
 	} else {
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}

@@ -27,30 +27,51 @@ type Command struct {
 	// between key declaration and cmd evaluation?
 	DeclareKeys func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
 
-	// Eval evaluates a command on the given engine. It should populate the
-	// supplied response (always a non-nil pointer to the correct type) and
-	// return special side effects (if any) in the Result. If it writes to the
-	// engine it should also update *CommandArgs.Stats. It should treat the
-	// provided request as immutable.
-	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
+	// Eval{RW,RO} evaluates a read-{write,only} command respectively on the
+	// given engine.{ReadWriter,Reader}. It should populate the supplied
+	// response (always a non-nil pointer to the correct type) and return
+	// special side effects (if any) in the Result. If it writes to the engine
+	// it should also update *CommandArgs.Stats. It should treat the provided
+	// request as immutable.
+	//
+	// Only one of these is ever set at a time.
+	EvalRW func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error)
+	EvalRO func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error)
 }
 
 var cmds = make(map[roachpb.Method]Command)
 
-// RegisterCommand makes a command available for execution. It must only be
-// called before any evaluation takes place.
-func RegisterCommand(
+// RegisterReadWriteCommand makes a read-write command available for execution.
+// It must only be called before any evaluation takes place.
+func RegisterReadWriteCommand(
 	method roachpb.Method,
 	declare func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
 	impl func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
+	register(method, Command{
+		DeclareKeys: declare,
+		EvalRW:      impl,
+	})
+}
+
+// RegisterReadOnlyCommand makes a read-only command available for execution. It
+// must only be called before any evaluation takes place.
+func RegisterReadOnlyCommand(
+	method roachpb.Method,
+	declare func(*roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet),
+	impl func(context.Context, engine.Reader, CommandArgs, roachpb.Response) (result.Result, error),
+) {
+	register(method, Command{
+		DeclareKeys: declare,
+		EvalRO:      impl,
+	})
+}
+
+func register(method roachpb.Method, command Command) {
 	if _, ok := cmds[method]; ok {
 		log.Fatalf(context.TODO(), "cannot overwrite previously registered method %v", method)
 	}
-	cmds[method] = Command{
-		DeclareKeys: declare,
-		Eval:        impl,
-	}
+	cmds[method] = command
 }
 
 // UnregisterCommand is provided for testing and allows removing a command.

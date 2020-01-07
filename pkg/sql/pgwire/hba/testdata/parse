@@ -1,4 +1,183 @@
+subtest line_too_short
+
+line
+local
+----
+error: end-of-line before database specification
+
+line
+local a
+----
+error: end-of-line before role specification
+
+line
+local a b
+----
+error: end-of-line before authentication method
+
+line
+host a b c
+----
+error: end-of-line before authentication method
+
+line
+host a b
+----
+error: end-of-line before IP address specification
+
+line
+host a b 1.1.1.1
+----
+error: end-of-line before netmask specification
+
+subtest end
+
+subtest unknown_formats
+
+line
+local a b c d
+----
+error: authentication option not in name=value format: d
+
+subtest end
+
+subtest ignored_quotes
+
+line
+"local" a b c
+----
+local a b c
+
+line
+local a b "method"
+----
+local a b method
+
+line
+local a b c "k=v"
+----
+local a b c k=v
+
+subtest end
+
+subtest keyword_all
+
+line
+host all b c d
+----
+host all b c d
+
+line
+host "all" b c d
+----
+host "all" b c d
+
+line
+host a all c d
+----
+host a all c d
+
+line
+host a "all" c d
+----
+host a "all" c d
+
+line
+host a b all d
+----
+host a b all d
+
+subtest end
+
+subtest samehost_samenet
+
+line
+host a b samehost d
+----
+error: unimplemented: address specification samehost is not yet supported
+
+line
+host a b samenet d
+----
+error: unimplemented: address specification samenet is not yet supported
+
+subtest end
+
+subtest addr
+
+
+line
+host a b 1.1.1.1,2.2.2.2
+----
+error: multiple values specified for host address
+
+line
+local a b 1.1.1.1
+----
+local a b 1.1.1.1
+
+
+line
+host a b 0.0.0.0/0 d
+----
+host a b 0.0.0.0/0 d
+
 parse
+host all all 0.0/0 trust
+----
+unknown directive: parse
+
+line
+host a b ::1/0 d
+----
+host a b ::/0 d
+
+line
+host a b 2.3.4.5/8 d
+----
+host a b 2.0.0.0/8 d
+
+line
+host all all fe80::7a31:c1ff:0000:0000/96 cert
+----
+host all all fe80::7a31:c1ff:0:0/96 cert
+
+line
+host a b 1.1.1.1 255.0.0.0,255.255.0.0 d
+----
+error: multiple values specified for netmask
+
+
+line
+host a b 2.3.4.5 255.255.0.0 d
+----
+host a b 2.3.0.0/16 d
+
+line
+host a b fe80:7a31:c1ff:: ffff:fff0:: d
+----
+host a b fe80:7a30::/28 d
+
+line
+host a b 1.1.1.1 abc d
+----
+error: invalid IP mask "abc": netmask not in IP numeric format
+
+line
+host a b 1.1.1.1 8.0.0.8 d
+----
+error: invalid IP mask "8.0.0.8": address is not a mask
+
+line
+host a b myhost d
+----
+host a b myhost d
+
+subtest end
+
+subtest multiline_entries
+
+multiline
 host all all 0.0.0.0/0 trust
 # comment
 
@@ -8,124 +187,34 @@ host all all all trust
 host all all hostname trust
 host all all 1.1.1.1 1 trust
 ----
-&hba.Conf{
-    Entries: {
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: &net.IPNet{
-                IP:   {0x0, 0x0, 0x0, 0x0},
-                Mask: {0x0, 0x0, 0x0, 0x0},
-            },
-            Method:  "trust",
-            Options: nil,
-        },
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: &net.IPNet{
-                IP:   {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-                Mask: {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-            },
-            Method:  "reject",
-            Options: nil,
-        },
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: &net.IPNet{
-                IP:   {0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7a, 0x31, 0xc1, 0xff, 0x0, 0x0, 0x0, 0x0},
-                Mask: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0, 0x0, 0x0, 0x0},
-            },
-            Method:  "cert",
-            Options: nil,
-        },
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: hba.String{Value:"all", Quoted:false},
-            Method:  "trust",
-            Options: nil,
-        },
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: hba.String{Value:"hostname", Quoted:false},
-            Method:  "trust",
-            Options: nil,
-        },
-        {
-            Type:     "host",
-            Database: {
-                {Value:"all", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: &net.IPNet{
-                IP:   {0x0, 0x0, 0x0, 0x0},
-                Mask: {0x80, 0x0, 0x0, 0x0},
-            },
-            Method:  "trust",
-            Options: nil,
-        },
-    },
-}
+error: line 4: invalid IP mask "0": netmask not in IP numeric format
 
-# Comma-separated lists.
+subtest end
 
-parse
+subtest comma_separated_lists
+
+multiline
 host a,b,c all all trust
-----
-&hba.Conf{
-    Entries: {
-        {
-            Type:     "host",
-            Database: {
-                {Value:"a", Quoted:false},
-                {Value:"b", Quoted:false},
-                {Value:"c", Quoted:false},
-            },
-            User: {
-                {Value:"all", Quoted:false},
-            },
-            Address: hba.String{Value:"all", Quoted:false},
-            Method:  "trust",
-            Options: nil,
-        },
-    },
-}
-
-parse
 host all a,b,c all trust
+host a,b,c d,e,f all trust
+host all testuser,"all" 0.0.0.0/0 cert
 ----
 &hba.Conf{
     Entries: {
+        {
+            Type:     "host",
+            Database: {
+                {Value:"a", Quoted:false},
+                {Value:"b", Quoted:false},
+                {Value:"c", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
+            Address: hba.String{Value:"all", Quoted:false},
+            Method:  "trust",
+            Options: nil,
+        },
         {
             Type:     "host",
             Database: {
@@ -140,14 +229,6 @@ host all a,b,c all trust
             Method:  "trust",
             Options: nil,
         },
-    },
-}
-
-parse
-host a,b,c d,e,f all trust
-----
-&hba.Conf{
-    Entries: {
         {
             Type:     "host",
             Database: {
@@ -164,14 +245,6 @@ host a,b,c d,e,f all trust
             Method:  "trust",
             Options: nil,
         },
-    },
-}
-
-parse
-host all testuser,"all" 0.0.0.0/0 cert
-----
-&hba.Conf{
-    Entries: {
         {
             Type:     "host",
             Database: {
@@ -191,7 +264,7 @@ host all testuser,"all" 0.0.0.0/0 cert
     },
 }
 
-parse
+multiline
 host "all","test space",something some,"us ers" all cert
 ----
 &hba.Conf{
@@ -214,35 +287,41 @@ host "all","test space",something some,"us ers" all cert
     },
 }
 
-parse
+subtest end
+
+subtest invalid_string
+
+multiline
+host "all all 0.0.0.0/0 trust
+----
+error: line 1: unterminated quoted string
+
+subtest end
+
+subtest empty_conf
+
+multiline
+# no line
+
+# to be found here
 ----
 error: no entries
 
-# local not supported
-parse
-local all all trust
-----
-error: entry 1 invalid
+subtest end
 
-# not an ip address
-parse
-host all all blah
-----
-error: entry 1 invalid
+subtest error_lineno
 
-parse
-host all all 0.0/0 trust
+multiline
+local all all cert
+host invalid
 ----
-error: invalid CIDR address: 0.0/0
+error: line 2: end-of-line before role specification
 
-# non-terminated string
-parse
-host "all all 0.0.0.0/0 trust
-----
-error: entry 1 invalid
+subtest end
 
-# options
-parse
+subtest options
+
+multiline
 host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
 ----
 &hba.Conf{
@@ -265,3 +344,5 @@ host all all all gss krb_realm=other include_realm=0 krb_realm=te-st12.COM
         },
     },
 }
+
+subtest end

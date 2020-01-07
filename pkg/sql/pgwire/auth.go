@@ -96,7 +96,7 @@ func (c *conn) handleAuthentication(
 						continue
 					}
 				case hba.String:
-					if !a.IsSpecial("all") {
+					if !a.IsKeyword("all") {
 						return sendError(errors.Errorf("unexpected %s address: %q", serverHBAConfSetting, a.Value))
 					}
 				default:
@@ -104,7 +104,7 @@ func (c *conn) handleAuthentication(
 				}
 				match := false
 				for _, u := range entry.User {
-					if u.IsSpecial("all") {
+					if u.IsKeyword("all") {
 						match = true
 						break
 					}
