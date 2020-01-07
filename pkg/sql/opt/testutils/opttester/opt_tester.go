@@ -157,6 +157,9 @@ type Flags struct {
 	//
 	Locality roachpb.Locality
 
+	// NodeID specifies the ID of the planning node.
+	NodeID roachpb.NodeID
+
 	// Database specifies the current database to use for the query. This field
 	// is only used by the save-tables command when rewriteActualFlag=true.
 	Database string
@@ -267,6 +270,13 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    The path of the file should be relative to
 //    testutils/opttester/testfixtures.
 //
+//  - node-info
+//
+//    Adds info about nodes in the cluster to the catalog. The input to this
+//    command should be in the form of a JSON array, where each element of the
+//    array specifies info about a single node, and matches the schema defined
+//    in testcat.NodeInfo. This is only available when using a TestCatalog.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -306,6 +316,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    can affect costing when there are multiple possible indexes to choose
 //    from, each in different localities.
 //
+//  - node: used to set the id of the node that plans the query. This id should
+//    match the id of one of the nodes previously added to the catalog using
+//    the node-info command. The choice of planning node can affect costing
+//    when an index is partitioned across multiple nodes.
+//
 //  - database: used to set the current database used by the query. This is
 //    used by the save-tables command when rewriteActualFlag=true.
 //
@@ -339,6 +354,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.Flags.Verbose = testing.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
+	ot.evalCtx.NodeID = ot.Flags.NodeID
 	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 
 	switch d.Cmd {
@@ -457,6 +473,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "import":
 		ot.Import(tb)
 		return ""
+
+	case "node-info":
+		result, err := ot.NodeInfo(d.Input)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -655,6 +678,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		if err != nil {
 			return err
 		}
+
+	case "node":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("node requires one argument")
+		}
+		nodeID, err := strconv.ParseInt(arg.Vals[0], 10, 32)
+		if err != nil {
+			return errors.Wrap(err, "node")
+		}
+		f.NodeID = roachpb.NodeID(nodeID)
 
 	case "database":
 		if len(arg.Vals) != 1 {
@@ -1126,6 +1159,19 @@ func (ot *OptTester) SaveTables() (opt.Expr, error) {
 	}
 
 	return expr, nil
+}
+
+// NodeInfo adds info about nodes in the cluster to the catalog. The input to
+// this command should be in the form of a JSON array, where each element of
+// the array specifies info about a single node, and matches the schema defined
+// in testcat.NodeInfo. This is only available when using a TestCatalog.
+func (ot *OptTester) NodeInfo(input string) (string, error) {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return "", fmt.Errorf("node-info can only be used with TestCatalog")
+	}
+
+	return catalog.SetNodeInfo(input)
 }
 
 // saveActualTables executes the given query against a running database and

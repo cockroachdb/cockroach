@@ -50,6 +50,9 @@ type optCatalog struct {
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
+
+	// nodes contains information about every node in the CockroachDB cluster.
+	nodes []optNode
 }
 
 var _ cat.Catalog = &optCatalog{}
@@ -60,6 +63,15 @@ var _ cat.Catalog = &optCatalog{}
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
 	oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
+
+	descriptors, err := getAllNodeDescriptors(oc.planner)
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "while getting node descriptors"))
+	}
+	oc.nodes = make([]optNode, len(descriptors))
+	for i, desc := range descriptors {
+		oc.nodes[i] = optNode{id: desc.NodeID, locality: desc.Locality, attrs: desc.Attrs}
+	}
 }
 
 // reset prepares the optCatalog to be used for a new query.
@@ -292,6 +304,16 @@ func (oc *optCatalog) FullyQualifiedName(
 		return cat.DataSourceName{}, err
 	}
 	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
+}
+
+// NodeCount is part of the cat.Catalog interface.
+func (oc *optCatalog) NodeCount() int {
+	return len(oc.nodes)
+}
+
+// Node is part of the cat.Catalog interface.
+func (oc *optCatalog) Node(i int) cat.Node {
+	return &oc.nodes[i]
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -567,15 +589,20 @@ func newOptTable(
 		// else use the table zone. Skip subzones that apply to partitions,
 		// since they apply only to a subset of the index.
 		idxZone := tblZone
+		partZones := make(map[string]*zonepb.ZoneConfig)
 		for j := range tblZone.Subzones {
 			subzone := &tblZone.Subzones[j]
-			if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
+			if subzone.IndexID == uint32(idxDesc.ID) {
 				copyZone := subzone.Config
 				copyZone.InheritFromParent(tblZone)
-				idxZone = &copyZone
+				if subzone.PartitionName == "" {
+					idxZone = &copyZone
+				} else {
+					partZones[subzone.PartitionName] = &copyZone
+				}
 			}
 		}
-		ot.indexes[i].init(ot, i, idxDesc, idxZone)
+		ot.indexes[i].init(ot, i, idxDesc, idxZone, partZones)
 	}
 
 	for i := range ot.desc.OutboundFKs {
@@ -832,9 +859,11 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 // optIndex is a wrapper around sqlbase.IndexDescriptor that caches some
 // commonly accessed information and keeps a reference to the table wrapper.
 type optIndex struct {
-	tab  *optTable
-	desc *sqlbase.IndexDescriptor
-	zone *zonepb.ZoneConfig
+	tab        *optTable
+	desc       *sqlbase.IndexDescriptor
+	zone       *zonepb.ZoneConfig
+	partZones  map[string]*zonepb.ZoneConfig
+	partitions []cat.IndexPartition
 
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
@@ -851,11 +880,17 @@ var _ cat.Index = &optIndex{}
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
 func (oi *optIndex) init(
-	tab *optTable, indexOrdinal int, desc *sqlbase.IndexDescriptor, zone *zonepb.ZoneConfig,
+	tab *optTable,
+	indexOrdinal int,
+	desc *sqlbase.IndexDescriptor,
+	zone *zonepb.ZoneConfig,
+	partZones map[string]*zonepb.ZoneConfig,
 ) {
 	oi.tab = tab
 	oi.desc = desc
 	oi.zone = zone
+	oi.partZones = partZones
+	oi.initPartitioning()
 	oi.indexOrdinal = indexOrdinal
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
@@ -1021,6 +1056,55 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 		}
 	}
 	return res
+}
+
+// PartitionCount is part of the cat.Index interface.
+func (oi *optIndex) PartitionCount() int {
+	return len(oi.partitions)
+}
+
+// Partition is part of the cat.Index interface.
+func (oi *optIndex) Partition(i int) cat.IndexPartition {
+	return oi.partitions[i]
+}
+
+func (oi *optIndex) initPartitioning() {
+	rng := oi.desc.Partitioning.Range
+	if len(rng) == 0 {
+		// TODO(rytaft): Add support for list partitioning too.
+		return
+	}
+	oi.partitions = make([]cat.IndexPartition, 0, len(rng))
+
+	var a sqlbase.DatumAlloc
+	for i := range rng {
+		zone, ok := oi.partZones[rng[i].Name]
+		if !ok {
+			continue
+		}
+		fromEncBuf := rng[i].FromInclusive
+		from, _, err := sqlbase.DecodePartitionTuple(
+			&a, &oi.tab.desc.TableDescriptor, oi.desc, &oi.desc.Partitioning,
+			fromEncBuf, nil, /* prefixDatums */
+		)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+		}
+		toEncBuf := rng[i].ToExclusive
+		to, _, err := sqlbase.DecodePartitionTuple(
+			&a, &oi.tab.desc.TableDescriptor, oi.desc, &oi.desc.Partitioning,
+			toEncBuf, nil, /* prefixDatums */
+		)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+		}
+
+		oi.partitions = append(oi.partitions, cat.IndexPartition{
+			From: from.Datums,
+			To:   to.Datums,
+			Zone: zone,
+		})
+	}
 }
 
 type optTableStat struct {
@@ -1468,4 +1552,28 @@ func (oi *optVirtualFamily) Column(i int) cat.FamilyColumn {
 // Table is part of the cat.Family interface.
 func (oi *optVirtualFamily) Table() cat.Table {
 	return oi.tab
+}
+
+// optNode implements cat.Node.
+type optNode struct {
+	id       roachpb.NodeID
+	locality roachpb.Locality
+	attrs    roachpb.Attributes
+}
+
+var _ cat.Node = &optNode{}
+
+// ID is part of the cat.Node interface.
+func (on *optNode) ID() roachpb.NodeID {
+	return on.id
+}
+
+// Locality is part of the cat.Node interface.
+func (on *optNode) Locality() roachpb.Locality {
+	return on.locality
+}
+
+// Attrs is part of the cat.Node interface.
+func (on *optNode) Attrs() roachpb.Attributes {
+	return on.attrs
 }

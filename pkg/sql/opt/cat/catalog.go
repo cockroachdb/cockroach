@@ -137,4 +137,13 @@ type Catalog interface {
 	//  - the fully qualified name of a data source object can change without the
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
+
+	// NodeCount returns the number of nodes in this CockroachDB cluster.
+	// Node information is used by the optimizer to estimate the cost of
+	// operations that may span multiple nodes.
+	NodeCount() int
+
+	// Node returns information about the ith node in this CockroachDB cluster,
+	// where i < NodeCount.
+	Node(i int) Node
 }

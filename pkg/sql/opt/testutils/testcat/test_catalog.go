@@ -40,6 +40,7 @@ const (
 type Catalog struct {
 	testSchema Schema
 	counter    int
+	nodes      []Node
 }
 
 type dataSource interface {
@@ -212,6 +213,16 @@ func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
 	return ds.(dataSource).fqName(), nil
+}
+
+// NodeCount is part of the cat.Catalog interface.
+func (tc *Catalog) NodeCount() int {
+	return len(tc.nodes)
+}
+
+// Node is part of the cat.Catalog interface.
+func (tc *Catalog) Node(i int) cat.Node {
+	return &tc.nodes[i]
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -727,6 +738,9 @@ type Index struct {
 	// the parent table, database, or even the default zone.
 	IdxZone *zonepb.ZoneConfig
 
+	// PartZones maps named index partitions to zones.
+	PartZones map[string]*config.ZoneConfig
+
 	// Ordinal is the ordinal of this index in the table.
 	ordinal int
 
@@ -736,6 +750,9 @@ type Index struct {
 	// partitionBy is the partitioning clause that corresponds to this index. Used
 	// to implement PartitionByListPrefixes.
 	partitionBy *tree.PartitionBy
+
+	// partitions contains the catalog partitions defined on this index.
+	partitions []cat.IndexPartition
 }
 
 // ID is part of the cat.Index interface.
@@ -856,6 +873,77 @@ func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 		}
 	}
 	return res
+}
+
+// PartitionCount is part of the cat.Index interface.
+func (ti *Index) PartitionCount() int {
+	if ti.partitions == nil {
+		ti.initPartitioning()
+	}
+	return len(ti.partitions)
+}
+
+// Partition is part of the cat.Index interface.
+func (ti *Index) Partition(i int) cat.IndexPartition {
+	if ti.partitions == nil {
+		ti.initPartitioning()
+	}
+	return ti.partitions[i]
+}
+
+func (ti *Index) initPartitioning() {
+	p := ti.partitionBy
+	if p == nil {
+		return
+	}
+	if len(p.Range) == 0 {
+		// TODO(rytaft): Add support for list partitioning too.
+		return
+	}
+	semaCtx := tree.MakeSemaContext()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for i := range p.Fields {
+		if i >= len(ti.Columns) || p.Fields[i] != ti.Columns[i].ColName() {
+			panic("partition by columns must be a prefix of the index columns")
+		}
+	}
+
+	datumsFromExprs := func(exprs tree.Exprs) tree.Datums {
+		// Cut off at MINVALUE or MAXVALUE, if present.
+		for i := range exprs {
+			if t, ok := exprs[i].(*tree.UnresolvedName); ok && t.NumParts == 1 {
+				switch t.Parts[0] {
+				case "minvalue", "maxvalue":
+					exprs = exprs[:i]
+				}
+			}
+		}
+		d := make(tree.Datums, len(exprs))
+		for i := range exprs {
+			c := tree.CastExpr{Expr: exprs[i], Type: ti.Columns[i].DatumType()}
+			cTyped, err := c.TypeCheck(&semaCtx, nil)
+			if err != nil {
+				panic(err)
+			}
+			d[i], err = cTyped.Eval(&evalCtx)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return d
+	}
+
+	ti.partitions = make([]cat.IndexPartition, len(p.Range))
+	for i := range p.Range {
+		from := datumsFromExprs(p.Range[i].From)
+		to := datumsFromExprs(p.Range[i].To)
+
+		ti.partitions[i] = cat.IndexPartition{
+			From: from,
+			To:   to,
+			Zone: ti.PartZones[string(p.Range[i].Name)],
+		}
+	}
 }
 
 // Column implements the cat.Column interface for testing purposes.
@@ -1198,4 +1286,28 @@ func (tf *Family) ColumnCount() int {
 // Column is part of the cat.Family interface.
 func (tf *Family) Column(i int) cat.FamilyColumn {
 	return tf.Columns[i]
+}
+
+// Node implements the cat.Node interface for testing purposes.
+type Node struct {
+	id       roachpb.NodeID
+	locality roachpb.Locality
+	attrs    roachpb.Attributes
+}
+
+var _ cat.Node = &Node{}
+
+// ID is part of the cat.Node interface.
+func (tn *Node) ID() roachpb.NodeID {
+	return tn.id
+}
+
+// Locality is part of the cat.Node interface.
+func (tn *Node) Locality() roachpb.Locality {
+	return tn.locality
+}
+
+// Attrs is part of the cat.Node interface.
+func (tn *Node) Attrs() roachpb.Attributes {
+	return tn.attrs
 }
