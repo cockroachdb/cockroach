@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -340,6 +341,14 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 // be advanced, the PushTxnRequest could get stuck forever.
 func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if engine.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		t.Skip("disabled on teeing engine")
+	}
 	tc := testContext{}
 	ctx := context.Background()
 	stopper := stop.NewStopper()

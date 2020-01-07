@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -487,6 +488,10 @@ func (t TeeEngine) CreateCheckpoint(dir string) error {
 	err := t.eng1.CreateCheckpoint(path1)
 	err2 := t.eng2.CreateCheckpoint(path2)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
+}
+
+func (t TeeEngine) String() string {
+	return t.eng1.(fmt.Stringer).String()
 }
 
 // TeeEngineFile is a File that forwards to both underlying eng1
