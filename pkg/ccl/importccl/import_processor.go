@@ -80,7 +80,9 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 	}()
 
 	for prog := range progCh {
-		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog})
+		// Take a copy so that we can send the progress address to the output processor.
+		p := prog
+		cp.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
 	if err != nil {
