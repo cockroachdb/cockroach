@@ -287,9 +287,9 @@ func TestReplicationStatsReport(t *testing.T) {
 					// Under-replicated.
 					{key: "/Table/t1/pk/101", stores: []int{1}},
 					// Under-replicated and unavailable.
-					{key: "/Table/t1/pk/101", stores: []int{3}},
+					{key: "/Table/t1/pk/102", stores: []int{3}},
 					// Over-replicated.
-					{key: "/Table/t1/pk/101", stores: []int{1, 2, 3, 4}},
+					{key: "/Table/t1/pk/103", stores: []int{1, 2, 3, 4}},
 				},
 				nodes: []node{
 					{id: 1, stores: []store{{id: 1}}},
