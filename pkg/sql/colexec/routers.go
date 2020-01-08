@@ -217,21 +217,22 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 			o.mu.data = append(o.mu.data, o.mu.allocator.NewMemBatchWithSize(o.types, o.outputBatchSize))
 		}
 
-		for i, t := range o.types {
-			o.mu.allocator.Append(
-				dst.ColVec(i),
-				coldata.SliceArgs{
-					ColType:   t,
-					Src:       batch.ColVec(i),
-					Sel:       selection,
-					DestIdx:   uint64(dst.Length()),
-					SrcEndIdx: uint64(len(selection)),
-				},
-			)
-		}
+		o.mu.allocator.PerformOperation(dst.ColVecs(), func() {
+			for i, t := range o.types {
+				dst.ColVec(i).Append(
+					coldata.SliceArgs{
+						ColType:   t,
+						Src:       batch.ColVec(i),
+						Sel:       selection,
+						DestIdx:   uint64(dst.Length()),
+						SrcEndIdx: uint64(len(selection)),
+					},
+				)
+			}
+			dst.SetLength(dst.Length() + numAppended)
+		})
 
 		selection = selection[numAppended:]
-		dst.SetLength(dst.Length() + numAppended)
 		toAppend -= numAppended
 	}
 

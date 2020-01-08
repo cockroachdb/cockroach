@@ -303,46 +303,48 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
 		newResumeIdx := a.scratch.resumeIdx - a.scratch.outputSize
-		for i := 0; i < len(a.outputTypes); i++ {
-			vec := a.scratch.ColVec(i)
-			// According to the aggregate function interface contract, the value at
-			// the current index must also be copied.
-			// Note that we're using Append here instead of Copy because we want the
-			// "truncation" behavior, i.e. we want to copy over the remaining tuples
-			// such the "lengths" of the vectors are equal to the number of copied
-			// elements.
-			a.allocator.Append(
-				vec,
-				coldata.SliceArgs{
-					Src:         vec,
-					ColType:     a.outputTypes[i],
-					DestIdx:     0,
-					SrcStartIdx: uint64(a.scratch.outputSize),
-					SrcEndIdx:   uint64(a.scratch.resumeIdx + 1),
-				},
-			)
-			// Now we need to restore the desired length for the Vec.
-			vec.SetLength(a.scratch.inputSize)
-			a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
-		}
+		a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
+			for i := 0; i < len(a.outputTypes); i++ {
+				vec := a.scratch.ColVec(i)
+				// According to the aggregate function interface contract, the value at
+				// the current index must also be copied.
+				// Note that we're using Append here instead of Copy because we want the
+				// "truncation" behavior, i.e. we want to copy over the remaining tuples
+				// such the "lengths" of the vectors are equal to the number of copied
+				// elements.
+				vec.Append(
+					coldata.SliceArgs{
+						Src:         vec,
+						ColType:     a.outputTypes[i],
+						DestIdx:     0,
+						SrcStartIdx: uint64(a.scratch.outputSize),
+						SrcEndIdx:   uint64(a.scratch.resumeIdx + 1),
+					},
+				)
+				// Now we need to restore the desired length for the Vec.
+				vec.SetLength(a.scratch.inputSize)
+				a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
+			}
+		})
 		a.scratch.resumeIdx = newResumeIdx
 		if a.scratch.resumeIdx >= a.scratch.outputSize {
 			// We still have overflow output values.
 			a.scratch.SetLength(uint16(a.scratch.outputSize))
-			for i := 0; i < len(a.outputTypes); i++ {
-				a.allocator.Copy(
-					a.unsafeBatch.ColVec(i),
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:         a.scratch.ColVec(i),
-							ColType:     a.outputTypes[i],
-							SrcStartIdx: 0,
-							SrcEndIdx:   uint64(a.scratch.Length()),
+			a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
+				for i := 0; i < len(a.outputTypes); i++ {
+					a.unsafeBatch.ColVec(i).Copy(
+						coldata.CopySliceArgs{
+							SliceArgs: coldata.SliceArgs{
+								Src:         a.scratch.ColVec(i),
+								ColType:     a.outputTypes[i],
+								SrcStartIdx: 0,
+								SrcEndIdx:   uint64(a.scratch.Length()),
+							},
 						},
-					},
-				)
-			}
-			a.unsafeBatch.SetLength(a.scratch.Length())
+					)
+				}
+				a.unsafeBatch.SetLength(a.scratch.Length())
+			})
 			a.scratch.shouldResetInternalBatch = false
 			return a.unsafeBatch
 		}
@@ -383,20 +385,21 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	batchToReturn := a.scratch.Batch
 	if a.scratch.resumeIdx > a.scratch.outputSize {
 		a.scratch.SetLength(uint16(a.scratch.outputSize))
-		for i := 0; i < len(a.outputTypes); i++ {
-			a.allocator.Copy(
-				a.unsafeBatch.ColVec(i),
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Src:         a.scratch.ColVec(i),
-						ColType:     a.outputTypes[i],
-						SrcStartIdx: 0,
-						SrcEndIdx:   uint64(a.scratch.Length()),
+		a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
+			for i := 0; i < len(a.outputTypes); i++ {
+				a.unsafeBatch.ColVec(i).Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							Src:         a.scratch.ColVec(i),
+							ColType:     a.outputTypes[i],
+							SrcStartIdx: 0,
+							SrcEndIdx:   uint64(a.scratch.Length()),
+						},
 					},
-				},
-			)
-		}
-		a.unsafeBatch.SetLength(a.scratch.Length())
+				)
+			}
+			a.unsafeBatch.SetLength(a.scratch.Length())
+		})
 		batchToReturn = a.unsafeBatch
 		a.scratch.shouldResetInternalBatch = false
 	} else {

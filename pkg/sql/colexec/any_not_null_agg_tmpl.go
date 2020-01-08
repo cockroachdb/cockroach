@@ -121,7 +121,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TemplateType(), vec.Nulls()
 
-	a.allocator.performOperation(
+	a.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
 			if nulls.MaybeHasNulls() {

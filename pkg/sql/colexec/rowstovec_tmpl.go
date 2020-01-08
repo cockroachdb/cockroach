@@ -102,7 +102,7 @@ func EncDatumRowsToColVec(
 		switch columnType.Width() {
 		// {{range .Widths}}
 		case _WIDTH:
-			allocator.performOperation(
+			allocator.PerformOperation(
 				[]coldata.Vec{vec},
 				func() {
 					_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
@@ -114,7 +114,7 @@ func EncDatumRowsToColVec(
 			execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 		}
 		// {{ else }}
-		allocator.performOperation(
+		allocator.PerformOperation(
 			[]coldata.Vec{vec},
 			func() {
 				_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)

@@ -314,23 +314,25 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 		hj.emittingUnmatchedState.rowIdx++
 	}
 
-	for outColIdx, inColIdx := range hj.ht.outCols {
-		outCol := hj.prober.batch.ColVec(outColIdx + hj.prober.buildColOffset)
-		valCol := hj.ht.vals[inColIdx]
-		colType := hj.ht.valTypes[inColIdx]
+	outCols := hj.prober.batch.ColVecs()[hj.prober.buildColOffset : hj.prober.buildColOffset+len(hj.ht.outCols)]
+	hj.allocator.PerformOperation(outCols, func() {
+		for outColIdx, inColIdx := range hj.ht.outCols {
+			outCol := outCols[outColIdx]
+			valCol := hj.ht.vals[inColIdx]
+			colType := hj.ht.valTypes[inColIdx]
 
-		hj.allocator.Copy(
-			outCol,
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
-					Src:       valCol,
-					SrcEndIdx: uint64(nResults),
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   colType,
+						Src:       valCol,
+						SrcEndIdx: uint64(nResults),
+					},
+					Sel64: hj.prober.buildIdx,
 				},
-				Sel64: hj.prober.buildIdx,
-			},
-		)
-	}
+			)
+		}
+	})
 
 	hj.prober.batch.SetLength(nResults)
 }
@@ -516,20 +518,20 @@ func makeHashTable(
 // output columns.
 func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
-	for i, colIdx := range ht.valCols {
-		ht.allocator.Append(
-			ht.vals[i],
-			coldata.SliceArgs{
-				ColType:   ht.valTypes[i],
-				Src:       batch.ColVec(int(colIdx)),
-				Sel:       batch.Selection(),
-				DestIdx:   ht.size,
-				SrcEndIdx: uint64(batchSize),
-			},
-		)
-	}
-
-	ht.size += uint64(batchSize)
+	ht.allocator.PerformOperation(ht.vals, func() {
+		for i, colIdx := range ht.valCols {
+			ht.vals[i].Append(
+				coldata.SliceArgs{
+					ColType:   ht.valTypes[i],
+					Src:       batch.ColVec(int(colIdx)),
+					Sel:       batch.Selection(),
+					DestIdx:   ht.size,
+					SrcEndIdx: uint64(batchSize),
+				},
+			)
+		}
+		ht.size += uint64(batchSize)
+	})
 }
 
 // initHash, rehash, and finalizeHash work together to compute the hash value
@@ -970,31 +972,35 @@ func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
 func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
-	for outColIdx, inColIdx := range prober.ht.outCols {
-		outCol := prober.batch.ColVec(outColIdx + prober.buildColOffset)
-		valCol := prober.ht.vals[inColIdx]
-		colType := prober.ht.valTypes[inColIdx]
-
-		// If the hash table is empty, then there is nothing to copy. The nulls
-		// will be set below.
-		if prober.ht.size > 0 {
-			// Note that if for some index i, probeRowUnmatched[i] is true, then
-			// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
-			// hash table, but we will set the NULL value below.
-			prober.ht.allocator.Copy(
-				outCol,
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:   colType,
-						Src:       valCol,
-						SrcEndIdx: uint64(nResults),
+	// If the hash table is empty, then there is nothing to copy. The nulls
+	// will be set below.
+	if prober.ht.size > 0 {
+		outCols := prober.batch.ColVecs()[prober.buildColOffset : prober.buildColOffset+len(prober.ht.outCols)]
+		prober.ht.allocator.PerformOperation(outCols, func() {
+			for outColIdx, inColIdx := range prober.ht.outCols {
+				outCol := outCols[outColIdx]
+				valCol := prober.ht.vals[inColIdx]
+				colType := prober.ht.valTypes[inColIdx]
+				// Note that if for some index i, probeRowUnmatched[i] is true, then
+				// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+				// hash table, but we will set the NULL value below.
+				outCol.Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							ColType:   colType,
+							Src:       valCol,
+							SrcEndIdx: uint64(nResults),
+						},
+						Sel64: prober.buildIdx,
 					},
-					Sel64: prober.buildIdx,
-				},
-			)
-		}
-		if prober.spec.outer {
-			// Add in the nulls we needed to set for the outer join.
+				)
+			}
+		})
+	}
+	if prober.spec.outer {
+		// Add in the nulls we needed to set for the outer join.
+		for outColIdx := range prober.ht.outCols {
+			outCol := prober.batch.ColVec(outColIdx + prober.buildColOffset)
 			nulls := outCol.Nulls()
 			for i, isNull := range prober.probeRowUnmatched {
 				if isNull {
@@ -1004,23 +1010,25 @@ func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, b
 		}
 	}
 
-	for outColIdx, inColIdx := range prober.spec.outCols {
-		outCol := prober.batch.ColVec(outColIdx + prober.probeColOffset)
-		valCol := batch.ColVec(int(inColIdx))
-		colType := prober.spec.sourceTypes[inColIdx]
+	outCols := prober.batch.ColVecs()[prober.probeColOffset : prober.probeColOffset+len(prober.spec.outCols)]
+	prober.ht.allocator.PerformOperation(outCols, func() {
+		for outColIdx, inColIdx := range prober.spec.outCols {
+			outCol := outCols[outColIdx]
+			valCol := batch.ColVec(int(inColIdx))
+			colType := prober.spec.sourceTypes[inColIdx]
 
-		prober.ht.allocator.Copy(
-			outCol,
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
-					Src:       valCol,
-					Sel:       prober.probeIdx,
-					SrcEndIdx: uint64(nResults),
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   colType,
+						Src:       valCol,
+						Sel:       prober.probeIdx,
+						SrcEndIdx: uint64(nResults),
+					},
 				},
-			},
-		)
-	}
+			)
+		}
+	})
 
 	if prober.build.outer {
 		// In order to determine which rows to emit for the outer join on the build

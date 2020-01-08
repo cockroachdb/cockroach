@@ -58,7 +58,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
-	b.allocator.performOperation(
+	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
 			for i := uint16(0); i < n; i++ {
@@ -135,7 +135,7 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	lengthVec := batch.ColVec(s.argumentCols[2]).Int64()
 	outputVec := batch.ColVec(s.outputIdx)
 	outputCol := outputVec.Bytes()
-	s.allocator.performOperation(
+	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
 			for i := uint16(0); i < n; i++ {

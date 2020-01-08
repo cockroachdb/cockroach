@@ -246,22 +246,23 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 
 	copy(op.distinctCol, op.distinct[op.batchStart:batchEnd])
 
-	for i, colIdx := range op.ht.outCols {
-		toCol := op.batch.ColVec(i)
-		fromCol := op.ht.vals[colIdx]
-		op.ht.allocator.Copy(
-			toCol,
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:     op.ht.valTypes[op.ht.outCols[i]],
-					Src:         fromCol,
-					SrcStartIdx: op.batchStart,
-					SrcEndIdx:   batchEnd,
+	op.ht.allocator.PerformOperation(op.batch.ColVecs(), func() {
+		for i, colIdx := range op.ht.outCols {
+			toCol := op.batch.ColVec(i)
+			fromCol := op.ht.vals[colIdx]
+			toCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     op.ht.valTypes[op.ht.outCols[i]],
+						Src:         fromCol,
+						SrcStartIdx: op.batchStart,
+						SrcEndIdx:   batchEnd,
+					},
+					Sel64: op.sel,
 				},
-				Sel64: op.sel,
-			},
-		)
-	}
+			)
+		}
+	})
 
 	op.batchStart = batchEnd
 

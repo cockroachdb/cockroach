@@ -743,8 +743,8 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 	sel := batch.Selection()
 	initialBuilderState := o.builderState.left
 	outputBatchSize := int(o.outputBatchSize)
-	o.allocator.performOperation(
-		o.output.ColVecs()[:len(input.outCols)],
+	o.allocator.PerformOperation(
+		o.output.ColVecs()[colOffset:colOffset+len(input.outCols)],
 		func() {
 			// Loop over every column.
 		LeftColLoop:
@@ -830,20 +830,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						// {{ end }}
 						{
 							v := execgen.UNSAFEGET(srcCol, int(sel[o.builderState.right.curSrcStartIdx]))
-							// We are in the fast path (we're setting a single element), so in
-							// order to not kill the performance, we only update the memory
-							// account in case of Bytes type (other types will not change the
-							// amount of memory accounted for).
-							// {{ if eq .LTyp.String "Bytes" }}
-							o.allocator.performOperation(
-								[]coldata.Vec{out},
-								func() {
-									// {{ end }}
-									execgen.SET(outCol, outStartIdx, v)
-									// {{ if eq .LTyp.String "Bytes" }}
-								},
-							)
-							// {{ end }}
+							execgen.SET(outCol, outStartIdx, v)
 						}
 						// {{ else }}
 						// {{ if _HAS_NULLS }}
@@ -853,25 +840,11 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 						// {{ end }}
 						{
 							v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
-							// We are in the fast path (we're setting a single element), so in
-							// order to not kill the performance, we only update the memory
-							// account in case of Bytes type (other types will not change the
-							// amount of memory accounted for).
-							// {{ if eq .LTyp.String "Bytes" }}
-							o.allocator.performOperation(
-								[]coldata.Vec{out},
-								func() {
-									// {{ end }}
-									execgen.SET(outCol, outStartIdx, v)
-									// {{ if eq .LTyp.String "Bytes" }}
-								},
-							)
-							// {{ end }}
+							execgen.SET(outCol, outStartIdx, v)
 						}
 						// {{ end }}
 					} else {
-						o.allocator.Copy(
-							out,
+						out.Copy(
 							coldata.CopySliceArgs{
 								SliceArgs: coldata.SliceArgs{
 									ColType:     colType,
@@ -948,34 +921,38 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
 	sel := batch.Selection()
 	outputBatchSize := int(o.outputBatchSize)
 
-	// Loop over every column.
-RightColLoop:
-	for outColIdx, inColIdx := range input.outCols {
-		outStartIdx := int(destStartIdx)
-		out := o.output.ColVec(outColIdx + colOffset)
-		var src coldata.Vec
-		if batch.Width() > int(inColIdx) {
-			src = batch.ColVec(int(inColIdx))
-		}
-		colType := input.sourceTypes[inColIdx]
+	o.allocator.PerformOperation(
+		o.output.ColVecs()[colOffset:colOffset+len(input.outCols)],
+		func() {
+			// Loop over every column.
+		RightColLoop:
+			for outColIdx, inColIdx := range input.outCols {
+				outStartIdx := int(destStartIdx)
+				out := o.output.ColVec(outColIdx + colOffset)
+				var src coldata.Vec
+				if batch.Width() > int(inColIdx) {
+					src = batch.ColVec(int(inColIdx))
+				}
+				colType := input.sourceTypes[inColIdx]
 
-		if sel != nil {
-			if src != nil && src.MaybeHasNulls() {
-				_RIGHT_SWITCH(_JOIN_TYPE, true, true)
-			} else {
-				_RIGHT_SWITCH(_JOIN_TYPE, true, false)
-			}
-		} else {
-			if src != nil && src.MaybeHasNulls() {
-				_RIGHT_SWITCH(_JOIN_TYPE, false, true)
-			} else {
-				_RIGHT_SWITCH(_JOIN_TYPE, false, false)
-			}
-		}
+				if sel != nil {
+					if src != nil && src.MaybeHasNulls() {
+						_RIGHT_SWITCH(_JOIN_TYPE, true, true)
+					} else {
+						_RIGHT_SWITCH(_JOIN_TYPE, true, false)
+					}
+				} else {
+					if src != nil && src.MaybeHasNulls() {
+						_RIGHT_SWITCH(_JOIN_TYPE, false, true)
+					} else {
+						_RIGHT_SWITCH(_JOIN_TYPE, false, false)
+					}
+				}
 
-		o.builderState.right.setBuilderColumnState(initialBuilderState)
-	}
-	o.builderState.right.reset()
+				o.builderState.right.setBuilderColumnState(initialBuilderState)
+			}
+			o.builderState.right.reset()
+		})
 }
 
 // {{ end }}

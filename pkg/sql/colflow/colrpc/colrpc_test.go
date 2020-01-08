@@ -287,16 +287,17 @@ func TestOutboxInbox(t *testing.T) {
 					outputBatches.Add(coldata.ZeroBatch)
 				} else {
 					batchCopy := testAllocator.NewMemBatchWithSize(typs, int(outputBatch.Length()))
-					for i := range typs {
-						testAllocator.Append(
-							batchCopy.ColVec(i),
-							coldata.SliceArgs{
-								ColType:   typs[i],
-								Src:       outputBatch.ColVec(i),
-								SrcEndIdx: uint64(outputBatch.Length()),
-							},
-						)
-					}
+					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
+						for i := range typs {
+							batchCopy.ColVec(i).Append(
+								coldata.SliceArgs{
+									ColType:   typs[i],
+									Src:       outputBatch.ColVec(i),
+									SrcEndIdx: uint64(outputBatch.Length()),
+								},
+							)
+						}
+					})
 					batchCopy.SetLength(outputBatch.Length())
 					outputBatches.Add(batchCopy)
 				}
