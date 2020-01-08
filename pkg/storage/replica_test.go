@@ -544,7 +544,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 
 				// Emulate what a server actually does and bump the write timestamp when
 				// possible. This makes some batches with diverged read and write
-				// timestamps to still pass isOnePhaseCommit().
+				// timestamps pass isOnePhaseCommit().
 				maybeBumpReadTimestampToWriteTimestamp(ctx, &ba)
 
 				if is1PC := isOnePhaseCommit(&ba); is1PC != c.exp1PC {
