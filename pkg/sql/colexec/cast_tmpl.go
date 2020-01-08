@@ -194,7 +194,7 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 	col := vec._FROMTYPE()
 	projVec := batch.ColVec(c.outputIdx)
 	projCol := projVec._TOTYPE()
-	c.allocator.performOperation(
+	c.allocator.PerformOperation(
 		[]coldata.Vec{projVec},
 		func() {
 			if vec.MaybeHasNulls() {

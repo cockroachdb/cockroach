@@ -101,7 +101,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec._TemplateType()
-	c.allocator.performOperation(
+	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
 			if sel := batch.Selection(); sel != nil {
