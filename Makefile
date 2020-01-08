@@ -150,11 +150,9 @@ CFLAGS += -g1
 CXXFLAGS += -g1
 LDFLAGS ?=
 
-# TODO(benesch): remove filter-outs below when golang/go#26144 and
-# golang/go#16651, respectively, are fixed.
-CGO_CFLAGS = $(filter-out -g%,$(CFLAGS))
+CGO_CFLAGS = $(CFLAGS)
 CGO_CXXFLAGS = $(CXXFLAGS)
-CGO_LDFLAGS = $(filter-out -static,$(LDFLAGS))
+CGO_LDFLAGS = $(LDFLAGS)
 
 export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS
 
@@ -393,6 +391,7 @@ ifneq ($(HOST_TRIPLE),$(TARGET_TRIPLE))
 is-cross-compile := 1
 endif
 
+target-is-linux := $(findstring linux,$(TARGET_TRIPLE))
 target-is-windows := $(findstring w64,$(TARGET_TRIPLE))
 
 # CMAKE_TARGET_MESSAGES=OFF prevents CMake from printing progress messages
@@ -473,15 +472,7 @@ C_LIBS_COMMON = \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
 	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
-C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
-
-# We only include krb5 on linux, non-musl builds.
-ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
-C_LIBS_CCL += $(LIBKRB5)
-KRB_CPPFLAGS := $(KRB5_DIR)/include
-KRB_DIR := $(KRB5_DIR)/lib
-override TAGS += gss
-endif
+C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL) $(if $(target-is-linux),$(LIBKRB5))
 
 # Go does not permit dashes in build tags. This is undocumented.
 native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)$(if $(use-msan),_msan)
@@ -526,8 +517,8 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR))' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB5_DIR)/include)' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB5_DIR)/lib)' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
