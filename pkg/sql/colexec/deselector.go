@@ -56,20 +56,21 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 	p.output.SetLength(batch.Length())
 	p.output.ResetInternalBatch()
 	sel := batch.Selection()
-	for i, t := range p.inputTypes {
-		toCol := p.output.ColVec(i)
-		fromCol := batch.ColVec(i)
-		p.allocator.Copy(
-			toCol,
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   t,
-					Src:       fromCol,
-					Sel:       sel,
-					SrcEndIdx: uint64(batch.Length()),
+	p.allocator.PerformOperation(p.output.ColVecs(), func() {
+		for i, t := range p.inputTypes {
+			toCol := p.output.ColVec(i)
+			fromCol := batch.ColVec(i)
+			toCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:   t,
+						Src:       fromCol,
+						Sel:       sel,
+						SrcEndIdx: uint64(batch.Length()),
+					},
 				},
-			},
-		)
-	}
+			)
+		}
+	})
 	return p.output
 }

@@ -370,19 +370,20 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 // buffer appends all tuples in range [start,end) from s.batch to already
 // buffered tuples.
 func (s *chunker) buffer(start uint16, end uint16) {
-	for i := 0; i < len(s.bufferedColumns); i++ {
-		s.allocator.Append(
-			s.bufferedColumns[i],
-			coldata.SliceArgs{
-				ColType:     s.inputTypes[i],
-				Src:         s.batch.ColVec(i),
-				DestIdx:     s.buffered,
-				SrcStartIdx: uint64(start),
-				SrcEndIdx:   uint64(end),
-			},
-		)
-	}
-	s.buffered += uint64(end - start)
+	s.allocator.PerformOperation(s.bufferedColumns, func() {
+		for i := 0; i < len(s.bufferedColumns); i++ {
+			s.bufferedColumns[i].Append(
+				coldata.SliceArgs{
+					ColType:     s.inputTypes[i],
+					Src:         s.batch.ColVec(i),
+					DestIdx:     s.buffered,
+					SrcStartIdx: uint64(start),
+					SrcEndIdx:   uint64(end),
+				},
+			)
+		}
+		s.buffered += uint64(end - start)
+	})
 }
 
 func (s *chunker) spool(ctx context.Context) {
