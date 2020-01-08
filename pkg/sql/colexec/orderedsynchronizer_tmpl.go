@@ -8,6 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// {{/*
+// +build execgen_template
+//
+// This file is the execgen template for orderedsynchronizer.eg.go. It's
+// formatted in a special way, so it's both valid Go and a valid text/template
+// input. This permits editing this file with editor support.
+//
+// */}}
+
 package colexec
 
 import (
@@ -18,10 +27,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// {{/*
+// Declarations to make the template compile properly.
+
+// _TYPE is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPE = coltypes.Unhandled
+
+// */}}
 
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
@@ -94,24 +115,32 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 
 		minBatch := o.heap[0]
 		// Copy the min row into the output.
-		for i := range o.columnTypes {
-			batch := o.inputBatches[minBatch]
-			vec := batch.ColVec(i)
-			srcStartIdx := o.inputIndices[minBatch]
-			if sel := batch.Selection(); sel != nil {
-				srcStartIdx = sel[srcStartIdx]
+		o.allocator.performOperation(o.output.ColVecs(), func() {
+			for i := range o.columnTypes {
+				batch := o.inputBatches[minBatch]
+				vec := batch.ColVec(i)
+				srcStartIdx := o.inputIndices[minBatch]
+				if sel := batch.Selection(); sel != nil {
+					srcStartIdx = sel[srcStartIdx]
+				}
+
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcStartIdx) {
+					o.output.ColVec(i).Nulls().SetNull(outputIdx)
+				} else {
+					switch o.columnTypes[i] {
+					// {{range .}}
+					case _TYPE:
+						srcCol := vec._TemplateType()
+						outCol := o.output.ColVec(i)._TemplateType()
+						v := execgen.UNSAFEGET(srcCol, int(srcStartIdx))
+						execgen.SET(outCol, int(outputIdx), v)
+					// {{end}}
+					default:
+						execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", o.columnTypes[i]))
+					}
+				}
 			}
-			o.allocator.Append(
-				o.output.ColVec(i),
-				coldata.SliceArgs{
-					ColType:     o.columnTypes[i],
-					Src:         vec,
-					DestIdx:     uint64(outputIdx),
-					SrcStartIdx: uint64(srcStartIdx),
-					SrcEndIdx:   uint64(srcStartIdx + 1),
-				},
-			)
-		}
+		})
 
 		// Advance the input batch, fetching a new batch if necessary.
 		if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
