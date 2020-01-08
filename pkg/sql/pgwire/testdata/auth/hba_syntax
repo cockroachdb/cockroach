@@ -20,7 +20,7 @@ host all all 0.0.0.0/0 invalid
 ERROR: unimplemented: unknown auth method "invalid" (SQLSTATE 0A000)
 HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
 --
-Supported methods: cert, cert-password, password
+Supported methods: cert, cert-password, password, reject, trust
 
 
 # CockroachDB does not (yet?) support per-db HBA rules.
@@ -52,3 +52,11 @@ HINT: You have attempted to use a feature that is not yet implemented.<STANDARD 
 --
 List the numeric CIDR notation instead, for example: 127.0.0.1/8.
 Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.
+
+
+# CockroachDB does not yet support local rules.
+set_hba
+local all all cert
+----
+ERROR: unimplemented: unsupported connection type: local (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
