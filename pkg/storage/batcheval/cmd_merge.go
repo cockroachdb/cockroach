@@ -29,10 +29,10 @@ func init() {
 // transactional, merges are not currently exposed directly to
 // clients. Merged values are explicitly not MVCC data.
 func Merge(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.MergeRequest)
 	h := cArgs.Header
 
-	return result.Result{}, engine.MVCCMerge(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value)
+	return result.Result{}, engine.MVCCMerge(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value)
 }

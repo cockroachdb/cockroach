@@ -81,7 +81,7 @@ func WriteAbortSpanOnResolve(status roachpb.TransactionStatus, poison, removedIn
 func UpdateAbortSpan(
 	ctx context.Context,
 	rec EvalContext,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txn enginepb.TxnMeta,
 	poison bool,
@@ -90,7 +90,7 @@ func UpdateAbortSpan(
 	// no changes are needed. This can help us avoid unnecessary Raft
 	// proposals.
 	var curEntry roachpb.AbortSpanEntry
-	exists, err := rec.AbortSpan().Get(ctx, batch, txn.ID, &curEntry)
+	exists, err := rec.AbortSpan().Get(ctx, readWriter, txn.ID, &curEntry)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func UpdateAbortSpan(
 		if !exists {
 			return nil
 		}
-		return rec.AbortSpan().Del(ctx, batch, ms, txn.ID)
+		return rec.AbortSpan().Del(ctx, readWriter, ms, txn.ID)
 	}
 
 	entry := roachpb.AbortSpanEntry{
@@ -113,7 +113,7 @@ func UpdateAbortSpan(
 	// curEntry already escapes, so assign entry to curEntry and pass
 	// that to Put instead of allowing entry to escape as well.
 	curEntry = entry
-	return rec.AbortSpan().Put(ctx, batch, ms, txn.ID, &curEntry)
+	return rec.AbortSpan().Put(ctx, readWriter, ms, txn.ID, &curEntry)
 }
 
 // CanPushWithPriority returns true if the given pusher can push the pushee

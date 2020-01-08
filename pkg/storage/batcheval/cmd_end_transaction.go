@@ -168,7 +168,7 @@ func declareKeysEndTxn(
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
 // recent PRs have landed.
 func EndTxn(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTxnRequest)
 	h := cArgs.Header
@@ -191,7 +191,7 @@ func EndTxn(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.Timestamp{}, &existingTxn, engine.MVCCGetOptions{},
+		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, engine.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -228,12 +228,12 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, args, reply.Txn, cArgs.EvalCtx)
+				externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, batch, ms, key, args, reply.Txn, externalIntents,
+					ctx, readWriter, ms, key, args, reply.Txn, externalIntents,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -290,7 +290,7 @@ func EndTxn(
 
 			reply.Txn.Status = roachpb.STAGING
 			reply.StagingTimestamp = reply.Txn.WriteTimestamp
-			if err := updateStagingTxn(ctx, batch, ms, key, args, reply.Txn); err != nil {
+			if err := updateStagingTxn(ctx, readWriter, ms, key, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 			return result.Result{}, nil
@@ -310,7 +310,7 @@ func EndTxn(
 		// during startup, to infer that any lingering intents belong to in-progress
 		// transactions and thus the pre-intent value can safely be used.
 		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
-			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
+			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, readWriter.(engine.Batch),
 				ms, mt, reply.Txn.WriteTimestamp)
 			if err != nil {
 				return result.Result{}, err
@@ -329,17 +329,17 @@ func EndTxn(
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve intents for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, args, reply.Txn, cArgs.EvalCtx)
+	externalIntents, err := resolveLocalIntents(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateFinalizedTxn(ctx, batch, ms, key, args, reply.Txn, externalIntents); err != nil {
+	if err := updateFinalizedTxn(ctx, readWriter, ms, key, args, reply.Txn, externalIntents); err != nil {
 		return result.Result{}, err
 	}
 
 	// Run the rest of the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
-		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
+		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, readWriter.(engine.Batch),
 			ms, args, reply.Txn)
 		if err != nil {
 			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
@@ -451,7 +451,7 @@ const intentResolutionBatchSize = 500
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
@@ -464,7 +464,7 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iter := batch.NewIterator(engine.IterOptions{
+	iter := readWriter.NewIterator(engine.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
 	})
 	iterAndBuf := engine.GetBufUsingIter(iter)
@@ -492,7 +492,7 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
+				ok, err := engine.MVCCResolveWriteIntentUsingIter(ctx, readWriter, iterAndBuf, resolveMS, intent)
 				if ok {
 					resolveAllowance--
 				}
@@ -505,7 +505,7 @@ func resolveLocalIntents(
 			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, resolveAllowance)
+				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, readWriter, iterAndBuf, ms, intent, resolveAllowance)
 				if err != nil {
 					return err
 				}
@@ -529,7 +529,7 @@ func resolveLocalIntents(
 
 	removedAny := resolveAllowance != intentResolutionBatchSize
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
-		if err := UpdateAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, args.Poison); err != nil {
+		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
 			return nil, err
 		}
 	}
@@ -542,7 +542,7 @@ func resolveLocalIntents(
 // remote) intents.
 func updateStagingTxn(
 	ctx context.Context,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *roachpb.EndTxnRequest,
@@ -551,7 +551,7 @@ func updateStagingTxn(
 	txn.IntentSpans = args.IntentSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return engine.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -560,7 +560,7 @@ func updateStagingTxn(
 // it around.
 func updateFinalizedTxn(
 	ctx context.Context,
-	batch engine.ReadWriter,
+	readWriter engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
 	args *roachpb.EndTxnRequest,
@@ -571,12 +571,12 @@ func updateFinalizedTxn(
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
-		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
+		return engine.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
 	txn.IntentSpans = externalIntents
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return engine.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.
@@ -1092,7 +1092,7 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	ctx context.Context, rec EvalContext, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
+	_ context.Context, rec EvalContext, _ engine.Batch, change *roachpb.ChangeReplicasTrigger,
 ) result.Result {
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the

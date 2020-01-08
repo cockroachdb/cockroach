@@ -35,7 +35,7 @@ type Conf struct {
 
 // Entry is a single line of a configuration.
 type Entry struct {
-	Type string
+	Type String
 	// Database is the list of databases to match. An empty list means
 	// "match any database".
 	Database []String
@@ -44,10 +44,11 @@ type Entry struct {
 	User []String
 	// Address is either AnyAddr, *net.IPNet or (unsupported) String for a hostname.
 	Address interface{}
-	Method  string
+	Method  String
 	// MethodFn is populated during name resolution of Method.
-	MethodFn interface{}
-	Options  [][2]string
+	MethodFn     interface{}
+	Options      [][2]string
+	OptionQuotes []bool
 }
 
 func (c Conf) String() string {
@@ -67,11 +68,11 @@ func (c Conf) String() string {
 	row := []string{"# TYPE", "DATABASE", "USER", "ADDRESS", "METHOD", "OPTIONS"}
 	table.Append(row)
 	for _, e := range c.Entries {
-		row[0] = e.Type
+		row[0] = e.Type.String()
 		row[1] = e.DatabaseString()
 		row[2] = e.UserString()
 		row[3] = e.AddressString()
-		row[4] = e.Method
+		row[4] = e.Method.String()
 		row[5] = e.OptionsString()
 		table.Append(row)
 	}
@@ -190,8 +191,9 @@ func (h Entry) AddressString() string {
 func (h Entry) OptionsString() string {
 	var sb strings.Builder
 	sp := ""
-	for _, opt := range h.Options {
-		fmt.Fprintf(&sb, "%s%s=%s", sp, opt[0], opt[1])
+	for i, opt := range h.Options {
+		sb.WriteString(sp)
+		sb.WriteString(String{Value: opt[0] + "=" + opt[1], Quoted: h.OptionQuotes[i]}.String())
 		sp = " "
 	}
 	return sb.String()

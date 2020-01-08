@@ -33,7 +33,7 @@ func init() {
 
 // EvalAddSSTable evaluates an AddSSTable command.
 func EvalAddSSTable(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
@@ -50,7 +50,7 @@ func EvalAddSSTable(
 	var skippedKVStats enginepb.MVCCStats
 	var err error
 	if args.DisallowShadowing {
-		if skippedKVStats, err = checkForKeyCollisions(ctx, batch, mvccStartKey, mvccEndKey, args.Data); err != nil {
+		if skippedKVStats, err = checkForKeyCollisions(ctx, readWriter, mvccStartKey, mvccEndKey, args.Data); err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 	}
@@ -192,7 +192,7 @@ func EvalAddSSTable(
 			// NB: This is *not* a general transformation of any arbitrary SST to a
 			// WriteBatch: it assumes every key in the SST is a simple Set. This is
 			// already assumed elsewhere in this RPC though, so that's OK here.
-			if err := batch.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+			if err := readWriter.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
 				return result.Result{}, err
 			}
 			dataIter.Next()
@@ -211,8 +211,8 @@ func EvalAddSSTable(
 }
 
 func checkForKeyCollisions(
-	ctx context.Context,
-	batch engine.ReadWriter,
+	_ context.Context,
+	readWriter engine.ReadWriter,
 	mvccStartKey engine.MVCCKey,
 	mvccEndKey engine.MVCCKey,
 	data []byte,
@@ -220,7 +220,7 @@ func checkForKeyCollisions(
 	// We could get a spansetBatch so fetch the underlying db engine as
 	// we need access to the underlying C.DBIterator later, and the
 	// dbIteratorGetter is not implemented by a spansetBatch.
-	dbEngine := spanset.GetDBEngine(batch, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
+	dbEngine := spanset.GetDBEngine(readWriter, roachpb.Span{Key: mvccStartKey.Key, EndKey: mvccEndKey.Key})
 
 	emptyMVCCStats := enginepb.MVCCStats{}
 
