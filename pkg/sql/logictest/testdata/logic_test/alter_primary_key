@@ -1,6 +1,6 @@
 # TODO (rohany,solongordon): we still have to figure out what happens with multiple families, so fix that right now.
 statement ok
-SET enable_primary_key_changes = true
+SET experimental_enable_primary_key_changes = true
 
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z), FAMILY (x, y, z, w))

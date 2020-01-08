@@ -343,8 +343,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`enable_primary_key_changes`: {
-		GetStringVal: makeBoolGetStringValFn(`enable_primary_key_changes`),
+	`experimental_enable_primary_key_changes`: {
+		GetStringVal: makeBoolGetStringValFn(`experimental_enable_primary_key_changes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
