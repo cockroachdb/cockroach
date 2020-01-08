@@ -517,9 +517,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			baseSQLMemoryBudget, err)
 	}
 
-	var authHook func(context.Context) error
+	var testingAuthHook func(context.Context) error
 	if k := s.execCfg.PGWireTestingKnobs; k != nil {
-		authHook = k.AuthHook
+		testingAuthHook = k.AuthHook
 	}
 
 	serveConn(
@@ -527,10 +527,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		&s.metrics, reserved, s.SQLServer,
 		s.IsDraining,
 		authOptions{
-			insecure: s.cfg.Insecure,
-			ie:       s.execCfg.InternalExecutor,
-			auth:     s.GetAuthenticationConfiguration(),
-			authHook: authHook,
+			insecure:        s.cfg.Insecure,
+			ie:              s.execCfg.InternalExecutor,
+			auth:            s.GetAuthenticationConfiguration(),
+			testingAuthHook: testingAuthHook,
 		},
 		s.stopper)
 	return nil
