@@ -35,10 +35,7 @@ type bufferingInMemoryOperator interface {
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	// TODO(yuzefovich): it might be possible to avoid the need for an Allocator
-	// when exporting buffered tuples. This will require the refactor of the
-	// buffering in-memory operators.
-	ExportBuffered(*Allocator) coldata.Batch
+	ExportBuffered() coldata.Batch
 }
 
 // oneInputDiskSpiller is an Operator that manages the fallback from an
@@ -92,8 +89,6 @@ var _ Operator = &oneInputDiskSpiller{}
 
 // newOneInputDiskSpiller returns a new oneInputDiskSpiller. It takes the
 // following arguments:
-// - allocator - this Allocator is used (if spilling occurs) when copying the
-//   buffered tuples from the in-memory operator into the disk-backed one.
 // - inMemoryOp - the in-memory operator that will be consuming input and doing
 //   computations until it either successfully processes the whole input or
 //   reaches its memory limit.
@@ -107,14 +102,13 @@ var _ Operator = &oneInputDiskSpiller{}
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
 func newOneInputDiskSpiller(
-	allocator *Allocator,
 	input Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
 	diskBackedOpConstructor func(input Operator) Operator,
 	spillingCallbackFn func(),
 ) Operator {
-	diskBackedOpInput := newBufferExportingOperator(allocator, inMemoryOp, input)
+	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
 	return &oneInputDiskSpiller{
 		input:                  input,
 		inMemoryOp:             inMemoryOp,
@@ -207,7 +201,6 @@ type bufferExportingOperator struct {
 	ZeroInputNode
 	NonExplainable
 
-	allocator       *Allocator
 	firstSource     bufferingInMemoryOperator
 	secondSource    Operator
 	firstSourceDone bool
@@ -216,10 +209,9 @@ type bufferExportingOperator struct {
 var _ Operator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
-	allocator *Allocator, firstSource bufferingInMemoryOperator, secondSource Operator,
+	firstSource bufferingInMemoryOperator, secondSource Operator,
 ) Operator {
 	return &bufferExportingOperator{
-		allocator:    allocator,
 		firstSource:  firstSource,
 		secondSource: secondSource,
 	}
@@ -234,7 +226,7 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next(ctx)
 	}
-	batch := b.firstSource.ExportBuffered(b.allocator)
+	batch := b.firstSource.ExportBuffered()
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.Next(ctx)
