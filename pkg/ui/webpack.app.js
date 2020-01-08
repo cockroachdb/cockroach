@@ -126,7 +126,7 @@ module.exports = (env) => {
           test: /\.js$/,
           loader: "source-map-loader",
           include: localRoots,
-          exclude: /\/node_modules/
+          exclude: /\/node_modules/,
         },
       ],
     },
