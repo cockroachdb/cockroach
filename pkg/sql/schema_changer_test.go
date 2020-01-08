@@ -2272,7 +2272,7 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET enable_primary_key_changes = true;
+SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX i (z));
 INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3); 
@@ -2381,7 +2381,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET enable_primary_key_changes = true;
+SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -2427,7 +2427,7 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET enable_primary_key_changes = true;
+SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));
 INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
@@ -2489,7 +2489,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET enable_primary_key_changes = true;
+SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
@@ -2546,7 +2546,7 @@ func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	if _, err := sqlDB.Exec(`
-SET enable_primary_key_changes = true;
+SET experimental_enable_primary_key_changes = true;
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT NOT NULL, z INT NOT NULL, w int, INDEX i (w));
 INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3); 

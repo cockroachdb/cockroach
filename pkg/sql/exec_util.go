@@ -146,8 +146,8 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 )
 
 var primaryKeyChangesEnabledClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.primary_key_changes.enabled",
-	"default value for enable_primary_key_changes session setting; allows use of primary key changes by default",
+	"sql.defaults.experimental_primary_key_changes.enabled",
+	"default value for experimental_enable_primary_key_changes session setting; allows use of primary key changes by default",
 	false,
 )
 

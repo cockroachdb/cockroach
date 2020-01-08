@@ -313,7 +313,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			if !params.p.EvalContext().SessionData.PrimaryKeyChangesEnabled {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"session variable enable_primary_key_changes is set to false, cannot perform primary key change")
+					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
 			// Ensure that there is not another primary key change attempted within this transaction.
