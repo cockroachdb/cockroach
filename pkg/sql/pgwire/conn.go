@@ -542,26 +542,23 @@ func (c *conn) processCommandsAsync(
 		}()
 
 		// Authenticate the connection.
-		if !authOpt.skipAuth {
-			if authOpt.authHook != nil {
-				if retErr = authOpt.authHook(ctx); retErr != nil {
-					return
-				}
-			} else {
-				if retErr = c.handleAuthentication(
-					ctx, ac, authOpt.insecure, authOpt.ie, authOpt.auth,
-					sqlServer.GetExecutorConfig(),
-				); retErr != nil {
-					return
-				}
-			}
+		if retErr = c.handleAuthentication(
+			ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
+		); retErr != nil {
+			// Auth failed or some other error.
+			return
 		}
 
+		// Inform the client of the default session settings.
 		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer)
 		if retErr != nil {
 			return
 		}
+		// Signal the connection was established to the authenticator.
 		ac.AuthOK(connHandler)
+		// Mark the authentication as succeeded in case a panic
+		// is thrown below and we need to report to the client
+		// using the defer above.
 		authOK = true
 
 		// Now actually process commands.
