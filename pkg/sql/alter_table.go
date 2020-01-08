@@ -379,12 +379,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			// TODO (rohany,solongordon): Until it is clear what to do with column families, disallow primary key changes
-			//  on tables with multiple column families.
-			if len(n.tableDesc.Families) > 1 {
-				return errors.New("unable to perform primary key change on tables with multiple column families")
-			}
-
 			// TODO (rohany,solongordon): Until it is clear how to handle foreign keys, disallow primary key changes
 			//  that are referenced by other tables through foreign key relationships.
 			if len(n.tableDesc.InboundFKs) > 0 || len(n.tableDesc.OutboundFKs) > 0 {
