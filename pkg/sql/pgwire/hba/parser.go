@@ -71,7 +71,10 @@ func parseHbaLine(line [][]String) (Entry, error) {
 			errors.New("multiple values specified for connection type"),
 			"Specify exactly one connection type per line.")
 	}
-	entry.Type = line[fieldIdx][0].Value
+	entry.Type = line[fieldIdx][0]
+	if entry.Type.Value == "" {
+		return entry, errors.New("cannot use empty string as connection type")
+	}
 
 	// Get the databases.
 	fieldIdx++
@@ -87,7 +90,7 @@ func parseHbaLine(line [][]String) (Entry, error) {
 	}
 	entry.User = line[fieldIdx]
 
-	if entry.Type != "local" {
+	if entry.Type.Value != "local" {
 		fieldIdx++
 		if fieldIdx >= len(line) {
 			return entry, errors.New("end-of-line before IP address specification")
@@ -100,6 +103,8 @@ func parseHbaLine(line [][]String) (Entry, error) {
 		}
 		token := tokens[0]
 		switch {
+		case token.Value == "":
+			return entry, errors.New("cannot use empty string as address")
 		case token.IsKeyword("all"):
 			entry.Address = token
 		case token.IsKeyword("samehost"), token.IsKeyword("samenet"):
@@ -158,7 +163,10 @@ func parseHbaLine(line [][]String) (Entry, error) {
 			errors.New("multiple values specified for authentication method"),
 			"Specify exactly one authentication method per line.")
 	}
-	entry.Method = line[fieldIdx][0].Value
+	entry.Method = line[fieldIdx][0]
+	if entry.Method.Value == "" {
+		return entry, errors.New("cannot use empty string as authentication method")
+	}
 
 	// Parse remaining arguments.
 	for fieldIdx++; fieldIdx < len(line); fieldIdx++ {
@@ -168,6 +176,7 @@ func parseHbaLine(line [][]String) (Entry, error) {
 				return entry, errors.Newf("authentication option not in name=value format: %s", tok.Value)
 			}
 			entry.Options = append(entry.Options, [2]string{kv[0], kv[1]})
+			entry.OptionQuotes = append(entry.OptionQuotes, tok.Quoted)
 		}
 	}
 

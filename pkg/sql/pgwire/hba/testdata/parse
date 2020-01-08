@@ -41,25 +41,25 @@ error: authentication option not in name=value format: d
 
 subtest end
 
-subtest ignored_quotes
+subtest quoted_columns
 
 line
 "local" a b c
 ----
-# TYPE DATABASE USER ADDRESS METHOD OPTIONS
-local  a        b            c
+# TYPE  DATABASE USER ADDRESS METHOD OPTIONS
+"local" a        b            c
 
 line
 local a b "method"
 ----
-# TYPE DATABASE USER ADDRESS METHOD OPTIONS
-local  a        b            method
+# TYPE DATABASE USER ADDRESS METHOD   OPTIONS
+local  a        b            "method"
 
 line
-local a b c "k=v"
+host all all all gss k=v " someopt = withspaces "
 ----
 # TYPE DATABASE USER ADDRESS METHOD OPTIONS
-local  a        b            c      k=v
+host   all      all  all     gss    k=v " someopt = withspaces "
 
 subtest end
 
@@ -226,7 +226,7 @@ host   all      testuser,"all" 0.0.0.0/0 cert
 &hba.Conf{
     Entries: {
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"a", Quoted:false},
                 {Value:"b", Quoted:false},
@@ -235,13 +235,14 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             User: {
                 {Value:"all", Quoted:false},
             },
-            Address:  hba.String{Value:"all", Quoted:false},
-            Method:   "trust",
-            MethodFn: nil,
-            Options:  nil,
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -250,13 +251,14 @@ host   all      testuser,"all" 0.0.0.0/0 cert
                 {Value:"b", Quoted:false},
                 {Value:"c", Quoted:false},
             },
-            Address:  hba.String{Value:"all", Quoted:false},
-            Method:   "trust",
-            MethodFn: nil,
-            Options:  nil,
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"a", Quoted:false},
                 {Value:"b", Quoted:false},
@@ -267,13 +269,14 @@ host   all      testuser,"all" 0.0.0.0/0 cert
                 {Value:"e", Quoted:false},
                 {Value:"f", Quoted:false},
             },
-            Address:  hba.String{Value:"all", Quoted:false},
-            Method:   "trust",
-            MethodFn: nil,
-            Options:  nil,
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"trust", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -285,9 +288,10 @@ host   all      testuser,"all" 0.0.0.0/0 cert
                 IP:   {0x0, 0x0, 0x0, 0x0},
                 Mask: {0x0, 0x0, 0x0, 0x0},
             },
-            Method:   "cert",
-            MethodFn: nil,
-            Options:  nil,
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
     },
 }
@@ -303,7 +307,7 @@ host   "all","test space",something some,"us ers" all     cert
 &hba.Conf{
     Entries: {
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:true},
                 {Value:"test space", Quoted:true},
@@ -313,10 +317,63 @@ host   "all","test space",something some,"us ers" all     cert
                 {Value:"some", Quoted:false},
                 {Value:"us ers", Quoted:true},
             },
+            Address:      hba.String{Value:"all", Quoted:false},
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
+        },
+    },
+}
+
+subtest end
+
+subtest empty_strings
+
+multiline
+"" all all all trust
+----
+error: line 1: cannot use empty string as connection type
+
+multiline
+host all all all ""
+----
+error: line 1: cannot use empty string as authentication method
+
+multiline
+host all all "" cert
+----
+error: line 1: cannot use empty string as address
+
+subtest end
+
+subtest quoted_options
+
+multiline
+host all all all gss k=v " someopt = withspaces "
+----
+# String render check:
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+host   all      all  all     gss    k=v " someopt = withspaces "
+# Detail:
+&hba.Conf{
+    Entries: {
+        {
+            Type:     hba.String{Value:"host", Quoted:false},
+            Database: {
+                {Value:"all", Quoted:false},
+            },
+            User: {
+                {Value:"all", Quoted:false},
+            },
             Address:  hba.String{Value:"all", Quoted:false},
-            Method:   "cert",
+            Method:   hba.String{Value:"gss", Quoted:false},
             MethodFn: nil,
-            Options:  nil,
+            Options:  {
+                {"k", "v"},
+                {" someopt ", " withspaces "},
+            },
+            OptionQuotes: {false, true},
         },
     },
 }
@@ -370,7 +427,7 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
 &hba.Conf{
     Entries: {
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -378,14 +435,15 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
                 {Value:"all", Quoted:false},
             },
             Address:  hba.String{Value:"root", Quoted:false},
-            Method:   "cert-password",
+            Method:   hba.String{Value:"cert-password", Quoted:false},
             MethodFn: nil,
             Options:  {
                 {"ignored", "value"},
             },
+            OptionQuotes: {false},
         },
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -393,13 +451,14 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
                 {Value:"all", Quoted:false},
             },
             Address:  hba.String{Value:"all", Quoted:false},
-            Method:   "gss",
+            Method:   hba.String{Value:"gss", Quoted:false},
             MethodFn: nil,
             Options:  {
                 {"krb_realm", "other"},
                 {"include_realm", "0"},
                 {"krb_realm", "te-st12.COM"},
             },
+            OptionQuotes: {false, false, false},
         },
     },
 }
@@ -420,7 +479,7 @@ host   "all"    "all" 0.0.0.0/0 cert
 &hba.Conf{
     Entries: {
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"db", Quoted:false},
             },
@@ -431,12 +490,13 @@ host   "all"    "all" 0.0.0.0/0 cert
                 IP:   {0x0, 0x0, 0x0, 0x0},
                 Mask: {0x0, 0x0, 0x0, 0x0},
             },
-            Method:   "cert",
-            MethodFn: nil,
-            Options:  nil,
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
         {
-            Type:     "host",
+            Type:     hba.String{Value:"host", Quoted:false},
             Database: {
                 {Value:"all", Quoted:true},
             },
@@ -447,9 +507,10 @@ host   "all"    "all" 0.0.0.0/0 cert
                 IP:   {0x0, 0x0, 0x0, 0x0},
                 Mask: {0x0, 0x0, 0x0, 0x0},
             },
-            Method:   "cert",
-            MethodFn: nil,
-            Options:  nil,
+            Method:       hba.String{Value:"cert", Quoted:false},
+            MethodFn:     nil,
+            Options:      nil,
+            OptionQuotes: nil,
         },
     },
 }
