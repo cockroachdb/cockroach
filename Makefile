@@ -844,7 +844,9 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/rule_name_string.go
 
 go-targets-ccl := \
-	$(COCKROACH) $(COCKROACHSHORT) go-install \
+	$(COCKROACH) $(COCKROACHSHORT) \
+	bin/workload \
+	go-install \
 	bench benchshort \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
