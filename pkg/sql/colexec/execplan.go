@@ -793,17 +793,7 @@ func NewColOperator(
 				if err != nil {
 					return result, err
 				}
-				var diskSpillerMemAccount *mon.BoundAccount
-				if useStreamingMemAccountForBuffering {
-					diskSpillerMemAccount = streamingMemAccount
-				} else {
-					diskSpillerMemAccount = result.createBufferingUnlimitedMemAccount(
-						ctx, flowCtx, "disk-spiller-sort-all",
-					)
-				}
-				diskSpillerAllocator := NewAllocator(ctx, diskSpillerMemAccount)
 				result.Op = newOneInputDiskSpiller(
-					diskSpillerAllocator,
 					input, inMemorySorter.(bufferingInMemoryOperator),
 					sorterMemMonitorName,
 					func(input Operator) Operator {

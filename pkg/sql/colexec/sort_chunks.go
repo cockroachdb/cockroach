@@ -442,6 +442,12 @@ func (s *chunker) getPartitionsCol() []bool {
 	}
 }
 
+func (s *chunker) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
+	execerror.VectorizedInternalPanic("getWindowedBatch is not implemented on chunker spooler")
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
 func (s *chunker) emptyBuffer() {
 	s.bufferedTuples.reset()
 }
