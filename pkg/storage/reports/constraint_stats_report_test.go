@@ -443,7 +443,8 @@ type node struct {
 	locality string
 	stores   []store
 	// dead, if set, indicates that the node is to be considered dead for the
-	// purposes of reports generation.
+	// purposes of reports generation. In production, this corresponds to a node
+	// with an expired liveness record.
 	dead bool
 }
 
