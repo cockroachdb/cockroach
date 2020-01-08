@@ -522,6 +522,7 @@ func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 		}
 		md.Payload.Lease = j.registry.newLease()
 		ju.UpdatePayload(md.Payload)
+		ju.UpdateStatus(StatusRunning)
 		return nil
 	})
 }
