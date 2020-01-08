@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 
@@ -35,6 +36,11 @@ type OrderedSynchronizer struct {
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
 	inputIndices []uint16
+	// heap is a min heap which stores indices into inputBatches. The "current
+	// value" of ith input batch is the tuple at inputIndices[i] position of
+	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
+	// from heap.
+	heap []int
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	output      coldata.Batch
@@ -68,30 +74,25 @@ func NewOrderedSynchronizer(
 func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if o.inputBatches == nil {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
+		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
 			o.inputBatches[i] = o.inputs[i].Next(ctx)
 			o.updateComparators(i)
+			if o.inputBatches[i].Length() > 0 {
+				o.heap = append(o.heap, i)
+			}
 		}
+		heap.Init(o)
 	}
 	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
 	for outputIdx < coldata.BatchSize() {
-		// Determine the batch with the smallest row.
-		minBatch := -1
-		for i := range o.inputs {
-			if o.inputBatches[i].Length() == 0 {
-				// Input exhausted.
-				continue
-			}
-			if minBatch == -1 || o.compareRow(i, minBatch) < 0 {
-				minBatch = i
-			}
-		}
-		if minBatch == -1 {
+		if o.Len() == 0 {
 			// All inputs exhausted.
 			break
 		}
 
+		minBatch := o.heap[0]
 		// Copy the min row into the output.
 		for i := range o.columnTypes {
 			batch := o.inputBatches[minBatch]
@@ -119,6 +120,11 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			o.inputBatches[minBatch] = o.inputs[minBatch].Next(ctx)
 			o.inputIndices[minBatch] = 0
 			o.updateComparators(minBatch)
+		}
+		if o.inputBatches[minBatch].Length() == 0 {
+			heap.Remove(o, 0)
+		} else {
+			heap.Fix(o, 0)
 		}
 
 		outputIdx++
@@ -180,4 +186,31 @@ func (o *OrderedSynchronizer) updateComparators(batchIdx int) {
 		vec := batch.ColVec(o.ordering[i].ColIdx)
 		o.comparators[i].setVec(batchIdx, vec)
 	}
+}
+
+// Len is part of heap.Interface and is only meant to be used internally.
+func (o *OrderedSynchronizer) Len() int {
+	return len(o.heap)
+}
+
+// Less is part of heap.Interface and is only meant to be used internally.
+func (o *OrderedSynchronizer) Less(i, j int) bool {
+	return o.compareRow(o.heap[i], o.heap[j]) < 0
+}
+
+// Swap is part of heap.Interface and is only meant to be used internally.
+func (o *OrderedSynchronizer) Swap(i, j int) {
+	o.heap[i], o.heap[j] = o.heap[j], o.heap[i]
+}
+
+// Push is part of heap.Interface and is only meant to be used internally.
+func (o *OrderedSynchronizer) Push(x interface{}) {
+	o.heap = append(o.heap, x.(int))
+}
+
+// Pop is part of heap.Interface and is only meant to be used internally.
+func (o *OrderedSynchronizer) Pop() interface{} {
+	x := o.heap[len(o.heap)-1]
+	o.heap = o.heap[:len(o.heap)-1]
+	return x
 }
