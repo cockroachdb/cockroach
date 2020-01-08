@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/kr/pretty"
 )
 
 func TestParse(t *testing.T) {
@@ -28,7 +29,7 @@ func TestParse(t *testing.T) {
 		if err != nil {
 			return fmt.Sprintf("error: %v\n", err)
 		}
-		return conf.String()
+		return fmt.Sprintf("%# v\n", pretty.Formatter(conf))
 	})
 }
 
