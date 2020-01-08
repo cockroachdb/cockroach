@@ -147,6 +147,8 @@ func TestByteArrayDecoding(t *testing.T) {
 		{`a\'bcd`, false, fmtEsc, "", "invalid bytea escape sequence"},
 		{`a\00`, false, fmtEsc, "", "bytea encoded value ends with incomplete escape sequence"},
 		{`a\099`, false, fmtEsc, "", "invalid bytea escape sequence"},
+		{`a\400`, false, fmtEsc, "", "invalid bytea escape sequence"},
+		{`a\777`, false, fmtEsc, "", "invalid bytea escape sequence"},
 		{`a'b`, false, fmtEsc, "a'b", ""},
 		{`a''b`, false, fmtEsc, "a''b", ""},
 		{`a\\b`, false, fmtEsc, "a\\b", ""},
