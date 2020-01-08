@@ -1,0 +1,5 @@
+# Configuration for Google Cloud Build
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-f', 'build/cloudbuild/Dockerfile', '-t', 'gcr.io/$PROJECT_ID/cockroach:$COMMIT_SHA', '.']
+timeout: 1800s

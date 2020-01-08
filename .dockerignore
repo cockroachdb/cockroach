@@ -1,0 +1,5 @@
+.git
+cockroach
+bin
+cockroach-data
+pkg/ui/node_modules
