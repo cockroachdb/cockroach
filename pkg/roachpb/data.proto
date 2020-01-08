@@ -448,17 +448,16 @@ message Transaction {
   // If set, a write performed by the transaction could not be performed at the
   // transaction's write timestamp because a newer value was present. Had our
   // write been performed, it would have overwritten the other value even though
-  // that value might not have been read by a previous read in the transaction.
-  // Thus, this flag indicates that, if the key in question had been read
-  // previously by the transaction, a refresh of the transaction's read span
-  // will surely fail. As of Dec 2019, the client does not take advantage of
-  // this flag to avoid hopeless refreshes.
-  // Note that this flag is not set when a write runs into the write timestamp
-  // cache (indicating a more recent DeleteRange that did not actually delete
-  // the respective key. In this case, a there's no reason to think that a
-  // refresh will not succeed.
-  //
+  // that value might not have been read by a previous read in the transaction
+  // (i.e. lost update anomaly).
   // When this flag is set, the transaction's write timestamp is also bumped.
+  // The flag is used, though, to return a more specific error to the client
+  // instead of TransactionRetryError(RETRY_SERIALIZABLE).
+  //
+  // As explained above, this flag indicates that, if the key in question had
+  // been read previously by the transaction, a refresh of the transaction's
+  // read span will surely fail. The client does not currently take advantage of
+  // this flag to avoid hopeless refreshes, though.
   //
   // Historically, this field was also important for SNAPSHOT transactions which
   // could commit in other situations when the write timestamp is bumped, but
