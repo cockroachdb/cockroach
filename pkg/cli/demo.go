@@ -470,6 +470,7 @@ func (c *transientCluster) runWorkload(
 }
 
 func incrementTelemetryCounters(cmd *cobra.Command) {
+	incrementDemoCounter(demo)
 	if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
 		incrementDemoCounter(nodes)
 	}
