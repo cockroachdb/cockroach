@@ -21,6 +21,8 @@ type demoTelemetry int
 
 const (
 	_ demoTelemetry = iota
+	// demo represents when cockroach demo is used at all.
+	demo
 	// nodes represents when cockroach demo is started with multiple nodes.
 	nodes
 	// demoLocality represents when cockroach demo is started with user defined localities.
@@ -32,6 +34,7 @@ const (
 )
 
 var demoTelemetryMap = map[demoTelemetry]string{
+	demo:                   "demo",
 	nodes:                  "nodes",
 	demoLocality:           "demo-locality",
 	withLoad:               "withload",
