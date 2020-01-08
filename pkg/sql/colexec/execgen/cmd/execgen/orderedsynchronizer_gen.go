@@ -28,8 +28,9 @@ func genOrderedSynchronizer(wr io.Writer) error {
 	s := string(d)
 
 	// Replace the template variables.
-	s = strings.Replace(s, "_TYPE", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
+	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
+	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 
 	s = replaceManipulationFuncs(".LTyp", s)
 
