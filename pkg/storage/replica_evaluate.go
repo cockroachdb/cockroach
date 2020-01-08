@@ -351,8 +351,8 @@ func evaluateBatch(
 		}
 	}
 
-	if baHeader.Txn != nil && baHeader.Txn.Status.IsCommittedOrStaging() {
-		if writeTooOldState.err != nil {
+	if writeTooOldState.err != nil {
+		if baHeader.Txn != nil && baHeader.Txn.Status.IsCommittedOrStaging() {
 			log.Fatalf(ctx, "committed txn with writeTooOld err: %s", writeTooOldState.err)
 		}
 	}
@@ -421,21 +421,22 @@ func evaluateCommand(
 	var err error
 	var pd result.Result
 
-	cArgs := batcheval.CommandArgs{
-		EvalCtx: rec,
-		Header:  h,
-		Args:    args,
-		MaxKeys: maxKeys,
-		Stats:   ms,
-	}
 	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
+		cArgs := batcheval.CommandArgs{
+			EvalCtx: rec,
+			Header:  h,
+			Args:    args,
+			MaxKeys: maxKeys,
+			Stats:   ms,
+		}
+
 		if cmd.EvalRW != nil {
 			pd, err = cmd.EvalRW(ctx, readWriter, cArgs, reply)
 		} else {
 			pd, err = cmd.EvalRO(ctx, readWriter, cArgs, reply)
 		}
 	} else {
-		err = errors.AssertionFailedf("unrecognized command %s", args.Method())
+		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
 	if h.ReturnRangeInfo {
