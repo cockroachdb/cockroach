@@ -61,10 +61,6 @@ module.exports = (env) => {
       path: path.resolve(__dirname, `dist${env.dist}`),
     },
 
-    mode: "none",
-
-    devtool: "source-map",
-
     resolve: {
       // Add resolvable extensions.
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
@@ -116,6 +112,7 @@ module.exports = (env) => {
         {
           test: /\.tsx?$/,
           include: localRoots,
+          exclude: /\/node_modules/,
           use: [
             "cache-loader",
             "babel-loader",
@@ -124,7 +121,13 @@ module.exports = (env) => {
         },
 
         // All output ".js" files will have any sourcemaps re-processed by "source-map-loader".
-        // { enforce: "pre", test: /\.js$/, loader: "source-map-loader" },
+        {
+          enforce: "pre",
+          test: /\.js$/,
+          loader: "source-map-loader",
+          include: localRoots,
+          exclude: /\/node_modules/
+        },
       ],
     },
 
@@ -147,7 +150,6 @@ module.exports = (env) => {
     stats: "errors-only",
 
     devServer: {
-      // historyApiFallback: true,
       contentBase: path.join(__dirname, `dist${env.dist}`),
       index: "",
       proxy: {
@@ -156,6 +158,11 @@ module.exports = (env) => {
           target: process.env.TARGET,
         },
       },
+    },
+
+    watchOptions: {
+      poll: 1000,
+      ignored: /node_modules/,
     },
 
     // Max size of is set to 4Mb to disable warning message and control
