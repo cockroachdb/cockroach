@@ -386,9 +386,10 @@ var FoldFunctionWhitelist = map[string]struct{}{
 	"hostmask":                     {},
 	"masklen":                      {},
 	"netmask":                      {},
+	"network":                      {},
 	"set_masklen":                  {},
 	"text":                         {},
-	// TODO(JEB) same_family????
+	"inet_merge":                   {},
 	"inet_same_family":             {},
 	"inet_contained_by_or_equals":  {},
 	"inet_contains_or_equals":      {},

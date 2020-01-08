@@ -402,8 +402,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				dIPAddr := tree.MustBeDIPAddr(args[0])
-				// TODO(jeb) impl me
-				return tree.NewDString(dIPAddr.IPAddr.String()), nil
+				return tree.NewDString(dIPAddr.IPAddr.CidrString()), nil
 			},
 			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
 				"For CIDR types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
@@ -418,7 +417,7 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				dIPAddr := tree.MustBeDIPAddr(args[0])
 				broadcastIPAddr := dIPAddr.IPAddr.Broadcast()
-				return &tree.DIPAddr{IPAddr: broadcastIPAddr}, nil
+				return &tree.DIPAddr{IPAddr: broadcastIPAddr, Typ: types.INet}, nil
 			},
 			Info: "Gets the broadcast address for the network address represented by the value." +
 				"\n\nFor example, `broadcast('192.168.1.2/24')` returns `'192.168.1.255/24'`",
@@ -465,7 +464,7 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				dIPAddr := tree.MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Hostmask()
-				return &tree.DIPAddr{IPAddr: ipAddr}, nil
+				return &tree.DIPAddr{IPAddr: ipAddr, Typ: types.INet}, nil
 			},
 			Info: "Creates an IP host mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `hostmask('192.168.1.2/16')` returns `'0.0.255.255'`",
@@ -528,7 +527,7 @@ var builtins = map[string]builtinDefinition{
 					return nil, pgerror.Newf(
 						pgcode.InvalidParameterValue, "invalid mask length: %d", mask)
 				}
-				return &tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
+				return &tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}, Typ: types.INet}, nil
 			},
 			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
 				"For example, `set_masklen('192.168.1.2', 16)` returns `'192.168.1.2/16'`.",

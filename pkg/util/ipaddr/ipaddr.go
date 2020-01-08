@@ -132,6 +132,11 @@ func (ipAddr IPAddr) String() string {
 	return ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 }
 
+func (ipAddr IPAddr) CidrString() string {
+	// TODO(jeb) impl me
+	return ipAddr.String()
+}
+
 // Compare two IPAddrs. IPv4-mapped IPv6 addresses are not equal to their IPv4
 // mapping. The order of order importance goes Family > Mask > IP-bytes.
 func (ipAddr IPAddr) Compare(other *IPAddr) int {

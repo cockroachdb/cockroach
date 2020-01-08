@@ -598,10 +598,9 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 	case types.UuidFamily:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
-	// TODO(jeb): add entry for CIDR
 	case types.INetFamily:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
-		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data, Typ: t}), b, err
 	case types.JsonFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
@@ -736,8 +735,6 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
-
-		// TODO(jeb) add CIDR
 	case types.INetFamily:
 		if v, ok := val.(*tree.DIPAddr); ok {
 			data := v.ToBuffer(nil)
@@ -899,7 +896,6 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDUuid(tree.DUuid{UUID: u}), nil
-	// TODO(jeb): add CIDR
 	case types.INetFamily:
 		v, err := value.GetBytes()
 		if err != nil {
@@ -1188,7 +1184,6 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.BitArray, nil
 	case types.UuidFamily:
 		return encoding.UUID, nil
-	// TODO(jeb): add CIDR
 	case types.INetFamily:
 		return encoding.IPAddr, nil
 	default:

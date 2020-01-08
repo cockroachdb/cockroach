@@ -326,7 +326,11 @@ var (
 	INet = &T{InternalType: InternalType{
 		Family: INetFamily, Oid: oid.T_inet, Locale: &emptyLocale}}
 
-	// TODO(jeb) add comment
+	// Cidr is the type of an IPv4 or IPv6 network specification. For example:
+	//
+	//   192.168.100.128/25
+	//   2001:4f8:3:ba::/64
+	//
 	Cidr = &T{InternalType: InternalType{
 		Family: INetFamily, Oid: oid.T_cidr, Locale: &emptyLocale}}
 

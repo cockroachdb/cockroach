@@ -175,7 +175,6 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Typ:        types.Cidr,
 			ReturnType: types.Cidr,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
-				//TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(d).IPAddr
 				return NewDIPAddr(DIPAddr{ipAddr.Complement(), types.Cidr}), nil
 			},
@@ -437,7 +436,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Cidr,
 			ReturnType: types.Cidr,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				// TODO(JEB) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.And(&other)
@@ -486,7 +484,6 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Cidr,
 			ReturnType: types.Cidr,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				//TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				newIPAddr, err := ipAddr.Or(&other)
@@ -2338,7 +2335,6 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.Cidr,
 			RightType: types.Cidr,
 			Fn: func(_ *EvalContext, left, right Datum) (Datum, error) {
-				// TODO(jeb) impl me
 				ipAddr := MustBeDIPAddr(left).IPAddr
 				other := MustBeDIPAddr(right).IPAddr
 				return MakeDBool(DBool(ipAddr.ContainsOrContainedBy(&other))), nil
