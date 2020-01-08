@@ -242,6 +242,9 @@ func (n *Nulls) set(args SliceArgs) {
 	if current < needed {
 		n.nulls = append(n.nulls, filledNulls[:needed-current]...)
 	}
+	// First, we unset the whole range that is overwritten. If there are any NULL
+	// values in the source, those will be copied over below, one at a time.
+	n.UnsetNullRange(args.DestIdx, args.DestIdx+toDuplicate)
 	if args.Src.MaybeHasNulls() {
 		src := args.Src.Nulls()
 		if args.Sel != nil {
@@ -259,8 +262,6 @@ func (n *Nulls) set(args SliceArgs) {
 				}
 			}
 		}
-	} else {
-		n.UnsetNullRange(args.DestIdx, args.DestIdx+toDuplicate)
 	}
 }
 
