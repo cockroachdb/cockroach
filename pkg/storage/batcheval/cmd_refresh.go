@@ -27,7 +27,7 @@ func init() {
 // Refresh checks whether the key has any values written in the interval
 // [args.RefreshFrom, header.Timestamp].
 func Refresh(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RefreshRequest)
 	h := cArgs.Header
@@ -55,7 +55,7 @@ func Refresh(
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	val, intent, err := engine.MVCCGet(ctx, batch, args.Key, refreshTo, engine.MVCCGetOptions{
+	val, intent, err := engine.MVCCGet(ctx, reader, args.Key, refreshTo, engine.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
 	})

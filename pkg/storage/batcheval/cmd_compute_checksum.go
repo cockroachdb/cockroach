@@ -45,7 +45,7 @@ const (
 // a particular snapshot. The checksum is later verified through a
 // CollectChecksumRequest.
 func ComputeChecksum(
-	ctx context.Context, batch engine.Reader, cArgs CommandArgs, resp roachpb.Response,
+	_ context.Context, _ engine.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 

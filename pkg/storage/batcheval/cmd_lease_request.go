@@ -30,7 +30,7 @@ func init() {
 // lease, all duties required of the range lease holder are commenced, including
 // releasing all latches and clearing the timestamp cache.
 func RequestLease(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return a
 	// newFailedLeaseTrigger() to satisfy stats.
@@ -125,6 +125,6 @@ func RequestLease(
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 	newLease.Start = effectiveStart
-	return evalNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
+	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
 		newLease, prevLease, isExtension, false /* isTransfer */)
 }

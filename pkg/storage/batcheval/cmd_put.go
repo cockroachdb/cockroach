@@ -40,7 +40,7 @@ func declareKeysPut(
 
 // Put sets the value for a specified key.
 func Put(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.PutRequest)
 	h := cArgs.Header
@@ -51,16 +51,16 @@ func Put(
 		ts = h.Timestamp
 	}
 	if h.DistinctSpans {
-		if b, ok := batch.(engine.Batch); ok {
+		if b, ok := readWriter.(engine.Batch); ok {
 			// Use the distinct batch for both blind and normal ops so that we don't
 			// accidentally flush mutations to make them visible to the distinct
 			// batch.
-			batch = b.Distinct()
-			defer batch.Close()
+			readWriter = b.Distinct()
+			defer readWriter.Close()
 		}
 	}
 	if args.Blind {
-		return result.Result{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+		return result.Result{}, engine.MVCCBlindPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
 	}
-	return result.Result{}, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+	return result.Result{}, engine.MVCCPut(ctx, readWriter, ms, args.Key, ts, args.Value, h.Txn)
 }

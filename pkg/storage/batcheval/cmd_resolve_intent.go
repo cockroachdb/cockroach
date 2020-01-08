@@ -69,7 +69,7 @@ func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func ResolveIntent(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
 	h := cArgs.Header
@@ -84,7 +84,7 @@ func ResolveIntent(
 		Txn:    args.IntentTxn,
 		Status: args.Status,
 	}
-	ok, err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent)
+	ok, err := engine.MVCCResolveWriteIntent(ctx, readWriter, ms, intent)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -93,7 +93,7 @@ func ResolveIntent(
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {
-		if err := UpdateAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+		if err := UpdateAbortSpan(ctx, cArgs.EvalCtx, readWriter, ms, args.IntentTxn, args.Poison); err != nil {
 			return result.Result{}, err
 		}
 	}

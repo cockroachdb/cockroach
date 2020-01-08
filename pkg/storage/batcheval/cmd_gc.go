@@ -53,7 +53,7 @@ func declareKeysGC(
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
 func GC(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
@@ -72,7 +72,7 @@ func GC(
 
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(
-		ctx, batch, cArgs.Stats, keys, h.Timestamp,
+		ctx, readWriter, cArgs.Stats, keys, h.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -97,7 +97,7 @@ func GC(
 	var replState storagepb.ReplicaState
 	if newThreshold != (hlc.Timestamp{}) {
 		replState.GCThreshold = &newThreshold
-		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
+		if err := stateLoader.SetGCThreshold(ctx, readWriter, cArgs.Stats, &newThreshold); err != nil {
 			return result.Result{}, err
 		}
 	}

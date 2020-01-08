@@ -40,7 +40,7 @@ func declareKeysTruncateLog(
 // has already been truncated has no effect. If this range is not the one
 // specified within the request body, the request will also be ignored.
 func TruncateLog(
-	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.TruncateLogRequest)
 
@@ -56,7 +56,7 @@ func TruncateLog(
 
 	var legacyTruncatedState roachpb.RaftTruncatedState
 	legacyKeyFound, err := engine.MVCCGetProto(
-		ctx, batch, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
 		hlc.Timestamp{}, &legacyTruncatedState, engine.MVCCGetOptions{},
 	)
 	if err != nil {
@@ -110,7 +110,7 @@ func TruncateLog(
 	// bugs that let it diverge. It might be easier to compute the stats
 	// from scratch, stopping when 4mb (defaultRaftLogTruncationThreshold)
 	// is reached as at that point we'll truncate aggressively anyway.
-	iter := batch.NewIterator(engine.IterOptions{UpperBound: end})
+	iter := readWriter.NewIterator(engine.IterOptions{UpperBound: end})
 	defer iter.Close()
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
 	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
@@ -136,7 +136,7 @@ func TruncateLog(
 		// code will atomically rewrite the truncated state (supplied via the
 		// side effect) into the new unreplicated key.
 		if err := engine.MVCCDelete(
-			ctx, batch, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
+			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
 			hlc.Timestamp{}, nil, /* txn */
 		); err != nil {
 			return result.Result{}, err
