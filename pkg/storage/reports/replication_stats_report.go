@@ -395,15 +395,26 @@ func (v *replicationStatsVisitor) countRange(
 	key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
 ) {
 	voters := len(r.Replicas().Voters())
-	underReplicated := replicationFactor > voters
-	overReplicated := replicationFactor < voters
-	var liveNodeCount int
+	var liveVoters int
 	for _, rep := range r.Replicas().Voters() {
 		if v.nodeChecker(rep.NodeID) {
-			liveNodeCount++
+			liveVoters++
 		}
 	}
-	unavailable := liveNodeCount < (len(r.Replicas().Voters())/2 + 1)
+
+	// TODO(andrei): This unavailability determination is naive. We need to take
+	// into account two different quorums when the range is in the joint-consensus
+	// state. See #43836.
+	unavailable := liveVoters < (voters/2 + 1)
+	// TODO(andrei): In the joint-consensus state, this under-replication also
+	// needs to consider the number of live replicas in each quorum. For example,
+	// with 2 VoterFulls, 1 VoterOutgoing, 1 VoterIncoming, if the outgoing voter
+	// is on a dead node, the range should be considered under-replicated.
+	underReplicated := replicationFactor > liveVoters
+	overReplicated := replicationFactor < voters
+	// Note that a range can be under-replicated and over-replicated at the same
+	// time if it has many replicas, but sufficiently many of them are on dead
+	// nodes.
 
 	v.report.AddZoneRangeStatus(key, unavailable, underReplicated, overReplicated)
 }

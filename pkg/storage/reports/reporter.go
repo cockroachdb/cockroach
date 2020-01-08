@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -195,18 +194,9 @@ func (stats *Reporter) update(
 		return storeDescs
 	}
 
-	livenessStatus := stats.liveness.GetLivenessStatusMap()
+	isLiveMap := stats.liveness.GetIsLiveMap()
 	isNodeLive := func(nodeID roachpb.NodeID) bool {
-		status, ok := livenessStatus[nodeID]
-		if !ok {
-			return false
-		}
-		switch status {
-		case storagepb.NodeLivenessStatus_LIVE, storagepb.NodeLivenessStatus_DECOMMISSIONING:
-			return true
-		default:
-			return false
-		}
+		return isLiveMap[nodeID].IsLive
 	}
 
 	// Create the visitors that we're going to pass to visitRanges() below.
