@@ -61,6 +61,14 @@ type lex struct {
 // same input here will yield 3 different tokens "abc", "def"(quoted),
 // "geh".
 //
+// PostgreSQL also accepts including special (control) characters
+// inside quoted and unquoted strings, including tabs (\t) and
+// carriage returns (\r) inside quoted strings. These are not accepted
+// here for the sake of simplicity in the pretty-printer. If a use
+// case comes up where they should be accepted, care should be taken
+// to implement a new pretty-printer that does not rewrite whitespace
+// in HBA strings.
+//
 // This difference is intended; it makes the implementation simpler
 // and the result less surprising.
 //
@@ -73,11 +81,13 @@ var rules = []struct {
 	r  rule
 	rg *regexp.Regexp
 }{
-	{r: rule{`[ \t\r,]*` /******/, func(l *lex) (bool, error) { return false, nil }}},
-	{r: rule{`#.*$` /***********/, func(l *lex) (bool, error) { return false, nil }}},
-	{r: rule{`[^", \t\r]+,?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.Value = l.lexed; return true, nil }}},
-	{r: rule{`"[^"]*",?` /******/, func(l *lex) (bool, error) { l.checkComma(); l.stripQuotes(); l.Value = l.lexed; return true, nil }}},
-	{r: rule{`"[^"]*$` /********/, func(l *lex) (bool, error) { return false, errors.New("unterminated quoted string") }}},
+	{r: rule{`[ \t\r,]*` /***********/, func(l *lex) (bool, error) { return false, nil }}},
+	{r: rule{`#.*$` /****************/, func(l *lex) (bool, error) { return false, nil }}},
+	{r: rule{`[^[:cntrl:] ",]+,?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.Value = l.lexed; return true, nil }}},
+	{r: rule{`"[^[:cntrl:]"]*",?` /**/, func(l *lex) (bool, error) { l.checkComma(); l.stripQuotes(); l.Value = l.lexed; return true, nil }}},
+	{r: rule{`"[^"]*$` /*************/, func(l *lex) (bool, error) { return false, errors.New("unterminated quoted string") }}},
+	{r: rule{`"[^"]*"` /*************/, func(l *lex) (bool, error) { return false, errors.New("invalid characters in quoted string") }}},
+	{r: rule{`.` /*******************/, func(l *lex) (bool, error) { return false, errors.Newf("unsupported character: %q", l.lexed) }}},
 }
 
 func (l *lex) checkComma() {

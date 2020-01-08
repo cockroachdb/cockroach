@@ -140,7 +140,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 	}
 
 	for _, entry := range conf.Entries {
-		switch entry.Type {
+		switch entry.Type.Value {
 		case "host":
 		case "local":
 			if st != nil &&
@@ -153,7 +153,8 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			// The syntax 'local' is not yet supported.
 			fallthrough
 		default:
-			return unimplemented.Newf("hba-type-"+entry.Type, "unsupported connection type: %s", entry.Type)
+			return unimplemented.Newf("hba-type-"+entry.Type.Value,
+				"unsupported connection type: %s", entry.Type.Value)
 		}
 		for _, db := range entry.Database {
 			if !db.IsKeyword("all") {
@@ -181,21 +182,21 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 					"Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.")
 		}
 		// Verify that the auth method is supported.
-		method, ok := hbaAuthMethods[entry.Method]
+		method, ok := hbaAuthMethods[entry.Method.Value]
 		if !ok || method.fn == nil {
-			return errors.WithHintf(unimplemented.Newf("hba-method-"+entry.Method,
-				"unknown auth method %q", entry.Method),
+			return errors.WithHintf(unimplemented.Newf("hba-method-"+entry.Method.Value,
+				"unknown auth method %q", entry.Method.Value),
 				"Supported methods: %s", listRegisteredMethods())
 		}
 		// Verify that the cluster setting is at least the required version.
 		if st != nil && !cluster.Version.IsActive(context.TODO(), st, method.minReqVersion) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`authentication method '%s' requires all nodes to be upgraded to %s`,
-				entry.Method,
+				entry.Method.Value,
 				cluster.VersionByKey(method.minReqVersion))
 		}
 		// Run the per-method validation.
-		if check := hbaCheckHBAEntries[entry.Method]; check != nil {
+		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
 			if err := check(entry); err != nil {
 				return err
 			}
@@ -226,7 +227,7 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 
 	// Lookup and cache the auth methods.
 	for i := range conf.Entries {
-		method := conf.Entries[i].Method
+		method := conf.Entries[i].Method.Value
 		methodEntry, ok := hbaAuthMethods[method]
 		if !ok {
 			// TODO(knz): Determine if an error should be reported
@@ -241,10 +242,10 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 }
 
 var rootEntry = hba.Entry{
-	Type:    "host",
+	Type:    hba.String{Value: "host"},
 	User:    []hba.String{{Value: security.RootUser, Quoted: false}},
 	Address: hba.AnyAddr{},
-	Method:  "cert",
+	Method:  hba.String{Value: "cert"},
 }
 
 // DefaultHBAConfig is used when the stored HBA configuration string
