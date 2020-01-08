@@ -354,10 +354,10 @@ func ParseDIPAddrFromINetString(s string, inetOid oid.Oid) (*DIPAddr, error) {
 	var err error
 	switch inetOid {
 	case oid.T_inet:
-		d.typ = types.INet
+		d.Typ = types.INet
 		err = ipaddr.ParseINet(s, &d.IPAddr)
 	case oid.T_cidr:
-		d.typ = types.Cidr
+		d.Typ = types.Cidr
 		err = ipaddr.ParseCidr(s, &d.IPAddr)
 	default:
 		panic(errors.AssertionFailedf("unexpected OID: %d", inetOid))
@@ -1533,7 +1533,7 @@ func (d *DUuid) Size() uintptr {
 // DIPAddr is the IPAddr Datum.
 type DIPAddr struct {
 	ipaddr.IPAddr
-	typ *types.T
+	Typ *types.T
 }
 
 // NewDIPAddr is a helper routine to create a *DIPAddr initialized from its
@@ -1568,7 +1568,7 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DIPAddr) ResolvedType() *types.T {
-	return d.typ
+	return d.Typ
 }
 
 // Compare implements the Datum interface.
@@ -1601,13 +1601,13 @@ func (d *DIPAddr) Prev(_ *EvalContext) (Datum, bool) {
 			return dMaxIPv4Addr, true
 		}
 		// Decrease mask size, wrap IPv6 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: d.Mask - 1}, d.typ}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: d.Mask - 1}, d.Typ}), true
 	} else if d.Family == ipaddr.IPv4family && d.Addr.Equal(dIPv4min) {
 		// Decrease mask size, wrap IPv4 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: d.Mask - 1}, d.typ}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: d.Mask - 1}, d.Typ}), true
 	}
 	// Decrement IP address.
-	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Sub(1), Mask: d.Mask}, d.typ}), true
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Sub(1), Mask: d.Mask}, d.Typ}), true
 }
 
 // Next implements the Datum interface.
@@ -1622,13 +1622,13 @@ func (d *DIPAddr) Next(_ *EvalContext) (Datum, bool) {
 			return dMinIPv6Addr, true
 		}
 		// Increase mask size, wrap IPv4 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: d.Mask + 1}, d.typ}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: d.Mask + 1}, d.Typ}), true
 	} else if d.Family == ipaddr.IPv6family && d.Addr.Equal(dIPv6max) {
 		// Increase mask size, wrap IPv6 IP address.
-		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: d.Mask + 1}, d.typ}), true
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: d.Mask + 1}, d.Typ}), true
 	}
 	// Increment IP address.
-	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Add(1), Mask: d.Mask}, d.typ}), true
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Add(1), Mask: d.Mask}, d.Typ}), true
 }
 
 // IsMax implements the Datum interface.
@@ -2721,8 +2721,8 @@ func AsJSON(d Datum) (json.JSON, error) {
 		return builder.Build(), nil
 	case *DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
-		// We need to make sure that t.typ is initialized before getting the tuple
-		// labels (it is valid for t.typ be left uninitialized when instantiating a
+		// We need to make sure that t.Typ is initialized before getting the tuple
+		// labels (it is valid for t.Typ be left uninitialized when instantiating a
 		// DTuple).
 		t.maybePopulateType()
 		labels := t.typ.TupleLabels()
@@ -2844,7 +2844,7 @@ type DTuple struct {
 	// This is used to accelerate IN comparisons.
 	sorted bool
 
-	// typ is the tuple's type.
+	// Typ is the tuple's type.
 	//
 	// The Types sub-field can be initially uninitialized, and is then
 	// populated upon first invocation of ResolvedTypes(). If

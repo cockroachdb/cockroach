@@ -325,6 +325,14 @@ func (ipAddr *IPAddr) Netmask() IPAddr {
 	return newIPAddr
 }
 
+// Network returns the network masked IP. This is defined as the IP address bits
+// that are masked.
+func (ipAddr *IPAddr) Network() IPAddr {
+	var newIPAddr IPAddr
+	//TODO(jeb) impl me
+	return newIPAddr
+}
+
 // Broadcast returns a new IPAddr where the host mask of the IP address is a
 // full mask, i.e. 0xFF bytes.
 func (ipAddr *IPAddr) Broadcast() IPAddr {
@@ -634,4 +642,10 @@ func (ip Addr) subIPAddrIPv6(o Addr) (int64, error) {
 	}
 	diff = sign * int64(lo)
 	return diff, nil
+}
+
+func (ipaddr IPAddr) Merge(addr IPAddr) IPAddr {
+	var newIPAddr IPAddr
+	// TODO(jeb) impl me
+	return newIPAddr
 }

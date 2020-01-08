@@ -397,6 +397,18 @@ var builtins = map[string]builtinDefinition{
 				"For INET types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
 				"\n\nFor example, `abbrev('192.168.1.2/24')` returns `'192.168.1.2/24'`",
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Cidr}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				// TODO(jeb) impl me
+				return tree.NewDString(dIPAddr.IPAddr.String()), nil
+			},
+			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
+				"For CIDR types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
+				"\n\nFor example, `abbrev('192.168.1.2/24')` returns `'192.168.1.2/24'`",
+		},
 	),
 
 	"broadcast": makeBuiltin(defProps(),
@@ -480,10 +492,24 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				dIPAddr := tree.MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Netmask()
-				return &tree.DIPAddr{IPAddr: ipAddr}, nil
+				return &tree.DIPAddr{IPAddr: ipAddr, Typ: types.INet}, nil
 			},
 			Info: "Creates an IP network mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `netmask('192.168.1.2/16')` returns `'255.255.0.0'`",
+		},
+	),
+
+	"network": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.Cidr),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				ipAddr := dIPAddr.IPAddr.Network()
+				return &tree.DIPAddr{IPAddr: ipAddr, Typ: types.Cidr}, nil
+			},
+			Info: "Extract the network part of an IP address." +
+				"\n\nFor example, `network('192.168.1.5/24')` returns `'192.168.1.0/24'`",
 		},
 	),
 
@@ -507,6 +533,25 @@ var builtins = map[string]builtinDefinition{
 			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
 				"For example, `set_masklen('192.168.1.2', 16)` returns `'192.168.1.2/16'`.",
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Cidr},
+				{"prefixlen", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Cidr),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				mask := int(tree.MustBeDInt(args[1]))
+
+				if !(dIPAddr.Family == ipaddr.IPv4family && mask >= 0 && mask <= 32) && !(dIPAddr.Family == ipaddr.IPv6family && mask >= 0 && mask <= 128) {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue, "invalid mask length: %d", mask)
+				}
+				return &tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}, Typ: types.Cidr}, nil
+			},
+			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
+				"For example, `set_masklen('192.168.1.0/24', 16)` returns `'192.168.0.0/16'`.",
+		},
 	),
 
 	"text": makeBuiltin(defProps(),
@@ -523,6 +568,23 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(s), nil
 			},
 			Info: "Converts the IP address and prefix length to text.",
+		},
+	),
+
+	"inet_merge": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.INet},
+				{"val", types.INet},
+			},
+			ReturnType: tree.FixedReturnType(types.Cidr),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				first := tree.MustBeDIPAddr(args[0])
+				other := tree.MustBeDIPAddr(args[1])
+				ipAddr := first.IPAddr.Merge(other.IPAddr)
+				return &tree.DIPAddr{IPAddr: ipAddr, Typ: types.Cidr}, nil
+			},
+			Info: "Returns the smallest network which includes both of the given networks.",
 		},
 	),
 
@@ -543,37 +605,29 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"inet_contained_by_or_equals": makeBuiltin(defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"val", types.INet},
-				{"container", types.INet},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
-				other := tree.MustBeDIPAddr(args[1]).IPAddr
-				return tree.MakeDBool(tree.DBool(ipAddr.ContainedByOrEquals(&other))), nil
-			},
-			Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
-				"The host part of the addresses is ignored.",
-		},
+		networkContainedByOrEquals(types.INet),
 	),
 
 	"inet_contains_or_equals": makeBuiltin(defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"container", types.INet},
-				{"val", types.INet},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
-				other := tree.MustBeDIPAddr(args[1]).IPAddr
-				return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrEquals(&other))), nil
-			},
-			Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
-				"The host part of the addresses is ignored.",
-		},
+		networkContainsOrEquals(types.INet),
+	),
+
+	"cidr_contained_by_or_equals": makeBuiltin(defProps(),
+		networkContainedByOrEquals(types.Cidr),
+	),
+
+	"cidr_contains_or_equals": makeBuiltin(defProps(),
+		networkContainsOrEquals(types.Cidr),
+	),
+
+	"network_contained_by_or_equals": makeBuiltin(defProps(),
+		networkContainedByOrEquals(types.INet),
+		networkContainedByOrEquals(types.Cidr),
+	),
+
+	"network_contains_or_equals": makeBuiltin(defProps(),
+		networkContainsOrEquals(types.INet),
+		networkContainsOrEquals(types.Cidr),
 	),
 
 	"from_ip": makeBuiltin(defProps(),
@@ -5623,4 +5677,38 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return ctx.StmtTimestamp.Add(offset), nil
+}
+
+func networkContainedByOrEquals(t *types.T) tree.Overload {
+	return tree.Overload{
+		Types: tree.ArgTypes{
+			{"val", t},
+			{"container", t},
+		},
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
+			other := tree.MustBeDIPAddr(args[1]).IPAddr
+			return tree.MakeDBool(tree.DBool(ipAddr.ContainedByOrEquals(&other))), nil
+		},
+		Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
+			"The host part of the addresses is ignored.",
+	}
+}
+
+func networkContainsOrEquals(t *types.T) tree.Overload {
+	return tree.Overload{
+		Types: tree.ArgTypes{
+			{"container", t},
+			{"val", t},
+		},
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			ipAddr := tree.MustBeDIPAddr(args[0]).IPAddr
+			other := tree.MustBeDIPAddr(args[1]).IPAddr
+			return tree.MakeDBool(tree.DBool(ipAddr.ContainsOrEquals(&other))), nil
+		},
+		Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
+			"The host part of the addresses is ignored.",
+	}
 }
