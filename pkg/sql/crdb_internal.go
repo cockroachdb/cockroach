@@ -2008,18 +2008,21 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			var voterReplicas, learnerReplicas []int
-			for _, rd := range desc.Replicas().Voters() {
-				voterReplicas = append(voterReplicas, int(rd.StoreID))
-			}
+			voterReplicas := append(
+				[]roachpb.ReplicaDescriptor(nil),
+				desc.Replicas().Voters()...,
+			)
+			var learnerReplicas []int
 			for _, rd := range desc.Replicas().Learners() {
 				learnerReplicas = append(learnerReplicas, int(rd.StoreID))
 			}
-			sort.Ints(voterReplicas)
+			sort.Slice(voterReplicas, func(i,j int) bool {
+				return voterReplicas[i].StoreID < voterReplicas[j].StoreID
+			})
 			sort.Ints(learnerReplicas)
 			votersArr := tree.NewDArray(types.Int)
 			for _, replica := range voterReplicas {
-				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return nil, err
 				}
 			}
@@ -2031,8 +2034,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			replicaLocalityArr := tree.NewDArray(types.String)
-			for _, id := range voterReplicas {
-				replicaLocality := nodeIDToLocality[roachpb.NodeID(id)].String()
+			for _, replica := range voterReplicas {
+				replicaLocality := nodeIDToLocality[replica.NodeID].String()
 				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
 					return nil, err
 				}

@@ -16,8 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -25,9 +28,60 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgx/pgtype"
+	"github.com/stretchr/testify/assert"
 )
+
+func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	// NodeID=1, StoreID=1
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Locality: roachpb.Locality{[]roachpb.Tier{{"node", "1"}}},
+			},
+			ReplicationMode: base.ReplicationAuto,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Set to 2 so the the next store id will be 3
+	tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 2)
+
+	// NodeID=2, StoreID=3
+	tc.AddServer(t,
+		base.TestServerArgs{
+			Locality: roachpb.Locality{[]roachpb.Tier{{"node", "2"}}},
+		},
+	)
+
+	//Set to 1 so the next store id will be 2
+	tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 1)
+
+	// NodeID=3, StoreID=2
+	tc.AddServer(t,
+		base.TestServerArgs{
+			Locality: roachpb.Locality{[]roachpb.Tier{{"node", "3"}}},
+		},
+	)
+	tc.WaitForFullReplication()
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	var replicas, localities string
+	sqlDB.QueryRow(t, `select replicas, replica_localities from crdb_internal.ranges limit 1`).
+		Scan(&replicas, &localities)
+
+	assert.Equal(t, "{1,2,3}", replicas)
+	// If range is represented as tuple of node ids then the result will be {node=1,node=2,node=3}
+	// If range is represented as tuple of store ids then the result will be {node=1,node=3,node=2}
+	assert.Equal(t, "{node=1,node=3,node=2}", localities)
+}
 
 func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
