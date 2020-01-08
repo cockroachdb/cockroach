@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Prepare the commit message by adding a release note.
-
+set -x
 require_justification=0
 set -euo pipefail
 
