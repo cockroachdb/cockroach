@@ -52,10 +52,10 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var ss SpanSet
-	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
-	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
-	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
+	var bdGkq SpanSet
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
 
 	allowed := []roachpb.Span{
 		// Exactly as declared.
@@ -73,7 +73,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 		{Key: roachpb.Key("l"), EndKey: roachpb.Key("m")},
 	}
 	for _, span := range allowed {
-		if err := ss.CheckAllowed(SpanReadOnly, span); err != nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err != nil {
 			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
 		}
 	}
@@ -102,7 +102,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 		{Key: roachpb.Key("k"), EndKey: roachpb.Key("q").Next()},
 	}
 	for _, span := range disallowed {
-		if err := ss.CheckAllowed(SpanReadOnly, span); err == nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err == nil {
 			t.Errorf("expected %s to be disallowed", span)
 		}
 	}
@@ -214,6 +214,71 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	for _, tc := range disallowedRW {
 		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); !testutils.IsError(err, writeErr) {
 			t.Errorf("expected %s at %s to be disallowed", tc.span, tc.ts)
+		}
+	}
+}
+
+func TestSpanSetCheckAllowedReversed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var bdGkq SpanSet
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
+	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
+
+	allowed := []roachpb.Span{
+		// Exactly as declared.
+		{Key: roachpb.Key("d")},
+		{Key: roachpb.Key("q")},
+	}
+	for _, span := range allowed {
+		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err != nil {
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
+		}
+	}
+
+	disallowed := []roachpb.Span{
+		// Points outside the declared spans, and on the endpoints.
+		{Key: roachpb.Key("b")},
+		{Key: roachpb.Key("g")},
+		{Key: roachpb.Key("k")},
+	}
+	for _, span := range disallowed {
+		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err == nil {
+			t.Errorf("expected %s to be disallowed", span)
+		}
+	}
+}
+
+func TestSpanSetCheckAllowedAtReversed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ts := hlc.Timestamp{WallTime: 42}
+	var bdGkq SpanSet
+	bdGkq.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, ts)
+	bdGkq.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")}, ts)
+	bdGkq.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")}, ts)
+
+	allowed := []roachpb.Span{
+		// Exactly as declared.
+		{Key: roachpb.Key("d")},
+		{Key: roachpb.Key("q")},
+	}
+	for _, span := range allowed {
+		if err := bdGkq.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err != nil {
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
+		}
+	}
+
+	disallowed := []roachpb.Span{
+		// Points outside the declared spans, and on the endpoints.
+		{Key: roachpb.Key("b")},
+		{Key: roachpb.Key("g")},
+		{Key: roachpb.Key("k")},
+	}
+	for _, span := range disallowed {
+		if err := bdGkq.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err == nil {
+			t.Errorf("expected %s to be disallowed", span)
 		}
 	}
 }
