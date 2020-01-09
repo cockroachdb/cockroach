@@ -908,16 +908,16 @@ func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
 	ctx = logtags.AddTag(ctx, "scExec", nil)
-	if log.V(2) {
-		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
-			sc.tableID, sc.mutationID)
-	}
 
 	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
 	if err != nil {
 		return err
 	}
 	if notFirst {
+		log.Infof(ctx,
+			"schema change on %s (%d v%d) mutation %d: another change is still in progress",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+		)
 		return errSchemaChangeNotFirstInLine
 	}
 
@@ -926,6 +926,11 @@ func (sc *SchemaChanger) exec(
 			return err
 		}
 	}
+
+	log.Infof(ctx,
+		"schema change on %s (%d v%d) mutation %d starting execution...",
+		tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+	)
 
 	// Delete dropped table data if possible.
 	if err := sc.maybeDropTable(ctx, inSession, tableDesc, evalCtx); err != nil {
@@ -974,12 +979,16 @@ func (sc *SchemaChanger) exec(
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
+		log.Infof(ctx,
+			"schema change on %s (%d v%d) mutation %d: another node is currently operating on this table",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+		)
 		return err
 	}
 	// Always try to release lease.
 	defer func() {
 		if err := sc.ReleaseLease(ctx, lease); err != nil {
-			log.Warningf(ctx, "while reasing schema change lease: %+v", err)
+			log.Warningf(ctx, "while releasing schema change lease: %+v", err)
 			// Go through the recording motions. See comment above.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
 		}
@@ -1211,9 +1220,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
-	if log.V(2) {
-		log.Infof(ctx, "waiting for a single version of table %d...", tableID)
-	}
+	log.Infof(ctx, "waiting for a single version of table %d...", tableID)
 	_, err := sc.leaseMgr.WaitForOneVersion(ctx, tableID, retryOpts)
 	if log.V(2) {
 		log.Infof(ctx, "waiting for a single version of table %d... done", tableID)
