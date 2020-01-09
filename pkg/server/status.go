@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -671,8 +670,7 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Error(codes.Internal, err.Error())
 	}
-	nowHlc := hlc.Timestamp{WallTime: s.admin.server.clock.PhysicalNow()}
-	isHealthy := l.IsLive(nowHlc) && !l.Draining
+	isHealthy := l.IsLive(s.admin.server.clock.Now().GoTime()) && !l.Draining
 	if !isHealthy {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
@@ -1041,7 +1039,7 @@ func (s *statusServer) Nodes(
 	}
 
 	clock := s.admin.server.clock
-	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
+	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.Now().GoTime(), s.st)
 
 	return &resp, nil
 }
@@ -1056,7 +1054,7 @@ func (s *statusServer) nodesStatusWithLiveness(
 		return nil, err
 	}
 	clock := s.admin.server.clock
-	statusMap := getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
+	statusMap := getLivenessStatusMap(s.nodeLiveness, clock.Now().GoTime(), s.st)
 	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID

@@ -288,6 +288,10 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 }
 
 // PhysicalNow returns the local wall time.
+//
+// Note that, contrary to Now(), PhysicalNow does not take into consideration
+// higher clock signals received through Update(). If you want to take them into
+// consideration, use c.Now().GoTime().
 func (c *Clock) PhysicalNow() int64 {
 	return c.physicalClock()
 }
