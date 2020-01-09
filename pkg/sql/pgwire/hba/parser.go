@@ -61,8 +61,7 @@ func Parse(input string) (*Conf, error) {
 // parseHbaLine parses one line of HBA configuration.
 //
 // Inspired from pg's src/backend/libpq/hba.c, parse_hba_line().
-func parseHbaLine(line [][]String) (Entry, error) {
-	var entry Entry
+func parseHbaLine(line [][]String) (entry Entry, err error) {
 	fieldIdx := 0
 
 	// Read the connection type.
@@ -71,9 +70,9 @@ func parseHbaLine(line [][]String) (Entry, error) {
 			errors.New("multiple values specified for connection type"),
 			"Specify exactly one connection type per line.")
 	}
-	entry.Type = line[fieldIdx][0]
-	if entry.Type.Value == "" {
-		return entry, errors.New("cannot use empty string as connection type")
+	entry.ConnType, err = ParseConnType(line[fieldIdx][0].Value)
+	if err != nil {
+		return entry, err
 	}
 
 	// Get the databases.
@@ -90,7 +89,7 @@ func parseHbaLine(line [][]String) (Entry, error) {
 	}
 	entry.User = line[fieldIdx]
 
-	if entry.Type.Value != "local" {
+	if entry.ConnType != ConnLocal {
 		fieldIdx++
 		if fieldIdx >= len(line) {
 			return entry, errors.New("end-of-line before IP address specification")
@@ -211,4 +210,19 @@ func checkMask(maybeMask net.IP) error {
 		return errors.New("address is not a mask")
 	}
 	return nil
+}
+
+// ParseConnType parses the connection type field.
+func ParseConnType(s string) (ConnType, error) {
+	switch s {
+	case "local":
+		return ConnLocal, nil
+	case "host":
+		return ConnHostAny, nil
+	case "hostssl":
+		return ConnHostSSL, nil
+	case "hostnossl":
+		return ConnHostNoSSL, nil
+	}
+	return 0, errors.Newf("unknown connection type: %q", s)
 }

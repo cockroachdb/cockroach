@@ -1,5 +1,5 @@
 set_hba
-bad
+local
 ----
 ERROR: line 1: end-of-line before database specification (SQLSTATE F0000)
 
