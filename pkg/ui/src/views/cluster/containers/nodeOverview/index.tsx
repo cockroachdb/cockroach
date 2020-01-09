@@ -64,7 +64,7 @@ interface NodeOverviewProps extends RouteComponentProps {
 /**
  * Renders the Node Overview page.
  */
-export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
+class NodeOverview extends React.Component<NodeOverviewProps, {}> {
   componentWillMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();

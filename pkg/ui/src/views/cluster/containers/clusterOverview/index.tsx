@@ -212,7 +212,7 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(
 /**
  * Renders the main content of the cluster visualization page.
  */
-export default class ClusterOverview extends React.Component<any, any> {
+export default class ClusterOverview extends React.Component {
   render() {
     return (
       <div className="cluster-page">

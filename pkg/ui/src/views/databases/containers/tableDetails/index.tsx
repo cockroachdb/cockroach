@@ -13,7 +13,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators, Dispatch, Action } from "redux";
-
 import * as protos from "src/js/protos";
 import { generateTableID, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -63,7 +62,7 @@ type TableMainProps = TableMainData & TableMainActions & RouteComponentProps;
  * TableMain renders the main content of the databases page, which is primarily a
  * data table of all databases.
  */
-export class TableMain extends React.Component<TableMainProps, {}> {
+class TableMain extends React.Component<TableMainProps, {}> {
   componentWillMount() {
     const database = getMatchParamByName(this.props.match, databaseNameAttr);
     const table = getMatchParamByName(this.props.match, tableNameAttr);
