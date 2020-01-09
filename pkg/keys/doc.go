@@ -17,11 +17,17 @@
 // dependency cycles. For example, EnsureSafeSplitKey knows far too much about
 // how to decode SQL keys.
 //
+// 1. Overview
+//
 // This is the ten-thousand foot view of the keyspace:
 //
 //    +----------+
 //    | (empty)  | /Min
-//    | \x01...  | /Local
+//    | \x01...  | /Local    ----+
+//    |          |               |
+//    | ...      |               |	local keys
+//    |          |               |
+//    |          |           ----+
 //    | \x02...  | /Meta1    ----+
 //    | \x03...  | /Meta2        |
 //    | \x04...  | /System       |
@@ -45,7 +51,8 @@
 // range descriptor and as the starting point for some scans, in which case it
 // acts like a global key.
 //
-// Key addressing
+//
+// 2. Key addressing
 //
 // The keyspace is divided into contiguous, non-overlapping chunks called
 // "ranges." A range is defined by its start and end keys. For example, a range
@@ -62,43 +69,86 @@
 // every local key has an address.
 //
 // Global keys have an address too, but the address is simply the key itself.
-//
 // To retrieve a key's address, use the Addr function.
 //
-// Local keys
+//
+// 3. Local keys
 //
 // Local keys hold data local to a RocksDB instance, such as store- and
 // range-specific metadata which must not pollute the user key space, but must
 // be collocated with the store and/or ranges which they refer to. Storing this
 // information in the global keyspace would place the data on an arbitrary set
 // of stores, with no guarantee of collocation. Local data includes store
-// metadata, range metadata, abort cache values and transaction records.
+// metadata, range metadata, abort cache values and transaction records. Check
+// `keymap` below for a more precise breakdown of the local keyspace.
 //
 // The local key prefix was chosen arbitrarily. Local keys would work just as
 // well with a different prefix, like 0xff, or even with a suffix.
-//
-// There are four kinds of local keys.
-//
-//   - Store local keys contain metadata about an individual store. They are
-//     unreplicated and unaddressable. The typical example is the store 'ident'
-//     record.
-//
-//   - Unreplicated range-ID local keys contain metadata that pertains to just
-//     one replica of a range. They are unreplicated and unaddressable. The
-//     typical example is the Raft log.
-//
-//   - Replicated range-ID local keys store metadata that pertains to a range as
-//     a whole. Though they are replicated, they are unaddressable. Typical
-//     examples are MVCC stats and the abort span.
-//
-//   - Range local keys also store metadata that pertains to a range as a whole.
-//     They are replicated and addressable. Typical examples are the local
-//     range descriptor and transaction records.
-//
-// Deciding between replicated range-ID local keys and (replicated) range local
-// keys is not entirely straightforward, as the two key types serve similar
-// purposes. Note that only addressable keys, like range local keys, can be the
-// target of KV operations. Unaddressable keys, like range-ID local keys, can
-// only be written as a side-effect of other KV operations. This often makes the
-// choice between the two clear.
 package keys
+
+// TODO(irfansharif): Sort the layout below as per the physical representation.
+func keymap() { //lint:ignore U1000
+	// There are four types of local key data enumerated below: store-local,
+	// unreplicated range-ID, replicated range-ID, and range local keys.
+	//
+	//   1. Store local keys. These contain metadata about an individual store.
+	//   They are unreplicated and unaddressable. The typical example is the
+	//   store 'ident' record.
+	_ = StoreClusterVersionKey
+	_ = StoreGossipKey
+	_ = StoreHLCUpperBoundKey
+	_ = StoreIdentKey
+	_ = StoreLastUpKey
+	_ = StoreSuggestedCompactionKey
+
+	//   2. Unreplicated range-ID local keys. These contain metadata that
+	//   pertains to just one replica of a range. They are unreplicated and
+	//   unaddressable. The typical example is the Raft log.
+	_ = RaftHardStateKey
+	_ = RaftLastIndexKey
+	_ = RaftLogKey
+	_ = RaftLogPrefix
+	_ = RaftTombstoneKey
+	_ = RaftTruncatedStateKey
+	_ = RangeLastReplicaGCTimestampKey
+	_ = RangeLastVerificationTimestampKeyDeprecated
+
+	//   3. Replicated range-ID local keys store metadata that pertains to a
+	//   range as a whole. Though they are replicated, they are unaddressable.
+	//   Typical examples are MVCC stats and the abort span.
+	_ = AbortSpanKey
+	_ = LeaseAppliedIndexLegacyKey
+	_ = RaftAppliedIndexLegacyKey
+	_ = RaftTombstoneIncorrectLegacyKey
+	_ = RaftTruncatedStateLegacyKey
+	_ = RangeAppliedStateKey
+	_ = RangeFrozenStatusKey
+	_ = RangeLastGCKey
+	_ = RangeLeaseKey
+	_ = RangeStatsLegacyKey
+	_ = RangeTxnSpanGCThresholdKey
+
+	//   4. Range local keys also store metadata that pertains to a range as a
+	//   whole. They are replicated and addressable. Typical examples are the
+	//   local range descriptor and transaction records.
+	_ = QueueLastProcessedKey
+	_ = RangeDescriptorJointKey
+	_ = RangeDescriptorKey
+	_ = TransactionKey
+
+	// Deciding between replicated range-ID local keys and (replicated) range
+	// local keys is not entirely straightforward, as the two key types serve
+	// similar purposes. Note that only addressable keys, like range local keys,
+	// can be the target of KV operations. Unaddressable keys, like range-ID
+	// local keys, can only be written as a side-effect of other KV operations.
+	// This often makes the choice between the two clear.
+
+	// TODO(irfansharif): Fill out keymap for the global keyspace (meta
+	// keys, liveness keys, etc.)
+	//
+	// The global keyspace includes the meta{1,2} keys, system keys, SQL keys,
+	// etc.
+	_ = RangeMetaKey
+	_ = NodeLivenessKey
+	_ = NodeStatusKey
+}
