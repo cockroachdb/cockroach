@@ -13,7 +13,7 @@ import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
+import { bindActionCreators, Dispatch, Action } from "redux";
 import { createSelector } from "reselect";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
@@ -176,7 +176,7 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   hoverState: hoverStateSelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       refreshNodes,

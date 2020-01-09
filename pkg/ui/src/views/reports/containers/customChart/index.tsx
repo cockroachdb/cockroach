@@ -14,7 +14,7 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
-import { Dispatch, bindActionCreators } from "redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 
 import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -279,7 +279,7 @@ const mapStateToProps = (state: AdminUIState) => ({
     metricsMetadata: metricsMetadataSelector(state),
   });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       refreshNodes,
