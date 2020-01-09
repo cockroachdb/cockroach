@@ -255,6 +255,7 @@ func (wfr *WindowFrameRun) IsDefaultFrame() bool {
 	}
 	if wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding {
 		return wfr.DefaultFrameExclusion() &&
+			wfr.Frame.Mode == RANGE &&
 			(wfr.Frame.Bounds.EndBound == nil || wfr.Frame.Bounds.EndBound.BoundType == CurrentRow)
 	}
 	return false
