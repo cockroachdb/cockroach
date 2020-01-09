@@ -35,6 +35,11 @@ subtest end
 subtest unknown_formats
 
 line
+unknown a b c
+----
+error: unknown connection type: "unknown"
+
+line
 local a b c d
 ----
 error: authentication option not in name=value format: d
@@ -46,8 +51,8 @@ subtest quoted_columns
 line
 "local" a b c
 ----
-# TYPE  DATABASE USER ADDRESS METHOD OPTIONS
-"local" a        b            c
+# TYPE DATABASE USER ADDRESS METHOD OPTIONS
+local  a        b            c
 
 line
 local a b "method"
@@ -226,7 +231,7 @@ host   all      testuser,"all" 0.0.0.0/0 cert
 &hba.Conf{
     Entries: {
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"a", Quoted:false},
                 {Value:"b", Quoted:false},
@@ -242,7 +247,7 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             OptionQuotes: nil,
         },
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -258,7 +263,7 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             OptionQuotes: nil,
         },
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"a", Quoted:false},
                 {Value:"b", Quoted:false},
@@ -276,7 +281,7 @@ host   all      testuser,"all" 0.0.0.0/0 cert
             OptionQuotes: nil,
         },
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -307,7 +312,7 @@ host   "all","test space",something some,"us ers" all     cert
 &hba.Conf{
     Entries: {
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:true},
                 {Value:"test space", Quoted:true},
@@ -333,7 +338,7 @@ subtest empty_strings
 multiline
 "" all all all trust
 ----
-error: line 1: cannot use empty string as connection type
+error: line 1: unknown connection type: ""
 
 multiline
 host all all all ""
@@ -359,7 +364,7 @@ host   all      all  all     gss    k=v " someopt = withspaces "
 &hba.Conf{
     Entries: {
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -427,7 +432,7 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
 &hba.Conf{
     Entries: {
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -443,7 +448,7 @@ host   all      all  all     gss           krb_realm=other include_realm=0 krb_r
             OptionQuotes: {false},
         },
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:false},
             },
@@ -479,7 +484,7 @@ host   "all"    "all" 0.0.0.0/0 cert
 &hba.Conf{
     Entries: {
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"db", Quoted:false},
             },
@@ -496,7 +501,7 @@ host   "all"    "all" 0.0.0.0/0 cert
             OptionQuotes: nil,
         },
         {
-            Type:     hba.String{Value:"host", Quoted:false},
+            ConnType: 6,
             Database: {
                 {Value:"all", Quoted:true},
             },

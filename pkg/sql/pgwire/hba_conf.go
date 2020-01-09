@@ -140,9 +140,9 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 	}
 
 	for _, entry := range conf.Entries {
-		switch entry.Type.Value {
-		case "host":
-		case "local":
+		switch entry.ConnType {
+		case hba.ConnHostAny:
+		case hba.ConnLocal:
 			if st != nil &&
 				!cluster.Version.IsActive(context.TODO(), st, cluster.VersionAuthLocalAndTrustRejectMethods) {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -153,8 +153,8 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			// The syntax 'local' is not yet supported.
 			fallthrough
 		default:
-			return unimplemented.Newf("hba-type-"+entry.Type.Value,
-				"unsupported connection type: %s", entry.Type.Value)
+			return unimplemented.Newf("hba-type-"+entry.ConnType.String(),
+				"unsupported connection type: %s", entry.ConnType)
 		}
 		for _, db := range entry.Database {
 			if !db.IsKeyword("all") {
@@ -242,10 +242,10 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 }
 
 var rootEntry = hba.Entry{
-	Type:    hba.String{Value: "host"},
-	User:    []hba.String{{Value: security.RootUser, Quoted: false}},
-	Address: hba.AnyAddr{},
-	Method:  hba.String{Value: "cert"},
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "cert"},
 }
 
 // DefaultHBAConfig is used when the stored HBA configuration string
