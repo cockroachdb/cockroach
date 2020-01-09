@@ -317,10 +317,10 @@ export default connect(
       defaultTimescaleSet: timescaleDefaultSet.selector(state),
     };
   },
-  {
+  () => ({
     setTimeScale: timewindow.setTimeScale,
     setTimeRange: timewindow.setTimeRange,
     refreshNodes: refreshNodes,
     setDefaultSet: timescaleDefaultSet.set,
-  },
+  }),
 )(withRouter(TimeScaleDropdown));
