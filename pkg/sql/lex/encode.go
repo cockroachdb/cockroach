@@ -320,7 +320,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 			b := byte(0)
 			for j := 1; j <= 3; j++ {
 				octDigit := data[i+j]
-				if octDigit < '0' || octDigit > '7' {
+				if octDigit < '0' || octDigit > '7' || (j == 1 && octDigit > '3') {
 					return nil, pgerror.New(pgcode.InvalidEscapeSequence,
 						"invalid bytea escape sequence")
 				}
