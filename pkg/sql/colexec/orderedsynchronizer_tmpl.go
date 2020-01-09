@@ -8,20 +8,54 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// {{/*
+// +build execgen_template
+//
+// This file is the execgen template for orderedsynchronizer.eg.go. It's
+// formatted in a special way, so it's both valid Go and a valid text/template
+// input. This permits editing this file with editor support.
+//
+// */}}
+
 package colexec
 
 import (
 	"container/heap"
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// {{/*
+// Declarations to make the template compile properly.
+
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
+// Dummy import to pull in "time" package.
+var _ time.Time
+
+// _GOTYPESLICE is the template Go type slice variable for this operator. It
+// will be replaced by the Go slice representation for each type in coltypes.T, for
+// example []int64 for coltypes.Int64.
+type _GOTYPESLICE interface{}
+
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
+
+// */}}
 
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
@@ -44,6 +78,25 @@ type OrderedSynchronizer struct {
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	output      coldata.Batch
+	outNulls    []*coldata.Nulls
+	// In order to reduce the number of interface conversions, we will get access
+	// to the underlying slice for the output vectors and will use them directly.
+	// {{range .}}
+	out_TYPECols []_GOTYPESLICE
+	// {{end}}
+	// outColsMap contains the positions of the corresponding vectors in the
+	// slice for the same types. For example, if we have an output batch with
+	// types = [Int64, Int64, Bool, Bytes, Bool, Int64], then outColsMap will be
+	//                      [0, 1, 0, 0, 1, 2]
+	//                       ^  ^  ^  ^  ^  ^
+	//                       |  |  |  |  |  |
+	//                       |  |  |  |  |  3rd among all Int64's
+	//                       |  |  |  |  2nd among all Bool's
+	//                       |  |  |  1st among all Bytes's
+	//                       |  |  1st among all Bool's
+	//                       |  2nd among all Int64's
+	//                       1st among all Int64's
+	outColsMap []int
 }
 
 var _ Operator = &OrderedSynchronizer{}
@@ -86,49 +139,57 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	}
 	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
-	for outputIdx < coldata.BatchSize() {
-		if o.Len() == 0 {
-			// All inputs exhausted.
-			break
-		}
-
-		minBatch := o.heap[0]
-		// Copy the min row into the output.
-		for i := range o.columnTypes {
-			batch := o.inputBatches[minBatch]
-			vec := batch.ColVec(i)
-			srcStartIdx := o.inputIndices[minBatch]
-			if sel := batch.Selection(); sel != nil {
-				srcStartIdx = sel[srcStartIdx]
+	o.allocator.performOperation(o.output.ColVecs(), func() {
+		for outputIdx < coldata.BatchSize() {
+			if o.Len() == 0 {
+				// All inputs exhausted.
+				break
 			}
-			o.allocator.Append(
-				o.output.ColVec(i),
-				coldata.SliceArgs{
-					ColType:     o.columnTypes[i],
-					Src:         vec,
-					DestIdx:     uint64(outputIdx),
-					SrcStartIdx: uint64(srcStartIdx),
-					SrcEndIdx:   uint64(srcStartIdx + 1),
-				},
-			)
-		}
 
-		// Advance the input batch, fetching a new batch if necessary.
-		if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
-			o.inputIndices[minBatch]++
-		} else {
-			o.inputBatches[minBatch] = o.inputs[minBatch].Next(ctx)
-			o.inputIndices[minBatch] = 0
-			o.updateComparators(minBatch)
-		}
-		if o.inputBatches[minBatch].Length() == 0 {
-			heap.Remove(o, 0)
-		} else {
-			heap.Fix(o, 0)
-		}
+			minBatch := o.heap[0]
+			// Copy the min row into the output.
+			batch := o.inputBatches[minBatch]
+			srcRowIdx := o.inputIndices[minBatch]
+			if sel := batch.Selection(); sel != nil {
+				srcRowIdx = sel[srcRowIdx]
+			}
+			for i, physType := range o.columnTypes {
+				vec := batch.ColVec(i)
+				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
+					o.outNulls[i].SetNull(outputIdx)
+				} else {
+					switch physType {
+					// {{range .}}
+					case _TYPES_T:
+						srcCol := vec._TYPE()
+						outCol := o.out_TYPECols[o.outColsMap[i]]
+						v := execgen.UNSAFEGET(srcCol, int(srcRowIdx))
+						execgen.SET(outCol, int(outputIdx), v)
+					// {{end}}
+					default:
+						execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
+					}
+				}
+			}
 
-		outputIdx++
-	}
+			// Advance the input batch, fetching a new batch if necessary.
+			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
+				o.inputIndices[minBatch]++
+			} else {
+				o.inputBatches[minBatch] = o.inputs[minBatch].Next(ctx)
+				o.inputIndices[minBatch] = 0
+				o.updateComparators(minBatch)
+			}
+			if o.inputBatches[minBatch].Length() == 0 {
+				heap.Remove(o, 0)
+			} else {
+				heap.Fix(o, 0)
+			}
+
+			outputIdx++
+		}
+	})
+
 	o.output.SetLength(outputIdx)
 	return o.output
 }
@@ -137,6 +198,20 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]uint16, len(o.inputs))
 	o.output = o.allocator.NewMemBatch(o.columnTypes)
+	o.outNulls = make([]*coldata.Nulls, len(o.columnTypes))
+	o.outColsMap = make([]int, len(o.columnTypes))
+	for i, outVec := range o.output.ColVecs() {
+		o.outNulls[i] = outVec.Nulls()
+		switch o.columnTypes[i] {
+		// {{range .}}
+		case _TYPES_T:
+			o.outColsMap[i] = len(o.out_TYPECols)
+			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
+		// {{end}}
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", o.columnTypes[i]))
+		}
+	}
 	for i := range o.inputs {
 		o.inputs[i].Init()
 	}

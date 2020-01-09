@@ -25,6 +25,18 @@ select * from interval_duration_type order by id asc
 2  00:12:56.123456           00:12:56.123           00:12:56.123456           00:12:56.123           00:12:00           00:12:56.123
 3  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:00  366 days 12:34:56.123
 
+subtest interval_extract_tests
+
+query R
+SELECT extract('second', interval '10:55:01.456')
+----
+1.456
+
+query R
+SELECT extract(minute from interval '10:55:01.456')
+----
+55
+
 # tests various typmods of intervals
 # matches subset of tests in src/test/regress/expected/interval.out
 subtest interval_postgres_duration_type_tests

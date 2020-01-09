@@ -484,7 +484,11 @@ func (w *windower) processPartition(
 	partition *rowcontainer.DiskBackedIndexedRowContainer,
 	partitionIdx int,
 ) error {
-	var peerGrouper tree.PeerGroupChecker
+	peerGrouper := &partitionPeerGrouper{
+		ctx:     ctx,
+		evalCtx: evalCtx,
+		rowCopy: make(sqlbase.EncDatumRow, len(w.inputTypes)),
+	}
 	usage := sizeOfSliceOfRows + rowSliceOverhead + sizeOfRow*int64(len(w.windowFns))
 	if err := w.growMemAccount(&w.acc, usage); err != nil {
 		return err
@@ -601,17 +605,9 @@ func (w *windower) processPartition(
 				}
 				partition.Sort(ctx)
 			}
-			peerGrouper = &partitionPeerGrouper{
-				ctx:       ctx,
-				evalCtx:   evalCtx,
-				partition: partition,
-				ordering:  windowFn.ordering,
-				rowCopy:   make(sqlbase.EncDatumRow, len(w.inputTypes)),
-			}
-		} else {
-			// If ORDER BY clause is not provided, all rows are peers.
-			peerGrouper = allPeers{}
 		}
+		peerGrouper.ordering = windowFn.ordering
+		peerGrouper.partition = partition
 
 		frameRun.Rows = partition
 		frameRun.RowIdx = 0
@@ -831,6 +827,10 @@ type partitionPeerGrouper struct {
 }
 
 func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
+	if len(n.ordering.Columns) == 0 {
+		// ORDER BY clause is omitted, so all rows are peers.
+		return true, nil
+	}
 	if n.err != nil {
 		return false, n.err
 	}
@@ -864,11 +864,6 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 	}
 	return true, nil
 }
-
-type allPeers struct{}
-
-// allPeers implements the PeerGroupChecker interface.
-func (allPeers) InSameGroup(i, j int) (bool, error) { return true, nil }
 
 const sizeOfInt = int64(unsafe.Sizeof(int(0)))
 const sliceOfIntsOverhead = int64(unsafe.Sizeof([]int{}))

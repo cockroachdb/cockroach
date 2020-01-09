@@ -3572,3 +3572,50 @@ SELECT array_agg(a) OVER () FROM l LIMIT 1
 
 statement ok
 RESET CLUSTER SETTING sql.distsql.temp_storage.workmem
+
+# Regression test for #38901 verifying that window frame takes precedence over
+# the concept of peers.
+query I
+SELECT count(a) OVER (ROWS 1 PRECEDING) FROM t
+----
+1
+2
+2
+
+statement ok
+CREATE TABLE t38901 (a INT PRIMARY KEY); INSERT INTO t38901 VALUES (1), (2), (3)
+
+query T
+SELECT array_agg(a) OVER (ORDER BY a ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING) FROM t38901 ORDER BY a
+----
+NULL
+{1}
+{1,2}
+
+# Regression test for #42935.
+query IIIII
+SELECT
+	a,
+	b,
+	count(*) OVER (ORDER BY b),
+	count(*) OVER (
+		ORDER BY
+			b
+		RANGE
+			BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+	),
+	count(*) OVER (
+		ORDER BY
+			b
+		ROWS
+			BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+	)
+FROM
+	(VALUES (1, 1), (2, 1), (3, 2), (4, 2)) AS t (a, b)
+ORDER BY
+	a, b
+----
+1  1  2  2  1
+2  1  2  2  2
+3  2  4  4  3
+4  2  4  4  4
