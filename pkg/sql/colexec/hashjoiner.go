@@ -286,12 +286,12 @@ func (hj *hashJoinEqOp) build(ctx context.Context) {
 	hj.builder.distinctExec(ctx)
 
 	if !hj.spec.buildDistinct {
-		hj.ht.same = make([]uint64, hj.ht.size+1)
+		hj.ht.same = make([]uint64, hj.ht.vals.length+1)
 		hj.ht.allocateVisited()
 	}
 
 	if hj.builder.spec.outer {
-		hj.prober.buildRowMatched = make([]bool, hj.ht.size)
+		hj.prober.buildRowMatched = make([]bool, hj.ht.vals.length)
 	}
 
 	hj.runningState = hjProbing
@@ -306,7 +306,7 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 
 	nResults := uint16(0)
 
-	for nResults < hj.outputBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
+	for nResults < hj.outputBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.vals.length {
 		if !hj.prober.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
 			hj.prober.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
@@ -318,7 +318,7 @@ func (hj *hashJoinEqOp) emitUnmatched() {
 	hj.allocator.PerformOperation(outCols, func() {
 		for outColIdx, inColIdx := range hj.ht.outCols {
 			outCol := outCols[outColIdx]
-			valCol := hj.ht.vals[inColIdx]
+			valCol := hj.ht.vals.colVecs[inColIdx]
 			colType := hj.ht.valTypes[inColIdx]
 
 			outCol.Copy(
@@ -383,7 +383,7 @@ type hashTable struct {
 	// table. A key tuple is defined as the elements in each row of vals that
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
-	vals []coldata.Vec
+	vals *bufferedBatch
 	// valTypes stores the corresponding types of the val columns.
 	valTypes []coltypes.T
 	// valCols stores the union of the keyCols and outCols.
@@ -396,8 +396,6 @@ type hashTable struct {
 	// outTypes stores the types of the output columns.
 	outTypes []coltypes.T
 
-	// size returns the total number of tuples the hashTable currently stores.
-	size uint64
 	// bucketSize returns the number of buckets the hashTable employs. This is
 	// equivalent to the size of first.
 	bucketSize uint64
@@ -454,7 +452,6 @@ func makeHashTable(
 	}
 
 	// Extract the important columns and discard the rest.
-	cols := make([]coldata.Vec, 0, nCols)
 	nKeep := uint32(0)
 
 	keepTypes := make([]coltypes.T, 0, nCols)
@@ -462,7 +459,6 @@ func makeHashTable(
 
 	for i := 0; i < nCols; i++ {
 		if keepCol[i] {
-			cols = append(cols, allocator.NewMemColumn(sourceTypes[i], 0))
 			keepTypes = append(keepTypes, sourceTypes[i])
 			keepCols = append(keepCols, uint32(i))
 
@@ -492,7 +488,7 @@ func makeHashTable(
 		allocator: allocator,
 		first:     make([]uint64, bucketSize),
 
-		vals:     cols,
+		vals:     newBufferedBatch(allocator, keepTypes, 0 /* initialSize */),
 		valTypes: keepTypes,
 		valCols:  keepCols,
 		keyCols:  keys,
@@ -518,19 +514,19 @@ func makeHashTable(
 // output columns.
 func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
-	ht.allocator.PerformOperation(ht.vals, func() {
+	ht.allocator.PerformOperation(ht.vals.colVecs, func() {
 		for i, colIdx := range ht.valCols {
-			ht.vals[i].Append(
+			ht.vals.colVecs[i].Append(
 				coldata.SliceArgs{
 					ColType:   ht.valTypes[i],
 					Src:       batch.ColVec(int(colIdx)),
 					Sel:       batch.Selection(),
-					DestIdx:   ht.size,
+					DestIdx:   ht.vals.length,
 					SrcEndIdx: uint64(batchSize),
 				},
 			)
 		}
-		ht.size += uint64(batchSize)
+		ht.vals.length += uint64(batchSize)
 	})
 }
 
@@ -590,7 +586,7 @@ func (ht *hashTable) computeBuckets(
 
 // buildNextChains builds the hash map from the computed hash values.
 func (ht *hashTable) buildNextChains(ctx context.Context) {
-	for id := uint64(1); id <= ht.size; id++ {
+	for id := uint64(1); id <= ht.vals.length; id++ {
 		ht.cancelChecker.check(ctx)
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
@@ -602,7 +598,7 @@ func (ht *hashTable) buildNextChains(ctx context.Context) {
 
 // allocateVisited allocates the visited array in the hashTable.
 func (ht *hashTable) allocateVisited() {
-	ht.visited = make([]bool, ht.size+1)
+	ht.visited = make([]bool, ht.vals.length+1)
 
 	// Since keyID = 0 is reserved for end of list, it can be marked as visited
 	// at the beginning.
@@ -632,9 +628,9 @@ func makeHashJoinBuilder(ht *hashTable, spec hashJoinerSourceSpec) *hashJoinBuil
 func (builder *hashJoinBuilder) exec(ctx context.Context) {
 	builder.distinctExec(ctx)
 
-	builder.ht.same = make([]uint64, builder.ht.size+1)
-	builder.ht.visited = make([]bool, builder.ht.size+1)
-	builder.ht.head = make([]bool, builder.ht.size+1)
+	builder.ht.same = make([]uint64, builder.ht.vals.length+1)
+	builder.ht.visited = make([]bool, builder.ht.vals.length+1)
+	builder.ht.head = make([]bool, builder.ht.vals.length+1)
 
 	// Since keyID = 0 is reserved for end of list, it can be marked as visited
 	// at the beginning.
@@ -642,16 +638,16 @@ func (builder *hashJoinBuilder) exec(ctx context.Context) {
 
 	nKeyCols := len(builder.spec.eqCols)
 	batchStart := uint64(0)
-	for batchStart < builder.ht.size {
+	for batchStart < builder.ht.vals.length {
 		batchEnd := batchStart + uint64(coldata.BatchSize())
-		if batchEnd > builder.ht.size {
-			batchEnd = builder.ht.size
+		if batchEnd > builder.ht.vals.length {
+			batchEnd = builder.ht.vals.length
 		}
 
 		batchSize := uint16(batchEnd - batchStart)
 
 		for i := 0; i < nKeyCols; i++ {
-			builder.ht.keys[i] = builder.ht.vals[builder.ht.keyCols[i]].Window(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
+			builder.ht.keys[i] = builder.ht.vals.colVecs[builder.ht.keyCols[i]].Window(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
 		}
 
 		builder.ht.lookupInitial(ctx, batchSize, nil)
@@ -693,12 +689,12 @@ func (builder *hashJoinBuilder) distinctExec(ctx context.Context) {
 	nKeyCols := len(builder.spec.eqCols)
 	keyCols := make([]coldata.Vec, nKeyCols)
 	for i := 0; i < nKeyCols; i++ {
-		keyCols[i] = builder.ht.vals[builder.ht.keyCols[i]]
+		keyCols[i] = builder.ht.vals.colVecs[builder.ht.keyCols[i]]
 	}
 
 	// builder.ht.next is used to store the computed hash value of each key.
-	builder.ht.next = make([]uint64, builder.ht.size+1)
-	builder.ht.computeBuckets(ctx, builder.ht.next[1:], keyCols, builder.ht.size, nil)
+	builder.ht.next = make([]uint64, builder.ht.vals.length+1)
+	builder.ht.computeBuckets(ctx, builder.ht.next[1:], keyCols, builder.ht.vals.length, nil)
 	builder.ht.buildNextChains(ctx)
 }
 
@@ -974,12 +970,12 @@ func (ht *hashTable) check(nToCheck uint16, sel []uint16) uint16 {
 func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
 	// If the hash table is empty, then there is nothing to copy. The nulls
 	// will be set below.
-	if prober.ht.size > 0 {
+	if prober.ht.vals.length > 0 {
 		outCols := prober.batch.ColVecs()[prober.buildColOffset : prober.buildColOffset+len(prober.ht.outCols)]
 		prober.ht.allocator.PerformOperation(outCols, func() {
 			for outColIdx, inColIdx := range prober.ht.outCols {
 				outCol := outCols[outColIdx]
-				valCol := prober.ht.vals[inColIdx]
+				valCol := prober.ht.vals.colVecs[inColIdx]
 				colType := prober.ht.valTypes[inColIdx]
 				// Note that if for some index i, probeRowUnmatched[i] is true, then
 				// prober.buildIdx[i] == 0 which will copy the garbage zeroth row of the
