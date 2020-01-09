@@ -65,6 +65,10 @@ const (
 
 	// ConnHostAny matches TCP connections with or without SSL/TLS.
 	ConnHostAny = ConnHostNoSSL | ConnHostSSL
+
+	// ConnAny matches any connection type. Used when registering auth
+	// methods.
+	ConnAny = ConnHostAny | ConnLocal
 )
 
 // String implements the fmt.Formatter interface.
@@ -162,6 +166,18 @@ func (h Entry) ConnTypeMatches(clientConn ConnType) bool {
 	default:
 		panic("unimplemented")
 	}
+}
+
+// ConnMatches returns true iff the provided client connection
+// type and address matches the entry spec.
+func (h Entry) ConnMatches(clientConn ConnType, ip net.IP) (bool, error) {
+	if !h.ConnTypeMatches(clientConn) {
+		return false, nil
+	}
+	if clientConn != ConnLocal {
+		return h.AddressMatches(ip)
+	}
+	return true, nil
 }
 
 // UserMatches returns true iff the provided username matches the an
