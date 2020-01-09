@@ -1280,6 +1280,17 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:dc1b6347a71f538d6fc4556d3d1bab7619fa433bf81f5ebd33ac14844d6da6ae"
+  name = "github.com/mmatczuk/go_generics"
+  packages = [
+    "cmd/go_generics",
+    "globals",
+  ]
+  pruneopts = "UT"
+  revision = "0aaa050f9bab8160cf684130d0afa69ff582cbe6"
+
+[[projects]]
+  branch = "master"
   digest = "1:753388e7be24c62a85e7758e3f6f45e719f9837c8f4a3ef07c38593d407939c7"
   name = "github.com/montanaflynn/stats"
   packages = ["."]
@@ -2101,6 +2112,7 @@
     "github.com/mattn/goveralls",
     "github.com/mibk/dupl",
     "github.com/mitchellh/reflectwalk",
+    "github.com/mmatczuk/go_generics/cmd/go_generics",
     "github.com/montanaflynn/stats",
     "github.com/nlopes/slack",
     "github.com/olekukonko/tablewriter",
