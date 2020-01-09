@@ -16,12 +16,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -47,7 +46,6 @@ import (
 )
 
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -628,32 +626,16 @@ func GetTotalMemoryWithoutLogging() (int64, string, error) {
 	if runtime.GOOS != "linux" {
 		return checkTotal(totalMem, "")
 	}
-
-	var buf []byte
-	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
-		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
-			err, humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem, warning)
-	}
-
-	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
+	cgAvlMem, warning, err := cgroups.GetCgroupMemoryLimit()
 	if err != nil {
-		warning := fmt.Sprintf("can't parse available memory from cgroups (%s), using system memory %s instead",
-			err, humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem, warning)
+		return checkTotal(totalMem,
+			fmt.Sprintf("available memory from cgroups is unsupported, using system memory %s instead: %v",
+				humanizeutil.IBytes(totalMem), err))
 	}
-
-	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
-		warning := fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem, warning)
+	if cgAvlMem == 0 || (totalMem > 0 && cgAvlMem > totalMem) {
+		return checkTotal(totalMem,
+			fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead: %s",
+				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning))
 	}
-
-	if totalMem > 0 && int64(cgAvlMem) > totalMem {
-		warning := fmt.Sprintf("available memory from cgroups (%s) exceeds system memory %s, using system memory",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem, warning)
-	}
-
-	return checkTotal(int64(cgAvlMem), "")
+	return checkTotal(cgAvlMem, "")
 }
