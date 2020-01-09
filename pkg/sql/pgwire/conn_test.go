@@ -328,8 +328,8 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, errors.Errorf("unexpected protocol version: %d", version)
 	}
 
-	// Consumer the connection options.
-	if _, err := parseOptions(context.TODO(), buf.Msg); err != nil {
+	// Consume the connection options.
+	if _, err := parseClientProvidedSessionParameters(context.TODO(), nil, &buf); err != nil {
 		return nil, err
 	}
 
