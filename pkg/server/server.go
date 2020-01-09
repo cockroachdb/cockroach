@@ -1917,8 +1917,8 @@ func (s *Server) startServeSQL(
 			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			tcpKeepAlive.configure(connCtx, conn)
 
-			if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
-				log.Error(connCtx, err)
+			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+				log.Errorf(connCtx, "serving SQL client conn: %v", err)
 			}
 		}))
 	})
@@ -1943,7 +1943,7 @@ func (s *Server) startServeSQL(
 		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
+				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Error(connCtx, err)
 				}
 			}))

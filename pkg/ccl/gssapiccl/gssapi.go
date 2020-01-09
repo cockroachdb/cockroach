@@ -44,7 +44,6 @@ const (
 func authGSS(
 	c pgwire.AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -189,5 +188,5 @@ func checkEntry(entry hba.Entry) error {
 }
 
 func init() {
-	pgwire.RegisterAuthMethod("gss", authGSS, cluster.Version19_1, checkEntry)
+	pgwire.RegisterAuthMethod("gss", authGSS, cluster.Version19_1, hba.ConnHostSSL, checkEntry)
 }
