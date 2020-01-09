@@ -21,7 +21,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";
-import { Dispatch, bindActionCreators } from "redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
@@ -158,7 +158,7 @@ const mapStateToProps = (state: AdminUIState, props: StoresProps) => ({
   lastError: selectStoresLastError(state, props),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       refreshStores,

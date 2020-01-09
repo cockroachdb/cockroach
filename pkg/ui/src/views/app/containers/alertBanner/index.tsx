@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Dispatch, bindActionCreators } from "redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import "./alertbanner.styl";
@@ -27,7 +27,7 @@ interface AlertBannerProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<AdminUIState>;
+  dispatch: Dispatch<Action, AdminUIState>;
 }
 
 /**

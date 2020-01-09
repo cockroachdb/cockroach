@@ -16,7 +16,7 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
+import { bindActionCreators, Dispatch, Action } from "redux";
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -382,7 +382,7 @@ const mapStateToProps = (state: AdminUIState) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       setSort: sortSetting.set,

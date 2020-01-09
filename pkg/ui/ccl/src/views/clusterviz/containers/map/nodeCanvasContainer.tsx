@@ -109,7 +109,7 @@ const dataErrors = createSelector(
   (nodes, locations, liveness) => [nodes.lastError, locations.lastError, liveness.lastError],
 );
 
-export default connect(
+export default withRouter(connect(
   (state: AdminUIState, _ownProps: NodeCanvasContainerOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
@@ -120,9 +120,9 @@ export default connect(
     dataExists: selectDataExists(state),
     dataErrors: dataErrors(state),
   }),
-  {
+  () => ({
     refreshNodes,
     refreshLiveness,
     refreshLocations,
-  },
-)(withRouter(NodeCanvasContainer));
+  }),
+)(NodeCanvasContainer));

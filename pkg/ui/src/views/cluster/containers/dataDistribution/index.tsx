@@ -213,11 +213,11 @@ const DataDistributionPageConnected = connect(
     localityTree: selectLocalityTree(state),
     localityTreeErrors: localityTreeErrors(state),
   }),
-  {
+  () => ({
     refreshDataDistribution,
     refreshNodes,
     refreshLiveness,
-  },
+  }),
 )(DataDistributionPage);
 
 export default DataDistributionPageConnected;

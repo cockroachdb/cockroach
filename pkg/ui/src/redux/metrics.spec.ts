@@ -14,8 +14,7 @@ import Long from "long";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 import * as matchers from "redux-saga-test-plan/matchers";
 
-import { delay } from "redux-saga";
-import { call, put } from "redux-saga/effects";
+import { call, put, delay } from "redux-saga/effects";
 import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
 import * as protos from "src/js/protos";
 
@@ -236,11 +235,11 @@ describe("metrics reducer", function() {
             assert.deepEqual(
               effects.call,
               [
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload, requestAction.payload, requestAction.payload]),
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload]),
-                call(delay, 0),
+                delay(0),
                 call(metrics.batchAndSendRequests, [requestAction.payload, requestAction.payload]),
               ],
             );

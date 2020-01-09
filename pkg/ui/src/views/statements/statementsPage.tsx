@@ -362,9 +362,9 @@ const StatementsPageConnected = connect(
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
   }),
-  {
+  () => ({
     refreshStatements,
-  },
+  }),
 )(StatementsPage);
 
 export default StatementsPageConnected;

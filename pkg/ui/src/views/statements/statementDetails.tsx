@@ -12,6 +12,7 @@ import d3 from "d3";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
+import { Action } from "redux";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 import { Params } from "react-router/lib/Router";
@@ -493,7 +494,7 @@ const mapStateToProps = (state: AdminUIState, props: RouterState) => ({
   nodeNames: nodeDisplayNameByIDSelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       refreshStatements,

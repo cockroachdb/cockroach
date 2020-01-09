@@ -13,7 +13,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")({dist: "ccl"});
+const webpackConfig = require("./webpack.app")({dist: "ccl"}, {mode: "development"});
 
 module.exports = function(config) {
   config.set({
