@@ -355,28 +355,6 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`primary key column 1 is not in column family 0`,
-			TableDescriptor{
-				ID:            2,
-				ParentID:      1,
-				Name:          "foo",
-				FormatVersion: FamilyFormatVersion,
-				Columns: []ColumnDescriptor{
-					{ID: 1, Name: "bar"},
-				},
-				Families: []ColumnFamilyDescriptor{
-					{ID: 0, Name: "baz"},
-					{ID: 1, Name: "qux", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
-				},
-				PrimaryIndex: IndexDescriptor{ID: 1, Name: "quux",
-					ColumnIDs:        []ColumnID{1},
-					ColumnNames:      []string{"bar"},
-					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-				},
-				NextColumnID: 2,
-				NextFamilyID: 2,
-				NextIndexID:  2,
-			}},
 		{`table must contain a primary key`,
 			TableDescriptor{
 				ID:            2,

@@ -230,3 +230,63 @@ query II
 SELECT y, z FROM t42992@i
 ----
 NULL 2
+
+# Ensure that reads only scan the necessary k/v's.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  x INT, y INT, z INT,
+  FAMILY (x), FAMILY (y), FAMILY (z),
+  UNIQUE INDEX i (x) STORING (y, z),
+  INDEX i2 (x) STORING (y, z)
+);
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t@i WHERE x = 1;
+SET TRACING=off
+----
+2
+
+# In this case, we scan only families 0 and 1.
+# We don't really need family 0, but removing that
+# from the needed families code is a further optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/55/2/1/{0-1/2}
+
+# Make sure that family splitting doesn't affect
+# lookups when there are null values along the
+# secondary index.
+statement ok
+INSERT INTO t VALUES (NULL, 3, 4)
+
+query I
+SET TRACING=on,kv,results;
+SELECT y FROM t@i WHERE x IS NULL;
+SET TRACING=off
+----
+3
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'Scan%'
+ORDER BY message
+----
+Scan /Table/55/2/{NULL-!NULL}
+
+# Ensure that updates only touch the changed column families.
+query T
+SET TRACING=on,kv,results;
+UPDATE t SET y = 5 WHERE x = 1;
+SET TRACING=off;
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'CPut /Table/55/2%'
+ORDER BY message
+----
+CPut /Table/55/2/1/1/1 -> /TUPLE/2:2:Int/5 (replacing raw_bytes:"\000\000\000\000\n#\004" timestamp:<> , if exists)

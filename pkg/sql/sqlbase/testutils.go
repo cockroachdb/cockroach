@@ -1004,7 +1004,6 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	}
 
 	var columns []tree.Name
-	isPKCol := map[tree.Name]bool{}
 	for _, def := range ast.Defs {
 		switch def := def.(type) {
 		case *tree.FamilyTableDef:
@@ -1013,22 +1012,7 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 			if def.HasColumnFamily() {
 				return false
 			}
-			// Primary keys must be in the first
-			// column family, so don't add them to
-			// the list.
-			if def.PrimaryKey {
-				continue
-			}
 			columns = append(columns, def.Name)
-		case *tree.UniqueConstraintTableDef:
-			// If there's an explicit PK index
-			// definition, save the columns from it
-			// and remove them later.
-			if def.PrimaryKey {
-				for _, col := range def.Columns {
-					isPKCol[col.Column] = true
-				}
-			}
 		}
 	}
 
@@ -1040,20 +1024,6 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	// are auto assigned to the first family, so
 	// there's no requirement to exhaust columns here.
 
-	// Remove columns specified in PK index
-	// definitions. We need to do this here because
-	// index defs and columns can appear in any
-	// order in the CREATE TABLE.
-	{
-		n := 0
-		for _, x := range columns {
-			if !isPKCol[x] {
-				columns[n] = x
-				n++
-			}
-		}
-		columns = columns[:n]
-	}
 	rng.Shuffle(len(columns), func(i, j int) {
 		columns[i], columns[j] = columns[j], columns[i]
 	})

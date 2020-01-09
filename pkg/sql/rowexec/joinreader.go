@@ -319,10 +319,15 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 // Generate spans for a given row.
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
-func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error) {
+// It additionally returns whether the row contains null, which is needed to
+// decide whether or not to split the generated span into separate family
+// specific spans.
+func (jr *joinReader) generateSpan(
+	row sqlbase.EncDatumRow,
+) (_ roachpb.Span, containsNull bool, _ error) {
 	numLookupCols := len(jr.lookupCols)
 	if numLookupCols > jr.numKeyCols {
-		return roachpb.Span{}, errors.Errorf(
+		return roachpb.Span{}, false, errors.Errorf(
 			"%d lookup columns specified, expecting at most %d", numLookupCols, jr.numKeyCols)
 	}
 
@@ -416,14 +421,15 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		if jr.hasNullLookupColumn(inputRow) {
 			continue
 		}
-		span, err := jr.generateSpan(inputRow)
+		span, containsNull, err := jr.generateSpan(inputRow)
 		if err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		}
 		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			spans = append(spans, jr.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, len(jr.lookupCols))...)
+			spans = append(
+				spans, jr.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, len(jr.lookupCols), containsNull)...)
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}

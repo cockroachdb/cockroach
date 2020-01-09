@@ -1746,11 +1746,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 	// Only validate column families and indexes if this is actually a table, not
 	// if it's just a view.
 	if desc.IsPhysicalTable() {
-		colIDToFamilyID, err := desc.validateColumnFamilies(columnIDs)
-		if err != nil {
+		if err := desc.validateColumnFamilies(columnIDs); err != nil {
 			return err
 		}
-		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
+
+		if err := desc.validateTableIndexes(columnNames); err != nil {
 			return err
 		}
 		if err := desc.validatePartitioning(); err != nil {
@@ -1767,14 +1767,12 @@ func (desc *TableDescriptor) ValidateTable() error {
 	return desc.Privileges.Validate(desc.GetID())
 }
 
-func (desc *TableDescriptor) validateColumnFamilies(
-	columnIDs map[ColumnID]string,
-) (map[ColumnID]FamilyID, error) {
+func (desc *TableDescriptor) validateColumnFamilies(columnIDs map[ColumnID]string) error {
 	if len(desc.Families) < 1 {
-		return nil, fmt.Errorf("at least 1 column family must be specified")
+		return fmt.Errorf("at least 1 column family must be specified")
 	}
 	if desc.Families[0].ID != FamilyID(0) {
-		return nil, fmt.Errorf("the 0th family must have ID 0")
+		return fmt.Errorf("the 0th family must have ID 0")
 	}
 
 	familyNames := map[string]struct{}{}
@@ -1783,54 +1781,54 @@ func (desc *TableDescriptor) validateColumnFamilies(
 	for i := range desc.Families {
 		family := &desc.Families[i]
 		if err := validateName(family.Name, "family"); err != nil {
-			return nil, err
+			return err
 		}
 
 		if _, ok := familyNames[family.Name]; ok {
-			return nil, fmt.Errorf("duplicate family name: %q", family.Name)
+			return fmt.Errorf("duplicate family name: %q", family.Name)
 		}
 		familyNames[family.Name] = struct{}{}
 
 		if other, ok := familyIDs[family.ID]; ok {
-			return nil, fmt.Errorf("family %q duplicate ID of family %q: %d",
+			return fmt.Errorf("family %q duplicate ID of family %q: %d",
 				family.Name, other, family.ID)
 		}
 		familyIDs[family.ID] = family.Name
 
 		if family.ID >= desc.NextFamilyID {
-			return nil, fmt.Errorf("family %q invalid family ID (%d) > next family ID (%d)",
+			return fmt.Errorf("family %q invalid family ID (%d) > next family ID (%d)",
 				family.Name, family.ID, desc.NextFamilyID)
 		}
 
 		if len(family.ColumnIDs) != len(family.ColumnNames) {
-			return nil, fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
+			return fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
 				len(family.ColumnIDs), len(family.ColumnNames))
 		}
 
 		for i, colID := range family.ColumnIDs {
 			name, ok := columnIDs[colID]
 			if !ok {
-				return nil, fmt.Errorf("family %q contains unknown column \"%d\"", family.Name, colID)
+				return fmt.Errorf("family %q contains unknown column \"%d\"", family.Name, colID)
 			}
 			if name != family.ColumnNames[i] {
-				return nil, fmt.Errorf("family %q column %d should have name %q, but found name %q",
+				return fmt.Errorf("family %q column %d should have name %q, but found name %q",
 					family.Name, colID, name, family.ColumnNames[i])
 			}
 		}
 
 		for _, colID := range family.ColumnIDs {
 			if famID, ok := colIDToFamilyID[colID]; ok {
-				return nil, fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
+				return fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
 			}
 			colIDToFamilyID[colID] = family.ID
 		}
 	}
 	for colID := range columnIDs {
 		if _, ok := colIDToFamilyID[colID]; !ok {
-			return nil, fmt.Errorf("column %d is not in any column family", colID)
+			return fmt.Errorf("column %d is not in any column family", colID)
 		}
 	}
-	return colIDToFamilyID, nil
+	return nil
 }
 
 // validateTableIndexes validates that indexes are well formed. Checks include
@@ -1838,9 +1836,7 @@ func (desc *TableDescriptor) validateColumnFamilies(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *TableDescriptor) validateTableIndexes(
-	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
-) error {
+func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnID) error {
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
@@ -1903,13 +1899,6 @@ func (desc *TableDescriptor) validateTableIndexes(
 				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
 			}
 			validateIndexDup[colID] = struct{}{}
-		}
-	}
-
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		famID, ok := colIDToFamilyID[colID]
-		if !ok || famID != FamilyID(0) {
-			return fmt.Errorf("primary key column %d is not in column family 0", colID)
 		}
 	}
 
@@ -2283,7 +2272,11 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
 				desc.Families[i].ColumnNames = append(
 					desc.Families[i].ColumnNames[:j], desc.Families[i].ColumnNames[j+1:]...)
-				if len(desc.Families[i].ColumnIDs) == 0 {
+				// Due to a complication with allowing primary key columns to not be restricted
+				// to family 0, we might end up deleting all the columns from family 0. We will
+				// allow empty column families now, but will disallow this in the future.
+				// TODO (rohany): remove this once the reliance on sentinel family 0 has been removed.
+				if len(desc.Families[i].ColumnIDs) == 0 && desc.Families[i].ID != 0 {
 					desc.Families = append(desc.Families[:i], desc.Families[i+1:]...)
 				}
 				return

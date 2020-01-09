@@ -32,10 +32,14 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 func FKCheckSpan(
 	s *span.Builder, values []tree.Datum, colMap map[sqlbase.ColumnID]int, numCols int,
 ) (roachpb.Span, error) {
+	span, containsNull, err := s.SpanFromDatumRow(values, numCols, colMap)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
 	// If it is safe to split this lookup into multiple families, generate a point lookup for
 	// family 0. Because we are just checking for existence, we only need family 0.
-	if s.CanSplitSpanIntoSeparateFamilies(1 /* numNeededFamilies */, numCols) {
-		return s.PointSpanFromDatumRow(values, 0 /* family */, colMap)
+	if s.CanSplitSpanIntoSeparateFamilies(1 /* numNeededFamilies */, numCols, containsNull) {
+		return s.SpanToPointSpan(span, 0), nil
 	}
-	return s.SpanFromDatumRow(values, numCols, colMap)
+	return span, nil
 }
