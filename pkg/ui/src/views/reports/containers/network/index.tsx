@@ -15,7 +15,7 @@ import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
+import { bindActionCreators, Dispatch, Action } from "redux";
 import { createSelector } from "reselect";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
@@ -398,7 +398,7 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodeSummaryErrors: nodeSummaryErrors(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       refreshNodes,

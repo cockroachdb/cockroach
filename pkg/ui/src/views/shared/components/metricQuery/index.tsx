@@ -124,7 +124,7 @@ export interface MetricProps {
  * component should contain axes as children and use them only informationally
  * without rendering them.
  */
-export class Metric extends React.Component<MetricProps, {}> {
+export class Metric extends React.Component<MetricProps> {
   render(): React.ReactElement<any> {
     throw new Error("Component <Metric /> should never render.");
   }

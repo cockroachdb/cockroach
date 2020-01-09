@@ -47,7 +47,7 @@ function shouldProxy(reqPath) {
 }
 
 // tslint:disable:object-literal-sort-keys
-module.exports = (env) => {
+module.exports = (env, argv) => {
   let localRoots = [path.resolve(__dirname)];
   if (env.dist === "ccl") {
     // CCL modules shadow OSS modules.
@@ -60,6 +60,8 @@ module.exports = (env) => {
       filename: "bundle.js",
       path: path.resolve(__dirname, `dist${env.dist}`),
     },
+
+    mode: argv.mode || "production",
 
     resolve: {
       // Add resolvable extensions.

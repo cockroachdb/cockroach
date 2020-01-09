@@ -11,8 +11,8 @@
 import { assert } from "chai";
 import moment from "moment";
 
-import { delay, channel } from "redux-saga";
-import { call } from "redux-saga/effects";
+import { channel } from "redux-saga";
+import { delay, call } from "redux-saga/effects";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 
 import {
@@ -39,7 +39,7 @@ describe("Query Management Saga", function() {
         refreshInterval: moment.duration(50),
         retryDelay: moment.duration(500),
         querySaga: function* () {
-            yield call(delay, 0);
+            yield delay(0);
             yield call(() => queryCounterCalled++);
         },
     };

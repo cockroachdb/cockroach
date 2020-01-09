@@ -11,7 +11,7 @@
 import _ from "lodash";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerMiddleware, routerReducer, RouterState } from "react-router-redux";
-import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer, Store } from "redux";
+import { createStore, combineReducers, applyMiddleware, compose, Store } from "redux";
 import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
 
@@ -58,7 +58,7 @@ export function createAdminUIStore() {
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(hashHistory)),
       // Support for redux dev tools
       // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-      (window as any).devToolsExtension ? (window as any).devToolsExtension({
+      (window as any).__REDUX_DEVTOOLS_EXTENSION__ ? (window as any).__REDUX_DEVTOOLS_EXTENSION__({
         serialize: {
           options: {
             function: (_key: string, value: any): Object => {
@@ -70,7 +70,7 @@ export function createAdminUIStore() {
           },
         },
       }) : _.identity,
-    ) as GenericStoreEnhancer,
+    ),
   );
 
   sagaMiddleware.run(rootSaga);

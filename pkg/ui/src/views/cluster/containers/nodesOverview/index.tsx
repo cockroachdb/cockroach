@@ -530,10 +530,10 @@ const NodesMainConnected = connect(
       nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
-  {
+  () => ({
     refreshNodes,
     refreshLiveness,
-  },
+  }),
 )(NodesMain);
 
 export { NodesMainConnected as NodesOverview };
