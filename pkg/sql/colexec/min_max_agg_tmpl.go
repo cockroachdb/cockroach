@@ -161,36 +161,31 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_ACCUMULATE_MINMAX(a, nulls, i, true)
-					}
-				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
-						_ACCUMULATE_MINMAX(a, nulls, i, true)
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_ACCUMULATE_MINMAX(a, nulls, i, false)
-					}
-				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
-						_ACCUMULATE_MINMAX(a, nulls, i, false)
-					}
-				}
+	if nulls.MaybeHasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_MINMAX(a, nulls, i, true)
 			}
-		},
-	)
+		} else {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col, 0, int(inputLen)) {
+				_ACCUMULATE_MINMAX(a, nulls, i, true)
+			}
+		}
+	} else {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_ACCUMULATE_MINMAX(a, nulls, i, false)
+			}
+		} else {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col, 0, int(inputLen)) {
+				_ACCUMULATE_MINMAX(a, nulls, i, false)
+			}
+		}
+	}
 }
 
 func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {

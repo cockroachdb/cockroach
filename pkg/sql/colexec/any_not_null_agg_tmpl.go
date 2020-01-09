@@ -121,36 +121,31 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TemplateType(), vec.Nulls()
 
-	a.allocator.PerformOperation(
-		[]coldata.Vec{vec},
-		func() {
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
-					}
-				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
-					}
-				} else {
-					col = execgen.SLICE(col, 0, int(inputLen))
-					for execgen.RANGE(i, col, 0, int(inputLen)) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
-					}
-				}
+	if nulls.MaybeHasNulls() {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_FIND_ANY_NOT_NULL(a, nulls, i, true)
 			}
-		},
-	)
+		} else {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col, 0, int(inputLen)) {
+				_FIND_ANY_NOT_NULL(a, nulls, i, true)
+			}
+		}
+	} else {
+		if sel != nil {
+			sel = sel[:inputLen]
+			for _, i := range sel {
+				_FIND_ANY_NOT_NULL(a, nulls, i, false)
+			}
+		} else {
+			col = execgen.SLICE(col, 0, int(inputLen))
+			for execgen.RANGE(i, col, 0, int(inputLen)) {
+				_FIND_ANY_NOT_NULL(a, nulls, i, false)
+			}
+		}
+	}
 }
 
 func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
