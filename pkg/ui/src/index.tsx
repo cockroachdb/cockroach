@@ -40,20 +40,23 @@ import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
-import Certificates from "src/views/reports/containers/certificates";
-import CustomChart from "src/views/reports/containers/customChart";
-import Debug from "src/views/reports/containers/debug";
-import EnqueueRange from "src/views/reports/containers/enqueueRange";
-import ProblemRanges from "src/views/reports/containers/problemRanges";
-import Localities from "src/views/reports/containers/localities";
-import Network from "src/views/reports/containers/network";
-import Nodes from "src/views/reports/containers/nodes";
-import ReduxDebug from "src/views/reports/containers/redux";
-import Range from "src/views/reports/containers/range";
-import Settings from "src/views/reports/containers/settings";
-import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
+import {
+  Certificates,
+  CustomChart,
+  Debug,
+  DecommissionedNodeHistory,
+  EnqueueRange,
+  Localities,
+  Network,
+  Nodes,
+  ProblemRanges,
+  Range,
+  ReduxDebug,
+  Settings,
+  Stores,
+} from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -163,7 +166,10 @@ ReactDOM.render(
           </Route>
           <Route path="localities" component={ Localities } />
           <Route path="network" component={ Network } />
-          <Route path="nodes" component={ Nodes } />
+          <Route path="nodes">
+            <IndexRoute component={ Nodes } />
+            <Route path="history" component={ DecommissionedNodeHistory } />
+          </Route>
           <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
