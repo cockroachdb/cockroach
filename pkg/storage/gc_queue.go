@@ -685,7 +685,8 @@ func RunGC(
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) (GCInfo, error) {
 
-	iter := rditer.NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(desc, snap,
+		true /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 
 	var infoMu = lockableGCInfo{}
