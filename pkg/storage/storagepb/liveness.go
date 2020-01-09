@@ -32,8 +32,11 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 	return !now.Before(deadAsOf)
 }
 
-// LivenessStatus returns a NodeLivenessStatus enumeration value for this liveness
-// based on the provided timestamp and threshold.
+// LivenessStatus returns a NodeLivenessStatus determination.
+//
+// deadThreshold is used for the DECOMMISSIONED and DEAD dispositions. If the
+// liveness record is expired by less than this threshold, these dispositions
+// are not returned.
 func (l *Liveness) LivenessStatus(now time.Time, threshold time.Duration) NodeLivenessStatus {
 	if l.IsDead(now, threshold) {
 		if l.Decommissioning {
