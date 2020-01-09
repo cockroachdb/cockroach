@@ -1,7 +1,8 @@
 # This verifies that the behavior with an empty HBA config
 # is equivalent to:
-#     host all root 0.0.0.0/0 cert
-#     host all all  0.0.0.0/0 cert-password
+#     host  all root all cert
+#     host  all all  all cert-password
+#     local all all      password
 # by using that explicit string and reproducing the tests
 # in the test file "empty_hba".
 
@@ -9,13 +10,15 @@ config secure
 ----
 
 set_hba
-host all root all cert
-host all all all cert-password
+host  all root all cert
+host  all all  all cert-password
+local all all      password
 ----
 # Active authentication configuration on this node:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      root all     cert
 host   all      all  all     cert-password
+local  all      all          password
 
 subtest root
 
@@ -24,7 +27,13 @@ connect user=root
 ----
 ok defaultdb
 
-# The rule has method "cert" so a cert is required in any case.
+# However root cannot connect over the unix socket.
+connect_unix user=root
+----
+ERROR: user root must use certificate authentication instead of password authentication
+
+# When no client cert is presented, the server would otherwise require
+# password auth. However, root password auth is rejected in any case.
 connect user=root password=foo sslmode=verify-ca sslcert=
 ----
 ERROR: no TLS peer certificates, but required for auth
@@ -38,6 +47,12 @@ connect user=testuser
 ----
 ok defaultdb
 
+# Empty/no password means deny password auth. Unix socket does not
+# present a cert so auth fails.
+connect_unix user=testuser
+----
+ERROR: password authentication failed for user testuser
+
 # Make the user need a password.
 sql
 ALTER USER testuser WITH PASSWORD 'pass';
@@ -46,6 +61,10 @@ ok
 
 # Password now needed, but as long as we're presenting a cert it's good.
 connect user=testuser
+----
+ok defaultdb
+
+connect_unix user=testuser password=pass
 ----
 ok defaultdb
 

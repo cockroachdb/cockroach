@@ -17,6 +17,9 @@ import (
 	"io/ioutil"
 	"net"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
@@ -91,10 +95,35 @@ import (
 //
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		hbaRunTest(t, insecure)
 	})
+}
+
+const socketConnVirtualPort = "6"
+
+func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func()) {
+	if runtime.GOOS == "windows" {
+		// Unix sockets not supported on windows.
+		return "", "", func() {}
+	}
+	// We need a temp directory in which we'll create the unix socket.
+	//
+	// On BSD, binding to a socket is limited to a path length of 104 characters
+	// (including the NUL terminator). In glibc, this limit is 108 characters.
+	//
+	// macOS has a tendency to produce very long temporary directory names, so
+	// we are careful to keep all the constants involved short.
+	tempDir, err := ioutil.TempDir("", "TestAuth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ".s.PGSQL.NNNN" is the standard unix socket name supported by pg clients.
+	return tempDir,
+		filepath.Join(tempDir, ".s.PGSQL."+socketConnVirtualPort),
+		func() { _ = os.RemoveAll(tempDir) }
 }
 
 func hbaRunTest(t *testing.T, insecure bool) {
@@ -103,7 +132,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
-		s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: insecure})
+		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
+		defer cleanup()
+
+		s, conn, _ := serverutils.StartServer(t,
+			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.TODO())
 
 		pgServer := s.(*server.TestServer).PGServer()
@@ -181,7 +214,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				_, err := conn.ExecContext(context.Background(), td.Input)
 				return fmtErr(err)
 
-			case "connect":
+			case "connect", "connect_unix":
+				if td.Cmd == "connect_unix" && runtime.GOOS == "windows" {
+					// Unix sockets not supported; assume the test succeeded.
+					return td.Expected
+				}
+
 				// Prepare a connection string using the server's default.
 				// What is the user requested by the test?
 				user := security.RootUser
@@ -196,9 +234,15 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					user == security.RootUser || user == server.TestUser /* withClientCerts */)
 				defer cleanupFn()
 
-				host, port, err := net.SplitHostPort(s.ServingSQLAddr())
-				if err != nil {
-					t.Fatal(err)
+				var host, port string
+				if td.Cmd == "connect" {
+					host, port, err = net.SplitHostPort(s.ServingSQLAddr())
+					if err != nil {
+						t.Fatal(err)
+					}
+				} else /* unix */ {
+					host = maybeSocketDir
+					port = socketConnVirtualPort
 				}
 				options, err := url.ParseQuery(sqlURL.RawQuery)
 				if err != nil {
@@ -216,7 +260,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				// at the end, letting the test override by introducing its
 				// own values at the beginning.
 				args := append(td.CmdArgs,
-					datadriven.CmdArg{Key: "user", Vals: []string{sqlURL.User.Username()}},
+					datadriven.CmdArg{Key: "user", Vals: []string{user}},
 					datadriven.CmdArg{Key: "host", Vals: []string{host}},
 					datadriven.CmdArg{Key: "port", Vals: []string{port}},
 				)

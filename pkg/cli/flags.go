@@ -350,12 +350,7 @@ func init() {
 		VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
 		VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 
-		// Usage for the unix socket is odd as we use a real file, whereas
-		// postgresql and clients consider it a directory and build a filename
-		// inside it using the port.
-		// Thus, we keep it hidden and use it for testing only.
 		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
-		_ = f.MarkHidden(cliflags.Socket.Name)
 
 		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
