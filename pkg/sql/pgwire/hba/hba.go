@@ -35,7 +35,8 @@ type Conf struct {
 
 // Entry is a single line of a configuration.
 type Entry struct {
-	Type String
+	// ConnType is the connection type to match.
+	ConnType ConnType
 	// Database is the list of databases to match. An empty list means
 	// "match any database".
 	Database []String
@@ -51,6 +52,38 @@ type Entry struct {
 	OptionQuotes []bool
 }
 
+// ConnType represents the type of connection matched by a rule.
+type ConnType int
+
+const (
+	// ConnLocal matches unix socket connections.
+	ConnLocal ConnType = 1 << iota
+	// ConnHostNoSSL matches TCP connections without SSL/TLS.
+	ConnHostNoSSL
+	// ConnHostSSL matches TCP connections with SSL/TLS.
+	ConnHostSSL
+
+	// ConnHostAny matches TCP connections with or without SSL/TLS.
+	ConnHostAny = ConnHostNoSSL | ConnHostSSL
+)
+
+// String implements the fmt.Formatter interface.
+func (t ConnType) String() string {
+	switch t {
+	case ConnLocal:
+		return "local"
+	case ConnHostNoSSL:
+		return "hostnossl"
+	case ConnHostSSL:
+		return "hostssl"
+	case ConnHostAny:
+		return "host"
+	default:
+		panic("unimplemented")
+	}
+}
+
+// String implements the fmt.Formatter interface.
 func (c Conf) String() string {
 	if len(c.Entries) == 0 {
 		return "# (empty configuration)\n"
@@ -68,7 +101,7 @@ func (c Conf) String() string {
 	row := []string{"# TYPE", "DATABASE", "USER", "ADDRESS", "METHOD", "OPTIONS"}
 	table.Append(row)
 	for _, e := range c.Entries {
-		row[0] = e.Type.String()
+		row[0] = e.ConnType.String()
 		row[1] = e.DatabaseString()
 		row[2] = e.UserString()
 		row[3] = e.AddressString()
@@ -112,6 +145,23 @@ func (h Entry) GetOptions(name string) []string {
 		}
 	}
 	return val
+}
+
+// ConnTypeMatches returns true iff the provided actual client connection
+// type matches the connection type specified in the rule.
+func (h Entry) ConnTypeMatches(clientConn ConnType) bool {
+	switch clientConn {
+	case ConnLocal:
+		return h.ConnType == ConnLocal
+	case ConnHostSSL:
+		// A SSL connection matches both "hostssl" and "host".
+		return h.ConnType&ConnHostSSL != 0
+	case ConnHostNoSSL:
+		// A non-SSL connection matches both "hostnossl" and "host".
+		return h.ConnType&ConnHostNoSSL != 0
+	default:
+		panic("unimplemented")
+	}
 }
 
 // UserMatches returns true iff the provided username matches the an
