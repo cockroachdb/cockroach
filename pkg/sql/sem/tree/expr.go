@@ -13,7 +13,6 @@ package tree
 import (
 	"bytes"
 	"fmt"
-	"github.com/lib/pq/oid"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Expr represents an expression.

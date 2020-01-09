@@ -12,6 +12,7 @@ package tree
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
