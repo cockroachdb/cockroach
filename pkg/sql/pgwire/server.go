@@ -13,7 +13,6 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -39,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ATTENTION: After changing this value in a unit test, you probably want to
@@ -405,106 +404,50 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 //
 // An error is returned if the initial handshake of the connection fails.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
-	s.mu.Lock()
-	draining := s.mu.draining
-	if !draining {
-		var cancel context.CancelFunc
-		ctx, cancel = contextutil.WithCancel(ctx)
-		done := make(chan struct{})
-		s.mu.connCancelMap[done] = cancel
-		defer func() {
-			cancel()
-			close(done)
-			s.mu.Lock()
-			delete(s.mu.connCancelMap, done)
-			s.mu.Unlock()
-		}()
-	}
-	s.mu.Unlock()
+	ctx, draining, onCloseFn := s.registerConn(ctx)
+	defer onCloseFn()
 
-	// If the Server is draining, we will use the connection only to send an
-	// error, so we don't count it in the stats. This makes sense since
-	// DrainClient() waits for that number to drop to zero,
-	// so we don't want it to oscillate unnecessarily.
-	if !draining {
-		s.metrics.NewConns.Inc(1)
-		s.metrics.Conns.Inc(1)
-		defer s.metrics.Conns.Dec(1)
-	}
-
-	var buf pgwirebase.ReadBuffer
-	n, err := buf.ReadUntypedMsg(conn)
+	// In any case, first check the command in the start-up message.
+	//
+	// We're assuming that a client is not willing/able to receive error
+	// packets before we drain that message.
+	version, buf, err := s.readVersion(conn)
 	if err != nil {
 		return err
 	}
-	s.metrics.BytesInCount.Inc(int64(n))
-	version, err := buf.GetUint32()
-	if err != nil {
-		return err
-	}
-	errSSLRequired := false
-	if version == versionSSL {
-		if len(buf.Msg) > 0 {
-			return errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
-		}
 
-		if s.cfg.Insecure {
-			if _, err := conn.Write(sslUnsupported); err != nil {
-				return err
-			}
-		} else {
-			if _, err := conn.Write(sslSupported); err != nil {
-				return err
-			}
-			tlsConfig, err := s.cfg.GetServerTLSConfig()
-			if err != nil {
-				return err
-			}
-			conn = tls.Server(conn, tlsConfig)
-		}
-
-		n, err := buf.ReadUntypedMsg(conn)
-		if err != nil {
-			return err
-		}
-		s.metrics.BytesInCount.Inc(int64(n))
-		version, err = buf.GetUint32()
-		if err != nil {
-			return err
-		}
-	} else if !s.cfg.Insecure {
-		errSSLRequired = true
-	}
-
-	sendErr := func(err error) error {
-		msgBuilder := newWriteBuffer(s.metrics.BytesOutCount)
-		_ /* err */ = writeErr(ctx, &s.execCfg.Settings.SV, err, msgBuilder, conn)
-		_ = conn.Close()
-		return err
-	}
-
-	if version != version30 {
-		if version == versionCancel {
-			telemetry.Inc(sqltelemetry.CancelRequestCounter)
-			_ = conn.Close()
-			return nil
-		}
-		return sendErr(fmt.Errorf("unknown protocol version %d", version))
-	}
-	if errSSLRequired {
-		return sendErr(pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired))
-	}
+	// If the server is shutting down, terminate the connection2 early.
 	if draining {
-		return sendErr(newAdminShutdownErr(ErrDrainingNewConn))
+		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
-	var sArgs sql.SessionArgs
-	if sArgs, err = parseOptions(ctx, buf.Msg); err != nil {
-		return sendErr(err)
+	// If the client requests SSL, upgrade the connection to use TLS.
+	var clientErr error
+	conn, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, version, &buf)
+	if err != nil {
+		return err
 	}
-	sArgs.User = tree.Name(sArgs.User).Normalize()
-	if sArgs.ConnResultsBufferSize == connResultsBufferSizeUnsetSentinel {
-		sArgs.ConnResultsBufferSize = connResultsBufferSize.Get(&s.execCfg.Settings.SV)
+	if clientErr != nil {
+		return s.sendErr(ctx, conn, clientErr)
+	}
+
+	// What does the client want to do?
+	switch version {
+	case versionCancel:
+		// If the client is really issuing a cancel request, close the door
+		// in their face (we don't support it yet). Make a note of that use
+		// in telemetry.
+		telemetry.Inc(sqltelemetry.CancelRequestCounter)
+		_ = conn.Close()
+		return nil
+
+	case version30:
+		// Normal SQL connection. Proceed normally below.
+
+	default:
+		// We don't know this protocol.
+		return s.sendErr(ctx, conn,
+			pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version))
 	}
 
 	// Reserve some memory for this connection using the server's monitor. This
@@ -517,41 +460,53 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			baseSQLMemoryBudget, err)
 	}
 
-	var authHook func(context.Context) error
-	if k := s.execCfg.PGWireTestingKnobs; k != nil {
-		authHook = k.AuthHook
+	// Load the client-provided session parameters.
+	var sArgs sql.SessionArgs
+	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf); err != nil {
+		return s.sendErr(ctx, conn, err)
 	}
 
+	// If a test is hooking in some authentication option, load it.
+	var testingAuthHook func(context.Context) error
+	if k := s.execCfg.PGWireTestingKnobs; k != nil {
+		testingAuthHook = k.AuthHook
+	}
+
+	// Defer the rest of the processing to the connection handler.
+	// This includes authentication.
 	serveConn(
 		ctx, conn, sArgs,
 		&s.metrics, reserved, s.SQLServer,
 		s.IsDraining,
 		authOptions{
-			insecure: s.cfg.Insecure,
-			ie:       s.execCfg.InternalExecutor,
-			auth:     s.GetAuthenticationConfiguration(),
-			authHook: authHook,
+			insecure:        s.cfg.Insecure,
+			ie:              s.execCfg.InternalExecutor,
+			auth:            s.GetAuthenticationConfiguration(),
+			testingAuthHook: testingAuthHook,
 		},
 		s.stopper)
 	return nil
 }
 
-// -1 for the sentinel in case someone wants to set it to 0.
-const connResultsBufferSizeUnsetSentinel = -1
-
-func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
+// parseClientProvidedSessionParameters reads the incoming k/v pairs
+// in the startup message into a sql.SessionArgs struct.
+func parseClientProvidedSessionParameters(
+	ctx context.Context, sv *settings.Values, buf *pgwirebase.ReadBuffer,
+) (sql.SessionArgs, error) {
 	args := sql.SessionArgs{
-		SessionDefaults:       make(map[string]string),
-		ConnResultsBufferSize: connResultsBufferSizeUnsetSentinel,
+		SessionDefaults: make(map[string]string),
 	}
-	buf := pgwirebase.ReadBuffer{Msg: data}
+	foundBufferSize := false
+
 	for {
+		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
 			return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 				"error reading option key: %s", err)
 		}
 		if len(key) == 0 {
+			// End of parameter list.
 			break
 		}
 		value, err := buf.GetString()
@@ -559,36 +514,52 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 			return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 				"error reading option value: %s", err)
 		}
+
+		// Case-fold for the key for easier comparison.
 		key = strings.ToLower(key)
+
+		// Load the parameter.
 		switch key {
 		case "user":
-			args.User = value
+			// Unicode-normalize and case-fold the username.
+			args.User = tree.Name(value).Normalize()
+
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"error parsing results_buffer_size option value '%s' as bytes", value)
+				return sql.SessionArgs{}, errors.WithSecondaryError(
+					pgerror.Newf(pgcode.ProtocolViolation,
+						"error parsing results_buffer_size option value '%s' as bytes", value), err)
 			}
 			if args.ConnResultsBufferSize < 0 {
 				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
+			foundBufferSize = true
+
 		default:
 			exists, configurable := sql.IsSessionVariableConfigurable(key)
-			if exists && configurable {
+
+			switch {
+			case exists && configurable:
 				args.SessionDefaults[key] = value
-			} else {
-				if !exists {
-					if _, ok := sql.UnsupportedVars[key]; ok {
-						counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
-						telemetry.Inc(counter)
-					}
-					log.Warningf(ctx, "unknown configuration parameter: %q", key)
-				} else {
-					return sql.SessionArgs{}, pgerror.Newf(pgcode.CantChangeRuntimeParam,
-						"parameter %q cannot be changed", key)
+
+			case !exists:
+				if _, ok := sql.UnsupportedVars[key]; ok {
+					counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
+					telemetry.Inc(counter)
 				}
+				log.Warningf(ctx, "unknown configuration parameter: %q", key)
+
+			case !configurable:
+				return sql.SessionArgs{}, pgerror.Newf(pgcode.CantChangeRuntimeParam,
+					"parameter %q cannot be changed", key)
 			}
 		}
+	}
+
+	if !foundBufferSize && sv != nil {
+		// The client did not provide buffer_size; use the cluster setting as default.
+		args.ConnResultsBufferSize = connResultsBufferSize.Get(sv)
 	}
 
 	if _, ok := args.SessionDefaults["database"]; !ok {
@@ -598,6 +569,144 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 	}
 
 	return args, nil
+}
+
+// maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
+// requested by the client, and available in the server configuration.
+func (s *Server) maybeUpgradeToSecureConn(
+	ctx context.Context, conn net.Conn, version uint32, buf *pgwirebase.ReadBuffer,
+) (newConn net.Conn, newVersion uint32, clientErr, serverErr error) {
+	// By default, this is a no-op.
+	newConn = conn
+	newVersion = version
+	var n int // byte counts
+
+	if version != versionSSL {
+		// The client did not require a SSL connection.
+
+		if !s.cfg.Insecure {
+			// Currently non-SSL connections are not allowed in secure
+			// mode. Ideally, we want to allow this and subject it to HBA
+			// rules ('hostssl' vs 'hostnossl').
+			//
+			// TODO(knz): revisit this when needed.
+			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
+			return
+		}
+
+		// Non-SSL in non-secure mode, all is well: no-op.
+		return
+	}
+
+	// Protocol sanity check.
+	if len(buf.Msg) > 0 {
+		serverErr = errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
+		return
+	}
+
+	// The client has requested SSL. We're going to try and upgrade the
+	// connection to use TLS/SSL.
+
+	// Do we have a TLS configuration?
+	tlsConfig, serverErr := s.cfg.GetServerTLSConfig()
+	if serverErr != nil {
+		return
+	}
+
+	if tlsConfig == nil {
+		// We don't have a TLS configuration available, so we can't honor
+		// the client's request.
+		n, serverErr = conn.Write(sslUnsupported)
+		if serverErr != nil {
+			return
+		}
+	} else {
+		// We have a TLS configuration. Upgrade the connection.
+		n, serverErr = conn.Write(sslSupported)
+		if serverErr != nil {
+			return
+		}
+		newConn = tls.Server(conn, tlsConfig)
+	}
+	s.metrics.BytesOutCount.Inc(int64(n))
+
+	// Finally, re-read the version/command from the client.
+	newVersion, *buf, serverErr = s.readVersion(newConn)
+	return
+}
+
+// registerConn registers the incoming connection to the map of active connections,
+// which can be canceled by a concurrent server drain. It also returns
+// the current draining status of the server.
+//
+// The onCloseFn() callback must be called at the end of the
+// connection by the caller.
+func (s *Server) registerConn(
+	ctx context.Context,
+) (newCtx context.Context, draining bool, onCloseFn func()) {
+	onCloseFn = func() {}
+	newCtx = ctx
+	s.mu.Lock()
+	draining = s.mu.draining
+	if !draining {
+		var cancel context.CancelFunc
+		newCtx, cancel = contextutil.WithCancel(ctx)
+		done := make(chan struct{})
+		s.mu.connCancelMap[done] = cancel
+		onCloseFn = func() {
+			cancel()
+			close(done)
+			s.mu.Lock()
+			delete(s.mu.connCancelMap, done)
+			s.mu.Unlock()
+		}
+	}
+	s.mu.Unlock()
+
+	// If the Server is draining, we will use the connection only to send an
+	// error, so we don't count it in the stats. This makes sense since
+	// DrainClient() waits for that number to drop to zero,
+	// so we don't want it to oscillate unnecessarily.
+	if !draining {
+		s.metrics.NewConns.Inc(1)
+		s.metrics.Conns.Inc(1)
+		prevOnCloseFn := onCloseFn
+		onCloseFn = func() { prevOnCloseFn(); s.metrics.Conns.Dec(1) }
+	}
+	return
+}
+
+// readVersion reads the start-up message, then returns the version
+// code (first uint32 in message) and the buffer containing the rest
+// of the payload.
+func (s *Server) readVersion(
+	conn io.Reader,
+) (version uint32, buf pgwirebase.ReadBuffer, err error) {
+	var n int
+	n, err = buf.ReadUntypedMsg(conn)
+	if err != nil {
+		return
+	}
+	version, err = buf.GetUint32()
+	if err != nil {
+		return
+	}
+	s.metrics.BytesInCount.Inc(int64(n))
+	return
+}
+
+// sendErr sends errors to the client during the connection startup
+// sequence. Later error sends during/after authentication are handled
+// in conn.go.
+func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
+	msgBuilder := newWriteBuffer(s.metrics.BytesOutCount)
+	// We could, but do not, report server-side network errors while
+	// trying to send the client error. This is because clients that
+	// receive error payload are highly correlated with clients
+	// disconnecting abruptly.
+	_ /* err */ = writeErr(ctx, &s.execCfg.Settings.SV, err, msgBuilder, conn)
+	_ = conn.Close()
+	return err
 }
 
 func newAdminShutdownErr(msg string) error {

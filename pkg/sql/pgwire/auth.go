@@ -32,11 +32,28 @@ const (
 )
 
 type authOptions struct {
-	skipAuth bool                            // test-only
-	authHook func(ctx context.Context) error // test-only
+	// insecure indicates that all connections for existing users must
+	// be allowed to go through. A password, if presented, must be
+	// accepted.
 	insecure bool
-	auth     *hba.Conf
-	ie       *sql.InternalExecutor
+	// auth is the current HBA configuration as returned by
+	// (*Server).GetAuthenticationConfiguration().
+	auth *hba.Conf
+	// ie is the server-wide internal executor, used to
+	// retrieve entries from system.users.
+	ie *sql.InternalExecutor
+
+	// The following fields are only used by tests.
+
+	// testingSkipAuth requires to skip authentication, not even
+	// allowing a password exchange.
+	// Note that this different from insecure auth: with no auth, no
+	// password is accepted (a protocol error is given if one is
+	// presented); with insecure auth; _any_ is accepted.
+	testingSkipAuth bool
+	// testingAuthHook, if provided, replaces the logic in
+	// handleAuthentication().
+	testingAuthHook func(ctx context.Context) error
 }
 
 // handleAuthentication checks the connection's user. Errors are sent to the
@@ -46,13 +63,15 @@ type authOptions struct {
 // authentication and update c.sessionArgs with the authenticated user's name,
 // if different from the one given initially.
 func (c *conn) handleAuthentication(
-	ctx context.Context,
-	ac AuthConn,
-	insecure bool,
-	ie *sql.InternalExecutor,
-	auth *hba.Conf,
-	execCfg *sql.ExecutorConfig,
+	ctx context.Context, ac AuthConn, authOpt authOptions, execCfg *sql.ExecutorConfig,
 ) error {
+	if authOpt.testingSkipAuth {
+		return nil
+	}
+	if authOpt.testingAuthHook != nil {
+		return authOpt.testingAuthHook(ctx)
+	}
+
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
 		return err
@@ -61,7 +80,7 @@ func (c *conn) handleAuthentication(
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
+		ctx, authOpt.ie, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)
@@ -73,12 +92,12 @@ func (c *conn) handleAuthentication(
 	if tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
 
-		methodFn, hbaEntry, err := c.lookupAuthenticationMethod(auth)
+		methodFn, hbaEntry, err := c.lookupAuthenticationMethod(authOpt.auth)
 		if err != nil {
 			return sendError(err)
 		}
 
-		authenticationHook, err := methodFn(ac, tlsState, insecure, hashedPassword, execCfg, hbaEntry)
+		authenticationHook, err := methodFn(ac, tlsState, authOpt.insecure, hashedPassword, execCfg, hbaEntry)
 		if err != nil {
 			return sendError(err)
 		}
