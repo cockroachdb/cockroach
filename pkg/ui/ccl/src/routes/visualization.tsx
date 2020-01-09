@@ -10,6 +10,7 @@ import { Route, IndexRedirect } from "react-router";
 import ClusterViz from "src/views/clusterviz/containers/map";
 import NodeList from "src/views/clusterviz/containers/map/nodeList";
 import ClusterOverview from "src/views/cluster/containers/clusterOverview";
+import { normalizeConnectedComponent } from "src/util/normalizeConnectedComponent";
 
 export const CLUSTERVIZ_ROOT = "/overview/map";
 
@@ -18,7 +19,7 @@ export default function createNodeMapRoutes(): JSX.Element {
     <Route path="overview" component={ ClusterOverview } >
       <IndexRedirect to="list" />
       <Route path="list" component={ NodeList } />
-      <Route path="map(/**)" component={ ClusterViz } />
+      <Route path="map(/**)" component={normalizeConnectedComponent(ClusterViz)} />
     </Route>
   );
 }

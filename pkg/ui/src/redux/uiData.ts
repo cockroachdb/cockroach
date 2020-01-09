@@ -261,7 +261,7 @@ export function getLoadError(state: AdminUIState, key: string): Error {
  * in the local UIDataState store.
  */
 export function saveUIData(...values: KeyValue[]) {
-  return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
+  return (dispatch: Dispatch<Action, AdminUIState>, getState: () => AdminUIState): Promise<void> => {
     const state = getState();
     values = _.filter(values, (kv) => !isInFlight(state, kv.key));
     if (values.length === 0) {
@@ -293,7 +293,7 @@ export function saveUIData(...values: KeyValue[]) {
  * loadUIData loads the values of the give UIData keys from the server.
  */
 export function loadUIData(...keys: string[]) {
-  return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {
+  return (dispatch: Dispatch<Action, AdminUIState>, getState: () => AdminUIState): Promise<void> => {
     const state = getState();
     keys = _.filter(keys, (k) => !isInFlight(state, k));
     if (keys.length === 0) {

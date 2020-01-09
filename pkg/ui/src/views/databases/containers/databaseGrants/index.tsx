@@ -10,7 +10,7 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
+import { bindActionCreators, Dispatch, Action } from "redux";
 import * as protos from "src/js/protos";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -89,7 +89,7 @@ const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitD
   grants: selectGrants(state, ownProps.name),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   bindActionCreators(
     {
       setSort: grantsSortSetting.set,

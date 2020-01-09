@@ -17,8 +17,7 @@
 
 import _ from "lodash";
 import { Action } from "redux";
-import { delay } from "redux-saga";
-import { take, fork, call, all, put } from "redux-saga/effects";
+import { delay, take, fork, call, all, put } from "redux-saga/effects";
 
 import * as protos from  "src/js/protos";
 import { PayloadAction } from "src/interfaces/action";
@@ -292,7 +291,7 @@ export function* queryMetricsSaga() {
     // Delay of zero will defer execution to the message queue, allowing the
     // currently executing event (e.g. rendering a new page or a timespan change)
     // to dispatch additional requests which can be batched.
-    yield call(delay, 0);
+    yield delay(0);
 
     const requestsToSend = requests;
     requests = [];
