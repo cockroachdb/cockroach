@@ -218,6 +218,71 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	}
 }
 
+func TestSpanSetCheckAllowedSpanKeyExclusive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ss SpanSet
+	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
+	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
+	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
+
+	allowed := []roachpb.Span{
+		// Exactly as declared.
+		{Key: roachpb.Key("d")},
+		{Key: roachpb.Key("q")},
+	}
+	for _, span := range allowed {
+		if err := ss.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err != nil {
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
+		}
+	}
+
+	disallowed := []roachpb.Span{
+		// Points outside the declared spans, and on the endpoints.
+		{Key: roachpb.Key("b")},
+		{Key: roachpb.Key("g")},
+		{Key: roachpb.Key("k")},
+	}
+	for _, span := range disallowed {
+		if err := ss.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err == nil {
+			t.Errorf("expected %s to be disallowed", span)
+		}
+	}
+}
+
+func TestSpanSetCheckAllowedAtSpanKeyExclusive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ts := hlc.Timestamp{WallTime: 42}
+	var ss SpanSet
+	ss.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, ts)
+	ss.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")}, ts)
+	ss.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")}, ts)
+
+	allowed := []roachpb.Span{
+		// Exactly as declared.
+		{Key: roachpb.Key("d")},
+		{Key: roachpb.Key("q")},
+	}
+	for _, span := range allowed {
+		if err := ss.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err != nil {
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
+		}
+	}
+
+	disallowed := []roachpb.Span{
+		// Points outside the declared spans, and on the endpoints.
+		{Key: roachpb.Key("b")},
+		{Key: roachpb.Key("g")},
+		{Key: roachpb.Key("k")},
+	}
+	for _, span := range disallowed {
+		if err := ss.checkAllowedAt(SpanReadOnly, span, ts, true /* spanKeyExclusive */); err == nil {
+			t.Errorf("expected %s to be disallowed", span)
+		}
+	}
+}
+
 // Test that a span declared for write access also implies read
 // access, but not vice-versa.
 func TestSpanSetWriteImpliesRead(t *testing.T) {

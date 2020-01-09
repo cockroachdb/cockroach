@@ -179,6 +179,10 @@ func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 // is also a problem if the added spans were read only and the spanset wasn't
 // already SortAndDedup-ed.
 func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
+	return s.checkAllowed(access, span, false /* spanKeyExclusive */)
+}
+
+func (s *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span, spanKeyExclusive bool) error {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
@@ -186,7 +190,9 @@ func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 
 	for ac := access; ac < NumSpanAccess; ac++ {
 		for _, cur := range s.spans[ac][scope] {
-			if cur.Contains(span) {
+			if cur.Contains(span) &&
+				(!spanKeyExclusive || cur.EndKey != nil && !cur.Key.Equal(span.Key)) ||
+				spanKeyExclusive && cur.EndKey.Equal(span.Key) {
 				return nil
 			}
 		}
@@ -200,6 +206,14 @@ func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 func (s *SpanSet) CheckAllowedAt(
 	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
 ) error {
+	return s.checkAllowedAt(access, span, timestamp, false /* inclusiveEnd */)
+}
+
+// checkAllowedAt is like CheckAllowedAt but provides the option to treat the
+// key in the query span as exclusive.
+func (s *SpanSet) checkAllowedAt(
+	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp, spanKeyExclusive bool,
+) error {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
@@ -207,7 +221,9 @@ func (s *SpanSet) CheckAllowedAt(
 
 	for ac := access; ac < NumSpanAccess; ac++ {
 		for _, cur := range s.spans[ac][scope] {
-			if cur.Contains(span) {
+			if (cur.Contains(span) &&
+				(!spanKeyExclusive || (cur.EndKey != nil && !cur.Key.Equal(span.Key)))) ||
+				(spanKeyExclusive && cur.EndKey.Equal(span.Key)) {
 				if cur.Timestamp.IsEmpty() {
 					// When the span is acquired as non-MVCC (i.e. with an empty
 					// timestamp), it's equivalent to a read/write mutex where we don't
