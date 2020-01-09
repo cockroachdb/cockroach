@@ -65,6 +65,8 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_liveness_a742f8206583547b, []int{0}
+	return fileDescriptor_liveness_6b86f4500e61329a, []int{0}
 	return fileDescriptor_liveness_02a7d82e103a0b92, []int{0}
 }
 
@@ -78,6 +80,9 @@ type Liveness struct {
 	// may be incremented if the liveness record expires (current time
 	// is later than the expiration timestamp).
 	Epoch int64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// The timestamp at which this liveness record expires.
+	// The timestamp at which this liveness record expires. The logical part of
+	// this timestamp is zero.
 	// The timestamp at which this liveness record expires.
 	//
 	// Note that the clock max offset is not accounted for in any way when this
@@ -96,6 +101,8 @@ func (m *Liveness) Reset()         { *m = Liveness{} }
 func (m *Liveness) String() string { return proto.CompactTextString(m) }
 func (*Liveness) ProtoMessage()    {}
 func (*Liveness) Descriptor() ([]byte, []int) {
+	return fileDescriptor_liveness_a742f8206583547b, []int{0}
+	return fileDescriptor_liveness_6b86f4500e61329a, []int{0}
 	return fileDescriptor_liveness_02a7d82e103a0b92, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
@@ -581,9 +588,13 @@ var (
 )
 
 func init() {
+	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_a742f8206583547b)
+	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_6b86f4500e61329a)
 	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_02a7d82e103a0b92)
 }
 
+var fileDescriptor_liveness_a742f8206583547b = []byte{
+var fileDescriptor_liveness_6b86f4500e61329a = []byte{
 var fileDescriptor_liveness_02a7d82e103a0b92 = []byte{
 	// 426 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x52, 0xc1, 0x6e, 0x9b, 0x30,

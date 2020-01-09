@@ -1550,7 +1550,7 @@ func (s *adminServer) DecommissionStatus(
 			Decommissioning: l.Decommissioning,
 			Draining:        l.Draining,
 		}
-		if l.IsLive(s.server.clock.Now()) {
+		if l.IsLive(s.server.clock.PhysicalTime()) {
 			nodeResp.IsLive = true
 		}
 
