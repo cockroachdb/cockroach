@@ -399,11 +399,40 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 	return nil
 }
 
+// SocketType indicates the connection type. This is an optimization to
+// prevent a comparison against conn.LocalAddr().Network().
+type SocketType bool
+
+const (
+	// SocketTCP is used for TCP sockets. The standard.
+	SocketTCP SocketType = true
+	// SocketUnix is used for unix datagram sockets.
+	SocketUnix SocketType = false
+)
+
+func (s SocketType) asConnType() (hba.ConnType, error) {
+	switch s {
+	case SocketTCP:
+		return hba.ConnHostNoSSL, nil
+	case SocketUnix:
+		return hba.ConnLocal, nil
+	default:
+		return 0, errors.AssertionFailedf("unimplemented socket type: %v", errors.Safe(s))
+	}
+}
+
 // ServeConn serves a single connection, driving the handshake process and
 // delegating to the appropriate connection type.
 //
+// The socketType argument is an optimization to avoid a string
+// compare on conn.LocalAddr().Network(). When the socket type is
+// unix datagram (local filesystem), SSL negotiation is disabled
+// even when the server is running securely with certificates.
+// This has the effect of forcing password auth, also in a way
+// compatible with postgres.
+//
 // An error is returned if the initial handshake of the connection fails.
-func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
+func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) error {
 	ctx, draining, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 
@@ -416,14 +445,20 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 
-	// If the server is shutting down, terminate the connection2 early.
+	// If the server is shutting down, terminate the connection early.
 	if draining {
 		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
+	// Compute the initial connType.
+	connType, err := socketType.asConnType()
+	if err != nil {
+		return err
+	}
+
 	// If the client requests SSL, upgrade the connection to use TLS.
 	var clientErr error
-	conn, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, version, &buf)
+	conn, connType, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, connType, version, &buf)
 	if err != nil {
 		return err
 	}
@@ -479,6 +514,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		&s.metrics, reserved, s.SQLServer,
 		s.IsDraining,
 		authOptions{
+			connType:        connType,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
 			auth:            s.GetAuthenticationConfiguration(),
@@ -574,17 +610,22 @@ func parseClientProvidedSessionParameters(
 // maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
 // requested by the client, and available in the server configuration.
 func (s *Server) maybeUpgradeToSecureConn(
-	ctx context.Context, conn net.Conn, version uint32, buf *pgwirebase.ReadBuffer,
-) (newConn net.Conn, newVersion uint32, clientErr, serverErr error) {
+	ctx context.Context,
+	conn net.Conn,
+	connType hba.ConnType,
+	version uint32,
+	buf *pgwirebase.ReadBuffer,
+) (newConn net.Conn, newConnType hba.ConnType, newVersion uint32, clientErr, serverErr error) {
 	// By default, this is a no-op.
 	newConn = conn
+	newConnType = connType
 	newVersion = version
 	var n int // byte counts
 
 	if version != versionSSL {
 		// The client did not require a SSL connection.
 
-		if !s.cfg.Insecure {
+		if !s.cfg.Insecure && connType != hba.ConnLocal {
 			// Currently non-SSL connections are not allowed in secure
 			// mode. Ideally, we want to allow this and subject it to HBA
 			// rules ('hostssl' vs 'hostnossl').
@@ -596,6 +637,11 @@ func (s *Server) maybeUpgradeToSecureConn(
 
 		// Non-SSL in non-secure mode, all is well: no-op.
 		return
+	}
+
+	if connType == hba.ConnLocal {
+		clientErr = pgerror.New(pgcode.ProtocolViolation,
+			"cannot use SSL/TLS over local connections")
 	}
 
 	// Protocol sanity check.
@@ -627,6 +673,7 @@ func (s *Server) maybeUpgradeToSecureConn(
 			return
 		}
 		newConn = tls.Server(conn, tlsConfig)
+		newConnType = hba.ConnHostSSL
 	}
 	s.metrics.BytesOutCount.Inc(int64(n))
 

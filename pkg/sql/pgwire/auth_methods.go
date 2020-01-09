@@ -39,26 +39,26 @@ func loadDefaultMethods() {
 	//
 	// Care should be taken by administrators to only accept this auth
 	// method over secure connections, e.g. those encrypted using SSL.
-	RegisterAuthMethod("password", authPassword, cluster.Version19_1, nil)
+	RegisterAuthMethod("password", authPassword, cluster.Version19_1, hba.ConnAny, nil)
 
 	// The "cert" method requires a valid client certificate for the
 	// user attempting to connect.
 	//
 	// This method is only usable over SSL connections.
-	RegisterAuthMethod("cert", authCert, cluster.Version19_1, nil)
+	RegisterAuthMethod("cert", authCert, cluster.Version19_1, hba.ConnHostSSL, nil)
 
 	// The "cert-password" method requires either a valid client
 	// certificate for the connecting user, or, if no cert is provided,
 	// a cleartext password.
-	RegisterAuthMethod("cert-password", authCertPassword, cluster.Version19_1, nil)
+	RegisterAuthMethod("cert-password", authCertPassword, cluster.Version19_1, hba.ConnAny, nil)
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("reject", authReject, cluster.VersionAuthLocalAndTrustRejectMethods, nil)
+	RegisterAuthMethod("reject", authReject, cluster.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
 
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("trust", authTrust, cluster.VersionAuthLocalAndTrustRejectMethods, nil)
+	RegisterAuthMethod("trust", authTrust, cluster.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
 
 }
 
@@ -66,7 +66,6 @@ func loadDefaultMethods() {
 type AuthMethod func(
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -75,7 +74,6 @@ type AuthMethod func(
 func authPassword(
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -92,7 +90,7 @@ func authPassword(
 		return nil, err
 	}
 	return security.UserAuthPasswordHook(
-		insecure, password, hashedPassword,
+		false /*insecure*/, password, hashedPassword,
 	), nil
 }
 
@@ -107,7 +105,6 @@ func passwordString(pwdData []byte) (string, error) {
 func authCert(
 	_ AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -119,13 +116,12 @@ func authCert(
 	tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 		tlsState.PeerCertificates[0].Subject.CommonName,
 	).Normalize()
-	return security.UserAuthCertHook(insecure, &tlsState)
+	return security.UserAuthCertHook(false /*insecure*/, &tlsState)
 }
 
 func authCertPassword(
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	insecure bool,
 	hashedPassword []byte,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
@@ -136,17 +132,17 @@ func authCertPassword(
 	} else {
 		fn = authCert
 	}
-	return fn(c, tlsState, insecure, hashedPassword, execCfg, entry)
+	return fn(c, tlsState, hashedPassword, execCfg, entry)
 }
 
 func authTrust(
-	_ AuthConn, _ tls.ConnectionState, _ bool, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+	_ AuthConn, _ tls.ConnectionState, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	return func(_ string, _ bool) error { return nil }, nil
 }
 
 func authReject(
-	_ AuthConn, _ tls.ConnectionState, _ bool, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+	_ AuthConn, _ tls.ConnectionState, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	return func(_ string, _ bool) error {
 		return errors.New("authentication rejected by configuration")

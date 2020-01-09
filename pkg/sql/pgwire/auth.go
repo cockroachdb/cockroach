@@ -36,6 +36,9 @@ type authOptions struct {
 	// be allowed to go through. A password, if presented, must be
 	// accepted.
 	insecure bool
+	// connType is the actual type of client connection (e.g. local,
+	// hostssl, hostnossl).
+	connType hba.ConnType
 	// auth is the current HBA configuration as returned by
 	// (*Server).GetAuthenticationConfiguration().
 	auth *hba.Conf
@@ -89,21 +92,19 @@ func (c *conn) handleAuthentication(
 		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
-	if tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn); ok {
-		tlsState := tlsConn.ConnectionState()
+	// Retrieve the authentication method.
+	tlsState, hbaEntry, methodFn, err := c.findAuthenticationMethod(authOpt)
+	if err != nil {
+		return sendError(err)
+	}
 
-		methodFn, hbaEntry, err := c.lookupAuthenticationMethod(authOpt.auth)
-		if err != nil {
-			return sendError(err)
-		}
-
-		authenticationHook, err := methodFn(ac, tlsState, authOpt.insecure, hashedPassword, execCfg, hbaEntry)
-		if err != nil {
-			return sendError(err)
-		}
-		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
-			return sendError(err)
-		}
+	// Ask the method to authenticate.
+	authenticationHook, err := methodFn(ac, tlsState, hashedPassword, execCfg, hbaEntry)
+	if err != nil {
+		return sendError(err)
+	}
+	if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
+		return sendError(err)
 	}
 
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
@@ -111,27 +112,71 @@ func (c *conn) handleAuthentication(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-func (c *conn) lookupAuthenticationMethod(
-	auth *hba.Conf,
-) (methodFn AuthMethod, entry *hba.Entry, err error) {
-	// Extract the IP address of the client.
-	tcpAddr, ok := c.conn.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		return nil, nil, errors.AssertionFailedf("client address type %T unsupported", c.conn.RemoteAddr())
+func (c *conn) findAuthenticationMethod(
+	authOpt authOptions,
+) (tlsState tls.ConnectionState, hbaEntry *hba.Entry, methodFn AuthMethod, err error) {
+	if authOpt.insecure {
+		// Insecure connections always use "trust" no matter what, and the
+		// remaining of the configuration is ignored.
+		methodFn = authTrust
+		return
 	}
-	ip := tcpAddr.IP
+
+	// Look up the method from the HBA configuration.
+	var mi methodInfo
+	mi, hbaEntry, err = c.lookupAuthenticationMethodUsingRules(authOpt.connType, authOpt.auth)
+	if err != nil {
+		return
+	}
+	methodFn = mi.fn
+
+	// Check that this method can be used over this connection type.
+	if authOpt.connType&mi.validConnTypes == 0 {
+		err = errors.Newf("method %q required for this user, but unusable over this connection type",
+			hbaEntry.Method.Value)
+		return
+	}
+
+	// If the client is using SSL, retrieve the TLS state to provide as
+	// input to the method.
+	if authOpt.connType == hba.ConnHostSSL {
+		tlsConn, ok := c.conn.(*readTimeoutConn).Conn.(*tls.Conn)
+		if !ok {
+			err = errors.AssertionFailedf("server reports hostssl conn without TLS state")
+			return
+		}
+		tlsState = tlsConn.ConnectionState()
+	}
+
+	return
+}
+
+func (c *conn) lookupAuthenticationMethodUsingRules(
+	connType hba.ConnType, auth *hba.Conf,
+) (mi methodInfo, entry *hba.Entry, err error) {
+	var ip net.IP
+	if connType != hba.ConnLocal {
+		// Extract the IP address of the client.
+		tcpAddr, ok := c.conn.RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			err = errors.AssertionFailedf("client address type %T unsupported", c.conn.RemoteAddr())
+			return
+		}
+		ip = tcpAddr.IP
+	}
 
 	// Look up the method.
 	for i := range auth.Entries {
-		entry := &auth.Entries[i]
-		addrMatch, err := entry.AddressMatches(ip)
+		entry = &auth.Entries[i]
+		var connMatch bool
+		connMatch, err = entry.ConnMatches(connType, ip)
 		if err != nil {
 			// TODO(knz): Determine if an error should be reported
 			// upon unknown address formats.
 			// See: https://github.com/cockroachdb/cockroach/issues/43716
-			return nil, nil, err
+			return
 		}
-		if !addrMatch {
+		if !connMatch {
 			// The address does not match.
 			continue
 		}
@@ -139,11 +184,12 @@ func (c *conn) lookupAuthenticationMethod(
 			// The user does not match.
 			continue
 		}
-		return entry.MethodFn.(AuthMethod), entry, nil
+		return entry.MethodFn.(methodInfo), entry, nil
 	}
 
 	// No match.
-	return nil, nil, errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, ip, c.sessionArgs.User)
+	err = errors.Errorf("no %s entry for host %q, user %q", serverHBAConfSetting, ip, c.sessionArgs.User)
+	return
 }
 
 // authenticatorIO is the interface used by the connection to pass password data

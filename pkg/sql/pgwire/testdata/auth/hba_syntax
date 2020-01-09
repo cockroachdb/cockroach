@@ -52,11 +52,3 @@ HINT: You have attempted to use a feature that is not yet implemented.<STANDARD 
 --
 List the numeric CIDR notation instead, for example: 127.0.0.1/8.
 Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.
-
-
-# CockroachDB does not yet support local rules.
-set_hba
-local all all cert
-----
-ERROR: unimplemented: unsupported connection type: local (SQLSTATE 0A000)
-HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
