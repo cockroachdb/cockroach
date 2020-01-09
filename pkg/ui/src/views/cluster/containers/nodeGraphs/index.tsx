@@ -263,10 +263,10 @@ export default connect(
       hoverState: hoverStateSelector(state),
     };
   },
-  {
+  () => ({
     refreshNodes,
     refreshLiveness,
     hoverOn,
     hoverOff,
-  },
+  }),
 )(NodeGraphs);
