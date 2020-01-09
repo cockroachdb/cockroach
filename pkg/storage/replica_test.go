@@ -6813,7 +6813,8 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}()
 
-	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(),
+		false /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)

@@ -70,7 +70,8 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 				limiter:  rate.NewLimiter(1<<10, 1),
 				newBatch: eng.NewBatch,
 			}
-			iter := rditer.NewReplicaDataIterator(repl.Desc(), snap, true /* replicatedOnly */)
+			iter := rditer.NewReplicaDataIterator(repl.Desc(), snap,
+				true /* replicatedOnly */, false /* seekEnd */)
 			defer iter.Close()
 			outSnap := &OutgoingSnapshot{
 				Iter:       iter,
