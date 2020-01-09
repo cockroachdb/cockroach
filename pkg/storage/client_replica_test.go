@@ -507,7 +507,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 }
 
 type leaseTransferTest struct {
-	mtc                        *multiTestContext
+	mtc *multiTestContext
+	// replicas of range covering key "a" on the first and the second stores.
 	replica0, replica1         *storage.Replica
 	replica0Desc, replica1Desc roachpb.ReplicaDescriptor
 	leftKey                    roachpb.Key
@@ -643,15 +644,20 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			l.filter = nil
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
+			log.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
 			<-extensionSem
+			log.Infof(filterArgs.Ctx, "filter unblocking lease request")
 		}
 		return nil
 	}
 }
 
+// forceLeaseExtension moves the clock forward close to the lease's expiration,
+// and then performs a read on the range, which will force the lease to be
+// renewed. This assumes the lease is not epoch-based.
 func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Lease) error {
-	shouldRenewTS := lease.Expiration.Add(-1, 0)
-	l.mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
+	// Set the clock close to the lease's expiration.
+	l.mtc.manualClock.Set(lease.Expiration.WallTime - 10)
 	err := l.sendRead(storeIdx).GoError()
 	// We can sometimes receive an error from our renewal attempt because the
 	// lease transfer ends up causing the renewal to re-propose and second

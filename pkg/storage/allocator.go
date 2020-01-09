@@ -853,6 +853,7 @@ func (a *Allocator) TransferLeaseTarget(
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
+		log.VEventf(ctx, 2, "no lease transfer target found")
 		return roachpb.ReplicaDescriptor{}
 	}
 

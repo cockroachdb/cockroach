@@ -410,7 +410,9 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return liveness.IsLive(nl.clock.Now()), nil
+	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() in order to
+	// consider clock signals from other nodes.
+	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
@@ -599,7 +601,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// expired while in flight, so maybe we don't have to care about
 		// that and only need to distinguish between same and different
 		// epochs in our return value.
-		if actual.IsLive(nl.clock.Now()) && !incrementEpoch {
+		if actual.IsLive(nl.clock.Now().GoTime()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
 		// Otherwise, return error.
@@ -646,7 +648,7 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	lMap := IsLiveMap{}
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
-	now := nl.clock.Now()
+	now := nl.clock.Now().GoTime()
 	for nID, l := range nl.mu.nodes {
 		isLive := l.IsLive(now)
 		if !isLive && l.Decommissioning {
@@ -726,7 +728,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness storagepb.L
 		<-sem
 	}()
 
-	if liveness.IsLive(nl.clock.Now()) {
+	if liveness.IsLive(nl.clock.Now().GoTime()) {
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 	update := livenessUpdate{Liveness: liveness}
@@ -896,7 +898,7 @@ func (nl *NodeLiveness) maybeUpdate(new storagepb.Liveness) {
 		return
 	}
 
-	now := nl.clock.Now()
+	now := nl.clock.Now().GoTime()
 	if !old.IsLive(now) && new.IsLive(now) {
 		for _, fn := range callbacks {
 			fn(new.NodeID)
@@ -956,8 +958,6 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		return 0
 	}
 
-	now := nl.clock.Now()
-
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
 
@@ -969,6 +969,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		log.Warningf(ctx, "looking up own liveness: %+v", err)
 		return 0
 	}
+	now := nl.clock.Now().GoTime()
 	// If this node isn't live, we don't want to report its view of node liveness
 	// because it's more likely to be inaccurate than the view of a live node.
 	if !self.IsLive(now) {
@@ -993,7 +994,7 @@ func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
 		if err != nil {
 			return hlc.Timestamp{}, 0, err
 		}
-		if !liveness.IsLive(now) {
+		if !liveness.IsLive(now.GoTime()) {
 			return hlc.Timestamp{}, 0, errLiveClockNotLive
 		}
 		return now, ctpb.Epoch(liveness.Epoch), nil
