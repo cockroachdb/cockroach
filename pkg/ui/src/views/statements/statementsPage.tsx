@@ -57,7 +57,7 @@ interface StatementsPageState {
   search?: string;
 }
 
-export class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
+class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
 
   constructor(props: StatementsPageProps & RouteProps) {
     super(props);
