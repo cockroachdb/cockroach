@@ -266,7 +266,7 @@ func (sp *StorePool) String() string {
 	sort.Sort(ids)
 
 	var buf bytes.Buffer
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, id := range ids {
@@ -431,7 +431,9 @@ func (sp *StorePool) decommissioningReplicas(
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
 
-	now := sp.clock.PhysicalTime()
+	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
+	// take clock signals from remote nodes into consideration.
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -462,7 +464,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -638,7 +640,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	var throttled throttledStoreReasons
 	var storeDescriptors []roachpb.StoreDescriptor
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {
