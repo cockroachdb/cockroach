@@ -368,6 +368,10 @@ return without an error.</p>
 quarter, month, week, dayofweek, isodow, dayofyear, julian,
 hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
+<tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: millennium, century, decade, year,
+month, day, hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
 <tr><td><a name="extract"></a><code>extract(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
@@ -387,7 +391,8 @@ timezone, timezone_hour, timezone_minute</p>
 timezone, timezone_hour, timezone_minute</p>
 </span></td></tr>
 <tr><td><a name="extract_duration"></a><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
-Compatible elements: hour, minute, second, millisecond, microsecond.</p>
+Compatible elements: hour, minute, second, millisecond, microsecond.
+This is deprecated in favor of <code>extract</code> which supports duration.</p>
 </span></td></tr>
 <tr><td><a name="now"></a><code>now() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts

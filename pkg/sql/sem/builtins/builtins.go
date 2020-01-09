@@ -1821,12 +1821,24 @@ may increase either contention or retry errors, or both.`,
 				// extract timeSpan fromTime.
 				fromTS := args[1].(*tree.DTimestamp)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
+				return extractTimeSpanFromTimestamp(ctx, fromTS.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
 				"quarter, month, week, dayofweek, isodow, dayofyear, julian,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromInterval := args[1].(*tree.DInterval)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractTimeSpanFromInterval(fromInterval, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: millennium, century, decade, year,\n" +
+				"month, day, hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
@@ -1838,7 +1850,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return extractStringFromTimestamp(ctx, fromTime, timeSpan)
+				return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
@@ -1851,7 +1863,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+				return extractTimeSpanFromTimestampTZ(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: millennium, century, decade, year, isoyear,\n" +
@@ -1865,7 +1877,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTime(fromTime, timeSpan)
+				return extractTimeSpanFromTime(fromTime, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
@@ -1876,7 +1888,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTimeTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return extractStringFromTimeTZ(fromTime, timeSpan)
+				return extractTimeSpanFromTimeTZ(fromTime, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch,\n" +
@@ -1916,7 +1928,8 @@ may increase either contention or retry errors, or both.`,
 				}
 			},
 			Info: "Extracts `element` from `input`.\n" +
-				"Compatible elements: hour, minute, second, millisecond, microsecond.",
+				"Compatible elements: hour, minute, second, millisecond, microsecond.\n" +
+				"This is deprecated in favor of `extract` which supports duration.",
 		},
 	),
 
@@ -4612,15 +4625,24 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	return arrayLower(a, dim-1)
 }
 
-const microsPerMilli = 1000
-const millisPerSec = 1000
-const secsPerHour = 3600
-const secsPerMinute = 60
-const secsPerDay = 86400
+const (
+	microsPerMilli = 1000
+	millisPerSec   = 1000
+	secsPerHour    = 3600
+	secsPerMinute  = 60
+	secsPerDay     = 86400
+	// daysPerMonth is assumed to be 30.
+	// matches DAYS_PER_MONTH in postgres.
+	daysPerMonth = 30
+	// daysPerYear assumed to be a quarter of a leap year.
+	// matches DAYS_PER_YEAR in postgres.
+	daysPerYear   = 365.25
+	monthsPerYear = 12
+)
 
-func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+func extractTimeSpanFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*fromTime)
-	return extractStringFromTimeOfDay(t, timeSpan)
+	return extractTimeSpanFromTimeOfDay(t, timeSpan)
 }
 
 func extractTimezoneFromOffset(offsetSecs int32, timeSpan string) tree.Datum {
@@ -4637,7 +4659,7 @@ func extractTimezoneFromOffset(offsetSecs int32, timeSpan string) tree.Datum {
 	return nil
 }
 
-func extractStringFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datum, error) {
+func extractTimeSpanFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datum, error) {
 	if ret := extractTimezoneFromOffset(-fromTime.OffsetSecs, timeSpan); ret != nil {
 		return ret, nil
 	}
@@ -4647,10 +4669,10 @@ func extractStringFromTimeTZ(fromTime *tree.DTimeTZ, timeSpan string) (tree.Datu
 		seconds := float64(time.Duration(fromTime.TimeOfDay))*float64(time.Microsecond)/float64(time.Second) + float64(fromTime.OffsetSecs)
 		return tree.NewDFloat(tree.DFloat(seconds)), nil
 	}
-	return extractStringFromTimeOfDay(fromTime.TimeOfDay, timeSpan)
+	return extractTimeSpanFromTimeOfDay(fromTime.TimeOfDay, timeSpan)
 }
 
-func extractStringFromTimeOfDay(t timeofday.TimeOfDay, timeSpan string) (tree.Datum, error) {
+func extractTimeSpanFromTimeOfDay(t timeofday.TimeOfDay, timeSpan string) (tree.Datum, error) {
 	switch timeSpan {
 	case "hour", "hours":
 		return tree.NewDFloat(tree.DFloat(t.Hour())), nil
@@ -4689,7 +4711,7 @@ func dateToJulianDay(year int, month int, day int) int {
 	return jd
 }
 
-func extractStringFromTimestampTZ(
+func extractTimeSpanFromTimestampTZ(
 	ctx *tree.EvalContext, fromTime time.Time, timeSpan string,
 ) (tree.Datum, error) {
 	_, offsetSecs := fromTime.Zone()
@@ -4700,12 +4722,65 @@ func extractStringFromTimestampTZ(
 	// time.Time's Year(), Month(), Day(), ISOWeek(), etc. all deal in terms
 	// of UTC, rather than as the timezone.
 	// Remedy this by assuming that the timezone is UTC (to prevent confusion)
-	// and offsetting time when using extractStringFromTimestamp.
+	// and offsetting time when using extractTimeSpanFromTimestamp.
 	pretendTime := fromTime.In(time.UTC).Add(time.Duration(offsetSecs) * time.Second)
-	return extractStringFromTimestamp(ctx, pretendTime, timeSpan)
+	return extractTimeSpanFromTimestamp(ctx, pretendTime, timeSpan)
 }
 
-func extractStringFromTimestamp(
+func extractTimeSpanFromInterval(
+	fromInterval *tree.DInterval, timeSpan string,
+) (tree.Datum, error) {
+	switch timeSpan {
+	case "millennia", "millennium", "millenniums":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 1000))), nil
+
+	case "centuries", "century":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 100))), nil
+
+	case "decade", "decades":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / (monthsPerYear * 10))), nil
+
+	case "year", "years":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months / monthsPerYear)), nil
+
+	case "month", "months":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Months % monthsPerYear)), nil
+
+	case "day", "days":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Days)), nil
+
+	case "hour", "hours":
+		return tree.NewDFloat(tree.DFloat(fromInterval.Nanos() / int64(time.Hour))), nil
+
+	case "minute", "minutes":
+		// Remove the hour component.
+		return tree.NewDFloat(tree.DFloat((fromInterval.Nanos() % int64(time.Second*secsPerHour)) / int64(time.Minute))), nil
+
+	case "second", "seconds":
+		return tree.NewDFloat(tree.DFloat(float64(fromInterval.Nanos()%int64(time.Minute)) / float64(time.Second))), nil
+
+	case "millisecond", "milliseconds":
+		// This a PG extension not supported in MySQL.
+		return tree.NewDFloat(tree.DFloat(float64(fromInterval.Nanos()%int64(time.Minute)) / float64(time.Millisecond))), nil
+
+	case "microsecond", "microseconds":
+		return tree.NewDFloat(tree.DFloat(float64(fromInterval.Nanos()%int64(time.Minute)) / float64(time.Microsecond))), nil
+	case "epoch":
+		numYears := fromInterval.Months / 12
+		monthsModYear := fromInterval.Months % 12
+		return tree.NewDFloat(tree.DFloat(
+			(float64(fromInterval.Nanos()) / float64(time.Second)) +
+				float64(fromInterval.Days*secsPerDay) +
+				float64(numYears*secsPerDay)*daysPerYear +
+				float64(monthsModYear*daysPerMonth*secsPerDay),
+		)), nil
+	default:
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
+	}
+}
+
+func extractTimeSpanFromTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
 ) (tree.Datum, error) {
 	switch timeSpan {

@@ -813,6 +813,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/mergejoiner_leftsemi.eg.go \
   pkg/sql/colexec/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/min_max_agg.eg.go \
+  pkg/sql/colexec/orderedsynchronizer.eg.go \
   pkg/sql/colexec/overloads_test_utils.eg.go \
   pkg/sql/colexec/proj_const_left_ops.eg.go \
   pkg/sql/colexec/proj_const_right_ops.eg.go \
@@ -1498,6 +1499,7 @@ pkg/sql/colexec/mergejoiner_leftouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/mergejoiner_leftsemi.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/mergejoiner_rightouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/min_max_agg.eg.go: pkg/sql/colexec/min_max_agg_tmpl.go
+pkg/sql/colexec/orderedsynchronizer.eg.go: pkg/sql/colexec/orderedsynchronizer_tmpl.go
 pkg/sql/colexec/proj_const_left_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
 pkg/sql/colexec/proj_const_right_ops.eg.go: pkg/sql/colexec/proj_const_ops_tmpl.go
 pkg/sql/colexec/proj_non_const_ops.eg.go: pkg/sql/colexec/proj_non_const_ops_tmpl.go

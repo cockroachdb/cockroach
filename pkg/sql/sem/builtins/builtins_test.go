@@ -246,7 +246,7 @@ func TestLPadRPad(t *testing.T) {
 	}
 }
 
-func TestExtractStringFromTimestamp(t *testing.T) {
+func TestExtractTimeSpanFromTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	utcPositiveOffset := time.FixedZone("otan happy time", 60*60*4+30*60)
@@ -309,7 +309,7 @@ func TestExtractStringFromTimestamp(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.input.Format(time.RFC3339)), func(t *testing.T) {
-			datum, err := extractStringFromTimestampTZ(nil, tc.input, tc.timeSpan)
+			datum, err := extractTimeSpanFromTimestampTZ(nil, tc.input, tc.timeSpan)
 			if tc.expectedError != "" {
 				assert.EqualError(t, err, tc.expectedError)
 			} else {
@@ -320,7 +320,7 @@ func TestExtractStringFromTimestamp(t *testing.T) {
 	}
 }
 
-func TestExtractStringFromTimeTZ(t *testing.T) {
+func TestExtractTimeSpanFromTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -351,13 +351,84 @@ func TestExtractStringFromTimeTZ(t *testing.T) {
 			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
 			assert.NoError(t, err)
 
-			datum, err := extractStringFromTimeTZ(timeTZ, tc.timeSpan)
+			datum, err := extractTimeSpanFromTimeTZ(timeTZ, tc.timeSpan)
 			if tc.expectedError != "" {
 				assert.EqualError(t, err, tc.expectedError)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, *(datum.(*tree.DFloat)))
 			}
+		})
+	}
+}
+
+func TestExtractTimeSpanFromInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		timeSpan    string
+		intervalStr string
+		expected    *tree.DFloat
+	}{
+		{"millennia", "25000 months 1000 days", tree.NewDFloat(2)},
+		{"millennia", "-25000 months 1000 days", tree.NewDFloat(-2)},
+		{"millennium", "25000 months 1000 days", tree.NewDFloat(2)},
+		{"millenniums", "25000 months 1000 days", tree.NewDFloat(2)},
+
+		{"century", "25000 months 1000 days", tree.NewDFloat(20)},
+		{"century", "-25000 months 1000 days", tree.NewDFloat(-20)},
+		{"centuries", "25000 months 1000 days", tree.NewDFloat(20)},
+
+		{"decade", "25000 months 1000 days", tree.NewDFloat(208)},
+		{"decade", "-25000 months 1000 days", tree.NewDFloat(-208)},
+		{"decades", "25000 months 1000 days", tree.NewDFloat(208)},
+
+		{"year", "25000 months 1000 days", tree.NewDFloat(2083)},
+		{"year", "-25000 months 1000 days", tree.NewDFloat(-2083)},
+		{"years", "25000 months 1000 days", tree.NewDFloat(2083)},
+
+		{"month", "25000 months 1000 days", tree.NewDFloat(4)},
+		{"month", "-25000 months 1000 days", tree.NewDFloat(-4)},
+		{"months", "25000 months 1000 days", tree.NewDFloat(4)},
+
+		{"day", "25000 months 1000 days", tree.NewDFloat(1000)},
+		{"day", "-25000 months 1000 days", tree.NewDFloat(1000)},
+		{"day", "-25000 months -1000 days", tree.NewDFloat(-1000)},
+		{"days", "25000 months 1000 days", tree.NewDFloat(1000)},
+
+		{"hour", "25-1 100:56:01.123456", tree.NewDFloat(100)},
+		{"hour", "25-1 -100:56:01.123456", tree.NewDFloat(-100)},
+		{"hours", "25-1 100:56:01.123456", tree.NewDFloat(100)},
+
+		{"minute", "25-1 100:56:01.123456", tree.NewDFloat(56)},
+		{"minute", "25-1 -100:56:01.123456", tree.NewDFloat(-56)},
+		{"minutes", "25-1 100:56:01.123456", tree.NewDFloat(56)},
+
+		{"second", "25-1 100:56:01.123456", tree.NewDFloat(1.123456)},
+		{"second", "25-1 -100:56:01.123456", tree.NewDFloat(-1.123456)},
+		{"seconds", "25-1 100:56:01.123456", tree.NewDFloat(1.123456)},
+
+		{"millisecond", "25-1 100:56:01.123456", tree.NewDFloat(1123.456)},
+		{"millisecond", "25-1 -100:56:01.123456", tree.NewDFloat(-1123.456)},
+		{"milliseconds", "25-1 100:56:01.123456", tree.NewDFloat(1123.456)},
+
+		{"microsecond", "25-1 100:56:01.123456", tree.NewDFloat(1123456)},
+		{"microsecond", "25-1 -100:56:01.123456", tree.NewDFloat(-1123456)},
+		{"microseconds", "25-1 100:56:01.123456", tree.NewDFloat(1123456)},
+
+		{"epoch", "25-1 100:56:01.123456", tree.NewDFloat(791895361.123456)},
+		{"epoch", "25-1 -100:56:01.123456", tree.NewDFloat(791168638.876544)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s as %s", tc.intervalStr, tc.timeSpan), func(t *testing.T) {
+			interval, err := tree.ParseDInterval(tc.intervalStr)
+			assert.NoError(t, err)
+
+			d, err := extractTimeSpanFromInterval(interval, tc.timeSpan)
+			assert.NoError(t, err)
+
+			assert.Equal(t, *tc.expected, *(d.(*tree.DFloat)))
 		})
 	}
 }
