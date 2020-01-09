@@ -188,12 +188,10 @@ type chunker struct {
 	// batch.
 	chunksStartIdx int
 
-	// buffered indicates the number of currently buffered tuples.
-	buffered uint64
-	// bufferedColumns is a buffer to store tuples when a chunk is bigger than
-	// col.BatchSize() or when the chunk is the last in the last read batch (we
-	// don't know yet where the end of such chunk is).
-	bufferedColumns []coldata.Vec
+	// bufferedTuples is a buffer to store tuples when a chunk is bigger than
+	// coldata.BatchSize() or when the chunk is the last in the last read batch
+	// (we don't know yet where the end of such chunk is).
+	bufferedTuples *bufferedBatch
 
 	readFrom chunkerReadingState
 	state    chunkerState
@@ -228,10 +226,7 @@ func newChunker(
 
 func (s *chunker) init() {
 	s.input.Init()
-	s.bufferedColumns = make([]coldata.Vec, len(s.inputTypes))
-	for i := 0; i < len(s.inputTypes); i++ {
-		s.bufferedColumns[i] = s.allocator.NewMemColumn(s.inputTypes[i], 0)
-	}
+	s.bufferedTuples = newBufferedBatch(s.allocator, s.inputTypes, 0 /* initialSize */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]uint64, 0, 16)
 }
@@ -253,7 +248,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 			s.batch = s.input.Next(ctx)
 			if s.batch.Length() == 0 {
 				s.inputDone = true
-				if s.buffered > 0 {
+				if s.bufferedTuples.length > 0 {
 					s.state = chunkerEmittingFromBuffer
 				} else {
 					s.state = chunkerEmittingFromBatch
@@ -275,7 +270,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 			}
 			s.chunks = boolVecToSel64(s.partitionCol, s.chunks[:0])
 
-			if s.buffered == 0 {
+			if s.bufferedTuples.length == 0 {
 				// There are no buffered tuples, so a new chunk starts in the current
 				// batch.
 				if len(s.chunks) > 1 {
@@ -297,7 +292,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 				for _, col := range s.alreadySortedCols {
 					if err := tuplesDiffer(
 						s.inputTypes[col.ColIdx],
-						s.bufferedColumns[col.ColIdx],
+						s.bufferedTuples.colVecs[col.ColIdx],
 						0, /*aTupleIdx */
 						s.batch.ColVec(int(col.ColIdx)),
 						0, /* bTupleIdx */
@@ -370,19 +365,19 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 // buffer appends all tuples in range [start,end) from s.batch to already
 // buffered tuples.
 func (s *chunker) buffer(start uint16, end uint16) {
-	s.allocator.PerformOperation(s.bufferedColumns, func() {
-		for i := 0; i < len(s.bufferedColumns); i++ {
-			s.bufferedColumns[i].Append(
+	s.allocator.PerformOperation(s.bufferedTuples.colVecs, func() {
+		for i := 0; i < len(s.bufferedTuples.colVecs); i++ {
+			s.bufferedTuples.colVecs[i].Append(
 				coldata.SliceArgs{
 					ColType:     s.inputTypes[i],
 					Src:         s.batch.ColVec(i),
-					DestIdx:     s.buffered,
+					DestIdx:     s.bufferedTuples.length,
 					SrcStartIdx: uint64(start),
 					SrcEndIdx:   uint64(end),
 				},
 			)
 		}
-		s.buffered += uint64(end - start)
+		s.bufferedTuples.length += uint64(end - start)
 	})
 }
 
@@ -393,7 +388,7 @@ func (s *chunker) spool(ctx context.Context) {
 func (s *chunker) getValues(i int) coldata.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
-		return s.bufferedColumns[i].Window(s.inputTypes[i], 0 /* start */, s.buffered)
+		return s.bufferedTuples.colVecs[i].Window(s.inputTypes[i], 0 /* start */, s.bufferedTuples.length)
 	case chunkerReadFromBatch:
 		return s.batch.ColVec(i).Window(s.inputTypes[i], s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
 	default:
@@ -406,7 +401,7 @@ func (s *chunker) getValues(i int) coldata.Vec {
 func (s *chunker) getNumTuples() uint64 {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
-		return s.buffered
+		return s.bufferedTuples.length
 	case chunkerReadFromBatch:
 		return s.chunks[len(s.chunks)-1] - s.chunks[s.chunksStartIdx]
 	case inputDone:
@@ -445,6 +440,5 @@ func (s *chunker) getPartitionsCol() []bool {
 }
 
 func (s *chunker) emptyBuffer() {
-	// We only need to set s.buffered to 0 to empty the buffer.
-	s.buffered = 0
+	s.bufferedTuples.reset()
 }

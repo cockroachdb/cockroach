@@ -94,11 +94,9 @@ type allSpooler struct {
 	allocator *Allocator
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []coltypes.T
-	// values stores all the values from the input after spooling. Each Vec in
-	// this slice is the entire column from the input.
-	values []coldata.Vec
-	// spooledTuples is the number of tuples spooled.
-	spooledTuples uint64
+	// bufferedTuples stores all the values from the input after spooling. Each
+	// Vec in this slice is the entire column from the input.
+	bufferedTuples *bufferedBatch
 	// spooled indicates whether spool() has already been called.
 	spooled bool
 }
@@ -115,10 +113,7 @@ func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.values = make([]coldata.Vec, len(p.inputTypes))
-	for i := 0; i < len(p.inputTypes); i++ {
-		p.values[i] = p.allocator.NewMemColumn(p.inputTypes[i], 0)
-	}
+	p.bufferedTuples = newBufferedBatch(p.allocator, p.inputTypes, 0 /* initialSize */)
 }
 
 func (p *allSpooler) spool(ctx context.Context) {
@@ -128,19 +123,19 @@ func (p *allSpooler) spool(ctx context.Context) {
 	p.spooled = true
 	batch := p.input.Next(ctx)
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
-		p.allocator.PerformOperation(p.values, func() {
-			for i := 0; i < len(p.values); i++ {
-				p.values[i].Append(
+		p.allocator.PerformOperation(p.bufferedTuples.colVecs, func() {
+			for i := 0; i < len(p.bufferedTuples.colVecs); i++ {
+				p.bufferedTuples.colVecs[i].Append(
 					coldata.SliceArgs{
 						ColType:   p.inputTypes[i],
 						Src:       batch.ColVec(i),
 						Sel:       batch.Selection(),
-						DestIdx:   p.spooledTuples,
+						DestIdx:   p.bufferedTuples.length,
 						SrcEndIdx: uint64(batch.Length()),
 					},
 				)
 			}
-			p.spooledTuples += uint64(batch.Length())
+			p.bufferedTuples.length += uint64(batch.Length())
 		})
 	}
 }
@@ -149,14 +144,14 @@ func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
 		execerror.VectorizedInternalPanic("getValues() is called before spool()")
 	}
-	return p.values[i]
+	return p.bufferedTuples.colVecs[i]
 }
 
 func (p *allSpooler) getNumTuples() uint64 {
 	if !p.spooled {
 		execerror.VectorizedInternalPanic("getNumTuples() is called before spool()")
 	}
-	return p.spooledTuples
+	return p.bufferedTuples.length
 }
 
 func (p *allSpooler) getPartitionsCol() []bool {
@@ -167,7 +162,7 @@ func (p *allSpooler) getPartitionsCol() []bool {
 }
 
 func (p *allSpooler) reset() {
-	p.spooledTuples = 0
+	p.bufferedTuples.reset()
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
 	}
