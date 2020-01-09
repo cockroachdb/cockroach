@@ -402,7 +402,7 @@ func DecodeTableKey(
 		}
 		var ipAddr ipaddr.IPAddr
 		_, err := ipAddr.FromBuffer(r)
-		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), rkey, err
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr, Typ: valType}), rkey, err
 	case types.OidFamily:
 		var i int64
 		if dir == encoding.Ascending {
@@ -906,7 +906,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr, Typ: typ}), nil
 	case types.OidFamily:
 		v, err := value.GetInt()
 		if err != nil {

@@ -892,10 +892,12 @@ oid   typname        typnamespace  typowner  typlen  typbyval  typtype
 25    text           1307062959    NULL      -1      false     b
 26    oid            1307062959    NULL      8       true      b
 30    oidvector      1307062959    NULL      -1      false     b
+650   cidr           1307062959    NULL      32      true      b
+651   _cidr          1307062959    NULL      -1      false     b
 700   float4         1307062959    NULL      4       true      b
 701   float8         1307062959    NULL      8       true      b
 705   unknown        1307062959    NULL      0       true      b
-869   inet           1307062959    NULL      24      true      b
+869   inet           1307062959    NULL      32      true      b
 1000  _bool          1307062959    NULL      -1      false     b
 1001  _bytea         1307062959    NULL      -1      false     b
 1002  _char          1307062959    NULL      -1      false     b
@@ -968,6 +970,8 @@ oid   typname        typcategory  typispreferred  typisdefined  typdelim  typrel
 25    text           S            false           true          ,         0         0        1009
 26    oid            N            false           true          ,         0         0        1028
 30    oidvector      A            false           true          ,         0         26       1013
+650   cidr           I            false           true          ,         0         0        651
+651   _cidr          A            false           true          ,         0         650      0
 700   float4         N            false           true          ,         0         0        1021
 701   float8         N            false           true          ,         0         0        1022
 705   unknown        X            false           true          ,         0         0        0
@@ -1044,6 +1048,8 @@ oid   typname        typinput        typoutput        typreceive        typsend 
 25    text           textin          textout          textrecv          textsend          0         0          0
 26    oid            oidin           oidout           oidrecv           oidsend           0         0          0
 30    oidvector      oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
+650   cidr           cidrin          cidrout          cidrrecv          cidrsend          0         0          0
+651   _cidr          array_in        array_out        array_recv        array_send        0         0          0
 700   float4         float4in        float4out        float4recv        float4send        0         0          0
 701   float8         float8in        float8out        float8recv        float8send        0         0          0
 705   unknown        unknownin       unknownout       unknownrecv       unknownsend       0         0          0
@@ -1120,6 +1126,8 @@ oid   typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 25    text           NULL      NULL        false       0            -1
 26    oid            NULL      NULL        false       0            -1
 30    oidvector      NULL      NULL        false       0            -1
+650   cidr           NULL      NULL        false       0            -1
+651   _cidr          NULL      NULL        false       0            -1
 700   float4         NULL      NULL        false       0            -1
 701   float8         NULL      NULL        false       0            -1
 705   unknown        NULL      NULL        false       0            -1
@@ -1196,6 +1204,8 @@ oid   typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 25    text           0         3903121477    NULL           NULL        NULL
 26    oid            0         0             NULL           NULL        NULL
 30    oidvector      0         0             NULL           NULL        NULL
+650   cidr           0         0             NULL           NULL        NULL
+651   _cidr          0         0             NULL           NULL        NULL
 700   float4         0         0             NULL           NULL        NULL
 701   float8         0         0             NULL           NULL        NULL
 705   unknown        0         0             NULL           NULL        NULL

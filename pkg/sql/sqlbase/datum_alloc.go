@@ -10,7 +10,9 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.

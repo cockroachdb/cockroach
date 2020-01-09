@@ -188,7 +188,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return tree.NewDUuid(tree.DUuid{UUID: uuid.Must(gen.NewV4())})
 	case types.INetFamily:
 		ipAddr := ipaddr.RandIPAddr(rng)
-		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
+		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr, Typ: typ})
 	case types.JsonFamily:
 		j, err := json.Random(20, rng)
 		if err != nil {
@@ -309,6 +309,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 			IPAddr: ipaddr.IPAddr{
 				Addr: ipaddr.Addr(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
 			},
+			Typ: typ,
 		})
 	case types.JsonFamily:
 		datum = tree.NewDJSON(randJSONSimple(rng))

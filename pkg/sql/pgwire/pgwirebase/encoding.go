@@ -562,7 +562,7 @@ func DecodeOidDatum(
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
+			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr, Typ: types.OidToType[id]}), nil
 		case oid.T_jsonb:
 			if len(b) < 1 {
 				return nil, NewProtocolViolationErrorf("no data to decode")
