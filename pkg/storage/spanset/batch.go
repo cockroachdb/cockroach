@@ -68,7 +68,7 @@ func (s *Iterator) Seek(key engine.MVCCKey) {
 
 // SeekReverse is part of the engine.Iterator interface.
 func (s *Iterator) SeekReverse(key engine.MVCCKey) {
-	s.err = s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
+	s.err = s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}, true)
 	if s.err == nil {
 		s.invalid = false
 	}

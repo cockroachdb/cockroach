@@ -183,10 +183,18 @@ func TestSpanSetBatch(t *testing.T) {
 	} else if err != nil {
 		t.Errorf("unexpected error on iterator: %+v", err)
 	}
+
 	// Seeking back in bounds restores validity.
-	iter.SeekReverse(insideKey)
+	iter.Seek(insideKey)
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected valid iterator, err=%v", err)
+	}
+	// SeekLT to the lower bound is invalid.
+	iter.SeekReverse(insideKey)
+	if ok, err := iter.Valid(); ok {
+		t.Fatalf("expected invalid iterator; found valid at key %s", iter.Key())
+	} else if !isReadSpanErr(err) {
+		t.Fatalf("SeekLT: unexpected error %v", err)
 	}
 }
 

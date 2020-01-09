@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -157,20 +158,61 @@ func (ss *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 // fail at checking if read only access over the span [a-d) was requested. This
 // is also a problem if the added spans were read only and the spanset wasn't
 // already SortAndDedup-ed.
-func (ss *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
+func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
+	return s.checkAllowed(access, span, false /* spanKeyExclusive */)
+}
+
+// See CheckAllowed(). The reversed arguments makes the lower bound exclusive
+// and the upper bound inclusive, i.e. [a,b) will be considered (a,b].
+func (s *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span, reversed bool) error {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
 	}
 	for ac := access; ac < NumSpanAccess; ac++ {
-		for _, s := range ss.spans[ac][scope] {
-			if s.Contains(span) {
+		for _, cur := range s.spans[ac][scope] {
+			if cur.Contains(span) &&
+				(!reversed || cur.EndKey != nil && !cur.Key.Equal(span.Key)) ||
+				reversed && cur.EndKey.Equal(span.Key) {
 				return nil
 			}
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, ss)
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, s)
+}
+
+// CheckAllowedAt returns an error if the access is not allowed at over the given keyspan
+// at the given timestamp.
+func (s *SpanSet) CheckAllowedAt(
+	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
+) error {
+	return s.checkAllowedAt(access, span, timestamp, false /* inclusiveEnd */)
+}
+
+// See CheckAllowedAt. The reversed arguments makes the lower bound exclusive
+// and the upper bound inclusive, i.e. [a,b) will be considered (a,b].
+func (s *SpanSet) checkAllowedAt(
+	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp, reversed bool,
+) error {
+	scope := SpanGlobal
+	if keys.IsLocal(span.Key) {
+		scope = SpanLocal
+	}
+
+	for ac := access; ac < NumSpanAccess; ac++ {
+		for _, cur := range s.spans[ac][scope] {
+			if (cur.Contains(span) &&
+				(!reversed || (cur.EndKey != nil && !cur.Key.Equal(span.Key)))) ||
+				(reversed && cur.EndKey.Equal(span.Key)) {
+
+				return nil
+			}
+		}
+	}
+
+	return errors.Errorf("cannot %s undeclared span %s at %s\ndeclared:\n%s",
+		access, span, timestamp.String(), s)
 }
 
 // Validate returns an error if any spans that have been added to the set

@@ -48,10 +48,10 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var ss SpanSet
-	ss.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
-	ss.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
-	ss.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
+	var bdGkq SpanSet
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
 
 	allowed := []roachpb.Span{
 		// Exactly as declared.
@@ -69,7 +69,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 		{Key: roachpb.Key("l"), EndKey: roachpb.Key("m")},
 	}
 	for _, span := range allowed {
-		if err := ss.CheckAllowed(SpanReadOnly, span); err != nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err != nil {
 			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
 		}
 	}
@@ -98,7 +98,39 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 		{Key: roachpb.Key("k"), EndKey: roachpb.Key("q").Next()},
 	}
 	for _, span := range disallowed {
-		if err := ss.CheckAllowed(SpanReadOnly, span); err == nil {
+		if err := bdGkq.CheckAllowed(SpanReadOnly, span); err == nil {
+			t.Errorf("expected %s to be disallowed", span)
+		}
+	}
+}
+
+func TestSpanSetCheckAllowedReversed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var bdGkq SpanSet
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")})
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
+	bdGkq.Add(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
+
+	allowed := []roachpb.Span{
+		// Exactly as declared.
+		{Key: roachpb.Key("d")},
+		{Key: roachpb.Key("q")},
+	}
+	for _, span := range allowed {
+		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err != nil {
+			t.Errorf("expected %s to be allowed, but got error: %+v", span, err)
+		}
+	}
+
+	disallowed := []roachpb.Span{
+		// Points outside the declared spans, and on the endpoints.
+		{Key: roachpb.Key("b")},
+		{Key: roachpb.Key("g")},
+		{Key: roachpb.Key("k")},
+	}
+	for _, span := range disallowed {
+		if err := bdGkq.checkAllowed(SpanReadOnly, span, true /* spanKeyExclusive */); err == nil {
 			t.Errorf("expected %s to be disallowed", span)
 		}
 	}
