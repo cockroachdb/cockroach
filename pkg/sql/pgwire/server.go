@@ -381,11 +381,11 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 		if !s.mu.draining {
 			return true
 		}
-		for _, cancel := range connCancelMap {
+		for _, close := range connCancelMap {
 			// There is a possibility that different calls to SetDraining have
 			// overlapping connCancelMaps, but context.CancelFunc calls are
 			// idempotent.
-			cancel()
+			close()
 		}
 		return false
 	}(); stop {
@@ -411,11 +411,21 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		var cancel context.CancelFunc
 		ctx, cancel = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
-		s.mu.connCancelMap[done] = cancel
+		switch c := conn.(type) {
+		case *net.TCPConn:
+			s.mu.connCancelMap[done] = func() {
+				if err := c.CloseRead(); err != nil {
+					log.Warningf(ctx, "failed to use CloseRead: %v", err)
+				}
+				cancel()
+			}
+		default:
+			s.mu.connCancelMap[done] = cancel
+		}
 		defer func() {
-			cancel()
-			close(done)
 			s.mu.Lock()
+			s.mu.connCancelMap[done]()
+			close(done)
 			delete(s.mu.connCancelMap, done)
 			s.mu.Unlock()
 		}()

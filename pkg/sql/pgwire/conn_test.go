@@ -856,6 +856,75 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	}
 }
 
+func TestTcpConnExitsOnCloseRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Infof(context.TODO(), "started listener on %s", ln.Addr())
+	defer func() {
+		if err := ln.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	expectedRead := []byte("expectedRead")
+
+	errChan := make(chan error)
+	// Channel to receive original server connection from goroutine
+	connChan := make(chan net.Conn)
+	go func() {
+		defer close(errChan)
+		errChan <- func() error {
+			c, err := ln.Accept()
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			connChan <- c
+
+			// Assert that reads are performed normally.
+			readBytes := make([]byte, len(expectedRead))
+			if _, err := c.Read(readBytes); err != nil {
+				return err
+			}
+			if !bytes.Equal(readBytes, expectedRead) {
+				return errors.Errorf("expected %v got %v", expectedRead, readBytes)
+			}
+
+			_, err = c.Read(make([]byte, 1))
+			return err
+		}()
+	}()
+
+	c, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if _, err := c.Write(expectedRead); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-errChan:
+		t.Fatalf("goroutine unexpectedly returned: %v", err)
+	case conn := <-connChan:
+		time.Sleep(500 * time.Microsecond)
+		tcpConn := conn.(*net.TCPConn)
+		if err := tcpConn.CloseRead(); err != nil {
+			t.Fatalf("failed to use CloseRead: %v", err)
+		}
+	default:
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := <-errChan; err != io.EOF {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestConnResultsBufferSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
