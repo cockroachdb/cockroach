@@ -72,6 +72,32 @@ func TestParseAndNormalizeAuthConfig(t *testing.T) {
 		})
 }
 
+func TestMatchConnType(t *testing.T) {
+	testCases := []struct {
+		conf, conn ConnType
+		match      bool
+	}{
+		{ConnLocal, ConnHostSSL, false},
+		{ConnLocal, ConnHostNoSSL, false},
+		{ConnLocal, ConnLocal, true},
+		{ConnHostAny, ConnLocal, false},
+		{ConnHostAny, ConnHostSSL, true},
+		{ConnHostAny, ConnHostNoSSL, true},
+		{ConnHostSSL, ConnLocal, false},
+		{ConnHostSSL, ConnHostSSL, true},
+		{ConnHostSSL, ConnHostNoSSL, false},
+		{ConnHostNoSSL, ConnLocal, false},
+		{ConnHostNoSSL, ConnHostSSL, false},
+		{ConnHostNoSSL, ConnHostNoSSL, true},
+	}
+	for _, tc := range testCases {
+		entry := Entry{ConnType: tc.conf}
+		if m := entry.ConnTypeMatches(tc.conn); m != tc.match {
+			t.Errorf("%s vs %s: expected %v, got %v", tc.conf, tc.conn, tc.match, m)
+		}
+	}
+}
+
 // TODO(mjibson): these are untested outside ccl +gss builds.
 var _ = Entry.GetOption
 var _ = Entry.GetOptions
