@@ -191,10 +191,10 @@ func MakeSpanFromEncDatums(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	alloc *DatumAlloc,
-) (roachpb.Span, error) {
-	startKey, complete, err := makeKeyFromEncDatums(keyPrefix, values, types, dirs, tableDesc, index, alloc)
+) (_ roachpb.Span, containsNull bool, _ error) {
+	startKey, complete, containsNull, err := makeKeyFromEncDatums(keyPrefix, values, types, dirs, tableDesc, index, alloc)
 	if err != nil {
-		return roachpb.Span{}, err
+		return roachpb.Span{}, false, err
 	}
 
 	var endKey roachpb.Key
@@ -214,7 +214,7 @@ func MakeSpanFromEncDatums(
 	} else {
 		endKey = startKey.PrefixEnd()
 	}
-	return roachpb.Span{Key: startKey, EndKey: endKey}, nil
+	return roachpb.Span{Key: startKey, EndKey: endKey}, containsNull, nil
 }
 
 // NeededColumnFamilyIDs returns a slice of FamilyIDs which contain
@@ -290,13 +290,13 @@ func makeKeyFromEncDatums(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	alloc *DatumAlloc,
-) (_ roachpb.Key, complete bool, _ error) {
+) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
 	if len(values) > len(dirs) {
-		return nil, false, errors.Errorf("%d values, %d directions", len(values), len(dirs))
+		return nil, false, false, errors.Errorf("%d values, %d directions", len(values), len(dirs))
 	}
 	if len(values) != len(types) {
-		return nil, false, errors.Errorf("%d values, %d types", len(values), len(types))
+		return nil, false, false, errors.Errorf("%d values, %d types", len(values), len(types))
 	}
 	// We know we will append to the key which will cause the capacity to grow
 	// so make it bigger from the get-go.
@@ -317,15 +317,19 @@ func makeKeyFromEncDatums(
 				length = len(types)
 				partial = true
 			}
-			var err error
-			key, err = appendEncDatumsToKey(key, types[:length], values[:length], dirs[:length], alloc)
+			var (
+				err error
+				n   bool
+			)
+			key, n, err = appendEncDatumsToKey(key, types[:length], values[:length], dirs[:length], alloc)
 			if err != nil {
-				return nil, false, err
+				return nil, false, false, err
 			}
+			containsNull = containsNull || n
 			if partial {
 				// Early stop - the number of desired columns was fewer than the number
 				// left in the current interleave.
-				return key, false, nil
+				return key, false, false, nil
 			}
 			types, values, dirs = types[length:], values[length:], dirs[length:]
 
@@ -337,12 +341,16 @@ func makeKeyFromEncDatums(
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
 		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
 	}
-	var err error
-	key, err = appendEncDatumsToKey(key, types, values, dirs, alloc)
+	var (
+		err error
+		n   bool
+	)
+	key, n, err = appendEncDatumsToKey(key, types, values, dirs, alloc)
 	if err != nil {
-		return key, false, err
+		return key, false, false, err
 	}
-	return key, len(types) == len(index.ColumnIDs), err
+	containsNull = containsNull || n
+	return key, len(types) == len(index.ColumnIDs), containsNull, err
 }
 
 // findColumnValue returns the value corresponding to the column. If
@@ -364,19 +372,22 @@ func appendEncDatumsToKey(
 	values EncDatumRow,
 	dirs []IndexDescriptor_Direction,
 	alloc *DatumAlloc,
-) (roachpb.Key, error) {
+) (_ roachpb.Key, containsNull bool, _ error) {
 	for i, val := range values {
 		encoding := DatumEncoding_ASCENDING_KEY
 		if dirs[i] == IndexDescriptor_DESC {
 			encoding = DatumEncoding_DESCENDING_KEY
 		}
+		if val.IsNull() {
+			containsNull = true
+		}
 		var err error
 		key, err = val.Encode(&types[i], alloc, encoding, key)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
-	return key, nil
+	return key, containsNull, nil
 }
 
 // EncodeTableIDIndexID encodes a table id followed by an index id.

@@ -1,0 +1,71 @@
+# LogicTest: local local-vec
+
+# Test that different operations still succeed when the primary key is not in column family 0.
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, FAMILY (y), FAMILY (z), FAMILY (x));
+INSERT INTO t VALUES (1, 2, 3), (4, 5, 6)
+
+query III rowsort
+SELECT * FROM t
+----
+1 2 3
+4 5 6
+
+statement ok
+UPDATE t SET x = 2 WHERE y = 2
+
+query III rowsort
+SELECT * FROM t
+----
+2 2 3
+4 5 6
+
+statement ok
+UPDATE t SET z = 3 WHERE x = 4
+
+query III rowsort
+SELECT * FROM t
+----
+2 2 3
+4 5 3
+
+query II
+SELECT y, z FROM t WHERE x = 2
+----
+2 3
+
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x DECIMAL PRIMARY KEY, y INT, FAMILY (y), FAMILY (x));
+INSERT INTO t VALUES (5.607, 1), (5.6007, 2)
+
+query TI rowsort
+SELECT * FROM t
+----
+5.607 1
+5.6007 2
+
+# Ensure that primary indexes with encoded composite values that are not in family 0 have their
+# composite values stored in the corresponding family.
+
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x DECIMAL, y DECIMAL, z INT, FAMILY (z), FAMILY (y), FAMILY (x), PRIMARY KEY (x, y));
+INSERT INTO t VALUES (1.00, 2.00, 1)
+
+query TTI
+SET tracing=on,kv,results;
+SELECT * FROM t;
+SET tracing=off
+----
+1.00 2.00 1
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
+message LIKE 'fetched: /t/primary/%'
+ORDER BY message
+----
+fetched: /t/primary/1/2.00/x -> /1.00
+fetched: /t/primary/1/2/y -> /2.00
+fetched: /t/primary/1/2/z -> /1

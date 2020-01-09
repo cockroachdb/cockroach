@@ -65,7 +65,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		return nil, false
 	}
 	table := s.tables[s.rnd.Intn(len(s.tables))]
-	indexes := s.getIndexes(*table.TableName)
+	indexes := s.indexes[*table.TableName]
 	var indexFlags tree.IndexFlags
 	if s.coin() {
 		indexNames := make([]tree.Name, 0, len(indexes))
@@ -85,16 +85,12 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 	return aliased, true
 }
 
-func (s *Smither) getIndexes(table tree.TableName) map[tree.Name]*tree.CreateIndex {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return s.indexes[table]
-}
-
 func (s *Smither) getRandTableIndex(
 	table, alias tree.TableName,
 ) (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
-	indexes := s.getIndexes(table)
+	s.lock.RLock()
+	indexes := s.indexes[table]
+	s.lock.RUnlock()
 	if len(indexes) == 0 {
 		return nil, nil, nil, false
 	}

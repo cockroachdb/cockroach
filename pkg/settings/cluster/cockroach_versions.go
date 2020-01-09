@@ -53,6 +53,7 @@ const (
 	VersionProtectedTimestamps
 	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
+	VersionPrimaryKeyColumnsOutOfFamilyZero
 
 	// Add new versions here (step one of two).
 )
@@ -367,6 +368,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// this would block any new SQL client.
 		Key:     VersionAuthLocalAndTrustRejectMethods,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 8},
+	},
+	{
+		// VersionPrimaryKeyColumnsOutOfFamilyZero allows for primary key columns
+		// to exist in column families other than 0, in order to prepare for
+		// primary key changes that move primary key columns to different families.
+		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).
