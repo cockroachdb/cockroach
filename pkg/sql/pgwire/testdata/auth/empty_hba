@@ -2,8 +2,9 @@
 #
 # An empty config is equivalent to:
 #
-#     host all root 0.0.0.0/0 cert
-#     host all all  0.0.0.0/0 cert-password
+#     host   all root all cert
+#     host   all all  all cert-password
+#     local  all all      password
 #
 # The server is secure, so the test runner sets sslmode=verify-full
 # by default for all test directives below with all other SSL settings loaded.
@@ -22,13 +23,19 @@ set_hba
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      root all     cert
 host   all      all  all     cert-password
+local  all      all          password
 
 subtest root
 
-# Root can always connect regardless.
+# Root can always connect over network regardless.
 connect user=root
 ----
 ok defaultdb
+
+# However root cannot connect over the unix socket by default.
+connect_unix user=root
+----
+ERROR: user root must use certificate authentication instead of password authentication
 
 # When no client cert is presented, the server would otherwise require
 # password auth. However, root password auth is rejected in any case.
@@ -41,10 +48,16 @@ subtest end root
 
 subtest normaluser_cert
 
-# User need no password, and we're presenting a client cert. All good.
+# User has no password, and we're presenting a client cert. All good.
 connect user=testuser
 ----
 ok defaultdb
+
+# Empty/no password means deny password auth. Unix socket does not
+# present a cert so auth fails.
+connect_unix user=testuser
+----
+ERROR: password authentication failed for user testuser
 
 # Make the user need a password.
 sql
@@ -63,6 +76,10 @@ connect user=testuser password=invalid sslmode=verify-ca sslcert=
 ERROR: password authentication failed for user testuser
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
+----
+ok defaultdb
+
+connect_unix user=testuser password=pass
 ----
 ok defaultdb
 

@@ -535,9 +535,17 @@ write its process ID to the specified file.`,
 		Name:   "socket",
 		EnvVar: "COCKROACH_SOCKET",
 		Description: `
-Unix socket file, postgresql protocol only.
-Note: when given a path to a unix socket, most postgres clients will
-open "<given path>/.s.PGSQL.<server port>"`,
+Accept client connections using a Unix domain socket with the
+given name.
+
+Note: for compatibility with PostgreSQL clients and drivers,
+ensure that the socket name has the form "/path/to/.s.PGSQL.NNNN",
+where NNNN is a number. PostgreSQL clients only take a port
+number and directory as input and construct the socket name
+programmatically.
+
+To use, for example: psql -h /path/to -p NNNN ...
+`,
 	}
 
 	ClientInsecure = FlagInfo{

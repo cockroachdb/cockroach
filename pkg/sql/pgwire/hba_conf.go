@@ -150,8 +150,6 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 					cluster.VersionByKey(cluster.VersionAuthLocalAndTrustRejectMethods),
 				)
 			}
-			// The syntax 'local' is not yet supported.
-			fallthrough
 		default:
 			return unimplemented.Newf("hba-type-"+entry.ConnType.String(),
 				"unsupported connection type: %s", entry.ConnType)
@@ -164,23 +162,26 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			}
 		}
 
-		// Verify the user is not requesting hostname-based validation,
-		// which is not yet implemented.
-		addrOk := true
-		switch t := entry.Address.(type) {
-		case *net.IPNet:
-		case hba.AnyAddr:
-		case hba.String:
-			addrOk = t.IsKeyword("all")
-		default:
-			addrOk = false
+		if entry.ConnType != hba.ConnLocal {
+			// Verify the user is not requesting hostname-based validation,
+			// which is not yet implemented.
+			addrOk := true
+			switch t := entry.Address.(type) {
+			case *net.IPNet:
+			case hba.AnyAddr:
+			case hba.String:
+				addrOk = t.IsKeyword("all")
+			default:
+				addrOk = false
+			}
+			if !addrOk {
+				return errors.WithHint(
+					unimplemented.New("hba-hostnames", "hostname-based HBA rules are not supported"),
+					"List the numeric CIDR notation instead, for example: 127.0.0.1/8.\n"+
+						"Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.")
+			}
 		}
-		if !addrOk {
-			return errors.WithHint(
-				unimplemented.New("hba-hostnames", "hostname-based HBA rules are not supported"),
-				"List the numeric CIDR notation instead, for example: 127.0.0.1/8.\n"+
-					"Alternatively, use 'all' (without quotes) for any IPv4/IPv6 address.")
-		}
+
 		// Verify that the auth method is supported.
 		method, ok := hbaAuthMethods[entry.Method.Value]
 		if !ok || method.fn == nil {
@@ -235,7 +236,7 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 			// See: https://github.com/cockroachdb/cockroach/issues/43716
 			return nil, errors.Errorf("unknown auth method %s", method)
 		}
-		conf.Entries[i].MethodFn = methodEntry.fn
+		conf.Entries[i].MethodFn = methodEntry.methodInfo
 	}
 
 	return conf, nil
@@ -253,7 +254,8 @@ var rootEntry = hba.Entry{
 var DefaultHBAConfig = func() *hba.Conf {
 	loadDefaultMethods()
 	conf, err := ParseAndNormalize(`
-host all all all cert-password
+host      all all  all cert-password
+local     all all      password
 `)
 	if err != nil {
 		panic(err)
@@ -291,14 +293,26 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 // the current active cluster version is at least the version
 // specified.
 //
+// The validConnTypes is checked during rule matching when accepting
+// connections: if the connection type is not accepted by the auth
+// method, authentication is refused upfront. For example, the "cert"
+// method requires SSL; if a rule specifies "host .... cert" and the
+// client connects without SSL, the authentication is refused.
+// (To express "cert on SSL, password on non-SSL", the HBA conf
+// can list 'hostssl ... cert; hostnossl .... password' instead.)
+//
 // The checkEntry method, if provided, is called upon configuration
 // the cluster setting in the SQL client which attempts to change the
 // configuration. It can block the configuration if e.g. the syntax is
 // invalid.
 func RegisterAuthMethod(
-	method string, fn AuthMethod, minReqVersion cluster.VersionKey, checkEntry CheckHBAEntry,
+	method string,
+	fn AuthMethod,
+	minReqVersion cluster.VersionKey,
+	validConnTypes hba.ConnType,
+	checkEntry CheckHBAEntry,
 ) {
-	hbaAuthMethods[method] = authMethodEntry{minReqVersion, fn}
+	hbaAuthMethods[method] = authMethodEntry{methodInfo{validConnTypes, fn}, minReqVersion}
 	if checkEntry != nil {
 		hbaCheckHBAEntries[method] = checkEntry
 	}
@@ -321,8 +335,13 @@ var (
 )
 
 type authMethodEntry struct {
+	methodInfo
 	minReqVersion cluster.VersionKey
-	fn            AuthMethod
+}
+
+type methodInfo struct {
+	validConnTypes hba.ConnType
+	fn             AuthMethod
 }
 
 // CheckHBAEntry defines a method for validating an hba Entry upon
