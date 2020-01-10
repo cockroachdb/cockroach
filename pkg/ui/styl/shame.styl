@@ -261,3 +261,57 @@
 
 .ant-btn-background-ghost
   box-shadow: none
+  
+.color
+  &--link
+    color $link
+    &:hover
+      text-decoration underline
+
+.ant-checkbox-wrapper
+  &:hover
+    .ant-checkbox-inner
+      border solid 1px $checkbox-border-hover
+      background $popover-border-color
+  .ant-checkbox-inner
+    border solid 1px $checkbox-border
+    border-radius 3px
+  .ant-checkbox-checked
+    &:hover
+      .ant-checkbox-inner
+        border solid 1px $link
+        background $link
+    .ant-checkbox-inner
+      background-color $link
+  span
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $popover-color
+
+.Chip--tooltip
+  min-width 250px
+  .ant-tooltip-inner
+    background-color black
+  span, p
+    font-family Lato-Bold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color #ededed
+  p
+    margin-top 25px
+  .color
+    &--green
+      color $green
+    &--lightgreen
+      color $lightgreen
+    &--grey
+      color $grey
+    &--lightblue
+      color $lightblue
+    &--blue
+      color $blue
+    &--yellow
+      color $yellow
