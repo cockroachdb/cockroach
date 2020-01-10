@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -670,9 +671,9 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Error(codes.Internal, err.Error())
 	}
-	ls := l.LivenessStatus(s.admin.server.clock.PhysicalTime(), 0 /* threshold */)
-	isHealthy := ls == storagepb.NodeLivenessStatus_LIVE
-	if !isHealthy {
+	nowHlc := hlc.Timestamp{WallTime: s.admin.server.clock.PhysicalNow()}
+	isReady := l.IsLive(nowHlc) && !l.Draining
+	if !isReady {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
