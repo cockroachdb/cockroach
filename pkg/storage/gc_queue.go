@@ -340,7 +340,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	return nil
 }
 
-func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.GCThreshold) error {
+func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) error {
 	req := r.template()
 	req.Threshold = thresh.Key
 	return r.send(ctx, req)
@@ -424,7 +424,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	return nil
 }
 
-func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.GCInfo) {
+func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
 	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
 	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))

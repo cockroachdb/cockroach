@@ -532,7 +532,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		info, err := gc.RunGC(
+		info, err := gc.Run(
 			context.Background(),
 			&desc,
 			snap,
