@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -546,11 +545,6 @@ func (info *GCInfo) updateMetrics(metrics *StoreMetrics) {
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
 }
 
-type lockableGCInfo struct {
-	syncutil.Mutex
-	GCInfo
-}
-
 // GCThreshold holds the key and txn span GC thresholds, respectively.
 type GCThreshold struct {
 	Key hlc.Timestamp
@@ -584,16 +578,11 @@ func RunGC(
 		true /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 
-	var infoMu = lockableGCInfo{}
-	infoMu.Policy = policy
-	infoMu.Now = now
-
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
-	infoMu.Threshold = gc.Threshold
 
 	if err := gcer.SetGCThreshold(ctx, GCThreshold{
 		Key: gc.Threshold,
@@ -609,6 +598,11 @@ func RunGC(
 	var vals [][]byte
 	var keyBytes int64
 	var valBytes int64
+	info := GCInfo{
+		Policy:    policy,
+		Now:       now,
+		Threshold: gc.Threshold,
+	}
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
@@ -643,12 +637,12 @@ func RunGC(
 							// intent on it) happen asynchronously and are accounted
 							// for separately. Thus higher up in the stack, we
 							// expect PushTxn > IntentTxns.
-							infoMu.IntentTxns++
+							info.IntentTxns++
 							// All transactions in txnMap may be PENDING and
 							// cleanupIntentsFn will push them to finalize them.
-							infoMu.PushTxn++
+							info.PushTxn++
 						}
-						infoMu.IntentsConsidered++
+						info.IntentsConsidered++
 						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
@@ -667,8 +661,8 @@ func RunGC(
 						valBytes = int64(len(vals[i]))
 
 						// Add the total size of the GC'able versions of the keys and values to GCInfo.
-						infoMu.GCInfo.AffectedVersionsKeyBytes += keyBytes
-						infoMu.GCInfo.AffectedVersionsValBytes += valBytes
+						info.AffectedVersionsKeyBytes += keyBytes
+						info.AffectedVersionsValBytes += valBytes
 
 						batchGCKeysBytes += keyBytes
 						// If the current key brings the batch over the target
@@ -698,7 +692,7 @@ func RunGC(
 					if batchGCKeysBytes != 0 {
 						batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 					}
-					infoMu.NumKeysAffected++
+					info.NumKeysAffected++
 				}
 			}
 		}
@@ -746,7 +740,7 @@ func RunGC(
 	// From now on, all newly added keys are range-local.
 
 	// Process local range key entries (txn records, queue last processed times).
-	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &infoMu, cleanupTxnIntentsAsyncFn)
+	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn)
 	if err != nil {
 		return GCInfo{}, err
 	}
@@ -757,29 +751,25 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
+	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info)
 	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
 		return GCInfo{}, err
 	}
 
-	infoMu.Lock()
-	log.Eventf(ctx, "GC'ed keys; stats %+v", infoMu.GCInfo)
-	infoMu.Unlock()
+	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
 		intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
 	}
-	infoMu.Lock()
-	infoMu.ResolveTotal += len(intents)
-	infoMu.Unlock()
+	info.ResolveTotal += len(intents)
 	log.Eventf(ctx, "cleanup of %d intents", len(intents))
 	if err := cleanupIntentsFn(ctx, intents); err != nil {
 		return GCInfo{}, err
 	}
 
-	return infoMu.GCInfo, nil
+	return info, nil
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
@@ -800,12 +790,9 @@ func processLocalKeyRange(
 	snap engine.Reader,
 	desc *roachpb.RangeDescriptor,
 	cutoff hlc.Timestamp,
-	infoMu *lockableGCInfo,
+	info *GCInfo,
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) ([]roachpb.GCRequest_GCKey, error) {
-	infoMu.Lock()
-	defer infoMu.Unlock()
-
 	var gcKeys []roachpb.GCRequest_GCKey
 
 	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
@@ -823,7 +810,7 @@ func processLocalKeyRange(
 		if err := kv.Value.GetProto(&txn); err != nil {
 			return err
 		}
-		infoMu.TransactionSpanTotal++
+		info.TransactionSpanTotal++
 		if cutoff.LessEq(txn.LastActive()) {
 			return nil
 		}
@@ -831,13 +818,13 @@ func processLocalKeyRange(
 		// The transaction record should be considered for removal.
 		switch txn.Status {
 		case roachpb.PENDING:
-			infoMu.TransactionSpanGCPending++
+			info.TransactionSpanGCPending++
 		case roachpb.STAGING:
-			infoMu.TransactionSpanGCStaging++
+			info.TransactionSpanGCStaging++
 		case roachpb.ABORTED:
-			infoMu.TransactionSpanGCAborted++
+			info.TransactionSpanGCAborted++
 		case roachpb.COMMITTED:
-			infoMu.TransactionSpanGCCommitted++
+			info.TransactionSpanGCCommitted++
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
@@ -893,16 +880,14 @@ func processAbortSpan(
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	threshold hlc.Timestamp,
-	infoMu *lockableGCInfo,
+	info *GCInfo,
 ) []roachpb.GCRequest_GCKey {
 	var gcKeys []roachpb.GCRequest_GCKey
 	abortSpan := abortspan.New(rangeID)
-	infoMu.Lock()
-	defer infoMu.Unlock()
 	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
-		infoMu.AbortSpanTotal++
+		info.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
-			infoMu.AbortSpanGCNum++
+			info.AbortSpanGCNum++
 			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
 		return nil
