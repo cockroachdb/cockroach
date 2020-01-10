@@ -2,6 +2,7 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
+set python "python2.7"
 set certs_dir "/certs"
 set ::env(COCKROACH_INSECURE) "false"
 set ::env(COCKROACH_HOST) "localhost"
@@ -95,10 +96,58 @@ eexpect "root@"
 interrupt
 end_test
 
-# Terminate with Ctrl+C.
+# Terminate the shell with Ctrl+C.
 interrupt
-
 eexpect $prompt
+
+start_test "Check that the auth cookie creation works and reports useful output."
+send "$argv auth-session login eisen --certs-dir=$certs_dir\r"
+eexpect "authentication cookie"
+eexpect "session="
+eexpect "HttpOnly"
+eexpect "Example uses:"
+eexpect "curl"
+eexpect "wget"
+eexpect $prompt
+end_test
+
+start_test "Check that the auth cookie can be emitted standalone."
+send "$argv auth-session login eisen --certs-dir=$certs_dir --only-cookie >cookie.txt\r"
+eexpect $prompt
+system "grep HttpOnly cookie.txt"
+end_test
+
+start_test "Check that the session is visible in the output of list."
+send "$argv auth-session list --certs-dir=$certs_dir\r"
+eexpect username
+eexpect eisen
+eexpect eisen
+eexpect "2 rows"
+eexpect $prompt
+end_test
+
+set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
+
+start_test "Check that the auth cookie works."
+send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/settings'\r"
+eexpect "cluster.organization"
+eexpect $prompt
+end_test
+
+
+start_test "Check that the cookie can be revoked."
+send "$argv auth-session logout eisen --certs-dir=$certs_dir\r"
+eexpect username
+eexpect eisen
+eexpect eisen
+eexpect "2 rows"
+eexpect "$prompt"
+
+send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/settings'\r"
+eexpect "HTTP Error 401"
+eexpect $prompt
+
+end_test
 
 send "exit 0\r"
 eexpect eof
