@@ -18,8 +18,8 @@ import (
 
 // IsLive returns whether the node is considered live at the given time with the
 // given clock offset.
-func (l *Liveness) IsLive(now hlc.Timestamp, maxOffset time.Duration) bool {
-	expiration := hlc.Timestamp(l.Expiration).Add(-maxOffset.Nanoseconds(), 0)
+func (l *Liveness) IsLive(now hlc.Timestamp) bool {
+	expiration := hlc.Timestamp(l.Expiration)
 	return now.Less(expiration)
 }
 
@@ -30,10 +30,8 @@ func (l *Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
 }
 
 // LivenessStatus returns a NodeLivenessStatus enumeration value for this liveness
-// based on the provided timestamp, threshold, and clock max offset.
-func (l *Liveness) LivenessStatus(
-	now time.Time, threshold, maxOffset time.Duration,
-) NodeLivenessStatus {
+// based on the provided timestamp and threshold.
+func (l *Liveness) LivenessStatus(now time.Time, threshold time.Duration) NodeLivenessStatus {
 	nowHlc := hlc.Timestamp{WallTime: now.UnixNano()}
 	if l.IsDead(nowHlc, threshold) {
 		if l.Decommissioning {
@@ -47,7 +45,7 @@ func (l *Liveness) LivenessStatus(
 	if l.Draining {
 		return NodeLivenessStatus_UNAVAILABLE
 	}
-	if l.IsLive(nowHlc, maxOffset) {
+	if l.IsLive(nowHlc) {
 		return NodeLivenessStatus_LIVE
 	}
 	return NodeLivenessStatus_UNAVAILABLE
