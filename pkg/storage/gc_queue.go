@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -544,11 +543,6 @@ func (info *GCInfo) updateMetrics(metrics *StoreMetrics) {
 	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
 }
 
-type lockableGCInfo struct {
-	syncutil.Mutex
-	GCInfo
-}
-
 // GCThreshold holds the key and txn span GC thresholds, respectively.
 type GCThreshold struct {
 	Key hlc.Timestamp
@@ -586,15 +580,18 @@ func RunGC(
 	}); err != nil {
 		return GCInfo{}, errors.Wrap(err, "failed to set GC thresholds")
 	}
-	infoMu := lockableGCInfo{}
-	infoMu.Policy = policy
-	infoMu.Now = now
-	infoMu.Threshold = gc.Threshold
+
+	info := GCInfo{
+		Policy:    policy,
+		Now:       now,
+		Threshold: gc.Threshold,
+	}
+
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
 	intentSpanMap := map[uuid.UUID][]roachpb.Span{}
 
-	err := processReplicatedKeyRange(ctx, desc, snap, now, gc, gcer, txnMap, intentSpanMap, &infoMu)
+	err := processReplicatedKeyRange(ctx, desc, snap, now, gc, gcer, txnMap, intentSpanMap, &info)
 	if err != nil {
 		return GCInfo{}, err
 	}
@@ -602,7 +599,7 @@ func RunGC(
 	// From now on, all newly added keys are range-local.
 
 	// Process local range key entries (txn records, queue last processed times).
-	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &infoMu, cleanupTxnIntentsAsyncFn)
+	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn)
 	if err != nil {
 		return GCInfo{}, err
 	}
@@ -613,29 +610,25 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
+	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info)
 	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
 		return GCInfo{}, err
 	}
 
-	infoMu.Lock()
-	log.Eventf(ctx, "GC'ed keys; stats %+v", infoMu.GCInfo)
-	infoMu.Unlock()
+	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
 		intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
 	}
-	infoMu.Lock()
-	infoMu.ResolveTotal += len(intents)
-	infoMu.Unlock()
+	info.ResolveTotal += len(intents)
 	log.Eventf(ctx, "cleanup of %d intents", len(intents))
 	if err := cleanupIntentsFn(ctx, intents); err != nil {
 		return GCInfo{}, err
 	}
 
-	return infoMu.GCInfo, nil
+	return info, nil
 }
 
 // processReplicatedKeyRange identifies garbage and sends GC requests to
@@ -652,7 +645,7 @@ func processReplicatedKeyRange(
 	gcer GCer,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	intentSpanMap map[uuid.UUID][]roachpb.Span,
-	infoMu *lockableGCInfo,
+	info *GCInfo,
 ) error {
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
@@ -678,12 +671,12 @@ func processReplicatedKeyRange(
 					// intent on it) happen asynchronously and are accounted
 					// for separately. Thus higher up in the stack, we
 					// expect PushTxn > IntentTxns.
-					infoMu.IntentTxns++
+					info.IntentTxns++
 					// All transactions in txnMap may be PENDING and
 					// cleanupIntentsFn will push them to finalize them.
-					infoMu.PushTxn++
+					info.PushTxn++
 				}
-				infoMu.IntentsConsidered++
+				info.IntentsConsidered++
 				intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{
 					Key: md.Key.Key,
 				})
@@ -726,8 +719,8 @@ func processReplicatedKeyRange(
 			batchGCKeysBytes += keyBytes
 			haveGarbageForThisKey = true
 			gcTimestampForThisKey = cur.Key.Timestamp
-			infoMu.AffectedVersionsKeyBytes += keyBytes
-			infoMu.AffectedVersionsValBytes += int64(len(cur.Value))
+			info.AffectedVersionsKeyBytes += keyBytes
+			info.AffectedVersionsValBytes += int64(len(cur.Value))
 		}
 		shouldSendBatch := batchGCKeysBytes >= gcKeyVersionChunkBytes
 		if shouldSendBatch || isNewest && haveGarbageForThisKey {
@@ -776,12 +769,9 @@ func processLocalKeyRange(
 	snap engine.Reader,
 	desc *roachpb.RangeDescriptor,
 	cutoff hlc.Timestamp,
-	infoMu *lockableGCInfo,
+	info *GCInfo,
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) ([]roachpb.GCRequest_GCKey, error) {
-	infoMu.Lock()
-	defer infoMu.Unlock()
-
 	var gcKeys []roachpb.GCRequest_GCKey
 
 	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
@@ -799,7 +789,7 @@ func processLocalKeyRange(
 		if err := kv.Value.GetProto(&txn); err != nil {
 			return err
 		}
-		infoMu.TransactionSpanTotal++
+		info.TransactionSpanTotal++
 		if cutoff.LessEq(txn.LastActive()) {
 			return nil
 		}
@@ -807,13 +797,13 @@ func processLocalKeyRange(
 		// The transaction record should be considered for removal.
 		switch txn.Status {
 		case roachpb.PENDING:
-			infoMu.TransactionSpanGCPending++
+			info.TransactionSpanGCPending++
 		case roachpb.STAGING:
-			infoMu.TransactionSpanGCStaging++
+			info.TransactionSpanGCStaging++
 		case roachpb.ABORTED:
-			infoMu.TransactionSpanGCAborted++
+			info.TransactionSpanGCAborted++
 		case roachpb.COMMITTED:
-			infoMu.TransactionSpanGCCommitted++
+			info.TransactionSpanGCCommitted++
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
@@ -869,16 +859,14 @@ func processAbortSpan(
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	threshold hlc.Timestamp,
-	infoMu *lockableGCInfo,
+	info *GCInfo,
 ) []roachpb.GCRequest_GCKey {
 	var gcKeys []roachpb.GCRequest_GCKey
 	abortSpan := abortspan.New(rangeID)
-	infoMu.Lock()
-	defer infoMu.Unlock()
 	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
-		infoMu.AbortSpanTotal++
+		info.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
-			infoMu.AbortSpanGCNum++
+			info.AbortSpanGCNum++
 			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
 		return nil
