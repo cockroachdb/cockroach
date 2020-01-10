@@ -33,7 +33,7 @@ interface NetworkOwnProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-interface Identity {
+export interface Identity {
   nodeID: number;
   address: string;
   locality: string;
@@ -363,7 +363,6 @@ class Network extends React.Component<NetworkProps, {}> {
         updatedAt: LongToMoment(status.updated_at),
       });
     });
-
     // Calculate the mean and sampled standard deviation.
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.LIVE)
@@ -406,7 +405,6 @@ class Network extends React.Component<NetworkProps, {}> {
         .filter(ms => _.isFinite(ms) && ms > 0)
         .value()
     ));
-
     const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa => (
       _.chain(nodesSummary.nodeStatusByID[nodeIDa].activity)
         .keys()

@@ -91,7 +91,6 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 
   render() {
     const { user, system } = this.props.databasesByType;
-
     return <div>
       <Helmet>
         <title>Tables | Databases</title>

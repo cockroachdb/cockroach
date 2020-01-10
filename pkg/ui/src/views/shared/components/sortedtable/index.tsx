@@ -73,6 +73,7 @@ interface SortedTableProps<T> {
     expansionKey: (obj: T) => string;
   };
   drawer?: boolean;
+  firstCellHeader?: boolean;
 }
 
 interface SortedTableState {
@@ -191,8 +192,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, sortSetting, onChangeSortSetting } = this.props;
-
+    const { data, sortSetting, onChangeSortSetting, firstCellHeader } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
       expandableConfig = {
@@ -213,6 +213,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           className={this.props.className}
           expandableConfig={expandableConfig}
           drawer={this.props.drawer}
+          firstCellHeader={firstCellHeader}
         />
       );
     }
