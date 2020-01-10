@@ -148,6 +148,7 @@ $cchar Categories for release notes:\\
 $cchar   - cli change\\
 $cchar   - sql change\\
 $cchar   - admin ui change\\
+$cchar   - security update\\
 $cchar   - general change (e.g., change of required Go version)\\
 $cchar   - build change (e.g., compatibility with older CPUs)\\
 $cchar   - enterprise change (e.g., change to backup/restore)\\
