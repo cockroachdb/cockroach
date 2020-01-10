@@ -163,11 +163,13 @@ relnotetitles = {
     'backward-incompatible change': "Backward-incompatible changes",
     'performance improvement': "Performance improvements",
     'bug fix': "Bug fixes",
+    'security update': "Security updates",
 }
 
 # Order in which to show the sections.
 relnote_sec_order = [
     'backward-incompatible change',
+    'security update',
     'general change',
     'enterprise change',
     'sql change',
@@ -188,7 +190,9 @@ cat_misspells = {
     'performance': 'performance improvement',
     'ui': 'admin ui change',
     'backwards-incompatible change': 'backward-incompatible change',
-    'enterprise': 'enterprise change'
+    'enterprise': 'enterprise change',
+    'security': 'security update',
+    'security change': 'security update',
 }
 
 #
