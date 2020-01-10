@@ -29,7 +29,7 @@ import (
 // Required properties are derived top-to-bottom - there is a required physical
 // property on the root, and each expression can require physical properties on
 // one or more of its operands. When an expression is optimized, it is always
-// with respect to a particular set of required physical properties.  The goal
+// with respect to a particular set of required physical properties. The goal
 // is to find the lowest cost expression that provides those properties while
 // still remaining logically equivalent.
 type Required struct {
