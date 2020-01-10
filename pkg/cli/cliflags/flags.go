@@ -178,6 +178,12 @@ when the first store is in-memory.
 `,
 	}
 
+	AuthTokenValidityPeriod = FlagInfo{
+		Name: "expire-after",
+		Description: `
+Duration after which the newly created session token expires.`,
+	}
+
 	Cache = FlagInfo{
 		Name: "cache",
 		Description: `
