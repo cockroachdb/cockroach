@@ -132,12 +132,12 @@ func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
 
 // genPrivateStruct generates the struct for a define tagged as Private:
 //
-//  type FunctionPrivate struct {
-//    Name       string
-//    Typ        *types.T
-//    Properties *tree.FunctionProperties
-//    Overload   *tree.Overload
-//  }
+//   type FunctionPrivate struct {
+//     Name       string
+//     Typ        *types.T
+//     Properties *tree.FunctionProperties
+//     Overload   *tree.Overload
+//   }
 //
 func (g *exprsGen) genPrivateStruct(define *lang.DefineExpr) {
 	privTyp := g.md.typeOf(define)

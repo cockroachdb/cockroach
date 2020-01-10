@@ -179,7 +179,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// Handle read-only operators which never write data or modify schema.
 	switch t := e.(type) {
 	case *memo.ValuesExpr:
 		ep, err = b.buildValues(t)
@@ -296,19 +295,19 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		ep, err = b.buildExport(t)
 
 	default:
-		if opt.IsSetOp(e) {
+		switch {
+		case opt.IsSetOp(e):
 			ep, err = b.buildSetOp(e)
-			break
-		}
-		if opt.IsJoinNonApplyOp(e) {
+
+		case opt.IsJoinNonApplyOp(e):
 			ep, err = b.buildHashJoin(e)
-			break
-		}
-		if opt.IsJoinApplyOp(e) {
+
+		case opt.IsJoinApplyOp(e):
 			ep, err = b.buildApplyJoin(e)
-			break
+
+		default:
+			err = errors.AssertionFailedf("no execbuild for %T", t)
 		}
-		return execPlan{}, errors.AssertionFailedf("no execbuild for %T", t)
 	}
 	if err != nil {
 		return execPlan{}, err

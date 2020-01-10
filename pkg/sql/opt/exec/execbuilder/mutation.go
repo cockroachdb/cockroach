@@ -246,7 +246,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	// Currently, the execution engine requires one input column for each fetch
-	// and update expression, so use ensureColumns to map and reorder colums so
+	// and update expression, so use ensureColumns to map and reorder columns so
 	// that they correspond to target table columns. For example:
 	//
 	//   UPDATE xyz SET x=1, y=1
@@ -256,7 +256,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(upd.FetchCols)+len(upd.UpdateCols)+len(upd.CheckCols)+len(upd.PassthroughCols))
+	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) + len(upd.CheckCols)
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
 
