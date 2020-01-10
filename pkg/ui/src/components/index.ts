@@ -12,7 +12,7 @@ export * from "./badge";
 export * from "./icon";
 export * from "./globalNavigation";
 export * from "./sideNavigation";
-export * from "./tabNavigation";
+export * from "./pageHeader";
 export * from "./text";
 export * from "./table";
 export * from "./tooltip";

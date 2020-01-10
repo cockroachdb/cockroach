@@ -8,13 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require '~src/components/core/index.styl'
+import * as React from "react";
 
-.tab-navigation
-  height 100%
-  display flex
-  flex-direction row
-  align-items center
+import "./pageHeader.styl";
 
-.tab-navigation > *
-  margin-right $spacing-small
+export interface PageHeaderProps {
+  children?: React.ReactNode;
+}
+
+export function PageHeader(props: PageHeaderProps) {
+  return (
+    <div className="page-header">
+      {props.children}
+    </div>
+  );
+}

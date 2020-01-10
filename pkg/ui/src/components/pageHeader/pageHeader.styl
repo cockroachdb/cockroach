@@ -8,18 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
+@require '~src/components/core/index.styl'
 
-import "./tabNavigation.styl";
+.page-header
+  height 100%
+  display flex
+  flex-direction row
+  align-items center
 
-export interface TabNavigationProps {
-  children?: React.ReactNode;
-}
-
-export function TabNavigation(props: TabNavigationProps) {
-  return (
-    <div className="tab-navigation">
-      {props.children}
-    </div>
-  );
-}
+.page-header > *
+  margin-right $spacing-small
