@@ -196,6 +196,7 @@ func init() {
 		quitCmd,
 
 		sqlShellCmd,
+		authCmd,
 		nodeCmd,
 		dumpCmd,
 		nodeLocalCmd,
