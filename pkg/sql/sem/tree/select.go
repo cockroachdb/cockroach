@@ -48,82 +48,6 @@ type Select struct {
 	ForLocked ForLocked
 }
 
-// ForLocked represents a locking clause, like FOR UPDATE.
-type ForLocked struct {
-	Strength   LockingStrength
-	WaitPolicy LockingWaitPolicy
-	Targets    TableNames
-}
-
-// Format implements the NodeFormatter interface.
-func (f ForLocked) Format(ctx *FmtCtx) {
-	f.Strength.Format(ctx)
-	if len(f.Targets) > 0 {
-		ctx.WriteString(" OF ")
-		f.Targets.Format(ctx)
-	}
-	f.WaitPolicy.Format(ctx)
-}
-
-// LockingStrength represents the possible row-level lock modes for a SELECT
-// statement.
-type LockingStrength byte
-
-const (
-	// ForNone represents the default - no for statement at all.
-	ForNone LockingStrength = iota
-	// ForUpdate represents FOR UPDATE.
-	ForUpdate
-	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
-	ForNoKeyUpdate
-	// ForShare represents FOR SHARE.
-	ForShare
-	// ForKeyShare represents FOR KEY SHARE.
-	ForKeyShare
-)
-
-// Format implements the NodeFormatter interface.
-func (f LockingStrength) Format(ctx *FmtCtx) {
-	switch f {
-	case ForNone:
-	case ForUpdate:
-		ctx.WriteString(" FOR UPDATE")
-	case ForNoKeyUpdate:
-		ctx.WriteString(" FOR NO KEY UPDATE")
-	case ForShare:
-		ctx.WriteString(" FOR SHARE")
-	case ForKeyShare:
-		ctx.WriteString(" FOR KEY SHARE")
-	}
-}
-
-// LockingWaitPolicy represents the possible policies for dealing with rows
-// being locked by FOR UPDATE/SHARE clauses (i.e., it represents the NOWAIT
-// and SKIP LOCKED options).
-type LockingWaitPolicy byte
-
-const (
-	// LockWaitBlock represents the default - wait for the lock to become
-	// available.
-	LockWaitBlock LockingWaitPolicy = iota
-	// LockWaitSkip represents SKIP LOCKED - skip rows that can't be locked.
-	LockWaitSkip
-	// LockWaitError represents NOWAIT - raise an error if a row cannot be
-	// locked.
-	LockWaitError
-)
-
-// Format implements the NodeFormatter interface.
-func (f LockingWaitPolicy) Format(ctx *FmtCtx) {
-	switch f {
-	case LockWaitBlock:
-	case LockWaitSkip:
-		ctx.WriteString(" SKIP LOCKED")
-	case LockWaitError:
-		ctx.WriteString(" NOWAIT")
-	}
-}
-
 // Format implements the NodeFormatter interface.
 func (node *Select) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
@@ -1025,5 +949,81 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	if node.Exclusion != NoExclusion {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Exclusion)
+	}
+}
+
+// ForLocked represents a locking clause, like FOR UPDATE.
+type ForLocked struct {
+	Strength   LockingStrength
+	WaitPolicy LockingWaitPolicy
+	Targets    TableNames
+}
+
+// Format implements the NodeFormatter interface.
+func (f ForLocked) Format(ctx *FmtCtx) {
+	f.Strength.Format(ctx)
+	if len(f.Targets) > 0 {
+		ctx.WriteString(" OF ")
+		f.Targets.Format(ctx)
+	}
+	f.WaitPolicy.Format(ctx)
+}
+
+// LockingStrength represents the possible row-level lock modes for a SELECT
+// statement.
+type LockingStrength byte
+
+const (
+	// ForNone represents the default - no for statement at all.
+	ForNone LockingStrength = iota
+	// ForUpdate represents FOR UPDATE.
+	ForUpdate
+	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
+	ForNoKeyUpdate
+	// ForShare represents FOR SHARE.
+	ForShare
+	// ForKeyShare represents FOR KEY SHARE.
+	ForKeyShare
+)
+
+// Format implements the NodeFormatter interface.
+func (f LockingStrength) Format(ctx *FmtCtx) {
+	switch f {
+	case ForNone:
+	case ForUpdate:
+		ctx.WriteString(" FOR UPDATE")
+	case ForNoKeyUpdate:
+		ctx.WriteString(" FOR NO KEY UPDATE")
+	case ForShare:
+		ctx.WriteString(" FOR SHARE")
+	case ForKeyShare:
+		ctx.WriteString(" FOR KEY SHARE")
+	}
+}
+
+// LockingWaitPolicy represents the possible policies for dealing with rows
+// being locked by FOR UPDATE/SHARE clauses (i.e., it represents the NOWAIT
+// and SKIP LOCKED options).
+type LockingWaitPolicy byte
+
+const (
+	// LockWaitBlock represents the default - wait for the lock to become
+	// available.
+	LockWaitBlock LockingWaitPolicy = iota
+	// LockWaitSkip represents SKIP LOCKED - skip rows that can't be locked.
+	LockWaitSkip
+	// LockWaitError represents NOWAIT - raise an error if a row cannot be
+	// locked.
+	LockWaitError
+)
+
+// Format implements the NodeFormatter interface.
+func (f LockingWaitPolicy) Format(ctx *FmtCtx) {
+	switch f {
+	case LockWaitBlock:
+	case LockWaitSkip:
+		ctx.WriteString(" SKIP LOCKED")
+	case LockWaitError:
+		ctx.WriteString(" NOWAIT")
 	}
 }
