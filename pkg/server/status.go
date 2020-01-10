@@ -666,10 +666,17 @@ func (s *statusServer) Details(
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
-	isHealthy, err := s.nodeLiveness.IsHealthy(nodeID)
+	clock := s.admin.server.clock
+	l, err := s.nodeLiveness.GetLiveness(nodeID)
 	if err != nil {
 		return nil, grpcstatus.Error(codes.Internal, err.Error())
 	}
+	ls := l.LivenessStatus(
+		clock.PhysicalTime(),
+		0, /* threshold */
+		clock.MaxOffset(),
+	)
+	isHealthy := ls == storagepb.NodeLivenessStatus_LIVE
 	if !isHealthy {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
