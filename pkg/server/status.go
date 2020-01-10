@@ -1040,7 +1040,8 @@ func (s *statusServer) Nodes(
 		}
 	}
 
-	resp.LivenessByNodeID = s.nodeLiveness.GetLivenessStatusMap()
+	clock := s.admin.server.clock
+	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
 
 	return &resp, nil
 }
@@ -1054,7 +1055,8 @@ func (s *statusServer) nodesStatusWithLiveness(
 	if err != nil {
 		return nil, err
 	}
-	statusMap := s.nodeLiveness.GetLivenessStatusMap()
+	clock := s.admin.server.clock
+	statusMap := getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
 	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
