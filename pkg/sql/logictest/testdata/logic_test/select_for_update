@@ -38,5 +38,32 @@ SELECT 1 FOR SHARE OF a, b
 # differently - NOWAIT returns an error to the client instead of blocking,
 # and SKIP LOCKED returns an inconsistent view.
 
-query error at or near "locked": syntax error: unimplemented: this syntax
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
 SELECT 1 FOR UPDATE SKIP LOCKED
+
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR NO KEY UPDATE SKIP LOCKED
+
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR SHARE SKIP LOCKED
+
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR KEY SHARE SKIP LOCKED
+
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR UPDATE OF a SKIP LOCKED
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR UPDATE NOWAIT
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR NO KEY UPDATE NOWAIT
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR SHARE NOWAIT
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR KEY SHARE NOWAIT
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR UPDATE OF a NOWAIT

@@ -1069,6 +1069,8 @@ func TestParse(t *testing.T) {
 		{`SELECT 1 FOR KEY SHARE`},
 		{`SELECT 1 FOR UPDATE OF a`},
 		{`SELECT 1 FOR NO KEY UPDATE OF a, b`},
+		{`SELECT 1 FOR UPDATE SKIP LOCKED`},
+		{`SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT`},
 
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
 		{`EXPLAIN TABLE a`},

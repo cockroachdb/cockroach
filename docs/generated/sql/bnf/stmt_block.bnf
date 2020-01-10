@@ -1173,7 +1173,7 @@ simple_select ::=
 	| set_operation
 
 locking_clause ::=
-	for_locking_strength opt_locked_rels
+	for_locking_strength opt_locked_rels opt_nowait_or_skip
 
 select_clause ::=
 	simple_select
@@ -1582,6 +1582,10 @@ for_locking_strength ::=
 
 opt_locked_rels ::=
 	'OF' table_name_list
+
+opt_nowait_or_skip ::=
+	'SKIP' 'LOCKED'
+	| 'NOWAIT'
 
 offset_clause ::=
 	'OFFSET' a_expr
