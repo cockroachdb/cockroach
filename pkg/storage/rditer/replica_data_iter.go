@@ -217,6 +217,18 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	return value
 }
 
+// KeyValue returns the current MVCCKeyValue.
+func (ri *ReplicaDataIterator) KeyValue() engine.MVCCKeyValue {
+	key := ri.it.UnsafeKey()
+	value := ri.it.UnsafeValue()
+	ri.a, key.Key = ri.a.Copy(key.Key, len(value))
+	ri.a, value = ri.a.Copy(value, 0)
+	return engine.MVCCKeyValue{
+		Key:   key,
+		Value: value,
+	}
+}
+
 // ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
 func (ri *ReplicaDataIterator) ResetAllocator() {
 	ri.a = nil
