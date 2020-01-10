@@ -43,8 +43,9 @@ const (
 	loginPath  = "/login"
 	logoutPath = "/logout"
 	// secretLength is the number of random bytes generated for session secrets.
-	secretLength      = 16
-	sessionCookieName = "session"
+	secretLength = 16
+	// SessionCookieName is the name of the cookie used for HTTP auth.
+	SessionCookieName = "session"
 )
 
 var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
@@ -271,19 +272,29 @@ func (s *authenticationServer) verifyPassword(
 	return (security.CompareHashAndPassword(hashedPassword, password) == nil), nil
 }
 
+// CreateAuthSecret creates a secret, hash pair to populate a session auth token.
+func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
+	secret = make([]byte, secretLength)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, nil, err
+	}
+
+	hasher := sha256.New()
+	_, _ = hasher.Write(secret)
+	hashedSecret = hasher.Sum(nil)
+	return secret, hashedSecret, nil
+}
+
 // newAuthSession attempts to create a new authentication session for the given
 // user. If successful, returns the ID and secret value for the new session.
 func (s *authenticationServer) newAuthSession(
 	ctx context.Context, username string,
 ) (int64, []byte, error) {
-	secret := make([]byte, secretLength)
-	if _, err := rand.Read(secret); err != nil {
+	secret, hashedSecret, err := CreateAuthSecret()
+	if err != nil {
 		return 0, nil, err
 	}
 
-	hasher := sha256.New()
-	_, _ = hasher.Write(secret)
-	hashedSecret := hasher.Sum(nil)
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `
@@ -385,7 +396,7 @@ func EncodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 
 func makeCookieWithValue(value string) *http.Cookie {
 	return &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     SessionCookieName,
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
@@ -400,7 +411,7 @@ func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
-	rawCookie, err := req.Cookie(sessionCookieName)
+	rawCookie, err := req.Cookie(SessionCookieName)
 	if err != nil {
 		return "", nil, err
 	}
