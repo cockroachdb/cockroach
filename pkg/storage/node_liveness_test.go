@@ -503,7 +503,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	livenesses := mtc.nodeLivenesses[0].GetLivenesses()
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
-	originalExpiration := mtc.clock.PhysicalNow() + mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1
+	originalExpiration := mtc.clock.PhysicalNow() + mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds()
 	for _, l := range livenesses {
 		if a, e := l.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
@@ -1012,7 +1012,6 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 func TestNodeLivenessLivenessStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	now := timeutil.Now()
-	maxOffset := 250 * time.Millisecond
 	threshold := 5 * time.Minute
 
 	for _, tc := range []struct {
@@ -1032,13 +1031,13 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			},
 			expected: storagepb.NodeLivenessStatus_LIVE,
 		},
-		// Minimum bound of liveness is now + max offset.
 		{
 			liveness: storagepb.Liveness{
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(maxOffset).UnixNano() + 1,
+					// Expires just slightly in the future.
+					WallTime: now.UnixNano() + 1,
 				},
 				Decommissioning: false,
 				Draining:        false,
@@ -1051,7 +1050,8 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				NodeID: 1,
 				Epoch:  1,
 				Expiration: hlc.LegacyTimestamp{
-					WallTime: now.Add(maxOffset).UnixNano(),
+					// Just expired.
+					WallTime: now.UnixNano(),
 				},
 				Decommissioning: false,
 				Draining:        false,
@@ -1138,7 +1138,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			if a, e := tc.liveness.LivenessStatus(now, threshold, maxOffset), tc.expected; a != e {
+			if a, e := tc.liveness.LivenessStatus(now, threshold), tc.expected; a != e {
 				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
 			}
 		})
