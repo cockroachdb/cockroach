@@ -30,6 +30,7 @@ import jobsIcon from "!!raw-loader!assets/sidebarIcons/jobs.svg";
 import statementsIcon from "!!raw-loader!assets/sidebarIcons/statements.svg";
 import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
 import gearIcon from "!!raw-loader!assets/sidebarIcons/gear.svg";
+import networkIcon from "!!raw-loader!assets/sidebarIcons/network.svg";
 
 import "./navigation-bar.styl";
 
@@ -165,6 +166,7 @@ export default class Sidebar extends React.Component {
           <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
           <IconLink to="/statements" icon={statementsIcon} title="Statements" activeFor="/statement" />
+          <IconLink to="/reports/network" icon={networkIcon} title="Network Latency" activeFor="/reports/network" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
