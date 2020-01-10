@@ -332,137 +332,6 @@ func makeGCQueueScoreImpl(
 	return r
 }
 
-// processLocalKeyRange scans the local range key entries, consisting of
-// transaction records, queue last processed timestamps, and range descriptors.
-//
-// - Transaction entries:
-//   - For expired transactions , schedule the intents for
-//     asynchronous resolution. The actual transaction spans are not
-//     returned for GC in this pass, but are separately GC'ed after
-//     successful resolution of all intents. The exception is if there
-//     are no intents on the txn record, in which case it's returned for
-//     immediate GC.
-//
-// - Queue last processed times: cleanup any entries which don't match
-//   this range's start key. This can happen on range merges.
-func processLocalKeyRange(
-	ctx context.Context,
-	snap engine.Reader,
-	desc *roachpb.RangeDescriptor,
-	cutoff hlc.Timestamp,
-	infoMu *lockableGCInfo,
-	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
-) ([]roachpb.GCRequest_GCKey, error) {
-	infoMu.Lock()
-	defer infoMu.Unlock()
-
-	var gcKeys []roachpb.GCRequest_GCKey
-
-	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
-		// If the transaction needs to be pushed or there are intents to
-		// resolve, invoke the cleanup function.
-		if !txn.Status.IsFinalized() || len(txn.IntentSpans) > 0 {
-			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsIntents(txn.IntentSpans, txn))
-		}
-		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key}) // zero timestamp
-		return nil
-	}
-
-	handleOneTransaction := func(kv roachpb.KeyValue) error {
-		var txn roachpb.Transaction
-		if err := kv.Value.GetProto(&txn); err != nil {
-			return err
-		}
-		infoMu.TransactionSpanTotal++
-		if !txn.LastActive().Less(cutoff) {
-			return nil
-		}
-
-		// The transaction record should be considered for removal.
-		switch txn.Status {
-		case roachpb.PENDING:
-			infoMu.TransactionSpanGCPending++
-		case roachpb.STAGING:
-			infoMu.TransactionSpanGCStaging++
-		case roachpb.ABORTED:
-			infoMu.TransactionSpanGCAborted++
-		case roachpb.COMMITTED:
-			infoMu.TransactionSpanGCCommitted++
-		default:
-			panic(fmt.Sprintf("invalid transaction state: %s", txn))
-		}
-		return handleTxnIntents(kv.Key, &txn)
-	}
-
-	handleOneQueueLastProcessed := func(kv roachpb.KeyValue, rangeKey roachpb.RKey) error {
-		if !rangeKey.Equal(desc.StartKey) {
-			// Garbage collect the last processed timestamp if it doesn't match start key.
-			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
-		}
-		return nil
-	}
-
-	handleOne := func(kv roachpb.KeyValue) error {
-		rangeKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
-		if err != nil {
-			return err
-		}
-		if suffix.Equal(keys.LocalTransactionSuffix.AsRawKey()) {
-			if err := handleOneTransaction(kv); err != nil {
-				return err
-			}
-		} else if suffix.Equal(keys.LocalQueueLastProcessedSuffix.AsRawKey()) {
-			if err := handleOneQueueLastProcessed(kv, roachpb.RKey(rangeKey)); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
-	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
-
-	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, engine.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
-			return false, handleOne(kv)
-		})
-	return gcKeys, err
-}
-
-// processAbortSpan iterates through the local AbortSpan entries
-// and collects entries which indicate that a client which was running
-// this transaction must have realized that it has been aborted (due to
-// heartbeating having failed). The parameter minAge is typically a
-// multiple of the heartbeat timeout used by the coordinator.
-//
-// TODO(tschottdorf): this could be done in Replica.GC itself, but it's
-// handy to have it here for stats (though less performant due to sending
-// all of the keys over the wire).
-func processAbortSpan(
-	ctx context.Context,
-	snap engine.Reader,
-	rangeID roachpb.RangeID,
-	threshold hlc.Timestamp,
-	infoMu *lockableGCInfo,
-) []roachpb.GCRequest_GCKey {
-	var gcKeys []roachpb.GCRequest_GCKey
-	abortSpan := abortspan.New(rangeID)
-	infoMu.Lock()
-	defer infoMu.Unlock()
-	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
-		infoMu.AbortSpanTotal++
-		if v.Timestamp.Less(threshold) {
-			infoMu.AbortSpanGCNum++
-			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
-		}
-		return nil
-	}); err != nil {
-		// Still return whatever we managed to collect.
-		log.Warning(ctx, err)
-	}
-	return gcKeys
-}
-
 // NoopGCer implements GCer by doing nothing.
 type NoopGCer struct{}
 
@@ -885,6 +754,137 @@ func RunGC(
 	}
 
 	return infoMu.GCInfo, nil
+}
+
+// processLocalKeyRange scans the local range key entries, consisting of
+// transaction records, queue last processed timestamps, and range descriptors.
+//
+// - Transaction entries:
+//   - For expired transactions , schedule the intents for
+//     asynchronous resolution. The actual transaction spans are not
+//     returned for GC in this pass, but are separately GC'ed after
+//     successful resolution of all intents. The exception is if there
+//     are no intents on the txn record, in which case it's returned for
+//     immediate GC.
+//
+// - Queue last processed times: cleanup any entries which don't match
+//   this range's start key. This can happen on range merges.
+func processLocalKeyRange(
+	ctx context.Context,
+	snap engine.Reader,
+	desc *roachpb.RangeDescriptor,
+	cutoff hlc.Timestamp,
+	infoMu *lockableGCInfo,
+	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
+) ([]roachpb.GCRequest_GCKey, error) {
+	infoMu.Lock()
+	defer infoMu.Unlock()
+
+	var gcKeys []roachpb.GCRequest_GCKey
+
+	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
+		// If the transaction needs to be pushed or there are intents to
+		// resolve, invoke the cleanup function.
+		if !txn.Status.IsFinalized() || len(txn.IntentSpans) > 0 {
+			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsIntents(txn.IntentSpans, txn))
+		}
+		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key}) // zero timestamp
+		return nil
+	}
+
+	handleOneTransaction := func(kv roachpb.KeyValue) error {
+		var txn roachpb.Transaction
+		if err := kv.Value.GetProto(&txn); err != nil {
+			return err
+		}
+		infoMu.TransactionSpanTotal++
+		if !txn.LastActive().Less(cutoff) {
+			return nil
+		}
+
+		// The transaction record should be considered for removal.
+		switch txn.Status {
+		case roachpb.PENDING:
+			infoMu.TransactionSpanGCPending++
+		case roachpb.STAGING:
+			infoMu.TransactionSpanGCStaging++
+		case roachpb.ABORTED:
+			infoMu.TransactionSpanGCAborted++
+		case roachpb.COMMITTED:
+			infoMu.TransactionSpanGCCommitted++
+		default:
+			panic(fmt.Sprintf("invalid transaction state: %s", txn))
+		}
+		return handleTxnIntents(kv.Key, &txn)
+	}
+
+	handleOneQueueLastProcessed := func(kv roachpb.KeyValue, rangeKey roachpb.RKey) error {
+		if !rangeKey.Equal(desc.StartKey) {
+			// Garbage collect the last processed timestamp if it doesn't match start key.
+			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
+		}
+		return nil
+	}
+
+	handleOne := func(kv roachpb.KeyValue) error {
+		rangeKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
+		if err != nil {
+			return err
+		}
+		if suffix.Equal(keys.LocalTransactionSuffix.AsRawKey()) {
+			if err := handleOneTransaction(kv); err != nil {
+				return err
+			}
+		} else if suffix.Equal(keys.LocalQueueLastProcessedSuffix.AsRawKey()) {
+			if err := handleOneQueueLastProcessed(kv, roachpb.RKey(rangeKey)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
+	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
+
+	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, engine.MVCCScanOptions{},
+		func(kv roachpb.KeyValue) (bool, error) {
+			return false, handleOne(kv)
+		})
+	return gcKeys, err
+}
+
+// processAbortSpan iterates through the local AbortSpan entries
+// and collects entries which indicate that a client which was running
+// this transaction must have realized that it has been aborted (due to
+// heartbeating having failed). The parameter minAge is typically a
+// multiple of the heartbeat timeout used by the coordinator.
+//
+// TODO(tschottdorf): this could be done in Replica.GC itself, but it's
+// handy to have it here for stats (though less performant due to sending
+// all of the keys over the wire).
+func processAbortSpan(
+	ctx context.Context,
+	snap engine.Reader,
+	rangeID roachpb.RangeID,
+	threshold hlc.Timestamp,
+	infoMu *lockableGCInfo,
+) []roachpb.GCRequest_GCKey {
+	var gcKeys []roachpb.GCRequest_GCKey
+	abortSpan := abortspan.New(rangeID)
+	infoMu.Lock()
+	defer infoMu.Unlock()
+	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
+		infoMu.AbortSpanTotal++
+		if v.Timestamp.Less(threshold) {
+			infoMu.AbortSpanGCNum++
+			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
+		}
+		return nil
+	}); err != nil {
+		// Still return whatever we managed to collect.
+		log.Warning(ctx, err)
+	}
+	return gcKeys
 }
 
 // timer returns a constant duration to space out GC processing

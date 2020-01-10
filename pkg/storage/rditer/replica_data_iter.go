@@ -114,7 +114,7 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool, seekEnd bool,
 ) *ReplicaDataIterator {
-	it := e.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	it := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
@@ -135,14 +135,14 @@ func NewReplicaDataIterator(
 // seekStart seeks the iterator to the start of its data range.
 func (ri *ReplicaDataIterator) seekStart() {
 	ri.curIndex = 0
-	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
+	ri.it.Seek(ri.ranges[ri.curIndex].Start)
 	ri.advance()
 }
 
 // seekEnd seeks the iterator to the end of its data range.
 func (ri *ReplicaDataIterator) seekEnd() {
 	ri.curIndex = len(ri.ranges) - 1
-	ri.it.SeekLT(ri.ranges[ri.curIndex].End)
+	ri.it.SeekReverse(ri.ranges[ri.curIndex].End)
 	ri.retreat()
 }
 
@@ -189,7 +189,7 @@ func (ri *ReplicaDataIterator) retreat() {
 		}
 		ri.curIndex--
 		if ri.curIndex >= 0 {
-			ri.it.SeekLT(ri.ranges[ri.curIndex].End)
+			ri.it.SeekReverse(ri.ranges[ri.curIndex].End)
 		} else {
 			return
 		}
