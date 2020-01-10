@@ -11,8 +11,6 @@
 package engine
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -35,51 +33,29 @@ func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageColl
 	}
 }
 
-// Filter makes decisions about garbage collection based on the
-// garbage collection policy for batches of values for the same
-// key. Returns the index of the first key to be GC'd and the
-// timestamp including, and after which, all values should be garbage
-// collected. If no values should be GC'd, returns -1 for the index
-// and the zero timestamp. Keys must be in descending time
-// order. Values deleted at or before the returned timestamp can be
-// deleted without invalidating any reads in the time interval
-// (gc.expiration, \infinity).
+// IsGarbage makes a determination whether a key (cur) is garbage. Next, if
+// non-nil should be the chronologically next version of the same key (or the
+// metadata KV if cur is an intent). If isNewest is false, next must be non-nil.
+// isNewest implies that this is the highest timestamp committed version for
+// this key. If isNewest is true and next is non-nil, it is an intent.
 //
 // The GC keeps all values (including deletes) above the expiration time, plus
 // the first value before or at the expiration time. This allows reads to be
 // guaranteed as described above. However if this were the only rule, then if
 // the most recent write was a delete, it would never be removed. Thus, when a
-// deleted value is the most recent before expiration, it can be deleted. This
-// would still allow for the tombstone bugs in #6227, so in the future we will
-// add checks that disallow writes before the last GC expiration time.
-func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) (int, hlc.Timestamp) {
-	if gc.policy.TTLSeconds <= 0 {
-		return -1, hlc.Timestamp{}
+// deleted value is the most recent before expiration, it can be deleted.
+func (gc GarbageCollector) IsGarbage(cur, next *MVCCKeyValue, isNewest bool) bool {
+	// If the value is not at or below the threshold then it's not garbage.
+	if belowThreshold := cur.Key.Timestamp.LessEq(gc.Threshold); !belowThreshold {
+		return false
 	}
-	if len(keys) == 0 {
-		return -1, hlc.Timestamp{}
+	isDelete := len(cur.Value) == 0
+	if isNewest && !isDelete {
+		return false
 	}
-
-	// find the first expired key index using binary search
-	i := sort.Search(len(keys), func(i int) bool { return keys[i].Timestamp.LessEq(gc.Threshold) })
-
-	if i == len(keys) {
-		return -1, hlc.Timestamp{}
-	}
-
-	// Now keys[i].Timestamp is <= gc.expiration, but the key-value pair is still
-	// "visible" at timestamp gc.expiration (and up to the next version).
-	if deleted := len(values[i]) == 0; deleted {
-		// We don't have to keep a delete visible (since GCing it does not change
-		// the outcome of the read). Note however that we can't touch deletes at
-		// higher timestamps immediately preceding this one, since they're above
-		// gc.expiration and are needed for correctness; see #6227.
-		return i, keys[i].Timestamp
-	} else if i+1 < len(keys) {
-		// Otherwise mark the previous timestamp for deletion (since it won't ever
-		// be returned for reads at gc.expiration and up).
-		return i + 1, keys[i+1].Timestamp
-	}
-
-	return -1, hlc.Timestamp{}
+	// If this value is not a delete, then we need to make sure that the next
+	// value is also at or below the threshold.
+	// NB: This doesn't need to check whether next is nil because we know
+	// isNewest is false when evaluating rhs of the or below.
+	return isDelete || next.Key.Timestamp.LessEq(gc.Threshold)
 }

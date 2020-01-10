@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -579,167 +578,25 @@ func RunGC(
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) (GCInfo, error) {
 
-	iter := rditer.NewReplicaDataIterator(desc, snap,
-		true /* replicatedOnly */, false /* seekEnd */)
-	defer iter.Close()
-
-	var infoMu = lockableGCInfo{}
-	infoMu.Policy = policy
-	infoMu.Now = now
-
-	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
-
 	gc := engine.MakeGarbageCollector(now, policy)
-	infoMu.Threshold = gc.Threshold
-
 	if err := gcer.SetGCThreshold(ctx, GCThreshold{
 		Key: gc.Threshold,
 		Txn: txnExp,
 	}); err != nil {
 		return GCInfo{}, errors.Wrap(err, "failed to set GC thresholds")
 	}
-
-	var batchGCKeys []roachpb.GCRequest_GCKey
-	var batchGCKeysBytes int64
-	var expBaseKey roachpb.Key
-	var keys []engine.MVCCKey
-	var vals [][]byte
-	var keyBytes int64
-	var valBytes int64
-
+	infoMu := lockableGCInfo{}
+	infoMu.Policy = policy
+	infoMu.Now = now
+	infoMu.Threshold = gc.Threshold
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
 	intentSpanMap := map[uuid.UUID][]roachpb.Span{}
 
-	// processKeysAndValues is invoked with each key and its set of
-	// values. Intents older than the intent age threshold are sent for
-	// resolution and values after the MVCC metadata, and possible
-	// intent, are sent for garbage collection.
-	processKeysAndValues := func() {
-		// If there's more than a single value for the key, possibly send for GC.
-		if len(keys) > 1 {
-			meta := &enginepb.MVCCMetadata{}
-			if err := protoutil.Unmarshal(vals[0], meta); err != nil {
-				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keys[0], err)
-			} else {
-				// In the event that there's an active intent, send for
-				// intent resolution if older than the threshold.
-				startIdx := 1
-				if meta.Txn != nil {
-					// Keep track of intent to resolve if older than the intent
-					// expiration threshold.
-					if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
-						txnID := meta.Txn.ID
-						if _, ok := txnMap[txnID]; !ok {
-							txnMap[txnID] = &roachpb.Transaction{
-								TxnMeta: *meta.Txn,
-							}
-							// IntentTxns and PushTxn will be equal here, since
-							// pushes to transactions whose record lies in this
-							// range (but which are not associated to a remaining
-							// intent on it) happen asynchronously and are accounted
-							// for separately. Thus higher up in the stack, we
-							// expect PushTxn > IntentTxns.
-							infoMu.IntentTxns++
-							// All transactions in txnMap may be PENDING and
-							// cleanupIntentsFn will push them to finalize them.
-							infoMu.PushTxn++
-						}
-						infoMu.IntentsConsidered++
-						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
-					}
-					// With an active intent, GC ignores MVCC metadata & intent value.
-					startIdx = 2
-				}
-				// See if any values may be GC'd.
-				if idx, gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
-					// Batch keys after the total size of version keys exceeds
-					// the threshold limit. This avoids sending potentially large
-					// GC requests through Raft. Iterate through the keys in reverse
-					// order so that GC requests can be made multiple times even on
-					// a single key, with successively newer timestamps to prevent
-					// any single request from exploding during GC evaluation.
-					for i := len(keys) - 1; i >= startIdx+idx; i-- {
-						keyBytes = int64(keys[i].EncodedSize())
-						valBytes = int64(len(vals[i]))
-
-						// Add the total size of the GC'able versions of the keys and values to GCInfo.
-						infoMu.GCInfo.AffectedVersionsKeyBytes += keyBytes
-						infoMu.GCInfo.AffectedVersionsValBytes += valBytes
-
-						batchGCKeysBytes += keyBytes
-						// If the current key brings the batch over the target
-						// size, add the current timestamp to finish the current
-						// chunk and start a new one.
-						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
-							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
-
-							err := gcer.GC(ctx, batchGCKeys)
-
-							// Succeed or fail, allow releasing the memory backing batchGCKeys.
-							iter.ResetAllocator()
-							batchGCKeys = nil
-							batchGCKeysBytes = 0
-
-							if err != nil {
-								// Even though we are batching the GC process, it's
-								// safe to continue because we bumped the GC
-								// thresholds. We may leave some inconsistent history
-								// behind, but nobody can read it.
-								log.Warning(ctx, err)
-								return
-							}
-						}
-					}
-					// Add the key to the batch at the GC timestamp, unless it was already added.
-					if batchGCKeysBytes != 0 {
-						batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
-					}
-					infoMu.NumKeysAffected++
-				}
-			}
-		}
-	}
-
-	// Iterate through the keys and values of this replica's range.
-	log.Event(ctx, "iterating through range")
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return GCInfo{}, err
-		} else if !ok {
-			break
-		} else if ctx.Err() != nil {
-			// Stop iterating if our context has expired.
-			return GCInfo{}, err
-		}
-		iterKey := iter.Key()
-		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {
-			// Moving to the next key (& values).
-			processKeysAndValues()
-			expBaseKey = iterKey.Key
-			if !iterKey.IsValue() {
-				keys = []engine.MVCCKey{iter.Key()}
-				vals = [][]byte{iter.Value()}
-				continue
-			}
-			// An implicit metadata.
-			keys = []engine.MVCCKey{engine.MakeMVCCMetadataKey(iterKey.Key)}
-			// A nil value for the encoded MVCCMetadata. This will unmarshal to an
-			// empty MVCCMetadata which is sufficient for processKeysAndValues to
-			// determine that there is no intent.
-			vals = [][]byte{nil}
-		}
-		keys = append(keys, iter.Key())
-		vals = append(vals, iter.Value())
-	}
-	// Handle last collected set of keys/vals.
-	processKeysAndValues()
-	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys); err != nil {
-			return GCInfo{}, err
-		}
+	err := processReplicatedKeyRange(ctx, desc, snap, now, gc, gcer, txnMap, intentSpanMap, &infoMu)
+	if err != nil {
+		return GCInfo{}, err
 	}
 
 	// From now on, all newly added keys are range-local.
@@ -779,6 +636,126 @@ func RunGC(
 	}
 
 	return infoMu.GCInfo, nil
+}
+
+// processReplicatedKeyRange identifies garbage and sends GC requests to
+// remove it.
+//
+// The logic iterates all versions of all keys in the range from oldest to
+// newest. Expired intents are written into the txnMap and intentSpanMap.
+func processReplicatedKeyRange(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	snap engine.Reader,
+	now hlc.Timestamp,
+	gc engine.GarbageCollector,
+	gcer GCer,
+	txnMap map[uuid.UUID]*roachpb.Transaction,
+	intentSpanMap map[uuid.UUID][]roachpb.Span,
+	infoMu *lockableGCInfo,
+) error {
+
+	// Compute intent expiration (intent age at which we attempt to resolve).
+	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+	handleIntent := func(md *engine.MVCCKeyValue) {
+		meta := &enginepb.MVCCMetadata{}
+		if err := protoutil.Unmarshal(md.Value, meta); err != nil {
+			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", md.Key, err)
+			return
+		}
+		if meta.Txn != nil {
+			// Keep track of intent to resolve if older than the intent
+			// expiration threshold.
+			if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
+				txnID := meta.Txn.ID
+				if _, ok := txnMap[txnID]; !ok {
+					txnMap[txnID] = &roachpb.Transaction{
+						TxnMeta: *meta.Txn,
+					}
+					// IntentTxns and PushTxn will be equal here, since
+					// pushes to transactions whose record lies in this
+					// range (but which are not associated to a remaining
+					// intent on it) happen asynchronously and are accounted
+					// for separately. Thus higher up in the stack, we
+					// expect PushTxn > IntentTxns.
+					infoMu.IntentTxns++
+					// All transactions in txnMap may be PENDING and
+					// cleanupIntentsFn will push them to finalize them.
+					infoMu.PushTxn++
+				}
+				infoMu.IntentsConsidered++
+				intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{
+					Key: md.Key.Key,
+				})
+			}
+		}
+	}
+
+	// Iterate all versions of all keys from oldest to newest. If a version is an
+	// intent it will have the highest timestamp of any versions and will be
+	// followed by a metadata entry. The loop will determine whether a given key
+	// has garbage and, if so, will determine the timestamp of the latest version
+	// which is garbage to be added to the current batch. If the current version
+	// pushes the size of keys to be removed above the limit, the current key will
+	// be added with that version and the batch will be sent. When the newest
+	// version for a key has been reached, if haveGarbageForThisKey, we'll add the
+	// current key to the batch with the gcTimestampForThisKey.
+	var (
+		batchGCKeys           []roachpb.GCRequest_GCKey
+		batchGCKeysBytes      int64
+		haveGarbageForThisKey bool
+		gcTimestampForThisKey hlc.Timestamp
+	)
+	it := makeGCIterator(desc, snap)
+	defer it.close()
+	for ; ; it.step() {
+		cur, next, isNewest, isIntent, ok, err := it.state()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		if isIntent {
+			handleIntent(next)
+			it.step() // step onto the metadata so the next iteration steps over it
+			continue
+		}
+		if gc.IsGarbage(cur, next, isNewest) {
+			keyBytes := int64(cur.Key.EncodedSize())
+			batchGCKeysBytes += keyBytes
+			haveGarbageForThisKey = true
+			gcTimestampForThisKey = cur.Key.Timestamp
+			infoMu.AffectedVersionsKeyBytes += keyBytes
+			infoMu.AffectedVersionsValBytes += int64(len(cur.Value))
+		}
+		shouldSendBatch := batchGCKeysBytes >= gcKeyVersionChunkBytes
+		if shouldSendBatch || isNewest && haveGarbageForThisKey {
+			batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{
+				Key:       cur.Key.Key,
+				Timestamp: gcTimestampForThisKey,
+			})
+			haveGarbageForThisKey = false
+			gcTimestampForThisKey = hlc.Timestamp{}
+		}
+		if shouldSendBatch {
+			if err := gcer.GC(ctx, batchGCKeys); err != nil {
+				// Even though we are batching the GC process, it's
+				// safe to continue because we bumped the GC
+				// thresholds. We may leave some inconsistent history
+				// behind, but nobody can read it.
+				log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+			}
+			batchGCKeys = nil
+			batchGCKeysBytes = 0
+		}
+	}
+	if len(batchGCKeys) > 0 {
+		if err := gcer.GC(ctx, batchGCKeys); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
