@@ -153,6 +153,8 @@ func initCLIDefaults() {
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
 
+	authCtx.validityPeriod = 1 * time.Hour
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -252,6 +254,13 @@ var dumpCtx struct {
 
 	// asOf determines the time stamp at which the dump should be taken.
 	asOf string
+}
+
+// authCtx captures the command-line parameters of the `auth-session`
+// command.
+var authCtx struct {
+	onlyCookie     bool
+	validityPeriod time.Duration
 }
 
 // debugCtx captures the command-line parameters of the `debug` command.

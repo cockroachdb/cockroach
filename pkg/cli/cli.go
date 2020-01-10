@@ -198,6 +198,7 @@ func init() {
 
 		sqlShellCmd,
 		userCmd,
+		authCmd,
 		nodeCmd,
 		dumpCmd,
 

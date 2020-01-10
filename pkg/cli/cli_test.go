@@ -1596,6 +1596,7 @@ Available Commands:
 
   sql               open a sql shell
   user              get, set, list and remove users (deprecated)
+  auth-session      log in and out of HTTP sessions
   node              list, inspect or remove nodes
   dump              dump sql tables
 

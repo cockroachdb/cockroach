@@ -465,6 +465,7 @@ func init() {
 		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, userCmds...)
+	clientCmds = append(clientCmds, authCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, initCmd)
@@ -478,6 +479,13 @@ func init() {
 
 		// Certificate flags.
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
+	}
+
+	// Auth commands.
+	{
+		f := loginCmd.Flags()
+		DurationFlag(f, &authCtx.validityPeriod, cliflags.AuthTokenValidityPeriod, authCtx.validityPeriod)
+		BoolFlag(f, &authCtx.onlyCookie, cliflags.OnlyCookie, authCtx.onlyCookie)
 	}
 
 	timeoutCmds := []*cobra.Command{
@@ -549,6 +557,7 @@ func init() {
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
 	sqlCmds = append(sqlCmds, userCmds...)
+	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
@@ -580,6 +589,7 @@ func init() {
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
+	tableOutputCommands = append(tableOutputCommands, authCmds...)
 
 	// By default, these commands print their output as pretty-formatted
 	// tables on terminals, and TSV when redirected to a file. The user
