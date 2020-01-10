@@ -12,7 +12,6 @@
 
 $side-panel-width = 140px
 $top-bar-height = 50px
-$navigation-bar-height = 74px
 
 .layout-panel
   display flex
@@ -34,7 +33,6 @@ $navigation-bar-height = 74px
   margin 0 $spacing-small
 
 .layout-panel__navigation-bar
-  height $navigation-bar-height
   background-color $colors--white
   color $colors--title
 
@@ -44,7 +42,6 @@ $navigation-bar-height = 74px
 .layout-panel__body
   display flex
   flex-direction row
-  height "calc(100% - %s - %s)" % ($top-bar-height $navigation-bar-height)
   flex 1
 
 .layout-panel__content
