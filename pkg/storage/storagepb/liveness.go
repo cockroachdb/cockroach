@@ -23,8 +23,7 @@ func (l *Liveness) IsLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 	return now.Less(expiration)
 }
 
-// IsDead returns whether the node is considered dead at the given time with the
-// given threshold.
+// IsDead returns true if the liveness expired more than threshold ago.
 func (l *Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
 	deadAsOf := hlc.Timestamp(l.Expiration).GoTime().Add(threshold)
 	return !now.GoTime().Before(deadAsOf)
