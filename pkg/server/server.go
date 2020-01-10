@@ -1586,18 +1586,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
 
-	{
-		var regLiveness jobs.NodeLiveness = s.nodeLiveness
-		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
-		}
-		if err := s.jobRegistry.Start(
-			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-		); err != nil {
-			return err
-		}
-	}
-
 	// Start the background thread for periodically refreshing table statistics.
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
@@ -1711,6 +1699,18 @@ func (s *Server) Start(ctx context.Context) error {
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
+
+	{
+		var regLiveness jobs.NodeLiveness = s.nodeLiveness
+		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
+			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+		}
+		if err := s.jobRegistry.Start(
+			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+		); err != nil {
+			return err
+		}
+	}
 
 	log.Event(ctx, "server ready")
 
