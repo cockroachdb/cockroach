@@ -255,19 +255,30 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 	}
 	log.Infof(ctx, "scheduled jobs %+v", jobs)
 	buf := bytes.Buffer{}
-	for i, j := range jobs {
+	for i, id := range jobs {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(fmt.Sprintf(" (%d)", j))
+		buf.WriteString(fmt.Sprintf(" (%d)", id))
 	}
-	_, err := ex.Exec(
+	if _, err := ex.Exec(
 		ctx,
 		"wait-for-jobs",
 		nil, /* txn */
 		fmt.Sprintf("SHOW JOBS WHEN COMPLETE VALUES %s", buf.String()),
-	)
-	return err
+	); err != nil {
+		return errors.New("could not finish waiting for queued jobs to complete")
+	}
+	for i, id := range jobs {
+		j, err := r.LoadJob(ctx, id)
+		if err != nil {
+			return errors.Wrapf(err, "Job %d could not be loaded. The job may not have succeeded", jobs[i])
+		}
+		if j.Payload().Error != "" {
+			return errors.New(fmt.Sprintf("Job %d failed with error %s", jobs[i], j.Payload().Error))
+		}
+	}
+	return nil
 }
 
 // NewJob creates a new Job.
@@ -659,14 +670,10 @@ func (r *Registry) resume(
 			errCh <- errors.Errorf("job %d: %s: restarting in background", *job.id, e)
 			return
 		}
-		terminal := true
 		var status Status
 		defer r.unregister(*job.id)
 		if err, ok := errors.Cause(resumeErr).(*InvalidStatusError); ok &&
 			(err.status == StatusPaused || err.status == StatusCanceled) {
-			if err.status == StatusPaused {
-				terminal = false
-			}
 			// If we couldn't operate on the job because it was paused or canceled, send
 			// the more understandable "job paused" or "job canceled" error message to
 			// the user.
@@ -687,12 +694,11 @@ func (r *Registry) resume(
 					// If we can't transactionally mark the job as failed then it will be
 					// restarted during the next adopt loop and retried.
 					resumeErr = errors.Wrapf(err, "could not mark job %d as failed: %s", *job.id, resumeErr)
-					terminal = false
 				}
 			}
 		}
 
-		if terminal {
+		if job.CheckTerminalStatus(ctx) {
 			resumer.OnTerminal(ctx, status, resultsCh)
 		}
 		errCh <- resumeErr
@@ -708,7 +714,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed querying for jobs")
 	}
 
 	type nodeStatus struct {
