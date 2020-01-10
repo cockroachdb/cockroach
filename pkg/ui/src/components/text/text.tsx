@@ -59,6 +59,29 @@ const getClassByTextType = (textType: TextTypes) => {
   }
 };
 
+const getElementByTextType = (textType: TextTypes) => {
+  switch (textType) {
+    case TextTypes.Heading1:
+      return "h1";
+    case TextTypes.Heading2:
+      return "h2";
+    case TextTypes.Heading3:
+      return "h3";
+    case TextTypes.Heading4:
+      return "h4";
+    case TextTypes.Heading5:
+      return "h5";
+    case TextTypes.Heading6:
+      return "h6";
+    case TextTypes.Body:
+    case TextTypes.BodyStrong:
+    case TextTypes.Caption:
+    case TextTypes.CaptionStrong:
+    default:
+      return "span";
+  }
+};
+
 Text.defaultProps = {
   textType: TextTypes.Body,
   disabled: false,
@@ -73,9 +96,11 @@ export function Text(props: TextProps) {
       "text--disabled": disabled,
     },
   );
-  return (
-    <span className={textTypeClass}>
-      {props.children}
-    </span>
-  );
+  const elementName = getElementByTextType(textType);
+
+  const componentProps = {
+    className: textTypeClass,
+  };
+
+  return React.createElement(elementName, componentProps, props.children);
 }

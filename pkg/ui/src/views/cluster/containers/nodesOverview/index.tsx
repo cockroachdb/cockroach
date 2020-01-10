@@ -92,7 +92,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
     return (
       <div className="embedded-table">
         <section className="section section--heading">
-          <h2>Live Nodes</h2>
+          <h2 className="base-heading">Live Nodes</h2>
         </section>
         <NodeSortedTable
           data={statuses}
@@ -222,7 +222,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     return (
       <div className="embedded-table">
         <section className="section section--heading">
-          <h2>{`${statusName} Nodes`}</h2>
+          <h2 className="base-heading">{`${statusName} Nodes`}</h2>
         </section>
         <NodeSortedTable
           data={statuses}

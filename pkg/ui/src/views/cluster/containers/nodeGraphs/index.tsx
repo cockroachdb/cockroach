@@ -218,7 +218,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         <Helmet>
           <title>{ title }</title>
         </Helmet>
-        <section className="section"><h1>{ title }</h1></section>
+        <section className="section"><h1 className="base-heading">{ title }</h1></section>
         <PageConfig>
           <PageConfigItem>
             <Dropdown

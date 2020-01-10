@@ -90,7 +90,7 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
     return (
       <div className="database-summary">
         <div className="database-summary-title">
-          <h2>Non-Table Cluster Data</h2>
+          <h2 className="base-heading">Non-Table Cluster Data</h2>
         </div>
         <div className="l-columns">
           <div className="l-columns__left">

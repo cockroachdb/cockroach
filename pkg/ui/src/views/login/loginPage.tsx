@@ -126,7 +126,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
           </section>
           <section className="section login-page__form">
             <div className="form-container">
-              <h1 className="heading">Log in to the Web UI</h1>
+              <h1 className="base-heading heading">Log in to the Web UI</h1>
               {this.renderError()}
               <form onSubmit={this.handleSubmit} className="form-internal" method="post">
                 <input
