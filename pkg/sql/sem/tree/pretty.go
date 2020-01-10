@@ -556,11 +556,12 @@ func (node ForLocked) docTable(p *PrettyCfg) []pretty.TableRow {
 	if node.Strength == ForNone {
 		return nil
 	}
-	items := make([]pretty.TableRow, 0, 2)
+	items := make([]pretty.TableRow, 0, 3)
 	items = append(items, node.Strength.docTable(p)...)
 	if len(node.Targets) > 0 {
 		items = append(items, p.row("OF", p.Doc(&node.Targets)))
 	}
+	items = append(items, node.WaitPolicy.docTable(p)...)
 	return items
 }
 
@@ -581,6 +582,23 @@ func (node LockingStrength) docTable(p *PrettyCfg) []pretty.TableRow {
 		keyword = "FOR SHARE"
 	case ForKeyShare:
 		keyword = "FOR KEY SHARE"
+	}
+	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
+}
+
+func (node LockingWaitPolicy) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node LockingWaitPolicy) docTable(p *PrettyCfg) []pretty.TableRow {
+	var keyword string
+	switch node {
+	case LockWaitBlock:
+		return nil
+	case LockWaitSkip:
+		keyword = "SKIP LOCKED"
+	case LockWaitError:
+		keyword = "NOWAIT"
 	}
 	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
 }

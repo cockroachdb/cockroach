@@ -300,6 +300,9 @@ func (u *sqlSymUnion) forLocked() tree.ForLocked {
 func (u *sqlSymUnion) lockingStrength() tree.LockingStrength {
     return u.val.(tree.LockingStrength)
 }
+func (u *sqlSymUnion) lockingWaitPolicy() tree.LockingWaitPolicy {
+    return u.val.(tree.LockingWaitPolicy)
+}
 func (u *sqlSymUnion) updateExpr() *tree.UpdateExpr {
     return u.val.(*tree.UpdateExpr)
 }
@@ -789,7 +792,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
 %type <tree.ForLocked> locking_clause
 %type <tree.LockingStrength> for_locking_strength
-%type <empty> opt_nowait_or_skip
+%type <tree.LockingWaitPolicy> opt_nowait_or_skip
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
@@ -5926,24 +5929,27 @@ locking_clause:
   /* EMPTY */ { $$.val = tree.ForLocked{} }
 | for_locking_strength opt_locked_rels opt_nowait_or_skip
   {
-    $$.val = tree.ForLocked{Strength: $1.lockingStrength(), Targets: $2.tableNames()}
+    $$.val = tree.ForLocked{
+      Strength:   $1.lockingStrength(),
+      WaitPolicy: $3.lockingWaitPolicy(),
+      Targets:    $2.tableNames(),
+    }
   }
 
 opt_locked_rels:
-  /* EMPTY */ { $$.val = tree.TableNames{} }
+  /* EMPTY */        { $$.val = tree.TableNames{} }
 | OF table_name_list { $$.val = $2.tableNames() }
 
 for_locking_strength:
-  FOR UPDATE { $$.val = tree.ForUpdate }
+  FOR UPDATE        { $$.val = tree.ForUpdate }
 | FOR NO KEY UPDATE { $$.val = tree.ForNoKeyUpdate }
-| FOR SHARE { $$.val = tree.ForShare }
-| FOR KEY SHARE { $$.val = tree.ForKeyShare }
+| FOR SHARE         { $$.val = tree.ForShare }
+| FOR KEY SHARE     { $$.val = tree.ForKeyShare }
 
 opt_nowait_or_skip:
-  /* EMPTY */ { }
-// We can't support these options yet.
-| SKIP LOCKED { return unimplementedWithIssue(sqllex, 40476) }
-| NOWAIT { return unimplementedWithIssue(sqllex, 40476) }
+  /* EMPTY */ { $$.val = tree.LockWaitBlock }
+| SKIP LOCKED { $$.val = tree.LockWaitSkip }
+| NOWAIT      { $$.val = tree.LockWaitError }
 
 select_clause:
 // We only provide help if an open parenthesis is provided, because

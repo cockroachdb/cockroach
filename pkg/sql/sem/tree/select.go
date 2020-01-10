@@ -50,8 +50,9 @@ type Select struct {
 
 // ForLocked represents a locking clause, like FOR UPDATE.
 type ForLocked struct {
-	Strength LockingStrength
-	Targets  TableNames
+	Strength   LockingStrength
+	WaitPolicy LockingWaitPolicy
+	Targets    TableNames
 }
 
 // Format implements the NodeFormatter interface.
@@ -61,6 +62,7 @@ func (f ForLocked) Format(ctx *FmtCtx) {
 		ctx.WriteString(" OF ")
 		f.Targets.Format(ctx)
 	}
+	f.WaitPolicy.Format(ctx)
 }
 
 // LockingStrength represents the possible row-level lock modes for a SELECT
@@ -92,6 +94,33 @@ func (f LockingStrength) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FOR SHARE")
 	case ForKeyShare:
 		ctx.WriteString(" FOR KEY SHARE")
+	}
+}
+
+// LockingWaitPolicy represents the possible policies for dealing with rows
+// being locked by FOR UPDATE/SHARE clauses (i.e., it represents the NOWAIT
+// and SKIP LOCKED options).
+type LockingWaitPolicy byte
+
+const (
+	// LockWaitBlock represents the default - wait for the lock to become
+	// available.
+	LockWaitBlock LockingWaitPolicy = iota
+	// LockWaitSkip represents SKIP LOCKED - skip rows that can't be locked.
+	LockWaitSkip
+	// LockWaitError represents NOWAIT - raise an error if a row cannot be
+	// locked.
+	LockWaitError
+)
+
+// Format implements the NodeFormatter interface.
+func (f LockingWaitPolicy) Format(ctx *FmtCtx) {
+	switch f {
+	case LockWaitBlock:
+	case LockWaitSkip:
+		ctx.WriteString(" SKIP LOCKED")
+	case LockWaitError:
+		ctx.WriteString(" NOWAIT")
 	}
 }
 
