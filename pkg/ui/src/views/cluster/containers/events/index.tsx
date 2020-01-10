@@ -144,7 +144,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         <title>Events</title>
       </Helmet>
       <section className="section section--heading">
-        <h1>Events</h1>
+        <h1 className="base-heading">Events</h1>
       </section>
       <section className="section l-columns">
         <div className="l-columns__left events-table">

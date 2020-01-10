@@ -87,7 +87,7 @@ class Stores extends React.Component<StoresProps, {}> {
     const { stores } = this.props;
     if (_.isEmpty(stores)) {
       return (
-        <h2>No stores were found on node {nodeID}.</h2>
+        <h2 className="base-heading">No stores were found on node {nodeID}.</h2>
       );
     }
 
@@ -108,8 +108,8 @@ class Stores extends React.Component<StoresProps, {}> {
         <Helmet>
           <title>Stores | Debug</title>
         </Helmet>
-        <h1>Stores</h1>
-        <h2>{header} stores</h2>
+        <h1 className="base-heading">Stores</h1>
+        <h2 className="base-heading">{header} stores</h2>
         <Loading
           loading={this.props.loading}
           error={this.props.lastError}

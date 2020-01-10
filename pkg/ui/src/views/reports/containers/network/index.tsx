@@ -55,7 +55,7 @@ function staleTable(staleIdentities: Identity[]) {
 
   return (
     <div>
-      <h2>Stale Nodes</h2>
+      <h2 className="base-heading">Stale Nodes</h2>
       <table className="failure-table">
         <tbody>
           <tr className="failure-table__row failure-table__row--header">
@@ -104,7 +104,7 @@ function noConnectionTable(noConnections: NoConnection[]) {
 
   return (
     <div>
-      <h2>No Connections</h2>
+      <h2 className="base-heading">No Connections</h2>
       <table className="failure-table">
         <tbody>
           <tr className="failure-table__row failure-table__row--header">
@@ -260,7 +260,7 @@ class Network extends React.Component<NetworkProps, {}> {
     // latencyTable is the table and heat-map that's displayed for all nodes.
     const latencyTable = (
       <div key="latency-table">
-        <h2>Latencies</h2>
+        <h2 className="base-heading">Latencies</h2>
         <table className="network-table">
           <tbody>
             <tr className="network-table__row">
@@ -300,7 +300,7 @@ class Network extends React.Component<NetworkProps, {}> {
     // legend is just a quick table showing the standard deviation values.
     const legend = (
       <div key="legend">
-        <h2>Legend</h2>
+        <h2 className="base-heading">Legend</h2>
         <table className="network-table">
           <tbody>
             <tr className="network-table__row">
@@ -425,9 +425,9 @@ class Network extends React.Component<NetworkProps, {}> {
 
     let content: JSX.Element | JSX.Element[];
     if (_.isEmpty(healthyIDs)) {
-      content = <h2>No healthy nodes match the filters</h2>;
+      content = <h2 className="base-heading">No healthy nodes match the filters</h2>;
     } else if (latencies.length < 1) {
-      content = <h2>Cannot show latency chart without two healthy nodes.</h2>;
+      content = <h2 className="base-heading">Cannot show latency chart without two healthy nodes.</h2>;
     } else {
       content = this.renderLatencyTable(latencies, staleIDs, nodesSummary, displayIdentities);
     }
@@ -446,7 +446,7 @@ class Network extends React.Component<NetworkProps, {}> {
         <Helmet>
           <title>Network Diagnostics | Debug</title>
         </Helmet>
-        <h1>Network Diagnostics</h1>
+        <h1 className="base-heading">Network Diagnostics</h1>
         <Loading
           loading={!contentAvailable(nodesSummary)}
           error={this.props.nodeSummaryErrors}

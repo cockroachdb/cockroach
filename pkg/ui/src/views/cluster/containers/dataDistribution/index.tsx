@@ -109,7 +109,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     return (
       <div className="data-distribution">
         <div className="data-distribution__zone-config-sidebar">
-          <h2>
+          <h2 className="base-heading">
             Zone Configs{" "}
             <div className="section-heading__tooltip">
               <ToolTipWrapper text={ZONE_CONFIG_TEXT}>
@@ -169,7 +169,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
           <title>Data Distribution</title>
         </Helmet>
         <section className="section">
-          <h1>Data Distribution</h1>
+          <h1 className="base-heading">Data Distribution</h1>
         </section>
         <section className="section">
           <Loading

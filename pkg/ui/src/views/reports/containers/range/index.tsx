@@ -54,8 +54,8 @@ function ErrorPage(props: {
 }) {
   return (
     <div className="section">
-      <h1>Range Report for r{props.rangeID}</h1>
-      <h2>{props.errorText}</h2>
+      <h1 className="base-heading">Range Report for r{props.rangeID}</h1>
+      <h2 className="base-heading">{props.errorText}</h2>
       <ConnectionsTable range={props.range} />
     </div>
   );
@@ -179,7 +179,7 @@ class Range extends React.Component<RangeProps, {}> {
         <Helmet>
           <title>{ `r${responseRangeID.toString()} Range | Debug` }</title>
         </Helmet>
-        <h1>Range Report for r{responseRangeID.toString()}</h1>
+        <h1 className="base-heading">Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <ConnectionsTable range={range} />
