@@ -708,7 +708,7 @@ func (a Allocator) RebalanceTarget(
 		// assume that the rebalance is ok (#20241).
 		if raftStatus != nil && raftStatus.Progress != nil {
 			replicaCandidates = simulateFilterUnremovableReplicas(
-				raftStatus, replicaCandidates, newReplica.ReplicaID)
+				ctx, raftStatus, replicaCandidates, newReplica.ReplicaID)
 		}
 		if len(replicaCandidates) == 0 {
 			// No existing replicas are suitable to remove.
@@ -1262,7 +1262,7 @@ func computeQuorum(nodes int) int {
 // slice. A "behind" replica is one which is not at or past the quorum commit
 // index.
 func filterBehindReplicas(
-	raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
 		// raftStatus.Progress is only populated on the Raft leader which means we
@@ -1303,6 +1303,7 @@ func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 // considered up-to-date (and thus can participate in quorum), but is not
 // considered a candidate for removal.
 func simulateFilterUnremovableReplicas(
+	ctx context.Context,
 	raftStatus *raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
@@ -1312,7 +1313,7 @@ func simulateFilterUnremovableReplicas(
 		State: tracker.StateReplicate,
 		Match: status.Commit,
 	}
-	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
+	return filterUnremovableReplicas(ctx, &status, replicas, brandNewReplicaID)
 }
 
 // filterUnremovableReplicas removes any unremovable replicas from the supplied
@@ -1322,11 +1323,12 @@ func simulateFilterUnremovableReplicas(
 // This is important when we've just added a replica in order to rebalance to
 // it (#17879).
 func filterUnremovableReplicas(
+	ctx context.Context,
 	raftStatus *raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
-	upToDateReplicas := filterBehindReplicas(raftStatus, replicas)
+	upToDateReplicas := filterBehindReplicas(ctx, raftStatus, replicas)
 	oldQuorum := computeQuorum(len(replicas))
 	if len(upToDateReplicas) < oldQuorum {
 		// The number of up-to-date replicas is less than the old quorum. No
