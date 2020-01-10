@@ -544,63 +544,8 @@ func (node *Select) docTable(p *PrettyCfg) []pretty.TableRow {
 	}
 	items = append(items, node.OrderBy.docRow(p))
 	items = append(items, node.Limit.docTable(p)...)
-	items = append(items, node.ForLocked.docTable(p)...)
+	items = append(items, node.Locking.docTable(p)...)
 	return items
-}
-
-func (node ForLocked) doc(p *PrettyCfg) pretty.Doc {
-	return p.rlTable(node.docTable(p)...)
-}
-
-func (node ForLocked) docTable(p *PrettyCfg) []pretty.TableRow {
-	if node.Strength == ForNone {
-		return nil
-	}
-	items := make([]pretty.TableRow, 0, 3)
-	items = append(items, node.Strength.docTable(p)...)
-	if len(node.Targets) > 0 {
-		items = append(items, p.row("OF", p.Doc(&node.Targets)))
-	}
-	items = append(items, node.WaitPolicy.docTable(p)...)
-	return items
-}
-
-func (node LockingStrength) doc(p *PrettyCfg) pretty.Doc {
-	return p.rlTable(node.docTable(p)...)
-}
-
-func (node LockingStrength) docTable(p *PrettyCfg) []pretty.TableRow {
-	var keyword string
-	switch node {
-	case ForNone:
-		return nil
-	case ForUpdate:
-		keyword = "FOR UPDATE"
-	case ForNoKeyUpdate:
-		keyword = "FOR NO KEY UPDATE"
-	case ForShare:
-		keyword = "FOR SHARE"
-	case ForKeyShare:
-		keyword = "FOR KEY SHARE"
-	}
-	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
-}
-
-func (node LockingWaitPolicy) doc(p *PrettyCfg) pretty.Doc {
-	return p.rlTable(node.docTable(p)...)
-}
-
-func (node LockingWaitPolicy) docTable(p *PrettyCfg) []pretty.TableRow {
-	var keyword string
-	switch node {
-	case LockWaitBlock:
-		return nil
-	case LockWaitSkip:
-		keyword = "SKIP LOCKED"
-	case LockWaitError:
-		keyword = "NOWAIT"
-	}
-	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
 }
 
 func (node *SelectClause) doc(p *PrettyCfg) pretty.Doc {
@@ -832,6 +777,73 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	default:
 		panic(errors.AssertionFailedf("unexpected type %d", errors.Safe(node.BoundType)))
 	}
+}
+
+func (node *LockingClause) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *LockingClause) docTable(p *PrettyCfg) []pretty.TableRow {
+	items := make([]pretty.TableRow, len(*node))
+	for i, n := range *node {
+		items[i] = p.row("", p.Doc(n))
+	}
+	return items
+}
+
+func (node *LockingItem) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node *LockingItem) docTable(p *PrettyCfg) []pretty.TableRow {
+	if node.Strength == ForNone {
+		return nil
+	}
+	items := make([]pretty.TableRow, 0, 3)
+	items = append(items, node.Strength.docTable(p)...)
+	if len(node.Targets) > 0 {
+		items = append(items, p.row("OF", p.Doc(&node.Targets)))
+	}
+	items = append(items, node.WaitPolicy.docTable(p)...)
+	return items
+}
+
+func (node LockingStrength) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node LockingStrength) docTable(p *PrettyCfg) []pretty.TableRow {
+	var keyword string
+	switch node {
+	case ForNone:
+		return nil
+	case ForUpdate:
+		keyword = "FOR UPDATE"
+	case ForNoKeyUpdate:
+		keyword = "FOR NO KEY UPDATE"
+	case ForShare:
+		keyword = "FOR SHARE"
+	case ForKeyShare:
+		keyword = "FOR KEY SHARE"
+	}
+	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
+}
+
+func (node LockingWaitPolicy) doc(p *PrettyCfg) pretty.Doc {
+	return p.rlTable(node.docTable(p)...)
+}
+
+func (node LockingWaitPolicy) docTable(p *PrettyCfg) []pretty.TableRow {
+	var keyword string
+	switch node {
+	case LockWaitBlock:
+		return nil
+	case LockWaitSkip:
+		keyword = "SKIP LOCKED"
+	case LockWaitError:
+		keyword = "NOWAIT"
+	}
+	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
 }
 
 func (p *PrettyCfg) peelCompOperand(e Expr) Expr {

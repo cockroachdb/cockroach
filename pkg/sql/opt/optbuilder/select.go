@@ -754,30 +754,7 @@ func (b *Builder) buildSelect(
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
-	forLocked := stmt.ForLocked
-
-	switch forLocked.Strength {
-	case tree.ForNone:
-	case tree.ForUpdate:
-	case tree.ForNoKeyUpdate:
-	case tree.ForShare:
-	case tree.ForKeyShare:
-		// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
-		// transactions are serializable in CockroachDB, clients can't observe
-		// whether or not FOR UPDATE (or any of the other weaker modes) actually
-		// created a lock. This behavior may improve as the transaction model gains
-		// more capabilities.
-	}
-
-	switch forLocked.WaitPolicy {
-	case tree.LockWaitBlock:
-	case tree.LockWaitSkip:
-		panic(unimplementedWithIssueDetailf(40476, "",
-			"SKIP LOCKED lock wait policy is not supported"))
-	case tree.LockWaitError:
-		panic(unimplementedWithIssueDetailf(40476, "",
-			"NOWAIT lock wait policy is not supported"))
-	}
+	locking := stmt.Locking
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
@@ -797,6 +774,34 @@ func (b *Builder) buildSelect(
 				))
 			}
 			limit = stmt.Limit
+		}
+		if stmt.Locking != nil {
+			locking = append(locking, stmt.Locking...)
+		}
+	}
+
+	for _, lockItem := range locking {
+		switch lockItem.Strength {
+		case tree.ForNone:
+		case tree.ForUpdate:
+		case tree.ForNoKeyUpdate:
+		case tree.ForShare:
+		case tree.ForKeyShare:
+			// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
+			// transactions are serializable in CockroachDB, clients can't observe
+			// whether or not FOR UPDATE (or any of the other weaker modes) actually
+			// created a lock. This behavior may improve as the transaction model gains
+			// more capabilities.
+		}
+
+		switch lockItem.WaitPolicy {
+		case tree.LockWaitBlock:
+		case tree.LockWaitSkip:
+			panic(unimplementedWithIssueDetailf(40476, "",
+				"SKIP LOCKED lock wait policy is not supported"))
+		case tree.LockWaitError:
+			panic(unimplementedWithIssueDetailf(40476, "",
+				"NOWAIT lock wait policy is not supported"))
 		}
 	}
 

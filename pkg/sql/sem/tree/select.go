@@ -41,11 +41,11 @@ func (*ValuesClause) selectStatement() {}
 
 // Select represents a SelectStatement with an ORDER and/or LIMIT.
 type Select struct {
-	With      *With
-	Select    SelectStatement
-	OrderBy   OrderBy
-	Limit     *Limit
-	ForLocked ForLocked
+	With    *With
+	Select  SelectStatement
+	OrderBy OrderBy
+	Limit   *Limit
+	Locking LockingClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -60,7 +60,7 @@ func (node *Select) Format(ctx *FmtCtx) {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Limit)
 	}
-	ctx.FormatNode(node.ForLocked)
+	ctx.FormatNode(&node.Locking)
 }
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.
@@ -579,7 +579,7 @@ func (node *DistinctOn) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
-// OrderBy represents an ORDER By clause.
+// OrderBy represents an ORDER BY clause.
 type OrderBy []*Order
 
 // Format implements the NodeFormatter interface.
@@ -952,15 +952,25 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	}
 }
 
-// ForLocked represents a locking clause, like FOR UPDATE.
-type ForLocked struct {
+// LockingClause represents a locking clause, like FOR UPDATE.
+type LockingClause []*LockingItem
+
+// Format implements the NodeFormatter interface.
+func (node *LockingClause) Format(ctx *FmtCtx) {
+	for _, n := range *node {
+		ctx.FormatNode(n)
+	}
+}
+
+// LockingItem represents a single locking item in a locking clause.
+type LockingItem struct {
 	Strength   LockingStrength
-	WaitPolicy LockingWaitPolicy
 	Targets    TableNames
+	WaitPolicy LockingWaitPolicy
 }
 
 // Format implements the NodeFormatter interface.
-func (f ForLocked) Format(ctx *FmtCtx) {
+func (f *LockingItem) Format(ctx *FmtCtx) {
 	f.Strength.Format(ctx)
 	if len(f.Targets) > 0 {
 		ctx.WriteString(" OF ")
