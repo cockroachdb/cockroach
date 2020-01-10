@@ -754,9 +754,9 @@ func (b *Builder) buildSelect(
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
-	forLocked := stmt.ForLocked.Strength
+	forLocked := stmt.ForLocked
 
-	switch forLocked {
+	switch forLocked.Strength {
 	case tree.ForNone:
 	case tree.ForUpdate:
 	case tree.ForNoKeyUpdate:
@@ -767,6 +767,16 @@ func (b *Builder) buildSelect(
 		// whether or not FOR UPDATE (or any of the other weaker modes) actually
 		// created a lock. This behavior may improve as the transaction model gains
 		// more capabilities.
+	}
+
+	switch forLocked.WaitPolicy {
+	case tree.LockWaitBlock:
+	case tree.LockWaitSkip:
+		panic(unimplementedWithIssueDetailf(40476, "",
+			"SKIP LOCKED lock wait policy is not supported"))
+	case tree.LockWaitError:
+		panic(unimplementedWithIssueDetailf(40476, "",
+			"NOWAIT lock wait policy is not supported"))
 	}
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
