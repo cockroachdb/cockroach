@@ -683,30 +683,6 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (storagepb.Liveness, 
 	return nl.getLivenessLocked(nodeID)
 }
 
-// GetLivenessStatusMap generates map from NodeID to LivenessStatus for all
-// nodes known to gossip. Nodes that haven't pinged their liveness record for
-// more than server.time_until_store_dead are considered dead.
-//
-// To include all nodes (including ones not in the gossip network), callers
-// should consider calling (statusServer).NodesWithLiveness() instead where
-// possible.
-//
-// GetLivenessStatusMap() includes removed nodes (dead + decommissioned).
-func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]storagepb.NodeLivenessStatus {
-	now := nl.clock.PhysicalTime()
-	livenesses := nl.GetLivenesses()
-	threshold := TimeUntilStoreDead.Get(&nl.st.SV)
-
-	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := liveness.LivenessStatus(
-			now, threshold,
-		)
-		statusMap[liveness.NodeID] = status
-	}
-	return statusMap
-}
-
 func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (storagepb.Liveness, error) {
 	if l, ok := nl.mu.nodes[nodeID]; ok {
 		return l, nil

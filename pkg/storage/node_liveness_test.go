@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
@@ -853,7 +856,11 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	log.Infof(ctx, "checking status map")
 
 	// See what comes up in the status.
-	callerNodeLiveness := firstServer.GetNodeLiveness()
+
+	cc, err := tc.Server(0).RPCContext().GRPCDialNode(
+		firstServer.RPCAddr(), firstServer.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	admin := serverpb.NewAdminClient(cc)
 
 	type testCase struct {
 		nodeID         roachpb.NodeID
@@ -885,7 +892,10 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 					storage.TestTimeUntilStoreDead)
 
 				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
-				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
+				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})
+				require.NoError(t, err)
+				nodeStatuses := resp.Statuses
+
 				st, ok := nodeStatuses[nodeID]
 				if !ok {
 					return errors.Errorf("node %d: not in statuses\n", nodeID)

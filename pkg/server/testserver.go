@@ -631,11 +631,6 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// GetNodeLiveness exposes the Server's nodeLiveness.
-func (ts *TestServer) GetNodeLiveness() *storage.NodeLiveness {
-	return ts.nodeLiveness
-}
-
 // DistSenderI is part of DistSendeInterface.
 func (ts *TestServer) DistSenderI() interface{} {
 	return ts.distSender
