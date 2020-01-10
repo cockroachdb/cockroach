@@ -597,7 +597,7 @@ func (rq *replicateQueue) findRemoveTarget(
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicaDescriptor{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}
-		candidates = filterUnremovableReplicas(raftStatus, existingReplicas, lastReplAdded)
+		candidates = filterUnremovableReplicas(ctx, raftStatus, existingReplicas, lastReplAdded)
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
 			existingReplicas, candidates, rangeRaftProgress(raftStatus, existingReplicas))
 		if len(candidates) > 0 {
