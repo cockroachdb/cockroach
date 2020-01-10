@@ -347,7 +347,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	return nil
 }
 
-func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.GCThreshold) error {
+func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) error {
 	req := r.template()
 	req.Threshold = thresh.Key
 	return r.send(ctx, req)
@@ -406,14 +406,14 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// Synchronize the new GC threshold decision with concurrent
 	// AdminVerifyProtectedTimestamp requests.
 	if err := repl.markPendingGC(gcTimestamp,
-		gc.MakeGarbageCollector(gcTimestamp, *zone.GC).Threshold); err != nil {
+		gc.CalculateThreshold(gcTimestamp, *zone.GC)); err != nil {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
 		return nil
 	}
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 
-	info, err := gc.RunGC(ctx, desc, snap, gcTimestamp, *zone.GC, &replicaGCer{repl: repl},
+	info, err := gc.Run(ctx, desc, snap, gcTimestamp, *zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
@@ -449,7 +449,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	return nil
 }
 
-func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.GCInfo) {
+func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
 	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
 	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))

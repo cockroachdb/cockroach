@@ -217,6 +217,18 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	return value
 }
 
+// UnsafeKey returns the same value as Key, but the memory is invalidated on
+// the next call to {Next,Prev,Close}.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.it.UnsafeKey()
+}
+
+// UnsafeValue returns the same value as Value, but the memory is invalidated on
+// the next call to {Next,Prev,Close}.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.it.UnsafeValue()
+}
+
 // ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
 func (ri *ReplicaDataIterator) ResetAllocator() {
 	ri.a = nil
