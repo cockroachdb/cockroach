@@ -25,7 +25,7 @@ import {
   CockroachLabsLockupIcon,
   Left,
   Right,
-  TabNavigation,
+  PageHeader,
   Text,
   TextTypes,
   Badge,
@@ -69,10 +69,10 @@ class Layout extends React.Component<LayoutProps & RouterState, {}> {
             </GlobalNavigation>
           </div>
           <div className="layout-panel__navigation-bar">
-            <TabNavigation>
+            <PageHeader>
               <Text textType={TextTypes.Heading2}>{clusterName || `Cluster id: ${clusterId || ""}`}</Text>
               <Badge text={clusterVersion} />
-            </TabNavigation>
+            </PageHeader>
           </div>
           <div className="layout-panel__body">
             <div className="layout-panel__sidebar">
