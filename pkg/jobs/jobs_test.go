@@ -1632,10 +1632,11 @@ func TestJobInTxn(t *testing.T) {
 	// Accessed atomically.
 	var hasRun int32
 	var job *jobs.Job
+	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
 		) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
-			_, ok := stmt.(*tree.Backup)
+			st, ok := stmt.(*tree.Backup)
 			if !ok {
 				return nil, nil, nil, false, nil
 			}
@@ -1643,28 +1644,63 @@ func TestJobInTxn(t *testing.T) {
 				var err error
 				job, err = phs.ExtendedEvalContext().QueueJob(
 					jobs.Record{
-						Details:  jobspb.BackupDetails{},
-						Progress: jobspb.BackupProgress{},
+						Description: st.String(),
+						Details:     jobspb.BackupDetails{},
+						Progress:    jobspb.BackupProgress{},
 					},
 				)
 				return err
 			}
 			return fn, nil, nil, false, nil
-		})
-
+		},
+	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func() error {
+				t.Logf("Resuming job: %+v", job.Payload())
+				return nil
+			},
+			Terminal: func() {
+				t.Logf("Finished job: %+v", job.Payload())
 				// Inc instead of just storing 1 to count how many jobs ran.
 				atomic.AddInt32(&hasRun, 1)
-				return nil
 			},
 		}
 	})
+	// Piggy back on RESTORE to be able to create a failing test job.
+	sql.AddPlanHook(
+		func(_ context.Context, stmt tree.Statement, phs sql.PlanHookState,
+		) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+			_, ok := stmt.(*tree.Restore)
+			if !ok {
+				return nil, nil, nil, false, nil
+			}
+			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+				var err error
+				job, err = phs.ExtendedEvalContext().QueueJob(
+					jobs.Record{
+						Description: "RESTORE",
+						Details:     jobspb.RestoreDetails{},
+						Progress:    jobspb.RestoreProgress{},
+					},
+				)
+				return err
+			}
+			return fn, nil, nil, false, nil
+		},
+	)
+	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func() error {
+				return errors.New("RESTORE failed")
+			},
+		}
+	})
+
 	t.Run("normal success", func(t *testing.T) {
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP doesnot.matter TO doesnotmattter")
+		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
 		require.NoError(t, err)
 
 		// If we rollback then the job should not run
@@ -1683,13 +1719,32 @@ func TestJobInTxn(t *testing.T) {
 		// Now let's actually commit the transaction and check that the job ran.
 		txn, err = sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP doesnot.matter2 TO doesnotmattter2")
+		_, err = txn.Exec("BACKUP tocommit TO foo")
 		require.NoError(t, err)
+		// Committing will block and wait for all jobs to run.
 		require.NoError(t, txn.Commit())
-		_, err = registry.LoadJob(ctx, *job.ID())
+		j, err := registry.LoadJob(ctx, *job.ID())
 		require.NoError(t, err, "queued job not found")
-		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", *job.ID())
-		require.Equal(t, int32(1), atomic.LoadInt32(&hasRun),
+		require.NotEqual(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job scheduled in transaction did not run")
+		require.Equal(t, int32(1), atomic.LoadInt32(&hasRun),
+			"more than one job ran")
+		require.Equal(t, "", j.Payload().Error)
 	})
+
+	t.Run("one of the queued jobs fails", func(t *testing.T) {
+		txn, err := sqlDB.Begin()
+		require.NoError(t, err)
+
+		// Add a succeeding job.
+		_, err = txn.Exec("BACKUP doesnotmatter TO doesnotmattter")
+		require.NoError(t, err)
+		// We hooked up a failing test to job to RESTORE.
+		_, err = txn.Exec("RESTORE TABLE tbl FROM somewhere")
+		require.NoError(t, err)
+
+		// Now let's actually commit the transaction and check that the job ran.
+		require.Error(t, txn.Commit())
+	})
+
 }
