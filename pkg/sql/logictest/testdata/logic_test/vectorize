@@ -1047,3 +1047,11 @@ query I
 SELECT CASE WHEN a = 0 THEN a ELSE 1:::INT8 END FROM t43550
 ----
 1
+
+# Regression test for #43855.
+statement ok
+CREATE TABLE t43855(o OID, r REGPROCEDURE)
+
+query i
+SELECT CASE WHEN o = 0 THEN 0:::OID ELSE r END FROM t43855
+----
