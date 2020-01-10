@@ -17,6 +17,7 @@ export interface TextProps {
   textType?: TextTypes;
   disabled?: boolean;
   children: React.ReactNode;
+  noWrap?: boolean;
 }
 
 export enum TextTypes {
@@ -85,15 +86,17 @@ const getElementByTextType = (textType: TextTypes) => {
 Text.defaultProps = {
   textType: TextTypes.Body,
   disabled: false,
+  noWrap: false,
 };
 
 export function Text(props: TextProps) {
-  const { textType, disabled } = props;
+  const { textType, disabled, noWrap } = props;
   const textTypeClass = cn(
     "text",
     getClassByTextType(textType),
     {
       "text--disabled": disabled,
+      "text--no-wrap": noWrap,
     },
   );
   const elementName = getElementByTextType(textType);
