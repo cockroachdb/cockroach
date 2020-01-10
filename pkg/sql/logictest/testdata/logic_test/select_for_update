@@ -92,3 +92,34 @@ query I
 SELECT 1 FOR READ ONLY
 ----
 1
+
+# Various operations are not supported when locking clauses are provided.
+# FeatureNotSupported errors are thrown for each of them.
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
+SELECT 1 UNION SELECT 1 FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
+VALUES (1) FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT DISTINCT 1 FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT 1 HAVING TRUE FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT count(1) FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT count(1) OVER () FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT generate_series(1, 2) FOR UPDATE
+
+# Set-returning functions in the from list are allowed.
+query I
+SELECT * FROM generate_series(1, 2) FOR UPDATE
+----
+1
+2

@@ -985,6 +985,7 @@ type LockingStrength byte
 
 const (
 	// ForNone represents the default - no for statement at all.
+	// LockingItem AST nodes are never created with this strength.
 	ForNone LockingStrength = iota
 	// ForUpdate represents FOR UPDATE.
 	ForUpdate
@@ -996,18 +997,23 @@ const (
 	ForKeyShare
 )
 
+var lockingStrengthName = [...]string{
+	ForNone:        "",
+	ForUpdate:      "FOR UPDATE",
+	ForNoKeyUpdate: "FOR NO KEY UPDATE",
+	ForShare:       "FOR SHARE",
+	ForKeyShare:    "FOR KEY SHARE",
+}
+
+func (s LockingStrength) String() string {
+	return lockingStrengthName[s]
+}
+
 // Format implements the NodeFormatter interface.
-func (f LockingStrength) Format(ctx *FmtCtx) {
-	switch f {
-	case ForNone:
-	case ForUpdate:
-		ctx.WriteString(" FOR UPDATE")
-	case ForNoKeyUpdate:
-		ctx.WriteString(" FOR NO KEY UPDATE")
-	case ForShare:
-		ctx.WriteString(" FOR SHARE")
-	case ForKeyShare:
-		ctx.WriteString(" FOR KEY SHARE")
+func (s LockingStrength) Format(ctx *FmtCtx) {
+	if s != ForNone {
+		ctx.WriteString(" ")
+		ctx.WriteString(s.String())
 	}
 }
 
@@ -1027,13 +1033,20 @@ const (
 	LockWaitError
 )
 
+var lockingWaitPolicyName = [...]string{
+	LockWaitBlock: "",
+	LockWaitSkip:  "SKIP LOCKED",
+	LockWaitError: "NOWAIT",
+}
+
+func (p LockingWaitPolicy) String() string {
+	return lockingWaitPolicyName[p]
+}
+
 // Format implements the NodeFormatter interface.
-func (f LockingWaitPolicy) Format(ctx *FmtCtx) {
-	switch f {
-	case LockWaitBlock:
-	case LockWaitSkip:
-		ctx.WriteString(" SKIP LOCKED")
-	case LockWaitError:
-		ctx.WriteString(" NOWAIT")
+func (p LockingWaitPolicy) Format(ctx *FmtCtx) {
+	if p != LockWaitBlock {
+		ctx.WriteString(" ")
+		ctx.WriteString(p.String())
 	}
 }
