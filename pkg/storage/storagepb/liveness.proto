@@ -44,6 +44,8 @@ message Liveness {
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
 // liveness system.
+//
+// See comment on LivenessStatus() for a description of the states.
 enum NodeLivenessStatus {
   UNKNOWN = 0;
   // DEAD indicates the node is considered dead.
