@@ -103,7 +103,7 @@ class Localities extends React.Component<LocalitiesProps, {}> {
         <Helmet>
           <title>Localities | Debug</title>
         </Helmet>
-        <section className="section"><h1>Localities</h1></section>
+        <section className="section"><h1 className="base-heading">Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
           error={ [this.props.localityStatus.lastError, this.props.locationStatus.lastError] }

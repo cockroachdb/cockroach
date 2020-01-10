@@ -91,7 +91,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
     .value();
   return (
     <div>
-      <h2>Connections (via Node {data.node_id})</h2>
+      <h2 className="base-heading">Connections (via Node {data.node_id})</h2>
       <table className="connections-table">
         <tbody>
           <tr className="connections-table__row connections-table__row--header">

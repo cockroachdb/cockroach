@@ -34,7 +34,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
 
   return (
     <div>
-      <h2>Connections {viaNodeID}</h2>
+      <h2 className="base-heading">Connections {viaNodeID}</h2>
       <Loading
         loading={!range || range.inFlight}
         error={range && range.lastError}

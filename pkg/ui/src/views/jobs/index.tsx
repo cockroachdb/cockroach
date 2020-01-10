@@ -294,7 +294,7 @@ class JobsTable extends React.Component<JobsTableProps> {
   renderTable = () => {
     const jobs = this.props.jobs.data.jobs;
     if (_.isEmpty(jobs)) {
-      return <div className="no-results"><h2>No Results</h2></div>;
+      return <div className="no-results"><h2 className="base-heading">No Results</h2></div>;
     }
     return (
       <JobsSortedTable
@@ -319,7 +319,7 @@ class JobsTable extends React.Component<JobsTableProps> {
           <title>Jobs</title>
         </Helmet>
         <section className="section">
-          <h1>
+          <h1 className="base-heading">
             Jobs
             <div className="section-heading__tooltip">
               <ToolTipWrapper text={titleTooltip}>

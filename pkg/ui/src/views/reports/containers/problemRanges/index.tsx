@@ -55,7 +55,7 @@ function ProblemRangeList(props: {
   }
   return (
     <div>
-      <h2>{props.name}</h2>
+      <h2 className="base-heading">{props.name}</h2>
       <div className="problems-list">
         {
           _.map(ids, id => {
@@ -110,14 +110,14 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       if (_.isEmpty(this.props.params[nodeIDAttr])) {
         return (
           <div>
-            <h2>Error loading Problem Ranges for the Cluster</h2>
+            <h2 className="base-heading">Error loading Problem Ranges for the Cluster</h2>
             {problemRanges.lastError.toString()}
           </div>
         );
       } else {
         return (
           <div>
-            <h2>Error loading Problem Ranges for node n{this.props.params[nodeIDAttr]}</h2>
+            <h2 className="base-heading">Error loading Problem Ranges for node n{this.props.params[nodeIDAttr]}</h2>
             {problemRanges.lastError.toString()}
           </div>
         );
@@ -131,9 +131,9 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     }));
     if (validIDs.length === 0) {
       if (_.isEmpty(this.props.params[nodeIDAttr])) {
-        return <h2>No nodes returned any results</h2>;
+        return <h2 className="base-heading">No nodes returned any results</h2>;
       } else {
-        return <h2>No results reported for node n{this.props.params[nodeIDAttr]}</h2>;
+        return <h2 className="base-heading">No results reported for node n{this.props.params[nodeIDAttr]}</h2>;
       }
     }
 
@@ -148,7 +148,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     const problems = _.values(data.problems_by_node_id);
     return (
       <div>
-        <h2>
+        <h2 className="base-heading">
           {titleText}
         </h2>
         <ProblemRangeList
@@ -196,7 +196,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <Helmet>
           <title>Problem Ranges | Debug</title>
         </Helmet>
-        <h1>Problem Ranges Report</h1>
+        <h1 className="base-heading">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
           error={this.props.problemRanges && this.props.problemRanges.lastError}

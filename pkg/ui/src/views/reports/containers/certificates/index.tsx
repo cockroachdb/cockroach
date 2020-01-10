@@ -166,7 +166,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     const nodeID = this.props.params[nodeIDAttr];
 
     if (_.isEmpty(certificates.certificates)) {
-      return <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>;
+      return <h2 className="base-heading">No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>;
     }
 
     let header: string = null;
@@ -178,7 +178,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
 
     return (
       <Fragment>
-        <h2>{header} certificates</h2>
+        <h2 className="base-heading">{header} certificates</h2>
         {
           _.map(certificates.certificates, (cert, key) => (
             this.renderCert(cert, key)
@@ -194,7 +194,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
         <Helmet>
           <title>Certificates | Debug</title>
         </Helmet>
-        <h1>Certificates</h1>
+        <h1 className="base-heading">Certificates</h1>
 
         <section className="section">
           <Loading

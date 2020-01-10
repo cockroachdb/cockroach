@@ -23,7 +23,7 @@ export default class Layout extends React.Component<{}, {}> {
       <Helmet>
         <title>Raft | Debug</title>
       </Helmet>
-      <section className="section"><h1>Raft</h1></section>
+      <section className="section"><h1 className="base-heading">Raft</h1></section>
       <div className="nav-container">
         <ul className="nav">
           <li className="normal">

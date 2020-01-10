@@ -62,7 +62,7 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
     if (allocator && allocator.lastError && allocator.lastError.message === "Forbidden") {
       return (
         <div>
-          <h2>Simulated Allocator Output</h2>
+          <h2 className="base-heading">Simulated Allocator Output</h2>
           { REMOTE_DEBUGGING_ERROR_TEXT }
         </div>
       );
@@ -75,7 +75,7 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
 
     return (
       <div>
-        <h2>Simulated Allocator Output{fromNodeID}</h2>
+        <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
         <Loading
           loading={!allocator || allocator.inFlight}
           error={allocator && allocator.lastError}

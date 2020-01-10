@@ -43,7 +43,7 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
     // leader?
     const rangeID = info.state.state.desc.range_id;
     const header = (
-      <h2>
+      <h2 className="base-heading">
         Lease History (from {Print.ReplicaID(rangeID, RangeInfo.GetLocalReplica(info))})
       </h2>
     );
