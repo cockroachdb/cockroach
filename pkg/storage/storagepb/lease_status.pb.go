@@ -37,6 +37,13 @@ const (
 	// leases) or Heartbeat (for epoch-based leases). A lease may not
 	// change hands while it is in stasis; would-be acquirers must wait
 	// for the stasis period to expire.
+	//
+	// The point of the stasis period is to prevent reads on the old leaseholder
+	// (the one whose stasis we're talking about) from missing to see writes
+	// performed under the next lease (held by someone else). Without the stasis,
+	// a new leaseholder with a fast clock could start performing writes at higher
+	// timestamp than the new lease start time, but in the past of reads at lower
+	// timestamps that might still be served by the old lease holder.
 	LeaseState_STASIS LeaseState = 2
 	// EXPIRED indicates that the lease can't be used. An expired lease
 	// may become VALID for the same leaseholder on RequestLease or
@@ -72,7 +79,7 @@ func (x LeaseState) String() string {
 	return proto.EnumName(LeaseState_name, int32(x))
 }
 func (LeaseState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_0ec6592ba7112e22, []int{0}
+	return fileDescriptor_lease_status_602546c1e89d0cf0, []int{0}
 }
 
 // LeaseStatus holds the lease state, the timestamp at which the state
@@ -93,7 +100,7 @@ func (m *LeaseStatus) Reset()         { *m = LeaseStatus{} }
 func (m *LeaseStatus) String() string { return proto.CompactTextString(m) }
 func (*LeaseStatus) ProtoMessage()    {}
 func (*LeaseStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_0ec6592ba7112e22, []int{0}
+	return fileDescriptor_lease_status_602546c1e89d0cf0, []int{0}
 }
 func (m *LeaseStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -474,10 +481,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/lease_status.proto", fileDescriptor_lease_status_0ec6592ba7112e22)
+	proto.RegisterFile("storage/storagepb/lease_status.proto", fileDescriptor_lease_status_602546c1e89d0cf0)
 }
 
-var fileDescriptor_lease_status_0ec6592ba7112e22 = []byte{
+var fileDescriptor_lease_status_602546c1e89d0cf0 = []byte{
 	// 354 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x91, 0xcf, 0x4e, 0xea, 0x40,
 	0x14, 0x87, 0x3b, 0xfc, 0xbb, 0x97, 0x43, 0x42, 0x7a, 0x27, 0x77, 0xd1, 0x60, 0x1c, 0x89, 0x71,
