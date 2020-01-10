@@ -340,7 +340,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	return nil
 }
 
-func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.GCThreshold) error {
+func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) error {
 	req := r.template()
 	req.Threshold = thresh.Key
 	return r.send(ctx, req)
@@ -390,7 +390,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, zone := repl.DescAndZone()
 
-	info, err := gc.RunGC(ctx, desc, snap, now, *zone.GC, &replicaGCer{repl: repl},
+	info, err := gc.Run(ctx, desc, snap, now, *zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.CleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
 			if err == nil {
@@ -424,7 +424,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	return nil
 }
 
-func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.GCInfo) {
+func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
 	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
 	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))

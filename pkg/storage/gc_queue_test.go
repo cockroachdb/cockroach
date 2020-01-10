@@ -69,7 +69,7 @@ func TestGCQueueScoreString(t *testing.T) {
 		},
 			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
 likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
-		// Check case of empty GCThreshold.
+		// Check case of empty Threshold.
 		{gcQueueScore{ShouldQueue: true}, `queue=true with 0.00/fuzz(0.00)=NaN=valScaleScore(0.00)*deadFrac(0.00)+intentScore(0.00)
 likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`},
 	} {
@@ -478,7 +478,7 @@ func TestGCQueueProcess(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	// The total size of the GC'able versions of the keys and values in GCInfo.
+	// The total size of the GC'able versions of the keys and values in Info.
 	// Key size: len("a") + MVCCVersionTimestampSize (13 bytes) = 14 bytes.
 	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
 	// key1 at ts1  (14 bytes) => "value" (10 bytes)
@@ -491,8 +491,8 @@ func TestGCQueueProcess(t *testing.T) {
 	var expectedVersionsKeyBytes int64 = 7 * 14
 	var expectedVersionsValBytes int64 = 5 * 10
 
-	// Call RunGC with dummy functions to get current GCInfo.
-	gcInfo, err := func() (gc.GCInfo, error) {
+	// Call Run with dummy functions to get current Info.
+	gcInfo, err := func() (gc.Info, error) {
 		snap := tc.repl.store.Engine().NewSnapshot()
 		desc := tc.repl.Desc()
 		defer snap.Close()
@@ -503,7 +503,7 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 
 		now := tc.Clock().Now()
-		return gc.RunGC(ctx, desc, snap, now, *zone.GC,
+		return gc.Run(ctx, desc, snap, now, *zone.GC,
 			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -858,10 +858,10 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
-	txns[0].ReadTimestamp = intentResolveTS
-	txns[0].WriteTimestamp = intentResolveTS
-	txns[1].ReadTimestamp = intentResolveTS
-	txns[1].WriteTimestamp = intentResolveTS
+	txns[0].OrigTimestamp = intentResolveTS
+	txns[0].Timestamp = intentResolveTS
+	txns[1].OrigTimestamp = intentResolveTS
+	txns[1].Timestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {
