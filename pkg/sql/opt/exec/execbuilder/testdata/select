@@ -1240,7 +1240,7 @@ statement ok
 CREATE TABLE a (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
 
 statement ok
-CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b))
+CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b), FAMILY (a, b, c, d))
 
 # No parallel line printed out for single-span selects.
 query TTT
