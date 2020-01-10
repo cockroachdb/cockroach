@@ -29,6 +29,14 @@ message Liveness {
   // is later than the expiration timestamp).
   int64 epoch = 2;
   // The timestamp at which this liveness record expires.
+  //
+  // Note that the clock max offset is not accounted for in any way when this
+  // expiration is set. If a checker wants to be extra-optimistic about another
+  // node being alive, it can adjust for the max offset. liveness.IsLive()
+  // doesn't do that, however. The expectation is that the expiration duration
+  // is large in comparison to the max offset, and that nodes heartbeat their
+  // liveness records well in advance of this expiration, so the optimism or
+  // pessimism of a checker does not matter very much.
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
   bool decommissioning = 5;
