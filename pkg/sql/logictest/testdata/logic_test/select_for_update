@@ -20,6 +20,11 @@ SELECT 1 FOR KEY SHARE
 ----
 1
 
+query I
+SELECT 1 FOR UPDATE FOR SHARE FOR NO KEY UPDATE FOR KEY SHARE
+----
+1
+
 # Postgres gives an error if you specify a table that isn't available in the
 # FROM list for the OF ... clause, but since we're ignoring this list anyway,
 # we didn't bother to add that behavior.
@@ -31,6 +36,11 @@ SELECT 1 FOR UPDATE OF a
 
 query I
 SELECT 1 FOR SHARE OF a, b
+----
+1
+
+query I
+SELECT 1 FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
 ----
 1
 
@@ -53,6 +63,12 @@ SELECT 1 FOR KEY SHARE SKIP LOCKED
 query error unimplemented: SKIP LOCKED lock wait policy is not supported
 SELECT 1 FOR UPDATE OF a SKIP LOCKED
 
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b SKIP LOCKED
+
+query error unimplemented: SKIP LOCKED lock wait policy is not supported
+SELECT 1 FOR UPDATE OF a SKIP LOCKED FOR NO KEY UPDATE OF b NOWAIT
+
 query error unimplemented: NOWAIT lock wait policy is not supported
 SELECT 1 FOR UPDATE NOWAIT
 
@@ -67,3 +83,12 @@ SELECT 1 FOR KEY SHARE NOWAIT
 
 query error unimplemented: NOWAIT lock wait policy is not supported
 SELECT 1 FOR UPDATE OF a NOWAIT
+
+query error unimplemented: NOWAIT lock wait policy is not supported
+SELECT 1 FOR UPDATE OF a NOWAIT FOR NO KEY UPDATE OF b NOWAIT
+
+# FOR READ ONLY is ignored, like in Postgres.
+query I
+SELECT 1 FOR READ ONLY
+----
+1
