@@ -5223,6 +5223,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 func TestFilterBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testCases := []struct {
 		commit   uint64
@@ -5277,7 +5278,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 					StoreID:   roachpb.StoreID(v),
 				})
 			}
-			candidates := filterBehindReplicas(status, replicas)
+			candidates := filterBehindReplicas(ctx, status, replicas)
 			var ids []uint64
 			for _, c := range candidates {
 				ids = append(ids, uint64(c.StoreID))
@@ -5291,6 +5292,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 
 func TestFilterUnremovableReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testCases := []struct {
 		commit            uint64
@@ -5348,7 +5350,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 				})
 			}
 
-			candidates := filterUnremovableReplicas(status, replicas, c.brandNewReplicaID)
+			candidates := filterUnremovableReplicas(ctx, status, replicas, c.brandNewReplicaID)
 			var ids []uint64
 			for _, c := range candidates {
 				ids = append(ids, uint64(c.StoreID))
@@ -5362,6 +5364,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 
 func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testCases := []struct {
 		commit            uint64
@@ -5403,7 +5406,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 				})
 			}
 
-			candidates := simulateFilterUnremovableReplicas(status, replicas, c.brandNewReplicaID)
+			candidates := simulateFilterUnremovableReplicas(ctx, status, replicas, c.brandNewReplicaID)
 			var ids []uint64
 			for _, c := range candidates {
 				ids = append(ids, uint64(c.StoreID))
