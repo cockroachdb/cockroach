@@ -454,23 +454,49 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
+// To also allow NULLs to be returned, use typeAsStringOrNull() instead.
 func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
 	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
-	fn := func() (string, error) {
-		d, err := typedE.Eval(p.EvalContext())
+	evalFn := p.makeStringEvalFn(typedE)
+	return func() (string, error) {
+		isNull, str, err := evalFn()
 		if err != nil {
 			return "", err
 		}
+		if isNull {
+			return "", errors.Errorf("expected string, got NULL")
+		}
+		return str, nil
+	}, nil
+}
+
+// typeAsStringOrNull is like TypeAsString but allows NULLs.
+func (p *planner) typeAsStringOrNull(e tree.Expr, op string) (func() (bool, string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+	if err != nil {
+		return nil, err
+	}
+	return p.makeStringEvalFn(typedE), nil
+}
+
+func (p *planner) makeStringEvalFn(typedE tree.TypedExpr) func() (bool, string, error) {
+	return func() (bool, string, error) {
+		d, err := typedE.Eval(p.EvalContext())
+		if err != nil {
+			return false, "", err
+		}
+		if d == tree.DNull {
+			return true, "", nil
+		}
 		str, ok := d.(*tree.DString)
 		if !ok {
-			return "", errors.Errorf("failed to cast %T to string", d)
+			return false, "", errors.Errorf("failed to cast %T to string", d)
 		}
-		return string(*str), nil
+		return false, string(*str), nil
 	}
-	return fn, nil
 }
 
 // KVStringOptValidate indicates the requested validation of a TypeAsStringOpts
