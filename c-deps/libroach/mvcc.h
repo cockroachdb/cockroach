@@ -59,6 +59,7 @@ template <bool reverse> class mvccScanner {
         txn_epoch_(txn.epoch),
         txn_sequence_(txn.sequence),
         txn_max_timestamp_(txn.max_timestamp),
+        txn_ignored_seqnums_(txn.ignored_seqnums),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
         check_uncertainty_(timestamp < txn.max_timestamp),
@@ -163,27 +164,89 @@ template <bool reverse> class mvccScanner {
     return results_;
   }
 
+  bool seqNumIsIgnored(int32_t sequence) const {
+    // The ignored seqnum ranges are guaranteed to be
+    // non-overlapping, non-contiguous, and guaranteed to be
+    // sorted in seqnum order. We're going to look from the end to
+    // see if the current intent seqnum is ignored.
+    //
+    // TODO(nvanbenschoten): this can use use binary search to improve
+    // the complexity. Worth looking into if this loop takes a while, due to
+    // long lists of ignored sequence where the ones near the specified sequence
+    // number are near the start. Until then, the current implementation is
+    // simpler and correct.
+    for (int i = txn_ignored_seqnums_.len - 1; i >= 0; i--) {
+        if (sequence < txn_ignored_seqnums_.ranges[i].start_seqnum) {
+            // The history entry's sequence number is lower/older than
+            // the current ignored range. Go to the previous range
+            // and try again.
+            continue;
+        }
+
+        // Here we have a range where the start seqnum is lower than the current
+        // intent seqnum. Does it include it?
+        if (sequence > txn_ignored_seqnums_.ranges[i].end_seqnum) {
+            // Here we have a range where the current history entry's seqnum
+            // is higher than the range's end seqnum. Given that the
+            // ranges are storted, we're guaranteed that there won't
+            // be any further overlapping range at a lower value of i.
+            return false;
+        }
+        // Yes, it's included. We're going to skip over this
+        // intent seqnum and retry the search above.
+        return true;
+    }
+
+    // Exhausted the ignore list. Not ignored.
+    return false;
+  }
+
   bool getFromIntentHistory() {
     cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent readIntent;
     readIntent.set_sequence(txn_sequence_);
+
+    auto end = meta_.intent_history().end();
+    cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent intent;
+
     // Look for the intent with the sequence number less than or equal to the
     // read sequence. To do so, search using upper_bound, which returns an
     // iterator pointing to the first element in the range [first, last) that is
     // greater than value, or last if no such element is found. Then, return the
     // previous value.
     auto up = std::upper_bound(
-        meta_.intent_history().begin(), meta_.intent_history().end(), readIntent,
+        meta_.intent_history().begin(), end, readIntent,
         [](const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& a,
            const cockroach::storage::engine::enginepb::MVCCMetadata_SequencedIntent& b) -> bool {
-          return a.sequence() < b.sequence();
+            return a.sequence() < b.sequence();
         });
-    if (up == meta_.intent_history().begin()) {
-      // It is possible that no intent exists such that the sequence is less
-      // than the read sequence. In this case, we cannot read a value from the
-      // intent history.
-      return false;
+    while (up != meta_.intent_history().begin()) {
+        const auto intent_pos = up - 1;
+        // Here we have found a history entry with the highest seqnum that's
+        // equal or lower to the txn seqnum.
+        //
+        // However this entry may also be part of an ignored range
+        // (partially rolled back). We'll check this next. If it is,
+        // we'll try the previous sequence in the intent history.
+        if (seqNumIsIgnored(intent_pos->sequence())) {
+           // This entry was part of an ignored range. Iterate back in intent
+           // history to the previous sequence, and check if that one is
+           // ignored.
+           up--;
+           continue;
+        }
+        // This history entry has not been ignored, so we're going to select
+        // this version.
+        intent = *intent_pos;
+        break;
     }
-    const auto intent = *(up - 1);
+
+    if (up == meta_.intent_history().begin()) {
+        // It is possible that no intent exists such that the sequence is less
+        // than the read sequence. In this case, we cannot read a value from the
+        // intent history.
+        return false;
+    }
+
     rocksdb::Slice value = intent.value();
     if (value.size() > 0 || tombstones_) {
       kvs_->Put(cur_raw_key_, value);
@@ -301,7 +364,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (txn_epoch_ == meta_.txn().epoch()) {
-      if (txn_sequence_ >= meta_.txn().sequence()) {
+      if (txn_sequence_ >= meta_.txn().sequence() && !seqNumIsIgnored(meta_.txn().sequence())) {
         // 8. We're reading our own txn's intent at an equal or higher sequence.
         // Note that we read at the intent timestamp, not at our read timestamp
         // as the intent timestamp may have been pushed forward by another
@@ -663,6 +726,7 @@ template <bool reverse> class mvccScanner {
   const uint32_t txn_epoch_;
   const int32_t txn_sequence_;
   const DBTimestamp txn_max_timestamp_;
+  const DBIgnoredSeqNums txn_ignored_seqnums_;
   const bool inconsistent_;
   const bool tombstones_;
   const bool check_uncertainty_;

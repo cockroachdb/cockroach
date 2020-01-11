@@ -4370,11 +4370,9 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			}
 
 			if pErr := tc.store.intentResolver.ResolveIntents(context.TODO(),
-				[]roachpb.Intent{{
-					Span:   roachpb.Span{Key: key},
-					Txn:    txnRecord.TxnMeta,
-					Status: txnRecord.Status,
-				}}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
+				[]roachpb.Intent{
+					roachpb.MakeIntent(&txnRecord, roachpb.Span{Key: key}),
+				}, intentresolver.ResolveOptions{Wait: true, Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
 		}
@@ -5038,11 +5036,11 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	txn := newTransaction("name", key, 1, tc.Clock())
 	txn.Status = roachpb.COMMITTED
 	if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
-		[]roachpb.Intent{{
-			Span:   roachpb.Span{Key: key},
-			Txn:    txn.TxnMeta,
-			Status: txn.Status,
-		}}, intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */}); pErr != nil {
+		[]roachpb.Intent{
+			roachpb.MakeIntent(txn, roachpb.Span{Key: key}),
+		},
+		intentresolver.ResolveOptions{Wait: false, Poison: true /* irrelevant */},
+	); pErr != nil {
 		t.Fatal(pErr)
 	}
 	testutils.SucceedsSoon(t, func() error {
@@ -5993,8 +5991,9 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("c"),
 		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
+		IntentTxn:      txn.TxnMeta,
+		Status:         roachpb.COMMITTED,
+		IgnoredSeqNums: txn.IgnoredSeqNums,
 	}
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -6107,8 +6106,9 @@ func TestRangeStatsComputation(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: pArgs.Key,
 		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
+		IntentTxn:      txn.TxnMeta,
+		Status:         roachpb.COMMITTED,
+		IgnoredSeqNums: txn.IgnoredSeqNums,
 	}
 
 	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
@@ -6508,8 +6508,9 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
 				EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
 			},
-			IntentTxn: txn.TxnMeta,
-			Status:    roachpb.COMMITTED,
+			IntentTxn:      txn.TxnMeta,
+			Status:         roachpb.COMMITTED,
+			IgnoredSeqNums: txn.IgnoredSeqNums,
 		}
 		if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
 			t.Fatal(pErr)

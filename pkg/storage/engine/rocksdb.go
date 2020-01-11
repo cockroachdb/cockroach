@@ -2620,6 +2620,16 @@ func goToCSlice(b []byte) C.DBSlice {
 	}
 }
 
+func goToCIgnoredSeqNums(b []enginepb.IgnoredSeqNumRange) C.DBIgnoredSeqNums {
+	if len(b) == 0 {
+		return C.DBIgnoredSeqNums{ranges: nil, len: 0}
+	}
+	return C.DBIgnoredSeqNums{
+		ranges: (*C.DBIgnoredSeqNumRange)(unsafe.Pointer(&b[0])),
+		len:    C.int(len(b)),
+	}
+}
+
 func goToCKey(key MVCCKey) C.DBKey {
 	return C.DBKey{
 		key:       goToCSlice(key.Key),
@@ -2707,6 +2717,7 @@ func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 		r.epoch = C.uint32_t(txn.Epoch)
 		r.sequence = C.int32_t(txn.Sequence)
 		r.max_timestamp = goToCTimestamp(txn.MaxTimestamp)
+		r.ignored_seqnums = goToCIgnoredSeqNums(txn.IgnoredSeqNums)
 	}
 	return r
 }
