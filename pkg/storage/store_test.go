@@ -1938,14 +1938,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
-func setTxnAutoGC(to bool) func() {
-	orig := batcheval.TxnAutoGC
-	f := func() {
-		batcheval.TxnAutoGC = orig
-	}
-	batcheval.TxnAutoGC = to
-	return f
-}
+func setTxnAutoGC(to bool) func() { return batcheval.TestingSetTxnAutoGC(to) }
 
 // TestStoreReadInconsistent verifies that gets and scans with read
 // consistency set to INCONSISTENT or READ_UNCOMMITTED either push or

@@ -494,6 +494,14 @@ message Transaction {
   // treated as immutable and all updates should be performed on a copy of the
   // slice.
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
+  // A list of ignored seqnum ranges.
+  //
+  // The user code must guarantee this list to be non-overlapping,
+  // non-contiguous (i.e. it must coalesce ranges to avoid situations
+  // where a range's end seqnum is equal to the next range's start
+  // seqnum), and sorted in seqnum order.
+  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
   reserved 3, 9, 13, 14;
 }
@@ -520,18 +528,32 @@ message TransactionRecord {
   util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
   repeated Span intent_spans               = 11 [(gogoproto.nullable) = false];
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
+  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
   // Fields on Transaction that are not present in a transaction record.
   reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.
+//
+// Intents are used for two separate purposes:
+// - on the return path of e.g. scans, to report the existence of a
+//    write intent on a key;
+// - as input argument to intent resolution, to pass the current txn status,
+//   timestamps and ignored seqnum ranges to the resolution algorithm.
+// Only in the latter case are the TxnMeta, status and ignored seqnum
+// ranges guaranteed to be consistent with the latest txn's state.
+//
+// Note: avoid constructing Intent directly; consider using
+// MakeIntent() or MakeErrorIntent() instead.
 message Intent {
   option (gogoproto.equal) = true;
 
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
+  repeated storage.engine.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.

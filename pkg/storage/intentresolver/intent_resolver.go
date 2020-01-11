@@ -374,8 +374,7 @@ func updateIntentTxnStatus(
 			// It must have been skipped.
 			continue
 		}
-		intent.Txn = pushee.TxnMeta
-		intent.Status = pushee.Status
+		intent.SetTxn(&pushee)
 		results = append(results, intent)
 	}
 	return results
@@ -709,8 +708,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				// Get the pushed txn and update the intents slice.
 				txn = &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 				for i := range intents {
-					intents[i].Txn = txn.TxnMeta
-					intents[i].Status = txn.Status
+					intents[i].SetTxn(txn)
 				}
 			}
 			var onCleanupComplete func(error)
@@ -887,24 +885,27 @@ func (ir *IntentResolver) ResolveIntents(
 	var resolveRangeReqs []roachpb.Request
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
+
 		if len(intent.EndKey) == 0 {
 			resolveReqs = append(resolveReqs,
 				resolveReq{
 					rangeID: ir.lookupRangeID(ctx, intent.Key),
 					req: &roachpb.ResolveIntentRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
-						IntentTxn:     intent.Txn,
-						Status:        intent.Status,
-						Poison:        opts.Poison,
+						RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
+						IntentTxn:      intent.Txn,
+						Status:         intent.Status,
+						Poison:         opts.Poison,
+						IgnoredSeqNums: intent.IgnoredSeqNums,
 					},
 				})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
-				IntentTxn:     intent.Txn,
-				Status:        intent.Status,
-				Poison:        opts.Poison,
-				MinTimestamp:  opts.MinTimestamp,
+				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:      intent.Txn,
+				Status:         intent.Status,
+				Poison:         opts.Poison,
+				MinTimestamp:   opts.MinTimestamp,
+				IgnoredSeqNums: intent.IgnoredSeqNums,
 			})
 		}
 	}

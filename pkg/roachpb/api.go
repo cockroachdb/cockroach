@@ -1252,3 +1252,24 @@ func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
 	}
 	return sl
 }
+
+// AsIntent creates an intent corresponding to the given resolve intent request.
+func (rir *ResolveIntentRequest) AsIntent() Intent {
+	return Intent{
+		Span:           rir.Span(),
+		Txn:            rir.IntentTxn,
+		Status:         rir.Status,
+		IgnoredSeqNums: rir.IgnoredSeqNums,
+	}
+}
+
+// AsIntent creates an intent corresponding to the given resolve
+// intent range request.
+func (rirr *ResolveIntentRangeRequest) AsIntent() Intent {
+	return Intent{
+		Span:           rirr.Span(),
+		Txn:            rirr.IntentTxn,
+		Status:         rirr.Status,
+		IgnoredSeqNums: rirr.IgnoredSeqNums,
+	}
+}
