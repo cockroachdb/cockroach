@@ -491,7 +491,11 @@ func makeSQLConn(url string) *sqlConn {
 	}
 }
 
-var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
+// sqlConnTimeout is the default SQL connect timeout. This can also be
+// set using `connect_timeout` in the connection URL. The default of
+// 15 seconds is chosen to exceed the default password retrieval
+// timeout (system.user_login.timeout).
+var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "15")
 
 // defaultSQLDb describes how a missing database part in the SQL
 // connection string is processed when creating a client connection.
@@ -548,15 +552,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 			return nil, errors.Errorf("cannot specify a password in URL with an insecure connection")
 		}
 	} else {
-		if baseURL.User.Username() == security.RootUser {
-			// Disallow password login for root.
-			if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
-				return nil, errors.Errorf("connections with user %s must use a client certificate",
-					baseURL.User.Username())
-			}
-			// If we can go on (we have a certificate spec), clear the password.
-			baseURL.User = url.User(security.RootUser)
-		} else if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
+		if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
 			// If there's no password in the URL yet and we don't have a client
 			// certificate, ask for it and populate it in the URL.
 			if _, pwdSet := baseURL.User.Password(); !pwdSet {

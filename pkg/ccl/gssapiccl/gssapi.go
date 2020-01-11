@@ -15,6 +15,7 @@
 package gssapiccl
 
 import (
+	"context"
 	"crypto/tls"
 	"strings"
 	"unsafe"
@@ -42,9 +43,10 @@ const (
 // authGSS performs GSS authentication. See:
 // https:github.com/postgres/postgres/blob/0f9cdd7dca694d487ab663d463b308919f591c02/src/backend/libpq/auth.c#L1090
 func authGSS(
+	ctx context.Context,
 	c pgwire.AuthConn,
 	tlsState tls.ConnectionState,
-	hashedPassword []byte,
+	_ pgwire.PasswordRetrievalFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {

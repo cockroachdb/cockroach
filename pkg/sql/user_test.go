@@ -186,8 +186,8 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		if err == nil {
 			defer func() { _ = dbSQL.Close() }()
 		}
-		if !testutils.IsError(err, "timeout while retrieving user account") {
-			t.Fatalf("expected timeout error during connection, got %v", err)
+		if !testutils.IsError(err, "internal error while retrieving user account") {
+			t.Fatalf("expected error during connection, got %v", err)
 		}
 		timeoutDur := timeutil.Now().Sub(start)
 		if timeoutDur > 5*time.Second {

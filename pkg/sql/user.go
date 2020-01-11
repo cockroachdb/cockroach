@@ -23,44 +23,75 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetUserHashedPassword returns the hashedPassword for the given username if
-// found in system.users.
+// GetUserHashedPassword determines if the given user exists and
+// also returns a password retrieval function.
 //
 // The function is tolerant of unavailable clusters (or unavailable
 // system.user) as follows:
 //
-// - if the user is root and system.users is unavailable, the function
-//   reports that the user exists but has no password. (Reminder: "no
-//   password" means that they cannot use password authentication and
-//   thus must use certificates instead, or an existing web session
-//   cookie when using the web UI.)
+// - if the user is root, the user is reported to exist immediately
+//   without querying system.users at all. The password retrieval
+//   is delayed until actually needed by the authentication method.
+//   This way, if the client presents a valid TLS certificate
+//   the password is not even needed at all. This is useful for e.g.
+//   `cockroach node status`.
 //
-//   This special case exists so that root can still log in into an
-//   unavailable cluster. This is currently required for proper
-//   function of `cockroach node status` which uses SQL.
-//   Ideally we would not need SQL to enquire the status of
-//   clusters and this special case would not need to exist.
+//   If root is forced to use a password (e.g. logging in onto the UI)
+//   then a user login timeout greater than 5 seconds is also
+//   ignored. This ensures that root has a modicum of comfort
+//   logging into an unavailable cluster.
+//
+//   TODO(knz): this does not yet quite work becaus even if the pw
+//   auth on the UI succeeds writing to system.web_sessions will still
+//   stall on an unavailable cluster and prevent root from logging in.
 //
 // - if the user is another user than root, then the function fails
 //   after a timeout instead of blocking. The timeout is configurable
-//   via a cluster setting.
+//   via the cluster setting.
 //
 func GetUserHashedPassword(
-	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
-) (exists bool, hashedPassword []byte, err error) {
+	ctx context.Context, ie *InternalExecutor, username string,
+) (
+	exists bool,
+	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
+	err error,
+) {
 	normalizedUsername := tree.Name(username).Normalize()
 	isRoot := normalizedUsername == security.RootUser
-	// Always return no password for the root user, even if someone manually inserts one.
+
 	if isRoot {
-		return true, nil, nil
+		// As explained above, for root we report that the user exists
+		// immediately, and delay retrieving the password until strictly
+		// necessary.
+		rootFn := func(ctx context.Context) ([]byte, error) {
+			_, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+			return hashedPassword, err
+		}
+		return true, rootFn, nil
 	}
 
+	// Other users must reach for system.users no matter what, because
+	// only that contains the truth about whether the user exists.
+	exists, hashedPassword, err := retrieveUserAndPassword(ctx, ie, isRoot, normalizedUsername)
+	return exists, func(ctx context.Context) ([]byte, error) { return hashedPassword, nil }, err
+}
+
+func retrieveUserAndPassword(
+	ctx context.Context, ie *InternalExecutor, isRoot bool, normalizedUsername string,
+) (exists bool, hashedPassword []byte, err error) {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
+	// We don't like long timeouts for root.
+	// (4.5 seconds to not exceed the default 5s timeout configured in many clients.)
+	const maxRootTimeout = 4*time.Second + 500*time.Millisecond
+	if isRoot && (timeout == 0 || timeout > maxRootTimeout) {
+		timeout = maxRootTimeout
+	}
+
 	runFn := func(fn func(ctx context.Context) error) error { return fn(ctx) }
 	if timeout != 0 {
 		runFn = func(fn func(ctx context.Context) error) error {
-			return contextutil.RunWithTimeout(ctx, "get-hashed-pwd-timeout", timeout, fn)
+			return contextutil.RunWithTimeout(ctx, "get-user-timeout", timeout, fn)
 		}
 	}
 
@@ -80,16 +111,10 @@ func GetUserHashedPassword(
 		return nil
 	})
 
-	if errors.Is(err, context.DeadlineExceeded) {
-		// Failed to retrieve the user account.
-		log.Warningf(ctx, "user lookup for %q failed: %v", username, err)
-		// As a special case, if root is logging in we know the user
-		// account exists; we just report it has no password so that it
-		// can only log in using certs or GSS.
-		if isRoot {
-			return true, nil, nil
-		}
-		err = errors.HandledWithMessage(err, "timeout while retrieving user account")
+	if err != nil {
+		// Failed to retrieve the user account. Report in logs for later investigation.
+		log.Warningf(ctx, "user lookup for %q failed: %v", normalizedUsername, err)
+		err = errors.HandledWithMessage(err, "internal error while retrieving user account")
 	}
 	return exists, hashedPassword, err
 }

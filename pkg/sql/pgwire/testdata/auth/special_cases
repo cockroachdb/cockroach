@@ -18,13 +18,13 @@ set_hba
 host all root 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER ADDRESS   METHOD   OPTIONS
-host   all      root all       cert
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
 host   all      root 0.0.0.0/0 password
 
 connect user=root password=abc sslmode=verify-ca sslcert=
 ----
-ERROR: no TLS peer certificates, but required for auth
+ERROR: password authentication failed for user root
 
 subtest end root_user_cannot_use_password
 
@@ -45,8 +45,8 @@ set_hba
 host all testuser 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER     ADDRESS   METHOD OPTIONS
-host   all      root     all       cert
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
 host   all      testuser 0.0.0.0/0 cert
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
@@ -61,8 +61,8 @@ set_hba
 host all testuser 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER     ADDRESS   METHOD   OPTIONS
-host   all      root     all       cert
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
 host   all      testuser 0.0.0.0/0 password
 
 connect user=testuser
