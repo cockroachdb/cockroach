@@ -672,8 +672,8 @@ func (s *statusServer) Details(
 		return nil, grpcstatus.Error(codes.Internal, err.Error())
 	}
 	nowHlc := hlc.Timestamp{WallTime: s.admin.server.clock.PhysicalNow()}
-	isReady := l.IsLive(nowHlc) && !l.Draining
-	if !isReady {
+	isHealthy := l.IsLive(nowHlc) && !l.Draining
+	if !isHealthy {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
