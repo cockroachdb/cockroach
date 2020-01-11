@@ -50,15 +50,26 @@ func GetUserHashedPassword(
 ) (exists bool, hashedPassword []byte, err error) {
 	normalizedUsername := tree.Name(username).Normalize()
 	isRoot := normalizedUsername == security.RootUser
-	// Always return no password for the root user, even if someone manually inserts one.
-	if isRoot {
-		return true, nil, nil
-	}
 
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
 	runFn := func(fn func(ctx context.Context) error) error { return fn(ctx) }
 	if timeout != 0 {
+		// The root user is special in that we want it to always be able
+		// to log in even when its password exists but is not currently
+		// available. This alone is guaranteed by the condition below at
+		// the end of the function.
+		//
+		// However, we also want this connection to be somewhat _timely_
+		// regardless of the value of the cluster setting. This is because
+		// `cockroach node status` usually is paired with the root cert
+		// and we want such commands to not last too long. To ease this UX
+		// scenario, we force the login timeout to never exceed 5 seconds,
+		// but just for the root user.
+		const rootMaxTimeout = 5 * time.Second
+		if isRoot && timeout > rootMaxTimeout {
+			timeout = rootMaxTimeout
+		}
 		runFn = func(fn func(ctx context.Context) error) error {
 			return contextutil.RunWithTimeout(ctx, "get-hashed-pwd-timeout", timeout, fn)
 		}

@@ -488,7 +488,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop(context.TODO())
 
-	errFail := "cluster in insecure mode; user cannot use password authentication"
+	errFail := "setting or updating a password is not supported in insecure mode"
 
 	testCases := []struct {
 		sql       string
