@@ -1254,7 +1254,7 @@ func getLivenessStatusMap(
 
 	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		status := liveness.LivenessStatus(now, threshold)
+		status := storage.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
 	}
 	return statusMap

@@ -89,21 +89,65 @@ var TimeUntilStoreDead = func() *settings.DurationSetting {
 // not decommissioned nodes.
 type NodeCountFunc func() int
 
-// A NodeLivenessFunc accepts a node ID, current time and threshold before
-// a node is considered dead and returns whether or not the node is live.
-type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus
+// A NodeLivenessFunc accepts a node ID and current time and returns whether or
+// not the node is live. A node is considered dead if its liveness record has
+// expired by more than TimeUntilStoreDead.
+type NodeLivenessFunc func(
+	nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
+) storagepb.NodeLivenessStatus
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
 // NodeLiveness.
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
-	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) storagepb.NodeLivenessStatus {
+	return func(
+		nodeID roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
+	) storagepb.NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
 			return storagepb.NodeLivenessStatus_UNAVAILABLE
 		}
-		return liveness.LivenessStatus(now, threshold)
+		return LivenessStatus(liveness, now, timeUntilStoreDead)
 	}
+}
+
+// LivenessStatus returns a NodeLivenessStatus enumeration value for the
+// provided Liveness based on the provided timestamp and threshold.
+//
+// The timeline of the states that a liveness goes through as time passes after
+// the respective liveness record is written is the following:
+//
+//  -----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
+//       tWrite         tExp                 tExp+threshold
+//
+// Explanation:
+//
+//  - Let's say a node write its liveness record at tWrite. It sets the
+//    Expiration field of the record as tExp=tWrite+livenessThreshold.
+//    The node is considered LIVE (or DECOMISSIONING or UNAVAILABLE if draining).
+//  - At tExp, the IsLive() method starts returning false. The state becomes
+//    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
+//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+func LivenessStatus(
+	l storagepb.Liveness, now time.Time, deadThreshold time.Duration,
+) storagepb.NodeLivenessStatus {
+	nowHlc := hlc.Timestamp{WallTime: now.UnixNano()}
+	if l.IsDead(nowHlc, deadThreshold) {
+		if l.Decommissioning {
+			return storagepb.NodeLivenessStatus_DECOMMISSIONED
+		}
+		return storagepb.NodeLivenessStatus_DEAD
+	}
+	if l.Decommissioning {
+		return storagepb.NodeLivenessStatus_DECOMMISSIONING
+	}
+	if l.Draining {
+		return storagepb.NodeLivenessStatus_UNAVAILABLE
+	}
+	if l.IsLive(nowHlc) {
+		return storagepb.NodeLivenessStatus_LIVE
+	}
+	return storagepb.NodeLivenessStatus_UNAVAILABLE
 }
 
 type storeDetail struct {
