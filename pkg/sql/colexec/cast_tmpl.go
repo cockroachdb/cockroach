@@ -182,12 +182,12 @@ func (c *castOp_FROMTYPE_TOTYPE) Init() {
 
 func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
+	if c.outputIdx == batch.Width() {
+		batch.AppendCol(coltypes._TOTYPE)
+	}
 	n := batch.Length()
 	if n == 0 {
 		return batch
-	}
-	if c.outputIdx == batch.Width() {
-		batch.AppendCol(coltypes._TOTYPE)
 	}
 	vec := batch.ColVec(c.colIdx)
 	col := vec._FROMTYPE()
