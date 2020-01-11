@@ -101,15 +101,6 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
-	// Root user does not have a password, simply disallow this.
-	if username == security.RootUser {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"user %s must use certificate authentication instead of password authentication",
-			security.RootUser,
-		)
-	}
-
 	// Verify the provided username/password pair.
 	verified, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {
@@ -260,14 +251,18 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (bool, error) {
-	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, s.server.execCfg.InternalExecutor, s.memMetrics, username,
+	exists, pwRetrieveFn, err := sql.GetUserHashedPassword(
+		ctx, s.server.execCfg.InternalExecutor, username,
 	)
 	if err != nil {
 		return false, err
 	}
 	if !exists {
 		return false, nil
+	}
+	hashedPassword, err := pwRetrieveFn(ctx)
+	if err != nil {
+		return false, err
 	}
 	return (security.CompareHashAndPassword(hashedPassword, password) == nil), nil
 }

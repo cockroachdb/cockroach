@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -65,15 +66,25 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return err
 	}
 
-	// The root user is not allowed a password.
-	if normalizedUsername == security.RootUser {
-		return pgerror.Newf(pgcode.InvalidPassword,
-			"user %s cannot use password authentication", security.RootUser)
+	// TODO(knz): Remove in 20.2.
+	if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
+		!cluster.Version.IsActive(params.ctx, params.EvalContext().Settings, cluster.VersionRootPassword) {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			`setting a root password requires all nodes to be upgraded to %s`,
+			cluster.VersionByKey(cluster.VersionRootPassword),
+		)
 	}
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+		// We disallow setting a non-empty password in insecure mode
+		// because insecure means an observer may have MITM'ed the change
+		// and learned the password.
+		//
+		// It's valid to clear the password (WITH PASSWORD NULL) however
+		// since that forces cert auth when moving back to secure mode,
+		// and certs can't be MITM'ed over the insecure SQL connection.
 		return pgerror.New(pgcode.InvalidPassword,
-			"cluster in insecure mode; user cannot use password authentication")
+			"setting or updating a password is not supported in insecure mode")
 	}
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(

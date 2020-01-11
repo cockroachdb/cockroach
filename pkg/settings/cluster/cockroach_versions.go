@@ -54,6 +54,7 @@ const (
 	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
 	VersionPrimaryKeyColumnsOutOfFamilyZero
+	VersionRootPassword
 
 	// Add new versions here (step one of two).
 )
@@ -375,6 +376,17 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// primary key changes that move primary key columns to different families.
 		Key:     VersionPrimaryKeyColumnsOutOfFamilyZero,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
+	},
+	{
+		// VersionRootPassword enables setting a password for the `root`
+		// user from SQL. Even though introducing a password for the root
+		// user in 20.1 does not prevent 19.2 nodes from using the root
+		// account, we need a cluster setting: the 19.2 nodes do not even
+		// *check* the password, so setting a pw in a hybrid 20.1/19.2
+		// cluster would yield different client auth successes in
+		// different nodes (which is poor UX).
+		Key:     VersionRootPassword,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).
