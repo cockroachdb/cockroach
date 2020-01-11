@@ -548,15 +548,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 			return nil, errors.Errorf("cannot specify a password in URL with an insecure connection")
 		}
 	} else {
-		if baseURL.User.Username() == security.RootUser {
-			// Disallow password login for root.
-			if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
-				return nil, errors.Errorf("connections with user %s must use a client certificate",
-					baseURL.User.Username())
-			}
-			// If we can go on (we have a certificate spec), clear the password.
-			baseURL.User = url.User(security.RootUser)
-		} else if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
+		if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
 			// If there's no password in the URL yet and we don't have a client
 			// certificate, ask for it and populate it in the URL.
 			if _, pwdSet := baseURL.User.Password(); !pwdSet {

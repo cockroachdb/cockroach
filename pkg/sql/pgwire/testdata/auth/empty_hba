@@ -2,7 +2,7 @@
 #
 # An empty config is equivalent to:
 #
-#     host   all root all cert
+#     host   all root all cert-password
 #     host   all all  all cert-password
 #     local  all all      password
 #
@@ -21,7 +21,7 @@ set_hba
 ----
 # Active authentication configuration on this node:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert
+host   all      root all     cert-password
 host   all      all  all     cert-password
 local  all      all          password
 
@@ -32,16 +32,17 @@ connect user=root
 ----
 ok defaultdb
 
-# However root cannot connect over the unix socket by default.
+# However root cannot connect over the unix socket by default
+# because it does not have a password.
 connect_unix user=root
 ----
-ERROR: user root must use certificate authentication instead of password authentication
+ERROR: password authentication failed for user root
 
 # When no client cert is presented, the server would otherwise require
-# password auth. However, root password auth is rejected in any case.
+# password auth. However, root does not have a password.
 connect user=root password=foo sslmode=verify-ca sslcert=
 ----
-ERROR: no TLS peer certificates, but required for auth
+ERROR: password authentication failed for user root
 
 subtest end root
 

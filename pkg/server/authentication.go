@@ -100,15 +100,6 @@ func (s *authenticationServer) UserLogin(
 		)
 	}
 
-	// Root user does not have a password, simply disallow this.
-	if username == security.RootUser {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"user %s must use certificate authentication instead of password authentication",
-			security.RootUser,
-		)
-	}
-
 	// Verify the provided username/password pair.
 	verified, err := s.verifyPassword(ctx, username, req.Password)
 	if err != nil {

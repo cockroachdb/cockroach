@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -25,11 +24,6 @@ func GetUserHashedPassword(
 	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
 ) (bool, []byte, error) {
 	normalizedUsername := tree.Name(username).Normalize()
-	// Always return no password for the root user, even if someone manually inserts one.
-	if normalizedUsername == security.RootUser {
-		return true, nil, nil
-	}
-
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 		`WHERE username=$1 AND "isRole" = false`
 	values, err := ie.QueryRow(
