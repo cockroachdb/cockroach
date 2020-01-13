@@ -119,12 +119,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	ctx, cancel := context.WithTimeout(context.Background(), p.opts.operationTimeout)
 	defer cancel()
 
-	if len(p.opts.locations) == 0 {
-		if opts.GeoDistributed {
-			p.opts.locations = defaultLocations
-		} else {
-			p.opts.locations = []string{defaultLocations[0]}
-		}
+	if !opts.GeoDistributed {
+		p.opts.locations = []string{p.opts.locations[0]}
 	}
 
 	if _, err := p.createVNets(ctx, p.opts.locations); err != nil {
