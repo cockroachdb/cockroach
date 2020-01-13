@@ -130,6 +130,13 @@ func registerSQLSmith(r *testRegistry) {
 			logStmt(setup)
 		}
 
+		stmt := "SET experimental_enable_primary_key_changes = true;"
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		} else {
+			logStmt(stmt)
+		}
+
 		const timeout = time.Minute
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout.String())
 		t.Status("setting statement_timeout")
