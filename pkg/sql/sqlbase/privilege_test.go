@@ -71,7 +71,7 @@ func TestPrivilege(t *testing.T) {
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
 			[]UserPrivilegeString{
 				{AdminRole, []string{"ALL"}},
-				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}},
+				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
 				{security.RootUser, []string{"ALL"}},
 			},
 		},
