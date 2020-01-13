@@ -44,6 +44,17 @@ export class Sort extends React.Component<ISortProps, {}> {
     this.context.router.push(`reports/network/${selected.value}`);
   }
 
+  componentDidMount() {
+    this.setDefaultSortValue("region");
+  }
+
+  setDefaultSortValue = (sortValue: string) => {
+    const isDefaultValuePresent = this.getSortValues(this.props.sort).find(e => e.value === sortValue);
+    if (isDefaultValuePresent) {
+      this.navigateTo(isDefaultValuePresent);
+    }
+  }
+
   getSortValues = (sort: NetworkSort[]) => sort.map(value => {
     return { value: value.id, label: value.id.replace(/^[a-z]/, m => m.toUpperCase()) };
   })
