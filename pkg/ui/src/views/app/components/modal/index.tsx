@@ -56,8 +56,7 @@ class CustomModal extends React.Component<ICustomModalProps, ICustomModalState> 
           onCancel={this.handleCancel}
           className="custom--modal"
           maskStyle={{
-            background: "#475872",
-            opacity: 0.83,
+            background: "rgba(71, 88, 114, 0.73)",
           }}
           footer={<Button type="link" className="custom--modal__close--button" onClick={this.handleCancel}>Done</Button>}
           {...this.props}
