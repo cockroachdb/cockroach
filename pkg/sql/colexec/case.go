@@ -115,104 +115,105 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	outputCol := c.buffer.batch.Batch.ColVec(c.outputIdx)
-	for i := range c.caseOps {
-		// Run the next case operator chain. It will project its THEN expression
-		// for all tuples that matched its WHEN expression and that were not
-		// already matched.
-		batch := c.caseOps[i].Next(ctx)
-		// The batch's projection column now additionally contains results for all
-		// of the tuples that passed the ith WHEN clause. The batch's selection
-		// vector is set to the same selection of tuples.
-		// Now, we must subtract this selection vector from the last buffered
-		// selection vector, so that the next operator gets to operate on the
-		// remaining set of tuples in the input that haven't matched an arm of the
-		// case statement.
-		// As an example, imagine the first WHEN op matched tuple 3. The following
-		// diagram shows the selection vector before running WHEN, after running
-		// WHEN, and then the desired selection vector after subtraction:
-		// - origSel
-		// | - selection vector after running WHEN
-		// | | - desired selection vector after subtraction
-		// | | |
-		// 1   1
-		// 2   2
-		// 3 3
-		// 4   4
-		toSubtract := batch.Selection()
-		toSubtract = toSubtract[:batch.Length()]
-		// toSubtract is now a selection vector containing all matched tuples of the
-		// current case arm.
-		var subtractIdx int
-		var curIdx uint16
-		inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[i])
-		// Copy the results into the output vector, using the toSubtract selection
-		// vector to copy only the elements that we actually wrote according to the
-		// current case arm.
-		c.allocator.Copy(
-			outputCol,
+	var batch coldata.Batch
+	c.allocator.PerformOperation([]coldata.Vec{outputCol}, func() {
+		for i := range c.caseOps {
+			// Run the next case operator chain. It will project its THEN expression
+			// for all tuples that matched its WHEN expression and that were not
+			// already matched.
+			batch = c.caseOps[i].Next(ctx)
+			// The batch's projection column now additionally contains results for all
+			// of the tuples that passed the ith WHEN clause. The batch's selection
+			// vector is set to the same selection of tuples.
+			// Now, we must subtract this selection vector from the last buffered
+			// selection vector, so that the next operator gets to operate on the
+			// remaining set of tuples in the input that haven't matched an arm of the
+			// case statement.
+			// As an example, imagine the first WHEN op matched tuple 3. The following
+			// diagram shows the selection vector before running WHEN, after running
+			// WHEN, and then the desired selection vector after subtraction:
+			// - origSel
+			// | - selection vector after running WHEN
+			// | | - desired selection vector after subtraction
+			// | | |
+			// 1   1
+			// 2   2
+			// 3 3
+			// 4   4
+			toSubtract := batch.Selection()
+			toSubtract = toSubtract[:batch.Length()]
+			// toSubtract is now a selection vector containing all matched tuples of the
+			// current case arm.
+			var subtractIdx int
+			var curIdx uint16
+			inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[i])
+			// Copy the results into the output vector, using the toSubtract selection
+			// vector to copy only the elements that we actually wrote according to the
+			// current case arm.
+			outputCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     c.typ,
+						Src:         inputCol,
+						Sel:         toSubtract,
+						SrcStartIdx: 0,
+						SrcEndIdx:   uint64(len(toSubtract)),
+					},
+					SelOnDest: true,
+				})
+			if oldSel := c.buffer.batch.Batch.Selection(); oldSel != nil {
+				// We have an old selection vector, which represents the tuples that
+				// haven't yet been matched. Remove the ones that just matched from the
+				// old selection vector.
+				for i := range oldSel[:c.buffer.batch.Batch.Length()] {
+					if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == oldSel[i] {
+						// The ith element of the old selection vector matched the current one
+						// in toSubtract. Skip writing this element, removing it from the old
+						// selection vector.
+						subtractIdx++
+						continue
+					}
+					oldSel[curIdx] = oldSel[i]
+					curIdx++
+				}
+			} else {
+				// No selection vector means there have been no matches yet, and we were
+				// considering the entire batch of tuples for this case arm. Make a new
+				// selection vector with all of the tuples but the ones that just matched.
+				c.buffer.batch.Batch.SetSelection(true)
+				oldSel = c.buffer.batch.Batch.Selection()
+				for i := uint16(0); i < c.buffer.batch.Batch.Length(); i++ {
+					if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
+						subtractIdx++
+						continue
+					}
+					oldSel[curIdx] = i
+					curIdx++
+				}
+			}
+			c.buffer.batch.Batch.SetLength(curIdx)
+
+			// Now our selection vector is set to exclude all the things that have
+			// matched so far. Reset the buffer and run the next case arm.
+			c.buffer.rewind()
+		}
+		// Finally, run the else operator, which will project into all tuples that
+		// are remaining in the selection vector (didn't match any case arms). Once
+		// that's done, restore the original selection vector and return the batch.
+		batch = c.elseOp.Next(ctx)
+		inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
+		outputCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
 					ColType:     c.typ,
 					Src:         inputCol,
-					Sel:         toSubtract,
+					Sel:         batch.Selection(),
 					SrcStartIdx: 0,
-					SrcEndIdx:   uint64(len(toSubtract)),
+					SrcEndIdx:   uint64(batch.Length()),
 				},
 				SelOnDest: true,
 			})
-		if oldSel := c.buffer.batch.Batch.Selection(); oldSel != nil {
-			// We have an old selection vector, which represents the tuples that
-			// haven't yet been matched. Remove the ones that just matched from the
-			// old selection vector.
-			for i := range oldSel[:c.buffer.batch.Batch.Length()] {
-				if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == oldSel[i] {
-					// The ith element of the old selection vector matched the current one
-					// in toSubtract. Skip writing this element, removing it from the old
-					// selection vector.
-					subtractIdx++
-					continue
-				}
-				oldSel[curIdx] = oldSel[i]
-				curIdx++
-			}
-		} else {
-			// No selection vector means there have been no matches yet, and we were
-			// considering the entire batch of tuples for this case arm. Make a new
-			// selection vector with all of the tuples but the ones that just matched.
-			c.buffer.batch.Batch.SetSelection(true)
-			oldSel = c.buffer.batch.Batch.Selection()
-			for i := uint16(0); i < c.buffer.batch.Batch.Length(); i++ {
-				if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
-					subtractIdx++
-					continue
-				}
-				oldSel[curIdx] = i
-				curIdx++
-			}
-		}
-		c.buffer.batch.Batch.SetLength(curIdx)
-
-		// Now our selection vector is set to exclude all the things that have
-		// matched so far. Reset the buffer and run the next case arm.
-		c.buffer.rewind()
-	}
-	// Finally, run the else operator, which will project into all tuples that
-	// are remaining in the selection vector (didn't match any case arms). Once
-	// that's done, restore the original selection vector and return the batch.
-	batch := c.elseOp.Next(ctx)
-	inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
-	c.allocator.Copy(
-		outputCol,
-		coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				ColType:     c.typ,
-				Src:         inputCol,
-				Sel:         batch.Selection(),
-				SrcStartIdx: 0,
-				SrcEndIdx:   uint64(batch.Length()),
-			},
-			SelOnDest: true,
-		})
+	})
 	batch.SetLength(origLen)
 	batch.SetSelection(origHasSel)
 	if origHasSel {

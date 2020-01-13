@@ -148,7 +148,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
 		} else {
-			a.allocator.performOperation(
+			a.allocator.PerformOperation(
 				[]coldata.Vec{a.vec},
 				func() {
 					execgen.SET(a.col, a.curIdx, a.curAgg)
@@ -161,7 +161,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TYPE(), vec.Nulls()
-	a.allocator.performOperation(
+	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
 			if nulls.MaybeHasNulls() {

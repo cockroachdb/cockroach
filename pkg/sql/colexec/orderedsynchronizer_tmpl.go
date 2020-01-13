@@ -139,7 +139,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	}
 	o.output.ResetInternalBatch()
 	outputIdx := uint16(0)
-	o.allocator.performOperation(o.output.ColVecs(), func() {
+	o.allocator.PerformOperation(o.output.ColVecs(), func() {
 		for outputIdx < coldata.BatchSize() {
 			if o.Len() == 0 {
 				// All inputs exhausted.

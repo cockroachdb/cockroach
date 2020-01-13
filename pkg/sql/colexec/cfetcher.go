@@ -562,7 +562,7 @@ const debugState = false
 // NextBatch is nextBatch with the addition of memory accounting.
 func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	rf.adapter.ctx = ctx
-	rf.adapter.allocator.performOperation(
+	rf.adapter.allocator.PerformOperation(
 		rf.machine.colvecs,
 		rf.nextAdapter,
 	)

@@ -72,7 +72,8 @@ type anyNotNull_TYPEAgg struct {
 	allocator                   *Allocator
 	done                        bool
 	groups                      []bool
-	vec                         _GOTYPESLICE
+	vec                         coldata.Vec
+	col                         _GOTYPESLICE
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	foundNonNullForCurrentGroup bool
@@ -80,7 +81,8 @@ type anyNotNull_TYPEAgg struct {
 
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
-	a.vec = vec._TemplateType()
+	a.vec = vec
+	a.col = vec._TemplateType()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
@@ -121,8 +123,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
 	col, nulls := vec._TemplateType(), vec.Nulls()
 
-	a.allocator.performOperation(
-		[]coldata.Vec{vec},
+	a.allocator.PerformOperation(
+		[]coldata.Vec{a.vec},
 		func() {
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
@@ -191,7 +193,7 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// from the rest of the template file.
 		// TODO(asubiotto): Figure out a way to alias this.
 		// v := {{ .Global.Get "col" "int(i)" }}
-		// {{ .Global.Set "a.vec" "a.curIdx" "v" }}
+		// {{ .Global.Set "a.col" "a.curIdx" "v" }}
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

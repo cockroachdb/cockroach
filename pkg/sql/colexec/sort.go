@@ -127,23 +127,22 @@ func (p *allSpooler) spool(ctx context.Context) {
 	}
 	p.spooled = true
 	batch := p.input.Next(ctx)
-	var nTuples uint64
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
-		for i := 0; i < len(p.values); i++ {
-			p.allocator.Append(
-				p.values[i],
-				coldata.SliceArgs{
-					ColType:   p.inputTypes[i],
-					Src:       batch.ColVec(i),
-					Sel:       batch.Selection(),
-					DestIdx:   nTuples,
-					SrcEndIdx: uint64(batch.Length()),
-				},
-			)
-		}
-		nTuples += uint64(batch.Length())
+		p.allocator.PerformOperation(p.values, func() {
+			for i := 0; i < len(p.values); i++ {
+				p.values[i].Append(
+					coldata.SliceArgs{
+						ColType:   p.inputTypes[i],
+						Src:       batch.ColVec(i),
+						Sel:       batch.Selection(),
+						DestIdx:   p.spooledTuples,
+						SrcEndIdx: uint64(batch.Length()),
+					},
+				)
+			}
+			p.spooledTuples += uint64(batch.Length())
+		})
 	}
-	p.spooledTuples = nTuples
 }
 
 func (p *allSpooler) getValues(i int) coldata.Vec {
@@ -262,26 +261,27 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			return coldata.ZeroBatch
 		}
 
-		for j := 0; j < len(p.inputTypes); j++ {
-			// TODO(yuzefovich): at this point, we have already fully sorted the
-			// input. I think it is ok if we do this Copy outside of the Allocator -
-			// the work has been done, but theoretically it is possible to hit the
-			// limit here (mainly with variable-sized types like Bytes). Nonetheless,
-			// for performance reasons it would be sad to fallback to disk at this
-			// point.
-			p.allocator.Copy(
-				p.output.ColVec(j),
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:     p.inputTypes[j],
-						Src:         p.input.getValues(j),
-						SrcStartIdx: p.emitted,
-						SrcEndIdx:   newEmitted,
+		p.allocator.PerformOperation(p.output.ColVecs(), func() {
+			for j := 0; j < len(p.inputTypes); j++ {
+				// TODO(yuzefovich): at this point, we have already fully sorted the
+				// input. I think it is ok if we do this Copy outside of the Allocator -
+				// the work has been done, but theoretically it is possible to hit the
+				// limit here (mainly with variable-sized types like Bytes). Nonetheless,
+				// for performance reasons it would be sad to fallback to disk at this
+				// point.
+				p.output.ColVec(j).Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							ColType:     p.inputTypes[j],
+							Src:         p.input.getValues(j),
+							SrcStartIdx: p.emitted,
+							SrcEndIdx:   newEmitted,
+						},
+						Sel64: p.order,
 					},
-					Sel64: p.order,
-				},
-			)
-		}
+				)
+			}
+		})
 		p.output.SetLength(uint16(newEmitted - p.emitted))
 		p.emitted = newEmitted
 		return p.output
@@ -419,22 +419,24 @@ func (p *sortOp) ExportBuffered(allocator *Allocator) coldata.Batch {
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()
 	}
-	for j := 0; j < len(p.inputTypes); j++ {
-		// TODO(yuzefovich): refactor spooler interface so that the spooler could
-		// return buffered tuples as batches and we didn't need to copy the data.
-		// We're using the provided Allocator.
-		allocator.Copy(
-			p.output.ColVec(j),
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:     p.inputTypes[j],
-					Src:         p.input.getValues(j),
-					SrcStartIdx: p.exported,
-					SrcEndIdx:   newExported,
+	// TODO(yuzefovich): refactor spooler interface so that the spooler could
+	// return buffered tuples as batches and we didn't need to copy the data.
+	// We're using the provided Allocator.
+	allocator.PerformOperation(p.output.ColVecs(), func() {
+		for j := 0; j < len(p.inputTypes); j++ {
+			p.output.ColVec(j).Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     p.inputTypes[j],
+						Src:         p.input.getValues(j),
+						SrcStartIdx: p.exported,
+						SrcEndIdx:   newExported,
+					},
 				},
-			},
-		)
-	}
+			)
+		}
+
+	})
 	p.output.SetLength(uint16(newExported - p.exported))
 	p.exported = newExported
 	return p.output

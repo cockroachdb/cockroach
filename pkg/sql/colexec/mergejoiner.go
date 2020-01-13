@@ -417,23 +417,22 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	}
 	destStartIdx := bufferedGroup.length
 	groupEndIdx := groupStartIdx + groupLength
-	for cIdx, cType := range input.sourceTypes {
-		o.allocator.Append(
-			bufferedGroup.ColVec(cIdx),
-			coldata.SliceArgs{
-				ColType:     cType,
-				Src:         batch.ColVec(cIdx),
-				Sel:         sel,
-				DestIdx:     destStartIdx,
-				SrcStartIdx: uint64(groupStartIdx),
-				SrcEndIdx:   uint64(groupEndIdx),
-			},
-		)
-	}
+	o.allocator.PerformOperation(bufferedGroup.colVecs, func() {
+		for cIdx, cType := range input.sourceTypes {
+			bufferedGroup.colVecs[cIdx].Append(
+				coldata.SliceArgs{
+					ColType:     cType,
+					Src:         batch.ColVec(cIdx),
+					Sel:         sel,
+					DestIdx:     destStartIdx,
+					SrcStartIdx: uint64(groupStartIdx),
+					SrcEndIdx:   uint64(groupEndIdx),
+				},
+			)
+		}
+		bufferedGroup.length += uint64(groupLength)
+	})
 
-	// We've added groupLength number of tuples to bufferedGroup, so we need to
-	// adjust its length.
-	bufferedGroup.length += uint64(groupLength)
 	for _, v := range bufferedGroup.colVecs {
 		if v.Type() == coltypes.Bytes {
 			v.Bytes().UpdateOffsetsToBeNonDecreasing(bufferedGroup.length)

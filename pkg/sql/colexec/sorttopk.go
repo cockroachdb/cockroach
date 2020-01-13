@@ -129,22 +129,23 @@ func (t *topKSorter) spool(ctx context.Context) {
 			fromLength = remainingRows
 			inputBatchIdx = fromLength
 		}
-		for i := range t.inputTypes {
-			destVec := t.topK.ColVec(i)
-			vec := inputBatch.ColVec(i)
-			colType := t.inputTypes[i]
-			t.allocator.Append(
-				destVec,
-				coldata.SliceArgs{
-					ColType:   colType,
-					Src:       vec,
-					Sel:       inputBatch.Selection(),
-					DestIdx:   toLength,
-					SrcEndIdx: uint64(fromLength),
-				},
-			)
-		}
-		spooledRows += fromLength
+		t.allocator.PerformOperation(t.topK.ColVecs(), func() {
+			for i := range t.inputTypes {
+				destVec := t.topK.ColVec(i)
+				vec := inputBatch.ColVec(i)
+				colType := t.inputTypes[i]
+				destVec.Append(
+					coldata.SliceArgs{
+						ColType:   colType,
+						Src:       vec,
+						Sel:       inputBatch.Selection(),
+						DestIdx:   toLength,
+						SrcEndIdx: uint64(fromLength),
+					},
+				)
+			}
+			spooledRows += fromLength
+		})
 		remainingRows -= fromLength
 		if fromLength == inputBatch.Length() {
 			inputBatch = t.input.Next(ctx)
@@ -165,7 +166,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 	for inputBatch.Length() > 0 {
 		t.updateComparators(inputVecIdx, inputBatch)
 		sel := inputBatch.Selection()
-		t.allocator.performOperation(
+		t.allocator.PerformOperation(
 			t.topK.ColVecs(),
 			func() {
 				for i := inputBatchIdx; i < inputBatch.Length(); i++ {
@@ -208,21 +209,22 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	for i := range t.inputTypes {
-		vec := t.output.ColVec(i)
-		t.allocator.Copy(
-			vec,
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:     t.inputTypes[i],
-					Src:         t.topK.ColVec(i),
-					Sel:         t.sel,
-					SrcStartIdx: uint64(t.emitted),
-					SrcEndIdx:   uint64(t.emitted + toEmit),
+	t.allocator.PerformOperation(t.output.ColVecs(), func() {
+		for i := range t.inputTypes {
+			vec := t.output.ColVec(i)
+			vec.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						ColType:     t.inputTypes[i],
+						Src:         t.topK.ColVec(i),
+						Sel:         t.sel,
+						SrcStartIdx: uint64(t.emitted),
+						SrcEndIdx:   uint64(t.emitted + toEmit),
+					},
 				},
-			},
-		)
-	}
+			)
+		}
+	})
 	t.output.SetLength(toEmit)
 	t.emitted += toEmit
 	return t.output
