@@ -27,6 +27,7 @@ var (
 
 		{10, makeAddColumn},
 		{10, makeJSONComputedColumn},
+		{10, makeAlterPrimaryKey},
 		{1, makeDropColumn},
 		{5, makeRenameColumn},
 		{5, makeAlterColumnType},
@@ -212,6 +213,40 @@ func makeDropColumn(s *Smither) (tree.Statement, bool) {
 			&tree.AlterTableDropColumn{
 				Column:       col.Name,
 				DropBehavior: s.randDropBehavior(),
+			},
+		},
+	}, true
+}
+
+func makeAlterPrimaryKey(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
+	if !ok {
+		return nil, false
+	}
+	// Collect all columns that are NOT NULL to be candidate new primary keys.
+	var candidateColumns tree.IndexElemList
+	for _, c := range tableRef.Columns {
+		if c.Nullable.Nullability == tree.NotNull {
+			candidateColumns = append(candidateColumns, tree.IndexElem{Column: c.Name})
+		}
+	}
+	if len(candidateColumns) == 0 {
+		return nil, false
+	}
+	s.rnd.Shuffle(len(candidateColumns), func(i, j int) {
+		candidateColumns[i], candidateColumns[j] = candidateColumns[j], candidateColumns[i]
+	})
+	// Pick some randomly short prefix of the candidate columns as a potential new primary key.
+	i := 1
+	for len(candidateColumns) > i && s.rnd.Intn(2) == 0 {
+		i++
+	}
+	candidateColumns = candidateColumns[:i]
+	return &tree.AlterTable{
+		Table: tableRef.TableName.ToUnresolvedObjectName(),
+		Cmds: tree.AlterTableCmds{
+			&tree.AlterTableAlterPrimaryKey{
+				Columns: candidateColumns,
 			},
 		},
 	}, true
