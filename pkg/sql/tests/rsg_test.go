@@ -547,6 +547,9 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		}
 		return err
 	})
+	if smither != nil {
+		smither.Close()
+	}
 
 	fmt.Printf("To reproduce, use schema:\n\n")
 	for _, stmt := range tableStmts {
