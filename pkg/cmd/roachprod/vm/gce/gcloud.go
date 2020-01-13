@@ -194,14 +194,6 @@ type projectsVal struct {
 	opts                   *providerOpts
 }
 
-// defaultZones is the list of  zones used by default for cluster creation.
-// If the geo flag is specified, nodes are distributed between zones.
-var defaultZones = []string{
-	"us-east1-b",
-	"us-west1-b",
-	"europe-west2-b",
-}
-
 // Set is part of the pflag.Value interface.
 func (v projectsVal) Set(projects string) error {
 	if projects == "" {
@@ -260,18 +252,17 @@ func (p *Provider) GetProjects() []string {
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
-	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
+	flags.StringSliceVar(&o.Zones, "zones", []string{"us-east1-b", "us-west1-b", "europe-west2-b"}, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
 
 	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
 		os.Getenv("GCE_SERVICE_ACCOUNT"), "Service account to use")
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
-		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
-			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
-			"regardless of geo (default [%s])",
-			strings.Join(defaultZones, ",")))
+	flags.StringSliceVar(&o.Zones, ProviderName+"-zones",
+		[]string{"us-east1-b", "us-west1-b", "europe-west2-b"},
+		"Zones for cluster; If zones are formatted as "+
+			"AZ:N where N is an integer, the zone will be repeated N times")
 	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20190122a",
 		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
@@ -356,12 +347,8 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if err != nil {
 		return err
 	}
-	if len(zones) == 0 {
-		if opts.GeoDistributed {
-			zones = defaultZones
-		} else {
-			zones = []string{defaultZones[0]}
-		}
+	if !opts.GeoDistributed {
+		zones = []string{zones[0]}
 	}
 
 	// Fixed args.
