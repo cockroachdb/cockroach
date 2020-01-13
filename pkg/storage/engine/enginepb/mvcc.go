@@ -171,7 +171,7 @@ func (meta *MVCCMetadata) GetPrevIntentSeq(seq TxnSeq) (TxnSeq, bool) {
 	index := sort.Search(len(meta.IntentHistory), func(i int) bool {
 		return meta.IntentHistory[i].Sequence >= seq
 	})
-	if index > 0 && index < len(meta.IntentHistory) {
+	if index > 0 {
 		return meta.IntentHistory[index-1].Sequence, true
 	}
 	return 0, false
