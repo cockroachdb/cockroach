@@ -715,7 +715,7 @@ user testuser
 statement error only users with the admin role are allowed to alter system ranges
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have CREATE privilege on database auth
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
 statement error pq: only users with the admin role are allowed to alter system tables
@@ -739,6 +739,26 @@ GRANT CREATE ON DATABASE auth TO testuser
 
 statement ok
 GRANT CREATE ON TABLE auth.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+user root
+
+statement ok
+REVOKE CREATE ON DATABASE auth from testuser
+
+user testuser
+
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+user root
+
+statement ok
+GRANT ZONECONFIG ON DATABASE auth to testuser
 
 user testuser
 
@@ -957,4 +977,3 @@ WHERE table_name = 'parent_modify' AND index_name IS NULL
 ----
 parent_modify  NULL  ALTER TABLE test.public.parent_modify CONFIGURE ZONE USING
                      gc.ttlseconds = 700
-
