@@ -64,8 +64,8 @@ type loggingT struct {
 
 		// exitOverride is used when shutting down logging.
 		exitOverride struct {
-			f         func(int) // overrides os.Exit when non-nil; testing only
-			hideStack bool      // hides stack trace; only in effect when f is not nil
+			f         func(int, error) // overrides os.Exit when non-nil; testing only
+			hideStack bool             // hides stack trace; only in effect when f is not nil
 		}
 
 		// the Cluster ID is reported on every new log file so as to ease the correlation
@@ -215,8 +215,6 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 		}
 		stacks = append(stacks, []byte(fatalErrorPostamble)...)
 
-		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
-
 		// We don't want to hang forever writing our final log message. If
 		// things are broken (for example, if the disk fills up and there
 		// are cascading errors and our process manager has stopped
@@ -230,7 +228,7 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 		//
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
-		exitFunc := os.Exit
+		exitFunc := func(x int, _ error) { os.Exit(x) }
 		logging.mu.Lock()
 		if logging.mu.exitOverride.f != nil {
 			if logging.mu.exitOverride.hideStack {
@@ -251,7 +249,7 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 			case <-time.After(10 * time.Second):
 			case <-fatalTrigger:
 			}
-			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+			exitFunc(255, nil) // C++ uses -1, which is silly because it's anded with 255 anyway.
 			close(exitCalled)
 		}()
 	} else {
