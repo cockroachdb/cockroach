@@ -45,3 +45,16 @@ export function queryByName(location: Location, key: string) {
   const urlParams = new URLSearchParams(location.search);
   return urlParams.get(key);
 }
+
+export function removeURLParameters(location: Location, removeParams: string[]) {
+  const deleteRegex = new RegExp(removeParams.join("=|") + "=");
+
+  const params = location.search.slice(1).split("&");
+  const search = [];
+  for (let i = 0; i < params.length; i++) {
+    if (deleteRegex.test(params[i]) === false) {
+      search.push(params[i]);
+    }
+  }
+  return search.length ? "?" + search.join("&") : "";
+}
