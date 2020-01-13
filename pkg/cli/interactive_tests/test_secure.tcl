@@ -44,41 +44,9 @@ eexpect "1 row"
 eexpect $prompt
 end_test
 
-start_test "Cannot create users with empty passwords."
-send "$argv user set carl --password --certs-dir=$certs_dir\r"
-eexpect "Enter password:"
-send "\r"
-eexpect "empty passwords are not permitted"
-eexpect $prompt
-end_test
-
-start_test "Make the user without password."
-send "$argv user set carl --certs-dir=$certs_dir\r"
-eexpect "CREATE USER"
-eexpect $prompt
-end_test
-
-start_test "Check a password can be changed."
-send "$argv user set carl --password --certs-dir=$certs_dir\r"
-eexpect "Enter password:"
-send "woof\r"
-eexpect "Confirm password:"
-send "woof\r"
-eexpect "ALTER USER"
-eexpect $prompt
-end_test
-
-start_test "Check a password is requested by the client."
-send "$argv sql --certs-dir=$certs_dir --user=carl\r"
-eexpect "Enter password:"
-send "woof\r"
-eexpect "carl@"
-send "\\q\r"
-eexpect $prompt
-end_test
 
 start_test "Can create users without passwords."
-send "$argv user set testuser --certs-dir=$certs_dir\r"
+send "$argv sql -e 'create user testuser' --certs-dir=$certs_dir\r"
 eexpect $prompt
 end_test
 

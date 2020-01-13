@@ -445,8 +445,6 @@ func init() {
 	// PKCS8 key format is only available for the client cert command.
 	BoolFlag(createClientCertCmd.Flags(), &generatePKCS8Key, cliflags.GeneratePKCS8Key, false)
 
-	BoolFlag(setUserCmd.Flags(), &password, cliflags.Password, false)
-
 	clientCmds := []*cobra.Command{
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
@@ -457,7 +455,6 @@ func init() {
 		sqlShellCmd,
 		/* StartCmds are covered above */
 	}
-	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, initCmd)
@@ -542,7 +539,6 @@ func init() {
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
-	sqlCmds = append(sqlCmds, userCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
 	for _, cmd := range sqlCmds {
@@ -573,7 +569,6 @@ func init() {
 	tableOutputCommands := append(
 		[]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd},
 		demoCmd.Commands()...)
-	tableOutputCommands = append(tableOutputCommands, userCmds...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
 
 	// By default, these commands print their output as pretty-formatted
