@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1368,7 +1369,7 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	defer finish()
 
 	if quitCtx.serverDecommission {
-		var myself []string // will remain empty, which means target yourself
+		var myself []roachpb.NodeID // will remain empty, which means target yourself
 		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, myself); err != nil {
 			return err
 		}

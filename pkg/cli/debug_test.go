@@ -341,13 +341,13 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 				adminClient := serverpb.NewAdminClient(grpcConn)
 
-				deadNodeStrs := []string{}
+				deadNodes := []roachpb.NodeID{}
 				for i := testCase.survivingNodes; i < testCase.totalNodes; i++ {
-					deadNodeStrs = append(deadNodeStrs, fmt.Sprintf("%d", i+1))
+					deadNodes = append(deadNodes, roachpb.NodeID(i+1))
 				}
 
 				if err := runDecommissionNodeImpl(
-					ctx, adminClient, nodeDecommissionWaitNone, deadNodeStrs,
+					ctx, adminClient, nodeDecommissionWaitNone, deadNodes,
 				); err != nil {
 					t.Fatal(err)
 				}
