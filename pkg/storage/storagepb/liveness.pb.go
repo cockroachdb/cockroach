@@ -65,7 +65,7 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_a742f8206583547b, []int{0}
+	return fileDescriptor_liveness_02a7d82e103a0b92, []int{0}
 }
 
 // Liveness holds information about a node's latest heartbeat and epoch.
@@ -79,6 +79,14 @@ type Liveness struct {
 	// is later than the expiration timestamp).
 	Epoch int64 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	// The timestamp at which this liveness record expires.
+	//
+	// Note that the clock max offset is not accounted for in any way when this
+	// expiration is set. If a checker wants to be extra-optimistic about another
+	// node being alive, it can adjust for the max offset. liveness.IsLive()
+	// doesn't do that, however. The expectation is that the expiration duration
+	// is large in comparison to the max offset, and that nodes heartbeat their
+	// liveness records well in advance of this expiration, so the optimism or
+	// pessimism of a checker does not matter very much.
 	Expiration      hlc.LegacyTimestamp `protobuf:"bytes,3,opt,name=expiration,proto3" json:"expiration"`
 	Draining        bool                `protobuf:"varint,4,opt,name=draining,proto3" json:"draining,omitempty"`
 	Decommissioning bool                `protobuf:"varint,5,opt,name=decommissioning,proto3" json:"decommissioning,omitempty"`
@@ -88,7 +96,7 @@ func (m *Liveness) Reset()         { *m = Liveness{} }
 func (m *Liveness) String() string { return proto.CompactTextString(m) }
 func (*Liveness) ProtoMessage()    {}
 func (*Liveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_a742f8206583547b, []int{0}
+	return fileDescriptor_liveness_02a7d82e103a0b92, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -573,10 +581,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_a742f8206583547b)
+	proto.RegisterFile("storage/storagepb/liveness.proto", fileDescriptor_liveness_02a7d82e103a0b92)
 }
 
-var fileDescriptor_liveness_a742f8206583547b = []byte{
+var fileDescriptor_liveness_02a7d82e103a0b92 = []byte{
 	// 426 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x52, 0xc1, 0x6e, 0x9b, 0x30,
 	0x18, 0xc6, 0x09, 0x49, 0x33, 0x47, 0x5a, 0x98, 0xd7, 0x43, 0x94, 0x03, 0xa0, 0xed, 0x82, 0x36,

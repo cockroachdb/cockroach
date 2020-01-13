@@ -410,7 +410,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
+	return liveness.IsLive(nl.clock.Now()), nil
 }
 
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
@@ -574,9 +574,8 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
-		maxOffset := nl.clock.MaxOffset()
 		update.Expiration = hlc.LegacyTimestamp(
-			nl.clock.Now().Add((nl.livenessThreshold + maxOffset).Nanoseconds(), 0))
+			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long
 		// as the cockroach process is running, checks inside hlc.Clock
 		// will ensure that the clock never moves backwards, but these
@@ -600,7 +599,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// expired while in flight, so maybe we don't have to care about
 		// that and only need to distinguish between same and different
 		// epochs in our return value.
-		if actual.IsLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
+		if actual.IsLive(nl.clock.Now()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
 		// Otherwise, return error.
@@ -648,9 +647,8 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
 	now := nl.clock.Now()
-	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
-		isLive := l.IsLive(now, maxOffset)
+		isLive := l.IsLive(now)
 		if !isLive && l.Decommissioning {
 			// This is a node that was completely removed. Skip over it.
 			continue
@@ -696,12 +694,11 @@ func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]storagepb.Node
 	now := nl.clock.PhysicalTime()
 	livenesses := nl.GetLivenesses()
 	threshold := TimeUntilStoreDead.Get(&nl.st.SV)
-	maxOffset := nl.clock.MaxOffset()
 
 	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
 		status := liveness.LivenessStatus(
-			now, threshold, maxOffset,
+			now, threshold,
 		)
 		statusMap[liveness.NodeID] = status
 	}
@@ -751,7 +748,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness storagepb.L
 		<-sem
 	}()
 
-	if liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()) {
+	if liveness.IsLive(nl.clock.Now()) {
 		return errors.Errorf("cannot increment epoch on live node: %+v", liveness)
 	}
 	update := livenessUpdate{Liveness: liveness}
@@ -921,8 +918,8 @@ func (nl *NodeLiveness) maybeUpdate(new storagepb.Liveness) {
 		return
 	}
 
-	now, offset := nl.clock.Now(), nl.clock.MaxOffset()
-	if !old.IsLive(now, offset) && new.IsLive(now, offset) {
+	now := nl.clock.Now()
+	if !old.IsLive(now) && new.IsLive(now) {
 		for _, fn := range callbacks {
 			fn(new.NodeID)
 		}
@@ -982,7 +979,6 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	}
 
 	now := nl.clock.Now()
-	maxOffset := nl.clock.MaxOffset()
 
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
@@ -997,12 +993,12 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	}
 	// If this node isn't live, we don't want to report its view of node liveness
 	// because it's more likely to be inaccurate than the view of a live node.
-	if !self.IsLive(now, maxOffset) {
+	if !self.IsLive(now) {
 		return 0
 	}
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
-		if l.IsLive(now, maxOffset) {
+		if l.IsLive(now) {
 			liveNodes++
 		}
 	}
@@ -1019,7 +1015,7 @@ func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
 		if err != nil {
 			return hlc.Timestamp{}, 0, err
 		}
-		if !liveness.IsLive(now, nl.clock.MaxOffset()) {
+		if !liveness.IsLive(now) {
 			return hlc.Timestamp{}, 0, errLiveClockNotLive
 		}
 		return now, ctpb.Epoch(liveness.Epoch), nil

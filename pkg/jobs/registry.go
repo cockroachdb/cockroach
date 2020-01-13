@@ -417,7 +417,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	defer r.mu.Unlock()
 	// If we haven't persisted a liveness record within the leniency
 	// interval, we'll cancel all of our jobs.
-	if !liveness.IsLive(r.lenientNow(), r.clock.MaxOffset()) {
+	if !liveness.IsLive(r.lenientNow()) {
 		r.cancelAll(ctx)
 		r.mu.epoch = liveness.Epoch
 		return
@@ -732,16 +732,16 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		// only a live node updates its own expiration.  Thus, the
 		// expiration time can be used as a reasonable measure of
 		// when the node was last seen.
-		now, maxOffset := r.lenientNow(), r.clock.MaxOffset()
+		now := r.lenientNow()
 		for _, liveness := range nl.GetLivenesses() {
 			nodeStatusMap[liveness.NodeID] = &nodeStatus{
-				isLive: liveness.IsLive(now, maxOffset),
+				isLive: liveness.IsLive(now),
 			}
 
 			// Don't try to start any more jobs unless we're really live,
 			// otherwise we'd just immediately cancel them.
 			if liveness.NodeID == r.nodeID.Get() {
-				if !liveness.IsLive(r.clock.Now(), maxOffset) {
+				if !liveness.IsLive(r.clock.Now()) {
 					return nil
 				}
 			}
