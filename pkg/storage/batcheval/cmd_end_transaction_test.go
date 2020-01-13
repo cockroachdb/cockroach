@@ -95,7 +95,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		noIntentSpans  bool
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       *hlc.Timestamp
-		noRefreshSpans bool
 		// Expected result.
 		expError string
 		expTxn   *roachpb.TransactionRecord
@@ -997,7 +996,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			if !c.commit {
 				require.Nil(t, c.inFlightWrites)
 				require.Nil(t, c.deadline)
-				require.False(t, c.noRefreshSpans)
 			}
 
 			// Issue an EndTxn request.
@@ -1005,9 +1003,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 				Commit:        c.commit,
 
-				InFlightWrites:             c.inFlightWrites,
-				Deadline:                   c.deadline,
-				CanCommitAtHigherTimestamp: c.noRefreshSpans,
+				InFlightWrites: c.inFlightWrites,
+				Deadline:       c.deadline,
 			}
 			if !c.noIntentSpans {
 				req.IntentSpans = intents
