@@ -21,9 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -300,24 +302,75 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, finish, err := getAdminClient(ctx, serverCfg)
-	if err != nil {
-		return err
-	}
-	defer finish()
-
-	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
-}
-
-func runDecommissionNodeImpl(
-	ctx context.Context, c serverpb.AdminClient, wait nodeDecommissionWaitType, args []string,
-) error {
-	if wait == nodeDecommissionWaitLive {
-		fmt.Fprintln(stderr, "\n--wait=live is deprecated and is treated as --wait=all")
-	}
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
+	}
+
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to the node")
+	}
+	defer finish()
+
+	if err := expectNodesDecommissioned(ctx, conn, nodeIDs, false /* decommissioned */); err != nil {
+		return err
+	}
+
+	c := serverpb.NewAdminClient(conn)
+
+	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
+}
+
+func expectNodesDecommissioned(
+	ctx context.Context, conn *grpc.ClientConn, nodeIDs []roachpb.NodeID, expDecommissioned bool,
+) error {
+	s := serverpb.NewStatusClient(conn)
+	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+	for _, nodeID := range nodeIDs {
+		liveness, ok := resp.LivenessByNodeID[nodeID]
+		if !ok {
+			fmt.Fprintln(stderr, "warning: cannot find status of node", nodeID)
+			continue
+		}
+		if !expDecommissioned {
+			// The user is expecting the node to not be
+			// decommissioned/decommissioning already.
+			switch liveness {
+			case storagepb.NodeLivenessStatus_DECOMMISSIONING,
+				storagepb.NodeLivenessStatus_DECOMMISSIONED:
+				fmt.Fprintln(stderr, "warning: node", nodeID, "is already decommissioning or decommissioned")
+			default:
+				// It's always possible to decommission a node that's either live
+				// or dead.
+			}
+		} else {
+			// The user is expecting the node to be recommissionable.
+			switch liveness {
+			case storagepb.NodeLivenessStatus_DECOMMISSIONING,
+				storagepb.NodeLivenessStatus_DECOMMISSIONED:
+				// ok.
+			case storagepb.NodeLivenessStatus_LIVE:
+				fmt.Fprintln(stderr, "warning: node", nodeID, "is not decommissioned")
+			default: // dead, unavailable, etc
+				fmt.Fprintln(stderr, "warning: node", nodeID, "is in unexpected state", liveness)
+			}
+		}
+	}
+	return nil
+}
+
+func runDecommissionNodeImpl(
+	ctx context.Context,
+	c serverpb.AdminClient,
+	wait nodeDecommissionWaitType,
+	nodeIDs []roachpb.NodeID,
+) error {
+	if wait == nodeDecommissionWaitLive {
+		fmt.Fprintln(stderr, "\n--wait=live is deprecated and is treated as --wait=all")
 	}
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
@@ -417,11 +470,17 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Failed to connect to the node")
 	}
 	defer finish()
+
+	if err := expectNodesDecommissioned(ctx, conn, nodeIDs, true /* decommissioned */); err != nil {
+		return err
+	}
+
+	c := serverpb.NewAdminClient(conn)
 
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:         nodeIDs,
