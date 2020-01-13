@@ -724,19 +724,19 @@ user testuser
 statement error only users with the admin role are allowed to alter system ranges
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: user testuser does not have CREATE privilege on database auth
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
 statement error pq: only users with the admin role are allowed to alter system tables
 ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
 
-statement error user testuser does not have CREATE privilege on relation t
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
 ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
-statement error user testuser does not have CREATE privilege on relation t
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
 ALTER PARTITION p OF TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
 
-statement error user testuser does not have CREATE privilege on relation t
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
 ALTER PARTITION p OF INDEX auth.t@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting CREATE on databases and tables should allow CONFIGURE ZONE on those
@@ -754,8 +754,70 @@ user testuser
 statement ok
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
+user root
+
 statement ok
+REVOKE CREATE ON DATABASE auth FROM testuser;
+REVOKE CREATE ON TABLE auth.t FROM testuser;
+
+user testuser
+
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
 ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
+
+
+# Granting ZONECONFIG privilege should allow configuring zones on database and tables
+user root
+
+statement ok
+CREATE TABLE auth.t2 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p VALUES IN (1)
+);
+GRANT ZONECONFIG ON TABLE auth.t2 to testuser
+
+user testuser
+
+statement ok
+ALTER TABLE auth.t2 CONFIGURE ZONE USING num_replicas = 3
+
+user root
+
+statement ok
+REVOKE ZONECONFIG ON TABLE auth.t2 FROM testuser;
+GRANT ZONECONFIG ON DATABASE auth TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
+
+# Existing tables should not inherit ZONECONFIG privilege
+statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t
+ALTER TABLE auth.t CONFIGURE ZONE USING num_replicas = 3
+
+# New tables should inherit ZONECONFIG privilege
+user root
+
+statement ok
+CREATE TABLE auth.t3 (x INT PRIMARY KEY) PARTITION BY LIST (x) (
+  PARTITION p VALUES IN (1)
+);
+CREATE INDEX x ON auth.t3 (x) PARTITION BY LIST (x) (
+  PARTITION p VALUES IN (1)
+);
+
+user testuser
+
+statement ok
+ALTER TABLE auth.t3 CONFIGURE ZONE USING num_replicas = 3
+
+# Index and rows (partitions) should inherit table permissions
+statement ok
+ALTER INDEX auth.t3@x CONFIGURE ZONE USING num_replicas=5;
+ALTER PARTITION p OF INDEX auth.t3@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting the admin role should allow configuring zones on system tables and
 # ranges.
@@ -966,4 +1028,3 @@ WHERE table_name = 'parent_modify' AND index_name IS NULL
 ----
 parent_modify  NULL  ALTER TABLE test.public.parent_modify CONFIGURE ZONE USING
                      gc.ttlseconds = 700
-

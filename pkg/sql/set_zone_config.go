@@ -181,7 +181,17 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		if err != nil {
 			return err
 		}
-		return p.CheckPrivilege(ctx, dbDesc, privilege.CREATE)
+		dbCreatePrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE)
+		dbZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilege.ZONECONFIG)
+
+		// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Database level
+		if dbZoneConfigPrivilegeErr == nil || dbCreatePrivilegeErr == nil {
+			return nil
+		}
+
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege on %s %s",
+			p.SessionData().User, privilege.ZONECONFIG, privilege.CREATE, dbDesc.TypeName(), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -193,7 +203,18 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	if tableDesc.ParentID == keys.SystemDatabaseID {
 		return p.RequireAdminRole(ctx, "alter system tables")
 	}
-	return p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
+
+	// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Table level
+	tableCreatePrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
+	tableZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilege.ZONECONFIG)
+
+	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
+		return nil
+	}
+
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not have %s or %s privilege on %s %s",
+		p.SessionData().User, privilege.ZONECONFIG, privilege.CREATE, tableDesc.TypeName(), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
