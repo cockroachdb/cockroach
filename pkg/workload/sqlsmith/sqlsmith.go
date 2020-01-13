@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -29,9 +30,18 @@ type sqlSmith struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed   int64
-	tables int
+	seed          int64
+	tables        int
+	errorSettings int
 }
+
+type errorSettingTypes int
+
+const (
+	ignoreExecErrors errorSettingTypes = iota
+	returnOnInternalError
+	returnOnError
+)
 
 func init() {
 	workload.Register(sqlSmithMeta)
@@ -46,6 +56,8 @@ var sqlSmithMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`sqlsmith`, pflag.ContinueOnError)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.tables, `tables`, 1, `Number of tables.`)
+		g.flags.IntVar(&g.errorSettings, `error-sensitivity`, 0,
+			`SQLSmith's sensitivity to errors. 0=ignore all errors. 1=quit on internal errors. 2=quit on any error.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -75,8 +87,38 @@ func (g *sqlSmith) Tables() []workload.Table {
 	return tables
 }
 
+func (g *sqlSmith) handleError(err error) error {
+	if err != nil {
+		switch errorSettingTypes(g.errorSettings) {
+		case ignoreExecErrors:
+			return nil
+		case returnOnInternalError:
+			if strings.Contains(err.Error(), "internal error") {
+				return err
+			}
+		case returnOnError:
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *sqlSmith) validateErrorSetting() error {
+	switch errorSettingTypes(g.errorSettings) {
+	case ignoreExecErrors:
+	case returnOnInternalError:
+	case returnOnError:
+	default:
+		return errors.Newf("invalid value for error-sensitivity: %d", g.errorSettings)
+	}
+	return nil
+}
+
 // Ops implements the Opser interface.
 func (g *sqlSmith) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+	if err := g.validateErrorSetting(); err != nil {
+		return workload.QueryLoad{}, err
+	}
 	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -105,10 +147,12 @@ func (g *sqlSmith) Ops(urls []string, reg *histogram.Registry) (workload.QueryLo
 			hists.Get(`generate`).Record(elapsed)
 
 			start = timeutil.Now()
-			if _, err := db.ExecContext(ctx, query); err != nil {
-				return err
+			_, err := db.ExecContext(ctx, query)
+			if handledErr := g.handleError(err); handledErr != nil {
+				return handledErr
 			}
 			elapsed = timeutil.Since(start)
+
 			hists.Get(`exec`).Record(elapsed)
 
 			return nil
