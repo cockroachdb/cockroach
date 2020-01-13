@@ -1760,12 +1760,14 @@ message ResponseUnion {
 // information required for executing it.
 message Header {
   reserved 7;
-  // timestamp specifies time at which reads or writes should be
-  // performed. If the timestamp is set to zero value, its value
-  // is initialized to the wall time of the receiving node.
+  // timestamp specifies time at which reads or writes should be performed. If
+  // the timestamp is set to zero value, its value is initialized to the wall
+  // time of the server node.
   //
-  // For transactional requests, writes are performed at the provisional commit
-  // timestamp (txn.Timestamp), not this one.
+  // Transactional requests are not allowed to set this field; they must rely on
+  // the server to set it from txn.ReadTimestamp. Also, for transactional
+  // requests, writes are performed at the provisional commit timestamp
+  // (txn.WriteTimestamp).
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
