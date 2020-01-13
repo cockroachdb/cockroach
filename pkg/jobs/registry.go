@@ -235,8 +235,10 @@ func (r *Registry) StartJob(
 
 	resumeCtx, cancel := r.makeCtx()
 	r.register(*j.ID(), cancel)
-
-	if err := j.Started(ctx); err != nil {
+	if err := j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		return nil
+	}); err != nil {
 		r.unregister(*j.ID())
 		return nil, err
 	}
@@ -475,7 +477,7 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		}
 		remove := false
 		switch Status(*row[2].(*tree.DString)) {
-		case StatusRunning, StatusPending:
+		case StatusRunning:
 			done, err := r.isOrphaned(ctx, payload)
 			if err != nil {
 				return err
@@ -709,9 +711,9 @@ func (r *Registry) resume(
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
-	const stmt = `SELECT id, payload, progress IS NULL FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
+	const stmt = `SELECT id, payload, progress IS NULL FROM system.jobs WHERE status IN ($1) ORDER BY created DESC`
 	rows, err := r.ex.Query(
-		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
+		ctx, "adopt-job", nil /* txn */, stmt, StatusRunning,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")

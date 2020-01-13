@@ -61,9 +61,6 @@ type Status string
 type RunningStatus string
 
 const (
-	// StatusPending is for jobs that have been created but on which work has
-	// not yet started.
-	StatusPending Status = "pending"
 	// StatusRunning is for jobs that are currently in progress.
 	StatusRunning Status = "running"
 	// StatusPaused is for jobs that are not currently performing work, but have
@@ -129,11 +126,6 @@ func (j *Job) Created(ctx context.Context) error {
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusPending {
-			// Already started - do nothing.
-			return nil
-		}
-		ju.UpdateStatus(StatusRunning)
 		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
 		return nil
@@ -502,7 +494,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		}
 
 		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes, progressBytes)
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
 		return err
 	}); err != nil {
 		return err
@@ -513,7 +505,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusRunning && md.Status != StatusPending {
+		if md.Status != StatusRunning {
 			return errors.Errorf("job %d has status %v which is not elligible for adopting", *j.id, md.Status)
 		}
 		if !md.Payload.Lease.Equal(oldLease) {
