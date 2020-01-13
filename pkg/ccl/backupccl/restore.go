@@ -1761,7 +1761,95 @@ func (r *restoreResumer) Resume(
 		r.job,
 	)
 	r.res = res
-	return err
+	if err != nil {
+		return err
+	}
+
+	if err := r.insertStats(ctx); err != nil {
+		return errors.Wrap(err, "inserting table statistics")
+	}
+
+	if err := r.publishTables(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Insert stats re-inserts the table statistics stored in the backup manifest.
+func (r *restoreResumer) insertStats(ctx context.Context) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if details.StatsInserted {
+		return nil
+	}
+
+	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := stats.InsertNewStats(ctx, r.execCfg.InternalExecutor, txn, r.latestStats); err != nil {
+			return errors.Wrapf(err, "inserting stats from backup")
+		}
+		details.StatsInserted = true
+		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+			return errors.Wrapf(err, "updating job marking stats insertion complete")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// publishTables updates the RESTORED tables status from OFFLINE to PUBLIC.
+func (r *restoreResumer) publishTables(ctx context.Context) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if details.TablesPublished {
+		return nil
+	}
+	log.Event(ctx, "making tables live")
+
+	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Write the new TableDescriptors and flip state over to public so they can be
+		// accessed.
+		b := txn.NewBatch()
+		for _, tbl := range r.tables {
+			tableDesc := *tbl
+			tableDesc.Version++
+			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
+			if err != nil {
+				return errors.Wrap(err, "validating table descriptor has not changed")
+			}
+			b.CPut(
+				sqlbase.MakeDescMetadataKey(tableDesc.ID),
+				sqlbase.WrapDescriptor(&tableDesc),
+				existingDescVal,
+			)
+		}
+
+		if err := txn.Run(ctx, b); err != nil {
+			return errors.Wrap(err, "publishing tables")
+		}
+
+		// Update and persist the state of the job.
+		details.TablesPublished = true
+		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+			return errors.Wrap(err, "updating job details after publishing tables")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+	// rows affected per table, so we use a large number because we want to make
+	// sure that stats always get created/refreshed here.
+	for i := range r.tables {
+		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].ID, math.MaxInt32 /* rowsAffected */)
+	}
+
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that
@@ -1833,40 +1921,6 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) er
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
-	log.Event(ctx, "making tables live")
-
-	if err := stats.InsertNewStats(ctx, r.execCfg.InternalExecutor, txn, r.latestStats); err != nil {
-		return errors.Wrapf(err, "could not reinsert table statistics")
-	}
-
-	// Write the new TableDescriptors and flip state over to public so they can be
-	// accessed.
-	b := txn.NewBatch()
-	for _, tbl := range r.tables {
-		tableDesc := *tbl
-		tableDesc.Version++
-		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-		existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
-		if err != nil {
-			return errors.Wrap(err, "publishing tables")
-		}
-		b.CPut(
-			sqlbase.MakeDescMetadataKey(tableDesc.ID),
-			sqlbase.WrapDescriptor(&tableDesc),
-			existingDescVal,
-		)
-	}
-	if err := txn.Run(ctx, b); err != nil {
-		return errors.Wrap(err, "publishing tables")
-	}
-
-	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
-	// rows affected per table, so we use a large number because we want to make
-	// sure that stats always get created/refreshed here.
-	for i := range r.tables {
-		r.execCfg.StatsRefresher.NotifyMutation(r.tables[i].ID, math.MaxInt32 /* rowsAffected */)
-	}
-
 	return nil
 }
 
