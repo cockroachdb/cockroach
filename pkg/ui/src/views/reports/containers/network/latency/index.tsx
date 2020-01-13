@@ -16,6 +16,7 @@ import { FixLong } from "oss/src/util/fixLong";
 import { Chip } from "oss/src/views/app/components/chip";
 import { Empty } from "oss/src/views/app/components/empty";
 import React from "react";
+import { Link } from "react-router";
 import { getValueFromString, Identity } from "..";
 import "./latency.styl";
 interface StdDev {
@@ -55,7 +56,7 @@ function createHeaderCell(staleIDs: Set<number>, id: DetailedIdentity, key: stri
   );
   return (
     <td key={key} className={className}>
-      {collapsed ? "" : node}
+      <Link to={`/node/${id.nodeID}`}>{collapsed ? "" : node}</Link>
     </td>
   );
 }
