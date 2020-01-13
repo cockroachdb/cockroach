@@ -1,0 +1,43 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-button
+  border-radius 3px
+  color $colors--primary-blue-3
+
+  &:hover
+    color $colors--primary-blue-4
+  &:active
+    border solid 2px $colors--primary-blue-1
+  &:focus
+    outline none
+    border solid 1px $colors--primary-blue-3
+
+.crl-button--type-flat
+  border none
+  cursor pointer
+  background-color transparent
+
+.crl-button--size-default
+  height $line-height--larger
+  min-width $line-height--larger
+  padding $spacing-smaller $spacing-small
+
+.crl-button--size-small
+  height $line-height--medium
+  min-width $line-height--medium
+  padding 0 $spacing-xx-small
+
+.crl-button--disabled
+  color $colors--neutral-4
+  pointer-events none
+  cursor default
