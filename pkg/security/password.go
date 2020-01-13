@@ -11,7 +11,6 @@
 package security
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -73,30 +72,4 @@ func PromptForPassword() (string, error) {
 	fmt.Print("\n")
 
 	return string(password), nil
-}
-
-// PromptForPasswordTwice prompts for a password twice, returning the read string if
-// they match, or an error.
-// This is meant to be used when setting a password.
-func PromptForPasswordTwice() (string, error) {
-	fmt.Print("Enter password: ")
-	one, err := terminal.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", err
-	}
-	if len(one) == 0 {
-		return "", ErrEmptyPassword
-	}
-	fmt.Print("\nConfirm password: ")
-	two, err := terminal.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", err
-	}
-	// Make sure stdout moves on to the next line.
-	fmt.Print("\n")
-	if !bytes.Equal(one, two) {
-		return "", errors.New("password mismatch")
-	}
-
-	return string(one), nil
 }
