@@ -16,14 +16,16 @@ statement ok
 INSERT INTO interval_duration_type (id, regular, regular_precision, second, second_precision, minute, minute_to_second_precision) VALUES
   (1, '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456', '12:34:56.123456'),
   (2, '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456', '12:56.123456'),
-  (3, '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456')
+  (3, '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456', '366 12:34:56.123456'),
+  (4, '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1', '1-2 3.1')
 
 query ITTTTTT
 select * from interval_duration_type order by id asc
 ----
-1  12:34:56.123456           12:34:56.123           12:34:56.123456           12:34:56.123           12:34:00           12:34:56.123
-2  00:12:56.123456           00:12:56.123           00:12:56.123456           00:12:56.123           00:12:00           00:12:56.123
-3  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:56.123456  366 days 12:34:56.123  366 days 12:34:00  366 days 12:34:56.123
+1  12:34:56.123456           12:34:56.123              12:34:56.123456           12:34:56.123              12:34:00                12:34:56.123
+2  00:12:56.123456           00:12:56.123              00:12:56.123456           00:12:56.123              00:12:00                00:12:56.123
+3  366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:56.123456  366 days 12:34:56.123     366 days 12:34:00       366 days 12:34:56.123
+4  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:00:03.1  1 year 2 mons 00:03:00  1 year 2 mons 00:00:03.1
 
 subtest interval_extract_tests
 
@@ -109,11 +111,10 @@ SELECT interval '1-2' year to month
 ----
 1 year 2 mons
 
-# TODO(#43079): fix this
-#query T
-#SELECT interval '1 2' day to hour
-#----
-#1 day 02:00:00
+query T
+SELECT interval '1 2' day to hour
+----
+1 day 02:00:00
 
 query T
 SELECT interval '1 2:03' day to hour
@@ -210,11 +211,10 @@ SELECT interval '1 -2:03:04' minute to second
 ----
 1 day -02:03:04
 
-# TODO(#43079): fix this
-#query T
-#SELECT interval '123 11' day to hour
-#----
-#123 days 11:00:00
+query T
+SELECT interval '123 11' day to hour
+----
+123 days 11:00:00
 
 query error could not parse "123 11" as type interval
 SELECT interval '123 11' day
@@ -308,3 +308,25 @@ query T
 SELECT interval '-1:02.123456'
 ----
 -00:01:02.123456
+
+subtest regression_43079
+
+query T
+SELECT interval '1-2 3' year
+----
+4 years
+
+query T
+SELECT interval '1-2 3' day
+----
+1 year 2 mons 3 days
+
+query T
+SELECT interval '2.1 00:'
+----
+2 days 02:24:00
+
+query T
+SELECT interval ' 5  ' year
+----
+5 years
