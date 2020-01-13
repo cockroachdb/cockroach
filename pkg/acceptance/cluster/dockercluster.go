@@ -21,7 +21,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -525,24 +523,6 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 	}
 
 	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
-	// This is called early in the bootstrap sequence, and the node may not have
-	// opened its ports yet. Wait for the health endpoint to become available,
-	// because we only get one shot at running the init command. (Retrying the
-	// init command is dangerous [0].)
-	// [0]: https://github.com/cockroachdb/cockroach/pull/19753#issuecomment-341561452
-	maybePanic(retry.ForDuration(time.Minute, func() error {
-		url := l.URL(ctx, nodeIdx) + "/health"
-		resp, httpErr := HTTPClient.Get(url)
-		if httpErr != nil {
-			return httpErr
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			log.Warning(ctx, "server not healthy; retrying")
-			return errors.New("server not healthy")
-		}
-		return nil
-	}))
 	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
 		containerConfig, container.HostConfig{}, "init-command"))
 	log.Info(ctx, "cluster successfully initialized")
