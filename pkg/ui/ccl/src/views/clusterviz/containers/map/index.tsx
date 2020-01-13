@@ -20,11 +20,11 @@ import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
-import { Select } from "src/components";
+import { Button } from "src/components/button";
+import { Dropdown } from "src/components/dropdown";
 
 // tslint:disable-next-line:variable-name
 const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
-const Option = Select.Option;
 
 interface ClusterVisualizationProps {
   licenseDataExists: boolean;
@@ -33,6 +33,11 @@ interface ClusterVisualizationProps {
 }
 
 class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
+  readonly items = [
+    { value: "list", name: "Node List" },
+    { value: "map", name: "Node Map" },
+  ];
+
   handleMapTableToggle = (value: string) => {
     this.props.router.push(`/overview/${value}`);
   }
@@ -56,14 +61,14 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
       <div className={classes}>
         <div className="cluster-visualization-layout__content">
           <div className="cluster-visualization-layout__content-item">
-            <Select
-              defaultValue="map"
-              display="link"
+            <Dropdown
+              items={this.items}
               onChange={this.handleMapTableToggle}
             >
-              <Option value="list">Node List</Option>
-              <Option value="map">Node Map</Option>
-            </Select>
+              <Button type="flat" size="small">
+                Node Map
+              </Button>
+            </Dropdown>
           </div>
           <div className={contentItemClasses}><Breadcrumbs tiers={tiers} /></div>
           <div className={contentItemClasses}><TimeScaleDropdown /></div>
