@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 type intervalLexer struct {
@@ -181,7 +182,7 @@ func newInvalidSQLDurationError(s string) error {
 }
 
 // Parses a SQL standard interval string.
-// See the following links for exampels:
+// See the following links for examples:
 //  - http://www.postgresql.org/docs/9.1/static/datatype-datetime.html#DATATYPE-INTERVAL-INPUT-EXAMPLES
 //  - http://www.ibm.com/support/knowledgecenter/SSGU8G_12.1.0/com.ibm.esqlc.doc/ids_esqlc_0190.htm
 func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Duration, error) {
@@ -218,6 +219,11 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			return d, newInvalidSQLDurationError(s)
 		}
 
+		mult := int64(1)
+		if neg {
+			mult = -1
+		}
+
 		if strings.ContainsRune(part, ':') {
 			// Try to parse as HH:MM:SS
 			if parsedIdx != nothingParsed {
@@ -230,14 +236,13 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			//
 			// Instead of supporting unit changing based on int or float, use the
 			// following rules:
-			// - One field is S.
 			// - Two fields is H:M or M:S.fff (unless using MINUTE TO SECOND, then M:S).
 			// - Three fields is H:M:S(.fff)?.
 			// - All fields support both int and float.
 			hms := strings.Split(part, ":")
 			var err error
 			var dur time.Duration
-			// Support such as `HH:` and `HH:MM:` as postgres do. Set the last part to "0".
+			// Support such as `HH:` and `HH:MM:` as postgres does. Set the last part to "0".
 			if hms[len(hms)-1] == "" {
 				hms[len(hms)-1] = "0"
 			}
@@ -253,8 +258,8 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 				}
 				dur, err = time.ParseDuration(toParse)
 			case 3:
-				// Support such as `HH::SS` as postgres do. Set minute part to 0.
-				// TODO(hainesc): `:1:2 -> 1 hour 2 min` as postgres do?
+				// Support such as `HH::SS` as postgres does. Set minute part to 0.
+				// TODO(hainesc): `:1:2 -> 1 hour 2 min` as postgres does?
 				if hms[1] == "" {
 					hms[1] = "0"
 				}
@@ -285,6 +290,12 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			var month int
 			var errMonth error
 			if yms[1] != "" {
+				// postgres technically supports decimals here, but it seems to be buggy
+				// due to the way it is parsed on their side.
+				// e.g. `select interval '0-2.1'` is different to select interval `'0-2.1 01:00'` --
+				// it seems the ".1" represents either a day or a constant, which we cannot
+				// replicate because we use spaces for divisors, but also seems like something
+				// we shouldn't sink too much time into looking at supporting.
 				month, errMonth = strconv.Atoi(yms[1])
 			}
 			if errYear == nil && errMonth == nil {
@@ -297,33 +308,37 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			} else {
 				return d, newInvalidSQLDurationError(s)
 			}
-
 		} else if value, err := strconv.ParseFloat(part, 64); err == nil {
-			// Try to parse as Day or Second.
-			var dur time.Duration
-			var err error
-			// Make sure 'Day Second'::interval invalid.
-			if floatParsed {
+			// We cannot specify '<Day> <Second>'::interval as two floats,
+			// but we can in the DAY TO HOUR format, where it is '<Day> <Hour>'.
+			if floatParsed && !itm.DurationField.IsDayToHour() {
 				return d, newInvalidSQLDurationError(s)
 			}
 			floatParsed = true
 			if parsedIdx == nothingParsed {
-				// It must be 'Second' part because nothing has been parsed.
-				toParse := part + "s"
-				if neg {
-					toParse = "-" + toParse
+				// It must be <DurationType> part because nothing has been parsed.
+				switch itm.DurationField.DurationType {
+				case types.IntervalDurationType_YEAR:
+					d = d.Add(duration.MakeDuration(0, 0, 12).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_MONTH:
+					d = d.Add(duration.MakeDuration(0, 0, 1).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_DAY:
+					d = d.Add(duration.MakeDuration(0, 1, 0).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_HOUR:
+					d = d.Add(duration.MakeDuration(time.Hour.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_MINUTE:
+					d = d.Add(duration.MakeDuration(time.Minute.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_SECOND, types.IntervalDurationType_UNSET:
+					d = d.Add(duration.MakeDuration(time.Second.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
+				case types.IntervalDurationType_MILLISECOND:
+					d = d.Add(duration.MakeDuration(time.Millisecond.Nanoseconds(), 0, 0).MulFloat(value * float64(mult)))
+				default:
+					return d, errors.AssertionFailedf("unhandled DurationField constant %#v", itm.DurationField)
 				}
-				dur, err = time.ParseDuration(toParse)
-
-				if err != nil {
-					return d, newInvalidSQLDurationError(s)
-				}
-				d = d.Add(duration.MakeDuration(dur.Nanoseconds(), 0, 0))
 				parsedIdx = hmsParsed
 			} else if parsedIdx == hmsParsed {
 				// Day part.
-				// TODO(hainesc): support float value in day part?
-				delta := duration.MakeDuration(0, 1, 0).Mul(int64(value))
+				delta := duration.MakeDuration(0, 1, 0).MulFloat(value)
 				if neg {
 					d = d.Sub(delta)
 				} else {
