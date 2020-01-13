@@ -56,9 +56,6 @@ type loggingT struct {
 	mu struct {
 		syncutil.Mutex
 
-		// traceLocation is the state of the -log_backtrace_at flag.
-		traceLocation traceLocation
-
 		// disableDaemons can be used to turn off both the GC and flush deamons.
 		disableDaemons bool
 
@@ -252,19 +249,6 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 			exitFunc(255, nil) // C++ uses -1, which is silly because it's anded with 255 anyway.
 			close(exitCalled)
 		}()
-	} else {
-		// Is there a stack trace trigger location configured?
-		doStacks := false
-		logging.mu.Lock()
-		if logging.mu.traceLocation.isSet() {
-			if logging.mu.traceLocation.match(file, line) {
-				doStacks = true
-			}
-		}
-		logging.mu.Unlock()
-		if doStacks {
-			stacks = getStacks(false)
-		}
 	}
 
 	if s >= logging.stderrThreshold.get() || (s == Severity_FATAL && l.stderrRedirected()) {

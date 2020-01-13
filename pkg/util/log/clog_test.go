@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -555,45 +554,6 @@ func TestRollover(t *testing.T) {
 	}
 	if info.nbytes >= LogFileMaxSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
-	}
-}
-
-func TestLogBacktraceAt(t *testing.T) {
-	s := ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-
-	setFlags()
-	defer mainLog.swap(mainLog.newBuffers())
-	// The peculiar style of this code simplifies line counting and maintenance of the
-	// tracing block below.
-	var infoLine string
-	setTraceLocation := func(file string, line int, delta int) {
-		_, file = filepath.Split(file)
-		infoLine = fmt.Sprintf("%s:%d", file, line+delta)
-		err := logging.mu.traceLocation.Set(infoLine)
-		if err != nil {
-			t.Fatal("error setting log_backtrace_at: ", err)
-		}
-	}
-	{
-		// Start of tracing block. These lines know about each other's relative position.
-		file, line, _ := caller.Lookup(0)
-		setTraceLocation(file, line, +2) // Two lines between Caller and Info calls.
-		Info(context.Background(), "we want a stack trace here")
-		if err := logging.mu.traceLocation.Set(""); err != nil {
-			t.Fatal(err)
-		}
-	}
-	numAppearances := strings.Count(contents(), infoLine)
-	if numAppearances < 2 {
-		// Need 2 appearances, one in the log header and one in the trace:
-		//   log_test.go:281: I0511 16:36:06.952398 02238 log_test.go:280] we want a stack trace here
-		//   ...
-		//   github.com/clog/glog_test.go:280 (0x41ba91)
-		//   ...
-		// We could be more precise but that would require knowing the details
-		// of the traceback format, which may not be dependable.
-		t.Fatal("got no trace back; log is ", contents())
 	}
 }
 
