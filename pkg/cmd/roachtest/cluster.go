@@ -328,7 +328,7 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	l.Printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
-	debugStdoutBuffer, _ := circbuf.NewBuffer(1024)
+	debugStdoutBuffer, _ := circbuf.NewBuffer(4096)
 	debugStderrBuffer, _ := circbuf.NewBuffer(1024)
 
 	// Do a dance around https://github.com/golang/go/issues/23019.
