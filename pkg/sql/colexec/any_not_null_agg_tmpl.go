@@ -122,7 +122,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	col, nulls := vec._TemplateType(), vec.Nulls()
 
 	a.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]coldata.Vec{a.vec},
 		func() {
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
