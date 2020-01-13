@@ -552,7 +552,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NONE NORMAL
 %token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
@@ -1147,7 +1147,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
-//   ALTER TABLE ... ALTER PRIMARY KEY USING INDEX <name>
+//   ALTER TABLE ... ALTER PRIMARY KEY USING COLUMNS (columns...) [DROP OLD KEY]
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
@@ -1688,11 +1688,19 @@ alter_table_cmd:
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
-  // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
+  // ALTER TABLE <name> ALTER PRIMARY KEY USING COLUMNS (columns...) [DROP OLD KEY]
 | ALTER PRIMARY KEY USING COLUMNS '(' index_params ')'
   {
     $$.val = &tree.AlterTableAlterPrimaryKey{
       Columns: $7.idxElems(),
+      DropOldKey: false,
+    }
+  }
+| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' DROP OLD KEY
+  {
+    $$.val = &tree.AlterTableAlterPrimaryKey{
+      Columns: $7.idxElems(),
+      DropOldKey: true,
     }
   }
 | VALIDATE CONSTRAINT constraint_name
@@ -9619,6 +9627,7 @@ unreserved_keyword:
 | OID
 | OIDS
 | OIDVECTOR
+| OLD
 | OPERATOR
 | OPT
 | OPTION

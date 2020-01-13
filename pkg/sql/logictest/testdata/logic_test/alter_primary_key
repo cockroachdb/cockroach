@@ -34,3 +34,49 @@ SELECT * FROM t_composite@primary
 # Test that we can drop tables after a primary key change.
 statement ok
 DROP TABLE t_composite
+
+# Test dropping vs keeping the old primary index.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT NOT NULL);
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x);
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y);
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   UNIQUE INDEX old_primary_key (x ASC),
+   FAMILY fam_0_x_y (x, y)
+)
+
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) DROP OLD KEY;
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   FAMILY fam_0_x_y (x, y)
+)

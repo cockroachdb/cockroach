@@ -392,11 +392,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"unable to perform primary key change on tables that are referenced by FK relationships")
 			}
 
-			// TODO (rohany): gate this behind a flag so it doesn't happen all the time.
-			// Create a new index that indexes everything the old primary index does, but doesn't store anything.
+			// If we are requested to drop the old primary key, or the primary key is the default rowID based primary key
+			// do not create a replacement index for the old primary key.
 			// TODO (rohany): is there an easier way of checking if the existing primary index was the
 			//  automatically created one?
-			if len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+			dropOldKey := t.DropOldKey || (len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] == "rowid")
+			if !dropOldKey {
 				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
 				baseName, name := "old_primary_key", "old_primary_key"
 				for try := 1; nameExists(name); try++ {
