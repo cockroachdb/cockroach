@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Divider } from "antd";
 import _ from "lodash";
 import moment from "moment";
-import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
+import { queryByName, queryToObj, queryToString, removeURLParameters } from "oss/src/util/query";
 import React from "react";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -24,7 +25,6 @@ import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/compo
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
-import { Divider } from "antd";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
@@ -203,7 +203,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
     history.push({
       pathname: location.pathname,
-      search: `?start=${start}&end=${moment.utc(dateEnd).format("X")}`,
+      search: `${removeURLParameters(location, ["start", "end"])}&start=${start}&end=${moment.utc(dateEnd).format("X")}`,
     });
   }
 
