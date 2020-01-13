@@ -394,7 +394,7 @@ func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel 
 	switch t {
 	// {{range $neType := .NETemplate}}
 	case _TYPES_T:
-		buildVec := ht.vals[ht.keyCols[keyColIdx]]
+		buildVec := ht.vals.colVecs[ht.keyCols[keyColIdx]]
 		probeVec := ht.keys[keyColIdx]
 
 		buildKeys := buildVec._TemplateType()
