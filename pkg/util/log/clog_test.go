@@ -521,10 +521,10 @@ func TestRollover(t *testing.T) {
 
 	setFlags()
 	var err error
-	defer func(previous func(error)) { logExitFunc = previous }(logExitFunc)
-	logExitFunc = func(e error) {
+	setExitErrFunc(false /* hideStack */, func(_ int, e error) {
 		err = e
-	}
+	})
+
 	defer func(previous int64) { LogFileMaxSize = previous }(LogFileMaxSize)
 	LogFileMaxSize = 2048
 
@@ -694,10 +694,6 @@ func (w *outOfSpaceWriter) Write([]byte) (int, error) {
 }
 
 func TestExitOnFullDisk(t *testing.T) {
-	oldLogExitFunc := logExitFunc
-	logExitFunc = nil
-	defer func() { logExitFunc = oldLogExitFunc }()
-
 	setFlags()
 
 	var exited sync.WaitGroup

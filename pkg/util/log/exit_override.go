@@ -23,6 +23,12 @@ import (
 //
 // Call with a nil function to undo.
 func SetExitFunc(hideStack bool, f func(int)) {
+	setExitErrFunc(hideStack, func(x int, err error) { f(x) })
+}
+
+// setExitErrFunc is like SetExitFunc but the function can also
+// observe the error that is triggering the exit.
+func setExitErrFunc(hideStack bool, f func(int, error)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 
@@ -65,27 +71,13 @@ func (l *loggerT) exitLocked(err error) {
 		}
 		fmt.Fprintf(w, "log: exiting because of error: %s\n", err)
 	}
-	// If logExitFunc is set, we do that instead of exiting.
-	if logExitFunc != nil {
-		logExitFunc(err)
-		return
-	}
 	l.flushAndSync(true /*doSync*/)
 	logging.mu.Lock()
 	f := logging.mu.exitOverride.f
 	logging.mu.Unlock()
 	if f != nil {
-		f(2)
+		f(2, err)
 	} else {
 		os.Exit(2)
 	}
 }
-
-// logExitFunc provides a simple mechanism to override the default behavior
-// of exiting on error. Used in testing and to guarantee we reach a required exit
-// for fatal logs. Instead, exit could be a function rather than a method but that
-// would make its use clumsier.
-//
-// TODO(knz): this can be replaced by exitOverride. Remove it.
-// See: https://github.com/cockroachdb/cockroach/issues/40982
-var logExitFunc func(error)
