@@ -486,20 +486,7 @@ func setupTransientCluster(
 	// Prepare the URL for use by the SQL shell.
 	// TODO (rohany): there should be a way that the user can request a specific node
 	//  to connect to to see the effects of the artificial latency.
-	options := url.Values{}
-	options.Add("sslmode", "disable")
-	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
-	sqlURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User(security.RootUser),
-		Host:     c.s.ServingSQLAddr(),
-		RawQuery: options.Encode(),
-	}
-	if gen != nil {
-		sqlURL.Path = gen.Meta().Name
-	}
-
-	c.connURL = sqlURL.String()
+	c.connURL = makeURLForServer(c.s, gen)
 
 	// Start up the update check loop.
 	// We don't do this in (*server.Server).Start() because we don't want it
@@ -589,7 +576,11 @@ func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Gener
 
 		// Run the workload. This must occur after partitioning the database.
 		if demoCtx.runWorkload {
-			if err := c.runWorkload(ctx, gen, []string{c.connURL}); err != nil {
+			var sqlURLs []string
+			for i := range c.servers {
+				sqlURLs = append(sqlURLs, makeURLForServer(c.servers[i], gen))
+			}
+			if err := c.runWorkload(ctx, gen, sqlURLs); err != nil {
 				return errors.Wrapf(err, "starting background workload")
 			}
 		}
@@ -644,6 +635,22 @@ func (c *transientCluster) runWorkload(
 	}
 
 	return nil
+}
+
+func makeURLForServer(s *server.TestServer, gen workload.Generator) string {
+	options := url.Values{}
+	options.Add("sslmode", "disable")
+	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
+	sqlURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(security.RootUser),
+		Host:     s.ServingSQLAddr(),
+		RawQuery: options.Encode(),
+	}
+	if gen != nil {
+		sqlURL.Path = gen.Meta().Name
+	}
+	return sqlURL.String()
 }
 
 func incrementTelemetryCounters(cmd *cobra.Command) {
