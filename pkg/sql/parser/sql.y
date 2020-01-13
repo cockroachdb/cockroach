@@ -219,6 +219,15 @@ func (u *sqlSymUnion) colQualElem() tree.ColumnQualification {
 func (u *sqlSymUnion) colQuals() []tree.NamedColumnQualification {
     return u.val.([]tree.NamedColumnQualification)
 }
+func (u *sqlSymUnion) storageParam() tree.StorageParam {
+    return u.val.(tree.StorageParam)
+}
+func (u *sqlSymUnion) storageParams() []tree.StorageParam {
+    if params, ok := u.val.([]tree.StorageParam); ok {
+        return params
+    }
+    return nil
+}
 func (u *sqlSymUnion) persistenceType() bool {
   return u.val.(bool)
 }
@@ -787,6 +796,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
 %type <str> import_format
+%type <tree.StorageParam> storage_parameter
+%type <[]tree.StorageParam> storage_parameter_list opt_table_with
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
@@ -4239,6 +4250,7 @@ create_table_stmt:
       AsSource: nil,
       PartitionBy: $9.partitionBy(),
       Temporary: $2.persistenceType(),
+      StorageParams: $10.storageParams(),
     }
   }
 | CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
@@ -4252,13 +4264,50 @@ create_table_stmt:
       AsSource: nil,
       PartitionBy: $12.partitionBy(),
       Temporary: $2.persistenceType(),
+      StorageParams: $13.storageParams(),
     }
   }
 
 opt_table_with:
-  /* EMPTY */     { /* no error */ }
-| WITHOUT OIDS    { /* SKIP DOC */ /* this is also the default in CockroachDB */ }
-| WITH name error { return unimplemented(sqllex, "create table with " + $2) }
+  /* EMPTY */
+  {
+    $$.val = nil
+  }
+| WITHOUT OIDS
+  {
+    /* SKIP DOC */
+    /* this is also the default in CockroachDB */
+		$$.val = nil
+  }
+| WITH '(' storage_parameter_list ')'
+  {
+    /* SKIP DOC */
+		$$.val = $3.storageParams()
+  }
+| WITH OIDS error
+  {
+    return unimplemented(sqllex, "create table with oids")
+  }
+
+storage_parameter:
+  name '=' d_expr
+  {
+    $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
+  }
+|  SCONST '=' d_expr
+  {
+    $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
+  }
+
+storage_parameter_list:
+  storage_parameter
+  {
+    $$.val = []tree.StorageParam{$1.storageParam()}
+  }
+|  storage_parameter_list ',' storage_parameter
+  {
+    $$.val = append($1.storageParams(), $3.storageParam())
+  }
 
 create_table_as_stmt:
   CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
@@ -4270,6 +4319,7 @@ create_table_as_stmt:
       Interleave: nil,
       Defs: $5.tblDefs(),
       AsSource: $8.slct(),
+      StorageParams: $6.storageParams(),
     }
   }
 | CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
@@ -4281,6 +4331,7 @@ create_table_as_stmt:
       Interleave: nil,
       Defs: $8.tblDefs(),
       AsSource: $11.slct(),
+      StorageParams: $9.storageParams(),
     }
   }
 

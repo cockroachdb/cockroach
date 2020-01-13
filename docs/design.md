@@ -843,23 +843,6 @@ error pointing at the replica's last known lease holder. These requests
 are retried transparently with the updated lease by the gateway node and
 never reach the client.
 
-Since reads bypass Raft, a new lease holder will, among other things, ascertain
-that its timestamp cache does not report timestamps smaller than the previous
-lease holder's (so that it's compatible with reads which may have occurred on
-the former lease holder). This is accomplished by letting leases enter
-a <i>stasis period</i> (which is just the expiration minus the maximum clock
-offset) before the actual expiration of the lease, so that all the next lease
-holder has to do is set the low water mark of the timestamp cache to its
-new lease's start time.
-
-As a lease enters its stasis period, no more reads or writes are served, which
-is undesirable. However, this would only happen in practice if a node became
-unavailable. In almost all practical situations, no unavailability results
-since leases are usually long-lived (and/or eagerly extended, which can avoid
-the stasis period) or proactively transferred away from the lease holder, which
-can also avoid the stasis period by promising not to serve any further reads
-until the next lease goes into effect.
-
 ## Colocation with Raft leadership
 
 The range lease is completely separate from Raft leadership, and so without

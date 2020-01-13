@@ -62,6 +62,49 @@ type createTableRun struct {
 	fromHeuristicPlanner bool
 }
 
+// storageParamType indicates the required type of a storage parameter.
+type storageParamType int
+
+// storageParamType values
+const (
+	storageParamBool storageParamType = iota
+	storageParamInt
+	storageParamFloat
+	storageParamUnimplemented
+)
+
+var storageParamExpectedTypes = map[string]storageParamType{
+	`fillfactor`:                                  storageParamInt,
+	`toast_tuple_target`:                          storageParamUnimplemented,
+	`parallel_workers`:                            storageParamUnimplemented,
+	`autovacuum_enabled`:                          storageParamUnimplemented,
+	`toast.autovacuum_enabled`:                    storageParamUnimplemented,
+	`autovacuum_vacuum_threshold`:                 storageParamUnimplemented,
+	`toast.autovacuum_vacuum_threshold`:           storageParamUnimplemented,
+	`autovacuum_vacuum_scale_factor`:              storageParamUnimplemented,
+	`toast.autovacuum_vacuum_scale_factor`:        storageParamUnimplemented,
+	`autovacuum_analyze_threshold`:                storageParamUnimplemented,
+	`autovacuum_analyze_scale_factor`:             storageParamUnimplemented,
+	`autovacuum_vacuum_cost_delay`:                storageParamUnimplemented,
+	`toast.autovacuum_vacuum_cost_delay`:          storageParamUnimplemented,
+	`autovacuum_vacuum_cost_limit`:                storageParamUnimplemented,
+	`autovacuum_freeze_min_age`:                   storageParamUnimplemented,
+	`toast.autovacuum_freeze_min_age`:             storageParamUnimplemented,
+	`autovacuum_freeze_max_age`:                   storageParamUnimplemented,
+	`toast.autovacuum_freeze_max_age`:             storageParamUnimplemented,
+	`autovacuum_freeze_table_age`:                 storageParamUnimplemented,
+	`toast.autovacuum_freeze_table_age`:           storageParamUnimplemented,
+	`autovacuum_multixact_freeze_min_age`:         storageParamUnimplemented,
+	`toast.autovacuum_multixact_freeze_min_age`:   storageParamUnimplemented,
+	`autovacuum_multixact_freeze_max_age`:         storageParamUnimplemented,
+	`toast.autovacuum_multixact_freeze_max_age`:   storageParamUnimplemented,
+	`autovacuum_multixact_freeze_table_age`:       storageParamUnimplemented,
+	`toast.autovacuum_multixact_freeze_table_age`: storageParamUnimplemented,
+	`log_autovacuum_min_duration`:                 storageParamUnimplemented,
+	`toast.log_autovacuum_min_duration`:           storageParamUnimplemented,
+	`user_catalog_table`:                          storageParamUnimplemented,
+}
+
 func (n *createTableNode) startExec(params runParams) error {
 	isTemporary := n.n.Temporary
 
@@ -1057,6 +1100,10 @@ func MakeTableDesc(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, temporary,
 	)
 
+	if err := checkStorageParameters(semaCtx, n.StorageParams, storageParamExpectedTypes); err != nil {
+		return desc, err
+	}
+
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
 	// write the new version into new index descriptors.
 	indexEncodingVersion := sqlbase.BaseIndexFormatVersion
@@ -1337,6 +1384,37 @@ func MakeTableDesc(
 	// See https://github.com/golang/go/issues/23188.
 	err := desc.AllocateIDs()
 	return desc, err
+}
+
+func checkStorageParameters(
+	semaCtx *tree.SemaContext, params tree.StorageParams, expectedTypes map[string]storageParamType,
+) error {
+	for _, sp := range params {
+		k := string(sp.Key)
+		validate, ok := expectedTypes[k]
+		if !ok {
+			return errors.Errorf("invalid storage parameter %q", k)
+		}
+		if sp.Value == nil {
+			return errors.Errorf("storage parameter %q requires a value", k)
+		}
+		var expectedType *types.T
+		if validate == storageParamBool {
+			expectedType = types.Bool
+		} else if validate == storageParamInt {
+			expectedType = types.Int
+		} else if validate == storageParamFloat {
+			expectedType = types.Float
+		} else {
+			return unimplemented.NewWithIssuef(43299, "storage parameter %q", k)
+		}
+
+		_, err := tree.TypeCheckAndRequire(sp.Value, semaCtx, expectedType, k)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.
