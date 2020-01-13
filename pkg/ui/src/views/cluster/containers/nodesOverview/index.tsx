@@ -251,12 +251,14 @@ class NodeList extends React.Component<LiveNodeListProps> {
       dataSource = _.head(dataSource).children;
     }
     return (
-      <TableSection
-        id={`nodes-overview__live-nodes`}
-        title={`Live Nodes (${nodesCount})`}
-        className="embedded-table">
-        <Table dataSource={dataSource} columns={columns} />
-      </TableSection>
+      <div className="nodes-overview__panel">
+        <TableSection
+          id={`nodes-overview__live-nodes`}
+          title={`Live Nodes (${nodesCount})`}
+          className="embedded-table">
+          <Table dataSource={dataSource} columns={columns} />
+        </TableSection>
+      </div>
     );
   }
 }
@@ -307,15 +309,17 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     }
 
     return (
-      <TableSection
-        id={`nodes-overview__decommissioned-nodes`}
-        title="Recently Decommissioned Nodes"
-        // TODO (koorosh): Uncomment link after Decommissioned node history page is added
-        // footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
-        isCollapsible={isCollapsible}
-        className="embedded-table">
-        <Table dataSource={dataSource} columns={this.columns} />
-      </TableSection>
+      <div className="nodes-overview__panel">
+        <TableSection
+          id={`nodes-overview__decommissioned-nodes`}
+          title="Recently Decommissioned Nodes"
+          // TODO (koorosh): Uncomment link after Decommissioned node history page is added
+          // footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
+          isCollapsible={isCollapsible}
+          className="embedded-table">
+          <Table dataSource={dataSource} columns={this.columns} />
+        </TableSection>
+      </div>
     );
   }
 }
@@ -509,12 +513,8 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
   render() {
     return (
       <div className="nodes-overview">
-        <div className="nodes-overview__panel">
-          <NodesConnected />
-        </div>
-        <div className="nodes-overview__panel">
-          <DecommissionedNodesConnected />
-        </div>
+        <NodesConnected />
+        <DecommissionedNodesConnected />
       </div>
     );
   }
