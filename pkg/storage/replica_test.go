@@ -569,9 +569,10 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		ru          []roachpb.RequestUnion
 		isTxn       bool
 		isRestarted bool
-		isWTO       bool
-		isTSOff     bool
-		exp1PC      bool
+		// isWTO implies isTSOff.
+		isWTO   bool
+		isTSOff bool
+		exp1PC  bool
 	}{
 		{ru: noReqs, isTxn: false, exp1PC: false},
 		{ru: noReqs, isTxn: true, exp1PC: false},
@@ -580,41 +581,33 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: etReq, isTxn: true, exp1PC: true},
 		{ru: etReq, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqs[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, exp1PC: true},
 		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsNoRefresh[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqsNoRefresh[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
-		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, isTSOff: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -627,6 +620,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 			}
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
+				c.isTSOff = true
 			}
 			if c.isTSOff {
 				ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
