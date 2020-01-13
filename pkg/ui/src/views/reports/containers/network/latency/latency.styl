@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+@require "~styl/base/palette.styl"
 
 .latency-table
   width 100%
@@ -34,12 +35,16 @@
     text-align center
     width 95px
     padding 9px 0
-    font-family SourceSansPro-SemiBold
-    font-size 12px
-    font-weight 600
-    line-height 1.67
-    letter-spacing 0.3px
-    color #5f6c87
+    a
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.67
+      letter-spacing 0.3px
+      color $adminui-grey-2
+      &:hover
+        color #0788ff
+        text-decoration underline
     &:first-child
       border-right 2px solid #e7ecf3
 
@@ -52,7 +57,7 @@
     font-weight 600
     line-height 1.67
     letter-spacing 0.3px
-    color #5f6c87
+    color $adminui-grey-2
   thead
     .region-name
       border-left 2px solid #e7ecf3
