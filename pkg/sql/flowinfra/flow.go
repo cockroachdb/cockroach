@@ -63,8 +63,11 @@ const (
 // Flow represents a flow which consists of processors and streams.
 type Flow interface {
 	// Setup sets up all the infrastructure for the flow as defined by the flow
-	// spec. The flow will then need to be started and run.
-	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) error
+	// spec. The flow will then need to be started and run. A new context (along
+	// with a context cancellation function) is derived. The new context must be
+	// used when running a flow so that all components running in their own
+	// goroutines could listen for a cancellation on the same context.
+	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, error)
 
 	// SetTxn is used to provide the transaction in which the flow will run.
 	// It needs to be called after Setup() and before Start/Run.
@@ -168,8 +171,13 @@ type FlowBase struct {
 }
 
 // Setup is part of the Flow interface.
-func (f *FlowBase) Setup(context.Context, *execinfrapb.FlowSpec, FuseOpt) error {
-	panic("Setup should not be called on FlowBase")
+func (f *FlowBase) Setup(
+	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
+) (context.Context, error) {
+	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.ctxDone = ctx.Done()
+	f.spec = spec
+	return ctx, nil
 }
 
 // SetTxn is part of the Flow interface.
@@ -240,12 +248,6 @@ func (f *FlowBase) GetCtxDone() <-chan struct{} {
 	return f.ctxDone
 }
 
-// SetSpec sets the flow spec of this flow. This is useful for debugging
-// purposes.
-func (f *FlowBase) SetSpec(spec *execinfrapb.FlowSpec) {
-	f.spec = spec
-}
-
 // GetCancelFlowFn returns the context cancellation function of the context of
 // this flow.
 func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
@@ -275,19 +277,14 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 
 // startInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to syncFlowConsumer if
-// set. A new context is derived and returned, and it must be used when this
-// method returns so that all components running in their own goroutines could
-// listen for a cancellation on the same context.
+// set.
 func (f *FlowBase) startInternal(
 	ctx context.Context, processors []execinfra.Processor, doneFn func(),
-) (context.Context, error) {
+) error {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(processors), len(f.startables),
 	)
-
-	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.
@@ -301,7 +298,7 @@ func (f *FlowBase) startInternal(
 		if err := f.flowRegistry.RegisterFlow(
 			ctx, f.ID, f, f.inboundStreams, SettingFlowStreamTimeout.Get(&f.FlowCtx.Cfg.Settings.SV),
 		); err != nil {
-			return ctx, err
+			return err
 		}
 	}
 
@@ -321,7 +318,7 @@ func (f *FlowBase) startInternal(
 		}(i)
 	}
 	f.startedGoroutines = len(f.startables) > 0 || len(processors) > 0 || !f.IsLocal()
-	return ctx, nil
+	return nil
 }
 
 // IsLocal returns whether this flow does not have any remote execution.
@@ -336,7 +333,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if _, err := f.startInternal(ctx, f.processors, doneFn); err != nil {
+	if err := f.startInternal(ctx, f.processors, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
@@ -361,7 +358,7 @@ func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
 	otherProcs := f.processors[:len(f.processors)-1]
 
 	var err error
-	if ctx, err = f.startInternal(ctx, otherProcs, doneFn); err != nil {
+	if err = f.startInternal(ctx, otherProcs, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
 			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})

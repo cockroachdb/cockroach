@@ -71,8 +71,12 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) error {
-	f.SetSpec(spec)
+) (context.Context, error) {
+	var err error
+	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	if err != nil {
+		return ctx, err
+	}
 	log.VEventf(ctx, 1, "setting up vectorize flow %s", f.ID.Short())
 	recordingStats := false
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
@@ -88,14 +92,14 @@ func (f *vectorizedFlow) Setup(
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
 	)
-	_, err := creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
+	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
 	if err == nil {
 		f.operatorConcurrency = creator.operatorConcurrency
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.bufferingMemMonitors = append(f.bufferingMemMonitors, creator.bufferingMemMonitors...)
 		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
-		return nil
+		return ctx, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
@@ -110,7 +114,7 @@ func (f *vectorizedFlow) Setup(
 		memMonitor.Stop(ctx)
 	}
 	log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-	return err
+	return ctx, err
 }
 
 // IsVectorized is part of the flowinfra.Flow interface.
