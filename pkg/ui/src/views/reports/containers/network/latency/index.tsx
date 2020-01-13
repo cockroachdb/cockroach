@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Tooltip } from "antd";
+import { Divider, Tooltip } from "antd";
 import classNames from "classnames";
 import _ from "lodash";
 import { NanoToMilli } from "oss/src/util/convert";
@@ -220,7 +220,17 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
       ) : (
         <Tooltip overlayClassName="Chip--tooltip" placement="bottom" title={(
           <div>
-            <span>{`N${identityB.nodeID}: ${identityB.locality} to N${identityA.nodeID}: ${identityA.locality}`}</span>
+            <div className="Chip--tooltip__nodes">
+              <div className="Chip--tooltip__nodes--item">
+                <p className="Chip--tooltip__nodes--item-title">{`Node ${identityB.nodeID}`}</p>
+                <p className="Chip--tooltip__nodes--item-description">{identityB.locality}</p>
+              </div>
+              <Divider type="vertical" />
+              <div className="Chip--tooltip__nodes--item">
+                <p className="Chip--tooltip__nodes--item-title">{`Node ${identityA.nodeID}`}</p>
+                <p className="Chip--tooltip__nodes--item-description">{identityA.locality}</p>
+              </div>
+            </div>
             <p className={`color--${type}`}>{`${latency.toFixed(2)}ms`}</p>
           </div>
         )}>
