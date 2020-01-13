@@ -16,7 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -25,11 +27,11 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		input    []statuspb.NodeStatus
+		input    serverpb.NodesResponse
 		expected []haProxyNodeInfo
 	}{
 		{
-			[]statuspb.NodeStatus{
+			serverpb.NodesResponse{Nodes: []statuspb.NodeStatus{
 				{
 					Desc: roachpb.NodeDescriptor{
 						NodeID: 1,
@@ -40,7 +42,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 					// Flags but no http port.
 					Args: []string{"--unwanted", "-unwanted"},
 				},
-			},
+			}},
 			[]haProxyNodeInfo{
 				{
 					NodeID:    1,
@@ -50,61 +52,101 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 			},
 		},
 		{
-			[]statuspb.NodeStatus{
+			serverpb.NodesResponse{Nodes: []statuspb.NodeStatus{
 				{
+					Desc: roachpb.NodeDescriptor{NodeID: 1},
 					Args: []string{"--unwanted", "--http-port=1234"},
 				},
 				{
+					Desc: roachpb.NodeDescriptor{NodeID: 2},
 					Args: nil,
 				},
 				{
+					Desc: roachpb.NodeDescriptor{NodeID: 3},
 					Args: []string{"--http-addr=foo:4567"},
 				},
-			},
+			}},
 			[]haProxyNodeInfo{
 				{
+					NodeID:    1,
 					CheckPort: "1234",
 				},
 				{
+					NodeID:    2,
 					CheckPort: base.DefaultHTTPPort,
 				},
 				{
+					NodeID:    3,
 					CheckPort: "4567",
 				},
 			},
 		},
 		{
-			[]statuspb.NodeStatus{
+			serverpb.NodesResponse{Nodes: []statuspb.NodeStatus{
 				{
+					Desc: roachpb.NodeDescriptor{NodeID: 1},
 					Args: []string{"--http-port", "5678", "--unwanted"},
 				},
-			},
+			}},
 			[]haProxyNodeInfo{
 				{
+					NodeID:    1,
 					CheckPort: "5678",
 				},
 			},
 		},
 		{
-			[]statuspb.NodeStatus{
+			serverpb.NodesResponse{Nodes: []statuspb.NodeStatus{
 				{
+					Desc: roachpb.NodeDescriptor{NodeID: 1},
 					// We shouldn't see this, because the flag needs an argument on startup,
 					// but check that we fall back to the default port.
 					Args: []string{"-http-port"},
 				},
-			},
+			}},
 			[]haProxyNodeInfo{
 				{
+					NodeID:    1,
 					CheckPort: base.DefaultHTTPPort,
 				},
 			},
 		},
+		// Check that decommission{ing,ed} nodes are not considered for
+		// generating the configuration.
+		{
+			serverpb.NodesResponse{
+				Nodes: []statuspb.NodeStatus{
+					{Desc: roachpb.NodeDescriptor{NodeID: 1}},
+					{Desc: roachpb.NodeDescriptor{NodeID: 2}},
+					{Desc: roachpb.NodeDescriptor{NodeID: 3}},
+					{Desc: roachpb.NodeDescriptor{NodeID: 4}},
+					{Desc: roachpb.NodeDescriptor{NodeID: 5}},
+					{Desc: roachpb.NodeDescriptor{NodeID: 6}},
+				},
+				LivenessByNodeID: map[roachpb.NodeID]storagepb.NodeLivenessStatus{
+					1: storagepb.NodeLivenessStatus_DEAD,
+					2: storagepb.NodeLivenessStatus_DECOMMISSIONING,
+					3: storagepb.NodeLivenessStatus_UNKNOWN,
+					4: storagepb.NodeLivenessStatus_UNAVAILABLE,
+					5: storagepb.NodeLivenessStatus_LIVE,
+					6: storagepb.NodeLivenessStatus_DECOMMISSIONED,
+				},
+			},
+			[]haProxyNodeInfo{
+				{NodeID: 1, CheckPort: base.DefaultHTTPPort},
+				// Node 2 is decommissioning.
+				{NodeID: 3, CheckPort: base.DefaultHTTPPort},
+				{NodeID: 4, CheckPort: base.DefaultHTTPPort},
+				{NodeID: 5, CheckPort: base.DefaultHTTPPort},
+				// Node 6 is decommissioned.
+			},
+		},
 	}
 
-	for _, testCase := range testCases {
-		output := nodeStatusesToNodeInfos(testCase.input)
+	for i, testCase := range testCases {
+		output := nodeStatusesToNodeInfos(&testCase.input)
 		if !reflect.DeepEqual(output, testCase.expected) {
-			t.Fatalf("unexpected output %v, expected %v", output, testCase.expected)
+			t.Fatalf("test %d: unexpected output %v, expected %v", i, output, testCase.expected)
 		}
 	}
 }

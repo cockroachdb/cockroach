@@ -24,6 +24,7 @@ import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/rocksdb.proto";
 import "storage/storagepb/lease_status.proto";
 import "storage/storagepb/state.proto";
+import "storage/storagepb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -111,6 +112,11 @@ message NodesRequest {}
 
 message NodesResponse {
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
+  map<int32, cockroach.storage.NodeLivenessStatus> liveness_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "LivenessByNodeID"
+  ];
 }
 
 message NodeRequest {
