@@ -72,9 +72,11 @@ func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
 	b.AppendCol(col)
 }
 
-// performOperation executes 'operation' (that somehow modifies 'destVecs') and
+// PerformOperation executes 'operation' (that somehow modifies 'destVecs') and
 // updates the memory account accordingly.
-func (a *Allocator) performOperation(destVecs []coldata.Vec, operation func()) {
+// NOTE: if some columnar vectors are not modified, they should not be included
+// in 'destVecs' to reduce the performance hit of memory accounting.
+func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	var before, after, delta int64
 	for _, dest := range destVecs {
 		// To simplify the accounting, we perform the operation first and then will
@@ -104,18 +106,6 @@ func (a *Allocator) performOperation(destVecs []coldata.Vec, operation func()) {
 	} else {
 		a.acc.Shrink(a.ctx, -delta)
 	}
-}
-
-// Append appends elements of a source coldata.Vec into dest according to
-// coldata.SliceArgs.
-func (a *Allocator) Append(dest coldata.Vec, args coldata.SliceArgs) {
-	a.performOperation([]coldata.Vec{dest}, func() { dest.Append(args) })
-}
-
-// Copy copies elements of a source coldata.Vec into dest according to
-// coldata.CopySliceArgs.
-func (a *Allocator) Copy(dest coldata.Vec, args coldata.CopySliceArgs) {
-	a.performOperation([]coldata.Vec{dest}, func() { dest.Copy(args) })
 }
 
 // TODO(yuzefovich): extend Allocator so that it could free up the memory (and

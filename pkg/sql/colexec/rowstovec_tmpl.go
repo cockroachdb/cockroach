@@ -58,7 +58,7 @@ func _ROWS_TO_COL_VEC(
 		row := rows[i]
 		if row[columnIdx].Datum == nil {
 			if err = row[columnIdx].EnsureDecoded(columnType, alloc); err != nil {
-				break
+				return
 			}
 		}
 		datum := row[columnIdx].Datum
@@ -67,7 +67,7 @@ func _ROWS_TO_COL_VEC(
 		} else {
 			v, err := datumToPhysicalFn(datum)
 			if err != nil {
-				break
+				return
 			}
 
 			castV := v.(_GOTYPE)
@@ -76,7 +76,6 @@ func _ROWS_TO_COL_VEC(
 	}
 	// {{end}}
 	// {{/*
-	return nil
 }
 
 // */}}
@@ -95,36 +94,29 @@ func EncDatumRowsToColVec(
 	alloc *sqlbase.DatumAlloc,
 ) error {
 	var err error
-	switch columnType.Family() {
-	// {{range .}}
-	case _FAMILY:
-		// {{ if .Widths }}
-		switch columnType.Width() {
-		// {{range .Widths}}
-		case _WIDTH:
-			allocator.performOperation(
-				[]coldata.Vec{vec},
-				func() {
+	allocator.PerformOperation(
+		[]coldata.Vec{vec},
+		func() {
+			switch columnType.Family() {
+			// {{range .}}
+			case _FAMILY:
+				// {{ if .Widths }}
+				switch columnType.Width() {
+				// {{range .Widths}}
+				case _WIDTH:
 					_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
-				},
-			)
-			return err
-		// {{end}}
-		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
-		}
-		// {{ else }}
-		allocator.performOperation(
-			[]coldata.Vec{vec},
-			func() {
+				// {{end}}
+				default:
+					execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
+				}
+				// {{ else }}
 				_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
-			},
-		)
-		return err
-		// {{end}}
-	// {{end}}
-	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported column type %s", columnType.String()))
-	}
-	return nil
+				// {{end}}
+			// {{end}}
+			default:
+				execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported column type %s", columnType.String()))
+			}
+		},
+	)
+	return err
 }
