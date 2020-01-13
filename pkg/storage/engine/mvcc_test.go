@@ -5490,7 +5490,7 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	}
 	txn.Sequence += 3
 
-	// on a separate key, start an increment.
+	// On a separate key, start an increment.
 	val, err := MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 	if val != 1 || err != nil {
 		t.Fatalf("expected val=1 (got %d): %+v", val, err)
@@ -5510,8 +5510,17 @@ func TestMVCCIdempotentTransactions(t *testing.T) {
 	if val != 2 || err != nil {
 		t.Fatalf("expected val=2 (got %d): %+v", val, err)
 	}
-	txn.Sequence--
+	// Replaying the latest increment doesn't increase the value.
+	// This is a regression test against #43928. Before that was fixed, the
+	// function would return a "different value after recomputing" error.
+	for i := 0; i < 10; i++ {
+		val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
+		if val != 2 || err != nil {
+			t.Fatalf("expected val=2 (got %d): %+v", val, err)
+		}
+	}
 	// Replaying an older increment doesn't increase the value.
+	txn.Sequence--
 	for i := 0; i < 10; i++ {
 		val, err = MVCCIncrement(ctx, engine, nil, testKey1, txn.OrigTimestamp, txn, 1)
 		if val != 1 || err != nil {
