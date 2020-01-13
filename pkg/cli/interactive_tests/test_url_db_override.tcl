@@ -7,8 +7,7 @@ start_server $argv
 # This is run as an acceptance test to ensure that the code path
 # that opens the SQL connection by URL is exercised.
 
-system "$argv sql -e 'create database test'"
-system "$argv user set test"
+system "$argv sql -e 'create database test; create user test'"
 set certs_dir "/certs"
 
 start_test "Check that the SSL settings come from flags is URL does not set them already."

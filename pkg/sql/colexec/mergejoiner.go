@@ -88,8 +88,10 @@ type mjProberState struct {
 	// Local buffer for the last left and right groups which is used when the
 	// group ends with a batch and the group on each side needs to be saved to
 	// state in order to be able to continue it in the next batch.
-	lBufferedGroup *mjBufferedGroup
-	rBufferedGroup *mjBufferedGroup
+	lBufferedGroup            *bufferedBatch
+	rBufferedGroup            *bufferedBatch
+	lBufferedGroupNeedToReset bool
+	rBufferedGroupNeedToReset bool
 }
 
 // mjState represents the state of the merge joiner.
@@ -385,8 +387,8 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize uint16) {
 		o.outputBatchSize = 1<<16 - 1
 	}
 
-	o.proberState.lBufferedGroup = newMJBufferedGroup(o.allocator, o.left.sourceTypes)
-	o.proberState.rBufferedGroup = newMJBufferedGroup(o.allocator, o.right.sourceTypes)
+	o.proberState.lBufferedGroup = newBufferedBatch(o.allocator, o.left.sourceTypes, int(coldata.BatchSize()))
+	o.proberState.rBufferedGroup = newBufferedBatch(o.allocator, o.right.sourceTypes, int(coldata.BatchSize()))
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -463,11 +465,13 @@ func (o *mergeJoinBase) initProberState(ctx context.Context) {
 		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
 		o.proberState.rLength = int(o.proberState.rBatch.Length())
 	}
-	if o.proberState.lBufferedGroup.needToReset {
+	if o.proberState.lBufferedGroupNeedToReset {
 		o.proberState.lBufferedGroup.reset()
+		o.proberState.lBufferedGroupNeedToReset = false
 	}
-	if o.proberState.rBufferedGroup.needToReset {
+	if o.proberState.rBufferedGroupNeedToReset {
 		o.proberState.rBufferedGroup.reset()
+		o.proberState.rBufferedGroupNeedToReset = false
 	}
 }
 

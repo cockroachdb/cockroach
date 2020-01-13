@@ -288,7 +288,7 @@ func isSQLCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "user", "sql", "dump", "workload", "nodelocal":
+	case "sql", "dump", "workload", "nodelocal":
 		return true
 	case "node":
 		if len(args) == 0 {
@@ -483,8 +483,6 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-d`, `nonexistent`, `-e`, `create database nonexistent; create table foo(x int); select * from foo`})
 	// COPY should return an intelligible error message.
 	c.RunWithArgs([]string{`sql`, `-e`, `copy t.f from stdin`})
-	// --echo-sql should print out the SQL statements.
-	c.RunWithArgs([]string{`user`, `ls`, `--echo-sql`})
 	// --set changes client-side variables before executing commands.
 	c.RunWithArgs([]string{`sql`, `--set=errexit=0`, `-e`, `select nonexistent`, `-e`, `select 123 as "123"`})
 	c.RunWithArgs([]string{`sql`, `--set`, `echo=true`, `-e`, `select 123 as "123"`})
@@ -534,11 +532,6 @@ func Example_sql() {
 	// x
 	// sql -e copy t.f from stdin
 	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
-	// user ls --echo-sql
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	// > SHOW USERS
-	// user_name
-	// root
 	// sql --set=errexit=0 -e select nonexistent -e select 123 as "123"
 	// ERROR: column "nonexistent" does not exist
 	// SQLSTATE: 42703
@@ -1333,165 +1326,6 @@ func Example_misc_table() {
 	// (6 rows)
 }
 
-func Example_user() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
-
-	c.Run("user ls")
-	c.Run("user ls --format=table")
-	c.Run("user ls --format=tsv")
-	c.Run("user set FOO")
-	c.RunWithArgs([]string{"sql", "-e", "create user if not exists 'FOO'"})
-	c.Run("user set Foo")
-	c.Run("user set fOo")
-	c.Run("user set foO")
-	c.Run("user set foo")
-	c.Run("user set _foo")
-	c.Run("user set f_oo")
-	c.Run("user set foo_")
-	c.Run("user set ,foo")
-	c.Run("user set f,oo")
-	c.Run("user set foo,")
-	c.Run("user set 0foo")
-	c.Run("user set 0123")
-	c.Run("user set foo0")
-	c.Run("user set f0oo")
-	c.Run("user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof")
-	c.Run("user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo")
-	c.Run("user set Ομηρος")
-	// Try some reserved keywords.
-	c.Run("user set and")
-	c.Run("user set table")
-	// Don't use get, since the output of hashedPassword is random.
-	// c.Run("user get foo")
-	c.Run("user ls --format=table")
-	c.Run("user rm foo")
-	c.Run("user ls --format=table")
-	c.RunWithArgs([]string{"sql", "-e", "drop database defaultdb"})
-	c.Run("user set foo")
-
-	// Output:
-	// user ls
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	// user_name
-	// root
-	// user ls --format=table
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	//   user_name
-	// -------------
-	//   root
-	// (1 row)
-	// user ls --format=tsv
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	// user_name
-	// root
-	// user set FOO
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// sql -e create user if not exists 'FOO'
-	// CREATE USER 0
-	// user set Foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 0
-	// user set fOo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 0
-	// user set foO
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 0
-	// user set foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 0
-	// user set _foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set f_oo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set foo_
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set ,foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username ",foo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
-	// user set f,oo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "f,oo" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
-	// user set foo,
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "foo," invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
-	// user set 0foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set 0123
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set foo0
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set f0oo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// ERROR: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
-	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set Ομηρος
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set and
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user set table
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-	// user ls --format=table
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	//                              user_name
-	// -------------------------------------------------------------------
-	//   0123
-	//   0foo
-	//   _foo
-	//   and
-	//   f0oo
-	//   f_oo
-	//   foo
-	//   foo0
-	//   foo_
-	//   foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
-	//   root
-	//   table
-	//   ομηρος
-	// (13 rows)
-	// user rm foo
-	// warning: This command is deprecated. Use DROP USER or DROP ROLE in a SQL session.
-	// DROP USER 1
-	// user ls --format=table
-	// warning: This command is deprecated. Use SHOW USERS or SHOW ROLES in a SQL session.
-	//                              user_name
-	// -------------------------------------------------------------------
-	//   0123
-	//   0foo
-	//   _foo
-	//   and
-	//   f0oo
-	//   f_oo
-	//   foo0
-	//   foo_
-	//   foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
-	//   root
-	//   table
-	//   ομηρος
-	// (12 rows)
-	// sql -e drop database defaultdb
-	// DROP DATABASE
-	// user set foo
-	// warning: This command is deprecated. Use CREATE USER or ALTER USER ... WITH PASSWORD ... in a SQL session.
-	// CREATE USER 1
-}
-
 func Example_cert() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
@@ -1525,7 +1359,6 @@ Available Commands:
   quit              drain and shutdown node
 
   sql               open a sql shell
-  user              get, set, list and remove users (deprecated)
   node              list, inspect or remove nodes
   dump              dump sql tables
 
