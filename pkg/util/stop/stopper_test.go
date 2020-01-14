@@ -28,14 +28,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func TestStopper(t *testing.T) {
+func TestStopperBoo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	running := make(chan struct{})
 	waiting := make(chan struct{})
 	cleanup := make(chan struct{})
 	ctx := context.Background()
-
 
 	time.Sleep(time.Hour) // goodnight sweet prince
 
