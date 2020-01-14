@@ -478,7 +478,7 @@ func (s *OutgoingSnapshot) Close() {
 type IncomingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The storage interface for the underlying SSTs.
-	SSSS *SSTSnapshotStorageScratch
+	SSTStorageScratch *SSTSnapshotStorageScratch
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
@@ -800,7 +800,7 @@ func (r *Replica) applySnapshot(
 		}
 		ingestionLog := fmt.Sprintf(
 			"ingestion=%d@%0.0fms ",
-			len(inSnap.SSSS.SSTs()),
+			len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000,
 		)
 		log.Infof(ctx, "applied %s snapshot [%s%s%sid=%s index=%d]",
@@ -872,7 +872,7 @@ func (r *Replica) applySnapshot(
 	if unreplicatedSST.DataSize > 0 {
 		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
 		// buffering in a MemFile first.
-		if err := inSnap.SSSS.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+		if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 			return err
 		}
 	}
@@ -909,19 +909,19 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSSS, s.Desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, s.Desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, snapType, inSnap.SSSS.SSTs()); err != nil {
+		if err := fn(inSnap, snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}
-	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSSS.SSTs()); err != nil {
-		return errors.Wrapf(err, "while ingesting %s", inSnap.SSSS.SSTs())
+	if err := r.store.engine.IngestExternalFiles(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	stats.ingestion = timeutil.Now()
 
@@ -1000,7 +1000,7 @@ func (r *Replica) applySnapshot(
 // method requires that each of the subsumed replicas raftMu is held.
 func (r *Replica) clearSubsumedReplicaDiskData(
 	ctx context.Context,
-	ssss *SSTSnapshotStorageScratch,
+	scratch *SSTSnapshotStorageScratch,
 	desc *roachpb.RangeDescriptor,
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
@@ -1038,7 +1038,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemFile first.
-			if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+			if err := scratch.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return err
 			}
 		}
@@ -1089,7 +1089,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			if subsumedReplSST.DataSize > 0 {
 				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 				// buffering in a MemFile first.
-				if err := ssss.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+				if err := scratch.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 					return err
 				}
 			}

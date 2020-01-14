@@ -35,9 +35,14 @@ type routerOutput interface {
 	cancel()
 }
 
-// defaultRouterOutputBlockedThreshold is the number of unread values buffered
-// by the routerOutputOp after which the output is considered blocked.
-var defaultRouterOutputBlockedThreshold = int(coldata.BatchSize() * 2)
+// getDefaultRouterOutputBlockedThreshold returns the number of unread values
+// buffered by the routerOutputOp after which the output is considered blocked.
+// It is a function rather than a variable so that in tests we could modify
+// coldata.BatchSize() (if it were a variable, then its value would be
+// evaluated before we set the desired batch size).
+func getDefaultRouterOutputBlockedThreshold() int {
+	return int(coldata.BatchSize()) * 2
+}
 
 type routerOutputOp struct {
 	// input is a reference to our router.
@@ -90,7 +95,7 @@ func newRouterOutputOp(
 	allocator *Allocator, types []coltypes.T, unblockedEventsChan chan<- struct{},
 ) *routerOutputOp {
 	return newRouterOutputOpWithBlockedThresholdAndBatchSize(
-		allocator, types, unblockedEventsChan, defaultRouterOutputBlockedThreshold, int(coldata.BatchSize()),
+		allocator, types, unblockedEventsChan, getDefaultRouterOutputBlockedThreshold(), int(coldata.BatchSize()),
 	)
 }
 

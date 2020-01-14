@@ -439,12 +439,14 @@ scrub_database_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause
 
 select_no_parens ::=
-	simple_select locking_clause
-	| select_clause sort_clause locking_clause
-	| select_clause opt_sort_clause select_limit locking_clause
-	| with_clause select_clause locking_clause
-	| with_clause select_clause sort_clause locking_clause
-	| with_clause select_clause opt_sort_clause select_limit locking_clause
+	simple_select
+	| select_clause sort_clause
+	| select_clause opt_sort_clause for_locking_clause opt_select_limit
+	| select_clause opt_sort_clause select_limit opt_for_locking_clause
+	| with_clause select_clause
+	| with_clause select_clause sort_clause
+	| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
+	| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
 
 select_with_parens ::=
 	'(' select_no_parens ')'
@@ -1172,18 +1174,27 @@ simple_select ::=
 	| table_clause
 	| set_operation
 
-locking_clause ::=
-	for_locking_strength opt_locked_rels opt_nowait_or_skip
-
 select_clause ::=
 	simple_select
 	| select_with_parens
+
+for_locking_clause ::=
+	for_locking_items
+	| 'FOR' 'READ' 'ONLY'
+
+opt_select_limit ::=
+	select_limit
+	| 
 
 select_limit ::=
 	limit_clause offset_clause
 	| offset_clause limit_clause
 	| limit_clause
 	| offset_clause
+
+opt_for_locking_clause ::=
+	for_locking_clause
+	| 
 
 set_rest_more ::=
 	generic_set
@@ -1578,18 +1589,8 @@ set_operation ::=
 	| select_clause 'INTERSECT' all_or_distinct select_clause
 	| select_clause 'EXCEPT' all_or_distinct select_clause
 
-for_locking_strength ::=
-	'FOR' 'UPDATE'
-	| 'FOR' 'NO' 'KEY' 'UPDATE'
-	| 'FOR' 'SHARE'
-	| 'FOR' 'KEY' 'SHARE'
-
-opt_locked_rels ::=
-	'OF' table_name_list
-
-opt_nowait_or_skip ::=
-	'SKIP' 'LOCKED'
-	| 'NOWAIT'
+for_locking_items ::=
+	( for_locking_item ) ( ( for_locking_item ) )*
 
 offset_clause ::=
 	'OFFSET' a_expr
@@ -1943,6 +1944,9 @@ all_or_distinct ::=
 	| 'DISTINCT'
 	| 
 
+for_locking_item ::=
+	for_locking_strength opt_locked_rels opt_nowait_or_skip
+
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
 
@@ -2207,6 +2211,19 @@ interval_qualifier ::=
 
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
+
+for_locking_strength ::=
+	'FOR' 'UPDATE'
+	| 'FOR' 'NO' 'KEY' 'UPDATE'
+	| 'FOR' 'SHARE'
+	| 'FOR' 'KEY' 'SHARE'
+
+opt_locked_rels ::=
+	'OF' table_name_list
+
+opt_nowait_or_skip ::=
+	'SKIP' 'LOCKED'
+	| 'NOWAIT'
 
 opt_join_hint ::=
 	'HASH'
