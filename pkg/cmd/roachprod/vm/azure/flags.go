@@ -11,8 +11,6 @@
 package azure
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
@@ -28,12 +26,6 @@ type providerOpts struct {
 	vnetName         string
 }
 
-var defaultLocations = []string{
-	"eastus2",
-	"westus",
-	"westeurope",
-}
-
 // ConfigureCreateFlags implements vm.ProviderFlags.
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.DurationVar(&o.operationTimeout, ProviderName+"-timeout", 10*time.Minute,
@@ -43,9 +35,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.machineType, ProviderName+"-machine-type",
 		string(compute.VirtualMachineSizeTypesStandardD4V3),
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")
-	flags.StringSliceVar(&o.locations, ProviderName+"-locations", nil,
-		fmt.Sprintf("Locations for cluster (see `az account list-locations`) (default\n[%s])",
-			strings.Join(defaultLocations, ",")))
+	flags.StringSliceVar(&o.locations, ProviderName+"-locations",
+		[]string{"eastus2", "westus", "westeurope"},
+		"Locations for cluster (see `az account list-locations`)")
 	flags.StringVar(&o.vnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
 }

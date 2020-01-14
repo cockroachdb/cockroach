@@ -283,29 +283,37 @@ func TestReplicationStatsReport(t *testing.T) {
 					},
 				},
 				splits: []split{
+					// No problem.
 					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
 					// Under-replicated.
 					{key: "/Table/t1/pk/101", stores: []int{1}},
+					// Under-replicated.
+					{key: "/Table/t1/pk/102", stores: []int{1, 2}},
+					// Under-replicated because 4 is dead.
+					{key: "/Table/t1/pk/103", stores: []int{1, 2, 4}},
 					// Under-replicated and unavailable.
-					{key: "/Table/t1/pk/101", stores: []int{3}},
+					{key: "/Table/t1/pk/104", stores: []int{3}},
 					// Over-replicated.
-					{key: "/Table/t1/pk/101", stores: []int{1, 2, 3, 4}},
+					{key: "/Table/t1/pk/105", stores: []int{1, 2, 3, 4}},
+					// Under-replicated and over-replicated.
+					{key: "/Table/t1/pk/106", stores: []int{1, 2, 4, 5}},
 				},
 				nodes: []node{
 					{id: 1, stores: []store{{id: 1}}},
 					{id: 2, stores: []store{{id: 2}}},
-					{id: 3, stores: []store{{id: 3}}, dead: true},
-					{id: 4, stores: []store{{id: 4}}},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+					{id: 5, stores: []store{{id: 3}}, dead: true},
 				},
 			},
 			exp: []replicationStatsEntry{
 				{
 					object: "t1.p1",
 					zoneRangeStatus: zoneRangeStatus{
-						numRanges:       4,
+						numRanges:       7,
 						unavailable:     1,
-						underReplicated: 2,
-						overReplicated:  1,
+						underReplicated: 5,
+						overReplicated:  2,
 					},
 				},
 			},

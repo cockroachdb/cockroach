@@ -443,7 +443,8 @@ type node struct {
 	locality string
 	stores   []store
 	// dead, if set, indicates that the node is to be considered dead for the
-	// purposes of reports generation.
+	// purposes of reports generation. In production, this corresponds to a node
+	// with an expired liveness record.
 	dead bool
 }
 
@@ -818,12 +819,18 @@ func processSplits(
 	keyScanner keysutil.PrettyScanner, splits []split,
 ) ([]roachpb.RangeDescriptor, error) {
 	ranges := make([]roachpb.RangeDescriptor, len(splits))
+	var lastKey roachpb.Key
 	for i, split := range splits {
 		prettyKey := splits[i].key
 		startKey, err := keyScanner.Scan(split.key)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse key: %s", prettyKey)
 		}
+		if lastKey.Compare(startKey) != -1 {
+			return nil, errors.WithStack(errors.Newf(
+				"unexpected lower or duplicate key: %s (prev key: %s)", prettyKey, lastKey))
+		}
+		lastKey = startKey
 		var endKey roachpb.Key
 		if i < len(splits)-1 {
 			prettyKey := splits[i+1].key
