@@ -86,6 +86,19 @@ func (c ColumnIDs) HasPrefix(input ColumnIDs) bool {
 	return true
 }
 
+// Equals returns true if the input list is equal to this list.
+func (c ColumnIDs) Equals(input ColumnIDs) bool {
+	if len(input) != len(c) {
+		return false
+	}
+	for i := range input {
+		if input[i] != c[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 

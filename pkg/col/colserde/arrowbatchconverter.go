@@ -84,10 +84,11 @@ var supportedTypes = func() map[coltypes.T]struct{} {
 	for _, t := range []coltypes.T{
 		coltypes.Bool,
 		coltypes.Bytes,
+		coltypes.Decimal,
+		coltypes.Float64,
 		coltypes.Int16,
 		coltypes.Int32,
 		coltypes.Int64,
-		coltypes.Float64,
 		coltypes.Timestamp,
 	} {
 		typs[t] = struct{}{}
@@ -115,15 +116,25 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == coltypes.Bool || typ == coltypes.Timestamp {
-			// Bools and Timestamps are handled differently from other coltypes.
-			// Refer to the comment on ArrowBatchConverter.builders for more
-			// information.
+		if typ == coltypes.Bool || typ == coltypes.Decimal || typ == coltypes.Timestamp {
+			// Bools, Decimals, and Timestamps are handled differently from other
+			// coltypes. Refer to the comment on ArrowBatchConverter.builders for
+			// more information.
 			var data *array.Data
 			switch typ {
 			case coltypes.Bool:
 				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 				data = c.builders.boolBuilder.NewBooleanArray().Data()
+			case coltypes.Decimal:
+				decimals := vec.Decimal()[:n]
+				for _, d := range decimals {
+					marshaled, err := d.MarshalText()
+					if err != nil {
+						return nil, err
+					}
+					c.builders.binaryBuilder.Append(marshaled)
+				}
+				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			case coltypes.Timestamp:
 				timestamps := vec.Timestamp()[:n]
 				for _, ts := range timestamps {
@@ -246,49 +257,64 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		if typ == coltypes.Bool || typ == coltypes.Bytes || typ == coltypes.Timestamp {
-			switch typ {
-			case coltypes.Bool:
-				boolArr := array.NewBooleanData(d)
-				vecArr := vec.Bool()
-				for i := 0; i < boolArr.Len(); i++ {
-					vecArr[i] = boolArr.Value(i)
-				}
-				arr = boolArr
-			case coltypes.Bytes:
-				bytesArr := array.NewBinaryData(d)
-				bytes := bytesArr.ValueBytes()
-				if bytes == nil {
-					// All bytes values are empty, so the representation is solely with the
-					// offsets slice, so create an empty slice so that the conversion
-					// corresponds.
-					bytes = make([]byte, 0)
-				}
-				coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
-				arr = bytesArr
-			case coltypes.Timestamp:
-				// TODO(yuzefovich): this serialization is quite inefficient - improve
-				// it.
-				bytesArr := array.NewBinaryData(d)
-				bytes := bytesArr.ValueBytes()
-				if bytes == nil {
-					// All bytes values are empty, so the representation is solely with the
-					// offsets slice, so create an empty slice so that the conversion
-					// corresponds.
-					bytes = make([]byte, 0)
-				}
-				offsets := bytesArr.ValueOffsets()
-				vecArr := vec.Timestamp()
-				for i := 0; i < len(offsets)-1; i++ {
-					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
-						return err
-					}
-				}
-				arr = bytesArr
-			default:
-				panic(fmt.Sprintf("unexpected type %s", typ))
+		switch typ {
+		case coltypes.Bool:
+			boolArr := array.NewBooleanData(d)
+			vecArr := vec.Bool()
+			for i := 0; i < boolArr.Len(); i++ {
+				vecArr[i] = boolArr.Value(i)
 			}
-		} else {
+			arr = boolArr
+		case coltypes.Bytes:
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
+			arr = bytesArr
+		case coltypes.Decimal:
+			// TODO(yuzefovich): this serialization is quite inefficient - improve
+			// it.
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			offsets := bytesArr.ValueOffsets()
+			vecArr := vec.Decimal()
+			for i := 0; i < len(offsets)-1; i++ {
+				if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
+					return err
+				}
+			}
+			arr = bytesArr
+		case coltypes.Timestamp:
+			// TODO(yuzefovich): this serialization is quite inefficient - improve
+			// it.
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			offsets := bytesArr.ValueOffsets()
+			vecArr := vec.Timestamp()
+			for i := 0; i < len(offsets)-1; i++ {
+				if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+					return err
+				}
+			}
+			arr = bytesArr
+		default:
 			var col interface{}
 			switch typ {
 			case coltypes.Int16:
