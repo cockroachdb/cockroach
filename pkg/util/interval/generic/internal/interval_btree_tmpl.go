@@ -156,7 +156,10 @@ func mut(n **node) *node {
 	}
 	// If we do not have unique ownership over the node then we
 	// clone it to gain unique ownership. After doing so, we can
-	// release our reference to the old node.
+	// release our reference to the old node. We pass recursive
+	// as true because even though we just observed the node's
+	// reference count to be greater than 1, we might be racing
+	// with another call to decRef on this node.
 	c := (*n).clone()
 	(*n).decRef(true /* recursive */)
 	*n = c
@@ -658,10 +661,24 @@ func (t *btree) Reset() {
 	t.length = 0
 }
 
-// Clone clones the btree, lazily.
+// Clone clones the btree, lazily. It does so in constant time.
 func (t *btree) Clone() btree {
 	c := *t
 	if c.root != nil {
+		// Incrementing the reference count on the root node is sufficient to
+		// ensure that no node in the cloned tree can be mutated by an actor
+		// holding a reference to the original tree and vice versa. This
+		// property is upheld because the root node in the receiver btree and
+		// the returned btree will both necessarily have a reference count of at
+		// least 2 when this method returns. All tree mutations recursively
+		// acquire mutable node references (see mut) as they traverse down the
+		// tree. The act of acquiring a mutable node reference performs a clone
+		// if a node's reference count is greater than one. Cloning a node (see
+		// clone) increases the reference count on each of its children,
+		// ensuring that they have a reference count of at least 2. This, in
+		// turn, ensures that any of the child nodes that are modified will also
+		// be copied-on-write, recursively ensuring the immutability property
+		// over the entire tree.
 		c.root.incRef()
 	}
 	return c
