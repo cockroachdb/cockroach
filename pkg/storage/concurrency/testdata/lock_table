@@ -1,0 +1,489 @@
+txn txn=txn1 ts=10,1 epoch=0
+----
+
+# req1 will acquire locks for txn1
+
+request r=req1 txn=txn1 ts=10,1 spans=r@a,b+w@c,f
+----
+
+scan r=req1
+----
+
+guard-start-waiting r=req1
+----
+false
+
+guard-new-state r=req1
+----
+
+guard-state r=req1
+----
+state=doneWaiting
+
+# Acquire lock on c both replicated and unreplicated. Just to trigger corner cases and since
+# uncontended replicated locks are not tracked by lockTable.
+acquire r=req1 k=c durability=r
+----
+
+acquire r=req1 k=c durability=u
+----
+
+acquire r=req1 k=e durability=u
+----
+
+done r=req1
+----
+
+# req2 is also for txn1 and will not wait for locks that are held by self.
+
+request r=req2 txn=txn1 ts=10,2 spans=w@b,d+r@d,g
+----
+
+scan r=req2
+----
+
+guard-start-waiting r=req2
+----
+false
+
+acquire r=req2 k=b durability=u
+----
+
+done r=req2
+----
+
+# txn1 holds locks on b, c, e.
+# txn2 has a smaller timestamp than txn1.
+txn txn=txn2 ts=8,12 epoch=0
+----
+
+# A read request for txn2 does not need to wait for locks held by txn1.
+request r=req3 txn=txn2 ts=8,12 spans=r@a,g
+----
+
+scan r=req3
+----
+
+guard-start-waiting r=req3
+----
+false
+
+done r=req3
+----
+
+# req4 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
+# not conflict with lock on e since wants to read there and the read is at a lower timestamp
+# than the lock.
+request r=req4 txn=txn2 ts=8,12 spans=w@a,d+r@d,g
+----
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+true
+
+guard-new-state r=req4
+----
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn1 ts=10,2
+
+# Release lock on b since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=b
+----
+
+guard-new-state r=req4
+----
+
+# Still waiting, but on lock c which has a different ts in the TxnMeta.
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn1 ts=10,1
+
+# Release lock on c since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=c,e
+----
+
+guard-new-state r=req4
+----
+
+# No longer waiting since does not conflict with lock on e.
+
+guard-state r=req4
+----
+state=doneWaiting
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+false
+
+# req4 proceeds to evaluation and discovers locks on a, f. The lock on a conflicts since req4
+# wants to write and the lock on f conflicts because req4's read has a higher timestamp.
+
+txn txn=txn3 ts=6 epoch=0
+----
+
+add-discovered r=req4 access=w k=a txn=txn3
+----
+
+add-discovered r=req4 access=r k=f txn=txn3
+----
+
+# Note that guard state has not changed yet. Discovering these locks means the caller has to
+# scan again.
+
+guard-start-waiting r=req4
+----
+false
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+true
+
+guard-new-state r=req4
+----
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+# which does not conflict. And txn3 with ts=6 has locks on a, f that do conflict. This is better
+# viewed as:
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait, + is in queue as inactive.
+#  req4      w+     w     w    r   r    r*
+#
+# Note that req4 is waiting on f since SpanReadOnly spans are ordered before SpanReadWrite spans.
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn3 ts=6
+
+# req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
+# conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
+# reservations.
+request r=req5 txn=txn1 ts=11,1 spans=r@b+r@c
+----
+
+scan r=req5
+----
+
+guard-start-waiting r=req5
+----
+false
+
+done r=req5
+----
+
+# req6 from txn1 conflicts with lock at f, and reservations at b, c. It is not a distinguished
+# waiter at f.
+#
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait, + is in queue as inactive.
+#  req4      w+   w     w    r   r    r*
+#  req6           w     w             r*
+#   tnx1
+#   11,1
+
+request r=req6 txn=txn1 ts=11,1 spans=r@f+w@b,d
+----
+
+scan r=req6
+----
+
+guard-start-waiting r=req6
+----
+true
+
+guard-new-state r=req6
+----
+
+guard-state r=req6
+----
+state=waitFor txn=txn3 ts=6
+
+# req7 from txn3 only wants to write to c
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1 txn3
+#            6                   10,1  6
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait, + is in queue as inactive.
+#  req4      w+    w     w    r   r    r*
+#  req6            w     w             r*
+#   tnx1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+
+request r=req7 txn=txn3 ts=6 spans=w@c
+----
+
+scan r=req7
+----
+
+guard-start-waiting r=req7
+----
+true
+
+guard-new-state r=req7
+----
+
+guard-state r=req7
+----
+state=waitForDistinguished txn=txn2 ts=8,12
+
+# Release f. This will cause req4 to wait at a, and req6 to wait at b.
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder   txn3                 txn1
+#            6                   10,1
+#  res           req4  req4
+#                txn2  txn2
+#                8,12  8,12
+# Requests: * is active wait, + is in queue as inactive.
+#  req4      w*    w     w    r   r    r
+#  req6            w*    w             r
+#   tnx1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+release txn=txn3 span=f
+----
+
+guard-new-state r=req6
+----
+
+guard-state r=req6
+----
+state=waitForDistinguished txn=txn2 ts=8,12
+
+guard-new-state r=req4
+----
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn3 ts=6
+
+# Release a. req4 is done waiting.
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder                        txn1
+#                                10,1
+#  res     req4  req4  req4
+#          txn2  txn2  txn2
+#          8,12  8,12  8,12
+# Requests: * is active wait, + is in queue as inactive.
+#  req4      w     w     w    r   r    r
+#  req6            w*    w             r
+#   tnx1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+release txn=txn3 span=a
+----
+
+guard-new-state r=req6
+----
+no new state
+
+guard-new-state r=req4
+----
+
+guard-state r=req4
+----
+state=doneWaiting
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+false
+
+acquire r=req4 k=b durability=r
+----
+
+acquire r=req4 k=c durability=r
+----
+
+guard-new-state r=req6
+----
+no new state
+
+guard-new-state r=req7
+----
+no new state
+
+done r=req4
+----
+
+guard-new-state r=req6
+----
+no new state
+
+guard-new-state r=req7
+----
+no new state
+
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder        txn2  txn2      txn1
+#                8,12  8,12      10,1
+#  res
+# Requests: * is active wait, + is in queue as inactive.
+#  req6            w*    w             r
+#   tnx1
+#   11,1
+#  req7                  w*
+#   txn3
+#   6
+
+# Release the lock at c. The lock at e is not held by txn2 so will be ignored.
+# req7 will get the reservation at c and will become doneWaiting.
+release txn=txn2 span=c,f
+----
+
+guard-new-state r=req7
+----
+
+guard-state r=req7
+----
+state=doneWaiting
+
+guard-state r=req6
+----
+state=waitForDistinguished txn=txn2 ts=8,12
+
+# Now before req7 can scan again, release the lock at b. This will cause req6 to break the
+# reservation of req7 at c and become doneWaiting too.
+
+release txn=txn2 span=b
+----
+
+guard-new-state r=req6
+----
+
+guard-state r=req6
+----
+state=doneWaiting
+
+guard-state r=req7
+----
+state=doneWaiting
+
+# Both requests are doneWaiting, but req holds the reservation. The state is
+# Locks:
+#             a    b    c    d    e    f    g
+#  holder                        txn1
+#                                10,1
+#  res            req6 req6
+#                 txn1 txn1
+#                 11,1 11,1
+# Requests: * is active wait, + is in queue as inactive.
+#  req6            w    w              r
+#   tnx1
+#   11,1
+#  req7                 w*
+#   txn3
+#   6
+
+scan r=req7
+----
+
+guard-start-waiting r=req7
+----
+true
+
+guard-new-state r=req7
+----
+
+guard-state r=req7
+----
+state=waitForDistinguished txn=txn1 ts=11,1
+
+scan r=req6
+----
+
+guard-start-waiting r=req6
+----
+false
+
+# Release reservation.
+done r=req6
+----
+
+guard-new-state r=req7
+----
+
+guard-state r=req7
+----
+state=doneWaiting
+
+scan r=req7
+----
+
+guard-start-waiting r=req7
+----
+false
+
+done r=req7
+----
+
+# e is still locked
+
+request r=req8 txn=txn3 ts=6 spans=w@e
+----
+
+scan r=req8
+----
+
+guard-start-waiting r=req8
+----
+true
+
+guard-new-state r=req8
+----
+
+guard-state r=req8
+----
+state=waitForDistinguished txn=txn1 ts=10,1
+
+done r=req8
+----
+
+release txn=txn1 span=c,f
+----
+
+# TODO(sbhola):
+# - Replicated lock that was uncontended is ignored by lockTable so later request does not wait
+#   until it discovers lock.
+# - Count of locks being tracked.
+# - Lock table with small max locks for waitElsewhere transition.
+
