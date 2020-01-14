@@ -156,6 +156,11 @@ func parseProcMounts(treeRoot string, f func(entry fstabEntry)) error {
 				e.fsVfsOpts = field
 			case 3:
 				e.fsMntOpts = field
+			case 4, 5:
+				// Ignoring fs_freq and fs_passno for now.
+			default:
+				// Should never be seen but it's not obviously worth pulling in the
+				// dependency on logging.
 			}
 		}
 		f(e)
