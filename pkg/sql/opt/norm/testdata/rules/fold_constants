@@ -149,7 +149,7 @@ norm expect-not=FoldArray
 SELECT ARRAY[1, 2, 3, x] FROM t
 ----
 project
- ├── columns: array:2(int[])
+ ├── columns: array:2(int[]!null)
  ├── scan t
  │    ├── columns: x:1(int!null)
  │    └── key: (1)

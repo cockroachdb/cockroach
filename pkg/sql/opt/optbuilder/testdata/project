@@ -56,7 +56,7 @@ build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM a
 ----
 project
- ├── columns: X:3(int) Y:4(bool!null)
+ ├── columns: X:3(int!null) Y:4(bool!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
@@ -95,9 +95,9 @@ build
 SELECT u + 1 AS r, v + 1 AS s FROM (SELECT a.x + 3 AS t, a.y + 1.0 AS u FROM a) AS foo(u, v)
 ----
 project
- ├── columns: r:5(int) s:6(float)
+ ├── columns: r:5(int!null) s:6(float)
  ├── project
- │    ├── columns: t:3(int) u:4(float)
+ │    ├── columns: t:3(int!null) u:4(float)
  │    ├── scan a
  │    │    └── columns: x:1(int!null) y:2(float)
  │    └── projections
@@ -185,7 +185,7 @@ build
 SELECT rowid::string FROM b
 ----
 project
- ├── columns: rowid:4(string)
+ ├── columns: rowid:4(string!null)
  ├── scan b
  │    └── columns: x:1(int) y:2(float) b.rowid:3(int!null)
  └── projections

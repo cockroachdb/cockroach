@@ -47,7 +47,7 @@ project
  │    ├── fd: ()-->(27,29)
  │    ├── project
  │    │    ├── save-table-name: q14_project_3
- │    │    ├── columns: column26:26(float) column28:28(float)
+ │    │    ├── columns: column26:26(float!null) column28:28(float!null)
  │    │    ├── stats: [rows=82726.8788, distinct(26)=82726.8788, null(26)=0, distinct(28)=52210.2591, null(28)=0]
  │    │    ├── inner-join (hash)
  │    │    │    ├── save-table-name: q14_inner_join_4

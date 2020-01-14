@@ -169,6 +169,14 @@ define Project {
     Projections ProjectionsExpr
 
     Passthrough ColSet
+
+    # notNullCols is the set of columns (input or synthesized) that are known to
+    # be not-null.
+    notNullCols ColSet
+
+    # internalFuncDeps are the functional dependencies between all columns
+    # (input or synthesized).
+    internalFuncDeps FuncDepSet
 }
 
 # InnerJoin creates a result set that combines columns from its left and right
@@ -271,6 +279,11 @@ define LookupJoin {
     On    FiltersExpr
 
     _ LookupJoinPrivate
+
+    # lookupProps caches relational properties for the "table" side of the lookup
+    # join, treating it as if it were another relational input. This makes the
+    # lookup join appear more like other join operators.
+    lookupProps RelProps
 }
 
 [Private]
@@ -306,11 +319,6 @@ define LookupJoinPrivate {
     # LookupColsAreTableKey is true if the lookup columns form a key in the
     # table (and thus each left row matches with at most one table row).
     LookupColsAreTableKey bool
-
-    # lookupProps caches relational properties for the "table" side of the lookup
-    # join, treating it as if it were another relational input. This makes the
-    # lookup join appear more like other join operators.
-    lookupProps RelProps
 
     # ConstFilters contains the constant filters that are represented as equality
     # conditions on the KeyCols. These filters are needed by the statistics code to
@@ -371,6 +379,13 @@ define ZigzagJoin {
     On   FiltersExpr
 
     _ ZigzagJoinPrivate
+
+    # leftProps and rightProps cache relational properties corresponding to an
+    # unconstrained scan on the respective indexes. By putting this in the
+    # expr, zigzag joins can reuse a lot of the logical property building code
+    # for joins.
+    leftProps RelProps
+    rightProps RelProps
 }
 
 [Private]
@@ -408,13 +423,6 @@ define ZigzagJoinPrivate {
     # Cols is the set of columns produced by the zigzag join. This set can
     # contain columns from either side's index.
     Cols ColSet
-
-    # leftProps and rightProps cache relational properties corresponding to an
-    # unconstrained scan on the respective indexes. By putting this in the
-    # expr, zigzag joins can reuse a lot of the logical property building code
-    # for joins.
-    leftProps RelProps
-    rightProps RelProps
 }
 
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike

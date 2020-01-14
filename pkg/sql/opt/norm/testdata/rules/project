@@ -95,7 +95,7 @@ norm expect=MergeProjects
 SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
 ----
 project
- ├── columns: y1:5(int) "?column?":7(float) x2:6(int) "?column?":8(string)
+ ├── columns: y1:5(int) "?column?":7(float) x2:6(int!null) "?column?":8(string)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
  │    ├── key: (1)

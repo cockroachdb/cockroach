@@ -11,26 +11,36 @@
 package ordering
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestProject(t *testing.T) {
+	evalCtx := tree.NewTestingEvalContext(nil /* st */)
+	var f norm.Factory
+	f.Init(evalCtx, testcat.New())
+	md := f.Metadata()
+	for i := 1; i <= 4; i++ {
+		md.AddColumn(fmt.Sprintf("col%d", i), types.Int)
+	}
+
 	var fds props.FuncDepSet
 	fds.AddEquivalency(2, 3)
 	fds.AddConstants(opt.MakeColSet(4))
 
-	project := &memo.ProjectExpr{
-		Input: &testexpr.Instance{
-			Rel: &props.Relational{
-				OutputCols: opt.MakeColSet(1, 2, 3, 4),
-				FuncDeps:   fds,
-			},
+	input := &testexpr.Instance{
+		Rel: &props.Relational{
+			OutputCols: opt.MakeColSet(1, 2, 3, 4),
+			FuncDeps:   fds,
 		},
 	}
 
@@ -66,6 +76,8 @@ func TestProject(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		req := physical.ParseOrderingChoice(tc.req)
+		project := f.Memo().MemoizeProject(input, nil /* projections */, opt.MakeColSet(1, 2, 3, 4))
+
 		res := "no"
 		if projectCanProvideOrdering(project, &req) {
 			res = projectBuildChildReqOrdering(project, &req, 0).String()
