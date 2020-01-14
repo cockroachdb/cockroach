@@ -796,7 +796,12 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(fmt.Sprintf("%x", int64(tree.MustBeDInt(args[0])))), nil
+				val := tree.MustBeDInt(args[0])
+				// This should technically match the precision of the types entered
+				// into the function, e.g. `-1 :: int4` should use uint32 for correctness.
+				// However, we don't encode that information for function resolution.
+				// As such, always assume bigint / uint64.
+				return tree.NewDString(fmt.Sprintf("%x", uint64(val))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
@@ -804,8 +809,15 @@ var builtins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"val", types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				bytes := *(args[0].(*tree.DBytes))
-				return tree.NewDString(fmt.Sprintf("%x", []byte(bytes))), nil
+				return tree.NewDString(fmt.Sprintf("%x", tree.MustBeDBytes(args[0]))), nil
+			},
+			Info: "Converts `val` to its hexadecimal representation.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(fmt.Sprintf("%x", tree.MustBeDString(args[0]))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
