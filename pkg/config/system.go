@@ -16,15 +16,17 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type zoneConfigHook func(
 	sysCfg *SystemConfig, objectID uint32,
-) (zone *ZoneConfig, placeholder *ZoneConfig, cache bool, err error)
+) (zone *zonepb.ZoneConfig, placeholder *zonepb.ZoneConfig, cache bool, err error)
 
 var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
@@ -35,15 +37,11 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
-
-	// SplitAtIDHook is a function that is used to check if a given
-	// descriptor comes from a database or a table view.
-	SplitAtIDHook func(uint32, *SystemConfig) bool
 )
 
 type zoneEntry struct {
-	zone        *ZoneConfig
-	placeholder *ZoneConfig
+	zone        *zonepb.ZoneConfig
+	placeholder *zonepb.ZoneConfig
 
 	// combined merges the zone and placeholder configs into a combined config.
 	// If both have subzone information, the placeholder information is preferred.
@@ -54,7 +52,7 @@ type zoneEntry struct {
 	// enough bake time to ensure this is OK to do. Until then, only use the
 	// combined value in GetZoneConfigForObject, which is only used by the
 	// optimizer.
-	combined *ZoneConfig
+	combined *zonepb.ZoneConfig
 }
 
 // SystemConfig embeds a SystemConfigEntries message which contains an
@@ -67,7 +65,7 @@ type zoneEntry struct {
 // that should not be considered for splits.
 type SystemConfig struct {
 	SystemConfigEntries
-	DefaultZoneConfig *ZoneConfig
+	DefaultZoneConfig *zonepb.ZoneConfig
 	mu                struct {
 		syncutil.RWMutex
 		zoneCache        map[uint32]zoneEntry
@@ -76,7 +74,7 @@ type SystemConfig struct {
 }
 
 // NewSystemConfig returns an initialized instance of SystemConfig.
-func NewSystemConfig(defaultZoneConfig *ZoneConfig) *SystemConfig {
+func NewSystemConfig(defaultZoneConfig *zonepb.ZoneConfig) *SystemConfig {
 	sc := &SystemConfig{}
 	sc.DefaultZoneConfig = defaultZoneConfig
 	sc.mu.zoneCache = map[uint32]zoneEntry{}
@@ -250,7 +248,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 // GetZoneConfigForKey looks up the zone config for the object (table
 // or database, specified by key.id). It is the caller's
 // responsibility to ensure that the range does not need to be split.
-func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
+func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*zonepb.ZoneConfig, error) {
 	return s.getZoneConfigForKey(DecodeKeyIntoZoneIDAndSuffix(key))
 }
 
@@ -300,7 +298,7 @@ func isPseudoTableID(id uint32) bool {
 // identifier.
 // NOTE: any subzones from the zone placeholder will be automatically merged
 // into the cached zone so the caller doesn't need special-case handling code.
-func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*ZoneConfig, error) {
+func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*zonepb.ZoneConfig, error) {
 	entry, err := s.getZoneEntry(id)
 	if err != nil {
 		return nil, err
@@ -310,7 +308,7 @@ func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*ZoneConfig, error) {
 
 // getZoneEntry returns the zone entry for the given object ID. In the fast
 // path, the zone is already in the cache, and is directly returned. Otherwise,
-// getZoneEntry will hydrate new ZoneConfig(s) from the SystemConfig and install
+// getZoneEntry will hydrate new zonepb.ZoneConfig(s) from the SystemConfig and install
 // them as an entry in the cache.
 func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
 	s.mu.RLock()
@@ -347,7 +345,9 @@ func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
 	return zoneEntry{}, nil
 }
 
-func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneConfig, error) {
+func (s *SystemConfig) getZoneConfigForKey(
+	id uint32, keySuffix []byte,
+) (*zonepb.ZoneConfig, error) {
 	entry, err := s.getZoneEntry(id)
 	if err != nil {
 		return nil, err
@@ -462,7 +462,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 			if zoneVal == nil {
 				continue
 			}
-			var zone ZoneConfig
+			var zone zonepb.ZoneConfig
 			if err := zoneVal.GetProto(&zone); err != nil {
 				// An error while decoding the zone proto is unfortunate, but logging a
 				// message here would be excessively spammy. Just move on, which
@@ -470,7 +470,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 				continue
 			}
 			// This logic is analogous to the well-commented static split logic above.
-			for _, s := range zone.subzoneSplits() {
+			for _, s := range zone.SubzoneSplits() {
 				subzoneKey := append(tableKey, s...)
 				if startKey.Less(subzoneKey) {
 					if subzoneKey.Less(endKey) {
@@ -516,19 +516,28 @@ func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 // It uses the internal cache to find a value, and tries to find
 // it using the hook if ID isn't found in the cache.
 func (s *SystemConfig) shouldSplit(ID uint32) bool {
-	s.mu.RLock()
-	shouldSplit, ok := s.mu.shouldSplitCache[ID]
-	s.mu.RUnlock()
-	if !ok {
-		// Check if the descriptor ID is not one of the reserved
-		// IDs that refer to ranges but not any actual descriptors.
-		shouldSplit = true
-		if ID >= keys.MinUserDescID {
-			shouldSplit = SplitAtIDHook(ID, s)
+	// Check the cache.
+	{
+		s.mu.RLock()
+		shouldSplit, ok := s.mu.shouldSplitCache[ID]
+		s.mu.RUnlock()
+		if ok {
+			return shouldSplit
 		}
-		s.mu.Lock()
-		s.mu.shouldSplitCache[ID] = shouldSplit
-		s.mu.Unlock()
 	}
+
+	var shouldSplit bool
+	if ID < keys.MinUserDescID {
+		// The ID might be one of the reserved IDs that refer to ranges but not any
+		// actual descriptors.
+		shouldSplit = true
+	} else {
+		desc := s.GetDesc(keys.DescMetadataKey(ID))
+		shouldSplit = desc != nil && sqlbase.ShouldSplitAtID(ID, desc)
+	}
+	// Populate the cache.
+	s.mu.Lock()
+	s.mu.shouldSplitCache[ID] = shouldSplit
+	s.mu.Unlock()
 	return shouldSplit
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -565,7 +566,7 @@ func (rq *replicateQueue) addOrReplace(
 func (rq *replicateQueue) findRemoveTarget(
 	ctx context.Context,
 	repl interface {
-		DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig)
+		DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig)
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
@@ -936,7 +937,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,

@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -3241,7 +3241,7 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setZones := func(zone config.ZoneConfig) {
+	setZones := func(zone zonepb.ZoneConfig) {
 		lhs().SetZoneConfig(&zone)
 		rhs().SetZoneConfig(&zone)
 	}
@@ -3297,7 +3297,7 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("lhs-undersize", func(t *testing.T) {
 		reset(t)
-		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*config.ZoneConfig)
+		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
 		*zone.RangeMinBytes *= 2
 		lhs().SetZoneConfig(zone)
 		store.MustForceMergeScanAndProcess()
@@ -3309,7 +3309,7 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*config.ZoneConfig)
+		zone := protoutil.Clone(storeCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
 		zone.RangeMinBytes = proto.Int64(lhs().GetMVCCStats().Total() + 1)
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total()*2 - 1)
 		setZones(*zone)

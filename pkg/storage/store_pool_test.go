@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -102,7 +102,7 @@ func createTestStorePool(
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, clock, stopper, st)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), config.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := newMockNodeLiveness(defaultNodeStatus)
 
 	TimeUntilStoreDead.Override(&st.SV, timeUntilStoreDeadValue)
@@ -147,7 +147,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	constraints []config.Constraints,
+	constraints []zonepb.Constraints,
 	storeIDs roachpb.StoreIDSlice, // optional
 	rangeID roachpb.RangeID,
 	filter storeFilter,
@@ -196,11 +196,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		storagepb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.TODO())
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := []config.Constraints{
+	constraints := []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Type: config.Constraint_REQUIRED, Value: "ssd"},
-				{Type: config.Constraint_REQUIRED, Value: "dc"},
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Value: "ssd"},
+				{Type: zonepb.Constraint_REQUIRED, Value: "dc"},
 			},
 		},
 	}
@@ -353,13 +353,13 @@ func TestStorePoolGetStoreList(t *testing.T) {
 func TestStoreListFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraints := []config.Constraints{
+	constraints := []zonepb.Constraints{
 		{
-			Constraints: []config.Constraint{
-				{Type: config.Constraint_REQUIRED, Key: "region", Value: "us-west"},
-				{Type: config.Constraint_REQUIRED, Value: "MustMatch"},
-				{Type: config.Constraint_DEPRECATED_POSITIVE, Value: "MatchingOptional"},
-				{Type: config.Constraint_PROHIBITED, Value: "MustNotMatch"},
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+				{Type: zonepb.Constraint_REQUIRED, Value: "MustMatch"},
+				{Type: zonepb.Constraint_DEPRECATED_POSITIVE, Value: "MatchingOptional"},
+				{Type: zonepb.Constraint_PROHIBITED, Value: "MustNotMatch"},
 			},
 		},
 	}

@@ -13,7 +13,7 @@ package server
 import (
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
@@ -24,9 +24,9 @@ type TestingKnobs struct {
 	// automatic version upgrade mechanism.
 	DisableAutomaticVersionUpgrade int32 // accessed atomically
 	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
-	DefaultZoneConfigOverride *config.ZoneConfig
+	DefaultZoneConfigOverride *zonepb.ZoneConfig
 	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
-	DefaultSystemZoneConfigOverride *config.ZoneConfig
+	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 	// PauseAfterGettingRPCAddress, if non-nil, instructs the server to wait until
 	// the channel is closed after getting an RPC serving address.
 	PauseAfterGettingRPCAddress chan struct{}

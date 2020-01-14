@@ -16,7 +16,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -725,7 +725,7 @@ type Index struct {
 
 	// IdxZone is the zone associated with the index. This may be inherited from
 	// the parent table, database, or even the default zone.
-	IdxZone *config.ZoneConfig
+	IdxZone *zonepb.ZoneConfig
 
 	// Ordinal is the ordinal of this index in the table.
 	ordinal int

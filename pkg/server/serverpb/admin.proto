@@ -12,7 +12,7 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "config/zone.proto";
+import "config/zonepb/zone.proto";
 import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
@@ -76,7 +76,7 @@ message DatabaseDetailsResponse {
   // the 'target_id' field of events.
   int64 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID"];
   // The zone configuration in effect for this database.
-  cockroach.config.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
+  cockroach.config.zonepb.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 5;
 }
@@ -162,7 +162,7 @@ message TableDetailsResponse {
   // executed.
   string create_table_statement = 5;
   // The zone configuration in effect for this table.
-  cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
+  cockroach.config.zonepb.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 7;
   // descriptor_id is an identifier used to uniquely identify this table.
@@ -554,7 +554,7 @@ message DataDistributionResponse {
     // "PARTITION north_america OF TABLE users".
     string target = 1;
 
-    config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
+    config.zonepb.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 
     reserved 3;
 
