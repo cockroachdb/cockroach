@@ -1055,3 +1055,12 @@ CREATE TABLE t43855(o OID, r REGPROCEDURE)
 query i
 SELECT CASE WHEN o = 0 THEN 0:::OID ELSE r END FROM t43855
 ----
+
+# Regression test for an aggregate that has output type different from its
+# input type (INT4 is input whereas output is INT). Currently such query is not
+# supported through vectorized engine, but we will get a plan with wrapped
+# rowexec.orderedAggregator.
+query I
+SELECT max(c) FROM a
+----
+2000
