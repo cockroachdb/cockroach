@@ -570,10 +570,11 @@ func (t *btree) Reset() {
 	t.length = 0
 }
 
-// Clone clones the btree, lazily.
+// Clone clones the btree, lazily. It does so in constant time.
 func (t *btree) Clone() btree {
 	c := *t
 	if c.root != nil {
+
 		c.root.incRef()
 	}
 	return c
