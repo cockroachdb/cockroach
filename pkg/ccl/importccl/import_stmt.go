@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -702,10 +701,9 @@ func parseAvroOptions(
 }
 
 type importResumer struct {
-	job            *jobs.Job
-	settings       *cluster.Settings
-	res            roachpb.BulkOpSummary
-	statsRefresher *stats.Refresher
+	job      *jobs.Job
+	settings *cluster.Settings
+	res      roachpb.BulkOpSummary
 
 	testingKnobs struct {
 		afterImport            func(summary roachpb.BulkOpSummary) error
@@ -964,9 +962,99 @@ func (r *importResumer) Resume(
 			return err
 		}
 	}
-
 	r.res = res
-	r.statsRefresher = p.ExecCfg().StatsRefresher
+
+	if err := r.publishTables(ctx, p.ExecCfg()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// publishTables updates the status of imported tables from OFFLINE to PUBLIC.
+func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.ExecutorConfig) error {
+	details := r.job.Details().(jobspb.ImportDetails)
+	// Tables should only be published once.
+	if details.TablesPublished {
+		return nil
+	}
+	log.Event(ctx, "making tables live")
+
+	// Needed to trigger the schema change manager.
+	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		for _, tbl := range details.Tables {
+			tableDesc := *tbl.Desc
+			tableDesc.Version++
+			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+
+			if !tbl.IsNew {
+				// NB: This is not using AllNonDropIndexes or directly mutating the
+				// constraints returned by the other usual helpers because we need to
+				// replace the `OutboundFKs` and `Checks` slices of tableDesc with copies
+				// that we can mutate. We need to do that because tableDesc is a shallow
+				// copy of tbl.Desc that we'll be asserting is the current version when we
+				// CPut below.
+				//
+				// Set FK constraints to unvalidated before publishing the table imported
+				// into.
+				tableDesc.OutboundFKs = make([]sqlbase.ForeignKeyConstraint, len(tableDesc.OutboundFKs))
+				copy(tableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
+				for i := range tableDesc.OutboundFKs {
+					tableDesc.OutboundFKs[i].Validity = sqlbase.ConstraintValidity_Unvalidated
+				}
+
+				// Set CHECK constraints to unvalidated before publishing the table imported into.
+				tableDesc.Checks = make([]*sqlbase.TableDescriptor_CheckConstraint, len(tbl.Desc.Checks))
+				for i, c := range tbl.Desc.AllActiveAndInactiveChecks() {
+					ck := *c
+					ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+					tableDesc.Checks[i] = &ck
+				}
+			}
+
+			// TODO(dt): re-validate any FKs?
+			// Note that this CPut is safe with respect to mixed-version descriptor
+			// upgrade and downgrade, because IMPORT does not operate in mixed-version
+			// states.
+			// TODO(jordan,lucy): remove this comment once 19.2 is released.
+			existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl.Desc)
+			if err != nil {
+				return errors.Wrap(err, "publishing tables")
+			}
+			b.CPut(
+				sqlbase.MakeDescMetadataKey(tableDesc.ID),
+				sqlbase.WrapDescriptor(&tableDesc),
+				existingDesc)
+		}
+		if err := txn.Run(ctx, b); err != nil {
+			return errors.Wrap(err, "publishing tables")
+		}
+
+		// Update job record to mark tables published state as complete.
+		details.TablesPublished = true
+		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+		if err != nil {
+			return errors.Wrap(err, "updating job details after publishing tables")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
+	// rows affected per table, so we use a large number because we want to make
+	// sure that stats always get created/refreshed here.
+	for i := range details.Tables {
+		execCfg.StatsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
+	}
+
 	return nil
 }
 
@@ -1054,69 +1142,6 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
-	log.Event(ctx, "making tables live")
-	details := r.job.Details().(jobspb.ImportDetails)
-
-	// Needed to trigger the schema change manager.
-	if err := txn.SetSystemConfigTrigger(); err != nil {
-		return err
-	}
-	b := txn.NewBatch()
-	for _, tbl := range details.Tables {
-		tableDesc := *tbl.Desc
-		tableDesc.Version++
-		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-
-		if !tbl.IsNew {
-			// NB: This is not using AllNonDropIndexes or directly mutating the
-			// constraints returned by the other usual helpers because we need to
-			// replace the `OutboundFKs` and `Checks` slices of tableDesc with copies
-			// that we can mutate. We need to do that because tableDesc is a shallow
-			// copy of tbl.Desc that we'll be asserting is the current version when we
-			// CPut below.
-			//
-			// Set FK constraints to unvalidated before publishing the table imported
-			// into.
-			tableDesc.OutboundFKs = make([]sqlbase.ForeignKeyConstraint, len(tableDesc.OutboundFKs))
-			copy(tableDesc.OutboundFKs, tbl.Desc.OutboundFKs)
-			for i := range tableDesc.OutboundFKs {
-				tableDesc.OutboundFKs[i].Validity = sqlbase.ConstraintValidity_Unvalidated
-			}
-
-			// Set CHECK constraints to unvalidated before publishing the table imported into.
-			tableDesc.Checks = make([]*sqlbase.TableDescriptor_CheckConstraint, len(tbl.Desc.Checks))
-			for i, c := range tbl.Desc.AllActiveAndInactiveChecks() {
-				ck := *c
-				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
-				tableDesc.Checks[i] = &ck
-			}
-		}
-
-		// TODO(dt): re-validate any FKs?
-		// Note that this CPut is safe with respect to mixed-version descriptor
-		// upgrade and downgrade, because IMPORT does not operate in mixed-version
-		// states.
-		// TODO(jordan,lucy): remove this comment once 19.2 is released.
-		existingDesc, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl.Desc)
-		if err != nil {
-			return errors.Wrap(err, "publishing tables")
-		}
-		b.CPut(
-			sqlbase.MakeDescMetadataKey(tableDesc.ID),
-			sqlbase.WrapDescriptor(&tableDesc),
-			existingDesc)
-	}
-	if err := txn.Run(ctx, b); err != nil {
-		return errors.Wrap(err, "publishing tables")
-	}
-
-	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
-	// rows affected per table, so we use a large number because we want to make
-	// sure that stats always get created/refreshed here.
-	for i := range details.Tables {
-		r.statsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
-	}
-
 	return nil
 }
 
