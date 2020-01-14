@@ -64,7 +64,7 @@ sort
       ├── fd: (24)-->(27,29)
       ├── project
       │    ├── save-table-name: q12_project_3
-      │    ├── columns: column26:26(int) column28:28(int) l_shipmode:24(char!null)
+      │    ├── columns: column26:26(int!null) column28:28(int!null) l_shipmode:24(char!null)
       │    ├── stats: [rows=29822.8417, distinct(24)=2, null(24)=0, distinct(26)=5, null(26)=0, distinct(28)=5, null(28)=0]
       │    ├── inner-join (lookup orders)
       │    │    ├── save-table-name: q12_lookup_join_4

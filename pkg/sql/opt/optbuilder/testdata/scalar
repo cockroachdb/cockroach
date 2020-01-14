@@ -870,7 +870,7 @@ project
  └── projections
       └── array-flatten [type=tuple{int, int}[]]
            └── project
-                ├── columns: "?column?":1(tuple{int, int})
+                ├── columns: "?column?":1(tuple{int, int}!null)
                 ├── values
                 │    └── tuple [type=tuple]
                 └── projections

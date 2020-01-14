@@ -113,7 +113,7 @@ update abcde
  │    ├──  column13:13 => e:5
  │    └──  column16:16 => rowid:6
  └── project
-      ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── columns: column17:17(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
@@ -154,7 +154,7 @@ update abcde
  │    ├──  column16:16 => e:5
  │    └──  column13:13 => rowid:6
  └── project
-      ├── columns: column17:17(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
+      ├── columns: column17:17(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null)
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
@@ -232,9 +232,9 @@ update abcde
  │    ├──  column15:15 => d:4
  │    └──  column13:13 => e:5
  └── project
-      ├── columns: column15:15(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null) column13:13(int) column14:14(int)
+      ├── columns: column15:15(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null) column13:13(int!null) column14:14(int)
       ├── project
-      │    ├── columns: column13:13(int) column14:14(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
+      │    ├── columns: column13:13(int!null) column14:14(int) a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
       │    ├── select
       │    │    ├── columns: a:7(int!null) b:8(int!null) c:9(int) d:10(int) e:11(int!null) rowid:12(int!null)
       │    │    ├── scan abcde
@@ -716,7 +716,7 @@ build
 UPDATE abcde AS foo SET a=2 WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
- ├── columns: "?column?":15(int) "?column?":16(int)
+ ├── columns: "?column?":15(int!null) "?column?":16(int)
  ├── update foo
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int!null) rowid:6(int!null)
  │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)
@@ -838,9 +838,9 @@ project
       │    ├──  a:7 => e:5
       │    └──  column13:13 => rowid:6
       └── project
-           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int)
+           ├── columns: column14:14(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null)
            ├── project
-           │    ├── columns: column13:13(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
+           │    ├── columns: column13:13(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            │    ├── scan abcde
            │    │    ├── columns: a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
            │    │    └── computed column expressions
@@ -976,7 +976,7 @@ update abcde
  │    ├──  column16:16 => d:4
  │    └──  column13:13 => e:5
  └── project
-      ├── columns: column16:16(int) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null)
+      ├── columns: column16:16(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null) column13:13(int!null) column14:14(int!null) column15:15(int!null)
       ├── project
       │    ├── columns: column13:13(int!null) column14:14(int!null) column15:15(int!null) a:7(int!null) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int!null)
       │    ├── scan abcde
@@ -1211,9 +1211,9 @@ update abcde
       │    │         └── e:11(int)
       │    │              └── variable: a [type=int]
       │    ├── max1-row
-      │    │    ├── columns: y:14(int) x:16(int) z:17(int) y1:18(int)
+      │    │    ├── columns: y:14(int) x:16(int!null) z:17(int) y1:18(int)
       │    │    └── project
-      │    │         ├── columns: x:16(int) z:17(int) y1:18(int) y:14(int)
+      │    │         ├── columns: x:16(int!null) z:17(int) y1:18(int) y:14(int)
       │    │         ├── scan xyz
       │    │         │    └── columns: xyz.x:13(string!null) y:14(int) xyz.z:15(float)
       │    │         └── projections
@@ -1622,7 +1622,7 @@ update mutation
  │    └──  column12:12 => p:4
  ├── check columns: check1:13(bool)
  └── project
-      ├── columns: check1:13(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
+      ├── columns: check1:13(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
       ├── project
       │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
       │    ├── project
@@ -1657,7 +1657,7 @@ update mutation
  │    └──  column13:13 => p:4
  ├── check columns: check1:14(bool)
  └── project
-      ├── columns: check1:14(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
+      ├── columns: check1:14(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
       ├── project
       │    ├── columns: column13:13(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null)
       │    ├── project
@@ -1692,7 +1692,7 @@ update mutation
  │    └──  column12:12 => p:4
  ├── check columns: check1:13(bool)
  └── project
-      ├── columns: check1:13(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
+      ├── columns: check1:13(bool!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
       ├── project
       │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
       │    ├── project
@@ -1771,9 +1771,9 @@ update checks
  │    └──  column12:12 => d:4
  ├── check columns: check1:13(bool) check2:14(bool)
  └── project
-      ├── columns: check1:13(bool) check2:14(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null) column12:12(int)
+      ├── columns: check1:13(bool!null) check2:14(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null) column12:12(int!null)
       ├── project
-      │    ├── columns: column12:12(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null)
+      │    ├── columns: column12:12(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int!null) column11:11(int!null)
       │    ├── project
       │    │    ├── columns: column9:9(int!null) column10:10(int!null) column11:11(int!null) a:5(int!null) b:6(int) c:7(int) d:8(int)
       │    │    ├── scan checks
@@ -1818,7 +1818,7 @@ update checks
  │    └──  column10:10 => d:4
  ├── check columns: check1:11(bool) check2:12(bool)
  └── project
-      ├── columns: check1:11(bool) check2:12(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: check1:11(bool) check2:12(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
       ├── project
       │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
       │    ├── project
@@ -1863,7 +1863,7 @@ update checks
  │    └──  column10:10 => d:4
  ├── check columns: check1:11(bool) check2:12(bool)
  └── project
-      ├── columns: check1:11(bool) check2:12(bool) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
+      ├── columns: check1:11(bool) check2:12(bool!null) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null) column10:10(int)
       ├── project
       │    ├── columns: column10:10(int) a:5(int!null) b:6(int) c:7(int) d:8(int) column9:9(int!null)
       │    ├── project

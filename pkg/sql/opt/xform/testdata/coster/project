@@ -24,7 +24,7 @@ opt
 SELECT k, k+2, i*d FROM a
 ----
 project
- ├── columns: k:1(int!null) "?column?":5(int) "?column?":6(decimal)
+ ├── columns: k:1(int!null) "?column?":5(int!null) "?column?":6(decimal)
  ├── stats: [rows=1000]
  ├── cost: 1100.03
  ├── key: (1)

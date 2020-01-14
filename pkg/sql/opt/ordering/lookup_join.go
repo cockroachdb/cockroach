@@ -22,7 +22,8 @@ func lookupOrIndexJoinCanProvideOrdering(
 ) bool {
 	// LookupJoin and IndexJoin can pass through their ordering if the ordering
 	// depends only on columns present in the input.
-	return isOrderingBoundBy(expr.Child(0).(memo.RelExpr), required)
+	inputCols := expr.Child(0).(memo.RelExpr).Relational().OutputCols
+	return required.CanProjectCols(inputCols)
 }
 
 func lookupOrIndexJoinBuildChildReqOrdering(

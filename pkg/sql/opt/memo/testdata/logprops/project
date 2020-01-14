@@ -14,7 +14,7 @@ build
 SELECT y, x+1 AS a, 1 AS b, x FROM xysd
 ----
 project
- ├── columns: y:2(int) a:5(int) b:6(int!null) x:1(int!null)
+ ├── columns: y:2(int) a:5(int!null) b:6(int!null) x:1(int!null)
  ├── key: (1)
  ├── fd: ()-->(6), (1)-->(2,5)
  ├── prune: (1,2,5,6)
@@ -327,7 +327,7 @@ build
 SELECT d, d::TEXT FROM xysd
 ----
 project
- ├── columns: d:4(decimal!null) d:5(string)
+ ├── columns: d:4(decimal!null) d:5(string!null)
  ├── prune: (4,5)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) xysd.d:4(decimal!null)

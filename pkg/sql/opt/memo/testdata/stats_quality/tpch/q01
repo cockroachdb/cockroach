@@ -56,7 +56,7 @@ sort
       ├── fd: (9,10)-->(17,18,20,22-26)
       ├── project
       │    ├── save-table-name: q1_project_3
-      │    ├── columns: column19:19(float) column21:21(float) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
+      │    ├── columns: column19:19(float!null) column21:21(float!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null)
       │    ├── stats: [rows=5925059.46, distinct(5)=50, null(5)=0, distinct(6)=925955, null(6)=0, distinct(7)=11, null(7)=0, distinct(9)=3, null(9)=0, distinct(10)=2, null(10)=0, distinct(19)=5925059.46, null(19)=0, distinct(21)=5925059.46, null(21)=0, distinct(9,10)=6, null(9,10)=0]
       │    ├── select
       │    │    ├── save-table-name: q1_select_4

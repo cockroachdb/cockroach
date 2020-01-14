@@ -39,7 +39,7 @@ scalar-group-by
  ├── fd: ()-->(18)
  ├── project
  │    ├── save-table-name: q6_project_2
- │    ├── columns: column17:17(float)
+ │    ├── columns: column17:17(float!null)
  │    ├── stats: [rows=34745.8339, distinct(17)=34745.8339, null(17)=0]
  │    ├── select
  │    │    ├── save-table-name: q6_select_3

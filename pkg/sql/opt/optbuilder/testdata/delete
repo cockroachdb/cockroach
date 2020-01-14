@@ -369,7 +369,7 @@ build
 DELETE FROM abcde AS foo WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
- ├── columns: "?column?":13(int) "?column?":14(int)
+ ├── columns: "?column?":13(int!null) "?column?":14(int)
  ├── delete foo
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int) rowid:6(int!null)
  │    ├── fetch columns: a:7(int) b:8(int) c:9(int) d:10(int) e:11(int) rowid:12(int)

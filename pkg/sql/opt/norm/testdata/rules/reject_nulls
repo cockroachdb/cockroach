@@ -549,7 +549,7 @@ project
  │    ├── scan ref_0
  │    │    └── columns: ref_0.s:4(string)
  │    ├── project
- │    │    ├── columns: exists:16(bool)
+ │    │    ├── columns: exists:16(bool!null)
  │    │    ├── outer: (4)
  │    │    ├── group-by
  │    │    │    ├── columns: ref_1.k:5(int!null) true_agg:15(bool)

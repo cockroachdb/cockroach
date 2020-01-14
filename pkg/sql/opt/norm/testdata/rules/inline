@@ -110,7 +110,7 @@ norm expect-not=InlineProjectConstants
 SELECT one+two FROM (VALUES (1, 2), (3, 4)) AS t(one, two)
 ----
 project
- ├── columns: "?column?":3(int)
+ ├── columns: "?column?":3(int!null)
  ├── cardinality: [2 - 2]
  ├── values
  │    ├── columns: column1:1(int!null) column2:2(int!null)
@@ -289,7 +289,7 @@ norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k=1 AS expr FROM a) a WHERE expr IS NULL
 ----
 project
- ├── columns: expr:6(bool)
+ ├── columns: expr:6(bool!null)
  ├── select
  │    ├── columns: k:1(int!null)
  │    ├── key: (1)
@@ -306,7 +306,7 @@ norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT k*2+1 AS expr FROM a) a WHERE expr > 10
 ----
 project
- ├── columns: expr:6(int)
+ ├── columns: expr:6(int!null)
  ├── select
  │    ├── columns: k:1(int!null)
  │    ├── key: (1)
@@ -323,7 +323,7 @@ norm expect=PushSelectIntoInlinableProject
 SELECT * FROM (SELECT NOT(k>1 AND k<=5) AS expr FROM a) a WHERE expr
 ----
 project
- ├── columns: expr:6(bool)
+ ├── columns: expr:6(bool!null)
  ├── select
  │    ├── columns: k:1(int!null)
  │    ├── key: (1)
@@ -434,19 +434,19 @@ LIMIT
   107
 ----
 project
- ├── columns: c0:6(int)
+ ├── columns: c0:6(int!null)
  ├── cardinality: [0 - 107]
  ├── side-effects
  └── limit
-      ├── columns: c0:6(int) c1:7(int)
+      ├── columns: c0:6(int!null) c1:7(int!null)
       ├── cardinality: [0 - 107]
       ├── side-effects
       ├── select
-      │    ├── columns: c0:6(int) c1:7(int)
+      │    ├── columns: c0:6(int!null) c1:7(int!null)
       │    ├── side-effects
       │    ├── limit hint: 107.00
       │    ├── project
-      │    │    ├── columns: c0:6(int) c1:7(int)
+      │    │    ├── columns: c0:6(int!null) c1:7(int!null)
       │    │    ├── limit hint: 321.00
       │    │    ├── scan crdb_internal.public.zones
       │    │    │    ├── columns: crdb_internal.public.zones.zone_id:1(int!null)
@@ -493,7 +493,7 @@ norm expect=InlineProjectInProject
 SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: "?column?":7(bool) r:8(int)
+ ├── columns: "?column?":7(bool!null) r:8(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
@@ -508,7 +508,7 @@ norm expect=InlineProjectInProject
 SELECT x+1, x+2, y1+2 FROM (SELECT x, y+1 AS y1 FROM xy)
 ----
 project
- ├── columns: "?column?":4(int) "?column?":5(int) "?column?":6(int)
+ ├── columns: "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -541,7 +541,7 @@ norm expect=InlineProjectInProject
 SELECT expr+1 AS r, i, expr2 || 'bar' AS s FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
- ├── columns: r:8(int) i:2(int) s:9(string)
+ ├── columns: r:8(int!null) i:2(int) s:9(string)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    ├── key: (1)
@@ -555,10 +555,10 @@ norm expect-not=InlineProjectInProject
 SELECT expr, expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: expr:6(int) r:7(int)
+ ├── columns: expr:6(int!null) r:7(int!null)
  ├── fd: (6)-->(7)
  ├── project
- │    ├── columns: expr:6(int)
+ │    ├── columns: expr:6(int!null)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
@@ -572,7 +572,7 @@ norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 AS r FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:9(bool) r:10(int)
+ ├── columns: exists:9(bool) r:10(int!null)
  ├── fd: ()-->(9)
  ├── scan a
  │    ├── columns: k:1(int!null)
@@ -604,21 +604,21 @@ norm expect=InlineProjectInProject
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: exists:9(bool)
+ ├── columns: exists:9(bool!null)
  ├── group-by
  │    ├── columns: true_agg:11(bool) rownum:13(int!null)
  │    ├── grouping columns: rownum:13(int!null)
  │    ├── key: (13)
  │    ├── fd: (13)-->(11)
  │    ├── left-join (cross)
- │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
+ │    │    ├── columns: expr:6(int!null) true:10(bool) rownum:13(int!null)
  │    │    ├── fd: (13)-->(6)
  │    │    ├── ordinality
- │    │    │    ├── columns: expr:6(int) rownum:13(int!null)
+ │    │    │    ├── columns: expr:6(int!null) rownum:13(int!null)
  │    │    │    ├── key: (13)
  │    │    │    ├── fd: (13)-->(6)
  │    │    │    └── project
- │    │    │         ├── columns: expr:6(int)
+ │    │    │         ├── columns: expr:6(int!null)
  │    │    │         ├── scan a
  │    │    │         │    ├── columns: k:1(int!null)
  │    │    │         │    └── key: (1)
@@ -643,7 +643,7 @@ norm
 SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
 ----
 project
- ├── columns: c:6(int)
+ ├── columns: c:6(int!null)
  ├── select
  │    ├── columns: k:1(int!null)
  │    ├── key: (1)

@@ -32,14 +32,14 @@ build
 WITH foo AS (SELECT 1/0) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: "?column?":2(decimal)
+ ├── columns: "?column?":2(decimal!null)
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
  ├── fd: ()-->(2)
  ├── prune: (2)
  ├── project
- │    ├── columns: "?column?":1(decimal)
+ │    ├── columns: "?column?":1(decimal!null)
  │    ├── cardinality: [1 - 1]
  │    ├── side-effects
  │    ├── key: ()
@@ -54,7 +54,7 @@ with &1 (foo)
  │              ├── const: 1 [type=int]
  │              └── const: 0 [type=int]
  └── with-scan &1 (foo)
-      ├── columns: "?column?":2(decimal)
+      ├── columns: "?column?":2(decimal!null)
       ├── mapping:
       │    └──  "?column?":1(decimal) => "?column?":2(decimal)
       ├── cardinality: [1 - 1]
@@ -68,7 +68,7 @@ build
 WITH foo AS (SELECT 1) SELECT 1/0 FROM foo
 ----
 with &1 (foo)
- ├── columns: "?column?":3(decimal)
+ ├── columns: "?column?":3(decimal!null)
  ├── cardinality: [1 - 1]
  ├── side-effects
  ├── key: ()
@@ -87,7 +87,7 @@ with &1 (foo)
  │    └── projections
  │         └── const: 1 [type=int]
  └── project
-      ├── columns: "?column?":3(decimal)
+      ├── columns: "?column?":3(decimal!null)
       ├── cardinality: [1 - 1]
       ├── side-effects
       ├── key: ()

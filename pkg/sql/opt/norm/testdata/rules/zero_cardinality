@@ -73,7 +73,7 @@ norm
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project
- ├── columns: case:6(decimal)
+ ├── columns: case:6(decimal!null)
  ├── cardinality: [0 - 0]
  ├── side-effects
  ├── key: ()

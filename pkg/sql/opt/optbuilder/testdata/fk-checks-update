@@ -46,7 +46,7 @@ update parent
  │    └──  column7:7 => parent.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column7:7(int) x:4(int) parent.p:5(int!null) other:6(int)
+ │    ├── columns: column7:7(int!null) x:4(int) parent.p:5(int!null) other:6(int)
  │    ├── scan parent
  │    │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
  │    └── projections
@@ -56,19 +56,19 @@ update parent
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
-                ├── columns: p:10(int)
+                ├── columns: p:10(int!null)
                 ├── project
-                │    ├── columns: p:10(int)
+                │    ├── columns: p:10(int!null)
                 │    ├── except
-                │    │    ├── columns: p:8(int)
-                │    │    ├── left columns: p:8(int)
+                │    │    ├── columns: p:8(int!null)
+                │    │    ├── left columns: p:8(int!null)
                 │    │    ├── right columns: column7:9(int)
                 │    │    ├── with-scan &1
                 │    │    │    ├── columns: p:8(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  parent.p:5(int) => p:8(int)
                 │    │    └── with-scan &1
-                │    │         ├── columns: column7:9(int)
+                │    │         ├── columns: column7:9(int!null)
                 │    │         └── mapping:
                 │    │              └──  column7:7(int) => column7:9(int)
                 │    └── projections
@@ -194,7 +194,7 @@ update child
  │    └──  column5:5 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: column5:5(int) column6:6(int) child.c:3(int!null) child.p:4(int!null)
+ │    ├── columns: column5:5(int!null) column6:6(int!null) child.c:3(int!null) child.p:4(int!null)
  │    ├── scan child
  │    │    └── columns: child.c:3(int!null) child.p:4(int!null)
  │    └── projections
@@ -207,9 +207,9 @@ update child
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── anti-join (hash)
-      │         ├── columns: column5:10(int)
+      │         ├── columns: column5:10(int!null)
       │         ├── with-scan &1
-      │         │    ├── columns: column5:10(int)
+      │         │    ├── columns: column5:10(int!null)
       │         │    └── mapping:
       │         │         └──  column5:5(int) => column5:10(int)
       │         ├── scan parent
@@ -220,19 +220,19 @@ update child
       │                   └── variable: parent.p [type=int]
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
-                ├── columns: c:13(int)
+                ├── columns: c:13(int!null)
                 ├── project
-                │    ├── columns: c:13(int)
+                │    ├── columns: c:13(int!null)
                 │    ├── except
-                │    │    ├── columns: c:11(int)
-                │    │    ├── left columns: c:11(int)
+                │    │    ├── columns: c:11(int!null)
+                │    │    ├── left columns: c:11(int!null)
                 │    │    ├── right columns: column6:12(int)
                 │    │    ├── with-scan &1
                 │    │    │    ├── columns: c:11(int!null)
                 │    │    │    └── mapping:
                 │    │    │         └──  child.c:3(int) => c:11(int)
                 │    │    └── with-scan &1
-                │    │         ├── columns: column6:12(int)
+                │    │         ├── columns: column6:12(int!null)
                 │    │         └── mapping:
                 │    │              └──  column6:6(int) => column6:12(int)
                 │    └── projections
@@ -471,7 +471,7 @@ update parent
  │    └──  column7:7 => parent.p:2
  ├── fk-fallback
  └── project
-      ├── columns: column7:7(int) x:4(int) parent.p:5(int!null) other:6(int)
+      ├── columns: column7:7(int!null) x:4(int) parent.p:5(int!null) other:6(int)
       ├── scan parent
       │    └── columns: x:4(int) parent.p:5(int!null) other:6(int)
       └── projections
