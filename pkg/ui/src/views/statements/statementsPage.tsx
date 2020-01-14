@@ -211,7 +211,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
             itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
             pageSize={pagination.pageSize}
             current={pagination.current}
-            total={data.length}
+            total={statements.length}
             onChange={this.onChangePage}
           />
         )}
