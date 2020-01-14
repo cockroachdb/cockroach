@@ -628,6 +628,10 @@ func (s clusterSpec) String() string {
 	return str
 }
 
+func firstZone(zones string) string {
+	return strings.SplitN(zones, ",", 2)[0]
+}
+
 func (s *clusterSpec) args() []string {
 	var args []string
 
@@ -654,7 +658,11 @@ func (s *clusterSpec) args() []string {
 		}
 	}
 	if s.Zones != "" {
-		args = append(args, "--gce-zones="+s.Zones)
+		if s.Geo {
+			args = append(args, "--gce-zones="+s.Zones)
+		} else {
+			args = append(args, "--gce-zones="+firstZone(s.Zones))
+		}
 	}
 	if s.Geo {
 		args = append(args, "--geo")
@@ -964,7 +972,11 @@ func (f *clusterFactory) newCluster(
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
 	if !local && zonesF != "" && cfg.spec.Zones == "" {
-		sargs = append(sargs, "--gce-zones="+zonesF)
+		if cfg.spec.Geo {
+			sargs = append(sargs, "--gce-zones="+zonesF)
+		} else {
+			sargs = append(sargs, "--gce-zones="+firstZone(zonesF))
+		}
 	}
 	if !cfg.useIOBarrier {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
