@@ -1,7 +1,11 @@
 create_user_stmt ::=
 	'CREATE' 'USER' name 'WITH' 'PASSWORD' password
 	| 'CREATE' 'USER' name  'PASSWORD' password
+	| 'CREATE' 'USER' name 'WITH' 'PASSWORD' 'NULL'
+	| 'CREATE' 'USER' name  'PASSWORD' 'NULL'
 	| 'CREATE' 'USER' name 
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 'WITH' 'PASSWORD' password
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name  'PASSWORD' password
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 'WITH' 'PASSWORD' 'NULL'
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name  'PASSWORD' 'NULL'
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' name 

@@ -821,7 +821,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-%type <tree.Expr> opt_password
+%type <tree.Expr> opt_password password_clause
 
 %type <tree.IsolationLevel> transaction_iso_level
 %type <tree.UserPriority> transaction_user_priority
@@ -5077,13 +5077,20 @@ create_user_stmt:
 | CREATE USER error // SHOW HELP: CREATE USER
 
 opt_password:
+  password_clause
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
+
+password_clause:
   opt_with PASSWORD string_or_placeholder
   {
     $$.val = $3.expr()
   }
-| /* EMPTY */
+| opt_with PASSWORD NULL
   {
-    $$.val = nil
+    $$.val = tree.DNull
   }
 
 // %Help: CREATE ROLE - define a new role
@@ -5315,13 +5322,13 @@ alter_rename_database_stmt:
 
 // https://www.postgresql.org/docs/10/static/sql-alteruser.html
 alter_user_password_stmt:
-  ALTER USER string_or_placeholder WITH PASSWORD string_or_placeholder
+  ALTER USER string_or_placeholder password_clause
   {
-    $$.val = &tree.AlterUserSetPassword{Name: $3.expr(), Password: $6.expr()}
+    $$.val = &tree.AlterUserSetPassword{Name: $3.expr(), Password: $4.expr()}
   }
-| ALTER USER IF EXISTS string_or_placeholder WITH PASSWORD string_or_placeholder
+| ALTER USER IF EXISTS string_or_placeholder password_clause
   {
-    $$.val = &tree.AlterUserSetPassword{Name: $5.expr(), Password: $8.expr(), IfExists: true}
+    $$.val = &tree.AlterUserSetPassword{Name: $5.expr(), Password: $6.expr(), IfExists: true}
   }
 
 alter_rename_table_stmt:

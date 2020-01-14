@@ -995,14 +995,14 @@ alter_partition_stmt ::=
 	alter_zone_partition_stmt
 
 alter_user_password_stmt ::=
-	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
-	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
+	'ALTER' 'USER' string_or_placeholder password_clause
+	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder password_clause
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 opt_password ::=
-	opt_with 'PASSWORD' string_or_placeholder
+	password_clause
 	| 
 
 role_or_group ::=
@@ -1345,9 +1345,9 @@ alter_zone_partition_stmt ::=
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
 
-opt_with ::=
-	'WITH'
-	| 
+password_clause ::=
+	opt_with 'PASSWORD' string_or_placeholder
+	| opt_with 'PASSWORD' 'NULL'
 
 changefeed_targets ::=
 	single_table_pattern_list
@@ -1355,6 +1355,10 @@ changefeed_targets ::=
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
+
+opt_with ::=
+	'WITH'
+	| 
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst
