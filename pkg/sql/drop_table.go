@@ -238,25 +238,29 @@ func (p *planner) dropTableImpl(
 ) ([]string, error) {
 	var droppedViews []string
 
-	// Remove foreign key back references from tables that this table has foreign
-	// keys to.
-	for i := range tableDesc.OutboundFKs {
-		ref := &tableDesc.OutboundFKs[i]
-		if err := p.removeFKBackReference(ctx, tableDesc, ref); err != nil {
-			return droppedViews, err
-		}
+	// Remove foreign key references.
+	if _, err := tableDesc.RemoveMatchingOutboundFKs(
+		func(fk sqlbase.ForeignKeyConstraint) bool {
+			return true
+		},
+		func(desc *MutableTableDescriptor, fk *sqlbase.ForeignKeyConstraint) error {
+			return p.removeFKBackReference(ctx, desc, fk)
+		},
+		true,
+	); err != nil {
+		return droppedViews, err
 	}
-	tableDesc.OutboundFKs = nil
 
-	// Remove foreign key forward references from tables that have foreign keys
-	// to this table.
-	for i := range tableDesc.InboundFKs {
-		ref := &tableDesc.InboundFKs[i]
-		if err := p.removeFKForBackReference(ctx, tableDesc, ref); err != nil {
-			return droppedViews, err
-		}
+	if _, err := tableDesc.RemoveMatchingInboundFKs(
+		func(fk sqlbase.ForeignKeyConstraint) bool {
+			return true
+		},
+		func(desc *MutableTableDescriptor, fk *sqlbase.ForeignKeyConstraint) error {
+			return p.removeFKForBackReference(ctx, desc, fk)
+		},
+	); err != nil {
+		return droppedViews, err
 	}
-	tableDesc.InboundFKs = nil
 
 	// Remove interleave relationships.
 	for _, idx := range tableDesc.AllNonDropIndexes() {

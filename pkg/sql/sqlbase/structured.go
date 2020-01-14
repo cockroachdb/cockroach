@@ -2597,25 +2597,18 @@ func (desc *MutableTableDescriptor) DropConstraint(
 				"drop-constraint-fk-mutation",
 				"constraint %q in the middle of being dropped", name)
 		}
-		// Search through the descriptor's foreign key constraints and delete the
-		// one that we're supposed to be deleting.
-		for i := range desc.OutboundFKs {
-			ref := &desc.OutboundFKs[i]
-			if ref.Name == name {
-				// If the constraint is unvalidated, there's no assumption that it must
-				// hold for all rows, so it can be dropped immediately.
-				if detail.FK.Validity == ConstraintValidity_Unvalidated {
-					// Remove the backreference.
-					if err := removeFK(desc, detail.FK); err != nil {
-						return err
-					}
-					desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
-					return nil
-				}
-				ref.Validity = ConstraintValidity_Dropping
-				desc.AddForeignKeyMutation(ref, DescriptorMutation_DROP)
-				return nil
-			}
+		numRemoved, err := desc.RemoveMatchingOutboundFKs(
+			func(fk ForeignKeyConstraint) bool {
+				return fk.Name == name
+			},
+			removeFK,
+			false, // alwaysRemove
+		)
+		if err != nil {
+			return err
+		}
+		if numRemoved == 1 {
+			return nil
 		}
 		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
@@ -2624,6 +2617,66 @@ func (desc *MutableTableDescriptor) DropConstraint(
 			"constraint %q has unsupported type", tree.ErrNameString(name))
 	}
 
+}
+
+// RemoveMatchingOutboundFKs attempts to remove all outbound foreign keys that
+// match the precondition set by matchFunc.
+//
+// It will attempt to add it to the queue to be removed by the schema changer,
+// unless alwaysRemove is set, or the constraint is unvalidated.
+//
+// Returns the number of OutboundFKs dropped, modifying the desc object.
+// If an error occurs, the OutboundFKs is not changed.
+func (desc *MutableTableDescriptor) RemoveMatchingOutboundFKs(
+	matchFunc func(ForeignKeyConstraint) bool,
+	removeBackReferenceFunc func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
+	alwaysRemove bool,
+) (int, error) {
+	newOutboundFKs := make([]ForeignKeyConstraint, 0, len(desc.OutboundFKs))
+	numRemoved := 0
+	for _, fk := range desc.OutboundFKs {
+		if matchFunc(fk) {
+			numRemoved++
+
+			if fk.Validity == ConstraintValidity_Unvalidated || alwaysRemove {
+				if err := removeBackReferenceFunc(desc, &fk); err != nil {
+					return 0, err
+				}
+				continue
+			}
+
+			fk.Validity = ConstraintValidity_Dropping
+			desc.AddForeignKeyMutation(&fk, DescriptorMutation_DROP)
+		}
+		newOutboundFKs = append(newOutboundFKs, fk)
+	}
+	desc.OutboundFKs = newOutboundFKs
+	return numRemoved, nil
+}
+
+// RemoveMatchingInboundFKs attempts to remove all inbound foreign keys
+// that match the precondition set by matchFunc.
+//
+// Returns the number of InboundFKs dropped, modifying the desc object.
+// If an error occurs, the InboundFKs is not changed.
+func (desc *MutableTableDescriptor) RemoveMatchingInboundFKs(
+	matchFunc func(ForeignKeyConstraint) bool,
+	removeForBackReferenceFunc func(*MutableTableDescriptor, *ForeignKeyConstraint) error,
+) (int, error) {
+	newInboundFKs := make([]ForeignKeyConstraint, 0, len(desc.InboundFKs))
+	numRemoved := 0
+	for _, fk := range desc.InboundFKs {
+		if matchFunc(fk) {
+			numRemoved++
+			if err := removeForBackReferenceFunc(desc, &fk); err != nil {
+				return 0, err
+			}
+			continue
+		}
+		newInboundFKs = append(newInboundFKs, fk)
+	}
+	desc.InboundFKs = newInboundFKs
+	return numRemoved, nil
 }
 
 // RenameConstraint renames a constraint.

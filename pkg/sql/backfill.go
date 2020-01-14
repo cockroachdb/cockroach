@@ -305,23 +305,23 @@ func (sc *SchemaChanger) dropConstraints(
 					)
 				}
 			case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-				var foundExisting bool
-				for j := range scTable.OutboundFKs {
-					def := &scTable.OutboundFKs[j]
-					if def.Name == constraint.Name {
+				numDropped, err := scTable.RemoveMatchingOutboundFKs(
+					func(fk sqlbase.ForeignKeyConstraint) bool {
+						return fk.Name == constraint.Name
+					},
+					func(desc *MutableTableDescriptor, fk *sqlbase.ForeignKeyConstraint) error {
 						backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
 						if !ok {
 							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 						}
-						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable.TableDesc()); err != nil {
-							return err
-						}
-						scTable.OutboundFKs = append(scTable.OutboundFKs[:j], scTable.OutboundFKs[j+1:]...)
-						foundExisting = true
-						break
-					}
+						return removeFKBackReferenceFromTable(backrefTable, fk.Name, desc.TableDesc())
+					},
+					true, // alwaysRemove
+				)
+				if err != nil {
+					return err
 				}
-				if !foundExisting {
+				if numDropped == 0 {
 					log.VEventf(
 						ctx, 2,
 						"backfiller tried to drop constraint %+v but it was not found, "+

@@ -171,40 +171,34 @@ func (p *planner) dropIndexByName(
 	}
 
 	// Index for updating the FK slices in place when removing FKs.
-	sliceIdx := 0
-	for i := range tableDesc.OutboundFKs {
-		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
-		sliceIdx++
-		fk := &tableDesc.OutboundFKs[i]
-		if fk.LegacyOriginIndex == idx.ID {
+	if _, err := tableDesc.RemoveMatchingOutboundFKs(
+		func(fk sqlbase.ForeignKeyConstraint) bool {
+			return fk.LegacyOriginIndex == idx.ID
+		},
+		func(desc *MutableTableDescriptor, fk *sqlbase.ForeignKeyConstraint) error {
 			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
 				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 			}
-			sliceIdx--
-			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
-				return err
-			}
-		}
+			return p.removeFKBackReference(ctx, tableDesc, fk)
+		},
+		true, // alwaysRemove - see the todo above.
+	); err != nil {
+		return err
 	}
-	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
 
-	sliceIdx = 0
-	for i := range tableDesc.InboundFKs {
-		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
-		sliceIdx++
-		fk := &tableDesc.InboundFKs[i]
-		if fk.LegacyReferencedIndex == idx.ID {
-			err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior)
-			if err != nil {
+	if _, err := tableDesc.RemoveMatchingInboundFKs(
+		func(fk sqlbase.ForeignKeyConstraint) bool {
+			return fk.LegacyReferencedIndex == idx.ID
+		},
+		func(desc *MutableTableDescriptor, fk *sqlbase.ForeignKeyConstraint) error {
+			if err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior); err != nil {
 				return err
 			}
-			sliceIdx--
-			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
-				return err
-			}
-		}
+			return p.removeFKForBackReference(ctx, desc, fk)
+		},
+	); err != nil {
+		return err
 	}
-	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 
 	if len(idx.Interleave.Ancestors) > 0 {
 		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
