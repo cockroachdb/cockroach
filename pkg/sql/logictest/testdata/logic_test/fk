@@ -2742,3 +2742,18 @@ ALTER TABLE table1_42498 ADD FOREIGN KEY (col2, col1) REFERENCES table2_42498 (c
 
 statement ok
 DROP TABLE table1_42498, table2_42498 CASCADE
+
+# Regression test for #42680: The unique index used for the referenced columns
+# must index only those columns and no others, in order to enforce uniqueness
+# for the FK constraint.
+subtest 42680_unique_index_must_exactly_match_columns
+
+# The table has a unique index on (a, b) but not (a).
+statement ok
+CREATE TABLE target (a INT, b INT, UNIQUE INDEX (a, b));
+
+statement ok
+CREATE TABLE source (a INT, INDEX (a));
+
+statement error there is no unique constraint matching given keys for referenced table target
+ALTER TABLE source ADD FOREIGN KEY (a) REFERENCES target (a);

@@ -26,7 +26,13 @@ tc_start_block "Run local roachtests"
 # NB: roachtest has its own teamcity output format and posts issues (whenever
 # GITHUB_API_TOKEN) is set, so it doesn't fit into the streamlined process
 # around the run_json_test helper.
-build/builder.sh env COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" GITHUB_API_TOKEN="${GITHUB_API_TOKEN-}" \
+build/builder.sh env \
+    COCKROACH_DEV_LICENSE="${COCKROACH_DEV_LICENSE}" \
+    GITHUB_API_TOKEN="${GITHUB_API_TOKEN-}" \
+    BUILD_VCS_NUMBER="${BUILD_VCS_NUMBER-}" \
+    TC_BUILD_ID="${TC_BUILD_ID-}" \
+    TC_SERVER_URL="${TC_SERVER_URL-}" \
+    TC_BUILD_BRANCH="${TC_BUILD_BRANCH-}" \
   stdbuf -oL -eL \
   ./bin/roachtest run acceptance kv/splits cdc/bank \
   --local \

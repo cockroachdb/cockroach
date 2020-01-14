@@ -352,7 +352,7 @@ EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
 tree  field        description
 ·     distributed  true
-·     vectorized   false
+·     vectorized   true
 scan  ·            ·
 ·     table        decimal_t@primary
 ·     spans        /1-/1/#
@@ -364,7 +364,7 @@ EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
 tree  field        description
 ·     distributed  true
-·     vectorized   false
+·     vectorized   true
 scan  ·            ·
 ·     table        decimal_t@primary
 ·     spans        -/2

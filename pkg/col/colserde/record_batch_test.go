@@ -22,6 +22,7 @@ import (
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -134,6 +135,20 @@ func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability flo
 			}
 			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
 		}
+	case coltypes.Decimal:
+		var err error
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		for i := range data {
+			var d apd.Decimal
+			// int64(rng.Uint64()) to get negative numbers, too.
+			d.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
+			data[i], err = d.MarshalText()
+			if err != nil {
+				panic(err)
+			}
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	case coltypes.Timestamp:
 		var err error
 		now := timeutil.Now()
@@ -188,7 +203,6 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	var (
-		supportedTypes  = make([]coltypes.T, 0, len(coltypes.AllTypes))
 		typs            = make([]coltypes.T, rng.Intn(maxTypes)+1)
 		data            = make([]*array.Data, len(typs))
 		dataLen         = rng.Intn(maxDataLen) + 1
@@ -196,14 +210,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 		buf             = bytes.Buffer{}
 	)
 
-	// We do not support decimals.
-	for _, t := range coltypes.AllTypes {
-		if t == coltypes.Decimal {
-			continue
-		}
-		supportedTypes = append(supportedTypes, t)
-	}
-
+	supportedTypes := coltypes.AllTypes
 	for i := range typs {
 		typs[i] = supportedTypes[rng.Intn(len(supportedTypes))]
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)

@@ -29,17 +29,9 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
-	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
-	for _, typ := range coltypes.AllTypes {
-		// TODO(asubiotto,jordan): We do not support decimal conversion yet.
-		if typ == coltypes.Decimal {
-			continue
-		}
-		availableTyps = append(availableTyps, typ)
-	}
 	typs := make([]coltypes.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = availableTyps[rng.Intn(len(availableTyps))]
+		typs[i] = coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
 	}
 
 	capacity := rng.Intn(int(coldata.BatchSize())) + 1
@@ -128,16 +120,6 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 	}
 }
 
-func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	unsupportedTypes := []coltypes.T{coltypes.Decimal}
-	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
-		require.Error(t, err)
-	}
-}
-
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -215,6 +197,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	typs := []coltypes.T{
 		coltypes.Bool,
 		coltypes.Bytes,
+		coltypes.Decimal,
 		coltypes.Int64,
 		coltypes.Timestamp,
 	}
@@ -224,6 +207,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	numBytes := []int64{
 		int64(coldata.BatchSize()),
 		fixedLen * int64(coldata.BatchSize()),
+		0, // The number of bytes for decimals will be set below.
 		8 * int64(coldata.BatchSize()),
 		3 * 8 * int64(coldata.BatchSize()),
 	}
@@ -251,6 +235,15 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 				}
 			}
 			batch.ColVec(0).SetCol(newBytes)
+		} else if typ == coltypes.Decimal {
+			// Decimal is variable length type, so we want to calculate precisely the
+			// total size of all decimals in the vector.
+			decimals := batch.ColVec(0).Decimal()
+			for _, d := range decimals {
+				marshaled, err := d.MarshalText()
+				require.NoError(b, err)
+				numBytes[typIdx] += int64(len(marshaled))
+			}
 		}
 		c, err := colserde.NewArrowBatchConverter([]coltypes.T{typ})
 		require.NoError(b, err)
