@@ -1,7 +1,12 @@
-# Does not like empty input (avoids misconfiguration)
+# OK with empty input
 omit
 ----
-not a single test was parsed
+
+# Does not like input without JSON but with plain text output (avoids misconfiguration)
+omit
+PASS
+----
+not a single test was parsed, but detected test output: PASS
 
 # Skips non-test lines. The test line is required to avoid a sanity
 # check in the tool.
