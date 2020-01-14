@@ -168,6 +168,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 						Cfg: &execinfra.ServerConfig{
 							DiskMonitor: &mon.BytesMonitor{},
 							Settings:    dsp.st,
+							ClusterID:   &dsp.rpcCtx.ClusterID,
 						},
 						NodeID: -1,
 					}, spec.Processors, fuseOpt,
