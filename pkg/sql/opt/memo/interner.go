@@ -642,11 +642,12 @@ func (h *hasher) IsIntEqual(l, r int) bool {
 }
 
 func (h *hasher) IsFloat64Equal(l, r float64) bool {
+	// Compare bit representations so that NaN == NaN and 0 != -0.
 	return math.Float64bits(l) == math.Float64bits(r)
 }
 
 func (h *hasher) IsStringEqual(l, r string) bool {
-	return bytes.Equal([]byte(l), []byte(r))
+	return l == r
 }
 
 func (h *hasher) IsBytesEqual(l, r []byte) bool {
