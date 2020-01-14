@@ -85,7 +85,8 @@ module.exports = function(config) {
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: Object.assign(webpackConfig, {
-      devtool: "source-map",
+      devtool: "inline-source-map",
+      mode: "none",
       externals: {
         "react/addons": true,
         "react/lib/ExecutionEnvironment": true,
