@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -33,7 +35,15 @@ import (
 // Test the constraint conformance report in a real cluster.
 func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#40919")
+	if testing.Short() {
+		// This test takes seconds because of replication vagaries.
+		t.Skip("short flag")
+	}
+	if testutils.NightlyStress() && util.RaceEnabled {
+		// Under stressrace, replication changes seem to hit 1m deadline errors and
+		// don't make progress.
+		t.Skip("test too slow for stressrace")
+	}
 
 	ctx := context.Background()
 	tc := serverutils.StartTestCluster(t, 5, base.TestClusterArgs{
@@ -85,6 +95,14 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 
 	// Wait for the violation to clear.
 	testutils.SucceedsSoon(t, func() error {
+		// Kick the replication queues, given that our rebalancing is finicky.
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+				return s.ForceReplicationScanAndProcess()
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		r := db.QueryRow(
 			"select violating_ranges from system.replication_constraint_stats where zone_id = $1",
 			zoneID)
