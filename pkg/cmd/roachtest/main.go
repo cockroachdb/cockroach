@@ -205,7 +205,9 @@ the test tags.
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
-			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+			&zonesF, "zones", "",
+			"Zones for the cluster. (non-geo tests use the first zone, geo tests use all zones) "+
+				"(uses roachprod defaults if empty)")
 		cmd.Flags().IntVar(
 			&cpuQuota, "cpu-quota", 300,
 			"The number of cloud CPUs roachtest is allowed to use at any one time.")
