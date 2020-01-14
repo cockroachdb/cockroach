@@ -120,21 +120,17 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     switch (type) {
       case "jump-prev":
         return (
-          <Tooltip placement="bottom" title="Previous 5 pages">
-            <div className="_pg-jump">
-              <Icon type="left" />
-              <span className="_jump-dots">•••</span>
-            </div>
-          </Tooltip>
+          <div className="_pg-jump">
+            <Icon type="left" />
+            <span className="_jump-dots">•••</span>
+          </div>
         );
       case "jump-next":
         return (
-          <Tooltip placement="bottom" title="Next 5 pages">
-            <div className="_pg-jump">
-              <Icon type="right" />
-              <span className="_jump-dots">•••</span>
-            </div>
-          </Tooltip>
+          <div className="_pg-jump">
+            <Icon type="right" />
+            <span className="_jump-dots">•••</span>
+          </div>
         );
       default:
         return originalElement;
