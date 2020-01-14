@@ -1312,15 +1312,21 @@ func MakeTableDesc(
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
 	// as maybeAddSequenceDependencies requires ColumnIDs to be correct.
+	// Elements in n.Defs are not necessarily column definitions, so use a separate
+	// counter to map ColumnDefs to columns.
+	colIdx := 0
 	for i := range n.Defs {
-		if expr := columnDefaultExprs[i]; expr != nil {
-			changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[i], expr, affected)
-			if err != nil {
-				return desc, err
+		if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
+			if expr := columnDefaultExprs[i]; expr != nil {
+				changedSeqDescs, err := maybeAddSequenceDependencies(ctx, vt, &desc, &desc.Columns[colIdx], expr, affected)
+				if err != nil {
+					return desc, err
+				}
+				for _, changedSeqDesc := range changedSeqDescs {
+					affected[changedSeqDesc.ID] = changedSeqDesc
+				}
 			}
-			for _, changedSeqDesc := range changedSeqDescs {
-				affected[changedSeqDesc.ID] = changedSeqDesc
-			}
+			colIdx++
 		}
 	}
 
