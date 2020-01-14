@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -374,7 +375,7 @@ func (oc *optCatalog) dataSourceForTable(
 	return ds, nil
 }
 
-var emptyZoneConfig = &config.ZoneConfig{}
+var emptyZoneConfig = &zonepb.ZoneConfig{}
 
 // getZoneConfig returns the ZoneConfig data structure for the given table.
 // ZoneConfigs are stored in protobuf binary format in the SystemConfig, which
@@ -382,7 +383,7 @@ var emptyZoneConfig = &config.ZoneConfig{}
 // somewhat stale, since it's taken from the gossiped SystemConfig.
 func (oc *optCatalog) getZoneConfig(
 	desc *sqlbase.ImmutableTableDescriptor,
-) (*config.ZoneConfig, error) {
+) (*zonepb.ZoneConfig, error) {
 	// Lookup table's zone if system config is available (it may not be as node
 	// is starting up and before it's received the gossiped config). If it is
 	// not available, use an empty config that has no zone constraints.
@@ -512,7 +513,7 @@ type optTable struct {
 	// stats are the inlined wrappers for table statistics.
 	stats []optTableStat
 
-	zone *config.ZoneConfig
+	zone *zonepb.ZoneConfig
 
 	// family is the inlined wrapper for the table's primary family. The primary
 	// family is the first family explicitly specified by the user. If no families
@@ -536,7 +537,7 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
-	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *config.ZoneConfig,
+	desc *sqlbase.ImmutableTableDescriptor, stats []*stats.TableStatistic, tblZone *zonepb.ZoneConfig,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
@@ -642,7 +643,7 @@ func (ot *optTable) PostgresDescriptorID() cat.StableID {
 
 // isStale checks if the optTable object needs to be refreshed because the stats
 // or zone config have changed. False positives are ok.
-func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *config.ZoneConfig) bool {
+func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig) bool {
 	// Fast check to verify that the statistics haven't changed: we check the
 	// length and the address of the underlying array. This is not a perfect
 	// check (in principle, the stats could have left the cache and then gotten
@@ -685,7 +686,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 
 	// Verify that indexes are in same zones. For performance, skip deep equality
 	// check if it's the same as the previous index (common case).
-	var prevLeftZone, prevRightZone *config.ZoneConfig
+	var prevLeftZone, prevRightZone *zonepb.ZoneConfig
 	for i := range ot.indexes {
 		leftZone := ot.indexes[i].zone
 		rightZone := otherTable.indexes[i].zone
@@ -833,7 +834,7 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 type optIndex struct {
 	tab  *optTable
 	desc *sqlbase.IndexDescriptor
-	zone *config.ZoneConfig
+	zone *zonepb.ZoneConfig
 
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
@@ -850,7 +851,7 @@ var _ cat.Index = &optIndex{}
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
 func (oi *optIndex) init(
-	tab *optTable, indexOrdinal int, desc *sqlbase.IndexDescriptor, zone *config.ZoneConfig,
+	tab *optTable, indexOrdinal int, desc *sqlbase.IndexDescriptor, zone *zonepb.ZoneConfig,
 ) {
 	oi.tab = tab
 	oi.desc = desc

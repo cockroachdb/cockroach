@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -294,9 +294,9 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
-	zoneConfig := config.ZoneConfig{
+	zoneConfig := zonepb.ZoneConfig{
 		NumReplicas:   proto.Int32(2),
-		Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "mem"}}}},
+		Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "mem"}}}},
 		RangeMinBytes: proto.Int64(1 << 10), // 1k
 		RangeMaxBytes: proto.Int64(1 << 18), // 256k
 	}
@@ -306,7 +306,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
-	var readZoneConfig config.ZoneConfig
+	var readZoneConfig zonepb.ZoneConfig
 	if err := db.GetProto(context.TODO(), key, &readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %s", err)
 	}

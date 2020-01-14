@@ -50,15 +50,12 @@ func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.
 func MakeAllDescsMetadataKey() roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-	return encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
+	return keys.DescMetadataPrefix()
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	k := MakeAllDescsMetadataKey()
-	k = encoding.EncodeUvarintAscending(k, uint64(descID))
-	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
+	return keys.DescMetadataKey(uint32(descID))
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the

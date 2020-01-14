@@ -13,13 +13,13 @@ package constraint
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // AnalyzedConstraints comment !!!
 type AnalyzedConstraints struct {
-	Constraints []config.Constraints
+	Constraints []zonepb.Constraints
 	// True if the per-replica constraints don't fully cover all the desired
 	// replicas in the range (sum(constraints.NumReplicas) < zone.NumReplicas).
 	// In such cases, we allow replicas that don't match any of the per-replica
@@ -42,7 +42,7 @@ func AnalyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
-	zone *config.ZoneConfig,
+	zone *zonepb.ZoneConfig,
 ) AnalyzedConstraints {
 	result := AnalyzedConstraints{
 		Constraints: zone.Constraints,
@@ -77,12 +77,12 @@ func AnalyzeConstraints(
 // SubConstraintsCheck checks a store against a single set of constraints (out
 // of the possibly numerous sets that apply to a range), returning true iff the
 // store matches the constraints.
-func SubConstraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraint) bool {
+func SubConstraintsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraint) bool {
 	for _, constraint := range constraints {
 		// StoreSatisfiesConstraint returns whether a store matches the given constraint.
-		hasConstraint := config.StoreMatchesConstraint(store, constraint)
-		if (constraint.Type == config.Constraint_REQUIRED && !hasConstraint) ||
-			(constraint.Type == config.Constraint_PROHIBITED && hasConstraint) {
+		hasConstraint := zonepb.StoreMatchesConstraint(store, constraint)
+		if (constraint.Type == zonepb.Constraint_REQUIRED && !hasConstraint) ||
+			(constraint.Type == zonepb.Constraint_PROHIBITED && hasConstraint) {
 			return false
 		}
 	}

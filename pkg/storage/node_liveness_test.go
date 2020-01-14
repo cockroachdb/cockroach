@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -770,6 +771,9 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 
 func TestNodeLivenessStatusMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short")
+	}
 
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -806,7 +810,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	// Allow for inserting zone configs without having to go through (or
 	// duplicate the logic from) the CLI.
 	config.TestingSetupZoneConfigHook(tc.Stopper())
-	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig := zonepb.DefaultZoneConfig()
 	// Force just one replica per range to ensure that we can shut down
 	// nodes without endangering the liveness range.
 	zoneConfig.NumReplicas = proto.Int32(1)
