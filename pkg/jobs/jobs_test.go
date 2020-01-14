@@ -105,9 +105,6 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return errors.Errorf("expected fraction completed %f, got %f", e, a)
 	}
 
-	if status == jobs.StatusPending {
-		return nil
-	}
 	started := timeutil.FromUnixMicros(payload.StartedMicros)
 	if started.Equal(timeutil.UnixEpoch) && status == jobs.StatusSucceeded {
 		return errors.Errorf("started time is empty but job claims to be successful")
@@ -480,7 +477,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 	})
 
-	// Fail the job, so expected it to attempt to mark failed, but fail that
+	// Fail the job, so expect it to attempt to mark failed, but fail that
 	// also. Thus it should not trigger OnTerminal.
 	t.Run("fail marking success and failed", func(t *testing.T) {
 		clear()
@@ -642,7 +639,7 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
+		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -711,7 +708,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusPending); err != nil {
+		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -751,7 +748,7 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:      jobspb.RestoreProgress{},
 		})
 
-		if err := sidExp.verify(sidJob.ID(), jobs.StatusPending); err != nil {
+		if err := sidExp.verify(sidJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 
@@ -912,11 +909,6 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, _ := createDefaultJob()
-			checkResumeFails(job, jobs.StatusPending)
-		}
-
-		{
 			job, _ := startLeasedJob(t, defaultRecord)
 			if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
@@ -1014,15 +1006,6 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("progress on non-started job fails", func(t *testing.T) {
-		job, _ := createDefaultJob()
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
-			err, `cannot update progress on pending job \(id \d+\)`,
-		) {
-			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
-		}
-	})
-
 	t.Run("progress on finished job fails", func(t *testing.T) {
 		job, _ := createDefaultJob()
 		if err := job.Started(ctx); err != nil {
@@ -1084,7 +1067,7 @@ func TestJobLifecycle(t *testing.T) {
 			Details:  jobspb.RestoreDetails{},
 			Progress: jobspb.RestoreProgress{},
 		})
-		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 		newDetails := jobspb.RestoreDetails{URIs: []string{"new"}}
@@ -1092,7 +1075,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.SetDetails(ctx, newDetails); err != nil {
 			t.Fatal(err)
 		}
-		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1102,7 +1085,7 @@ func TestJobLifecycle(t *testing.T) {
 			Details:  jobspb.RestoreDetails{},
 			Progress: jobspb.RestoreProgress{},
 		})
-		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 		newDetails := jobspb.RestoreProgress{HighWater: []byte{42}}
@@ -1110,7 +1093,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.SetProgress(ctx, newDetails); err != nil {
 			t.Fatal(err)
 		}
-		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
+		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
 	})
