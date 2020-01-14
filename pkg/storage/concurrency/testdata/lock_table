@@ -1,0 +1,184 @@
+txn txn=txn1 ts=10,1 epoch=0
+----
+
+# req1 will acquire locks for txn1
+
+request r=req1 txn=txn1 ts=10,1 spans=r[a,b),w[c,f)
+----
+
+scan r=req1
+----
+
+guard-start-waiting r=req1
+----
+false
+
+guard-new-state r=req1
+----
+
+guard-state r=req1
+----
+state=doneWaiting
+
+acquire r=req1 k=c durability=r
+----
+
+acquire r=req1 k=e durability=u
+----
+
+done r=req1
+----
+
+# req2 is also for txn1 and will not wait for locks that are held by self.
+
+request r=req2 txn=txn1 ts=10,2 spans=w[b,d),r[d,g)
+----
+
+scan r=req2
+----
+
+guard-start-waiting r=req2
+----
+false
+
+acquire r=req2 k=b durability=r
+----
+
+done r=req2
+----
+
+# txn1 holds locks on b, c, e.
+# txn2 has a smaller timestamp than txn1.
+txn txn=txn2 ts=8,12 epoch=0
+----
+
+# A read request for txn2 does not need to wait for locks held by txn1.
+request r=req3 txn=txn2 ts=8,12 spans=r[a,g)
+----
+
+scan r=req3
+----
+
+guard-start-waiting r=req3
+----
+false
+
+done r=req3
+----
+
+# req4 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
+# not conflict with lock on e since wants to read there and the read is at a lower timestamp
+# than the lock.
+request r=req4 txn=txn2 ts=8,12 spans=w[a,d),r[d,g)
+----
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+true
+
+guard-new-state r=req4
+----
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn1 ts=10,2
+
+# Release lock on b since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=[b)
+----
+
+guard-new-state r=req4
+----
+
+# Still waiting, but on lock c which has a different ts in the TxnMeta.
+
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn1 ts=10,1
+
+# Release lock on c since epoch of txn1 has changed.
+update txn=txn1 ts=11,1 epoch=1 span=[c,e)
+----
+
+guard-new-state r=req4
+----
+
+# No longer waiting since does not conflict with lock on e.
+
+guard-state r=req4
+----
+state=doneWaiting
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+false
+
+# req4 proceeds to evaluation and discovers locks on a, f. The lock on a conflicts since req4
+# wants to write and the lock on f conflicts because req4's read has a higher timestamp.
+
+txn txn=txn3 ts=6 epoch=0
+----
+
+add-discovered r=req4 access=w k=a txn=txn3
+----
+
+add-discovered r=req4 access=r k=f txn=txn3
+----
+
+# Note that guard state has not changed yet. Discovering these locks means the caller has to
+# scan again.
+
+guard-start-waiting r=req4
+----
+false
+
+scan r=req4
+----
+
+guard-start-waiting r=req4
+----
+true
+
+guard-new-state r=req4
+----
+
+# req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
+# which does not conflict. And txn3 has locks on a, f that do conflict.
+guard-state r=req4
+----
+state=waitForDistinguished txn=txn3 ts=6
+
+# req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
+# conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
+# reservations.
+request r=req5 txn=txn1 ts=11,1 spans=r[b),r[c)
+----
+
+scan r=req5
+----
+
+guard-start-waiting r=req5
+----
+false
+
+done r=req5
+----
+
+# TODOs:
+# - Put another transaction behind reservation holder so it is not a distinguished
+#   waiter.
+# -
+# -
+
+
+
+
+
