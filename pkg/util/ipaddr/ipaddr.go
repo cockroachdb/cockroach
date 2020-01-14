@@ -176,8 +176,100 @@ func getFamily(addr string) IPFamily {
 }
 
 func ParseCidr(s string, dest *IPAddr) error {
-	// TODO(jeb) impl me
-	return ParseINet(s, dest)
+	/*
+			PG is *very* lenient on what it accepts as input for CIDRs.
+			For example, '10' is legitimate input for PG, which then gets
+		  converted to '10.0.0.0' internally, and will always be '10.0.0.0'
+			for all future outputs. Also, PG accepts input without the
+			subnet mask. Thus we need to support the very loose inputs
+			PG accepts.
+	*/
+	//var maskSize byte
+	i := strings.IndexByte(s, '/')
+	family := getFamily(s)
+
+	var addr, maskStr string
+	if i > 0 {
+		addr, maskStr = s[:i], s[i+1:]
+	} else {
+		// If no CIDR spec was given, infer width from net class.
+		if family == IPv4family {
+			// look at first octet to determine network class
+			i = strings.Index(s, ".")
+			highOctet, err := strconv.Atoi(s[:i])
+			if err != nil {
+				return pgerror.WithCandidateCode(
+					errors.Errorf("could not parse %q as inet. invalid mask", s),
+					pgcode.InvalidTextRepresentation)
+			}
+
+			var bits int
+			if highOctet >= 240 { /* Class E */
+				bits = 32
+			} else if highOctet >= 224 { /* Class D */
+				bits = 8
+			} else if highOctet >= 192 { /* Class c */
+				bits = 24
+			} else if highOctet >= 128 { /* Class B */
+				bits = 16
+			} else { /* Class A */
+				bits = 8
+			}
+
+			// If there are no additional bits specified for a class D address
+			// adjust bits to 4.
+			if bits == 8 && highOctet == 224 {
+				bits = 4
+			}
+			maskStr = "/" + strconv.Itoa(bits)
+		}
+	}
+
+	maskOnes, err := strconv.Atoi(maskStr)
+	if err != nil {
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid mask", s),
+			pgcode.InvalidTextRepresentation)
+	} else if maskOnes < 0 || (family == IPv4family && maskOnes > 32) || (family == IPv6family && maskOnes > 128) {
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid mask", s),
+			pgcode.InvalidTextRepresentation)
+	}
+
+	if family == IPv4family {
+		// Trims IPv4 suffix "." to match postgres compitibility.
+		addr = strings.TrimRight(addr, ".")
+
+		// If the mask is outside the defined octets, postgres will raise an error.
+		octetCount := strings.Count(addr, ".") + 1
+		if (octetCount+1)*8-1 < maskOnes {
+			return pgerror.WithCandidateCode(
+				errors.Errorf("could not parse %q as inet. mask is larger than provided octets", s),
+				pgcode.InvalidTextRepresentation)
+		}
+
+		// Append extra ".0" to ensure there are a total of 4 octets.
+		var buffer bytes.Buffer
+		buffer.WriteString(addr)
+		for i := 0; i < 4-octetCount; i++ {
+			buffer.WriteString(".0")
+		}
+		buffer.WriteString(maskStr)
+		addr = buffer.String()
+	}
+
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return pgerror.WithCandidateCode(
+			errors.Errorf("could not parse %q as inet. invalid IP", s),
+			pgcode.InvalidTextRepresentation)
+	}
+
+	*dest = IPAddr{Family: family,
+		Addr: Addr(uint128.FromBytes(ip)),
+		Mask: byte(maskOnes),
+	}
+	return nil
 }
 
 // ParseINet parses postgres style INET types. See TestIPAddrParseINet for
