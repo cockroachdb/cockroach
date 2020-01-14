@@ -205,14 +205,16 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
             </div>
           ) : <Empty title="SQL statement queries will show up here." />}
         </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={this.filteredStatementsData().length}
-          onChange={this.onChangePage}
-        />
+        {data.length > 0 && (
+          <Pagination
+            size="small"
+            itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+            pageSize={pagination.pageSize}
+            current={pagination.current}
+            total={data.length}
+            onChange={this.onChangePage}
+          />
+        )}
       </React.Fragment>
     );
   }
