@@ -34,37 +34,37 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	defer cleanup()
 	defer eng.Close()
 
-	sss := NewSSTSnapshotStorage(eng, testLimiter)
-	ssss := sss.NewSSTSnapshotStorageScratch(testRangeID, testSnapUUID)
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.
-	_, err := os.Stat(ssss.snapDir)
+	_, err := os.Stat(scratch.snapDir)
 	if !os.IsNotExist(err) {
-		t.Fatalf("expected %s to not exist", ssss.snapDir)
+		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
 
-	sssf, err := ssss.NewFile(ctx, 0)
+	f, err := scratch.NewFile(ctx, 0)
 	require.NoError(t, err)
 	defer func() {
-		require.NoError(t, sssf.Close())
+		require.NoError(t, f.Close())
 	}()
 
 	// Check that even though the files aren't created, they are still recorded in SSTs().
-	require.Equal(t, len(ssss.SSTs()), 1)
+	require.Equal(t, len(scratch.SSTs()), 1)
 
 	// Check that the storage lazily creates the files on write.
-	for _, fileName := range ssss.SSTs() {
+	for _, fileName := range scratch.SSTs() {
 		_, err := os.Stat(fileName)
 		if !os.IsNotExist(err) {
 			t.Fatalf("expected %s to not exist", fileName)
 		}
 	}
 
-	_, err = sssf.Write([]byte("foo"))
+	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
 
 	// After writing to files, check that they have been flushed to disk.
-	for _, fileName := range ssss.SSTs() {
+	for _, fileName := range scratch.SSTs() {
 		require.FileExists(t, fileName)
 		data, err := ioutil.ReadFile(fileName)
 		require.NoError(t, err)
@@ -72,29 +72,29 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	}
 
 	// Check that closing is idempotent.
-	require.NoError(t, sssf.Close())
-	require.NoError(t, sssf.Close())
+	require.NoError(t, f.Close())
+	require.NoError(t, f.Close())
 
 	// Check that writing to a closed file is an error.
-	_, err = sssf.Write([]byte("foo"))
+	_, err = f.Write([]byte("foo"))
 	require.EqualError(t, err, "file has already been closed")
 
 	// Check that closing an empty file is an error.
-	sssf, err = ssss.NewFile(ctx, 0)
+	f, err = scratch.NewFile(ctx, 0)
 	require.NoError(t, err)
-	require.EqualError(t, sssf.Close(), "file is empty")
-	_, err = sssf.Write([]byte("foo"))
+	require.EqualError(t, f.Close(), "file is empty")
+	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
 
 	// Check that Clear removes the directory.
-	require.NoError(t, ssss.Clear())
-	_, err = os.Stat(ssss.snapDir)
+	require.NoError(t, scratch.Clear())
+	_, err = os.Stat(scratch.snapDir)
 	if !os.IsNotExist(err) {
-		t.Fatalf("expected %s to not exist", ssss.snapDir)
+		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
-	require.NoError(t, sss.Clear())
-	_, err = os.Stat(sss.dir)
+	require.NoError(t, sstSnapshotStorage.Clear())
+	_, err = os.Stat(sstSnapshotStorage.dir)
 	if !os.IsNotExist(err) {
-		t.Fatalf("expected %s to not exist", sss.dir)
+		t.Fatalf("expected %s to not exist", sstSnapshotStorage.dir)
 	}
 }
