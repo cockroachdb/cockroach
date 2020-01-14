@@ -42,7 +42,6 @@ func GetCgroupMemoryLimit() (limit int64, warnings string, err error) {
 
 // treeRoot is set to "/" in production code and exists only for testing.
 func getCgroupMem(treeRoot string) (limit int64, warnings string, err error) {
-	// Let's assume that the memory cgroup is rooted at defaultMemoryCgroupRoot.
 	procCgroupFile := filepath.Join(treeRoot, "proc", strconv.Itoa(os.Getpid()), "cgroup")
 	cgroupPath, isV2, err := parseMemoryPathFromProcCgroupFile(procCgroupFile)
 	if err != nil {
@@ -60,28 +59,39 @@ func getCgroupMem(treeRoot string) (limit int64, warnings string, err error) {
 			return 0, "", err
 		}
 	}
-	limit = int64(math.MinInt64)
+	limit = int64(math.MaxInt64)
 	var parseErrors []error
+	// Walk the cgroup hierarchy from the most specific group containing the
+	// current process to the root. The minimum limit applies.
 	for p := cgroupPath; true; p = filepath.Dir(p) {
 		limitFilePath := filepath.Join(treeRoot, cgroupRoot, p, memoryLimitFile)
+		// NB: The current cgroup may not have the memory subsystem enabled. If it's
+		// not enabled an os.PathError will be returned.
 		if read, err := parseCgroupLimitFile(limitFilePath); err != nil {
 			if pe := new(os.PathError); !errors.As(err, &pe) {
 				parseErrors = append(parseErrors, err)
 			}
-		} else if limit == math.MinInt64 || read < limit {
-			limit = read
+		} else {
+			limit = min(limit, read)
 		}
 		if p == "/" {
 			break
 		}
 	}
-	if limit == math.MinInt64 {
+	if limit == math.MaxInt64 {
 		if len(parseErrors) == 0 {
 			return 0, "", fmt.Errorf("failed to find cgroup memory limit")
 		}
 		return 0, "", parseErrors[0]
 	}
 	return limit, joinErrorsForWarning(parseErrors), nil
+}
+
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // parseMemoryPathFromProcCgroupFile determines the path for the cgroup which
@@ -136,13 +146,19 @@ func parseMemoryPathFromProcCgroupFile(
 			// TODO(ajwerner): consider propagating a warning or something.
 			continue
 		}
-		if string(row[matches[2]:matches[3]]) == "0" {
+		// See 1. above: For the cgroups version 2 hierarchy, this field contains
+		// the value 0. Mark its 3rd field as the unifiedPath to be returned if
+		// we don't encounter a memory hierarchy.
+		if isV2 := string(row[matches[2]:matches[3]]) == "0"; isV2 {
 			unifiedPath = string(row[matches[6]:matches[7]])
 			continue
 		}
-		if string(row[matches[4]:matches[5]]) != "memory" {
+		// See 2. above.
+		if !strings.Contains(string(row[matches[4]:matches[5]]), cgroupMemorySubsystem) {
 			continue
 		}
+		// This row is for a hierarchy which contains the memory subsystem, return
+		// its 3rd field.
 		return string(row[matches[6]:matches[7]]), false, nil
 	}
 	if unifiedPath != "" {
