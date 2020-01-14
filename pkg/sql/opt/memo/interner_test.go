@@ -327,9 +327,42 @@ func TestInterner(t *testing.T) {
 
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
+			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
+			{val1: ScanFlags{ForceIndex: false}, val2: ScanFlags{ForceIndex: true}, equal: false},
+			{val1: ScanFlags{ForceIndex: true}, val2: ScanFlags{ForceIndex: true}, equal: true},
+			{val1: ScanFlags{Direction: tree.Descending}, val2: ScanFlags{Direction: tree.Ascending}, equal: false},
+			{val1: ScanFlags{Direction: tree.Ascending}, val2: ScanFlags{Direction: tree.Ascending}, equal: true},
+			{val1: ScanFlags{Index: 1}, val2: ScanFlags{Index: 2}, equal: false},
+			{val1: ScanFlags{Index: 2}, val2: ScanFlags{Index: 2}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: true, Index: 1}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: true, Index: 2}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: false, Index: 1}, equal: false},
+			{
+				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				val2:  ScanFlags{NoIndexJoin: false, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				equal: false,
+			},
+			{
+				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: false, Direction: tree.Ascending, Index: 1},
+				equal: false,
+			},
+			{
+				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Descending, Index: 1},
+				equal: false,
+			},
+			{
+				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 2},
+				equal: false,
+			},
+			{
+				val1:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				val2:  ScanFlags{NoIndexJoin: true, ForceIndex: true, Direction: tree.Ascending, Index: 1},
+				equal: true,
+			},
 		}},
 
 		{hashFn: in.hasher.HashPointer, eqFn: in.hasher.IsPointerEqual, variations: []testVariation{
