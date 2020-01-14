@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -57,8 +56,6 @@ type Reporter struct {
 	meta1LeaseHolder *storage.Store
 	// Latest zone config
 	latestConfig *config.SystemConfig
-	// Node liveness by store id
-	nodeLiveStatus map[roachpb.NodeID]storagepb.NodeLivenessStatus
 
 	db        *client.DB
 	liveness  *storage.NodeLiveness
@@ -177,8 +174,6 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	stats.updateNodeLiveness()
-
 	if err := stats.updateLocalityConstraints(); err != nil {
 		log.Errorf(ctx, "unable to update the locality constraints: %s", err)
 	}
@@ -199,14 +194,19 @@ func (stats *Reporter) update(
 		return storeDescs
 	}
 
+	isLiveMap := stats.liveness.GetIsLiveMap()
+	isNodeLive := func(nodeID roachpb.NodeID) bool {
+		return isLiveMap[nodeID].IsLive
+	}
+
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
 	localityStatsVisitor := makeLocalityStatsVisitor(
 		ctx, stats.localityConstraints, stats.latestConfig,
-		getStoresFromGossip, stats.isNodeLive, locSaver)
+		getStoresFromGossip, isNodeLive, locSaver)
 	statusVisitor := makeReplicationStatsVisitor(
-		ctx, stats.latestConfig, stats.isNodeLive, replStatsSaver)
+		ctx, stats.latestConfig, isNodeLive, replStatsSaver)
 
 	// Iterate through all the ranges.
 	const descriptorReadBatchSize = 10000
@@ -290,26 +290,8 @@ func (stats *Reporter) updateLocalityConstraints() error {
 	return nil
 }
 
-func (stats *Reporter) updateNodeLiveness() {
-	stats.nodeLiveStatus = stats.liveness.GetLivenessStatusMap()
-}
-
 // nodeChecker checks whether a node is to be considered alive or not.
 type nodeChecker func(nodeID roachpb.NodeID) bool
-
-func (stats *Reporter) isNodeLive(nodeID roachpb.NodeID) bool {
-	l, ok := stats.nodeLiveStatus[nodeID]
-	if !ok {
-		return false
-	}
-	switch l {
-	// Decommissioning nodes are considered live nodes.
-	case storagepb.NodeLivenessStatus_LIVE, storagepb.NodeLivenessStatus_DECOMMISSIONING:
-		return true
-	default:
-		return false
-	}
-}
 
 // zoneResolver resolves ranges to their zone configs. It is optimized for the
 // case where a range falls in the same range as a the previously-resolved range

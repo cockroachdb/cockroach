@@ -77,9 +77,8 @@ type providerOpts struct {
 	EBSProvisionedIOPs int
 
 	// CreateZones stores the list of zones for used cluster creation.
-	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
-	// on the geo flag being set. If no zones specified, defaultCreateZones are
-	// used. See defaultCreateZones.
+	// When specifying the geo flag, nodes will be placed over these zones.
+	// See defaultGeoZones.
 	CreateZones []string
 }
 
@@ -97,8 +96,8 @@ var defaultConfig = func() (cfg *awsConfig) {
 }()
 
 // defaultCreateZones is the list of availability zones used by default for
-// cluster creation. If the geo flag is specified, nodes are distributed between
-// zones.
+// cluster creation. If the geo flag is specified, one zone from each region
+// is randomly chosen.
 var defaultCreateZones = []string{
 	"us-east-2b",
 	"us-west-2b",
@@ -136,11 +135,10 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		1000, "Number of IOPs to provision, only used if "+ProviderName+
 			"-ebs-volume-type=io1")
 
-	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", nil,
-		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
-			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
-			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
+	flags.StringSliceVar(&o.CreateZones, ProviderName+"-zones", defaultCreateZones,
+		"aws availability zones to use for cluster creation, the cluster "+
+			" will be spread out evenly by zone (if geo). If zones are formatted as "+
+			"AZ:N where N is an integer, the zone will be repeated N times")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -211,17 +209,10 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	if err := p.ConfigSSH(); err != nil {
 		return err
 	}
-
 	expandedZones, err := vm.ExpandZonesFlag(p.opts.CreateZones)
 	if err != nil {
 		return err
 	}
-
-	useDefaultZones := len(expandedZones) == 0
-	if useDefaultZones {
-		expandedZones = defaultCreateZones
-	}
-
 	regions, err := p.allRegions(expandedZones)
 	if err != nil {
 		return err
@@ -231,7 +222,7 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}
 
 	var zones []string // contains an az corresponding to each entry in names
-	if !opts.GeoDistributed && (useDefaultZones || len(expandedZones) == 1) {
+	if !opts.GeoDistributed {
 		// Only use one zone in the region if we're not creating a geo cluster.
 		regionZones, err := p.regionZones(regions[0], expandedZones)
 		if err != nil {
