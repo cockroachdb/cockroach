@@ -1041,3 +1041,12 @@ query I
 SELECT b FROM t42994_2@i
 ----
 NULL
+
+# Regression test for an aggregate that has output type different from its
+# input type (INT4 is input whereas output is INT). Currently such query is not
+# supported through vectorized engine, but we will get a plan with wrapped
+# rowexec.orderedAggregator.
+query I
+SELECT max(c) FROM a
+----
+2000
