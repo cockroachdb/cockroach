@@ -126,7 +126,7 @@ func nativeToDatum(
 // type names that can be used to construct our target type.
 var familyToAvroT = map[types.Family][]string{
 	// Primitive avro types.
-	types.BoolFamily:   {"bool", "string"},
+	types.BoolFamily:   {"bool", "boolean", "string"},
 	types.IntFamily:    {"int", "long", "string"},
 	types.FloatFamily:  {"float", "double", "string"},
 	types.StringFamily: {"string"},
