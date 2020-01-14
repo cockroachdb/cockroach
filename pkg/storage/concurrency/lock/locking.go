@@ -148,7 +148,7 @@ var _ = Exclusive
 type Durability uint32
 
 const (
-	_ Durability = iota
+	// Used as array indices, so numbered from 0.
 
 	// Unreplicated locks are held only on a single Replica in a Range, which is
 	// typically the leaseholder. Unreplicated locks are very fast to acquire
@@ -157,7 +157,7 @@ const (
 	// locks provide no guarantee of survivability across lease transfers or
 	// leaseholder crashes. They should therefore be thought of as best-effort
 	// and should not be relied upon for correctness.
-	Unreplicated
+	Unreplicated Durability = 0
 
 	// Replicated locks are held on at least a quorum of Replicas in a Range.
 	// They are slower to acquire and release than Unreplicated locks because
@@ -166,7 +166,10 @@ const (
 	// survivability across lease transfers, leaseholder crashes, and other
 	// forms of failure events. They will remain available as long as their
 	// Range remains available and they will never be lost.
-	Replicated
+	Replicated Durability = 1
+
+	// NumDurability is the number of durability levels.
+	NumDurability Durability = 2
 )
 
 // Silence unused warnings.

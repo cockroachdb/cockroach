@@ -77,6 +77,8 @@ type Span struct {
 // and non-MVCC accesses. The set is divided into subsets for access type
 // (read-only or read/write) and key scope (local or global; used to facilitate
 // use by the separate local and global latches).
+// The Span slice for a particular access and scope contains non-ovelapping
+// spans in increasing key order.
 type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]Span
 }
