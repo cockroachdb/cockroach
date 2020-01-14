@@ -328,6 +328,11 @@ func runTestsWithFn(
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, uint16(math.Trunc(.002 * float64(coldata.BatchSize()))), uint16(math.Trunc(.003 * float64(coldata.BatchSize()))), uint16(math.Trunc(.016 * float64(coldata.BatchSize()))), coldata.BatchSize()} {
+		if batchSize == 0 {
+			// It is possible for batchSize to be 0 here when varying
+			// coldata.BatchSize(), so we want to skip such configuration.
+			continue
+		}
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
@@ -1036,7 +1041,11 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	rng, _ := randutil.NewPseudoRand()
-	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)
+	batchSize := uint16(10)
+	if batchSize > coldata.BatchSize() {
+		batchSize = coldata.BatchSize()
+	}
+	sel := randomSel(rng, batchSize, 0 /* probOfOmitting */)
 	batchLen := uint16(len(sel))
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)

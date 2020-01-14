@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	sqltypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
@@ -59,17 +58,6 @@ func colListStr(cols []uint32) string {
 			buf.WriteByte(',')
 		}
 		fmt.Fprintf(&buf, "@%d", c+1)
-	}
-	return buf.String()
-}
-
-func typeListStr(typs []sqltypes.T) string {
-	var buf bytes.Buffer
-	for i, typ := range typs {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		fmt.Fprintf(&buf, "%s", typ.Name())
 	}
 	return buf.String()
 }
@@ -360,9 +348,11 @@ func (s *SampleAggregatorSpec) summary() (string, []string) {
 }
 
 func (is *InputSyncSpec) summary(showTypes bool) (string, []string) {
-	typs := make([]string, 0, 2)
+	typs := make([]string, 0, len(is.ColumnTypes)+1)
 	if showTypes {
-		typs = append(typs, typeListStr(is.ColumnTypes))
+		for _, typ := range is.ColumnTypes {
+			typs = append(typs, typ.Name())
+		}
 	}
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:

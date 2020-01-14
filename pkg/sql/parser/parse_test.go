@@ -1071,6 +1071,11 @@ func TestParse(t *testing.T) {
 		{`SELECT 1 FOR NO KEY UPDATE OF a, b`},
 		{`SELECT 1 FOR UPDATE SKIP LOCKED`},
 		{`SELECT 1 FOR NO KEY UPDATE OF a, b NOWAIT`},
+		{`SELECT 1 ORDER BY 1 FOR UPDATE`},
+		{`SELECT 1 LIMIT 1 FOR UPDATE`},
+		{`SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE`},
+		{`SELECT 1 FOR UPDATE FOR UPDATE`},
+		{`SELECT 1 FOR SHARE OF a FOR KEY SHARE SKIP LOCKED`},
 
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
 		{`EXPLAIN TABLE a`},
@@ -1787,6 +1792,11 @@ func TestParse2(t *testing.T) {
 		{`SELECT ROW()`, `SELECT ()`},
 		{`SELECT ROW(1)`, `SELECT (1,)`},
 		{`SELECT (ROW(1) AS a)`, `SELECT ((1,) AS a)`},
+
+		{`SELECT 1 ORDER BY 1 FOR UPDATE LIMIT 1`,
+			`SELECT 1 ORDER BY 1 LIMIT 1 FOR UPDATE`},
+		// FOR READ ONLY is ignored, like in Postgres.
+		{`SELECT 1 FOR READ ONLY`, `SELECT 1`},
 
 		{`SHOW CREATE TABLE t`,
 			`SHOW CREATE t`},

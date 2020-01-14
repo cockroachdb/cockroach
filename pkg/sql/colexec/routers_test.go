@@ -61,28 +61,28 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		{
 			inputBatchSize:   coldata.BatchSize(),
 			outputBatchSize:  int(coldata.BatchSize()),
-			blockedThreshold: defaultRouterOutputBlockedThreshold,
+			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
 			name:             "OneBatch",
 		},
 		{
 			inputBatchSize:   coldata.BatchSize(),
 			outputBatchSize:  4,
-			blockedThreshold: defaultRouterOutputBlockedThreshold,
+			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
 			name:             "OneBatchGTOutputSize",
 		},
 		{
 			inputBatchSize:   4,
 			outputBatchSize:  int(coldata.BatchSize()),
-			blockedThreshold: defaultRouterOutputBlockedThreshold,
+			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection,
 			name:             "MultipleInputBatchesLTOutputSize",
 		},
 		{
 			inputBatchSize:   coldata.BatchSize(),
 			outputBatchSize:  int(coldata.BatchSize()),
-			blockedThreshold: defaultRouterOutputBlockedThreshold,
+			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
 			selection:        fullSelection[:len(fullSelection)/4],
 			name:             "QuarterSelection",
 		},
@@ -243,13 +243,23 @@ func TestRouterOutputNext(t *testing.T) {
 			blockThreshold = smallBatchSize / 2
 		)
 
+		// It is possible that coldata.BatchSize is smaller than our smallBatchSize
+		// which breaks the assumptions of this test. Also, interestingly, if we
+		// do something like 'if smallBatchSize < coldata.BatchSize()', apparently
+		// the compiler will produce such code that the 'if' condition will be only
+		// checked on the first run whereas the condition might not longer hold on
+		// consequent runs. That's why we have this "data dependency" on the slice.
+		if len(fullSelection) < blockThreshold {
+			return
+		}
+
 		// Use a smaller selection than the batch size; it increases test coverage.
 		selection := fullSelection[:blockThreshold]
 
-		expected := make(tuples, len(data)/(smallBatchSize/blockThreshold))
-		for i, j := 0, 0; i < len(data) && j < len(expected); i, j = i+smallBatchSize, j+blockThreshold {
-			for k := 0; k < blockThreshold; k++ {
-				expected[j+k] = data[i+k]
+		expected := make(tuples, 0, len(data))
+		for i := 0; i < len(data); i += smallBatchSize {
+			for k := 0; k < blockThreshold && i+k < len(data); k++ {
+				expected = append(expected, data[i+k])
 			}
 		}
 
@@ -437,14 +447,23 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	data := make(tuples, coldata.BatchSize())
+	// We have precomputed expectedNumVals only for the default batch size, so we
+	// will override it if a different value is set.
+	const expectedBatchSize = 1024
+	batchSize := coldata.BatchSize()
+	if batchSize != expectedBatchSize {
+		coldata.SetBatchSizeForTests(expectedBatchSize)
+		defer func(batchSize uint16) { coldata.SetBatchSizeForTests(batchSize) }(batchSize)
+		batchSize = expectedBatchSize
+	}
+	data := make(tuples, batchSize)
 	valsYetToSee := make(map[int64]struct{})
 	for i := range data {
 		data[i] = tuple{i}
 		valsYetToSee[int64(i)] = struct{}{}
 	}
 
-	in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
+	in := newOpTestInput(batchSize, data, nil /* typs */)
 	in.Init()
 
 	var (
@@ -453,10 +472,11 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		// runs of tests unless the underlying hash algorithm changes. If it does,
 		// distributed hash routing will not produce correct results.
 		expectedNumVals = []int{273, 252, 287, 212}
-		valsPushed      = make([]int, len(expectedNumVals))
+		numOutputs      = 4
+		valsPushed      = make([]int, numOutputs)
 	)
 
-	outputs := make([]routerOutput, len(expectedNumVals))
+	outputs := make([]routerOutput, numOutputs)
 	for i := range outputs {
 		// Capture the index.
 		outputIdx := i

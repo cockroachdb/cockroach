@@ -303,8 +303,11 @@ func (u *sqlSymUnion) when() *tree.When {
 func (u *sqlSymUnion) whens() []*tree.When {
     return u.val.([]*tree.When)
 }
-func (u *sqlSymUnion) forLocked() tree.ForLocked {
-    return u.val.(tree.ForLocked)
+func (u *sqlSymUnion) lockingClause() tree.LockingClause {
+    return u.val.(tree.LockingClause)
+}
+func (u *sqlSymUnion) lockingItem() *tree.LockingItem {
+    return u.val.(*tree.LockingItem)
 }
 func (u *sqlSymUnion) lockingStrength() tree.LockingStrength {
     return u.val.(tree.LockingStrength)
@@ -801,7 +804,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
-%type <tree.ForLocked> locking_clause
+%type <tree.LockingClause> for_locking_clause opt_for_locking_clause for_locking_items
+%type <*tree.LockingItem> for_locking_item
 %type <tree.LockingStrength> for_locking_strength
 %type <tree.LockingWaitPolicy> opt_nowait_or_skip
 %type <tree.SelectStatement> set_operation
@@ -879,7 +883,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
 %type <tree.ArraySubscripts> array_subscripts
 %type <tree.GroupBy> group_clause
-%type <*tree.Limit> select_limit
+%type <*tree.Limit> select_limit opt_select_limit
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
 %type <empty> opt_using_clause
@@ -5958,51 +5962,76 @@ select_with_parens:
 //      clause.
 //      - 2002-08-28 bjm
 select_no_parens:
-  simple_select locking_clause
+  simple_select
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), ForLocked: $2.forLocked()}
+    $$.val = &tree.Select{Select: $1.selectStmt()}
   }
-| select_clause sort_clause locking_clause
+| select_clause sort_clause
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), ForLocked: $3.forLocked()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
-| select_clause opt_sort_clause select_limit locking_clause
+| select_clause opt_sort_clause for_locking_clause opt_select_limit 
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), ForLocked: $4.forLocked()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $4.limit(), Locking: $3.lockingClause()}
   }
-| with_clause select_clause locking_clause
+| select_clause opt_sort_clause select_limit opt_for_locking_clause
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), ForLocked: $3.forLocked()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), Locking: $4.lockingClause()}
   }
-| with_clause select_clause sort_clause locking_clause
+| with_clause select_clause
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), ForLocked: $4.forLocked()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt()}
   }
-| with_clause select_clause opt_sort_clause select_limit locking_clause
+| with_clause select_clause sort_clause
   {
-    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), ForLocked: $5.forLocked()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy()}
+  }
+| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit 
+  {
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $5.limit(), Locking: $4.lockingClause()}
+  }
+| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
+  {
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), Locking: $5.lockingClause()}
   }
 
-locking_clause:
-  /* EMPTY */ { $$.val = tree.ForLocked{} }
-| for_locking_strength opt_locked_rels opt_nowait_or_skip
+for_locking_clause:
+  for_locking_items { $$.val = $1.lockingClause() }
+| FOR READ ONLY     { $$.val = (tree.LockingClause)(nil) }
+
+opt_for_locking_clause:
+  for_locking_clause { $$.val = $1.lockingClause() }
+| /* EMPTY */        { $$.val = (tree.LockingClause)(nil) }
+
+for_locking_items:
+  for_locking_item
   {
-    $$.val = tree.ForLocked{
+    $$.val = tree.LockingClause{$1.lockingItem()}
+  }
+| for_locking_items for_locking_item
+  {
+    $$.val = append($1.lockingClause(), $2.lockingItem())
+  }
+
+for_locking_item:
+  for_locking_strength opt_locked_rels opt_nowait_or_skip
+  {
+    $$.val = &tree.LockingItem{
       Strength:   $1.lockingStrength(),
-      WaitPolicy: $3.lockingWaitPolicy(),
       Targets:    $2.tableNames(),
+      WaitPolicy: $3.lockingWaitPolicy(),
     }
   }
-
-opt_locked_rels:
-  /* EMPTY */        { $$.val = tree.TableNames{} }
-| OF table_name_list { $$.val = $2.tableNames() }
 
 for_locking_strength:
   FOR UPDATE        { $$.val = tree.ForUpdate }
 | FOR NO KEY UPDATE { $$.val = tree.ForNoKeyUpdate }
 | FOR SHARE         { $$.val = tree.ForShare }
 | FOR KEY SHARE     { $$.val = tree.ForKeyShare }
+
+opt_locked_rels:
+  /* EMPTY */        { $$.val = tree.TableNames{} }
+| OF table_name_list { $$.val = $2.tableNames() }
 
 opt_nowait_or_skip:
   /* EMPTY */ { $$.val = tree.LockWaitBlock }
@@ -6347,6 +6376,10 @@ select_limit:
   }
 | limit_clause
 | offset_clause
+
+opt_select_limit:
+  select_limit { $$.val = $1.limit() }
+| /* EMPTY */  { $$.val = (*tree.Limit)(nil) }
 
 opt_limit_clause:
   limit_clause

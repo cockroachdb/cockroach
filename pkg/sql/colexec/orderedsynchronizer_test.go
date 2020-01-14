@@ -157,6 +157,9 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	numInputs := 3
 	inputLen := 1024
 	batchSize := uint16(16)
+	if batchSize > coldata.BatchSize() {
+		batchSize = coldata.BatchSize()
+	}
 
 	// Generate a random slice of sorted ints.
 	randInts := make([]int, inputLen)

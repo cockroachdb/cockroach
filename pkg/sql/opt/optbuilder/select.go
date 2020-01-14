@@ -719,7 +719,7 @@ func (b *Builder) buildSelectStmt(
 		return b.buildStmt(stmt.Select, desiredTypes, inScope)
 
 	case *tree.SelectClause:
-		return b.buildSelectClause(stmt, nil /* orderBy */, desiredTypes, inScope)
+		return b.buildSelectClause(stmt, nil /* orderBy */, nil /* locking */, desiredTypes, inScope)
 
 	case *tree.UnionClause:
 		return b.buildUnionClause(stmt, desiredTypes, inScope)
@@ -754,30 +754,7 @@ func (b *Builder) buildSelect(
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
-	forLocked := stmt.ForLocked
-
-	switch forLocked.Strength {
-	case tree.ForNone:
-	case tree.ForUpdate:
-	case tree.ForNoKeyUpdate:
-	case tree.ForShare:
-	case tree.ForKeyShare:
-		// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
-		// transactions are serializable in CockroachDB, clients can't observe
-		// whether or not FOR UPDATE (or any of the other weaker modes) actually
-		// created a lock. This behavior may improve as the transaction model gains
-		// more capabilities.
-	}
-
-	switch forLocked.WaitPolicy {
-	case tree.LockWaitBlock:
-	case tree.LockWaitSkip:
-		panic(unimplementedWithIssueDetailf(40476, "",
-			"SKIP LOCKED lock wait policy is not supported"))
-	case tree.LockWaitError:
-		panic(unimplementedWithIssueDetailf(40476, "",
-			"NOWAIT lock wait policy is not supported"))
-	}
+	locking := stmt.Locking
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
@@ -798,17 +775,22 @@ func (b *Builder) buildSelect(
 			}
 			limit = stmt.Limit
 		}
+		if stmt.Locking != nil {
+			locking = append(locking, stmt.Locking...)
+		}
 	}
 
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.SelectClause:
-		outScope = b.buildSelectClause(t, orderBy, desiredTypes, inScope)
+		outScope = b.buildSelectClause(t, orderBy, locking, desiredTypes, inScope)
 
 	case *tree.UnionClause:
+		b.rejectIfLocking(locking, "UNION/INTERSECT/EXCEPT")
 		outScope = b.buildUnionClause(t, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
+		b.rejectIfLocking(locking, "VALUES")
 		outScope = b.buildValuesClause(t, desiredTypes, inScope)
 
 	default:
@@ -847,7 +829,11 @@ func (b *Builder) buildSelect(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectClause(
-	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []*types.T, inScope *scope,
+	sel *tree.SelectClause,
+	orderBy tree.OrderBy,
+	locking tree.LockingClause,
+	desiredTypes []*types.T,
+	inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, inScope)
 	b.processWindowDefs(sel, fromScope)
@@ -904,6 +890,8 @@ func (b *Builder) buildSelectClause(
 			outScope = b.buildDistinctOn(projectionsScope.distinctOnCols, outScope)
 		}
 	}
+
+	b.validateLockingForSelectClause(sel, locking, fromScope)
 	return outScope
 }
 
@@ -1096,4 +1084,81 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}
+}
+
+// validateLockingForSelectClause checks for operations that are not supported
+// with FOR [KEY] UPDATE/SHARE. If a locking clause was specified with the
+// select and an incompatible operation is in use, a locking error is raised.
+// The method also validates that only supported locking modes are used.
+func (b *Builder) validateLockingForSelectClause(
+	sel *tree.SelectClause, locking tree.LockingClause, scope *scope,
+) {
+	if len(locking) == 0 {
+		return
+	}
+
+	first := locking[0]
+	switch {
+	case sel.Distinct:
+		b.raiseLockingError(first, "DISTINCT clause")
+
+	case sel.GroupBy != nil:
+		b.raiseLockingError(first, "GROUP BY clause")
+
+	case sel.Having != nil:
+		b.raiseLockingError(first, "HAVING clause")
+
+	case scope.groupby != nil && scope.groupby.hasAggregates():
+		b.raiseLockingError(first, "aggregate functions")
+
+	case len(scope.windows) != 0:
+		b.raiseLockingError(first, "window functions")
+
+	case len(scope.srfs) != 0:
+		b.raiseLockingError(first, "set-returning functions in the target list")
+	}
+
+	for _, li := range locking {
+		// Validate locking strength.
+		switch li.Strength {
+		case tree.ForNone:
+			// AST nodes should not be created with this locking strength.
+			panic(errors.AssertionFailedf("locking item without strength"))
+		case tree.ForUpdate, tree.ForNoKeyUpdate, tree.ForShare, tree.ForKeyShare:
+			// CockroachDB treats all of the FOR LOCKED modes as no-ops. Since all
+			// transactions are serializable in CockroachDB, clients can't observe
+			// whether or not FOR UPDATE (or any of the other weaker modes) actually
+			// created a lock. This behavior may improve as the transaction model gains
+			// more capabilities.
+		default:
+			panic(errors.AssertionFailedf("unknown locking strength: %s", li.Strength))
+		}
+
+		// Validating locking wait policy.
+		switch li.WaitPolicy {
+		case tree.LockWaitBlock:
+			// Default.
+		case tree.LockWaitSkip:
+			panic(unimplementedWithIssueDetailf(40476, "",
+				"SKIP LOCKED lock wait policy is not supported"))
+		case tree.LockWaitError:
+			panic(unimplementedWithIssueDetailf(40476, "",
+				"NOWAIT lock wait policy is not supported"))
+		default:
+			panic(errors.AssertionFailedf("unknown locking wait policy: %s", li.WaitPolicy))
+		}
+	}
+}
+
+// rejectIfLocking raises a locking error if a locking clause was specified.
+func (b *Builder) rejectIfLocking(locking tree.LockingClause, context string) {
+	if len(locking) == 0 {
+		return
+	}
+	b.raiseLockingError(locking[0], context)
+}
+
+func (b *Builder) raiseLockingError(first *tree.LockingItem, context string) {
+	panic(pgerror.Newf(pgcode.FeatureNotSupported,
+		"%s is not allowed with %s", first.Strength, context))
 }

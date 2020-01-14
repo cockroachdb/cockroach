@@ -66,15 +66,11 @@ type outgoingSnapshotStream interface {
 type snapshotStrategy interface {
 	// Receive streams SnapshotRequests in from the provided stream and
 	// constructs an IncomingSnapshot.
-	Receive(
-		context.Context, incomingSnapshotStream, SnapshotRequest_Header,
-	) (IncomingSnapshot, error)
+	Receive(context.Context, incomingSnapshotStream, SnapshotRequest_Header) (IncomingSnapshot, error)
 
 	// Send streams SnapshotRequests created from the OutgoingSnapshot in to the
 	// provided stream.
-	Send(
-		context.Context, outgoingSnapshotStream, SnapshotRequest_Header, *OutgoingSnapshot,
-	) error
+	Send(context.Context, outgoingSnapshotStream, SnapshotRequest_Header, *OutgoingSnapshot) error
 
 	// Status provides a status report on the work performed during the
 	// snapshot. Only valid if the strategy succeeded.
@@ -110,14 +106,14 @@ type kvBatchSnapshotStrategy struct {
 	// before flushing to disk. Only used on the receiver side.
 	sstChunkSize int64
 	// Only used on the receiver side.
-	ssss *SSTSnapshotStorageScratch
+	scratch *SSTSnapshotStorageScratch
 }
 
 // multiSSTWriter is a wrapper around RocksDBSstFileWriter and
 // SSTSnapshotStorageScratch that handles chunking SSTs and persisting them to
 // disk.
 type multiSSTWriter struct {
-	ssss      *SSTSnapshotStorageScratch
+	scratch   *SSTSnapshotStorageScratch
 	currSST   engine.SSTWriter
 	keyRanges []rditer.KeyRange
 	currRange int
@@ -128,12 +124,12 @@ type multiSSTWriter struct {
 
 func newMultiSSTWriter(
 	ctx context.Context,
-	ssss *SSTSnapshotStorageScratch,
+	scratch *SSTSnapshotStorageScratch,
 	keyRanges []rditer.KeyRange,
 	sstChunkSize int64,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
-		ssss:         ssss,
+		scratch:      scratch,
 		keyRanges:    keyRanges,
 		sstChunkSize: sstChunkSize,
 	}
@@ -144,7 +140,7 @@ func newMultiSSTWriter(
 }
 
 func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
-	newSSTFile, err := msstw.ssss.NewFile(ctx, msstw.sstChunkSize)
+	newSSTFile, err := msstw.scratch.NewFile(ctx, msstw.sstChunkSize)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
@@ -224,7 +220,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most three SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.ssss, keyRanges, kvSS.sstChunkSize)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
 	if err != nil {
 		return noSnap, err
 	}
@@ -283,7 +279,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			inSnap := IncomingSnapshot{
 				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
 				SnapUUID:                       snapUUID,
-				SSSS:                           kvSS.ssss,
+				SSTStorageScratch:              kvSS.scratch,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
 				snapType:                       header.Type,
@@ -312,7 +308,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				inSnap.snapType = SnapshotRequest_PREEMPTIVE
 			}
 
-			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.ssss.SSTs()))
+			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
 	}
@@ -520,11 +516,11 @@ func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
 
 // Close implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
-	if kvSS.ssss != nil {
+	if kvSS.scratch != nil {
 		// A failure to clean up the storage is benign except that it will leak
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
-		if err := kvSS.ssss.Clear(); err != nil {
+		if err := kvSS.scratch.Clear(); err != nil {
 			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
@@ -823,7 +819,7 @@ func (s *Store) receiveSnapshot(
 
 		ss = &kvBatchSnapshotStrategy{
 			raftCfg:      &s.cfg.RaftConfig,
-			ssss:         s.sss.NewSSTSnapshotStorageScratch(header.State.Desc.RangeID, snapUUID),
+			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		}
 		defer ss.Close(ctx)
