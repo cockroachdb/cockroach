@@ -231,22 +231,42 @@ var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
-	return &pebble.Options{
-		Comparer:              MVCCComparer,
-		L0CompactionThreshold: 2,
-		L0StopWritesThreshold: 1000,
-		LBaseMaxBytes:         64 << 20, // 64 MB
-		Levels: []pebble.LevelOptions{{
-			BlockSize:    32 << 10, // 32 KB
-			FilterPolicy: bloom.FilterPolicy(10),
-			FilterType:   pebble.TableFilter,
-		}},
+	opts := &pebble.Options{
+		Comparer:                    MVCCComparer,
+		L0CompactionThreshold:       2,
+		L0StopWritesThreshold:       1000,
+		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels:                      make([]pebble.LevelOptions, 7),
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		MinFlushRate:                4 << 20, // 4 MB/sec
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
+
+	for i := 0; i < len(opts.Levels); i++ {
+		l := &opts.Levels[i]
+		l.EnsureDefaults()
+		l.BlockSize = 32 << 10 // 32 KB
+		l.FilterPolicy = bloom.FilterPolicy(10)
+		l.FilterType = pebble.TableFilter
+		if i > 0 {
+			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
+		}
+	}
+
+	// Do not create bloom filters for the last level (i.e. the largest level
+	// which contains data in the LSM store). This configuration reduces the size
+	// of the bloom filters by 10x. This is significant given that bloom filters
+	// require 1.25 bytes (10 bits) per key which can translate into gigabytes of
+	// memory given typical key and value sizes. The downside is that bloom
+	// filters will only be usable on the higher levels, but that seems
+	// acceptable. We typically see read amplification of 5-6x on clusters
+	// (i.e. there are 5-6 levels of sstables) which means we'll achieve 80-90%
+	// of the benefit of having bloom filters on every level for only 10% of the
+	// memory cost.
+	opts.Levels[6].FilterPolicy = nil
+	return opts
 }
 
 type pebbleLogger struct {
