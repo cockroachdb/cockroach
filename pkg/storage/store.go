@@ -385,7 +385,7 @@ type Store struct {
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
-	sss                SSTSnapshotStorage
+	sstSnapshotStorage SSTSnapshotStorage
 	protectedtsCache   protectedts.Cache
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
@@ -854,8 +854,8 @@ func NewStore(
 	// after each snapshot application, except when the node crashed right before
 	// it can clean it up. If this fails it's not a correctness issue since the
 	// storage is also cleared before receiving a snapshot.
-	s.sss = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
-	if err := s.sss.Clear(); err != nil {
+	s.sstSnapshotStorage = NewSSTSnapshotStorage(s.engine, s.limiters.BulkIOWriteRate)
+	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
 	s.protectedtsCache = cfg.ProtectedTimestampCache
