@@ -130,11 +130,13 @@ func registerSQLSmith(r *testRegistry) {
 			logStmt(setup)
 		}
 
-		stmt := "SET experimental_enable_primary_key_changes = true;"
-		if _, err := conn.Exec(stmt); err != nil {
-			t.Fatal(err)
-		} else {
-			logStmt(stmt)
+		if t.IsBuildVersion("v20.1.0") {
+			stmt := "SET experimental_enable_primary_key_changes = true;"
+			if _, err := conn.Exec(stmt); err != nil {
+				t.Fatal(err)
+			} else {
+				logStmt(stmt)
+			}
 		}
 
 		const timeout = time.Minute
