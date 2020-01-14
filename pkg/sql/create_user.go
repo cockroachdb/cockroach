@@ -190,7 +190,7 @@ var errNoUserNameSpecified = errors.New("no username specified")
 
 type userAuthInfo struct {
 	name     func() (string, error)
-	password func() (string, error)
+	password func() (bool, string, error)
 }
 
 func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
@@ -198,9 +198,9 @@ func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userA
 	if err != nil {
 		return userAuthInfo{}, err
 	}
-	var password func() (string, error)
+	var password func() (bool, string, error)
 	if passwordE != nil {
-		password, err = p.TypeAsString(passwordE, ctx)
+		password, err = p.typeAsStringOrNull(passwordE, ctx)
 		if err != nil {
 			return userAuthInfo{}, err
 		}
@@ -208,7 +208,11 @@ func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userA
 	return userAuthInfo{name: name, password: password}, nil
 }
 
-// resolve returns the actual user name and (hashed) password.
+// resolve returns the actual user name and (hashed) password.  The
+// returned hashed password slice is nil iff the user was specified to
+// have no password (e.g. CREATE USER without a PASSWORD clause, or
+// using PASSWORD NULL). If the password was specified but empty
+// (e.g. PASSWORD ''), an error is reported instead.
 func (ua *userAuthInfo) resolve() (string, []byte, error) {
 	name, err := ua.name()
 	if err != nil {
@@ -224,9 +228,12 @@ func (ua *userAuthInfo) resolve() (string, []byte, error) {
 
 	var hashedPassword []byte
 	if ua.password != nil {
-		resolvedPassword, err := ua.password()
+		isNull, resolvedPassword, err := ua.password()
 		if err != nil {
 			return "", nil, err
+		}
+		if isNull {
+			return normalizedUsername, hashedPassword, nil
 		}
 		if resolvedPassword == "" {
 			return "", nil, security.ErrEmptyPassword
