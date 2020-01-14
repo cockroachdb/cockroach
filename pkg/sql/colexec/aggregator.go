@@ -440,11 +440,15 @@ func extractAggTypes(aggCols [][]uint32, colTypes []coltypes.T) [][]coltypes.T {
 }
 
 // isAggregateSupported returns whether the aggregate function that operates on
-// column of type 'inputType' (which can be nil in case of COUNT_ROWS) is
+// columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
 // supported.
-func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *types.T) (bool, error) {
+func isAggregateSupported(
+	aggFn execinfrapb.AggregatorSpec_Func, inputTypes []types.T,
+) (bool, error) {
 	var aggType []coltypes.T
-	if inputType != nil {
+	var inputType *types.T
+	if len(inputTypes) > 0 {
+		inputType = &inputTypes[0]
 		aggType = append(aggType, typeconv.FromColumnType(inputType))
 	}
 	switch aggFn {
@@ -462,13 +466,22 @@ func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputType *type
 			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
 		}
 	}
-	_, _, err := makeAggregateFuncs(
+	_, outputTypes, err := makeAggregateFuncs(
 		nil, /* allocator */
 		[][]coltypes.T{aggType},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
 	if err != nil {
 		return false, err
+	}
+	_, retType, err := execinfrapb.GetAggregateInfo(aggFn, inputTypes...)
+	if err != nil {
+		return false, err
+	}
+	if typeconv.FromColumnType(retType) != outputTypes[0] {
+		// TODO(yuzefovich): support this case through vectorize. Probably it needs
+		// to be done at the same time as #38845.
+		return false, errors.Newf("aggregates with different input and output types are not supported")
 	}
 	return true, nil
 }
