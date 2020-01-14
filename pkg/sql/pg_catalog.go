@@ -303,9 +303,8 @@ CREATE TABLE pg_catalog.pg_am (
 	amtype CHAR
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		var err error
 		// add row for forward indexes
-		if err = addRow(
+		if err := addRow(
 			forwardIndexOid,                      // oid - all versions
 			tree.NewDName(indexTypeForwardIndex), // amname - all versions
 			zeroVal,                              // amstrategies - < v9.6
@@ -344,7 +343,7 @@ CREATE TABLE pg_catalog.pg_am (
 		}
 
 		// add row for inverted indexes
-		if err = addRow(
+		if err := addRow(
 			invertedIndexOid,                      // oid - all versions
 			tree.NewDName(indexTypeInvertedIndex), // amname - all versions
 			zeroVal,                               // amstrategies - < v9.6
@@ -674,7 +673,7 @@ CREATE TABLE pg_catalog.pg_class (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				// The only difference between tables, views and sequences is the relkind column.
+				// The only difference between tables, views and sequences are the relkind and relam columns.
 				relKind := relKindTable
 				relAm := forwardIndexOid
 				if table.IsView() {
