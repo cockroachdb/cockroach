@@ -36,6 +36,9 @@ func TestStopper(t *testing.T) {
 	cleanup := make(chan struct{})
 	ctx := context.Background()
 
+
+	time.Sleep(time.Hour) // goodnight sweet prince
+
 	s.RunWorker(ctx, func(context.Context) {
 		<-running
 	})
