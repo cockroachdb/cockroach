@@ -86,12 +86,12 @@ module.exports = function(config) {
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: Object.assign(webpackConfig, {
       devtool: "inline-source-map",
-      mode: "none",
       externals: {
         "react/addons": true,
         "react/lib/ExecutionEnvironment": true,
         "react/lib/ReactContext": true,
       },
+      mode: "none",
     }),
 
     // "stats" needs to be copied to webpackMiddleware configuration in order
