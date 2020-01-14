@@ -770,6 +770,9 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 
 func TestNodeLivenessStatusMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short")
+	}
 
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
