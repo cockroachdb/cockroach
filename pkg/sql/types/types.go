@@ -13,6 +13,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1086,6 +1087,13 @@ func (t *T) PGName() string {
 //
 func (t *T) SQLStandardName() string {
 	return t.SQLStandardNameWithTypmod(false, 0)
+}
+
+var telemetryNameReplaceRegex = regexp.MustCompile("[^a-zA-Z0-9]")
+
+// TelemetryName returns a name that is friendly for telemetry.
+func (t *T) TelemetryName() string {
+	return strings.ToLower(telemetryNameReplaceRegex.ReplaceAllString(t.SQLString(), "_"))
 }
 
 // SQLStandardNameWithTypmod is like SQLStandardName but it also accepts a
