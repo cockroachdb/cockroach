@@ -106,6 +106,10 @@ func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction
 	return txn
 }
 
+func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) MVCCKey {
+	return MVCCKey{Key: key, Timestamp: ts}
+}
+
 type mvccKeys []MVCCKey
 
 func (n mvccKeys) Len() int           { return len(n) }
