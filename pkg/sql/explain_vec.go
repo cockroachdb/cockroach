@@ -72,6 +72,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	flowCtx := makeFlowCtx(planCtx, plan, params)
+	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 	// Temporarily set vectorize to on so that we can get the whole plan back even
 	// if we wouldn't support it due to lack of streaming.
