@@ -663,8 +663,22 @@ func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error 
 }
 
 func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
+
+		// Retrieve the existing namespace table's descriptor and change its name to
+		// "namespace_deprecated". This prevents name collisions with the new
+		// namespace table, for instance during backup.
+		deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
+		deprecatedDesc := &sqlbase.Descriptor{}
+		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
+		if err != nil {
+			return err
+		}
+		deprecatedDesc.Table(ts).Name = sqlbase.DeprecatedNamespaceTable.Name
+		b.Put(deprecatedKey, deprecatedDesc)
+
 		// The 19.2 namespace table contains an entry for "namespace" which maps to
 		// the deprecated namespace tables ID. Even though the cluster version at
 		// this point is 19.2, we construct a metadata name key in the 20.1 format.
@@ -676,17 +690,13 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		//    idempotent semantics of the migration ensure that "namespace" maps to
 		//    the correct ID in the new system.namespace table after all tables are
 		//    copied over.
-		nameKey := sqlbase.NewPublicTableKey(sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTable.GetName())
-		b.CPut(nameKey.Key(), sqlbase.NamespaceTable.GetID(), nil)
-		b.CPut(sqlbase.MakeDescMetadataKey(sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable), nil)
+		nameKey := sqlbase.NewPublicTableKey(
+			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTable.GetName())
+		b.Put(nameKey.Key(), sqlbase.NamespaceTable.GetID())
+		b.Put(sqlbase.MakeDescMetadataKey(
+			sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))
 		return txn.Run(ctx, b)
 	})
-	// CPuts only provide idempotent inserts if we ignore the errors that arise
-	// when the condition isn't met.
-	if _, ok := err.(*roachpb.ConditionFailedError); ok {
-		return nil
-	}
-	return err
 }
 
 // migrateSystemNamespace migrates entries from the deprecated system.namespace

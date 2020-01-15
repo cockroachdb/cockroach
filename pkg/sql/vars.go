@@ -849,8 +849,7 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
 
-	// TODO(arul): Update this comment when temp tables work is done.
-	// Still under development
+	// CockroachDB extension.
 	`experimental_enable_temp_tables`: {
 		GetStringVal: makeBoolGetStringValFn(`experimental_enable_temp_tables`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
@@ -864,7 +863,9 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.TempTablesEnabled)
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(temporaryTablesEnabledClusterMode.Get(sv))
+		},
 	},
 }
 

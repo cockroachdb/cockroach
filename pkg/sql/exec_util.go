@@ -152,6 +152,12 @@ var primaryKeyChangesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_temporary_tables.enabled",
+	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
+	false,
+)
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
