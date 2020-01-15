@@ -59,16 +59,8 @@ const (
 	indoptionNullsFirst = 0x02
 )
 
-var forwardIndexOid *tree.DOid
-var invertedIndexOid *tree.DOid
-
-func init() {
-	h := makeOidHasher()
-	h.writeStr(indexTypeForwardIndex)
-	forwardIndexOid = h.getOid()
-	h.writeStr(indexTypeInvertedIndex)
-	invertedIndexOid = h.getOid()
-}
+var forwardIndexOid = StringOid(indexTypeForwardIndex)
+var invertedIndexOid = StringOid(indexTypeInvertedIndex)
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
@@ -348,9 +340,9 @@ CREATE TABLE pg_catalog.pg_am (
 			tree.NewDName(indexTypeInvertedIndex), // amname - all versions
 			zeroVal,                               // amstrategies - < v9.6
 			zeroVal,                               // amsupport - < v9.6
-			tree.DBoolTrue,                        // amcanorder - < v9.6
+			tree.DBoolFalse,                       // amcanorder - < v9.6
 			tree.DBoolFalse,                       // amcanorderbyop - < v9.6
-			tree.DBoolTrue,                        // amcanbackward - < v9.6
+			tree.DBoolFalse,                       // amcanbackward - < v9.6
 			tree.DBoolFalse,                       // amcanunique - < v9.6
 			tree.DBoolFalse,                       // amcanmulticol - < v9.6
 			tree.DBoolFalse,                       // amoptionalkey - < v9.6
@@ -3043,4 +3035,10 @@ func (h oidHasher) OperatorOid(name string, leftType, rightType, returnType *tre
 
 func defaultOid(id sqlbase.ID) *tree.DOid {
 	return tree.NewDOid(tree.DInt(id))
+}
+
+func StringOid(s string) *tree.DOid {
+	h := makeOidHasher()
+	h.writeStr(s)
+	return h.getOid()
 }
