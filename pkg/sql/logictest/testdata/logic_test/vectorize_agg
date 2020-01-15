@@ -1,0 +1,39 @@
+# LogicTest: local-vec
+
+statement ok
+CREATE TABLE bools (a INT, b BOOL)
+
+# Ensure vectorize engine is used
+statement ok
+SET vectorize=experimental_always
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+NULL NULL
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
+----
+
+statement ok
+RESET vectorize
+
+statement OK
+INSERT INTO bools VALUES
+(0, NULL),
+(1, true),  (1, true),
+(2, false), (2, false),
+(3, false), (3, true), (3, true),
+(4, NULL),  (4, true),
+(5, false), (5, NULL)
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
+----
+NULL NULL
+true true
+false false
+false true
+true true
+false false
