@@ -139,7 +139,6 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
-	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,

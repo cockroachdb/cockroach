@@ -415,7 +415,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// It represents adding role management via CREATEROLE privilege.
 		// Added new column in system.users table to track hasCreateRole.
 		Key:     VersionCreateRolePrivilege,
-		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 13},
 	},
 	// Add new versions here (step two of two).
 

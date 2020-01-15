@@ -50,6 +50,13 @@ var toSQLStmt = map[Kind]string{
 	NOCREATEROLE: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
 }
 
+// toBool is a map of roleprivilege (Kind) ->
+// bool value in system.users table (bool).
+var toBool = map[Kind]bool{
+	CREATEROLE:   true,
+	NOCREATEROLE: false,
+}
+
 // List is a list of role privileges.
 type List []Kind
 

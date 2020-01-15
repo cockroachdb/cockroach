@@ -535,7 +535,8 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{}", false).
-				Results("isRole", "BOOL", false, false, "", "{}", false),
+				Results("isRole", "BOOL", false, false, "", "{}", false).
+				Results("hasCreateRole", "BOOL", false, false, "", "{}", false),
 		}},
 		{"SHOW DATABASES", []preparedQueryTest{
 			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
