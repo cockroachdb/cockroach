@@ -12,6 +12,7 @@ package distsql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -68,6 +69,12 @@ func verifyColOperator(
 
 	proc, err := rowexec.NewProcessor(ctx, flowCtx, 0, &pspec.Core, &pspec.Post, inputsProc, []execinfra.RowReceiver{nil}, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "syntax error") {
+			// It is possible that we generated an invalid filter expression, and in
+			// such case we will get an error when creating a processor. However,
+			// this should *not* fail the test, so we swallow the error.
+			return nil
+		}
 		return err
 	}
 	outProc, ok := proc.(execinfra.RowSource)
