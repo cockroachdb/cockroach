@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1236,15 +1237,39 @@ func (s *adminServer) Health(
 	return &serverpb.HealthResponse{}, nil
 }
 
+// getLivenessStatusMap generates a map from NodeID to LivenessStatus for all
+// nodes known to gossip. Nodes that haven't pinged their liveness record for
+// more than server.time_until_store_dead are considered dead.
+//
+// To include all nodes (including ones not in the gossip network), callers
+// should consider calling (statusServer).NodesWithLiveness() instead where
+// possible.
+//
+// getLivenessStatusMap() includes removed nodes (dead + decommissioned).
+func getLivenessStatusMap(
+	nl *storage.NodeLiveness, now time.Time, st *cluster.Settings,
+) map[roachpb.NodeID]storagepb.NodeLivenessStatus {
+	livenesses := nl.GetLivenesses()
+	threshold := storage.TimeUntilStoreDead.Get(&st.SV)
+
+	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
+	for _, liveness := range livenesses {
+		status := storage.LivenessStatus(liveness, now, threshold)
+		statusMap[liveness.NodeID] = status
+	}
+	return statusMap
+}
+
 // Liveness returns the liveness state of all nodes on the cluster
 // known to gossip. To reach all nodes in the cluster, consider
 // using (statusServer).NodesWithLiveness instead.
 func (s *adminServer) Liveness(
 	context.Context, *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
+	clock := s.server.clock
+	statusMap := getLivenessStatusMap(
+		s.server.nodeLiveness, clock.PhysicalTime(), s.server.st)
 	livenesses := s.server.nodeLiveness.GetLivenesses()
-	statusMap := s.server.nodeLiveness.GetLivenessStatusMap()
-
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
 		Statuses:   statusMap,
