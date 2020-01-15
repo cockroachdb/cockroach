@@ -12,37 +12,93 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
 // found in system.users.
+//
+// The function is tolerant of unavailable clusters (or unavailable
+// system.user) as follows:
+//
+// - if the user is root and system.users is unavailable, the function
+//   reports that the user exists but has no password. (Reminder: "no
+//   password" means that they cannot use password authentication and
+//   thus must use certificates instead, or an existing web session
+//   cookie when using the web UI.)
+//
+//   This special case exists so that root can still log in into an
+//   unavailable cluster. This is currently required for proper
+//   function of `cockroach node status` which uses SQL.
+//   Ideally we would not need SQL to enquire the status of
+//   clusters and this special case would not need to exist.
+//
+// - if the user is another user than root, then the function fails
+//   after a timeout instead of blocking. The timeout is configurable
+//   via a cluster setting.
+//
 func GetUserHashedPassword(
 	ctx context.Context, ie *InternalExecutor, metrics *MemoryMetrics, username string,
-) (bool, []byte, error) {
+) (exists bool, hashedPassword []byte, err error) {
 	normalizedUsername := tree.Name(username).Normalize()
+	isRoot := normalizedUsername == security.RootUser
 	// Always return no password for the root user, even if someone manually inserts one.
-	if normalizedUsername == security.RootUser {
+	if isRoot {
 		return true, nil, nil
 	}
 
-	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
-		`WHERE username=$1 AND "isRole" = false`
-	values, err := ie.QueryRow(
-		ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
-	if err != nil {
-		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+	// We may be operating with a timeout.
+	timeout := userLoginTimeout.Get(&ie.s.cfg.Settings.SV)
+	runFn := func(fn func(ctx context.Context) error) error { return fn(ctx) }
+	if timeout != 0 {
+		runFn = func(fn func(ctx context.Context) error) error {
+			return contextutil.RunWithTimeout(ctx, "get-hashed-pwd-timeout", timeout, fn)
+		}
 	}
-	if values == nil {
-		return false, nil, nil
+
+	// Perform the lookup with a timeout.
+	err = runFn(func(ctx context.Context) error {
+		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+			`WHERE username=$1 AND "isRole" = false`
+		values, err := ie.QueryRow(
+			ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
+		if err != nil {
+			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		}
+		if values != nil {
+			exists = true
+			hashedPassword = []byte(*(values[0].(*tree.DBytes)))
+		}
+		return nil
+	})
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		// Failed to retrieve the user account.
+		log.Warningf(ctx, "user lookup for %q failed: %v", username, err)
+		// As a special case, if root is logging in we know the user
+		// account exists; we just report it has no password so that it
+		// can only log in using certs or GSS.
+		if isRoot {
+			return true, nil, nil
+		}
+		err = errors.HandledWithMessage(err, "timeout while retrieving user account")
 	}
-	hashedPassword := []byte(*(values[0].(*tree.DBytes)))
-	return true, hashedPassword, nil
+	return exists, hashedPassword, err
 }
+
+var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
+	"server.user_login.timeout",
+	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
+	10*time.Second,
+)
 
 // The map value is true if the map key is a role, false if it is a user.
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
