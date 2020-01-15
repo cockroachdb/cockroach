@@ -81,3 +81,5 @@ export const store = createAdminUIStore();
 
 // Connect react-router history with redux.
 export const history = syncHistoryWithStore(hashHistory, store);
+
+export type History = typeof history;
