@@ -17,6 +17,7 @@ import (
 )
 
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -57,8 +58,8 @@ func registerDjango(r *testRegistry) {
 			ctx,
 			c,
 			node,
-			"install python dependencies",
-			`sudo apt-get -qq install python3.6 python3.6-dev build-essential`,
+			"install dependencies",
+			`sudo apt-get -qq install make python3.6 libpq-dev python3.6-dev gcc python3-setuptools python-setuptools build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -80,8 +81,11 @@ func registerDjango(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "install postgres",
-			`sudo apt-get -qq install postgresql postgresql-contrib libpq-dev`,
+			ctx,
+			c,
+			node,
+			"install pytest",
+			`sudo pip3 install pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -92,13 +96,13 @@ func registerDjango(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		latestTag, err := repeatGetLatestTag(
+		djangoLatestTag, err := repeatGetLatestTag(
 			ctx, c, "django", "django", djangoReleaseTagRegex,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Django release is %s.", latestTag)
+		c.l.Printf("Latest Django release is %s.", djangoLatestTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -106,29 +110,28 @@ func registerDjango(r *testRegistry) {
 			c,
 			"https://github.com/django/django/",
 			"/mnt/data1/django",
-			latestTag,
+			djangoLatestTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		djangoCockroachDBLatestTag, err := repeatGetLatestTag(
+			ctx, c, "django", "django", djangoCockroachDBReleaseTagRegex,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
 
 		if err := repeatGitCloneE(
 			ctx,
 			t.l,
 			c,
-			"https://github.com/cockroachdb/cockroach-django",
-			"/mnt/data1/django/tests/cockroach-django",
-			// TODO (rohany): change the arguments to take in a specific branch here.
-			"master",
+			"https://github.com/cockroachdb/django-cockroachdb",
+			"/mnt/data1/django/tests/django-cockroachdb",
+			djangoCockroachDBLatestTag,
 			node,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, c, node, "install cockroach-django", `
-					cd /mnt/data1/django/tests/cockroach-django/ &&
-					pip3 install psycopg2-binary --user && pip3 install . --user`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -136,9 +139,17 @@ func registerDjango(r *testRegistry) {
 		if err := repeatRunE(
 			ctx, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
-				pip3 install -e .. --user &&
-				pip3 install -r requirements/py3.txt --user &&
-				pip3 install -r requirements/postgres.txt --user`,
+				sudo pip3 install -e .. &&
+				sudo pip3 install -r requirements/py3.txt &&
+				sudo pip3 install -r requirements/postgres.txt`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, c, node, "install django-cockroachdb", `
+					cd /mnt/data1/django/tests/django-cockroachdb/ &&
+					sudo pip3 install .`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -181,12 +192,11 @@ func registerDjango(r *testRegistry) {
 		results.parsePythonUnitTestOutput(fullTestResults, expectedFailureList, ignoredlist)
 		results.summarizeAll(
 			t, "django" /* ormName */, blacklistName,
-			expectedFailureList, version, latestTag,
+			expectedFailureList, version, djangoLatestTag,
 		)
 	}
 
 	r.Add(testSpec{
-		Skip:       "django tests are still too flaky to run",
 		MinVersion: "v19.2.0",
 		Name:       "django",
 		Owner:      OwnerAppDev,
@@ -206,7 +216,7 @@ python3 runtests.py %s --settings cockroach_settings --parallel 1 -v 2
 const cockroachDjangoSettings = `
 DATABASES = {
     'default': {
-        'ENGINE': 'cockroach.django',
+        'ENGINE': 'django_cockroachdb',
         'NAME' : 'django_tests',
         'USER' : 'root',
         'PASSWORD' : '',
