@@ -82,6 +82,20 @@ You can test the new builder image in TeamCity by using the custom parameters
 UI (the "..." icon next to the "Run" button) to verify the image before
 committing the change.
 
+## Updating the nodejs version
+
+Please copy this checklist ino the relevant commit message, with a link
+back to this document:
+
+* [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L218)).
+* [ ] Rebuild the Docker image and bump the version in builder.sh accordingly ([source](./builder.sh#L6)).
+* [ ] Bump the default installed version of nodejs in bootstrap-debian.sh ([source](./bootstrap/bootstrap-debian.sh#L9)).
+* [ ] Update the `builder.dockerImage` parameter in the TeamCity `Cockroach` project.
+
+You can test the new builder image in TeamCity by using the custom parameters
+UI (the "..." icon next to the "Run" button) to verify the image before
+committing the change.
+
 ## Updating Dependencies
 
 This snapshot was built and is managed using `dep` and we manage `vendor` as a
