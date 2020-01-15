@@ -128,6 +128,13 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	o.leftFeedOp.batch = batch
 	batch = o.leftProjOpChain.Next(ctx)
 
+	if origLen == 0 {
+		// Run the right-side projection on the remaining tuples.
+		o.rightFeedOp.batch = batch
+		batch = o.rightProjOpChain.Next(ctx)
+		return batch
+	}
+
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
 	// not get the projection for the right side.
@@ -183,10 +190,6 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetSelection(false)
 	}
 	batch.SetLength(origLen)
-
-	if origLen == 0 {
-		return batch
-	}
 
 	rightCol := batch.ColVec(o.rightIdx)
 	outputCol := batch.ColVec(o.outputIdx)

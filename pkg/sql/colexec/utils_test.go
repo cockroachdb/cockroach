@@ -224,6 +224,9 @@ func runTestsWithoutAllNullsInjection(
 		// output on its second Next call (we need the first call to Next to get a
 		// reference to a batch to modify), and a second time to modify the batch
 		// and verify that this does not change the operator output.
+		// NOTE: this test makes sense only if the operator returns two non-zero
+		// length batches (if not, we short-circuit the test since the operator
+		// doesn't have to restore anything on a zero-length batch).
 		var (
 			secondBatchHasSelection, secondBatchHasNulls bool
 			inputTypes                                   []coltypes.T
@@ -249,6 +252,9 @@ func runTestsWithoutAllNullsInjection(
 			}
 			ctx := context.Background()
 			b := op.Next(ctx)
+			if b.Length() == 0 {
+				return
+			}
 			if round == 1 {
 				if secondBatchHasSelection {
 					b.SetSelection(false)
@@ -265,6 +271,9 @@ func runTestsWithoutAllNullsInjection(
 				}
 			}
 			b = op.Next(ctx)
+			if b.Length() == 0 {
+				return
+			}
 			if round == 0 {
 				secondBatchHasSelection = b.Selection() != nil
 				secondBatchHasNulls = maybeHasNulls(b)
@@ -488,8 +497,7 @@ func (s *opTestInput) Init() {
 func (s *opTestInput) Next(context.Context) coldata.Batch {
 	s.batch.ResetInternalBatch()
 	if len(s.tuples) == 0 {
-		s.batch.SetLength(0)
-		return s.batch
+		return coldata.ZeroBatch
 	}
 	batchSize := s.batchSize
 	if len(s.tuples) < int(batchSize) {
@@ -700,8 +708,7 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 		}
 	} else {
 		if s.idx == uint16(len(s.sel)) {
-			s.batch.SetLength(0)
-			return s.batch
+			return coldata.ZeroBatch
 		}
 		batchSize = s.batchSize
 		if uint16(len(s.sel))-s.idx < batchSize {
@@ -1125,7 +1132,7 @@ func (c *chunkingBatchSource) Init() {
 
 func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if c.curIdx >= c.len {
-		c.batch.SetLength(0)
+		return coldata.ZeroBatch
 	}
 	lastIdx := c.curIdx + uint64(coldata.BatchSize())
 	if lastIdx > c.len {

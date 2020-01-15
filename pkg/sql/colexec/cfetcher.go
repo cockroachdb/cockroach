@@ -857,8 +857,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			return rf.machine.batch, nil
 
 		case stateFinished:
-			rf.machine.batch.SetLength(0)
-			return rf.machine.batch, nil
+			return coldata.ZeroBatch, nil
 		}
 	}
 }
