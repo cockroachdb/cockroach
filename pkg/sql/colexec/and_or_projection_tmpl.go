@@ -128,48 +128,59 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	o.leftFeedOp.batch = batch
 	batch = o.leftProjOpChain.Next(ctx)
 
-	// Now we need to populate a selection vector on the batch in such a way that
-	// those tuples that we already know the result of logical operation for do
-	// not get the projection for the right side.
-	//
-	// knownResult indicates the boolean value which if present on the left side
-	// fully determines the result of the logical operation.
-	// {{ if _IS_OR_OP }}
-	knownResult := true
-	// {{ else }}
-	knownResult := false
-	// {{ end }}
-	leftCol := batch.ColVec(o.leftIdx)
-	leftColVals := leftCol.Bool()
-	var curIdx uint16
-	if usesSel {
-		sel := batch.Selection()
-		origSel := o.origSel[:origLen]
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
-			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(true)
+	// It is possible that we have a typeless zero-length batch, and we cannot
+	// get a particular columnar vector from it, so we have special casing here
+	// for non-zero length batches.
+	// TODO(yuzefovich): remove it once we can short-circuit.
+	var (
+		knownResult bool
+		leftCol     coldata.Vec
+		leftColVals []bool
+	)
+	if origLen > 0 {
+		// Now we need to populate a selection vector on the batch in such a way that
+		// those tuples that we already know the result of logical operation for do
+		// not get the projection for the right side.
+		//
+		// knownResult indicates the boolean value which if present on the left side
+		// fully determines the result of the logical operation.
+		// {{ if _IS_OR_OP }}
+		knownResult = true
+		// {{ else }}
+		knownResult = false
+		// {{ end }}
+		leftCol = batch.ColVec(o.leftIdx)
+		leftColVals = leftCol.Bool()
+		var curIdx uint16
+		if usesSel {
+			sel := batch.Selection()
+			origSel := o.origSel[:origLen]
+			if leftCol.MaybeHasNulls() {
+				leftNulls := leftCol.Nulls()
+				for _, i := range origSel {
+					_ADD_TUPLE_FOR_RIGHT(true)
+				}
+			} else {
+				for _, i := range origSel {
+					_ADD_TUPLE_FOR_RIGHT(false)
+				}
 			}
 		} else {
-			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(false)
+			batch.SetSelection(true)
+			sel := batch.Selection()
+			if leftCol.MaybeHasNulls() {
+				leftNulls := leftCol.Nulls()
+				for i := uint16(0); i < origLen; i++ {
+					_ADD_TUPLE_FOR_RIGHT(true)
+				}
+			} else {
+				for i := uint16(0); i < origLen; i++ {
+					_ADD_TUPLE_FOR_RIGHT(false)
+				}
 			}
 		}
-	} else {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
-			for i := uint16(0); i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(true)
-			}
-		} else {
-			for i := uint16(0); i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(false)
-			}
-		}
+		batch.SetLength(curIdx)
 	}
-	batch.SetLength(curIdx)
 
 	// Run the right-side projection on the remaining tuples.
 	o.rightFeedOp.batch = batch
