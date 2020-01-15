@@ -321,6 +321,11 @@ func TestRegistryBasic(t *testing.T) {
 	ev3.MustSetValue(&roachpb.RangeFeedValue{Key: keyC, Value: val, PrevValue: val})
 	ev4.MustSetValue(&roachpb.RangeFeedValue{Key: keyD, Value: val, PrevValue: val})
 	err1 := roachpb.NewErrorf("error1")
+	noPrev := func(ev *roachpb.RangeFeedEvent) *roachpb.RangeFeedEvent {
+		ev = ev.ShallowCopy()
+		ev.GetValue().(*roachpb.RangeFeedValue).PrevValue = roachpb.Value{}
+		return ev
+	}
 
 	reg := makeRegistry()
 	require.Equal(t, 0, reg.Len())
@@ -357,10 +362,10 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(spCD, ev3)
 	reg.PublishToOverlapping(spAC, ev4)
 	require.NoError(t, reg.waitForCaughtUp(all))
-	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev4}, rAB.Events())
+	require.Equal(t, []*roachpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4)}, rAB.Events())
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev2, ev4}, rBC.Events())
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev3}, rCD.Events())
-	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2, ev4}, rAC.Events())
+	require.Equal(t, []*roachpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, rAC.Events())
 	require.Nil(t, rAB.Err())
 	require.Nil(t, rBC.Err())
 	require.Nil(t, rCD.Err())
@@ -400,7 +405,7 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(spCD, ev2)
 	reg.PublishToOverlapping(spAC, ev1)
 	require.NoError(t, reg.waitForCaughtUp(all))
-	require.Equal(t, []*roachpb.RangeFeedEvent{ev4, ev1}, rAB.Events())
+	require.Equal(t, []*roachpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, rAB.Events())
 
 	// Disconnect from rAB without error.
 	reg.Disconnect(spAB)
@@ -518,8 +523,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
 	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
-		Span:       roachpb.Span{Key: roachpb.Key("a")},
-		ResolvedTS: hlc.Timestamp{WallTime: 5},
+		Span: spAB, ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
 	reg.PublishToOverlapping(spAB, ev)
 	require.NoError(t, reg.waitForCaughtUp(all))
