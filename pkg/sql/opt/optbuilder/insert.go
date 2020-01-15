@@ -664,6 +664,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 			mb.b.addTable(mb.tab, &mb.alias),
 			nil, /* ordinals */
 			nil, /* indexFlags */
+			noRowLocking,
 			excludeMutations,
 			inScope,
 		)
@@ -746,6 +747,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		nil, /* indexFlags */
+		noRowLocking,
 		includeMutations,
 		inScope,
 	)

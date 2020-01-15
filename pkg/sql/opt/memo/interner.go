@@ -311,17 +311,24 @@ func (h *hasher) HashFloat64(val float64) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashRune(val rune) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashString(val string) {
 	for _, c := range val {
-		h.hash ^= internHash(c)
-		h.hash *= prime64
+		h.HashRune(c)
 	}
+}
+
+func (h *hasher) HashByte(val byte) {
+	h.HashRune(rune(val))
 }
 
 func (h *hasher) HashBytes(val []byte) {
 	for _, c := range val {
-		h.hash ^= internHash(c)
-		h.hash *= prime64
+		h.HashByte(c)
 	}
 }
 
@@ -540,6 +547,13 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	h.HashFloat64(val.LimitHint)
 }
 
+func (h *hasher) HashLockingItem(val *tree.LockingItem) {
+	if val != nil {
+		h.HashByte(byte(val.Strength))
+		h.HashByte(byte(val.WaitPolicy))
+	}
+}
+
 func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -646,7 +660,15 @@ func (h *hasher) IsFloat64Equal(l, r float64) bool {
 	return math.Float64bits(l) == math.Float64bits(r)
 }
 
+func (h *hasher) IsRuneEqual(l, r rune) bool {
+	return l == r
+}
+
 func (h *hasher) IsStringEqual(l, r string) bool {
+	return l == r
+}
+
+func (h *hasher) IsByteEqual(l, r byte) bool {
 	return l == r
 }
 
@@ -852,6 +874,13 @@ func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
 
 func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
+}
+
+func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
+	if l == nil || r == nil {
+		return l == r
+	}
+	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
 }
 
 func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {

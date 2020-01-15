@@ -983,26 +983,28 @@ func (f *LockingItem) Format(ctx *FmtCtx) {
 // statement.
 type LockingStrength byte
 
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
 const (
 	// ForNone represents the default - no for statement at all.
 	// LockingItem AST nodes are never created with this strength.
 	ForNone LockingStrength = iota
-	// ForUpdate represents FOR UPDATE.
-	ForUpdate
-	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
-	ForNoKeyUpdate
-	// ForShare represents FOR SHARE.
-	ForShare
 	// ForKeyShare represents FOR KEY SHARE.
 	ForKeyShare
+	// ForShare represents FOR SHARE.
+	ForShare
+	// ForNoKeyUpdate represents FOR NO KEY UPDATE.
+	ForNoKeyUpdate
+	// ForUpdate represents FOR UPDATE.
+	ForUpdate
 )
 
 var lockingStrengthName = [...]string{
 	ForNone:        "",
-	ForUpdate:      "FOR UPDATE",
-	ForNoKeyUpdate: "FOR NO KEY UPDATE",
-	ForShare:       "FOR SHARE",
 	ForKeyShare:    "FOR KEY SHARE",
+	ForShare:       "FOR SHARE",
+	ForNoKeyUpdate: "FOR NO KEY UPDATE",
+	ForUpdate:      "FOR UPDATE",
 }
 
 func (s LockingStrength) String() string {
@@ -1017,11 +1019,18 @@ func (s LockingStrength) Format(ctx *FmtCtx) {
 	}
 }
 
+// Max returns the maximum of the two locking strengths.
+func (s LockingStrength) Max(s2 LockingStrength) LockingStrength {
+	return LockingStrength(max(byte(s), byte(s2)))
+}
+
 // LockingWaitPolicy represents the possible policies for dealing with rows
 // being locked by FOR UPDATE/SHARE clauses (i.e., it represents the NOWAIT
 // and SKIP LOCKED options).
 type LockingWaitPolicy byte
 
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
 const (
 	// LockWaitBlock represents the default - wait for the lock to become
 	// available.
@@ -1049,4 +1058,16 @@ func (p LockingWaitPolicy) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 		ctx.WriteString(p.String())
 	}
+}
+
+// Max returns the maximum of the two locking wait policies.
+func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
+	return LockingWaitPolicy(max(byte(p), byte(p2)))
+}
+
+func max(a, b byte) byte {
+	if a > b {
+		return a
+	}
+	return b
 }
