@@ -16,9 +16,9 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
 flow              DelRange /Table/53/1 - /Table/53/2
-dist sender send  r28: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng to (n1,s1):1
 flow              DelRange /Table/53/1/601/0 - /Table/53/2
-dist sender send  r28: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng to (n1,s1):1
 
 # Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
 # chunk of fewer than 600 keys.
@@ -34,4 +34,4 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
 ----
 flow              DelRange /Table/53/1/5 - /Table/53/1/5/#
-dist sender send  r28: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
