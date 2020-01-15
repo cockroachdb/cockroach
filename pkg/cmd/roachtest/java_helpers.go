@@ -20,14 +20,22 @@ import (
 
 var issueRegexp = regexp.MustCompile(`See: https://github.com/cockroachdb/cockroach/issues/(\d+)`)
 
+type status int
+
+const (
+	pass status = iota
+	fail
+	skip
+)
+
 // extractFailureFromJUnitXML parses an XML report to find all failed tests. The
 // return values are:
 // - slice of all test names.
-// - slice of bool for each test, with true indicating pass.
+// - slice of status for each test.
 // - map from name of a failed test to a github issue that explains the failure,
 //   if the error message contained a reference to an issue.
 // - error if there was a problem parsing the XML.
-func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]string, error) {
+func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string]string, error) {
 	type Failure struct {
 		Message string `xml:"message,attr"`
 	}
@@ -56,18 +64,19 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 	_ = testSuites.XMLName
 
 	var tests []string
-	var passed []bool
+	var testStatuses []status
 	var failedTestToIssue = make(map[string]string)
 	processTestSuite := func(testSuite TestSuite) {
 		for _, testCase := range testSuite.TestCases {
-			if testCase.Skipped != nil {
-				continue
-			}
 			testName := fmt.Sprintf("%s.%s", testCase.ClassName, testCase.Name)
 			testPassed := len(testCase.Failure.Message) == 0 && len(testCase.Error.Message) == 0
 			tests = append(tests, testName)
-			passed = append(passed, testPassed)
-			if !testPassed {
+			if testCase.Skipped != nil {
+				testStatuses = append(testStatuses, skip)
+			} else if testPassed {
+				testStatuses = append(testStatuses, pass)
+			} else {
+				testStatuses = append(testStatuses, fail)
 				message := testCase.Failure.Message
 				if len(message) == 0 {
 					message = testCase.Error.Message
@@ -99,7 +108,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 		processTestSuite(testSuite)
 	}
 
-	return tests, passed, failedTestToIssue, nil
+	return tests, testStatuses, failedTestToIssue, nil
 }
 
 // parseJUnitXML parses testOutputInJUnitXMLFormat and updates the receiver
@@ -107,7 +116,7 @@ func extractFailureFromJUnitXML(contents []byte) ([]string, []bool, map[string]s
 func (r *ormTestsResults) parseJUnitXML(
 	t *test, expectedFailures, ignorelist blacklist, testOutputInJUnitXMLFormat []byte,
 ) {
-	tests, passed, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
+	tests, statuses, issueHints, err := extractFailureFromJUnitXML(testOutputInJUnitXMLFormat)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,26 +135,29 @@ func (r *ormTestsResults) parseJUnitXML(
 		if len(issue) == 0 || issue == "unknown" {
 			issue = issueHints[test]
 		}
-		pass := passed[i]
+		status := statuses[i]
 		switch {
 		case expectedIgnored:
-			r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
+			r.results[test] = fmt.Sprintf("--- IGNORE: %s due to %s (expected)", test, ignoredIssue)
 			r.ignoredCount++
-		case pass && !expectedFailure:
+		case status == skip:
+			r.results[test] = fmt.Sprintf("--- SKIP: %s", test)
+			r.skipCount++
+		case status == pass && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 			r.passExpectedCount++
-		case pass && expectedFailure:
+		case status == pass && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.passUnexpectedCount++
-		case !pass && expectedFailure:
+		case status == fail && expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 				test, maybeAddGithubLink(issue),
 			)
 			r.failExpectedCount++
 			r.currentFailures = append(r.currentFailures, test)
-		case !pass && !expectedFailure:
+		case status == fail && !expectedFailure:
 			r.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 				test, maybeAddGithubLink(issue))
 			r.failUnexpectedCount++
