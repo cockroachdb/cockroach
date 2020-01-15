@@ -320,7 +320,7 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 			}
 			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
 			if c.Cfg.Insecure {
-				args = append(args, "--insecure")
+				args = append(args, "--insecure=true")
 			} else {
 				args = append(args, "--insecure=false")
 				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
