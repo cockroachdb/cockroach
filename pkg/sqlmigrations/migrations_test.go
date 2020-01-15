@@ -705,3 +705,41 @@ func TestUpdateSystemLocationData(t *testing.T) {
 		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
 	}
 }
+
+func TestMigrateNamespaceTableDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "create new system.namespace table")
+	mt.start(t, base.TestServerArgs{})
+
+	// Since we're already on 20.1, mimic the beginning state by deleting the
+	// new namespace descriptor and changing the old one's name to "namespace".
+	key := sqlbase.MakeDescMetadataKey(keys.NamespaceTableID)
+	require.NoError(t, mt.kvDB.Del(ctx, key))
+
+	deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
+	kv, err := mt.kvDB.Get(ctx, deprecatedKey)
+	require.NoError(t, err)
+	desc := &sqlbase.Descriptor{}
+	require.NoError(t, kv.ValueProto(desc))
+	desc.GetTable().Name = sqlbase.NamespaceTable.Name
+	require.NoError(t, mt.kvDB.Put(ctx, deprecatedKey, desc))
+
+	// Run the migration.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	// Check that the persisted descriptors now match our in-memory versions.
+	kv, err = mt.kvDB.Get(ctx, key)
+	require.NoError(t, err)
+	require.NoError(t, kv.ValueProto(desc))
+	require.True(t, desc.GetTable().Equal(sqlbase.NamespaceTable))
+
+	kv, err = mt.kvDB.Get(ctx, deprecatedKey)
+	require.NoError(t, err)
+	require.NoError(t, kv.ValueProto(desc))
+	require.True(t, desc.GetTable().Equal(sqlbase.DeprecatedNamespaceTable))
+}
