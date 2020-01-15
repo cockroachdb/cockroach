@@ -125,6 +125,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
+		// Replaced by addAdminRoleWithHasCreateRole migration.
 		name:   "add system.users isRole column and create admin role",
 		workFn: addAdminRole,
 	},

@@ -322,8 +322,7 @@ func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleprivil
 			`SELECT 1 from %s WHERE option = '%s' AND username = ANY($1) LIMIT 1`,
 			roleOptionsTableName,
 			rolePrivilege.String(),
-		),
-		roles)
+		))
 
 	if err != nil {
 		return err
