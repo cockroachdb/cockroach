@@ -12,12 +12,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -45,12 +46,7 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.DELETE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -182,9 +178,26 @@ func (n *DropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-user",
 			params.p.txn,
-			`DELETE FROM system.users WHERE username=$1 AND "isRole" = $2`,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username=$1 AND "isRole" = $2`,
+				userTableName,
+			),
 			normalizedUsername,
 			n.isRole,
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"drop-user",
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username=$1`,
+				roleOptionsTableName,
+			),
+			normalizedUsername,
 		)
 		if err != nil {
 			return err

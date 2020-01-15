@@ -72,6 +72,15 @@ CREATE TABLE system.users (
   "isRole"         BOOL NOT NULL DEFAULT false
 );`
 
+	RoleOptionsTableSchema = `
+CREATE TABLE system.role_options (
+	username STRING NOT NULL,
+	option STRING NOT NULL,
+	value STRING,
+	PRIMARY KEY (username, option),
+	FAMILY "primary" (username, option, value)
+)`
+
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
@@ -264,6 +273,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.DeprecatedNamespaceTableID: privilege.ReadData,
 	keys.DescriptorTableID:          privilege.ReadData,
 	keys.UsersTableID:               privilege.ReadWriteData,
+	keys.RoleOptionsTableID:         privilege.ReadWriteData,
 	keys.ZonesTableID:               privilege.ReadWriteData,
 	// We eventually want to migrate the table to appear read-only to force the
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
@@ -1241,6 +1251,43 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
+
+	// RoleOptionsTable is the descriptor for the role_options table.
+	RoleOptionsTable = TableDescriptor{
+		Name:                    "role_options",
+		ID:                      keys.RoleOptionsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "username", ID: 1, Type: *types.String},
+			{Name: "option", ID: 2, Type: *types.String},
+			{Name: "value", ID: 3, Type: *types.String, Nullable: true},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ColumnNames:     []string{"username", "option", "value"},
+				ColumnIDs:       []ColumnID{1, 2, 3},
+				DefaultColumnID: 3,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"username", "option"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+			Version:          SecondaryIndexFamilyFormatVersion,
+		},
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleOptionsTableID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 )
 
 // Create a kv pair for the zone config for the given key and config value.
@@ -1278,6 +1325,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &RoleOptionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.
 	target.AddDescriptor(keys.SystemDatabaseID, &TableStatisticsTable)

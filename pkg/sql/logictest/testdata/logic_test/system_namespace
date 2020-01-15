@@ -26,6 +26,7 @@ SELECT * FROM system.namespace
 1   29  replication_stats                27
 1   29  reports_meta                     28
 1   29  role_members                     23
+1   29  role_options                     33
 1   29  settings                         6
 1   29  table_statistics                 20
 1   29  ui                               14
