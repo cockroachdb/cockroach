@@ -11,6 +11,7 @@
 package engine
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -178,7 +179,7 @@ func (fw *SSTWriter) Close() {
 // Implements the writeCloseSyncer interface and is intended for use with
 // SSTWriter.
 type MemFile struct {
-	data []byte
+	bytes.Buffer
 }
 
 // Close implements the writeCloseSyncer interface.
@@ -191,13 +192,7 @@ func (*MemFile) Sync() error {
 	return nil
 }
 
-// Write implements the writeCloseSyncer interface.
-func (f *MemFile) Write(p []byte) (int, error) {
-	f.data = append(f.data, p...)
-	return len(p), nil
-}
-
 // Data returns the in-memory buffer behind this MemFile.
 func (f *MemFile) Data() []byte {
-	return f.data
+	return f.Bytes()
 }
