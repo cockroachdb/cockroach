@@ -1,7 +1,12 @@
-# Doesn't like empty input.
-strip
+# OK with empty input
+omit
 ----
-not a single test was parsed
+
+# Does not like input without JSON but with plain text output (avoids misconfiguration)
+omit
+PASS
+----
+not a single test was parsed, but detected test output: PASS
 
 # Strips passing tests but keeps the start/stop events as well as random non-test output.
 strip

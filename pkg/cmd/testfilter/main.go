@@ -120,13 +120,17 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 	}
 	m := map[tup]*ent{}
 	ev := &testEvent{}
-	var n int // number of JSON lines parsed
+	var n int               // number of JSON lines parsed
+	var passFailLine string // catch common error of piping non-json test output in
 	for scanner.Scan() {
 		line := scanner.Text() // has no EOL marker
 		if len(line) <= 2 || line[0] != '{' || line[len(line)-1] != '}' {
 			// Not test2json output, pass it through except in `omit` mode.
 			// It's important that we still see build errors etc when running
 			// in -mode=strip.
+			if passFailLine == "" && (strings.Contains(line, "PASS") || strings.Contains(line, "FAIL")) {
+				passFailLine = line
+			}
 			if mode != modeOmit {
 				fmt.Fprintln(out, line)
 			}
@@ -203,13 +207,13 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 	// if len(m) != 0 {
 	// 	return fmt.Errorf("%d tests did not terminate (a package likely exited prematurely)", len(m))
 	// }
-	if mode != modeConvert && n == 0 {
+	if mode != modeConvert && n == 0 && passFailLine != "" {
 		// Without this, if the input to this command wasn't even JSON, we would
 		// pass. That's a mistake we should avoid at all costs. Note that even
 		// `go test -run - ./some/pkg` produces n>0 due to the start/pass events
 		// for the package, so if we're here then 100% something weird is going
 		// on.
-		return fmt.Errorf("not a single test was parsed")
+		return fmt.Errorf("not a single test was parsed, but detected test output: %s", passFailLine)
 	}
 	return nil
 }
