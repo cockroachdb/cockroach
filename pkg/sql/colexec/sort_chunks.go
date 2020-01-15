@@ -365,6 +365,9 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 // buffer appends all tuples in range [start,end) from s.batch to already
 // buffered tuples.
 func (s *chunker) buffer(start uint16, end uint16) {
+	if start == end {
+		return
+	}
 	s.allocator.PerformOperation(s.bufferedTuples.colVecs, func() {
 		for i := 0; i < len(s.bufferedTuples.colVecs); i++ {
 			s.bufferedTuples.colVecs[i].Append(

@@ -80,10 +80,9 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 	s.internalBatch.SetSelection(s.sel != nil)
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
-		s.internalBatch.SetLength(0)
-	} else {
-		s.internalBatch.SetLength(s.batchLen)
+		return coldata.ZeroBatch
 	}
+	s.internalBatch.SetLength(s.batchLen)
 	if s.sel != nil {
 		// Since selection vectors are mutable, to make sure that we return the
 		// batch with the given selection vector, we need to reset

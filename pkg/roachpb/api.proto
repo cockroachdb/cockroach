@@ -620,10 +620,13 @@ message EndTxnRequest {
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
-  // Set to true if this transaction is serializable isolation but has
-  // accummulated no refresh spans. This allows the executing server
-  // to retry it locally on the fast path.
-  bool no_refresh_spans = 8;
+  // CanCommitAtHigherTimestamp indicates that the batch this EndTxn is part of
+  // can be evaluated at a higher timestamp than the transaction's read
+  // timestamp. This is set by the client if the transaction has not performed
+  // any reads that must be refreshed prior to sending this current batch. When
+  // set, it allows the server to handle pushes and write too old conditions
+  // locally.
+  bool can_commit_at_higher_timestamp = 8;
   // True to indicate that intent spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
@@ -1832,6 +1835,13 @@ message Header {
   // ability. Set this flag to request deferred errors, which can
   // improve performance under heavy contention when client-side
   // retries are already inevitable.
+  //
+  // Non-transactional requests are not allowed to set this flag (since there's
+  // nowhere to defer the error to). At the replica level, this flag is ignored
+  // when the batch contains an EndTxn (similarly to before, there's nowhere to
+  // defer the error to). However, the client is allowed to set the flag in a
+  // batch that contains the EndTxn, and it will have an effect for any
+  // sub-batches that are split off by the DistSender.
   bool defer_write_too_old_error = 14;
 }
 
@@ -1868,9 +1878,8 @@ message BatchResponse {
     // error and returns it separately). In effect, nearly no usage of
     // BatchResponse needs to care about this field.
     Error error = 1;
-    // timestamp is set only for non-transactional responses and denotes the
-    // timestamp at which the batch executed. The timestamp cache is updated
-    // at this timestamp.
+    // timestamp denotes the timestamp at which the batch's reads executed. The
+    // timestamp cache is updated at this timestamp.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have

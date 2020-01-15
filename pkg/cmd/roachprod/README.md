@@ -87,6 +87,29 @@ marc-foo: 23h59m42s remaining
 Syncing...
 ```
 
+#### Choosing a Provider
+
+Use the `--clouds` flag to set which cloud provider(s) to use. Ex:
+
+```
+$ roachprod create foo --clouds gce,aws
+```
+
+#### Node Distribution Options
+
+There are a couple flags that interact to create nodes in one zone or in
+geographically distributed zones:
+
+- `--geo`
+- the `--[provider]-zones` flags (`--gce-zones`, `--aws-zones`, `--azure-locations`)
+
+Here's what to expect when the options are combined:
+
+- _If neither are set_: nodes are all placed within one of the the provider's default zones
+- _`--geo` only_: nodes are spread across the provider's default zones
+- _`--[provider]-zones` or `--geo --[provider]-zones`_: nodes are spread across
+  all the specified zones
+
 ### Interact using crl-prod tools
 
 `roachprod` populates hosts files in `~/.roachprod/hosts`. These are used by

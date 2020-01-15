@@ -2350,3 +2350,22 @@ query B
 SELECT (1, 2) IN ((2, 3), NULL)
 ----
 NULL
+
+# Test for regression in hex functions.
+subtest regression_41707
+
+# The int8 casts make it match postgres behavior - unfortunately, we do not default to int4.
+query TTTTTTT
+select to_hex(-2147483649), to_hex(-2147483648::int8), to_hex(-1::int8), to_hex(0), to_hex(1), to_hex(2147483647), to_hex(2147483648)
+----
+ffffffff7fffffff  ffffffff80000000  ffffffffffffffff  0  1  7fffffff  80000000
+
+query T
+select to_hex(E'\\047\\134'::bytea)
+----
+275c
+
+query T
+select to_hex('abc')
+----
+616263

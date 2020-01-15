@@ -351,6 +351,4 @@ var PostgresMode = multiOption(
 	// Some func impls differ from postgres, so skip them here.
 	// #41709
 	IgnoreFNs("^sha"),
-	// #41707
-	IgnoreFNs("^to_hex"),
 )
