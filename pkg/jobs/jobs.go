@@ -129,10 +129,8 @@ func (j *Job) Created(ctx context.Context) error {
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusPending {
-			// Already started - do nothing.
-			return nil
-		}
+		// TODO(spaskob): Remove this status change after we stop supporting
+		// pending job states.
 		ju.UpdateStatus(StatusRunning)
 		md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
@@ -502,7 +500,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 		}
 
 		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes, progressBytes)
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
 		return err
 	}); err != nil {
 		return err
