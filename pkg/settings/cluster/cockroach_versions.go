@@ -56,6 +56,7 @@ const (
 	VersionPrimaryKeyColumnsOutOfFamilyZero
 	VersionRootPassword
 	VersionNoExplicitForeignKeyIndexIDs
+	VersionCreateRolePrivilege
 
 	// Add new versions here (step one of two).
 )
@@ -398,7 +399,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionNoExplicitForeignKeyIndexIDs,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 11},
 	},
-
+	{
+		// VersionCreateRolePrivilege is https://github.com/cockroachdb/cockroach/pull/44232.
+		//
+		// It represents adding role management via CREATEROLE privilege.
+		// Added new column in system.users table to track hasCreateRole.
+		Key:     VersionCreateRolePrivilege,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 12},
+	},
 	// Add new versions here (step two of two).
 
 })
