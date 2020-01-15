@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -43,12 +43,7 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.DELETE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
