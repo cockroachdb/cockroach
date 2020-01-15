@@ -88,3 +88,7 @@ func maybeRerunBackground() (bool, error) {
 	}
 	return false, nil
 }
+
+func disableOtherPermissionBits() {
+	_ = unix.Umask(0007)
+}
