@@ -672,8 +672,8 @@ func (s *statusServer) Details(
 		return nil, grpcstatus.Error(codes.Internal, err.Error())
 	}
 	nowHlc := hlc.Timestamp{WallTime: s.admin.server.clock.PhysicalNow()}
-	isReady := l.IsLive(nowHlc) && !l.Draining
-	if !isReady {
+	isHealthy := l.IsLive(nowHlc) && !l.Draining
+	if !isHealthy {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
@@ -1040,7 +1040,8 @@ func (s *statusServer) Nodes(
 		}
 	}
 
-	resp.LivenessByNodeID = s.nodeLiveness.GetLivenessStatusMap()
+	clock := s.admin.server.clock
+	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
 
 	return &resp, nil
 }
@@ -1054,7 +1055,8 @@ func (s *statusServer) nodesStatusWithLiveness(
 	if err != nil {
 		return nil, err
 	}
-	statusMap := s.nodeLiveness.GetLivenessStatusMap()
+	clock := s.admin.server.clock
+	statusMap := getLivenessStatusMap(s.nodeLiveness, clock.PhysicalTime(), s.st)
 	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
