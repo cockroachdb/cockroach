@@ -705,3 +705,53 @@ func TestUpdateSystemLocationData(t *testing.T) {
 		t.Fatalf("Exected to find 0 rows in system.locations. Found  %d instead", count)
 	}
 }
+
+func TestMigrateNamespaceTableDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "create new system.namespace table")
+	mt.start(t, base.TestServerArgs{})
+
+	// Since we're already on 20.1, mimic the beginning state by deleting the
+	// new namespace descriptor and changing the old one's name to "namespace".
+	key := sqlbase.MakeDescMetadataKey(keys.NamespaceTableID)
+	require.NoError(t, mt.kvDB.Del(ctx, key))
+
+	deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
+	desc := &sqlbase.Descriptor{}
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
+		require.NoError(t, err)
+		desc.Table(ts).Name = sqlbase.NamespaceTable.Name
+		return txn.Put(ctx, deprecatedKey, desc)
+	}))
+
+	// Run the migration.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Check that the persisted descriptors now match our in-memory versions,
+		// ignoring create and modification times.
+		{
+			ts, err := txn.GetProtoTs(ctx, key, desc)
+			require.NoError(t, err)
+			table := desc.Table(ts)
+			table.CreateAsOfTime = sqlbase.NamespaceTable.CreateAsOfTime
+			table.ModificationTime = sqlbase.NamespaceTable.ModificationTime
+			require.True(t, table.Equal(sqlbase.NamespaceTable))
+		}
+		{
+			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
+			require.NoError(t, err)
+			table := desc.Table(ts)
+			table.CreateAsOfTime = sqlbase.DeprecatedNamespaceTable.CreateAsOfTime
+			table.ModificationTime = sqlbase.DeprecatedNamespaceTable.ModificationTime
+			require.True(t, table.Equal(sqlbase.DeprecatedNamespaceTable))
+		}
+		return nil
+	}))
+}
