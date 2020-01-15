@@ -99,15 +99,22 @@ func (c *insertFastPathFKCheck) init() error {
 	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(&c.tabDesc.TableDescriptor, c.idxDesc.ID)
 	c.spanBuilder = span.MakeBuilder(c.tabDesc.TableDesc(), c.idxDesc)
 
-	if len(c.InsertCols) > len(c.idxDesc.ColumnIDs) {
+	if len(c.InsertCols) > len(c.idxDesc.ColumnIDs)+len(c.idxDesc.ExtraColumnIDs) {
 		return errors.AssertionFailedf(
 			"%d FK cols, only %d cols in index",
-			len(c.InsertCols), len(c.idxDesc.ColumnIDs),
+			len(c.InsertCols),
+			len(c.idxDesc.ColumnIDs)+len(c.idxDesc.ExtraColumnIDs),
 		)
 	}
 	c.colMap = make(map[sqlbase.ColumnID]int, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
-		colID := c.idxDesc.ColumnIDs[i]
+		var colID sqlbase.ColumnID
+		if i < len(c.idxDesc.ColumnIDs) {
+			colID = c.idxDesc.ColumnIDs[i]
+		} else {
+			colID = c.idxDesc.ExtraColumnIDs[i-len(c.idxDesc.ColumnIDs)]
+		}
+
 		c.colMap[colID] = int(ord)
 	}
 	return nil

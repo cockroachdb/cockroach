@@ -101,7 +101,7 @@ func EncodePartialIndexSpan(
 }
 
 // EncodePartialIndexKey encodes a partial index key; only the first numCols of
-// index.ColumnIDs are encoded.
+// append(index.ColumnIDs, index.ExtraColumnIDs) are encoded.
 func EncodePartialIndexKey(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -110,7 +110,17 @@ func EncodePartialIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	colIDs := index.ColumnIDs[:numCols]
+	var colIDs, extraColIDs []ColumnID
+	if numCols <= len(index.ColumnIDs) {
+		colIDs = index.ColumnIDs[:numCols]
+	} else {
+		colIDs = index.ColumnIDs
+		numExtraCols := numCols - len(index.ColumnIDs)
+		// The capacity argument is used to cause a runtime error if we have too
+		// many columns (even if the slice has extra capacity).
+		extraColIDs = index.ExtraColumnIDs[:numExtraCols:len(index.ExtraColumnIDs)]
+	}
+
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add twice the key prefix as an initial guess.
@@ -118,7 +128,8 @@ func EncodePartialIndexKey(
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = make([]byte, len(keyPrefix), 2*len(keyPrefix)+3*len(index.Interleave.Ancestors)+2*len(values))
 	copy(key, keyPrefix)
-	dirs := directions(index.ColumnDirections)[:numCols]
+
+	dirs := directions(index.ColumnDirections)
 
 	if len(index.Interleave.Ancestors) > 0 {
 		for i, ancestor := range index.Interleave.Ancestors {
@@ -137,7 +148,7 @@ func EncodePartialIndexKey(
 			var n bool
 			key, n, err = EncodeColumns(colIDs[:length], dirs[:length], colMap, values, key)
 			if err != nil {
-				return key, containsNull, err
+				return nil, false, err
 			}
 			containsNull = containsNull || n
 			if partial {
@@ -147,6 +158,7 @@ func EncodePartialIndexKey(
 				return key, containsNull, nil
 			}
 			colIDs, dirs = colIDs[length:], dirs[length:]
+			numCols -= length
 			// Each ancestor is separated by an interleaved
 			// sentinel (0xfe).
 			key = encoding.EncodeInterleavedSentinel(key)
@@ -158,8 +170,17 @@ func EncodePartialIndexKey(
 
 	var n bool
 	key, n, err = EncodeColumns(colIDs, dirs, colMap, values, key)
+	if err != nil {
+		return nil, false, err
+	}
 	containsNull = containsNull || n
-	return key, containsNull, err
+
+	key, n, err = EncodeColumns(extraColIDs, nil /* directions */, colMap, values, key)
+	if err != nil {
+		return nil, false, err
+	}
+	containsNull = containsNull || n
+	return key, containsNull, nil
 }
 
 type directions []IndexDescriptor_Direction
