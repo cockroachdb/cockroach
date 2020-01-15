@@ -1687,54 +1687,13 @@ CockroachDB supports the following flags:
 		},
 	),
 
-	"now": txnTSImpl,
-	"current_time": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
-		tree.Overload{
-			Types:             tree.ArgTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: true,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return ctx.GetTxnTime(time.Microsecond), nil
-			},
-			Info: "Returns the current transaction's time with time zone.",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.Time),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return ctx.GetTxnTimeNoZone(time.Microsecond), nil
-			},
-			Info: "Returns the current transaction's time with no time zone.",
-		},
-		tree.Overload{
-			Types:             tree.ArgTypes{{"precision", types.Int}},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: true,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				prec := int32(tree.MustBeDInt(args[0]))
-				if prec < 0 || prec > 6 {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
-				}
-				return ctx.GetTxnTime(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
-			},
-			Info: "Returns the current transaction's time with time zone.",
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"precision", types.Int}},
-			ReturnType: tree.FixedReturnType(types.Time),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				prec := int32(tree.MustBeDInt(args[0]))
-				if prec < 0 || prec > 6 {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
-				}
-				return ctx.GetTxnTimeNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
-			},
-			Info: "Returns the current transaction's time with no time zone.",
-		},
-	),
-	"current_timestamp":     txnTSWithPrecisionImpl,
-	"transaction_timestamp": txnTSImpl,
+	"now":                   txnTSImplBuiltin(true),
+	"current_time":          txnTimeWithPrecisionBuiltin(true),
+	"current_timestamp":     txnTSWithPrecisionImplBuiltin(true),
+	"transaction_timestamp": txnTSImplBuiltin(true),
+
+	"localtimestamp": txnTSWithPrecisionImplBuiltin(false),
+	"localtime":      txnTimeWithPrecisionBuiltin(false),
 
 	"statement_timestamp": makeBuiltin(
 		tree.FunctionProperties{Impure: true},
@@ -3587,90 +3546,150 @@ has no relationship with the commit order of concurrent transactions.`
 
 var txnTSDoc = `Returns the time of the current transaction.` + txnTSContextDoc
 
-var txnTSOverloads = []tree.Overload{
-	{
-		Types:             tree.ArgTypes{},
-		ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-		PreferredOverload: true,
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return ctx.GetTxnTimestamp(time.Microsecond), nil
+func txnTSOverloads(preferTZOverload bool) []tree.Overload {
+	return []tree.Overload{
+		{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
+			PreferredOverload: preferTZOverload,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTimestamp(time.Microsecond), nil
+			},
+			Info: txnTSDoc,
 		},
-		Info: txnTSDoc,
-	},
-	{
-		Types:      tree.ArgTypes{},
-		ReturnType: tree.FixedReturnType(types.Timestamp),
-		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
+		{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.Timestamp),
+			PreferredOverload: !preferTZOverload,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
+			},
+			Info: txnTSDoc,
 		},
-		Info: txnTSDoc,
-	},
-	{
-		Types:      tree.ArgTypes{},
-		ReturnType: tree.FixedReturnType(types.Date),
-		Fn:         currentDate,
-		Info:       txnTSDoc,
-	},
+		{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Date),
+			Fn:         currentDate,
+			Info:       txnTSDoc,
+		},
+	}
 }
 
-var txnTSWithPrecisionOverloads = append(
-	[]tree.Overload{
-		{
+func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
+	return append(
+		[]tree.Overload{
+			{
+				Types:             tree.ArgTypes{{"precision", types.Int}},
+				ReturnType:        tree.FixedReturnType(types.TimestampTZ),
+				PreferredOverload: preferTZOverload,
+				Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+					prec := int32(tree.MustBeDInt(args[0]))
+					if prec < 0 || prec > 6 {
+						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					}
+					return ctx.GetTxnTimestamp(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+				},
+				Info: txnTSDoc,
+			},
+			{
+				Types:             tree.ArgTypes{{"precision", types.Int}},
+				ReturnType:        tree.FixedReturnType(types.Timestamp),
+				PreferredOverload: !preferTZOverload,
+				Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+					prec := int32(tree.MustBeDInt(args[0]))
+					if prec < 0 || prec > 6 {
+						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					}
+					return ctx.GetTxnTimestampNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+				},
+				Info: txnTSDoc,
+			},
+			{
+				Types:      tree.ArgTypes{{"precision", types.Int}},
+				ReturnType: tree.FixedReturnType(types.Date),
+				Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+					prec := int32(tree.MustBeDInt(args[0]))
+					if prec < 0 || prec > 6 {
+						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					}
+					return currentDate(ctx, args)
+				},
+				Info: txnTSDoc,
+			},
+		},
+		txnTSOverloads(preferTZOverload)...,
+	)
+}
+
+func txnTSImplBuiltin(preferTZOverload bool) builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+			Impure:   true,
+		},
+		txnTSOverloads(preferTZOverload)...,
+	)
+}
+
+func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+			Impure:   true,
+		},
+		txnTSWithPrecisionOverloads(preferTZOverload)...,
+	)
+}
+
+func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
+	return makeBuiltin(
+		tree.FunctionProperties{Impure: true},
+		tree.Overload{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.TimeTZ),
+			PreferredOverload: preferTZOverload,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTime(time.Microsecond), nil
+			},
+			Info: "Returns the current transaction's time with time zone.",
+		},
+		tree.Overload{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.Time),
+			PreferredOverload: !preferTZOverload,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTimeNoZone(time.Microsecond), nil
+			},
+			Info: "Returns the current transaction's time with no time zone.",
+		},
+		tree.Overload{
 			Types:             tree.ArgTypes{{"precision", types.Int}},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: true,
+			ReturnType:        tree.FixedReturnType(types.TimeTZ),
+			PreferredOverload: preferTZOverload,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {
 					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
 				}
-				return ctx.GetTxnTimestamp(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+				return ctx.GetTxnTime(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},
-			Info: txnTSDoc,
+			Info: "Returns the current transaction's time with time zone.",
 		},
-		{
-			Types:      tree.ArgTypes{{"precision", types.Int}},
-			ReturnType: tree.FixedReturnType(types.Timestamp),
+		tree.Overload{
+			Types:             tree.ArgTypes{{"precision", types.Int}},
+			ReturnType:        tree.FixedReturnType(types.Time),
+			PreferredOverload: !preferTZOverload,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {
 					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
 				}
-				return ctx.GetTxnTimestampNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
+				return ctx.GetTxnTimeNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},
-			Info: txnTSDoc,
+			Info: "Returns the current transaction's time with no time zone.",
 		},
-		{
-			Types:      tree.ArgTypes{{"precision", types.Int}},
-			ReturnType: tree.FixedReturnType(types.Date),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				prec := int32(tree.MustBeDInt(args[0]))
-				if prec < 0 || prec > 6 {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
-				}
-				return currentDate(ctx, args)
-			},
-			Info: txnTSDoc,
-		},
-	},
-	txnTSOverloads...,
-)
-
-var txnTSImpl = makeBuiltin(
-	tree.FunctionProperties{
-		Category: categoryDateAndTime,
-		Impure:   true,
-	},
-	txnTSOverloads...,
-)
-
-var txnTSWithPrecisionImpl = makeBuiltin(
-	tree.FunctionProperties{
-		Category: categoryDateAndTime,
-		Impure:   true,
-	},
-	txnTSWithPrecisionOverloads...,
-)
+	)
+}
 
 func currentDate(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 	t := ctx.GetTxnTimestamp(time.Microsecond).Time

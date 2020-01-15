@@ -394,6 +394,36 @@ timezone, timezone_hour, timezone_minute</p>
 Compatible elements: hour, minute, second, millisecond, microsecond.
 This is deprecated in favor of <code>extract</code> which supports duration.</p>
 </span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp(precision: <a href="int.html">int</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp(precision: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
+<tr><td><a name="localtimestamp"></a><code>localtimestamp(precision: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
 <tr><td><a name="now"></a><code>now() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
@@ -1075,6 +1105,14 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="current_time"></a><code>current_time(precision: <a href="int.html">int</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with no time zone.</p>
 </span></td></tr>
 <tr><td><a name="current_time"></a><code>current_time(precision: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
+</span></td></tr>
+<tr><td><a name="localtime"></a><code>localtime() &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with no time zone.</p>
+</span></td></tr>
+<tr><td><a name="localtime"></a><code>localtime() &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
+</span></td></tr>
+<tr><td><a name="localtime"></a><code>localtime(precision: <a href="int.html">int</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with no time zone.</p>
+</span></td></tr>
+<tr><td><a name="localtime"></a><code>localtime(precision: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
 </span></td></tr></tbody>
 </table>
 
