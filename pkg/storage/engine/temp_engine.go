@@ -30,7 +30,7 @@ func NewTempEngine(
 	engine enginepb.EngineType,
 	tempStorage base.TempStorageConfig,
 	storeSpec base.StoreSpec,
-) (diskmap.Factory, error) {
+) (diskmap.Factory, FS, error) {
 	switch engine {
 	case enginepb.EngineTypeTeePebbleRocksDB:
 		fallthrough
@@ -80,12 +80,12 @@ func storageConfigFromTempStorageConfigAndStoreSpec(
 // the working set is larger than can be stored in memory.
 func NewRocksDBTempEngine(
 	tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (diskmap.Factory, error) {
+) (diskmap.Factory, FS, error) {
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
 		db := newRocksDBInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */)
-		return &rocksDBTempEngine{db: db}, nil
+		return &rocksDBTempEngine{db: db}, db, nil
 	}
 
 	cfg := RocksDBConfig{
@@ -96,10 +96,10 @@ func NewRocksDBTempEngine(
 	defer rocksDBCache.Release()
 	db, err := NewRocksDB(cfg, rocksDBCache)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &rocksDBTempEngine{db: db}, nil
+	return &rocksDBTempEngine{db: db}, db, nil
 }
 
 type pebbleTempEngine struct {
@@ -128,7 +128,7 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 // when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
-) (diskmap.Factory, error) {
+) (diskmap.Factory, FS, error) {
 	// Default options as copied over from pebble/cmd/pebble/db.go
 	opts := DefaultPebbleOptions()
 	// Pebble doesn't currently support 0-size caches, so use a 128MB cache for
@@ -156,8 +156,8 @@ func NewPebbleTempEngine(
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &pebbleTempEngine{db: p.db}, nil
+	return &pebbleTempEngine{db: p.db}, p, nil
 }
