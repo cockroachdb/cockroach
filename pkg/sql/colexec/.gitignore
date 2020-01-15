@@ -1,6 +1,7 @@
 and_or_projection.eg.go
 any_not_null_agg.eg.go
 avg_agg.eg.go
+bool_and_or_agg.eg.go
 cast.eg.go
 const.eg.go
 count_agg.eg.go
