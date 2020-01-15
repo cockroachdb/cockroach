@@ -20,7 +20,6 @@ var pgxBlacklists = blacklistsForVersion{
 // in the test log.
 var pgxBlackList20_1 = blacklist{
 	"v4.Example_CustomType":                                                   "27796",
-	"v4.TestArrayDecoding":                                                    "26925",
 	"v4.TestConnBeginBatchDeferredError":                                      "31632",
 	"v4.TestConnCopyFromCopyFromSourceErrorEnd":                               "5807",
 	"v4.TestConnCopyFromCopyFromSourceErrorMidway":                            "5807",
@@ -59,6 +58,7 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestInsertTimestampArray":                                             "5807",
 	"v4.TestLargeObjects":                                                     "26725",
 	"v4.TestLargeObjectsMultipleTransactions":                                 "26725",
+	"v4.TestLargeObjectsPreferSimpleProtocol":                                 "26725",
 	"v4.TestListenNotify":                                                     "41522",
 	"v4.TestListenNotifySelfNotification":                                     "41522",
 	"v4.TestListenNotifyWhileBusyIsSafe":                                      "41522",
@@ -82,7 +82,6 @@ var pgxIgnoreList20_1 = blacklist{
 
 var pgxBlackList19_2 = blacklist{
 	"v4.Example_CustomType":                                                   "27796",
-	"v4.TestArrayDecoding":                                                    "26925",
 	"v4.TestConnBeginBatchDeferredError":                                      "31632",
 	"v4.TestConnCopyFromCopyFromSourceErrorEnd":                               "5807",
 	"v4.TestConnCopyFromCopyFromSourceErrorMidway":                            "5807",
@@ -119,8 +118,9 @@ var pgxBlackList19_2 = blacklist{
 	"v4.TestInetCIDRTranscodeWithJustIP":                                      "18846",
 	"v4.TestInsertBoolArray":                                                  "5807",
 	"v4.TestInsertTimestampArray":                                             "5807",
-	"v4.TestLargeObjects":                                                     "42626",
-	"v4.TestLargeObjectsMultipleTransactions":                                 "42626",
+	"v4.TestLargeObjects":                                                     "26725",
+	"v4.TestLargeObjectsMultipleTransactions":                                 "26725",
+	"v4.TestLargeObjectsPreferSimpleProtocol":                                 "26725",
 	"v4.TestListenNotify":                                                     "41522",
 	"v4.TestListenNotifySelfNotification":                                     "41522",
 	"v4.TestListenNotifyWhileBusyIsSafe":                                      "41522",
