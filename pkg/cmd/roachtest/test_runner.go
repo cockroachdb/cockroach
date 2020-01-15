@@ -301,6 +301,38 @@ func (r *testRunner) Run(
 
 	if errs.Err() != nil {
 		shout(ctx, l, lopt.stdout, "FAIL (err: %s)", errs.Err())
+
+		// We stopped prematurely due to some irrecoverable error (e.g. failure
+		// to create a cluster). Likely many tests didn't even run, so post a
+		// meta issue about that.
+		//
+		// TODO(tbg): more generally distinguish timeouts and infra failures and
+		// customize this as appropriate.
+		if issues.CanPost() {
+			branch := "<unknown branch>"
+			if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+				branch = b
+			}
+			msg := fmt.Sprintf("roachtest exited due to an error on branch=%s, cloud=%s:\n%s",
+				branch, cloud, errs.Err())
+
+			const name = "test-runner"
+			req := issues.PostRequest{
+				TitleTemplate: fmt.Sprintf("roachtest: %s failed", name),
+				BodyTemplate:  issues.UnitTestFailureBody,
+				PackageName:   "roachtest",
+				TestName:      name,
+				Message:       msg,
+				ExtraLabels:   []string{"O-roachtest"},
+			}
+			if err := issues.Post(
+				context.Background(),
+				req,
+			); err != nil {
+				shout(ctx, l, lopt.stdout, "failed to post issue: %s", err)
+			}
+		}
+
 		return errs.Err()
 	}
 	passFailLine := r.generateReport()
