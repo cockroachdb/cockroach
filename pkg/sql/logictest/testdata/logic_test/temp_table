@@ -1,0 +1,42 @@
+statement ok
+SET experimental_enable_temp_tables=true
+
+subtest test_meta_tables
+
+statement ok
+CREATE TEMP TABLE temp_table_test (a timetz PRIMARY KEY)
+
+statement ok
+CREATE TEMP TABLE temp_table_ref (a timetz PRIMARY KEY)
+
+statement ok
+ALTER TABLE temp_table_ref ADD CONSTRAINT fk_temp FOREIGN KEY (a) REFERENCES temp_table_test(a)
+
+query TT
+SHOW CREATE TABLE temp_table_test
+----
+temp_table_test  CREATE TEMP TABLE temp_table_test (
+                 a TIMETZ NOT NULL,
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                 FAMILY "primary" (a)
+)
+
+query TT
+SELECT table_name, table_type FROM information_schema.tables WHERE table_name = 'temp_table_test' AND table_schema LIKE 'pg_temp_%'
+----
+temp_table_test  LOCAL TEMPORARY
+
+# query changes names, so we can only grab a count to be sure.
+query I
+SELECT count(1) FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'
+----
+1
+
+query T
+SELECT * FROM [SHOW TABLES FROM pg_temp] ORDER BY 1
+----
+temp_table_ref
+temp_table_test
+
+statement ok
+DROP TABLE temp_table_ref CASCADE; DROP TABLE temp_table_test CASCADE

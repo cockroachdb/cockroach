@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 // MakeNameMetadataKey returns the key for the name, as expected by
@@ -32,6 +33,45 @@ func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Ke
 		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[3].ID))
 	}
 	return k
+}
+
+// DecodeNameMetadataKey returns the components that make up the
+// NameMetadataKey for version >= 20.1.
+func DecodeNameMetadataKey(k roachpb.Key) (parentID ID, parentSchemaID ID, name string, err error) {
+	k, _, err = keys.DecodeTablePrefix(k)
+	if err != nil {
+		return 0, 0, "", err
+	}
+
+	var buf uint64
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	if buf != uint64(NamespaceTable.PrimaryIndex.ID) {
+		return 0, 0, "", errors.Newf("tried get table %d, but got %d", NamespaceTable.PrimaryIndex.ID, buf)
+	}
+
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	parentID = ID(buf)
+
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	parentSchemaID = ID(buf)
+
+	var bytesBuf []byte
+	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	name = string(bytesBuf)
+
+	return parentID, parentSchemaID, name, nil
 }
 
 // MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
