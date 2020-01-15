@@ -30,7 +30,7 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope *scope) {
-	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, inScope)
+	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, unknownRowLocking, inScope)
 
 	isLateral := false
 	inScopeRight := inScope
@@ -43,7 +43,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		inScopeRight = leftScope
 	}
 
-	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, inScopeRight)
+	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, unknownRowLocking, inScopeRight)
 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
