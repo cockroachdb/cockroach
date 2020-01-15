@@ -1,0 +1,15 @@
+statement ok
+SET experimental_enable_temp_tables=true
+
+subtest test_information_schema
+
+statement ok
+CREATE TEMP TABLE is_test (a timetz);
+
+query TTTTTI
+SELECT * FROM information_schema.tables WHERE table_name = 'is_test'
+----
+test  public  is_test  LOCAL TEMPORARY  YES  1
+
+statement ok
+DROP TABLE is_test

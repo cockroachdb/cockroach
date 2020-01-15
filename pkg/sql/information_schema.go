@@ -1317,6 +1317,7 @@ var (
 	tableTypeSystemView = tree.NewDString("SYSTEM VIEW")
 	tableTypeBaseTable  = tree.NewDString("BASE TABLE")
 	tableTypeView       = tree.NewDString("VIEW")
+	tableTypeTemporary  = tree.NewDString("LOCAL TEMPORARY")
 )
 
 var informationSchemaTablesTable = virtualSchemaTable{
@@ -1338,6 +1339,8 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				} else if table.IsView() {
 					tableType = tableTypeView
 					insertable = noString
+				} else if table.Temporary {
+					tableType = tableTypeTemporary
 				}
 				dbNameStr := tree.NewDString(db.Name)
 				scNameStr := tree.NewDString(scName)
