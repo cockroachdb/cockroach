@@ -531,8 +531,9 @@ func Post(ctx context.Context, req PostRequest) error {
 	return defaultP.post(ctx, req)
 }
 
-// CanPost returns true if the github API token environment variable is set.
+// CanPost returns true if the github API token environment variable is set to
+// a nontrivial value.
 func CanPost() bool {
-	_, ok := os.LookupEnv(githubAPITokenEnv)
-	return ok
+	s, ok := os.LookupEnv(githubAPITokenEnv)
+	return ok && len(s) > 0
 }
