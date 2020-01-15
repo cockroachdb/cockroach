@@ -534,6 +534,30 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn4.Sequence = txn.Sequence + 10
 	require.Equal(t, expTxn4, txn4)
 
+	// Test the updates to the WriteTooOld field. The WriteTooOld field is
+	// supposed to be dictated by the transaction with the higher ReadTimestamp,
+	// or it's cumulative when the ReadTimestamps are equal.
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(-1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.False(t, txn2.WriteTooOld)
+	}
+
 	// Updating a Transaction at a future epoch ignores all epoch-scoped fields.
 	var txn5 Transaction
 	txn5.ID = txn.ID

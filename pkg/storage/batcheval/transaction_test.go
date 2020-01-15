@@ -145,7 +145,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		expErr string                  // empty if no error expected
 	}{
 		///////////////////////////////////////////////////////////////////////
-		//                       EndTransactionRequest                       //
+		//                       EndTxnRequest                               //
 		///////////////////////////////////////////////////////////////////////
 		{
 			name: "end txn, rollback, no poison, intent missing, abort span missing",

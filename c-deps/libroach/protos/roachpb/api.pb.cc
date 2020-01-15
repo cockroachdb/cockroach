@@ -10485,7 +10485,7 @@ const int EndTxnRequest::kInternalCommitTriggerFieldNumber;
 const int EndTxnRequest::kIntentSpansFieldNumber;
 const int EndTxnRequest::kInFlightWritesFieldNumber;
 const int EndTxnRequest::kRequire1PcFieldNumber;
-const int EndTxnRequest::kNoRefreshSpansFieldNumber;
+const int EndTxnRequest::kCanCommitAtHigherTimestampFieldNumber;
 const int EndTxnRequest::kPoisonFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -10664,14 +10664,14 @@ bool EndTxnRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // bool no_refresh_spans = 8;
+      // bool can_commit_at_higher_timestamp = 8;
       case 8: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &no_refresh_spans_)));
+                 input, &can_commit_at_higher_timestamp_)));
         } else {
           goto handle_unusual;
         }
@@ -10763,9 +10763,9 @@ void EndTxnRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->require_1pc(), output);
   }
 
-  // bool no_refresh_spans = 8;
-  if (this->no_refresh_spans() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->no_refresh_spans(), output);
+  // bool can_commit_at_higher_timestamp = 8;
+  if (this->can_commit_at_higher_timestamp() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->can_commit_at_higher_timestamp(), output);
   }
 
   // bool poison = 9;
@@ -10841,8 +10841,8 @@ size_t EndTxnRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  // bool no_refresh_spans = 8;
-  if (this->no_refresh_spans() != 0) {
+  // bool can_commit_at_higher_timestamp = 8;
+  if (this->can_commit_at_higher_timestamp() != 0) {
     total_size += 1 + 1;
   }
 
@@ -10885,8 +10885,8 @@ void EndTxnRequest::MergeFrom(const EndTxnRequest& from) {
   if (from.require_1pc() != 0) {
     set_require_1pc(from.require_1pc());
   }
-  if (from.no_refresh_spans() != 0) {
-    set_no_refresh_spans(from.no_refresh_spans());
+  if (from.can_commit_at_higher_timestamp() != 0) {
+    set_can_commit_at_higher_timestamp(from.can_commit_at_higher_timestamp());
   }
   if (from.poison() != 0) {
     set_poison(from.poison());
@@ -10917,7 +10917,7 @@ void EndTxnRequest::InternalSwap(EndTxnRequest* other) {
   swap(internal_commit_trigger_, other->internal_commit_trigger_);
   swap(commit_, other->commit_);
   swap(require_1pc_, other->require_1pc_);
-  swap(no_refresh_spans_, other->no_refresh_spans_);
+  swap(can_commit_at_higher_timestamp_, other->can_commit_at_higher_timestamp_);
   swap(poison_, other->poison_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

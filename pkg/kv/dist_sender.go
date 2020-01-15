@@ -619,7 +619,7 @@ var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
 // splitBatchAndCheckForRefreshSpans splits the batch according to the
 // canSplitET parameter and checks whether the final request is an
-// EndTxn. If so, the EndTxnRequest.NoRefreshSpans
+// EndTxn. If so, the EndTxnRequest.CanCommitAtHigherTimestamp
 // flag is reset to indicate whether earlier parts of the split may
 // result in refresh spans.
 func splitBatchAndCheckForRefreshSpans(
@@ -628,10 +628,10 @@ func splitBatchAndCheckForRefreshSpans(
 	parts := ba.Split(canSplitET)
 	// If the final part contains an EndTxn, we need to check
 	// whether earlier split parts contain any refresh spans and properly
-	// set the NoRefreshSpans flag on the end transaction.
+	// set the CanCommitAtHigherTimestamp flag on the end transaction.
 	lastPart := parts[len(parts)-1]
 	lastReq := lastPart[len(lastPart)-1].GetInner()
-	if et, ok := lastReq.(*roachpb.EndTxnRequest); ok && et.NoRefreshSpans {
+	if et, ok := lastReq.(*roachpb.EndTxnRequest); ok && et.CanCommitAtHigherTimestamp {
 		hasRefreshSpans := func() bool {
 			for _, part := range parts[:len(parts)-1] {
 				for _, req := range part {
@@ -644,7 +644,7 @@ func splitBatchAndCheckForRefreshSpans(
 		}()
 		if hasRefreshSpans {
 			etCopy := *et
-			etCopy.NoRefreshSpans = false
+			etCopy.CanCommitAtHigherTimestamp = false
 			lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
 			lastPart[len(lastPart)-1].MustSetInner(&etCopy)
 			parts[len(parts)-1] = lastPart

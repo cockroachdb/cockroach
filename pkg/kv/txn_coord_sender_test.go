@@ -553,6 +553,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 }
 
 func assertTransactionRetryError(t *testing.T, e error) {
+	t.Helper()
 	if retErr, ok := e.(*roachpb.TransactionRetryWithProtoRefreshError); ok {
 		if !testutils.IsError(retErr, "TransactionRetryError") {
 			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",

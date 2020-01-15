@@ -195,9 +195,8 @@ func (s *zeroOperator) Init() {
 
 func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 	// TODO(solon): Can we avoid calling Next on the input at all?
-	next := s.input.Next(ctx)
-	next.SetLength(0)
-	return next
+	s.input.Next(ctx)
+	return coldata.ZeroBatch
 }
 
 type singleTupleNoInputOperator struct {
@@ -224,8 +223,7 @@ func (s *singleTupleNoInputOperator) Init() {
 func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
 	s.batch.ResetInternalBatch()
 	if s.nexted {
-		s.batch.SetLength(0)
-		return s.batch
+		return coldata.ZeroBatch
 	}
 	s.nexted = true
 	s.batch.SetLength(1)

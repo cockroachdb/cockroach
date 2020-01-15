@@ -55,9 +55,6 @@ func registerSQLSmith(r *testRegistry) {
 		"no-mutations": sqlsmith.Settings["no-mutations"],
 		"no-ddl":       sqlsmith.Settings["no-ddl"],
 	}
-	unsupportedTypesByVersion := map[string][]string{
-		"v19.2": {"TIMETZ"},
-	}
 
 	runSQLSmith := func(ctx context.Context, t *test, c *cluster, setupName, settingName string) {
 		// Set up a statement logger for easy reproduction. We only
@@ -95,30 +92,7 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatalf("unknown setting %s", settingName)
 		}
 
-		version, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		var unsupportedTypes []string
-		for prefix, types := range unsupportedTypesByVersion {
-			if strings.HasPrefix(version, prefix) {
-				unsupportedTypes = types
-				break
-			}
-		}
-
 		setup := setupFunc(rng)
-		foundUnsupportedType := false
-		for _, unsupportedType := range unsupportedTypes {
-			if strings.Contains(setup, unsupportedType) {
-				foundUnsupportedType = true
-				break
-			}
-		}
-		if foundUnsupportedType {
-			t.Skip("generated setup contains an unsupported type", setup)
-		}
-
 		setting := settingFunc(rng)
 
 		conn := c.Conn(ctx, 1)
@@ -130,13 +104,11 @@ func registerSQLSmith(r *testRegistry) {
 			logStmt(setup)
 		}
 
-		if t.IsBuildVersion("v20.1.0") {
-			stmt := "SET experimental_enable_primary_key_changes = true;"
-			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
-			} else {
-				logStmt(stmt)
-			}
+		stmt := "SET experimental_enable_primary_key_changes = true;"
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		} else {
+			logStmt(stmt)
 		}
 
 		const timeout = time.Minute
@@ -220,7 +192,7 @@ func registerSQLSmith(r *testRegistry) {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Cluster:    makeClusterSpec(4),
-			MinVersion: "v19.2.0",
+			MinVersion: "v20.1.0",
 			Timeout:    time.Minute * 20,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
