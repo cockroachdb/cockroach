@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/gc"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -373,12 +374,12 @@ func TestGCQueueProcess(t *testing.T) {
 	tc.manualClock.Increment(48 * 60 * 60 * 1E9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
-	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
-	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
-	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1E9, 0)                                  // 1s old
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                        // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                            // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                           // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(gc.IntentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1e9, 0)                                     // 1s old
 	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("b")
 	key3 := roachpb.Key("c")
@@ -491,7 +492,7 @@ func TestGCQueueProcess(t *testing.T) {
 	var expectedVersionsValBytes int64 = 5 * 10
 
 	// Call RunGC with dummy functions to get current GCInfo.
-	gcInfo, err := func() (GCInfo, error) {
+	gcInfo, err := func() (gc.GCInfo, error) {
 		snap := tc.repl.store.Engine().NewSnapshot()
 		desc := tc.repl.Desc()
 		defer snap.Close()
@@ -502,8 +503,8 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 
 		now := tc.Clock().Now()
-		return RunGC(ctx, desc, snap, now, *zone.GC,
-			NoopGCer{},
+		return gc.RunGC(ctx, desc, snap, now, *zone.GC,
+			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
 			},
@@ -855,11 +856,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
-	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
-	txns[0].OrigTimestamp = intentResolveTS
-	txns[0].Timestamp = intentResolveTS
-	txns[1].OrigTimestamp = intentResolveTS
-	txns[1].Timestamp = intentResolveTS
+
+	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
+	txns[0].ReadTimestamp = intentResolveTS
+	txns[0].WriteTimestamp = intentResolveTS
+	txns[1].ReadTimestamp = intentResolveTS
+	txns[1].WriteTimestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {
@@ -984,12 +986,12 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	const keyCount = 100
-	if gcKeyVersionChunkBytes%keyCount != 0 {
+	if gc.KeyVersionChunkBytes%keyCount != 0 {
 		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
 	}
 	// Reduce the key size by MVCCVersionTimestampSize (13 bytes) to prevent batch overflow.
 	// This is due to MVCCKey.EncodedSize(), which returns the full size of the encoded key.
-	const keySize = (gcKeyVersionChunkBytes / keyCount) - 13
+	const keySize = (gc.KeyVersionChunkBytes / keyCount) - 13
 	// Create a format string for creating version keys of exactly
 	// length keySize.
 	fmtStr := fmt.Sprintf("%%0%dd", keySize)

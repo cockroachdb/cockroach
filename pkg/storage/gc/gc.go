@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package engine
+package gc
 
 import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -52,7 +53,7 @@ func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageColl
 // deleted value is the most recent before expiration, it can be deleted. This
 // would still allow for the tombstone bugs in #6227, so in the future we will
 // add checks that disallow writes before the last GC expiration time.
-func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) (int, hlc.Timestamp) {
+func (gc GarbageCollector) Filter(keys []engine.MVCCKey, values [][]byte) (int, hlc.Timestamp) {
 	if gc.policy.TTLSeconds <= 0 {
 		return -1, hlc.Timestamp{}
 	}
