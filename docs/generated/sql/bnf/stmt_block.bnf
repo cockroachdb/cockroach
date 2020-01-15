@@ -93,6 +93,7 @@ transaction_stmt ::=
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_user_stmt
+	| alter_role_stmt
 
 backup_stmt ::=
 	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
@@ -298,6 +299,9 @@ alter_ddl_stmt ::=
 alter_user_stmt ::=
 	alter_user_password_stmt
 
+alter_role_stmt ::=
+	'ALTER' role_or_group string_or_placeholder 'WITH' role_privilege_list
+
 partitioned_backup ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
@@ -333,6 +337,8 @@ create_user_stmt ::=
 create_role_stmt ::=
 	'CREATE' role_or_group string_or_placeholder
 	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
+	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privilege_list
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder 'WITH' role_privilege_list
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -739,6 +745,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOCREATEROLE'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -1000,15 +1007,19 @@ alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder password_clause
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder password_clause
 
+role_or_group ::=
+	'ROLE'
+
+role_privilege_list ::=
+	role_privilege
+	| role_privilege role_privilege_list
+
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 opt_password ::=
 	password_clause
 	| 
-
-role_or_group ::=
-	'ROLE'
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1360,6 +1371,10 @@ password_clause ::=
 	opt_with 'PASSWORD' string_or_placeholder
 	| opt_with 'PASSWORD' 'NULL'
 
+role_privilege ::=
+	'CREATEROLE'
+	| 'NOCREATEROLE'
+
 changefeed_targets ::=
 	single_table_pattern_list
 	| 'TABLE' single_table_pattern_list
@@ -1671,6 +1686,7 @@ reserved_keyword ::=
 	| 'COLUMN'
 	| 'CONSTRAINT'
 	| 'CREATE'
+	| 'CREATEROLE'
 	| 'CURRENT_CATALOG'
 	| 'CURRENT_DATE'
 	| 'CURRENT_ROLE'

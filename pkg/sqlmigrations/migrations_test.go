@@ -557,7 +557,7 @@ func TestAdminUserExists(t *testing.T) {
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
-	migration := mt.pop(t, "add system.users isRole column and create admin role")
+	migration := mt.pop(t, "add system.users isRole, hasCreateRole columns and create admin role")
 	mt.start(t, base.TestServerArgs{})
 
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"

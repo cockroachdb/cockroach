@@ -123,11 +123,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs: staticIDs(keys.RoleMembersTableID),
 	},
 	{
-		// Introduced in v2.0. Permanent migration.
-		name:   "add system.users isRole column and create admin role",
-		workFn: addAdminRole,
-	},
-	{
 		// Introduced in v2.0, replaced by "ensure admin role privileges in all descriptors"
 		name: "grant superuser privileges on all objects to the admin role",
 	},
@@ -287,6 +282,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:                "migrate system.namespace_deprecated entries into system.namespace",
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+	},
+	{
+		// Replaces addAdminRole migration
+		name:   "add system.users isRole, hasCreateRole columns and create admin role",
+		workFn: addAdminRoleWithHasCreateRole,
 	},
 }
 
@@ -868,14 +868,6 @@ func addRootUser(ctx context.Context, r runner) error {
 	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
 }
 
-func addAdminRole(ctx context.Context, r runner) error {
-	// Upsert the admin role into the table. We intentionally override any existing entry.
-	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
-          `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
-}
-
 func addRootToAdminRole(ctx context.Context, r runner) error {
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
@@ -883,6 +875,15 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           `
 	return r.execAsRootWithRetry(
 		ctx, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+}
+
+func addAdminRoleWithHasCreateRole(ctx context.Context, r runner) error {
+	// Upsert the admin role with CreateRole privilege into the table. We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "hasCreateRole") VALUES ($1, '', true, true)
+          `
+	return r.execAsRootWithRetry(ctx, "addAdminRoleWithHasCreateRole",
+		upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

@@ -101,7 +101,7 @@ import (
 //
 // Logic tests can start with a directive as follows:
 //
-//   # LogicTest: local fakedist
+//   # LogicTest: fakedist
 //
 // This directive lists configurations; the test is run once in each
 // configuration (in separate subtests). The configurations are defined by
@@ -542,9 +542,6 @@ func parseTestConfig(names []string) []logicTestConfigIdx {
 
 var (
 	defaultConfigNames = []string{
-		"local",
-		"local-vec-off",
-		"local-vec",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-vec",

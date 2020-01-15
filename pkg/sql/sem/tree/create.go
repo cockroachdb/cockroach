@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -1220,8 +1221,10 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 
 // CreateRole represents a CREATE ROLE statement.
 type CreateRole struct {
-	Name        Expr
-	IfNotExists bool
+	Name           Expr
+	RolePrivileges roleprivilege.List
+	IfHasWith      bool
+	IfNotExists    bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1231,6 +1234,24 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(node.Name)
+	if node.IfHasWith {
+		ctx.WriteString(" WITH ")
+		node.RolePrivileges.Format(&ctx.Buffer)
+	}
+}
+
+// AlterRolePrivileges represents an ALTER ROLE ... WITH <OPTION...> statement.
+type AlterRolePrivileges struct {
+	Name           Expr
+	RolePrivileges roleprivilege.List
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ROLE ")
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" WITH ")
+	node.RolePrivileges.Format(&ctx.Buffer)
 }
 
 // CreateView represents a CREATE VIEW statement.

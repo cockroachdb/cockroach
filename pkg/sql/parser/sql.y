@@ -31,6 +31,7 @@ import (
 
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+    "github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -336,6 +337,12 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
 }
+func (u *sqlSymUnion) rolePrivilegeType() roleprivilege.Kind {
+    return u.val.(roleprivilege.Kind)
+}
+func (u *sqlSymUnion) rolePrivilegeList() roleprivilege.List {
+    return u.val.(roleprivilege.List)
+}
 func (u *sqlSymUnion) onConflict() *tree.OnConflict {
     return u.val.(*tree.OnConflict)
 }
@@ -522,7 +529,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -561,7 +568,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NONE NORMAL
+%token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NO_INDEX_JOIN NONE NORMAL
 %token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -633,6 +640,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
+%type <tree.Statement> alter_role_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -832,8 +840,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ReadWriteMode> transaction_read_mode
 
 %type <str> name opt_name opt_name_parens opt_to_savepoint
-%type <str> privilege savepoint_name
-
+%type <str> privilege savepoint_name role_privilege
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
@@ -1027,6 +1034,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.TargetList> opt_on_targets_roles
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
+%type <roleprivilege.List> role_privilege_list
 %type <tree.AuditMode> audit_mode
 
 %type <str> relocate_kw
@@ -1133,10 +1141,11 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_user_stmt     // EXTEND WITH HELP: ALTER USER
+| alter_role_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -2624,7 +2633,7 @@ drop_user_stmt:
 // %Help: DROP ROLE - remove a role
 // %Category: Priv
 // %Text: DROP ROLE [IF EXISTS] <role> [, ...]
-// %SeeAlso: CREATE ROLE, SHOW ROLES
+// %SeeAlso: CREATE ROLE, ALTER ROLE, SHOW ROLES
 drop_role_stmt:
   DROP ROLE string_or_placeholder_list
   {
@@ -3871,7 +3880,7 @@ show_users_stmt:
 // %Help: SHOW ROLES - list defined roles
 // %Category: Priv
 // %Text: SHOW ROLES
-// %SeeAlso: CREATE ROLE, DROP ROLE
+// %SeeAlso: CREATE ROLE, ALTER ROLE, DROP ROLE
 show_roles_stmt:
   SHOW ROLES
   {
@@ -5100,8 +5109,8 @@ password_clause:
 
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
-// %Text: CREATE ROLE [IF NOT EXISTS] <name>
-// %SeeAlso: DROP ROLE, SHOW ROLES
+// %Text: CREATE ROLE [IF NOT EXISTS] <name>  [WITH] <OPTIONS...>
+// %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
   CREATE role_or_group string_or_placeholder
   {
@@ -5111,7 +5120,26 @@ create_role_stmt:
   {
     $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
   }
+| CREATE role_or_group string_or_placeholder WITH role_privilege_list
+  {
+    $$.val = &tree.CreateRole{Name: $3.expr(), IfHasWith: true, RolePrivileges: $5.rolePrivilegeList()}
+  }
+| CREATE role_or_group IF NOT EXISTS string_or_placeholder WITH role_privilege_list
+  {
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, IfHasWith: true, RolePrivileges: $8.rolePrivilegeList()}
+  }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
+
+// %Help: ALTER ROLE - alter a role
+// %Category: Priv
+// %Text: ALTER ROLE <name> [WITH] <options...>
+// %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
+alter_role_stmt:
+  ALTER role_or_group string_or_placeholder WITH role_privilege_list
+  {
+    $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), RolePrivileges: $5.rolePrivilegeList()}
+  }
+| ALTER role_or_group error // SHOW HELP: ALTER ROLE
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
@@ -5136,6 +5164,29 @@ create_view_stmt:
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
+
+role_privilege:
+  CREATEROLE
+  | NOCREATEROLE
+
+
+role_privilege_list:
+  role_privilege
+  {
+    rolePrivList, err := roleprivilege.ListFromStrings(tree.NameList{tree.Name($1)}.ToStrings())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = rolePrivList
+  }
+  | role_privilege role_privilege_list
+  {
+		rolePrivList, err := roleprivilege.ListFromStrings(tree.NameList{tree.Name($1)}.ToStrings())
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = append(rolePrivList, $2.rolePrivilegeList()...)
+  }
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
@@ -9729,6 +9780,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NOCREATEROLE
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -9989,6 +10041,7 @@ reserved_keyword:
 | COLUMN
 | CONSTRAINT
 | CREATE
+| CREATEROLE
 | CURRENT_CATALOG
 | CURRENT_DATE
 | CURRENT_ROLE

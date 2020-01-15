@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -280,4 +281,38 @@ func (p *planner) resolveMemberOfWithAdminOption(
 	}
 
 	return ret, nil
+}
+
+func (p *planner) HasCreateRolePrivilege(ctx context.Context) error {
+	user := p.SessionData().User
+
+	// Expand role memberships
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the roles that 'user' is a member of.
+	// Check for hasCreateRole permission
+	hasCreateRole := false
+	for role := range memberOf {
+		hasCreateRoleStmt := fmt.Sprintf("select * from %s WHERE username = '%s' AND \"hasCreateRole\" = true", userTableName, role)
+		hasCreateRoleRows, err := p.ExecCfg().InternalExecutor.QueryRow(
+			ctx, "hasCreateRole", p.Txn(), hasCreateRoleStmt)
+
+		if err != nil {
+			return err
+		}
+
+		if len(hasCreateRoleRows) != 0 {
+			hasCreateRole = true
+		}
+	}
+
+	if !hasCreateRole {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have CREATEROLE privilege", user)
+	}
+
+	return nil
 }
