@@ -151,7 +151,7 @@ func newTempFile(dir string) (*os.File, error) {
 	}
 
 	return os.OpenFile(tempFileName,
-		os.O_RDWR|os.O_APPEND, 0660)
+		os.O_RDWR|os.O_APPEND, 0640)
 }
 
 // Run runs I/O benchmarks specified by diskOpts.
