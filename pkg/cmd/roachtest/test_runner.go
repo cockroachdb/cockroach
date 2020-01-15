@@ -619,10 +619,17 @@ func (r *testRunner) runTest(
 				msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
 					branch, cloud, output)
 				artifacts := fmt.Sprintf("/%s", t.Name())
+				title := fmt.Sprintf("roachtest: %s failed", t.Name())
+				// Don't disambiguate by branch if the branch is master, to avoid
+				// creating duplicates with issues created prior to when this code
+				// was introduced.
+				if branch != "master" {
+					title = fmt.Sprintf("roachtest: %s failed on %s", t.Name(), branch)
+				}
 
 				req := issues.PostRequest{
 					// TODO(tbg): actually use this as a template.
-					TitleTemplate: fmt.Sprintf("roachtest: %s failed", t.Name()),
+					TitleTemplate: title,
 					// TODO(tbg): make a template better adapted to roachtest.
 					BodyTemplate: issues.UnitTestFailureBody,
 					PackageName:  "roachtest",
