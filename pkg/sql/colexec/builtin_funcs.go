@@ -102,6 +102,9 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 			}
 		},
 	)
+	// Although we didn't change the length of the batch, it is necessary to set
+	// the length anyway (this helps maintaining the invariant of flat bytes).
+	batch.SetLength(n)
 	return batch
 }
 
@@ -185,6 +188,9 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 			}
 		},
 	)
+	// Although we didn't change the length of the batch, it is necessary to set
+	// the length anyway (this helps maintaining the invariant of flat bytes).
+	batch.SetLength(n)
 	return batch
 }
 

@@ -203,8 +203,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	toEmit := t.topK.Length() - t.emitted
 	if toEmit == 0 {
 		// We're done.
-		t.output.SetLength(0)
-		return t.output
+		return coldata.ZeroBatch
 	}
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()

@@ -53,7 +53,6 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 		return batch
 	}
 
-	p.output.SetLength(batch.Length())
 	p.output.ResetInternalBatch()
 	sel := batch.Selection()
 	p.allocator.PerformOperation(p.output.ColVecs(), func() {
@@ -72,5 +71,6 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 			)
 		}
 	})
+	p.output.SetLength(batch.Length())
 	return p.output
 }
