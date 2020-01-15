@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -1317,6 +1317,7 @@ var (
 	tableTypeSystemView = tree.NewDString("SYSTEM VIEW")
 	tableTypeBaseTable  = tree.NewDString("BASE TABLE")
 	tableTypeView       = tree.NewDString("VIEW")
+	tableTypeTemporary  = tree.NewDString("LOCAL TEMPORARY")
 )
 
 var informationSchemaTablesTable = virtualSchemaTable{
@@ -1338,6 +1339,8 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				} else if table.IsView() {
 					tableType = tableTypeView
 					insertable = noString
+				} else if table.Temporary {
+					tableType = tableTypeTemporary
 				}
 				dbNameStr := tree.NewDString(db.Name)
 				scNameStr := tree.NewDString(scName)
@@ -1407,9 +1410,25 @@ CREATE TABLE information_schema.views (
 func forEachSchemaName(
 	ctx context.Context, p *planner, db *sqlbase.DatabaseDescriptor, fn func(string) error,
 ) error {
-	scNames := []string{string(tree.PublicSchemaName)}
-	// Handle virtual schemas.
-	for _, schema := range p.getVirtualTabler().getEntries() {
+	var idToName map[sqlbase.ID]string
+	var err error
+	if db != nil {
+		idToName, err = p.GetSchemaNamesForDatabase(ctx, db.ID, p.txn)
+		if err != nil {
+			return err
+		}
+	} else {
+		idToName, err = p.GetAllSchemaNames(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+	}
+	vtableEntries := p.getVirtualTabler().getEntries()
+	scNames := make([]string, 0, len(idToName)+len(vtableEntries))
+	for _, name := range idToName {
+		scNames = append(scNames, name)
+	}
+	for _, schema := range vtableEntries {
 		scNames = append(scNames, schema.desc.Name)
 	}
 	sort.Strings(scNames)
@@ -1594,6 +1613,20 @@ func forEachTableDescWithTableLookupInternal(
 		}
 	}
 
+	// Generate all schema names, and keep a mapping.
+	var schemaNames map[sqlbase.ID]string
+	if dbContext != nil {
+		schemaNames, err = p.GetSchemaNamesForDatabase(ctx, dbContext.ID, p.txn)
+		if err != nil {
+			return err
+		}
+	} else {
+		schemaNames, err = p.GetAllSchemaNames(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
@@ -1601,7 +1634,11 @@ func forEachTableDescWithTableLookupInternal(
 		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
 			continue
 		}
-		if err := fn(dbDesc, tree.PublicSchema, table, lCtx); err != nil {
+		scName, ok := schemaNames[table.GetParentSchemaID()]
+		if !ok {
+			return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+		}
+		if err := fn(dbDesc, scName, table, lCtx); err != nil {
 			return err
 		}
 	}

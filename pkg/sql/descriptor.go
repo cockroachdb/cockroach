@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -300,6 +301,67 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 		descIDs = append(descIDs, ID)
 	}
 	return descIDs, nil
+}
+
+// GetAllSchemaNames returns all the schemas.
+func (p *planner) GetAllSchemaNames(
+	ctx context.Context, txn *client.Txn,
+) (map[sqlbase.ID]string, error) {
+	rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx,
+		"get-all-schema-names",
+		p.txn,
+		`SELECT id, name FROM system.namespace WHERE "parentSchemaID" = 0`,
+	)
+	if err != nil {
+		// Account for a mixed-cluster by checking the namespace table's existence.
+		// TODO(sqlexec): remove this at 20.2 or after.
+		if _, ok, err := lookupDescriptorByID(ctx, p.txn, keys.NamespaceTableID); err == nil && !ok {
+			return map[sqlbase.ID]string{
+				sqlbase.ID(keys.PublicSchemaID): tree.PublicSchema,
+			}, nil
+		}
+		return nil, err
+	}
+	ret := make(map[sqlbase.ID]string, len(rows))
+	for _, row := range rows {
+		id := tree.MustBeDInt(row[0])
+		name := tree.MustBeDString(row[1])
+		ret[sqlbase.ID(id)] = string(name)
+	}
+	return ret, nil
+}
+
+// GetSchemaNamesForDatabase returns all the schemas that have been created
+// under a specific database.
+func (p *planner) GetSchemaNamesForDatabase(
+	ctx context.Context, dbID sqlbase.ID, txn *client.Txn,
+) (map[sqlbase.ID]string, error) {
+	log.Eventf(ctx, "Fetching all schema names for %v dbID", dbID)
+	rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx,
+		"get-schema-names-for-db",
+		p.txn,
+		`SELECT id, name FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = 0`,
+		dbID,
+	)
+	if err != nil {
+		// Account for a mixed-cluster by checking the namespace table's existence.
+		// TODO(sqlexec): remove this at 20.2 or after.
+		if _, ok, err := lookupDescriptorByID(ctx, p.txn, keys.NamespaceTableID); err == nil && !ok {
+			return map[sqlbase.ID]string{
+				sqlbase.ID(keys.PublicSchemaID): tree.PublicSchema,
+			}, nil
+		}
+		return nil, err
+	}
+	ret := make(map[sqlbase.ID]string, len(rows))
+	for _, row := range rows {
+		id := tree.MustBeDInt(row[0])
+		name := tree.MustBeDString(row[1])
+		ret[sqlbase.ID(id)] = string(name)
+	}
+	return ret, nil
 }
 
 // writeDescToBatch adds a Put command writing a descriptor proto to the
