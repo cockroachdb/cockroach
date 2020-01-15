@@ -243,6 +243,7 @@ func (cfg *DiskQueueCfg) EnsureDefaults() error {
 }
 
 // NewDiskQueue creates a Queue that spills to disk.
+// TODO(asubiotto): Plumb down a monitor for disk space.
 func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err
@@ -497,6 +498,8 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 	return true, nil
 }
 
+// Dequeue dequeues a batch from disk and deserializes it into b. Note that the
+// deserialized batch is only valid until the next call to Dequeue.
 func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 	if d.serializer != nil && d.numBufferedBatches > 0 {
 		if err := d.writeFooterAndFlush(); err != nil {

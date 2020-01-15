@@ -33,6 +33,18 @@ type Allocator struct {
 	acc *mon.BoundAccount
 }
 
+func getVecsSize(vecs []coldata.Vec) int64 {
+	var size int64
+	for _, dest := range vecs {
+		if dest.Type() == coltypes.Bytes {
+			size += int64(dest.Bytes().Size())
+		} else {
+			size += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
+		}
+	}
+	return size
+}
+
 // NewAllocator constructs a new Allocator instance.
 func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 	return &Allocator{ctx: ctx, acc: acc}
@@ -52,6 +64,24 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 		execerror.VectorizedInternalPanic(err)
 	}
 	return coldata.NewMemBatchWithSize(types, size)
+}
+
+// RetainBatch adds the size of the batch to the memory account. This shouldn't
+// need to be used regularly, since most memory accounting necessary is done
+// through PerformOperation. Use this if you want to explicitly manage the
+// memory accounted for.
+func (a *Allocator) RetainBatch(b coldata.Batch) {
+	if err := a.acc.Grow(a.ctx, getVecsSize(b.ColVecs())); err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+}
+
+// ReleaseBatch releases the size of the batch from the memory account. This
+// shouldn't need to be used regularly, since all accounts are closed by
+// Flow.Cleanup. Use this if you want to explicitly manage the memory used. An
+// example of a use case is releasing a batch before writing it to disk.
+func (a *Allocator) ReleaseBatch(b coldata.Batch) {
+	a.acc.Shrink(a.ctx, getVecsSize(b.ColVecs()))
 }
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
@@ -101,28 +131,14 @@ func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 // NOTE: if some columnar vectors are not modified, they should not be included
 // in 'destVecs' to reduce the performance hit of memory accounting.
 func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
-	var before, after, delta int64
-	for _, dest := range destVecs {
-		// To simplify the accounting, we perform the operation first and then will
-		// update the memory account. The minor "drift" in accounting that is
-		// caused by this approach is ok.
-		if dest.Type() == coltypes.Bytes {
-			before += int64(dest.Bytes().Size())
-		} else {
-			before += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
-		}
-	}
-
+	before := getVecsSize(destVecs)
+	// To simplify the accounting, we perform the operation first and then will
+	// update the memory account. The minor "drift" in accounting that is
+	// caused by this approach is ok.
 	operation()
+	after := getVecsSize(destVecs)
 
-	for _, dest := range destVecs {
-		if dest.Type() == coltypes.Bytes {
-			after += int64(dest.Bytes().Size())
-		} else {
-			after += int64(estimateBatchSizeBytes([]coltypes.T{dest.Type()}, dest.Capacity()))
-		}
-	}
-	delta = after - before
+	delta := after - before
 	if delta >= 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
 			execerror.VectorizedInternalPanic(err)

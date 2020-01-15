@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -83,6 +85,16 @@ func (f *vectorizedFlow) Setup(
 		recordingStats = true
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
+	// flowTempStoragePath is the directory to use for this flow's temporary
+	// storage.
+	flowTempStoragePath := filepath.Join(f.Cfg.TempStoragePath, f.GetID().String())
+	if err := f.Cfg.TempFS.CreateDir(flowTempStoragePath); err != nil {
+		return ctx, err
+	}
+	diskQueueCfg := colcontainer.DiskQueueCfg{FS: f.Cfg.TempFS, Path: flowTempStoragePath}
+	if err := diskQueueCfg.EnsureDefaults(); err != nil {
+		return ctx, err
+	}
 	creator := newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
@@ -91,6 +103,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetSyncFlowConsumer(),
 		f.GetFlowCtx().Cfg.NodeDialer,
 		f.GetID(),
+		diskQueueCfg,
 	)
 	_, err = creator.setupFlow(ctx, f.GetFlowCtx(), spec.Processors, opt)
 	if err == nil {
@@ -100,6 +113,17 @@ func (f *vectorizedFlow) Setup(
 		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return ctx, nil
+	}
+	if err := f.Cfg.TempFS.DeleteDir(flowTempStoragePath); err != nil {
+		// Log error as a Warning but keep on going to close the memory
+		// infrastructure.
+		log.Warningf(
+			ctx,
+			"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
+			f.GetID().Short(),
+			flowTempStoragePath,
+			err,
+		)
 	}
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
@@ -144,6 +168,18 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	}
 	for _, memMonitor := range f.bufferingMemMonitors {
 		memMonitor.Stop(ctx)
+	}
+	flowTempStoragePath := filepath.Join(f.Cfg.TempStoragePath, f.GetID().String())
+	if err := f.Cfg.TempFS.DeleteDir(flowTempStoragePath); err != nil {
+		// Log error as a Warning but keep on going to close the memory
+		// infrastructure.
+		log.Warningf(
+			ctx,
+			"unable to remove flow %s's temporary directory at %s, files may be left over: %v",
+			f.GetID().Short(),
+			flowTempStoragePath,
+			err,
+		)
 	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
@@ -298,6 +334,8 @@ type vectorizedFlowCreator struct {
 	// bufferingMemAccounts contains all memory accounts of the buffering
 	// components in the vectorized flow.
 	bufferingMemAccounts []*mon.BoundAccount
+
+	diskQueueCfg colcontainer.DiskQueueCfg
 }
 
 func newVectorizedFlowCreator(
@@ -308,6 +346,7 @@ func newVectorizedFlowCreator(
 	syncFlowConsumer execinfra.RowReceiver,
 	nodeDialer *nodedialer.Dialer,
 	flowID execinfrapb.FlowID,
+	diskQueueCfg colcontainer.DiskQueueCfg,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -320,7 +359,25 @@ func newVectorizedFlowCreator(
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
 		flowID:                         flowID,
+		diskQueueCfg:                   diskQueueCfg,
 	}
+}
+
+// createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.
+// These should only be used when spilling to disk and an operator is made aware
+// of a memory usage limit separately.
+// The receiver is updated to have a reference to the unlimited memory monitor.
+// TODO(asubiotto): This identical to the helper function in
+//  NewColOperatorResult, meaning that we should probably find a way to refactor
+//  this.
+func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) *mon.BytesMonitor {
+	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
+		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
+	)
+	s.bufferingMemMonitors = append(s.bufferingMemMonitors, bufferingOpUnlimitedMemMonitor)
+	return bufferingOpUnlimitedMemMonitor
 }
 
 // newStreamingMemAccount creates a new memory account bound to the monitor in
@@ -391,16 +448,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
 	}
 
-	hashRouterMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hash-router-limited",
-	)
-	hashRouterMemAccount := hashRouterMemMonitor.MakeBoundAccount()
-	s.bufferingMemMonitors = append(s.bufferingMemMonitors, hashRouterMemMonitor)
-	s.bufferingMemAccounts = append(s.bufferingMemAccounts, &hashRouterMemAccount)
-	router, outputs := colexec.NewHashRouter(
-		colexec.NewAllocator(ctx, &hashRouterMemAccount), input, outputTyps,
-		output.HashColumns, len(output.Streams),
-	)
+	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, "hash-router")
+	allocators := make([]*colexec.Allocator, len(output.Streams))
+	for i := range allocators {
+		acc := hashRouterMemMonitor.MakeBoundAccount()
+		allocators[i] = colexec.NewAllocator(ctx, &acc)
+		s.bufferingMemAccounts = append(s.bufferingMemAccounts, &acc)
+	}
+	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
 	}
@@ -920,15 +975,7 @@ func SupportsVectorized(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	fuseOpt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
-	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(),
-		vectorizedRemoteComponentCreator{},
-		false,                   /* recordingStats */
-		nil,                     /* waitGroup */
-		&execinfra.RowChannel{}, /* syncFlowConsumer */
-		nil,                     /* nodeDialer */
-		execinfrapb.FlowID{},
-	)
+	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{})
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed

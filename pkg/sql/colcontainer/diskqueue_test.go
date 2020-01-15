@@ -15,68 +15,21 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/fs"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-const inMemDirName = "testing"
-
-// newTestingDiskQueueCfg returns a DiskQueueCfg and a non-nil cleanup function.
-func newTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg, func()) {
-	t.Helper()
-
-	var (
-		cfg       colcontainer.DiskQueueCfg
-		cleanup   func()
-		testingFS fs.FS
-		path      string
-	)
-
-	if inMem {
-		ngn := engine.NewDefaultInMem()
-		testingFS = ngn.(fs.FS)
-		if err := testingFS.CreateDir(inMemDirName); err != nil {
-			t.Fatal(err)
-		}
-		path = inMemDirName
-		cleanup = ngn.Close
-	} else {
-		ngn, err := engine.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		testingFS = ngn.(fs.FS)
-		tempPath, dirCleanup := testutils.TempDir(t)
-		path = tempPath
-		cleanup = func() {
-			ngn.Close()
-			dirCleanup()
-		}
-	}
-	cfg.FS = testingFS
-	cfg.Path = path
-
-	if err := cfg.EnsureDefaults(); err != nil {
-		t.Fatal(err)
-	}
-
-	return cfg, cleanup
-}
-
 func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	queueCfg, cleanup := newTestingDiskQueueCfg(t, true /* inMem */)
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
 	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
@@ -194,7 +147,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	}
 	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
-	queueCfg, cleanup := newTestingDiskQueueCfg(b, false /* inMem */)
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	queueCfg.BufferSizeBytes = int(bufSize)
 	queueCfg.MaxFileSizeBytes = int(blockSize)
