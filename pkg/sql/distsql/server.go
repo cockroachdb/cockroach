@@ -561,8 +561,11 @@ func (ds *ServerImpl) flowStreamInt(
 func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) error {
 	ctx := ds.AnnotateCtx(stream.Context())
 	err := ds.flowStreamInt(ctx, stream)
-	if err != nil {
-		log.Error(ctx, err)
+	if err != nil && log.V(2) {
+		// flowStreamInt may return an error during normal operation (e.g. a flow
+		// was canceled as part of a graceful teardown). Log this error at the INFO
+		// level behind a verbose flag for visibility.
+		log.Info(ctx, err)
 	}
 	return err
 }
