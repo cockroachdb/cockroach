@@ -69,7 +69,7 @@ https://github.com/cockroachdb/vendored and checked out as a submodule at
 
 ## Updating the golang version
 
-Please copy this checklist ino the relevant commit message, with a link
+Please copy this checklist into the relevant commit message, with a link
 back to this document:
 
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
@@ -81,6 +81,10 @@ back to this document:
 You can test the new builder image in TeamCity by using the custom parameters
 UI (the "..." icon next to the "Run" button) to verify the image before
 committing the change.
+
+## Updating the nodejs version
+
+Please follow the instructions above on updating the golang version, omitting the go-version-check.sh step.
 
 ## Updating Dependencies
 
