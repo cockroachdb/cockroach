@@ -606,9 +606,13 @@ func generateFilterExpr(
 		}
 		constDatum := sqlbase.RandDatum(rng, &colTypes[colIdx], true /* nullOk */)
 		constDatumString := constDatum.String()
-		if strings.Contains(constDatumString, "NaN") || strings.Contains(constDatumString, "Inf") {
-			// We need to surround special values with quotes.
-			constDatumString = fmt.Sprintf("'%s'", constDatumString)
+		switch colTypes[colIdx].Family() {
+		case types.FloatFamily, types.DecimalFamily:
+			if strings.Contains(strings.ToLower(constDatumString), "nan") ||
+				strings.Contains(strings.ToLower(constDatumString), "inf") {
+				// We need to surround special numerical values with quotes.
+				constDatumString = fmt.Sprintf("'%s'", constDatumString)
+			}
 		}
 		return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
 	}
