@@ -218,3 +218,19 @@ func TestExportShow(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }
+
+// TestExportVectorized makes sure that SupportsVectorized check doesn't panic
+// on CSVWriter processor.
+func TestExportVectorized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE t(a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `SET vectorize_row_count_threshold=0`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'http://0.1:37957/exp_1' FROM TABLE t`)
+}

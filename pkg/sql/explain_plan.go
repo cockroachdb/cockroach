@@ -223,6 +223,7 @@ func (p *planner) populateExplain(
 		distSQLPlanner.FinalizePlan(planCtx, &physicalPlan)
 		flows := physicalPlan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
+		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
