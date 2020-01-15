@@ -143,7 +143,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				for i := range desiredTypes {
 					desiredTypes[i] = mb.md.ColumnMeta(mb.targetColList[targetIdx+i]).Type
 				}
-				outScope := mb.b.buildSelectStmt(t.Select, desiredTypes, mb.outScope)
+				outScope := mb.b.buildSelectStmt(t.Select, noRowLocking, desiredTypes, mb.outScope)
 				mb.subqueries = append(mb.subqueries, outScope)
 				n = len(outScope.cols)
 

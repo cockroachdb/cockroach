@@ -65,6 +65,14 @@ define ScanPrivate {
     # Flags modify how the table is scanned, such as which index is used to scan.
     Flags ScanFlags
 
+    # Locking represents the row-level locking mode of the Scan. Most scans
+    # leave this unset (Strength = ForNone), which indicates that no row-level
+    # locking will be performed while scanning the table. Stronger locking modes
+    # are used by SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial
+    # row retrieval of DELETE and UPDATE statements. The locking item's Targets
+    # list will always be empty when part of a ScanPrivate.
+    Locking LockingItem
+
     # PartitionConstrainedScan records whether or not we were able to use partitions
     # to constrain the lookup spans further. This flag is used to record telemetry
     # about how often this optimization is getting applied.
