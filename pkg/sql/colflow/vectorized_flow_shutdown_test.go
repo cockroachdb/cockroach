@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -108,6 +109,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	dialer := &execinfrapb.MockDialer{Addr: addr}
 	defer dialer.Close()
 
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
 	for run := 0; run < 10; run++ {
 		for _, shutdownOperation := range shutdownScenarios {
 			t.Run(fmt.Sprintf("shutdownScenario=%s", shutdownOperation.string), func(t *testing.T) {
@@ -153,14 +157,14 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
-				// Note that the components of the vectorized flow will run
-				// concurrently, so we cannot reuse testAllocator and/or testMemAcc in
-				// all of them, and we need to instantiate separate objects.
-				hashRouterMemAccount := testMemMonitor.MakeBoundAccount()
-				defer hashRouterMemAccount.Close(ctxRemote)
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
-					colexec.NewAllocator(ctxRemote, &hashRouterMemAccount), hashRouterInput, typs, []uint32{0}, numHashRouterOutputs,
-				)
+				// Create an allocator for each output.
+				allocators := make([]*colexec.Allocator, numHashRouterOutputs)
+				for i := range allocators {
+					acc := testMemMonitor.MakeBoundAccount()
+					defer acc.Close(ctxRemote)
+					allocators[i] = colexec.NewAllocator(ctxRemote, &acc)
+				}
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(allocators, hashRouterInput, typs, []uint32{0}, 64<<20 /* 64 MiB */, queueCfg)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
