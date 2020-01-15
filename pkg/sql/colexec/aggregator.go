@@ -32,6 +32,8 @@ var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
 	execinfrapb.AggregatorSpec_COUNT,
 	execinfrapb.AggregatorSpec_MIN,
 	execinfrapb.AggregatorSpec_MAX,
+	execinfrapb.AggregatorSpec_BOOL_AND,
+	execinfrapb.AggregatorSpec_BOOL_OR,
 }
 
 // aggregateFunc is an aggregate function that performs computation on a batch
@@ -243,6 +245,10 @@ func makeAggregateFuncs(
 			funcs[i], err = newMinAgg(allocator, aggTyps[i][0])
 		case execinfrapb.AggregatorSpec_MAX:
 			funcs[i], err = newMaxAgg(allocator, aggTyps[i][0])
+		case execinfrapb.AggregatorSpec_BOOL_AND:
+			funcs[i] = newBoolAndAgg()
+		case execinfrapb.AggregatorSpec_BOOL_OR:
+			funcs[i] = newBoolOrAgg()
 		default:
 			return nil, nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}

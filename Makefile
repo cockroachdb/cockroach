@@ -827,7 +827,8 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/sum_agg.eg.go \
   pkg/sql/colexec/tuples_differ.eg.go \
-  pkg/sql/colexec/vec_comparators.eg.go
+  pkg/sql/colexec/vec_comparators.eg.go \
+  pkg/sql/colexec/boolean_agg.eg.go
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
@@ -1512,6 +1513,7 @@ pkg/sql/colexec/sort.eg.go: pkg/sql/colexec/sort_tmpl.go
 pkg/sql/colexec/sum_agg.eg.go: pkg/sql/colexec/sum_agg_tmpl.go
 pkg/sql/colexec/tuples_differ.eg.go: pkg/sql/colexec/tuples_differ_tmpl.go
 pkg/sql/colexec/vec_comparators.eg.go: pkg/sql/colexec/vec_comparators_tmpl.go
+pkg/sql/colexec/boolean_agg.eg.go: pkg/sql/colexec/boolean_agg_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
 	execgen $@
