@@ -131,7 +131,10 @@ func registerSQLSmith(r *testRegistry) {
 		}
 
 		if t.IsBuildVersion("v20.1.0") {
-			stmt := "SET experimental_enable_primary_key_changes = true;"
+			stmt := `
+SET experimental_enable_primary_key_changes = true;
+SET experimental_enable_temp_tables = true;
+`
 			if _, err := conn.Exec(stmt); err != nil {
 				t.Fatal(err)
 			} else {

@@ -983,6 +983,7 @@ func RandCreateTableWithInterleave(
 		Table:      tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
 		Defs:       defs,
 		Interleave: interleaveDef,
+		Temporary:  rng.Intn(2) == 0,
 	}
 
 	// Create some random column families.
