@@ -132,11 +132,10 @@ func (r *testRegistration) Err() *roachpb.Error {
 func TestRegistrationBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	key := roachpb.Key("a")
 	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: keyA, Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: keyB, Value: val})
 
 	// Registration with no catchup scan specified.
 	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
@@ -314,14 +313,13 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 func TestRegistryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	key := roachpb.Key("a")
 	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val, PrevValue: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val, PrevValue: val})
-	ev3.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val, PrevValue: val})
-	ev4.MustSetValue(&roachpb.RangeFeedValue{Key: key, Value: val, PrevValue: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: keyB, Value: val, PrevValue: val})
+	ev3.MustSetValue(&roachpb.RangeFeedValue{Key: keyC, Value: val, PrevValue: val})
+	ev4.MustSetValue(&roachpb.RangeFeedValue{Key: keyD, Value: val, PrevValue: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
