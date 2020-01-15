@@ -794,6 +794,7 @@ system              public             630200280_32_7_not_null  verified IS NOT 
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
+system              public             630200280_4_4_not_null   hasCreateRole IS NOT NULL
 system              public             630200280_5_1_not_null   id IS NOT NULL
 system              public             630200280_6_1_not_null   name IS NOT NULL
 system              public             630200280_6_2_not_null   value IS NOT NULL
@@ -1020,6 +1021,7 @@ system         public        table_statistics                 tableID           
 system         public        ui                               key                      1
 system         public        ui                               lastUpdated              3
 system         public        ui                               value                    2
+system         public        users                            hasCreateRole            4
 system         public        users                            hashedPassword           2
 system         public        users                            isRole                   3
 system         public        users                            username                 1

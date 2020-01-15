@@ -81,6 +81,7 @@ SHOW COLUMNS FROM system.users
 username        STRING  false  NULL   ·  {primary}  false
 hashedPassword  BYTES   true   NULL   ·  {}         false
 isRole          BOOL    false  false  ·  {}         false
+hasCreateRole   BOOL    false  false  ·  {}         false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
