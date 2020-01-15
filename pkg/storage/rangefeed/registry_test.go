@@ -133,8 +133,8 @@ func TestRegistrationBasic(t *testing.T) {
 
 	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: keyA, Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: keyB, Value: val})
 
 	// Registration with no catchup scan specified.
 	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil)
@@ -270,10 +270,10 @@ func TestRegistryBasic(t *testing.T) {
 	val := roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1, ev2 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
 	ev3, ev4 := new(roachpb.RangeFeedEvent), new(roachpb.RangeFeedEvent)
-	ev1.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev2.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev3.MustSetValue(&roachpb.RangeFeedValue{Value: val})
-	ev4.MustSetValue(&roachpb.RangeFeedValue{Value: val})
+	ev1.MustSetValue(&roachpb.RangeFeedValue{Key: keyA, Value: val})
+	ev2.MustSetValue(&roachpb.RangeFeedValue{Key: keyB, Value: val})
+	ev3.MustSetValue(&roachpb.RangeFeedValue{Key: keyC, Value: val})
+	ev4.MustSetValue(&roachpb.RangeFeedValue{Key: keyD, Value: val})
 	err1 := roachpb.NewErrorf("error1")
 
 	reg := makeRegistry()
