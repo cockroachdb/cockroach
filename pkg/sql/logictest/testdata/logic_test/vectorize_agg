@@ -1,0 +1,60 @@
+# LogicTest: local local-vec
+
+# Disable automatic stats.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+CREATE TABLE bools (b BOOL)
+
+# Ensure vectorize engine is used
+statement ok
+SET vectorize=experimental_always
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+NULL NULL
+
+statement ok
+RESET vectorize
+
+statement OK
+INSERT INTO bools VALUES (true), (true), (true)
+
+statement ok
+SET vectorize=experimental_always
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+true true
+
+statement ok
+RESET vectorize
+
+statement OK
+INSERT INTO bools VALUES (false), (false)
+
+statement ok
+SET vectorize=experimental_always
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+false true
+
+statement ok
+RESET vectorize
+
+statement OK
+DELETE FROM bools WHERE b
+
+statement ok
+SET vectorize=experimental_always
+
+query BB
+SELECT bool_and(b), bool_or(b) FROM bools
+----
+false false
+
