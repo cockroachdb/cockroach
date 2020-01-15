@@ -146,8 +146,11 @@ else
                     "backward-incompatible change") ;;
                     "performance improvement") ;;
                     "bug fix") ;;
+                    "security update") ;;
                     bugfix)
                         hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
+                    security*)
+                        hint "Try 'Release note ($lcat)' -> 'Release note (security update)'" ;;
                     sql*)
                         hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
                     "backwards-incompatible"*|"backward incompatible"*)
