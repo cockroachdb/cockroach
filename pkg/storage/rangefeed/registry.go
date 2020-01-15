@@ -115,6 +115,8 @@ func newRegistration(
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
 func (r *registration) publish(event *roachpb.RangeFeedEvent) {
+	event = r.maybeStripEvent(event)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
@@ -128,6 +130,43 @@ func (r *registration) publish(event *roachpb.RangeFeedEvent) {
 		// a catch-up scan.
 		r.mu.overflowed = true
 	}
+}
+
+// maybeStripEvent determines whether the event contains excess information not
+// applicable to the current registration. If so, it makes a copy of the event
+// and strips the incompatible information to match only what the registration
+// requested.
+func (r *registration) maybeStripEvent(event *roachpb.RangeFeedEvent) *roachpb.RangeFeedEvent {
+	ret := event
+	copyOnWrite := func() interface{} {
+		if ret == event {
+			ret = event.ShallowCopy()
+		}
+		return ret.GetValue()
+	}
+
+	switch t := ret.GetValue().(type) {
+	case *roachpb.RangeFeedValue:
+	case *roachpb.RangeFeedCheckpoint:
+		if !t.Span.EqualValue(r.span) {
+			// Checkpoint events are always created spanning the entire Range.
+			// However, a registration might not be listening on updates over
+			// the entire Range. If this is the case then we need to constrain
+			// the checkpoint events published to that registration to just the
+			// span that it's listening on. This is more than just a convenience
+			// to consumers - it would be incorrect to say that a rangefeed has
+			// observed all values up to the checkpoint timestamp over a given
+			// key span if any updates to that span have been filtered out.
+			if !t.Span.Contains(r.span) {
+				panic(fmt.Sprintf("registration span %v larger than checkpoint span %v", r.span, t.Span))
+			}
+			t = copyOnWrite().(*roachpb.RangeFeedCheckpoint)
+			t.Span = r.span
+		}
+	default:
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
+	}
+	return ret
 }
 
 // disconnect cancels the output loop context for the registration and passes an
@@ -369,7 +408,7 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		// of a registration's starting timestamp.
 		minTS = hlc.MaxTimestamp
 	default:
-		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", event))
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
 
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {

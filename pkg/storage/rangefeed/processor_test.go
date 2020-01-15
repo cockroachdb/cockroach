@@ -191,7 +191,7 @@ func TestProcessorBasic(t *testing.T) {
 	require.Equal(t, 1, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 1},
 		)},
 		r1Stream.Events(),
@@ -202,7 +202,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 5},
 		)},
 		r1Stream.Events(),
@@ -254,7 +254,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 9},
 		)},
 		r1Stream.Events(),
@@ -264,7 +264,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 11},
 		)},
 		r1Stream.Events(),
@@ -284,7 +284,7 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 			rangeFeedCheckpoint(
-				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 				hlc.Timestamp{WallTime: 15},
 			),
 		},
@@ -305,7 +305,7 @@ func TestProcessorBasic(t *testing.T) {
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 15},
 		)},
 		r2Stream.Events(),
@@ -314,12 +314,16 @@ func TestProcessorBasic(t *testing.T) {
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(hlc.Timestamp{WallTime: 20})
 	p.syncEventAndRegistrations()
-	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+	chEventAM := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{WallTime: 20},
 	)}
-	require.Equal(t, chEvent, r1Stream.Events())
-	require.Equal(t, chEvent, r2Stream.Events())
+	require.Equal(t, chEventAM, r1Stream.Events())
+	chEventCZ := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
+		hlc.Timestamp{WallTime: 20},
+	)}
+	require.Equal(t, chEventCZ, r2Stream.Events())
 
 	// Test value with two registration that overlaps both.
 	p.ConsumeLogicalOps(
@@ -411,7 +415,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 0},
 		)},
 		r1Stream.Events(),
@@ -532,7 +536,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	// The registration should be provided a checkpoint immediately with an
 	// empty resolved timestamp because it did not perform a catch-up scan.
 	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{},
 	)}
 	require.Equal(t, chEvent, r1Stream.Events())
@@ -563,7 +567,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 	// The registration should have been informed of the new resolved timestamp.
 	chEvent = []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{WallTime: 18},
 	)}
 	require.Equal(t, chEvent, r1Stream.Events())

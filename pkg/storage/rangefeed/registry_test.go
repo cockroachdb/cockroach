@@ -378,7 +378,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
 	ev.MustSetValue(&roachpb.RangeFeedCheckpoint{
-		ResolvedTS: hlc.Timestamp{WallTime: 5},
+		Span: spAB, ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
 	reg.PublishToOverlapping(spAB, ev)
 	require.NoError(t, reg.waitForCaughtUp(all))
