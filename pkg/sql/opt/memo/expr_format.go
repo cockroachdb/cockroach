@@ -360,6 +360,29 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
 			}
 		}
+		if t.Locking != nil {
+			strength := ""
+			switch t.Locking.Strength {
+			case tree.ForNone:
+			case tree.ForKeyShare:
+				strength = "for-key-share"
+			case tree.ForShare:
+				strength = "for-share"
+			case tree.ForNoKeyUpdate:
+				strength = "for-no-key-update"
+			case tree.ForUpdate:
+				strength = "for-update"
+			}
+			wait := ""
+			switch t.Locking.WaitPolicy {
+			case tree.LockWaitBlock:
+			case tree.LockWaitSkip:
+				wait = ",skip-locked"
+			case tree.LockWaitError:
+				wait = ",nowait"
+			}
+			tp.Childf("locking: %s%s", strength, wait)
+		}
 
 	case *LookupJoinExpr:
 		if !t.Flags.Empty() {

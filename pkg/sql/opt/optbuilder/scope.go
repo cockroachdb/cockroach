@@ -98,6 +98,9 @@ type scope struct {
 	// scopes.
 	ctes map[string]*cteSource
 
+	// locking contains FOR [KEY] UPDATE/SHARE items that apply to this scope.
+	locking []*tree.LockingItem
+
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
@@ -1297,6 +1300,77 @@ func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarNodeFormatter"))
 }
+
+// firstLockingMode returns the first row-level locking mode if there are any in
+// this scope or in any of its parents scopes.
+func (s *scope) firstLockingMode() *tree.LockingItem {
+	for curr := s; curr != nil; curr = curr.parent {
+		if len(curr.locking) > 0 {
+			return curr.locking[0]
+		}
+	}
+	return nil
+}
+
+// lockingModeForTable returns the desired row-level locking mode for the
+// specifies table as was specified using a FOR [KEY] UPDATE/SHARE clause in
+// this scope or any of its parents. If no matching locking mode is found, the
+// method will return nil. Otherwise, the non-nil returned LockingItem will
+// always have an empty Targets list.
+func (s *scope) lockingModeForTable(alias tree.Name) *tree.LockingItem {
+	var ret *tree.LockingItem
+	var copied bool
+	updateRet := func(li *tree.LockingItem) {
+		if ret == nil && len(li.Targets) == 0 {
+			ret = li
+			return
+		}
+		if !copied {
+			ret = new(tree.LockingItem)
+			copied = true
+		}
+		// From https://www.postgresql.org/docs/12/sql-select.html#SQL-FOR-UPDATE-SHARE
+		// > If the same table is mentioned (or implicitly affected) by more
+		// > than one locking clause, then it is processed as if it was only
+		// > specified by the strongest one.
+		ret.Strength = ret.Strength.Max(li.Strength)
+		// > Similarly, a table is processed as NOWAIT if that is specified in
+		// > any of the clauses affecting it. Otherwise, it is processed as SKIP
+		// > LOCKED if that is specified in any of the clauses affecting it.
+		ret.WaitPolicy = ret.WaitPolicy.Max(li.WaitPolicy)
+	}
+
+	for curr := s; curr != nil; curr = curr.parent {
+		for _, li := range curr.locking {
+			if len(li.Targets) == 0 {
+				// If no targets are specified, the clause affects all tables.
+				updateRet(li)
+			} else {
+				// If targets are specified, the clause affects only those tables.
+				for _, target := range li.Targets {
+					if target.TableName == alias {
+						updateRet(li)
+						break
+					}
+				}
+			}
+		}
+	}
+	return ret
+}
+
+// ignoreLockingForCTE is a placeholder for the following comment:
+//
+// We intentionally do not propate any row-level locking information from the
+// current scope to the CTE. This mirrors Postgres' behavior. It also avoids a
+// number of awkward questions like how row-level locking would interact with
+// mutating commong table expressions.
+//
+// From https://www.postgresql.org/docs/12/sql-select.html#SQL-FOR-UPDATE-SHARE
+// > these clauses do not apply to WITH queries referenced by the primary query.
+// > If you want row locking to occur within a WITH query, specify a locking
+// > clause within the WITH query.
+func (s *scope) ignoreLockingForCTE() {}
 
 // newAmbiguousColumnError returns an error with a helpful error message to be
 // used in case of an ambiguous column reference.
