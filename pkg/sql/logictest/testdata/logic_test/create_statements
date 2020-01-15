@@ -88,4 +88,3 @@ CREATE TABLE a (b INT) WITH (toast_tuple_target=100);
 
 statement ok
 CREATE TABLE a (b INT) WITH (fillfactor=100);
-

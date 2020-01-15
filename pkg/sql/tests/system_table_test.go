@@ -119,6 +119,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.CommentsTableID, sqlbase.CommentsTableSchema, sqlbase.CommentsTable},
 		{keys.ProtectedTimestampsMetaTableID, sqlbase.ProtectedTimestampsMetaTableSchema, sqlbase.ProtectedTimestampsMetaTable},
 		{keys.ProtectedTimestampsRecordsTableID, sqlbase.ProtectedTimestampsRecordsTableSchema, sqlbase.ProtectedTimestampsRecordsTable},
+		{keys.RoleOptionsTableID, sqlbase.RoleOptionsTableSchema, sqlbase.RoleOptionsTable},
 	} {
 		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(

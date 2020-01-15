@@ -277,17 +277,24 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "create new system.namespace table",
 		workFn:              createNewSystemNamespaceDescriptor,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "migrate system.namespace_deprecated entries into system.namespace",
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+	},
+	{
+		// Introduced in v20.1.,
+		name:                "create system.role_options table with an entry for (admin, CREATEROLE)",
+		workFn:              createRoleOptionsTable,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
+		newDescriptorIDs:    staticIDs(keys.RoleOptionsTableID),
 	},
 }
 
@@ -734,6 +741,24 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 			sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))
 		return txn.Run(ctx, b)
 	})
+}
+
+func createRoleOptionsTable(ctx context.Context, r runner) error {
+	// Create system.role_options table with an entry for (admin, CREATEROLE).
+	err := createSystemTable(ctx, r, sqlbase.RoleOptionsTable)
+	if err != nil {
+		return errors.Wrap(err, "failed to create system.role_options")
+	}
+
+	// Upsert the admin role with CreateRole privilege into the table.
+	// We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
+          `
+	return r.execAsRootWithRetry(ctx,
+		"add role options table and upsert admin with CREATEROLE",
+		upsertAdminStmt,
+		sqlbase.AdminRole)
 }
 
 // migrateSystemNamespace migrates entries from the deprecated system.namespace

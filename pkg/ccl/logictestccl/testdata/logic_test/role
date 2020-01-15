@@ -780,3 +780,182 @@ REVOKE public FROM testuser
 
 statement error user or role public does not exist
 REVOKE admin FROM public
+
+# Test "WITH CREATEROLE" option
+
+statement error pq: conflicting role privilege options
+CREATE ROLE rolewithcreate WITH NOCREATEROLE CREATEROLE
+
+statement error pq: conflicting role privilege options
+CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
+
+statement error pq: conflicting role privilege options
+ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
+
+statement error pq: conflicting role privilege options
+ALTER ROLE testrole CREATEROLE NOCREATEROLE
+
+statement error pq: redundant role privilege options
+CREATE ROLE rolewithcreate WITH CREATEROLE CREATEROLE
+
+statement error pq: redundant role privilege options
+CREATE ROLE rolewithcreate WITH NOCREATEROLE NOCREATEROLE
+
+statement error pq: redundant role privilege options
+ALTER ROLE testrole WITH CREATEROLE CREATEROLE
+
+statement error pq: redundant role privilege options
+ALTER ROLE testrole WITH NOCREATEROLE NOCREATEROLE
+
+statement ok
+CREATE ROLE rolewithcreate WITH CREATEROLE
+
+statement ok
+CREATE ROLE anotherrolewithcreate CREATEROLE
+
+statement ok
+CREATE ROLE rolewithoutcreate WITH NOCREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS rolewithcreate2 WITH CREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS anotherrolewithcreate2 CREATEROLE
+
+statement ok
+CREATE ROLE IF NOT EXISTS rolewithoutcreate2 WITH NOCREATEROLE
+
+statement ok
+CREATE USER testuser
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+
+user testuser
+
+# User should not have permissions to CREATE / ALTER role without CREATEROLE privilege
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolewithcreate3 WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER ROLE rolewithcreate WITH NOCREATEROLE
+
+user root
+
+statement ok
+GRANT rolewithcreate TO testuser
+
+user testuser
+
+statement ok
+CREATE ROLE roleg WITH CREATEROLE
+
+statement ok
+ALTER ROLE roleg WITH NOCREATEROLE
+
+statement ok
+DROP ROLE roleg
+
+statement ok
+CREATE ROLE IF NOT EXISTS roleg
+
+statement ok
+CREATE ROLE IF NOT EXISTS roleg
+
+# Need Admin option to GRANT role, CREATEROLE should not give GRANT role privilege for other roles
+statement ok
+CREATE USER testuser3
+
+statement error pq: testuser is not a role admin for role admin
+GRANT admin to testuser3
+
+statement error pq: testuser is not a superuser or role admin for role roleg
+GRANT roleg to testuser3
+
+user root
+
+statement ok
+ALTER ROLE rolewithcreate WITH NOCREATEROLE
+
+statement ok
+ALTER ROLE rolewithcreate NOCREATEROLE
+
+statement error pq: cannot edit admin role
+ALTER ROLE admin with NOCREATEROLE
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+rolewithcreate  testuser  false
+
+# testuser should no longer have CREATEROLE privileges
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE roleh WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER ROLE roleg with NOCREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+DROP ROLE roleg
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE IF NOT EXISTS rolewithcreate WITH CREATEROLE
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE USER testuser4
+
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER USER testuser3 WITH PASSWORD 'ilov3beefjerky'
+
+user root
+
+statement error pq: role rolek does not exist
+ALTER ROLE rolek CREATEROLE
+
+statement ok
+ALTER ROLE rolewithcreate WITH CREATEROLE
+
+statement ok
+ALTER ROLE rolewithcreate CREATEROLE
+
+user testuser
+
+statement ok
+CREATE ROLE IF NOT EXISTS rolei WITH NOCREATEROLE
+
+statement ok
+DROP ROLE rolewithcreate
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE rolewithcreate
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE ROLE IF NOT EXISTS roleh WITH CREATEROLE
+
+# Testing nested role privilege
+user root
+
+statement ok
+CREATE ROLE childrole WITH NOCREATEROLE
+
+statement ok
+CREATE ROLE parentrole WITH CREATEROLE
+
+statement ok
+GRANT parentrole TO childrole
+
+statement ok
+GRANT childrole to testuser
+
+user testuser
+
+statement ok
+CREATE ROLE rolej

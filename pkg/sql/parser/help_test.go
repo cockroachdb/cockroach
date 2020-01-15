@@ -66,6 +66,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
+		{`ALTER ROLE bleh ?? WITH NOCREATEROLE`, `ALTER ROLE`},
+
 		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
 		{`ALTER RANGE ??`, `ALTER RANGE`},
 
@@ -104,6 +106,7 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE USER blih WITH ??`, `CREATE USER`},
 
 		{`CREATE ROLE bleh ??`, `CREATE ROLE`},
+		{`CREATE ROLE bleh ?? WITH CREATEROLE`, `CREATE ROLE`},
 
 		{`CREATE VIEW blah (??`, `CREATE VIEW`},
 		{`CREATE VIEW blah AS (SELECT c FROM x) ??`, `CREATE VIEW`},

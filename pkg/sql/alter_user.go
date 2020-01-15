@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -36,12 +36,7 @@ type alterUserSetPasswordNode struct {
 func (p *planner) AlterUserSetPassword(
 	ctx context.Context, n *tree.AlterUserSetPassword,
 ) (planNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.UPDATE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
