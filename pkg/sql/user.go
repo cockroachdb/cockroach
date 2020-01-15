@@ -98,7 +98,7 @@ func retrieveUserAndPassword(
 	// Perform the lookup with a timeout.
 	err = runFn(func(ctx context.Context) error {
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
-			`WHERE username=$1 AND "isRole" = false`
+			`WHERE username=$1 AND "isRole" = false AND "hasCreateRole" = false`
 		values, err := ie.QueryRowEx(
 			ctx, "get-hashed-pwd", nil, /* txn */
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},

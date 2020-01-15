@@ -12,12 +12,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -26,33 +27,38 @@ import (
 // CreateUserNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateUserNode struct {
-	ifNotExists bool
-	isRole      bool
+	ifNotExists    bool
+	isRole         bool
+	RolePrivileges roleprivilege.List
 	userAuthInfo
 
 	run createUserRun
 }
 
-var userTableName = tree.NewTableName("system", "users")
+var userTableName = tree.NewTableName("system", "users").String()
 
 // CreateUser creates a user.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
 func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
-	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, false /* isRole */, "CREATE USER")
+	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, false /* isRole */, "CREATE USER", nil)
 }
 
 // CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
 func (p *planner) CreateUserNode(
-	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
+	ctx context.Context,
+	nameE, passwordE tree.Expr,
+	ifNotExists bool,
+	isRole bool,
+	opName string,
+	rolePrivileges roleprivilege.List,
 ) (*CreateUserNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
+	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
+	if err := rolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
 		return nil, err
 	}
 
@@ -62,9 +68,10 @@ func (p *planner) CreateUserNode(
 	}
 
 	return &CreateUserNode{
-		userAuthInfo: ua,
-		ifNotExists:  ifNotExists,
-		isRole:       isRole,
+		userAuthInfo:   ua,
+		ifNotExists:    ifNotExists,
+		isRole:         isRole,
+		RolePrivileges: rolePrivileges,
 	}, nil
 }
 
@@ -104,7 +111,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName,
 		params.p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`select "isRole" from system.users where username = $1`,
+		fmt.Sprintf(`select "isRole" from %s where username = $1`, userTableName),
 		normalizedUsername,
 	)
 	if err != nil {
@@ -126,15 +133,22 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
+	rolePrivilegeBits, err := n.RolePrivileges.ToBitField()
+	if err != nil {
+		return err
+	}
+
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		"insert into system.users values ($1, $2, $3)",
+		fmt.Sprintf("insert into %s values ($1, $2, $3, $4)", userTableName),
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
+		rolePrivilegeBits&roleprivilege.CREATEROLE.Mask() != 0,
 	)
+
 	if err != nil {
 		return err
 	} else if n.run.rowsAffected != 1 {

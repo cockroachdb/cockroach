@@ -616,9 +616,9 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'FKScan%'
 ----
-FKScan /Table/84/3/100/"one"{-/#}
-FKScan /Table/85/3/100/"one"{-/#}
-FKScan /Table/86/2/100/"one"{-/PrefixEnd}
+FKScan /Table/88/3/100/"one"{-/#}
+FKScan /Table/89/3/100/"one"{-/#}
+FKScan /Table/90/2/100/"one"{-/PrefixEnd}
 
 # since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
 statement ok

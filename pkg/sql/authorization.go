@@ -12,11 +12,14 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -280,4 +283,51 @@ func (p *planner) resolveMemberOfWithAdminOption(
 	}
 
 	return ret, nil
+}
+
+// HasRolePrivilege converts the roleprivilege to it's SQL column name and
+// checks if the user belongs to a role where the roleprivilege has value true.
+// Only works on checking the "positive version" of the privilege.
+// Example: CREATEROLE instead of NOCREATEROLE.
+func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleprivilege.Kind) error {
+	user := p.SessionData().User
+
+	if user == security.RootUser || user == security.NodeUser {
+		return nil
+	}
+
+	normalizedName, err := NormalizeAndValidateUsername(user)
+	if err != nil {
+		return err
+	}
+
+	// Create list of roles for sql WHERE IN clause.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, normalizedName)
+
+	var roles []string
+	for role := range memberOf {
+		roles = append(roles, fmt.Sprintf("'%s'", role))
+	}
+
+	sqlRoleList := fmt.Sprintf("(%s)", strings.Join(roles, ","))
+
+	hasCreateRoleRows, err := p.ExecCfg().InternalExecutor.Query(
+		ctx, "hasCreateRole", p.Txn(),
+		fmt.Sprintf(
+			`SELECT * from %s WHERE "%s" = true AND username in %s`,
+			userTableName,
+			rolePrivilege.ToSQLColumnName(),
+			sqlRoleList))
+
+	if err != nil {
+		return err
+	}
+
+	if len(hasCreateRoleRows) != 0 {
+		return nil
+	}
+
+	// User is not a member of a role that has CREATEROLE privilege.
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"user %s does not have CREATEROLE privilege", user)
 }
