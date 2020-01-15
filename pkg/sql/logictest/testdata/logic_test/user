@@ -97,7 +97,7 @@ root  root  root
 
 user testuser
 
-statement error pq: user testuser does not have INSERT privilege on relation users
+statement error pq: user testuser does not have CREATEROLE privilege
 CREATE USER user4
 
 statement error pq: user testuser does not have INSERT privilege on relation users
