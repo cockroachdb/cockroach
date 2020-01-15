@@ -340,6 +340,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			// TODO (rohany,solongordon): Figure out whats going on with interleaved tables later.
+			//  For now, we will disallow primary key change operations on tables that are interleaved
+			//  or have interleaved children.
+			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
+				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
+					return errors.New("table being altered cannot have interleaved children or be interleaved")
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+
 			nameExists := func(name string) bool {
 				_, _, err := n.tableDesc.FindIndexByName(name)
 				return err == nil
@@ -367,16 +379,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			// TODO (rohany,solongordon): Figure out whats going on with interleaved tables later.
-			//  For now, we will disallow primary key change operations on tables that are interleaved
-			//  or have interleaved children.
-			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
-				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
-					return errors.New("table being altered cannot have interleaved children or be interleaved")
+			if t.Interleave != nil {
+				if err := params.p.addInterleave(params.ctx, n.tableDesc, newPrimaryIndexDesc, t.Interleave); err != nil {
+					return err
 				}
-				return nil
-			}); err != nil {
-				return err
+				if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, newPrimaryIndexDesc); err != nil {
+					return err
+				}
 			}
 
 			// TODO (rohany,solongordon): Until it is clear how to handle foreign keys, disallow primary key changes
