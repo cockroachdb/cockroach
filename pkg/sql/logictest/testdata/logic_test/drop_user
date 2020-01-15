@@ -136,7 +136,7 @@ testuser
 
 user testuser
 
-statement error pq: user testuser does not have DELETE privilege on relation users
+statement error pq: user testuser does not have CREATEROLE privilege
 DROP USER user2
 
 user root

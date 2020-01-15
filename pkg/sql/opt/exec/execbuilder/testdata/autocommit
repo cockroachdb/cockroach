@@ -33,11 +33,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
 # Multi-row insert should auto-commit.
 query B
@@ -54,11 +54,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -78,11 +78,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -102,11 +102,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -123,13 +123,13 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -147,13 +147,13 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -184,11 +184,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
 # Multi-row upsert should auto-commit.
 query B
@@ -205,11 +205,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -229,11 +229,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -253,11 +253,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -274,13 +274,13 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Upsert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -298,13 +298,13 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -335,12 +335,12 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -360,12 +360,12 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -385,12 +385,12 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -407,14 +407,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Update with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -432,14 +432,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Put to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Put to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -470,11 +470,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # Multi-row delete should auto-commit.
 query B
@@ -491,11 +491,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -515,11 +515,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r29: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -539,12 +539,12 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message     LIKE '%r28: sending batch%'
+WHERE message     LIKE '%sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -561,14 +561,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Del to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Del to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -586,14 +586,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 2 Del to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 2 Del to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 INSERT INTO ab VALUES (12, 0);
@@ -636,14 +636,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 CPut, 2 InitPut to (n1,s1):1
-dist sender send  r28: sending batch 2 Scan to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut, 2 InitPut to (n1,s1):1
+dist sender send  r29: sending batch 2 Scan to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -659,15 +659,15 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -684,15 +684,15 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 1 Del to (n1,s1):1
-dist sender send  r28: sending batch 1 Scan to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 1 Del to (n1,s1):1
+dist sender send  r29: sending batch 1 Scan to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 # -----------------------
 # Multiple mutation tests
@@ -715,14 +715,14 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -740,11 +740,11 @@ SET TRACING=OFF
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message       LIKE '%r28: sending batch%'
+WHERE message       LIKE '%sending batch%'
   AND message   NOT LIKE '%PushTxn%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 2 CPut to (n1,s1):1
-dist sender send  r28: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 2 CPut to (n1,s1):1
+dist sender send  r29: sending batch 1 EndTxn to (n1,s1):1
