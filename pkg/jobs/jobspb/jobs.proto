@@ -75,6 +75,8 @@ message RestoreDetails {
   repeated sqlbase.TableDescriptor table_descs = 5;
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
   bool prepare_completed = 8;
+  bool stats_inserted = 9;
+  bool tables_published = 10;
 }
 
 message RestoreProgress {

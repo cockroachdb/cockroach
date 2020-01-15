@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -211,6 +212,59 @@ func TestAppend(t *testing.T) {
 			dest := NewMemColumn(typ, int(BatchSize()))
 			dest.Append(tc.args)
 			require.Equal(t, tc.expectedLength, len(dest.Int64()))
+		})
+	}
+}
+
+// TestAppendBytesWithLastNull makes sure that Append handles correctly the
+// case when the last element of Bytes vector is NULL.
+func TestAppendBytesWithLastNull(t *testing.T) {
+	src := NewMemColumn(coltypes.Bytes, 4)
+	sel := []uint16{0, 2, 3}
+	src.Bytes().Set(0, []byte("zero"))
+	src.Nulls().SetNull(1)
+	src.Bytes().Set(2, []byte("two"))
+	src.Nulls().SetNull(3)
+	sliceArgs := SliceArgs{
+		Src:         src,
+		ColType:     coltypes.Bytes,
+		DestIdx:     0,
+		SrcStartIdx: 0,
+		SrcEndIdx:   uint64(len(sel)),
+	}
+	dest := NewMemColumn(coltypes.Bytes, 3)
+	expected := NewMemColumn(coltypes.Bytes, 3)
+	for _, withSel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
+			expected.Nulls().UnsetNulls()
+			expected.Bytes().Reset()
+			if withSel {
+				sliceArgs.Sel = sel
+				for expIdx, srcIdx := range sel {
+					if src.Nulls().NullAt(srcIdx) {
+						expected.Nulls().SetNull(uint16(expIdx))
+					} else {
+						expected.Bytes().Set(expIdx, src.Bytes().Get(int(srcIdx)))
+					}
+				}
+			} else {
+				sliceArgs.Sel = nil
+				for expIdx := 0; expIdx < 3; expIdx++ {
+					if src.Nulls().NullAt(uint16(expIdx)) {
+						expected.Nulls().SetNull(uint16(expIdx))
+					} else {
+						expected.Bytes().Set(expIdx, src.Bytes().Get(expIdx))
+					}
+				}
+			}
+			expected.Bytes().UpdateOffsetsToBeNonDecreasing(3)
+			// require.Equal checks the "string-ified" versions of the vectors for
+			// equality. Bytes uses maxSetIndex to print out "truncated"
+			// representation, so we manually update it (Vec.Append will use
+			// AppendVal function that updates maxSetIndex itself).
+			expected.Bytes().maxSetIndex = 2
+			dest.Append(sliceArgs)
+			require.Equal(t, expected, dest)
 		})
 	}
 }
