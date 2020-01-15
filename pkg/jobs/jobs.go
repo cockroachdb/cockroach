@@ -129,6 +129,9 @@ func (j *Job) Created(ctx context.Context) error {
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
 	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusPending && md.Status != StatusRunning {
+			return errors.Errorf("job with status %s cannot be marked started", md.Status)
+		}
 		// TODO(spaskob): Remove this status change after we stop supporting
 		// pending job states.
 		ju.UpdateStatus(StatusRunning)
