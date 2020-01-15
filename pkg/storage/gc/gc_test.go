@@ -8,30 +8,31 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package engine
+package gc
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) MVCCKey {
-	return MVCCKey{Key: key, Timestamp: ts}
+func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) engine.MVCCKey {
+	return engine.MVCCKey{Key: key, Timestamp: ts}
 }
 
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
-	aKeys = []MVCCKey{
+	aKeys = []engine.MVCCKey{
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 1}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
-	bKeys = []MVCCKey{
+	bKeys = []engine.MVCCKey{
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
@@ -48,7 +49,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	testData := []struct {
 		gc       GarbageCollector
 		time     hlc.Timestamp
-		keys     []MVCCKey
+		keys     []engine.MVCCKey
 		values   [][]byte
 		expIdx   int
 		expDelTS hlc.Timestamp
