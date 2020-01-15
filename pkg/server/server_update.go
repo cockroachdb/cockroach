@@ -93,20 +93,20 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	nodesWithLiveness, err := s.status.NodesWithLiveness(ctx)
+	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
 	if err != nil {
 		return false, err
 	}
 
 	var newVersion string
 	for nodeID, st := range nodesWithLiveness {
-		if st.LivenessStatus != storagepb.NodeLivenessStatus_LIVE &&
-			st.LivenessStatus != storagepb.NodeLivenessStatus_DECOMMISSIONING {
+		if st.livenessStatus != storagepb.NodeLivenessStatus_LIVE &&
+			st.livenessStatus != storagepb.NodeLivenessStatus_DECOMMISSIONING {
 			return false, errors.Errorf("node %d not running (%s), cannot determine version",
-				nodeID, st.LivenessStatus)
+				nodeID, st.livenessStatus)
 		}
 
-		version := st.Desc.ServerVersion.String()
+		version := st.NodeStatus.Desc.ServerVersion.String()
 		if newVersion == "" {
 			newVersion = version
 		} else if version != newVersion {
