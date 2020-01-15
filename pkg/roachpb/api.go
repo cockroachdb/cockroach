@@ -1180,6 +1180,25 @@ func (e *RangeFeedEvent) MustSetValue(value interface{}) {
 	}
 }
 
+// ShallowCopy returns a shallow copy of the receiver and its variant type.
+func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
+	copy := *e
+	switch t := copy.GetValue().(type) {
+	case *RangeFeedValue:
+		copyVal := *t
+		copy.MustSetValue(&copyVal)
+	case *RangeFeedCheckpoint:
+		copyChk := *t
+		copy.MustSetValue(&copyChk)
+	case *RangeFeedError:
+		copyErr := *t
+		copy.MustSetValue(&copyErr)
+	default:
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
+	}
+	return &copy
+}
+
 // MakeReplicationChanges returns a slice of changes of the given type with an
 // item for each target.
 func MakeReplicationChanges(
