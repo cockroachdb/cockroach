@@ -57,7 +57,11 @@ func ShowCreateTable(
 	a := &sqlbase.DatumAlloc{}
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteString("CREATE TABLE ")
+	f.WriteString("CREATE ")
+	if desc.Temporary {
+		f.WriteString("TEMP ")
+	}
+	f.WriteString("TABLE ")
 	f.FormatNode(tn)
 	f.WriteString(" (")
 	primaryKeyIsOnVisibleColumn := false

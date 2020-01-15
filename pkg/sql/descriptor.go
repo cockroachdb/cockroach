@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -300,6 +301,39 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 		descIDs = append(descIDs, ID)
 	}
 	return descIDs, nil
+}
+
+// GetSchemasForDatabase looks up and returns all available
+// schema ids to names
+func GetSchemasForDatabase(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
+) (map[sqlbase.ID]string, error) {
+	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
+
+	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key()
+	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+
+	// Always add public schema ID.
+	// TODO(solon): This can be removed in 20.2, when this is always written.
+	// In 20.1, in a migrating state, it may be not included yet.
+	ret := make(map[sqlbase.ID]string, len(kvs)+1)
+	ret[sqlbase.ID(keys.PublicSchemaID)] = tree.PublicSchema
+
+	for _, kv := range kvs {
+		id := sqlbase.ID(kv.ValueInt())
+		if _, ok := ret[id]; ok {
+			continue
+		}
+		_, _, name, err := sqlbase.DecodeNameMetadataKey(kv.Key)
+		if err != nil {
+			return nil, err
+		}
+		ret[id] = name
+	}
+	return ret, nil
 }
 
 // writeDescToBatch adds a Put command writing a descriptor proto to the

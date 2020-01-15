@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // delegateShowTables implements SHOW TABLES which returns all the tables.
@@ -30,6 +31,11 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	}
 
 	var query string
+	schema := lex.EscapeSQLString(name.Schema())
+	if name.Schema() == sessiondata.PgTempSchemaName {
+		schema = lex.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
+	}
+
 	if n.WithComment {
 		const getTablesQuery = `
 SELECT
@@ -44,7 +50,8 @@ WHERE ns.nspname = %[2]s
 		query = fmt.Sprintf(
 			getTablesQuery,
 			&name.CatalogName,
-			lex.EscapeSQLString(name.Schema()))
+			schema,
+		)
 
 	} else {
 		const getTablesQuery = `
@@ -53,8 +60,11 @@ WHERE ns.nspname = %[2]s
    WHERE table_schema = %[2]s
 ORDER BY table_name`
 
-		query = fmt.Sprintf(getTablesQuery,
-			&name.CatalogName, lex.EscapeSQLString(name.Schema()))
+		query = fmt.Sprintf(
+			getTablesQuery,
+			&name.CatalogName,
+			schema,
+		)
 	}
 
 	return parse(query)
