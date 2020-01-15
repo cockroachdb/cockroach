@@ -77,7 +77,7 @@ type SortedDiskMapBatchWriter interface {
 }
 
 // SortedDiskMap is an on-disk map. Keys are iterated over in sorted order.
-type SortedDiskMap interface {
+type SortedDiskMap interface /**/ {
 	// NewIterator returns a SortedDiskMapIterator that can be used to iterate
 	// over key/value pairs in sorted order.
 	NewIterator() SortedDiskMapIterator
