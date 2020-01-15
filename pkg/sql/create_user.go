@@ -26,8 +26,9 @@ import (
 // CreateUserNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateUserNode struct {
-	ifNotExists bool
-	isRole      bool
+	ifNotExists   bool
+	isRole        bool
+	hasCreateRole bool
 	userAuthInfo
 
 	run createUserRun
