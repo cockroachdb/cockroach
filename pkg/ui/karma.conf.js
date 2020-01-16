@@ -85,10 +85,10 @@ module.exports = function(config) {
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: {
+      devtool: "source-map",
+      mode: "development",
       module: webpackConfig.module,
       resolve: webpackConfig.resolve,
-      devtool: "inline-source-map",
-      mode: "development",
     },
 
     // "stats" needs to be copied to webpackMiddleware configuration in order
