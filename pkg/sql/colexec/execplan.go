@@ -280,11 +280,11 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			if len(agg.Arguments) > 0 {
 				return false, errors.Newf("aggregates with arguments not supported")
 			}
-			var inputType *types.T
-			if len(agg.ColIdx) > 0 {
-				inputType = &spec.Input[0].ColumnTypes[agg.ColIdx[0]]
+			var inputTypes []types.T
+			for _, colIdx := range agg.ColIdx {
+				inputTypes = append(inputTypes, spec.Input[0].ColumnTypes[colIdx])
 			}
-			if supported, err := isAggregateSupported(agg.Func, inputType); !supported {
+			if supported, err := isAggregateSupported(agg.Func, inputTypes); !supported {
 				return false, err
 			}
 		}
