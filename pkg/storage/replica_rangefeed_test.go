@@ -115,6 +115,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	replNum := 3
 	streams := make([]*testStream, replNum)
 	streamErrC := make(chan *roachpb.Error, replNum)
+	rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 	for i := 0; i < replNum; i++ {
 		stream := newTestStream()
 		streams[i] = stream
@@ -124,7 +125,7 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span:     roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span:     rangefeedSpan,
 				WithDiff: true,
 			}
 
@@ -168,7 +169,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			Key: roachpb.Key("b"), Value: expVal1,
 		}},
 		{Checkpoint: &roachpb.RangeFeedCheckpoint{
-			Span:       roachpb.Span{Key: startKey, EndKey: roachpb.KeyMax},
+			Span:       rangefeedSpan,
 			ResolvedTS: hlc.Timestamp{},
 		}},
 	}
@@ -406,12 +407,6 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			subT.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
 		}
 	}
-	waitForInitialCheckpoint := func(
-		subT *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error,
-	) {
-		span := roachpb.Span{Key: startKey, EndKey: roachpb.KeyMax}
-		waitForInitialCheckpointAcrossSpan(subT, stream, streamErrC, span)
-	}
 
 	assertRangefeedRetryErr := func(
 		subT *testing.T, pErr *roachpb.Error, expReason roachpb.RangeFeedRetryError_Reason,
@@ -439,12 +434,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed on the replica we plan to remove.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
+		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span: rangefeedSpan,
 			}
 
 			pErr := mtc.Store(removeStore).RangeFeed(&req, stream)
@@ -452,7 +448,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpoint(t, stream, streamErrC)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Remove the replica from the range.
 		mtc.unreplicateRange(rangeID, removeStore)
@@ -468,12 +464,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed on the replica we plan to split.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
+		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span: rangefeedSpan,
 			}
 
 			pErr := mtc.Store(0).RangeFeed(&req, stream)
@@ -481,7 +478,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpoint(t, stream, streamErrC)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Split the range.
 		args := adminSplitArgs([]byte("m"))
@@ -516,12 +513,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed on the left replica.
 		streamLeft := newTestStream()
 		streamLeftErrC := make(chan *roachpb.Error, 1)
+		rangefeedLeftSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: splitKey}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: splitKey},
+				Span: rangefeedLeftSpan,
 			}
 
 			pErr := mtc.Store(0).RangeFeed(&req, streamLeft)
@@ -531,12 +529,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed on the right replica.
 		streamRight := newTestStream()
 		streamRightErrC := make(chan *roachpb.Error, 1)
+		rangefeedRightSpan := roachpb.Span{Key: splitKey, EndKey: roachpb.Key("z")}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rightRangeID,
 				},
-				Span: roachpb.Span{Key: splitKey, EndKey: roachpb.Key("z")},
+				Span: rangefeedRightSpan,
 			}
 
 			pErr := mtc.Store(0).RangeFeed(&req, streamRight)
@@ -544,12 +543,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event on each stream.
-		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, roachpb.Span{
-			Key: startKey, EndKey: splitKey,
-		})
-		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, roachpb.Span{
-			Key: splitKey, EndKey: roachpb.KeyMax,
-		})
+		waitForInitialCheckpointAcrossSpan(t, streamLeft, streamLeftErrC, rangefeedLeftSpan)
+		waitForInitialCheckpointAcrossSpan(t, streamRight, streamRightErrC, rangefeedRightSpan)
 
 		// Merge the ranges back together
 		mergeArgs := adminMergeArgs(startKey)
@@ -574,12 +569,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed on the replica we plan to partition.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
+		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span: rangefeedSpan,
 			}
 
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
@@ -590,7 +586,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpoint(t, stream, streamErrC)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Force the leader off the replica on partitionedStore. If it's the
 		// leader, this test will fall over when it cuts the replica off from
@@ -668,12 +664,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Establish a rangefeed.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
+		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
 					RangeID: rangeID,
 				},
-				Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				Span: rangefeedSpan,
 			}
 
 			pErr := mtc.Store(0).RangeFeed(&req, stream)
@@ -681,7 +678,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}()
 
 		// Wait for the first checkpoint event.
-		waitForInitialCheckpoint(t, stream, streamErrC)
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
