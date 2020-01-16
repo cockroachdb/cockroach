@@ -191,9 +191,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Certificates | Debug</title>
-        </Helmet>
+        <Helmet title="Certificates | Debug" />
         <h1 className="base-heading">Certificates</h1>
 
         <section className="section">

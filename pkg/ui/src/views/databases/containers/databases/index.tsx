@@ -93,9 +93,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
     const { user, system } = this.props.databasesByType;
 
     return <div>
-      <Helmet>
-        <title>Tables | Databases</title>
-      </Helmet>
+      <Helmet title="Tables | Databases" />
       <section className="section"><h1 className="base-heading">Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">

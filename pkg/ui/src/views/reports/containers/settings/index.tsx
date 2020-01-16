@@ -79,9 +79,7 @@ class Settings extends React.Component<SettingsProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Cluster Settings | Debug</title>
-        </Helmet>
+        <Helmet title="Cluster Settings | Debug" />
         <h1 className="base-heading">Cluster Settings</h1>
         <Loading
           loading={!this.props.settings.data}

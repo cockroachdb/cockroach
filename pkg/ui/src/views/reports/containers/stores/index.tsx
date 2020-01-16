@@ -105,9 +105,7 @@ class Stores extends React.Component<StoresProps, {}> {
 
     return (
       <div className="section">
-        <Helmet>
-          <title>Stores | Debug</title>
-        </Helmet>
+        <Helmet title="Stores | Debug" />
         <h1 className="base-heading">Stores</h1>
         <h2 className="base-heading">{header} stores</h2>
         <Loading
