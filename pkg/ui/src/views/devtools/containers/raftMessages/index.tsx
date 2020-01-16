@@ -38,11 +38,9 @@ interface NodeGraphsOwnProps {
   hoverState: HoverState;
 }
 
-type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
-/**
- * NodeGraphs renders the main content of the cluster graphs page.
- */
-class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
+type RaftMessagesProps = NodeGraphsOwnProps & RouterState;
+
+export class RaftMessages extends React.Component<RaftMessagesProps, {}> {
   // Magic to add react router to the context.
   // See https://github.com/ReactTraining/react-router/issues/975
   // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
@@ -95,7 +93,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     this.refresh();
   }
 
-  componentWillReceiveProps(props: NodeGraphsProps) {
+  componentWillReceiveProps(props: RaftMessagesProps) {
     this.refresh(props);
   }
 
@@ -169,6 +167,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     );
   }
 }
+
 const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
   nodesSummary: nodesSummarySelector(state),
   nodesQueryValid: state.cachedData.nodes.valid,
@@ -187,4 +186,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(NodeGraphs);
+export default connect(mapStateToProps, mapDispatchToProps)(RaftMessages);
