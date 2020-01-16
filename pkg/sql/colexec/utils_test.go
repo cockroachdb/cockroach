@@ -549,8 +549,10 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	}
 
 	// Reset nulls for all columns in this batch.
-	for i := 0; i < s.batch.Width(); i++ {
-		s.batch.ColVec(i).Nulls().UnsetNulls()
+	for _, colVec := range s.batch.ColVecs() {
+		if colVec.Type() != coltypes.Unhandled {
+			colVec.Nulls().UnsetNulls()
+		}
 	}
 
 	rng := rand.New(rand.NewSource(123))

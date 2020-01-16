@@ -198,7 +198,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	for {
 		batch := si.input.Next(ctx)
 		if batch.Length() == 0 {
-			return batch
+			return coldata.ZeroBatch
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -267,12 +267,10 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
-	if pi.outputIdx == batch.Width() {
-		pi.allocator.AppendColumn(batch, coltypes.Bool)
-	}
 	if batch.Length() == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	pi.allocator.MaybeAddColumn(batch, coltypes.Bool, pi.outputIdx)
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec._TemplateType()

@@ -62,14 +62,37 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 	return coldata.NewMemColumn(t, n)
 }
 
-// AppendColumn appends a newly allocated coldata.Vec of the given type to b.
-func (a *Allocator) AppendColumn(b coldata.Batch, t coltypes.T) {
+// MaybeAddColumn might add a newly allocated coldata.Vec of the given type to
+// b at position colIdx. It will do so if either
+// 1. the width of the batch is not greater than colIdx, or
+// 2. there is already an "unknown" vector in position colIdx in the batch.
+// If the first condition is true, then "unknown" vectors of zero length will
+// be appended to the batch before appending the requested column.
+// If the second condition is true, then the "unknown" column is replaced with
+// the newly created typed column.
+// NOTE: b must be non-zero length batch.
+func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
+	if b.Length() == 0 {
+		execerror.VectorizedInternalPanic("trying to add a column to zero length batch")
+	}
+	if b.Width() > colIdx && b.ColVec(colIdx).Type() != coltypes.Unhandled {
+		// Neither of the two conditions mentioned in the comment above are true,
+		// so there is nothing to do.
+		return
+	}
+	for b.Width() < colIdx {
+		b.AppendCol(a.NewMemColumn(coltypes.Unhandled, 0))
+	}
 	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, int(coldata.BatchSize())))
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	col := a.NewMemColumn(t, int(coldata.BatchSize()))
-	b.AppendCol(col)
+	if b.Width() == colIdx {
+		b.AppendCol(col)
+	} else {
+		b.ReplaceCol(col, colIdx)
+	}
 }
 
 // PerformOperation executes 'operation' (that somehow modifies 'destVecs') and
