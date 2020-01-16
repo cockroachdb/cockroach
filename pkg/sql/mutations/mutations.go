@@ -34,6 +34,10 @@ var (
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = sqlbase.ColumnFamilyMutator
+
+	// TempTableMutator modifies a CREATE TABLE statement to maybe be
+	// a CREATE TEMP TABLE statement instead.
+	TempTableMutator StatementMutator = tempTableMutator
 )
 
 // StatementMutator defines a func that can change a statement.
@@ -116,6 +120,19 @@ func randNonNegInt(rng *rand.Rand) int64 {
 		v = rng.Int63()
 	}
 	return v
+}
+
+func tempTableMutator(rng *rand.Rand, stmt tree.Statement) bool {
+	create, ok := stmt.(*tree.CreateTable)
+	if !ok {
+		return false
+	}
+	if create.Temporary {
+		return false
+	}
+	isTemp := rng.Intn(2) == 0
+	create.Temporary = isTemp
+	return isTemp
 }
 
 func statisticsMutator(

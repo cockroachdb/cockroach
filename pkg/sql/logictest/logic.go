@@ -1277,7 +1277,9 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	if err != nil {
 		return err
 	}
-
+	if _, err := t.db.Exec("SET experimental_enable_temp_tables = true"); err != nil {
+		return err
+	}
 	if *showSQL {
 		t.outf("--- queries start here (file: %s)", path)
 	}
@@ -1903,7 +1905,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
+	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator, mutations.TempTableMutator)
 	if changed {
 		t.outf("rewrote:\n%s\n", execSQL)
 	}
