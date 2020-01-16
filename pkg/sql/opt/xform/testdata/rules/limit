@@ -11,9 +11,9 @@ CREATE TABLE a
 )
 ----
 
-# --------------------------------------------------
-# PushLimitIntoScan
-# --------------------------------------------------
+# ---------------------------------------------------
+# GenerateLimitedScans / PushLimitIntoConstrainedScan
+# ---------------------------------------------------
 
 opt
 SELECT * FROM a LIMIT 1
@@ -122,8 +122,31 @@ memo (optimized, ~6KB, required=[presentation: s:4])
  ├── G7: (variable s)
  └── G8: (const 'foo')
 
+# GenerateLimitedScans propagates row-level locking information.
+opt
+SELECT * FROM a LIMIT 1 FOR UPDATE
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── limit: 1
+ ├── locking: for-update
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# PushLimitIntoConstrainedScan propagates row-level locking information.
+opt
+SELECT s FROM a WHERE s='foo' LIMIT 1 FOR UPDATE
+----
+scan a@s_idx
+ ├── columns: s:4(string!null)
+ ├── constraint: /4/1: [/'foo' - /'foo']
+ ├── limit: 1
+ ├── locking: for-update
+ ├── key: ()
+ └── fd: ()-->(4)
+
 # --------------------------------------------------
-# PushLimitIntoLookupJoin
+# PushLimitIntoIndexJoin
 # --------------------------------------------------
 
 exec-ddl
@@ -510,3 +533,21 @@ offset
  │         ├── fd: (1)-->(2,4,5)
  │         └── ordering: -4
  └── const: 10 [type=int]
+
+# PushLimitIntoIndexJoin propagates row-level locking information.
+opt
+SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
+----
+index-join kuv
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +2
+ └── scan kuv@secondary
+      ├── columns: k:1(int!null) u:2(int)
+      ├── limit: 5
+      ├── locking: for-update
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── ordering: +2

@@ -485,6 +485,15 @@ memo (optimized, ~6KB, required=[presentation: i:2,k:1])
  ├── G7: (variable s)
  └── G8: (const 'foo')
 
+# GenerateIndexScans propagates row-level locking information.
+opt
+SELECT s, i, f FROM a ORDER BY s FOR UPDATE
+----
+scan a@s_idx
+ ├── columns: s:4(string) i:2(int) f:3(float)
+ ├── locking: for-update
+ └── ordering: +4
+
 # Collated strings are treated properly.
 exec-ddl
 CREATE TABLE x (s STRING COLLATE en_u_ks_level1 PRIMARY KEY)

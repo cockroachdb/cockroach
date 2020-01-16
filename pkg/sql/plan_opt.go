@@ -35,7 +35,7 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 // the following stmt.Prepared fields:
 //  - Columns
 //  - Types
-//  - AnonymizedStmt
+//  - AnonymizedStr
 //  - Memo (for reuse during exec, if appropriate).
 //
 // On success, the returned flags always have planFlagOptUsed set.
