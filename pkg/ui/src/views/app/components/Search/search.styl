@@ -11,7 +11,7 @@
 @require '~styl/base/palette.styl'
 
 ._search-form
-  width 450px
+  width 280px
   height 40px
   .ant-input-affix-wrapper
     &:hover
@@ -27,8 +27,11 @@
     font-size 14px
   ._prefix-icon
     color $adminui-grey-2
+    width 12px
     &:hover
       color $adminui-grey-2
+  ._suffix-icon
+    width 10px
   ._clear-search
     color $text-color
     &:hover
@@ -51,7 +54,7 @@
       border 2px solid $adminui-blue-1-base
       border-right-width 2px !important
     &:placeholder
-      color $adminui-grey-2
+      color #000
     &:not(:first-child)
       padding-left 35px
       padding-right 60px
