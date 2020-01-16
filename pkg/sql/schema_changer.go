@@ -1275,8 +1275,10 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	// Get the other tables whose foreign key backreferences need to be removed.
 	// We make a call to PublishMultiple to handle the situation to add Foreign Key backreferences.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
+	var interleaveParents map[sqlbase.ID]struct{}
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+		interleaveParents = make(map[sqlbase.ID]struct{})
 
 		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
@@ -1295,6 +1297,23 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				if fk.ReferencedTableID != desc.ID {
 					fksByBackrefTable[constraint.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[constraint.ForeignKey.ReferencedTableID], constraint)
 				}
+			} else if swap := mutation.GetPrimaryKeySwap(); swap != nil {
+				// If any old indexes (including the old primary index) being rewritten are interleaved
+				// children, we will have to update their parents as well.
+				for _, idxID := range append([]sqlbase.IndexID{swap.OldPrimaryIndexId}, swap.OldIndexes...) {
+					oldIndex, err := desc.FindIndexByID(idxID)
+					if err != nil {
+						return err
+					}
+					if len(oldIndex.Interleave.Ancestors) != 0 {
+						ancestor := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
+						if ancestor.TableID != desc.ID {
+							interleaveParents[ancestor.TableID] = struct{}{}
+						}
+					}
+				}
+				// Because we are not currently supporting primary key changes on tables/indexes
+				// that are interleaved parents, we don't check oldPrimaryIndex.InterleavedBy.
 			}
 		}
 		return nil
@@ -1306,6 +1325,11 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
+	}
+	for id := range interleaveParents {
+		if _, ok := fksByBackrefTable[id]; !ok {
+			tableIDsToUpdate = append(tableIDsToUpdate, id)
+		}
 	}
 
 	update := func(descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
@@ -1356,6 +1380,36 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
 					fn()
 				}
+				// If any old index had an interleaved parent, remove the backreference from the parent.
+				for _, idxID := range append(
+					[]sqlbase.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
+					oldIndex, err := scDesc.FindIndexByID(idxID)
+					if err != nil {
+						return err
+					}
+					if len(oldIndex.Interleave.Ancestors) != 0 {
+						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
+						ancestor := descs[ancestorInfo.TableID]
+						ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
+						if err != nil {
+							return err
+						}
+						foundAncestor := false
+						for k, ref := range ancestorIdx.InterleavedBy {
+							if ref.Table == scDesc.ID && ref.Index == oldIndex.ID {
+								if foundAncestor {
+									return errors.AssertionFailedf(
+										"ancestor entry in %s for %s@%s found more than once",
+										ancestor.Name, scDesc.Name, oldIndex.Name)
+								}
+								ancestorIdx.InterleavedBy = append(
+									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
+								foundAncestor = true
+							}
+						}
+					}
+				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				mutationID := scDesc.ClusterVersion.NextMutationID
