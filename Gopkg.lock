@@ -394,7 +394,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4b96d80bbf38331491295de06ba90d25ff613455d8aab268be54764cfc0a624f"
+  digest = "1:587f948690f35af901d9c7632e4b3ede47022afa38f369b1221a26c61b7801b6"
   name = "github.com/cockroachdb/crlfmt"
   packages = [
     ".",
@@ -402,7 +402,7 @@
     "internal/render",
   ]
   pruneopts = "UT"
-  revision = "3c56c65c97a11c610354ce15b9939c0d0aff5d7a"
+  revision = "a78e1c207bc03184df89a2f3f0eba3014863b919"
 
 [[projects]]
   branch = "master"
