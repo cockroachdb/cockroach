@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
-import { match as Match } from "react-router-dom";
+import _ from "lodash";
 
 interface ParamsObj {
   [key: string]: string;
@@ -29,11 +29,10 @@ export function queryToString(obj: any) {
 export function queryToObj(location: Location, key: string, value: string) {
   const params = new URLSearchParams(location.search);
   const paramObj: ParamsObj = {};
-
-  params.forEach((paramValue, paramKey) => {
-    paramObj[paramKey] = paramValue;
-  });
-  if (key) {
+  for (const data of params.keys()) {
+    paramObj[data] = params.get(data);
+  }
+  if (key && value) {
     if (value.length > 0 || (typeof value === "number")) {
       paramObj[key] = value;
     } else {
@@ -48,10 +47,8 @@ export function queryByName(location: Location, key: string) {
   return urlParams.get(key);
 }
 
-export function getMatchParamByName(match: Match<any>, key: string ) {
-  const param = match.params[key];
-  if (param) {
-    return decodeURIComponent(param);
-  }
-  return null;
+export function removeURLParameters(location: Location, removeParams: string[]) {
+  const params = new URLSearchParams(location.search);
+  _.each(removeParams, param => params.delete(param));
+  return "?" + params;
 }
