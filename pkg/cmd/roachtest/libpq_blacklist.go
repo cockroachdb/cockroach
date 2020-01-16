@@ -31,6 +31,7 @@ var libPQBlacklist20_1 = blacklist{
 	"pq.TestCopyInBinaryError":           "5807",
 	"pq.TestCopyInMultipleValues":        "5807",
 	"pq.TestCopyInRaiseStmtTrigger":      "5807",
+	"pq.TestCopyInStmtAffectedRows":      "5807",
 	"pq.TestCopyInTypes":                 "5807",
 	"pq.TestCopyInWrongType":             "5807",
 	"pq.TestCopyRespLoopConnectionError": "5807",
@@ -77,6 +78,7 @@ var libPQBlacklist19_2 = blacklist{
 	"pq.TestCopyInBinaryError":           "5807",
 	"pq.TestCopyInMultipleValues":        "5807",
 	"pq.TestCopyInRaiseStmtTrigger":      "5807",
+	"pq.TestCopyInStmtAffectedRows":      "5807",
 	"pq.TestCopyInTypes":                 "5807",
 	"pq.TestCopyInWrongType":             "5807",
 	"pq.TestCopyRespLoopConnectionError": "5807",
@@ -111,10 +113,6 @@ var libPQBlacklist19_2 = blacklist{
 var libPQIgnorelist20_1 = libPQIgnorelist19_2
 
 var libPQIgnorelist19_2 = blacklist{
-	// TestCloseBadConn fails due to an issue with the test.
-	// TODO(asubiotto): The upstream fix has been submitted so this can be removed
-	// from blacklists once we test with a newer version of lib/pq.
-	"pq.TestCloseBadConn": "41690",
 	// TestFormatTsBacked fails due to not returning an error for accepting a
 	// timestamp format that postgres does not.
 	"pq.TestFormatTsBackend": "41690",

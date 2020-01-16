@@ -99,7 +99,6 @@ message ImportDetails {
   int64 sst_size = 4 [(gogoproto.customname) = "SSTSize"];
   int64 oversample = 9;
   bool skip_fks = 10 [(gogoproto.customname) = "SkipFKs"];
-  bool prepare_complete = 12;
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",
@@ -118,6 +117,9 @@ message ImportDetails {
   // sort that produced sorted, non-overlapping data to ingest. When ingesting
   // directly, many other fields like samples, oversample, sst_size are ignored.
   bool ingest_directly = 11;
+
+  bool prepare_complete = 12;
+  bool tables_published = 13;
 }
 
 message ImportProgress {
