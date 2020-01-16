@@ -293,7 +293,8 @@ func (u urlParser) Set(v string) error {
 				}
 			}
 		default:
-			return fmt.Errorf("unsupported sslmode=%s (supported: disable, require, verify-ca, verify-full", sslMode)
+			return fmt.Errorf(
+				"unsupported sslmode=%s (supported: disable, require, verify-ca, verify-full)", sslMode)
 		}
 	}
 
