@@ -284,6 +284,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 	},
+	{
+		// WIP
+		name:   "add hasCreateRole to admin user",
+		workFn: addCreateRoleToAdmin,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -856,6 +861,14 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           `
 	return runStmtAsRootWithRetry(
 		ctx, r, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+}
+
+func addCreateRoleToAdmin(ctx context.Context, r runner) error {
+	// Upsert the admin role wih CreateRole privilege into the table. We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "hasCreateRole") VALUES ($1, '', true, true)
+          `
+	return runStmtAsRootWithRetry(ctx, r, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

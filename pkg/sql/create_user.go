@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -51,6 +52,34 @@ func (p *planner) CreateUserNode(
 	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
+	}
+
+	user := p.SessionData().User
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
+	for role := range memberOf {
+		if privs.CheckPrivilege(role, privilege) {
+			return nil
+		}
+	}
+
+	if isRole {
+		hasCreateRole, err := p.ExecCfg().InternalExecutor.Query(
+			ctx, "hasCreateRole", p.Txn(),
+			fmt.Sprintf("select hasCreateRole from system.users WHERE username = %s", user),
+			nil)
+
+		fmt.Println(user, hasCreateRole, err)
+		//if len(hasCreateRole) < 1 {
+		//	fmt.Println("Role does not have create role privilege")
+		//	return nil, err
+		//}
 	}
 
 	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
