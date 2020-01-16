@@ -174,8 +174,7 @@ func (p *allSpooler) getPartitionsCol() []bool {
 func (p *allSpooler) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
 	for i, t := range p.inputTypes {
 		window := p.bufferedTuples.colVecs[i].Window(t, startIdx, endIdx)
-		p.windowedBatch.ColVec(i).SetCol(window.Col())
-		p.windowedBatch.ColVec(i).SetNulls(window.Nulls())
+		p.windowedBatch.ReplaceCol(window, i)
 	}
 	p.windowedBatch.SetLength(uint16(endIdx - startIdx))
 	return p.windowedBatch

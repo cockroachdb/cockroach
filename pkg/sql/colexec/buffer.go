@@ -56,9 +56,7 @@ func (b *bufferOp) advance(ctx context.Context) {
 
 func (b *bufferOp) Next(ctx context.Context) coldata.Batch {
 	if b.read {
-		// TODO(yuzefovich): use coldata.ZeroBatch.
-		b.batch.SetLength(0)
-		return b.batch
+		return coldata.ZeroBatch
 	}
 	b.read = true
 	return b.batch

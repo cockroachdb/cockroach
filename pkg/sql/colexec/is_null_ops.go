@@ -48,13 +48,11 @@ func (o *isNullProjOp) Init() {
 
 func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
-	if o.outputIdx == batch.Width() {
-		o.allocator.AppendColumn(batch, coltypes.Bool)
-	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	o.allocator.MaybeAddColumn(batch, coltypes.Bool, o.outputIdx)
 	vec := batch.ColVec(o.colIdx)
 	nulls := vec.Nulls()
 	projCol := batch.ColVec(o.outputIdx).Bool()
