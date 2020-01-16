@@ -62,7 +62,7 @@ type TableMainProps = TableMainData & TableMainActions & RouteComponentProps;
  * TableMain renders the main content of the databases page, which is primarily a
  * data table of all databases.
  */
-class TableMain extends React.Component<TableMainProps, {}> {
+export class TableMain extends React.Component<TableMainProps, {}> {
   componentWillMount() {
     const database = getMatchParamByName(this.props.match, databaseNameAttr);
     const table = getMatchParamByName(this.props.match, tableNameAttr);
