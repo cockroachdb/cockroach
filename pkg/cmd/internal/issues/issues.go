@@ -88,10 +88,12 @@ Parameters:
 - {{ . }}{{end}}{{end}}
 
 {{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
-{{end -}}
+{{else -}}
 {{threeticks}}
 make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
 {{threeticks}}
+
+{{end -}}
 
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 `
