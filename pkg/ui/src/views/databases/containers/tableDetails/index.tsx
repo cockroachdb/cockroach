@@ -60,7 +60,7 @@ type TableMainProps = TableMainData & TableMainActions & RouterState;
  * TableMain renders the main content of the databases page, which is primarily a
  * data table of all databases.
  */
-class TableMain extends React.Component<TableMainProps, {}> {
+export class TableMain extends React.Component<TableMainProps, {}> {
   componentWillMount() {
     this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
       database: this.props.params[databaseNameAttr],
