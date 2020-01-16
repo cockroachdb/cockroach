@@ -73,7 +73,7 @@ func StoreLastUpKey() roachpb.Key {
 // StoreHLCUpperBoundKey returns the store-local key for storing an upper bound
 // to the wall time used by HLC.
 func StoreHLCUpperBoundKey() roachpb.Key {
-	return MakeStoreKey(localHLCUpperBoundSuffix, nil)
+	return MakeStoreKey(localStoreHLCUpperBoundSuffix, nil)
 }
 
 // StoreSuggestedCompactionKey returns a store-local key for a
