@@ -364,6 +364,26 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
+			// COUNT_ROWS and COUNT aggregates do not have any input arguments, but
+			// they return Int64.
+			outputType := coltypes.Int64
+			if len(aggTyps[i]) > 0 {
+				// If an aggregate does have any input arguments, it'll return the same
+				// type as its first argument (we only support single argument
+				// aggregate functions at the moment).
+				outputType = typeconv.FromColumnType(&aggTyps[i][0])
+			}
+			// The columnar aggregates will return the same physical output type as their
+			// input. However, our current builtin resolution might say that the return
+			// type is the canonical for the family (for example, MAX on INT4 is said to
+			// return INT8), so we explicitly check whether the type the columnar
+			// aggregate returns and the type the planning code will expect it to return
+			// are the same. If they are not, we fallback to row-by-row engine.
+			if typeconv.FromColumnType(retType) != outputType {
+				// TODO(yuzefovich): support this case through vectorize. Probably it needs
+				// to be done at the same time as #38845.
+				return result, errors.Errorf("aggregates with different input and output types are not supported")
+			}
 			result.ColumnTypes[i] = *retType
 		}
 		var typs []coltypes.T
