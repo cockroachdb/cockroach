@@ -40,7 +40,6 @@ const (
 type Catalog struct {
 	testSchema Schema
 	counter    int
-	nodes      []Node
 }
 
 type dataSource interface {
@@ -213,16 +212,6 @@ func (tc *Catalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
 	return ds.(dataSource).fqName(), nil
-}
-
-// NodeCount is part of the cat.Catalog interface.
-func (tc *Catalog) NodeCount() int {
-	return len(tc.nodes)
-}
-
-// Node is part of the cat.Catalog interface.
-func (tc *Catalog) Node(i int) cat.Node {
-	return &tc.nodes[i]
 }
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
@@ -1286,28 +1275,4 @@ func (tf *Family) ColumnCount() int {
 // Column is part of the cat.Family interface.
 func (tf *Family) Column(i int) cat.FamilyColumn {
 	return tf.Columns[i]
-}
-
-// Node implements the cat.Node interface for testing purposes.
-type Node struct {
-	id       roachpb.NodeID
-	locality roachpb.Locality
-	attrs    roachpb.Attributes
-}
-
-var _ cat.Node = &Node{}
-
-// ID is part of the cat.Node interface.
-func (tn *Node) ID() roachpb.NodeID {
-	return tn.id
-}
-
-// Locality is part of the cat.Node interface.
-func (tn *Node) Locality() roachpb.Locality {
-	return tn.locality
-}
-
-// Attrs is part of the cat.Node interface.
-func (tn *Node) Attrs() roachpb.Attributes {
-	return tn.attrs
 }

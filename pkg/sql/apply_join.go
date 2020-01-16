@@ -244,7 +244,9 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		// type of join we've been instructed to do (inner, left outer, semi, or
 		// anti).
 
-		a.optimizer.Init(params.p.EvalContext(), &params.p.optPlanningCtx.catalog)
+		a.optimizer.Init(
+			params.p.EvalContext(), &params.p.optPlanningCtx.catalog, params.p.ExecCfg().ClusterInfoCache,
+		)
 
 		bindings := make(map[opt.ColumnID]tree.Datum, a.leftBoundColMap.Len())
 		a.leftBoundColMap.ForEach(func(k, v int) {

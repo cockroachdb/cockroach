@@ -63,7 +63,7 @@ func newForcingOptimizer(
 		remaining:   steps,
 		lastMatched: opt.InvalidRuleName,
 	}
-	fo.o.Init(&tester.evalCtx, tester.catalog)
+	fo.o.Init(&tester.evalCtx, tester.catalog, tester.cluster)
 	fo.coster.Init(&fo.o, &fo.groups)
 	fo.o.SetCoster(&fo.coster)
 

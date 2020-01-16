@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,13 +90,13 @@ type Factory struct {
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
-func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
+func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog, cluster cluster.Info) {
 	// Initialize (or reinitialize) the memo.
 	if f.mem == nil {
 		f.mem = &memo.Memo{}
 	}
 	f.mem.Init(evalCtx)
-	f.mem.AddNodes(catalog)
+	f.mem.AddClusterInfo(cluster)
 
 	f.evalCtx = evalCtx
 	f.catalog = catalog
@@ -118,7 +119,7 @@ func (f *Factory) DetachMemo() *memo.Memo {
 	f.mem.ClearColStats(f.mem.RootExpr())
 	detach := f.mem
 	f.mem = nil
-	f.Init(f.evalCtx, nil /* catalog */)
+	f.Init(f.evalCtx, nil /* catalog */, nil /* cluster */)
 	return detach
 }
 

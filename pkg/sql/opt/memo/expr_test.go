@@ -16,7 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -58,12 +59,13 @@ func TestExprIsNeverNull(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/expr", func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var err error
 
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			switch d.Cmd {
 			case "scalar-is-not-nullable":
 				var notNullCols opt.ColSet
@@ -99,7 +101,7 @@ func TestExprIsNeverNull(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 				var o xform.Optimizer
-				o.Init(&evalCtx, catalog)
+				o.Init(&evalCtx, catalog, nil /* cluster */)
 				for i, typ := range varTypes {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}

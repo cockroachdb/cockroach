@@ -30,19 +30,20 @@ type Partitioning struct {
 }
 
 // partition represents a subset of rows for a relational operator that are
-// known to reside on a particular subset of nodes in the cluster.
+// known to reside on a particular subset of neighborhoods in the cluster.
 type partition struct {
 	// constraint defines the subset of rows in this partition.
 	constraint constraint.Constraint
 
-	// nodes is the set of all nodes where replicas of this partition may reside,
-	// as defined by the index zone configurations.
-	nodes util.FastIntSet
+	// neighborhoods is the set of all neighborhoods where replicas of this
+	// partition may reside, as defined by the index zone configurations.
+	neighborhoods util.FastIntSet
 
-	// leasePreferences is the set of nodes that satisfy the first lease
+	// leasePreferences is the set of neighborhoods that satisfy the first lease
 	// preference for this partition, as defined by the index zone configurations.
-	// leasePreferences should be a subset of nodes, and indicates the nodes where
-	// the leaseholder replica for this partition is most likely to reside.
+	// leasePreferences should be a subset of neighborhoods, and indicates the
+	// neighborhoods where the leaseholder replica for this partition is most
+	// likely to reside.
 	leasePreferences util.FastIntSet
 }
 
@@ -87,8 +88,8 @@ func (p *Partitioning) init(
 		keyCtx = &newKeyCtx
 	}
 
-	// Add a single-span constraint for each partition, as well as nodes matching
-	// the index's zone config.
+	// Add a single-span constraint for each partition, as well as neighborhoods
+	// matching the index's zone config.
 	partitionCount := index.PartitionCount()
 	p.partitions = make([]partition, 0, partitionCount)
 	for i := 0; i < partitionCount; i++ {
@@ -115,31 +116,31 @@ func (p *Partitioning) init(
 		if !cs.IsContradiction() {
 			p.partitions = append(p.partitions, partition{
 				constraint:       cs,
-				nodes:            nodesFromZone(md.AllNodes(), catPart.Zone),
-				leasePreferences: leasePrefFromZone(md.AllNodes(), catPart.Zone),
+				neighborhoods:    neighborhoodsFromZone(md.AllNeighborhoods(), catPart.Zone),
+				leasePreferences: leasePrefFromZone(md.AllNeighborhoods(), catPart.Zone),
 			})
 		}
 	}
 }
 
-// Nodes returns the set of all nodes where data for this relational operator
-// may reside.
-func (p *Partitioning) Nodes() util.FastIntSet {
+// Neighborhoods returns the set of all neighborhoods where data for this
+// relational operator may reside.
+func (p *Partitioning) Neighborhoods() util.FastIntSet {
 	var nodes util.FastIntSet
 	for i := range p.partitions {
-		nodes.UnionWith(p.partitions[i].nodes)
+		nodes.UnionWith(p.partitions[i].neighborhoods)
 	}
 	return nodes
 }
 
-// nodesFromZone returns all the nodes that satisfy at least one of the replica
-// constraints in the given zone.
-func nodesFromZone(allNodes []opt.NodeMeta, zone cat.Zone) util.FastIntSet {
+// neighborhoodsFromZone returns all the neighborhoods that satisfy at least
+// one of the replica constraints in the given zone.
+func neighborhoodsFromZone(allNeighborhoods []opt.NeighborhoodMeta, zone cat.Zone) util.FastIntSet {
 	var nodes util.FastIntSet
-	for i := range allNodes {
+	for i := range allNeighborhoods {
 		for j, n := 0, zone.ReplicaConstraintsCount(); j < n; j++ {
-			if nodeSatisfiesConstraints(&allNodes[i], zone.ReplicaConstraints(j)) {
-				nodes.Add(int(allNodes[i].MetaID))
+			if allNeighborhoods[i].Neighborhood.SatisfiesConstraints(zone.ReplicaConstraints(j)) {
+				nodes.Add(int(allNeighborhoods[i].MetaID))
 				break
 			}
 		}
@@ -147,53 +148,18 @@ func nodesFromZone(allNodes []opt.NodeMeta, zone cat.Zone) util.FastIntSet {
 	return nodes
 }
 
-// leasePrefFromZone returns all the nodes that satisfy the first lease
+// leasePrefFromZone returns all the neighborhoods that satisfy the first lease
 // preference in the given zone.
-func leasePrefFromZone(allNodes []opt.NodeMeta, zone cat.Zone) util.FastIntSet {
+func leasePrefFromZone(allNeighborhoods []opt.NeighborhoodMeta, zone cat.Zone) util.FastIntSet {
 	var leasePreferences util.FastIntSet
-	for i := range allNodes {
+	for i := range allNeighborhoods {
 		if zone.LeasePreferenceCount() > 0 {
 			// Only use the first lease preference if available since others only apply
 			// in edge cases.
-			if nodeSatisfiesConstraints(&allNodes[i], zone.LeasePreference(0)) {
-				leasePreferences.Add(int(allNodes[i].MetaID))
+			if allNeighborhoods[i].Neighborhood.SatisfiesConstraints(zone.LeasePreference(0)) {
+				leasePreferences.Add(int(allNeighborhoods[i].MetaID))
 			}
 		}
 	}
 	return leasePreferences
-}
-
-// nodeSatisfiesConstraints checks whether a node satisfies all of the given
-// constraints. If a constraint is of the PROHIBITED type, satisfying it means
-// the node should not match the constraint's spec.
-func nodeSatisfiesConstraints(node *opt.NodeMeta, constraints cat.ConstraintSet) bool {
-	for i, n := 0, constraints.ConstraintCount(); i < n; i++ {
-		c := constraints.Constraint(i)
-		hasConstraint := nodeMatchesConstraint(node, c)
-		required := c.IsRequired()
-		if (required && !hasConstraint) || (!required && hasConstraint) {
-			return false
-		}
-	}
-	return true
-}
-
-// nodeMatchesConstraint returns whether a node matches a constraint's
-// spec. It notably ignores whether the constraint is required or prohibited.
-// Also see nodeSatisfiesConstraints().
-func nodeMatchesConstraint(node *opt.NodeMeta, c cat.Constraint) bool {
-	if c.GetKey() == "" {
-		for _, attr := range node.Attrs.Attrs {
-			if attr == c.GetValue() {
-				return true
-			}
-		}
-		return false
-	}
-	for _, tier := range node.Locality.Tiers {
-		if c.GetKey() == tier.Key && c.GetValue() == tier.Value {
-			return true
-		}
-	}
-	return false
 }

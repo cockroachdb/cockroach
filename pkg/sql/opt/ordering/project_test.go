@@ -27,7 +27,7 @@ import (
 func TestProject(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(nil /* st */)
 	var f norm.Factory
-	f.Init(evalCtx, testcat.New())
+	f.Init(evalCtx, testcat.New(), nil /* cluster */)
 	md := f.Metadata()
 	for i := 1; i <= 4; i++ {
 		md.AddColumn(fmt.Sprintf("col%d", i), types.Int)

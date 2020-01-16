@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opbench"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -230,6 +231,7 @@ func runBench(t *testing.T, spec *opbench.Spec, path string, mode runMode) {
 	// TODO(justin): we should support multiple catalogs, and each query
 	// should specify which catalog it pertains to.
 	catalog := opbench.MakeTPCHCatalog()
+	cluster := testcluster.New()
 
 	for {
 		record, err := r.Read()
@@ -268,7 +270,7 @@ func runBench(t *testing.T, spec *opbench.Spec, path string, mode runMode) {
 
 		// Compute the estimated cost.
 
-		tester := opttester.New(catalog, planText)
+		tester := opttester.New(catalog, cluster, planText)
 		e, err := tester.Expr()
 		if err != nil {
 			t.Fatal(err)

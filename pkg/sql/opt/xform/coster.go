@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -76,8 +77,8 @@ type coster struct {
 	//
 	locality roachpb.Locality
 
-	// nodeID is the ID of the current node.
-	nodeID roachpb.NodeID
+	// neighborhoodID is the stable ID of the current neighborhood.
+	neighborhoodID cluster.NeighborhoodID
 
 	// perturbation indicates how much to randomly perturb the cost. It is used
 	// to generate alternative plans for testing. For example, if perturbation is
@@ -133,11 +134,15 @@ const (
 )
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64) {
+func (c *coster) Init(
+	evalCtx *tree.EvalContext, mem *memo.Memo, cluster cluster.Info, perturbation float64,
+) {
 	c.evalCtx = evalCtx
 	c.mem = mem
 	c.locality = evalCtx.Locality
-	c.nodeID = evalCtx.NodeID
+	if cluster != nil {
+		c.neighborhoodID = cluster.NeighborhoodFromNode(evalCtx.NodeID)
+	}
 	c.perturbation = perturbation
 }
 
@@ -288,7 +293,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
-	additionalCost := c.additionalScanCost(scan.Partitioning, c.nodeID)
+	additionalCost := c.additionalScanCost(scan.Partitioning, c.neighborhoodID)
 
 	if ordering.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
@@ -401,8 +406,8 @@ func (c *coster) computeIndexJoinCost(join *memo.IndexJoinExpr) memo.Cost {
 	perRowCost := cpuCostFactor + randIOCostFactor +
 		c.rowScanCost(join.Table, cat.PrimaryIndex, join.Cols.Len())
 	p := c.primaryIndexPartitioning(join)
-	nodeID := c.inputNode(join)
-	additionalCost := c.additionalScanCost(p, nodeID)
+	neighborhoodID := c.inputNeighborhood(join)
+	additionalCost := c.additionalScanCost(p, neighborhoodID)
 	return memo.Cost(leftRowCount)*perRowCost + additionalCost
 }
 
@@ -628,14 +633,14 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 }
 
 // additionalScanCost returns the additional cost of scanning an index due to
-// the way data is physically partitioned across nodes. The given nodeID is the
-// node from which the scan request originates.
+// the way data is physically partitioned across neighborhoods. The given
+// neighborhoodID is the neighborhood from which the scan request originates.
 func (c *coster) additionalScanCost(
-	partitioning *physical.Partitioning, nodeID roachpb.NodeID,
+	partitioning *physical.Partitioning, neighborhoodID cluster.NeighborhoodID,
 ) memo.Cost {
 	var additionalCost memo.Cost
-	if c.nodeID != 0 {
-		adjustment := 1.0 - c.nodeMatchScore(partitioning, nodeID)
+	if c.neighborhoodID != 0 {
+		adjustment := 1.0 - c.neighborhoodMatchScore(partitioning, neighborhoodID)
 		// TODO(rytaft): make this less arbitrary.
 		additionalCost += 10 * randIOCostFactor * memo.Cost(adjustment)
 	}
@@ -795,18 +800,18 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 	return (constraintScore*2 + leaseScore) / 3
 }
 
-func (c *coster) nodeMatchScore(
-	partitioning *physical.Partitioning, nodeID roachpb.NodeID,
+func (c *coster) neighborhoodMatchScore(
+	partitioning *physical.Partitioning, neighborhoodID cluster.NeighborhoodID,
 ) float64 {
 	if partitioning == nil {
 		// No partitioning info available.
 		return 1
 	}
 
-	nodes := partitioning.Nodes()
-	if nodes.Len() == 1 {
-		id, _ := nodes.Next(0)
-		if nodeID == c.mem.Metadata().NodeMeta(opt.NodeID(id)).Node.ID() {
+	neighborhoods := partitioning.Neighborhoods()
+	if neighborhoods.Len() == 1 {
+		id, _ := neighborhoods.Next(0)
+		if neighborhoodID == c.mem.Metadata().NeighborhoodMeta(opt.NeighborhoodID(id)).Neighborhood.ID() {
 			return 1
 		}
 	}
@@ -871,16 +876,17 @@ func (c *coster) primaryIndexPartitioning(join *memo.IndexJoinExpr) *physical.Pa
 	return physical.NewConstrainedPartitioning(c.evalCtx, md, index, pkCS)
 }
 
-// inputNode returns the node containing the input to the given index join.
-// If a single node cannot be identified, returns the current node.
-func (c *coster) inputNode(join *memo.IndexJoinExpr) roachpb.NodeID {
-	nodeID := c.nodeID
+// inputNeighborhood returns the neighborhood containing the input to the given
+// index join. If a single neighborhood cannot be identified, returns the
+// current neighborhood.
+func (c *coster) inputNeighborhood(join *memo.IndexJoinExpr) cluster.NeighborhoodID {
+	neighborhoodID := c.neighborhoodID
 	if scan, ok := join.Input.(*memo.ScanExpr); ok && scan.Partitioning != nil {
-		nodes := scan.Partitioning.Nodes()
-		if nodes.Len() == 1 {
-			id, _ := nodes.Next(0)
-			nodeID = c.mem.Metadata().NodeMeta(opt.NodeID(id)).Node.ID()
+		neighborhoods := scan.Partitioning.Neighborhoods()
+		if neighborhoods.Len() == 1 {
+			id, _ := neighborhoods.Next(0)
+			neighborhoodID = c.mem.Metadata().NeighborhoodMeta(opt.NeighborhoodID(id)).Neighborhood.ID()
 		}
 	}
-	return nodeID
+	return neighborhoodID
 }

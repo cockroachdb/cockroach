@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -537,6 +538,7 @@ type ExecutorConfig struct {
 	AuditLogger       *log.SecondaryLogger
 	InternalExecutor  *InternalExecutor
 	QueryCache        *querycache.C
+	ClusterInfoCache  *clusterinfo.Cache
 
 	TestingKnobs              ExecutorTestingKnobs
 	PGWireTestingKnobs        *PGWireTestingKnobs

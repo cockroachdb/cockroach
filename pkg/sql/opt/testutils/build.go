@@ -36,7 +36,7 @@ func BuildQuery(
 		t.Fatal(err)
 	}
 	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
-	o.Init(evalCtx, catalog)
+	o.Init(evalCtx, catalog, nil /* cluster */)
 	err = optbuilder.New(ctx, &semaCtx, evalCtx, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
 		t.Fatal(err)

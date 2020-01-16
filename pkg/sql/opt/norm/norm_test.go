@@ -13,6 +13,8 @@ package norm_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -42,8 +44,9 @@ func TestNormRules(t *testing.T) {
 		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})
@@ -55,7 +58,7 @@ func TestNormRules(t *testing.T) {
 func TestRuleFoldNullInEmpty(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var f norm.Factory
-	f.Init(&evalCtx, nil /* catalog */)
+	f.Init(&evalCtx, nil /* catalog */, nil /* cluster */)
 
 	in := f.ConstructIn(memo.NullSingleton, memo.EmptyTuple)
 	if in.Op() != opt.FalseOp {

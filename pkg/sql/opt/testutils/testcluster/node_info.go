@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package testcat
+package testcluster
 
 import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 )
 
 // NodeInfo is the JSON schema for defining information about a node.
@@ -23,16 +24,16 @@ type NodeInfo struct {
 	Attrs    []string `json:"attrs,omitempty"`
 }
 
-// SetNodeInfo sets node info in the Catalog. The input to this command should
+// SetNodeInfo sets node info in the Cluster. The input to this command should
 // be in the form of a JSON array, where each element of the array specifies
 // info about a single node, and matches the schema defined in NodeInfo.
-func (tc *Catalog) SetNodeInfo(input string) (string, error) {
+func (tc *Cluster) SetNodeInfo(input string) (string, error) {
 	var nodeInfos []NodeInfo
 	if err := json.Unmarshal([]byte(input), &nodeInfos); err != nil {
 		return "", err
 	}
 
-	tc.nodes = make([]Node, len(nodeInfos))
+	tc.neighborhoods = make([]Neighborhood, len(nodeInfos))
 	for i, info := range nodeInfos {
 		nodeID := roachpb.NodeID(info.NodeID)
 		var locality roachpb.Locality
@@ -41,7 +42,13 @@ func (tc *Catalog) SetNodeInfo(input string) (string, error) {
 		}
 		var attrs roachpb.Attributes
 		attrs.Attrs = info.Attrs
-		tc.nodes[i] = Node{id: nodeID, locality: locality, attrs: attrs}
+		tc.neighborhoods[i] = Neighborhood{
+			// TODO(rytaft): This currently constructs one neighborhood per node. Add
+			// logic to adapt the number of nodes per neighborhood based on the cluster
+			// size and topology.
+			id:    cluster.NeighborhoodID(nodeID),
+			nodes: []node{{id: nodeID, locality: locality, attrs: attrs}},
+		}
 	}
 
 	return "", nil

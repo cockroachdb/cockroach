@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -24,9 +25,10 @@ func TestCatalog(t *testing.T) {
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			return tester.RunCommand(t, d)
 		})
 	})

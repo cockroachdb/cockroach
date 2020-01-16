@@ -50,9 +50,6 @@ type optCatalog struct {
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
-
-	// nodes contains information about every node in the CockroachDB cluster.
-	nodes []optNode
 }
 
 var _ cat.Catalog = &optCatalog{}
@@ -63,15 +60,6 @@ var _ cat.Catalog = &optCatalog{}
 func (oc *optCatalog) init(planner *planner) {
 	oc.planner = planner
 	oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
-
-	descriptors, err := getAllNodeDescriptors(oc.planner)
-	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "while getting node descriptors"))
-	}
-	oc.nodes = make([]optNode, len(descriptors))
-	for i, desc := range descriptors {
-		oc.nodes[i] = optNode{id: desc.NodeID, locality: desc.Locality, attrs: desc.Attrs}
-	}
 }
 
 // reset prepares the optCatalog to be used for a new query.
@@ -304,16 +292,6 @@ func (oc *optCatalog) FullyQualifiedName(
 		return cat.DataSourceName{}, err
 	}
 	return tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name)), nil
-}
-
-// NodeCount is part of the cat.Catalog interface.
-func (oc *optCatalog) NodeCount() int {
-	return len(oc.nodes)
-}
-
-// Node is part of the cat.Catalog interface.
-func (oc *optCatalog) Node(i int) cat.Node {
-	return &oc.nodes[i]
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -1552,28 +1530,4 @@ func (oi *optVirtualFamily) Column(i int) cat.FamilyColumn {
 // Table is part of the cat.Family interface.
 func (oi *optVirtualFamily) Table() cat.Table {
 	return oi.tab
-}
-
-// optNode implements cat.Node.
-type optNode struct {
-	id       roachpb.NodeID
-	locality roachpb.Locality
-	attrs    roachpb.Attributes
-}
-
-var _ cat.Node = &optNode{}
-
-// ID is part of the cat.Node interface.
-func (on *optNode) ID() roachpb.NodeID {
-	return on.id
-}
-
-// Locality is part of the cat.Node interface.
-func (on *optNode) Locality() roachpb.Locality {
-	return on.locality
-}
-
-// Attrs is part of the cat.Node interface.
-func (on *optNode) Attrs() roachpb.Attributes {
-	return on.attrs
 }

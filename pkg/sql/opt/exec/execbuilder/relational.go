@@ -645,7 +645,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	// outer columns, so that we can figure out the output columns and various
 	// other attributes.
 	var f norm.Factory
-	f.Init(b.evalCtx, b.catalog)
+	f.Init(b.evalCtx, b.catalog, nil /* cluster */)
 	fakeBindings := make(map[opt.ColumnID]tree.Datum)
 	rightExpr.Relational().OuterCols.ForEach(func(k opt.ColumnID) {
 		fakeBindings[k] = tree.DNull

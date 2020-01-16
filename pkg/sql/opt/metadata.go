@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,9 +91,9 @@ type Metadata struct {
 	// needed for EXPLAIN (opt, env).
 	views []cat.View
 
-	// nodes stores information about each metadata node, indexed by
-	// NodeID.index().
-	nodes []NodeMeta
+	// neighborhoods stores information about each metadata neighborhood, indexed
+	// by NeighborhoodID.index().
+	neighborhoods []NeighborhoodMeta
 
 	// currUniqueID is the highest UniqueID that has been assigned.
 	currUniqueID UniqueID
@@ -159,10 +160,10 @@ func (md *Metadata) Init() {
 	}
 	md.views = md.views[:0]
 
-	for i := range md.nodes {
-		md.nodes[i] = NodeMeta{}
+	for i := range md.neighborhoods {
+		md.neighborhoods[i] = NeighborhoodMeta{}
 	}
-	md.nodes = md.nodes[:0]
+	md.neighborhoods = md.neighborhoods[:0]
 
 	md.currUniqueID = 0
 }
@@ -192,7 +193,7 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
 	md.views = append(md.views, from.views...)
-	md.nodes = append(md.nodes, from.nodes...)
+	md.neighborhoods = append(md.neighborhoods, from.neighborhoods...)
 	md.currUniqueID = from.currUniqueID
 }
 
@@ -507,35 +508,31 @@ func (md *Metadata) AllViews() []cat.View {
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
 
-// AddNodes adds information about all nodes in the CockroachDB cluster to the
+// AddClusterInfo adds information about the CockroachDB cluster to the
 // metadata.
-func (md *Metadata) AddNodes(catalog cat.Catalog) {
-	if catalog == nil {
+func (md *Metadata) AddClusterInfo(cluster cluster.Info) {
+	if cluster == nil {
 		return
 	}
 
-	md.nodes = make([]NodeMeta, catalog.NodeCount())
-	for i := range md.nodes {
-		catNode := catalog.Node(i)
-		md.nodes[i] = NodeMeta{
-			MetaID:   makeNodeID(i),
-			Node:     catNode,
-			Locality: catNode.Locality(),
-			Attrs:    catNode.Attrs(),
-
-			// TODO(rytaft): consider adding node activity with pairwise latencies.
+	md.neighborhoods = make([]NeighborhoodMeta, cluster.NeighborhoodCount())
+	for i := range md.neighborhoods {
+		clustNeighborhood := cluster.Neighborhood(i)
+		md.neighborhoods[i] = NeighborhoodMeta{
+			MetaID:       makeNeighborhoodID(i),
+			Neighborhood: clustNeighborhood,
 		}
 	}
 }
 
-// NodeMeta looks up the metadata for the node associated with the given
-// node id.
-func (md *Metadata) NodeMeta(nodeID NodeID) *NodeMeta {
-	return &md.nodes[nodeID.index()]
+// NeighborhoodMeta looks up the metadata for the neighborhood associated with
+// the given neighborhood id.
+func (md *Metadata) NeighborhoodMeta(neighborhoodID NeighborhoodID) *NeighborhoodMeta {
+	return &md.neighborhoods[neighborhoodID.index()]
 }
 
-// AllNodes returns the metadata for all nodes. The result must not be
-// modified.
-func (md *Metadata) AllNodes() []NodeMeta {
-	return md.nodes
+// AllNeighborhoods returns the metadata for all neighborhoods. The result must
+// not be modified.
+func (md *Metadata) AllNeighborhoods() []NeighborhoodMeta {
+	return md.neighborhoods
 }

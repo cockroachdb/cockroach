@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -66,7 +68,7 @@ func TestMemoInit(t *testing.T) {
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
 
-	o.Init(&evalCtx, catalog)
+	o.Init(&evalCtx, catalog, nil /* cluster */)
 	if !o.Memo().IsEmpty() {
 		t.Fatal("memo should be empty")
 	}
@@ -310,8 +312,9 @@ func traverseExpr(expr memo.RelExpr, f func(memo.RelExpr)) {
 func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -99,7 +101,7 @@ func TestDetachMemoRace(t *testing.T) {
 		go func() {
 			var o xform.Optimizer
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			o.Init(&evalCtx, catalog)
+			o.Init(&evalCtx, catalog, nil /* cluster */)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
@@ -164,8 +166,9 @@ func TestRuleProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			tester.Flags.ExprFormat = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
 				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
 			return tester.RunCommand(t, d)
@@ -222,8 +225,9 @@ func TestExternal(t *testing.T) {
 func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
+		cluster := testcluster.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
+			tester := opttester.New(catalog, cluster, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})
