@@ -244,33 +244,6 @@ query TT
 select * from current_timestamp_test WHERE a - interval '3h' <> b
 ----
 
-subtest regression_cockroachdb-django_97
-
-query T
-SELECT '2001-01-01 01:00:00'::timestamptz AT TIME ZONE '+3'
-----
-2001-01-01 04:00:00 +0000 +0000
-
-query T
-SELECT '2001-01-01 01:00:00'::timestamptz AT TIME ZONE '-3:00'
-----
-2000-12-31 22:00:00 +0000 +0000
-
-query T
-SELECT '2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'GMT+3'
-----
-2001-01-01 04:00:00 +0000 +0000
-
-query T
-SELECT '2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'UTC-3:00'
-----
-2000-12-31 22:00:00 +0000 +0000
-
-query T
-SELECT '2001-01-01 01:00:00'::timestamptz AT TIME ZONE 'Pacific/Honolulu'
-----
-2000-12-31 15:00:00 +0000 +0000
-
 subtest localtimestamp_test
 
 query TTTT

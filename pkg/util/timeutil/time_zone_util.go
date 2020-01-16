@@ -35,10 +35,25 @@ func FixedOffsetTimeZoneToLocation(offset int, origRepr string) *time.Location {
 		offset)
 }
 
+// TimeZoneStringToLocationStandard is an option for the standard to use
+// for parsing in TimeZoneStringToLocation.
+type TimeZoneStringToLocationStandard uint32
+
+const (
+	// TimeZoneStringToLocationISO8601Standard parses UTC offsets as *east* of
+	// the GMT line, e.g. UTC-5 would be 'America/New_York' without daylight savings.
+	TimeZoneStringToLocationISO8601Standard TimeZoneStringToLocationStandard = iota
+	// TimeZoneStringToLocationPOSIXStandard parses UTC offsets as *west* of the
+	// GMT line, e.g. UTC+5 would be 'America/New_York' without daylight savings.
+	TimeZoneStringToLocationPOSIXStandard
+)
+
 // TimeZoneStringToLocation transforms a string into a time.Location. It
 // supports the usual locations and also time zones with fixed offsets created
 // by FixedOffsetTimeZoneToLocation().
-func TimeZoneStringToLocation(locStr string) (*time.Location, error) {
+func TimeZoneStringToLocation(
+	locStr string, std TimeZoneStringToLocationStandard,
+) (*time.Location, error) {
 	offset, origRepr, parsed := ParseFixedOffsetTimeZone(locStr)
 	if parsed {
 		return FixedOffsetTimeZoneToLocation(offset, origRepr), nil
@@ -47,6 +62,9 @@ func TimeZoneStringToLocation(locStr string) (*time.Location, error) {
 	// The time may just be a raw int value.
 	intVal, err := strconv.ParseInt(locStr, 10, 64)
 	if err == nil {
+		if std == TimeZoneStringToLocationPOSIXStandard {
+			intVal *= -1
+		}
 		return FixedOffsetTimeZoneToLocation(int(intVal)*60*60, locStr), nil
 	}
 
@@ -60,8 +78,12 @@ func TimeZoneStringToLocation(locStr string) (*time.Location, error) {
 			return loc, nil
 		}
 	}
+
 	tzOffset, ok := timeZoneOffsetStringConversion(locStr)
 	if ok {
+		if std == TimeZoneStringToLocationPOSIXStandard {
+			tzOffset *= -1
+		}
 		return FixedOffsetTimeZoneToLocation(int(tzOffset), locStr), nil
 	}
 	return nil, errors.Newf("could not parse %q as time zone", locStr)
