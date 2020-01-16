@@ -16,5 +16,7 @@ Parameters:
 - GOFLAGS=race
 
 Artifacts: [/kv/splits/nodes=3/quiesce=true](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=artifacts#/kv/splits/nodes=3/quiesce=true)
+[roachdash](https://roachdash.crdb.dev/?filter=status%3Aopen+t%3A.%2Akv%2Fsplits%2Fnodes%3D3%2Fquiesce%3Dtrue.%2A&sort=title&restgroup=false&display=lastcommented+project)
+
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 
