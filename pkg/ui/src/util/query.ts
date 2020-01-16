@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
+import _ from "lodash";
 
 interface ParamsObj {
   [key: string]: string;
@@ -31,7 +32,7 @@ export function queryToObj(location: Location, key: string, value: string) {
   for (const data of params.keys()) {
     paramObj[data] = params.get(data);
   }
-  if (key) {
+  if (key && value) {
     if (value.length > 0 || (typeof value === "number")) {
       paramObj[key] = value;
     } else {
@@ -47,14 +48,7 @@ export function queryByName(location: Location, key: string) {
 }
 
 export function removeURLParameters(location: Location, removeParams: string[]) {
-  const deleteRegex = new RegExp(removeParams.join("=|") + "=");
-
-  const params = location.search.slice(1).split("&");
-  const search = [];
-  for (let i = 0; i < params.length; i++) {
-    if (deleteRegex.test(params[i]) === false) {
-      search.push(params[i]);
-    }
-  }
-  return search.length ? "?" + search.join("&") : "";
+  const params = new URLSearchParams(location.search);
+  _.each(removeParams, param => params.delete(param));
+  return "?" + params;
 }
