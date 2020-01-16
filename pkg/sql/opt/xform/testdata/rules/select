@@ -620,6 +620,57 @@ memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G21: (const 9)
  └── G22: (const 10)
 
+# GenerateConstrainedScans propagates row-level locking information.
+opt
+SELECT k FROM a WHERE k = 1 FOR UPDATE
+----
+scan a
+ ├── columns: k:1(int!null)
+ ├── constraint: /1: [/1 - /1]
+ ├── locking: for-update
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
+----
+index-join b
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ └── scan b@v
+      ├── columns: k:1(int!null) v:3(int!null)
+      ├── constraint: /3: [/1 - /10]
+      ├── locking: for-update
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      └── fd: (1)-->(3), (3)-->(1)
+
+opt
+SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 FOR UPDATE
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null) j:4(jsonb)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)-->(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
+ │    └── scan b@v
+ │         ├── columns: k:1(int!null) v:3(int!null)
+ │         ├── constraint: /3: [/1 - /10]
+ │         ├── locking: for-update
+ │         ├── cardinality: [0 - 10]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(3), (3)-->(1)
+ └── filters
+      └── (k + u) = 1 [type=bool, outer=(1,2)]
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
@@ -849,3 +900,20 @@ select
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── filters
       └── j @> '{"a": []}' [type=bool, outer=(4)]
+
+# GenerateInvertedIndexScans propagates row-level locking information.
+opt
+SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── index-join b
+      ├── columns: k:1(int!null) j:4(jsonb)
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      └── scan b@inv_idx
+           ├── columns: k:1(int!null)
+           ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
+           ├── locking: for-update
+           └── key: (1)
