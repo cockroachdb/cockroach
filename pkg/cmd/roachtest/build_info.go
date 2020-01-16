@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"os/exec"
 
@@ -24,8 +25,16 @@ func runBuildInfo(ctx context.Context, t *test, c *cluster) {
 	c.Start(ctx, t)
 
 	var details serverpb.DetailsResponse
-	url := `http://` + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + `/_status/details/local`
-	err := httputil.GetJSON(http.Client{}, url, &details)
+	urlSchema := "https://"
+	if insecure {
+		urlSchema = "http://"
+	}
+	url := urlSchema + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + `/_status/details/local`
+	// TODO(rail): figure out the way to accept expected certs only
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	err := httputil.GetJSON(http.Client{Transport: tr}, url, &details)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -361,9 +361,9 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
-			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
+			"./cockroach", "node", "drain", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
-		)
+			cockroachSecureFlag())
 		t.l.Printf("cockroach node drain:\n%s\n", buf)
 		if err != nil {
 			t.Fatal(err)
@@ -392,10 +392,12 @@ func registerQuitTransfersLeases(r *testRegistry) {
 }
 
 func runQuit(ctx context.Context, t *test, c *cluster, nodeID int, extraArgs ...string) []byte {
-	args := append([]string{
-		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
-		fmt.Sprintf("--port={pgport:%d}", nodeID)},
-		extraArgs...)
+	args := []string{
+		"./cockroach", "quit", "--logtostderr=INFO",
+		fmt.Sprintf("--port={pgport:%d}", nodeID),
+		cockroachSecureFlag(),
+	}
+	args = append(args, extraArgs...)
 	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID), args...)
 	t.l.Printf("cockroach quit:\n%s\n", buf)
 	if err != nil {

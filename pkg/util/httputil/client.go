@@ -12,6 +12,7 @@ package httputil
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -33,6 +34,9 @@ func NewClientWithTimeout(timeout time.Duration) *Client {
 			// much higher than on linux).
 			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
 			DisableKeepAlives: true,
+			// TODO(rail): figure out how to accept certs properly
+			// TODO(rail): consider moving the tls config part somewhere else to avoid changing the current behaviour.
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}}
 }

@@ -260,11 +260,11 @@ func (Cockroach) CertsDir(c *SyncedCluster, index int) string {
 // NodeURL implements the ClusterImpl.NodeDir interface.
 func (Cockroach) NodeURL(c *SyncedCluster, host string, port int) string {
 	url := fmt.Sprintf("'postgres://root@%s:%d", host, port)
-	if c.Secure {
+	if c.Insecure {
+		url += "?sslmode=disable"
+	} else {
 		url += "?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&" +
 			"sslrootcert=certs%2Fca.crt&sslmode=verify-full"
-	} else {
-		url += "?sslmode=disable"
 	}
 	url += "'"
 	return url
@@ -428,10 +428,10 @@ func (h *crdbInstallHelper) generateStartArgs(
 	nodes := h.c.ServerNodes()
 
 	args = append(args, "--background")
-	if h.c.Secure {
-		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
-	} else {
+	if h.c.Insecure {
 		args = append(args, "--insecure")
+	} else {
+		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
 	}
 
 	var storeDirs []string
@@ -643,7 +643,7 @@ func (h *crdbInstallHelper) useStartSingleNode(vers *version.Version) bool {
 // cluster and we're starting n1.
 func (h *crdbInstallHelper) distributeCerts() {
 	for _, node := range h.c.ServerNodes() {
-		if node == 1 && h.c.Secure {
+		if node == 1 && !h.c.Insecure {
 			h.c.DistributeCerts()
 			break
 		}

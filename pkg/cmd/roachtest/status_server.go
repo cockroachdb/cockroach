@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -32,17 +33,25 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 	urlMap := make(map[int]string)
 	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
 		var details serverpb.DetailsResponse
-		url := `http://` + addr + `/_status/details/local`
+		urlSchema := "https://"
+		if insecure {
+			urlSchema = "http://"
+		}
+		url := urlSchema + addr + `/_status/details/local`
 		// Use a retry-loop when populating the maps because we might be trying to
 		// talk to the servers before they are responding to status requests
 		// (resulting in 404's).
 		if err := retry.ForDuration(10*time.Second, func() error {
-			return httputil.GetJSON(http.Client{}, url, &details)
+			// TODO(rail): figure out the way to accept expected certs only
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			return httputil.GetJSON(http.Client{Transport: tr}, url, &details)
 		}); err != nil {
 			t.Fatal(err)
 		}
 		idMap[i+1] = details.NodeID
-		urlMap[i+1] = `http://` + addr
+		urlMap[i+1] = urlSchema + addr
 	}
 
 	// The status endpoints below may take a while to produce their answer, maybe more
@@ -78,7 +87,11 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 		}
 		var details serverpb.DetailsResponse
 		for _, urlID := range urlIDs {
-			if err := httputil.GetJSON(http.Client{}, url+`/_status/details/`+urlID, &details); err != nil {
+			// TODO(rail): figure out the way to accept expected certs only
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			if err := httputil.GetJSON(http.Client{Transport: tr}, url+`/_status/details/`+urlID, &details); err != nil {
 				t.Fatalf("unable to parse details - %s", err)
 			}
 			if details.NodeID != expectedNodeID {

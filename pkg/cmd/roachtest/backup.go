@@ -152,8 +152,8 @@ func registerBackup(r *testRegistry) {
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
+				c.Run(ctx, c.Node(1),
+					fmt.Sprintf("./cockroach sql %s -e BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/%s'", cockroachSecureFlag(), dest))
 				return nil
 			})
 			m.Wait()

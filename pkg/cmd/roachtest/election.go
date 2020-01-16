@@ -38,7 +38,7 @@ func registerElectionAfterRestart(r *testRegistry) {
 			time.Sleep(3 * time.Second)
 
 			t.Status("creating table and splits")
-			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+			c.Run(ctx, c.Node(1), `./cockroach sql `+cockroachSecureFlag()+` -e "
         CREATE DATABASE IF NOT EXISTS test;
         CREATE TABLE test.kv (k INT PRIMARY KEY, v INT);
         -- Prevent the merge queue from immediately discarding our splits.
@@ -46,7 +46,7 @@ func registerElectionAfterRestart(r *testRegistry) {
         ALTER TABLE test.kv SPLIT AT SELECT generate_series(0, 10000, 100)"`)
 
 			start := timeutil.Now()
-			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+			c.Run(ctx, c.Node(1), `./cockroach sql `+cockroachSecureFlag()+` -e "
         SELECT * FROM test.kv"`)
 			duration := timeutil.Since(start)
 			t.l.Printf("pre-restart, query took %s\n", duration)
@@ -73,7 +73,8 @@ func registerElectionAfterRestart(r *testRegistry) {
 			// takes ages (perhaps due to some cli-internal query taking a
 			// very long time), we fail with the duration check below and
 			// not an opaque error from the cli.
-			buf, err := c.RunWithBuffer(ctx, t.l, c.Node(1), `COCKROACH_CONNECT_TIMEOUT=240 ./cockroach sql --insecure -e "
+			buf, err := c.RunWithBuffer(ctx, t.l, c.Node(1),
+				`COCKROACH_CONNECT_TIMEOUT=240 ./cockroach sql `+cockroachSecureFlag()+` -e "
 SET TRACING = on;
 SELECT * FROM test.kv;
 SET TRACING = off;

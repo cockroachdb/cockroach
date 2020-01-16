@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
 	"net"
@@ -135,7 +136,11 @@ type gossipUtil struct {
 func newGossipUtil(ctx context.Context, c *cluster) *gossipUtil {
 	urlMap := make(map[int]string)
 	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
-		urlMap[i+1] = `http://` + addr
+		urlSchema := "https://"
+		if insecure {
+			urlSchema = "http://"
+		}
+		urlMap[i+1] = urlSchema + addr
 	}
 	return &gossipUtil{
 		waitTime: 30 * time.Second,
@@ -154,7 +159,11 @@ func (g *gossipUtil) check(ctx context.Context, c *cluster, f checkGossipFunc) e
 		var infoStatus gossip.InfoStatus
 		for i := 1; i <= c.spec.NodeCount; i++ {
 			url := g.urlMap[i] + `/_status/gossip/local`
-			if err := httputil.GetJSON(http.Client{}, url, &infoStatus); err != nil {
+			// TODO(rail): figure out the way to accept expected certs only
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			if err := httputil.GetJSON(http.Client{Transport: tr}, url, &infoStatus); err != nil {
 				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
@@ -399,7 +408,7 @@ SELECT count(replicas)
 	// connections. This will require node 1 to reach out to the other nodes in
 	// the cluster for gossip info.
 	err := c.RunE(ctx, c.Node(1),
-		`./cockroach start --insecure --background --store={store-dir} `+
+		`./cockroach start `+cockroachSecureFlag()+` --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 			`--listen-addr=:$[{pgport:1}+10000] --http-port=$[{pgport:1}+1] `+
 			`--join={pghost:1}:{pgport:1}`+
