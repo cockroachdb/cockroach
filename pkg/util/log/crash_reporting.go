@@ -17,6 +17,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -27,10 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	raven "github.com/getsentry/raven-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 )
 
@@ -246,23 +246,25 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	if crashReportURL == "" {
 		return
 	}
-	if err := raven.SetDSN(crashReportURL); err != nil {
-		panic(errors.Wrap(err, "failed to setup crash reporting"))
-	}
 	crashReportingActive = true
-
 	if cmd == "start" {
 		cmd = "server"
 	}
 	info := build.GetInfo()
-	raven.SetRelease(info.Tag)
-	raven.SetEnvironment(crashReportEnv)
-	raven.SetTagsContext(map[string]string{
+	tags := map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,
 		"distribution": info.Distribution,
 		"rev":          info.Revision,
 		"goversion":    info.GoVersion,
+	}
+	sentry.Init(sentry.ClientOptions{
+		Dsn:         crashReportURL,
+		Environment: crashReportEnv,
+		Release:     info.Tag,
+	})
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(tags)
 	})
 }
 
@@ -470,8 +472,14 @@ func SendCrashReport(
 		return
 	}
 	err := ReportablesToSafeError(depth+1, format, reportables)
-	ex := raven.NewException(err, stacktrace.NewStackTrace(depth+1))
-	SendReport(ctx, err.Error(), crashReportType, nil, ex)
+	trace := sentry.NewStacktrace()
+	trace.Frames = trace.Frames[depth+2:]
+	cause := errors.Cause(err)
+	SendReport(ctx, err.Error(), crashReportType, nil, &sentry.Exception{
+		Type:       reflect.TypeOf(cause).String(),
+		Value:      cause.Error(),
+		Stacktrace: trace,
+	})
 }
 
 // ShouldSendReport returns true iff SendReport() should be called.
@@ -495,39 +503,43 @@ func SendReport(
 	errMsg string,
 	crashReportType ReportType,
 	extraDetails map[string]interface{},
-	details ...stacktrace.ReportableObject,
+	exception *sentry.Exception,
 ) {
-	packet := raven.NewPacket(errMsg, details...)
-
+	event := sentry.NewEvent()
+	event.Message = errMsg
+	event.Extra["runtime.Version"] = runtime.Version()
+	event.Extra["runtime.NumCPU"] = runtime.NumCPU()
+	event.Extra["runtime.GOMAXPROCS"] = runtime.GOMAXPROCS(0) // 0 just returns the current value
+	event.Extra["runtime.NumGoroutine"] = runtime.NumGoroutine()
+	if exception != nil {
+		event.Exception = append(event.Exception, *exception)
+	}
 	for extraKey, extraValue := range extraDetails {
-		packet.Extra[extraKey] = extraValue
+		event.Extra[extraKey] = extraValue
 	}
 
 	if !ReportSensitiveDetails {
 		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
 		// Otherwise, raven.Client.Capture will see an empty ServerName field and
 		// automatically fill in the machine's hostname.
-		packet.ServerName = "<redacted>"
+		event.ServerName = "<redacted>"
 	}
-	tags := map[string]string{
-		"uptime": uptimeTag(timeutil.Now()),
-	}
-
+	event.Tags["uptime"] = uptimeTag(timeutil.Now())
 	switch crashReportType {
 	case ReportTypePanic:
-		tags["report_type"] = "panic"
+		event.Tags["report_type"] = "panic"
 	case ReportTypeError:
-		tags["report_type"] = "error"
+		event.Tags["report_type"] = "error"
 	}
-
 	for _, f := range tagFns {
 		v := f.value(ctx)
 		if v != "" {
-			tags[f.key] = maybeTruncate(v)
+			event.Tags[f.key] = maybeTruncate(v)
 		}
 	}
 
-	eventID, ch := raven.DefaultClient.Capture(packet, tags)
+	sentry.CaptureEvent(event)
+
 	select {
 	case <-ch:
 		Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
