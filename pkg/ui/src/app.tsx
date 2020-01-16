@@ -26,7 +26,7 @@ import visualizationRoutes from "src/routes/visualization";
 
 import NotFound from "src/views/app/components/NotFound";
 import Layout from "src/views/app/containers/layout";
-import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
+import { ConnectedDatabaseTablesList, ConnectedDatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
@@ -120,8 +120,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
           { /* databases */}
           <Route path="databases">
             <IndexRedirect to="tables"/>
-            <Route path="tables" component={normalizeConnectedComponent(DatabaseTablesList)}/>
-            <Route path="grants" component={normalizeConnectedComponent(DatabaseGrantsList)}/>
+            <Route path="tables" component={normalizeConnectedComponent(ConnectedDatabaseTablesList)}/>
+            <Route path="grants" component={normalizeConnectedComponent(ConnectedDatabaseGrantsList)}/>
             <Redirect
               from={`database/:${databaseNameAttr}/table/:${tableNameAttr}`}
               to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
