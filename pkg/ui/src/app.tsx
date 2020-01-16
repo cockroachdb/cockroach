@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect } from "react";
+import React from "react";
 import { Action, Store } from "redux";
 import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
@@ -17,7 +17,6 @@ import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr, implicitTxnAttr,
 } from "src/util/constants";
 
-import { alertDataSync } from "src/redux/alerts";
 import "src/redux/analytics";
 import { AdminUIState, History } from "src/redux/state";
 
@@ -76,8 +75,6 @@ export interface AppProps {
 // tslint:disable-next-line:variable-name
 export const App: React.FC<AppProps> = (props: AppProps) => {
   const {store, history} = props;
-
-  useEffect(() => store.subscribe(alertDataSync(store)), []);
 
   return (
     <Provider store={store}>
