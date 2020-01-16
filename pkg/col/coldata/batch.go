@@ -56,6 +56,16 @@ type Batch interface {
 	ResetInternalBatch()
 }
 
+// ReplaceCol is a helper method that replaces the column at index colIdx in b
+// with the provided col.
+func ReplaceCol(b Batch, col Vec, colIdx int) {
+	if b.Width() <= colIdx {
+		panic(fmt.Sprintf("trying to replace col at colIdx = %d when the width of the batch is %d", colIdx, b.Width()))
+	}
+	b.ColVec(colIdx).SetCol(col.Col())
+	b.ColVec(colIdx).SetNulls(col.Nulls())
+}
+
 var _ Batch = &MemBatch{}
 
 const (
@@ -116,10 +126,34 @@ func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 }
 
 // ZeroBatch is a schema-less Batch of length 0.
-var ZeroBatch = NewMemBatchWithSize(nil /* types */, 0 /* size */)
+var ZeroBatch = &zeroBatch{MemBatch: NewMemBatchWithSize(nil /* types */, 0 /* size */).(*MemBatch)}
 
-func init() {
-	ZeroBatch.SetLength(0)
+// zeroBatch is a wrapper around MemBatch that prohibits modifications of the
+// batch.
+type zeroBatch struct {
+	*MemBatch
+}
+
+var _ Batch = &zeroBatch{}
+
+func (b *zeroBatch) Length() uint16 {
+	return 0
+}
+
+func (b *zeroBatch) SetLength(uint16) {
+	panic("length should not be changed on zero batch")
+}
+
+func (b *zeroBatch) SetSelection(bool) {
+	panic("selection should not be changed on zero batch")
+}
+
+func (b *zeroBatch) AppendCol(Vec) {
+	panic("no columns should be appended to zero batch")
+}
+
+func (b *zeroBatch) Reset([]coltypes.T, int) {
+	panic("zero batch should not be reset")
 }
 
 // MemBatch is an in-memory implementation of Batch.

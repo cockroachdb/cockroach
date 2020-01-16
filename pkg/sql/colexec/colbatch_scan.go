@@ -69,7 +69,9 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	if err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	bat.SetSelection(false)
+	if bat.Selection() != nil {
+		execerror.VectorizedInternalPanic("unexpectedly a selection vector is set on the batch coming from CFetcher")
+	}
 	return bat
 }
 
