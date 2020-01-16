@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -619,7 +620,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 	// {{ range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
-		if src != nil {
+		if src != nil && batch.Length() > 0 {
 			srcCol = src._TemplateType()
 		}
 		outCol := out._TemplateType()
@@ -790,7 +791,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
-		if src != nil {
+		if src != nil && batch.Length() > 0 {
 			srcCol = src._TemplateType()
 		}
 		outCol := out._TemplateType()
@@ -1159,10 +1160,18 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) exhaustRightSource() {
 func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) build() {
 	if o.output.Width() != 0 {
 		outStartIdx := o.builderState.outCount
-		o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-		// {{ if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti) }}
-		o.buildRightGroups(o.builderState.rGroups, len(o.left.outCols), &o.right, o.builderState.rBatch, outStartIdx)
-		// {{ end }}
+		if err := execerror.CatchVectorizedRuntimeError(func() {
+			o.buildLeftGroups(o.builderState.lGroups, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+			// {{ if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti) }}
+			o.buildRightGroups(o.builderState.rGroups, len(o.left.outCols), &o.right, o.builderState.rBatch, outStartIdx)
+			// {{ end }}
+		}); err != nil {
+			msg := fmt.Sprintf("buildLeftGroups: input=%s\n", o.left.String())
+			msg = msg + fmt.Sprintf("buildLeftGroups: batch width=%d\n", o.builderState.lBatch.Width())
+			msg = msg + fmt.Sprintf("buildRightGroups: input=%s\n", o.right.String())
+			msg = msg + fmt.Sprintf("buildRightGroups: batch width=%d\n", o.builderState.rBatch.Width())
+			execerror.VectorizedInternalPanic(errors.Wrap(err, msg))
+		}
 	}
 	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 }

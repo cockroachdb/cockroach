@@ -43,9 +43,34 @@ start_key  end_key  replicas  lease_holder
 NULL       /2       {3}       3
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
+SELECT url FROM [EXPLAIN (DISTSQL, TYPES) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9GPk0AQxt_9KzbjS6t7gaX4ssklGOWUSw9O4KLJhYe9MrYkHIu7S2LT9H83wCUV5Gobjb6xu_P7Zub7wg70txI4JP7Sf5eSRpXkKo5uyL3_5Xb5NgjJ7H2QpMmn5Zw8lbzqC0qy9K9Sch0FIVHkLgnCD2Qm5uTzRz_2iSCXxMmAQiVzDMUjauD3wICCAxmFWskVai1Ve73rioL8O3CbQlHVjWmvMworqRD4DkxhSgQOqXgoMUaRo7JarRyNKMpOulbFo1BbTwGFpBaV5sRyLizHegnZnoJszJPsQe1hSzZCb4Y6HoNsn1HQRqwRuLOnz4x30GkqqXJUmA-Uspb8XcnEjjeo1ngtiwqVtRjOlm5r5L3t0V3qx535QKHEr2bmsdfzS1WsN_0nUIgaw4nHqOdQzx25cNhw8QcbTowfygtZW-7YisnW7qA1Oz17ezr78u9mz54d719k7_zX7CeGi1HXstJ4UrR2ux7ma-zt0rJRK7xVctW16Y9Rx3XO5qhN_-r2h6Dqnrrf73SYHYfZGLZ_hp0BzMawcxR-M4DtMbw4Y-dfOh-H2XHYPWvnbP_iRwAAAP__W2L0nA==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk1GLm0AQx9_7KZbpS9LuoWvsi3Bgab3WI6eperTl8GEvThPBc-3uCg0h3724HqSmiSRwcC_i7s7vv_Ofmd2C-l2BB2kwDz5lpJUVuUniO_IQ_FjMP4YRmXwO0yz9Nqck-7kI0il5jnzXx1VkHtxk5DYOIyLJfRpGX8iET8n3r0ESEE6uiZMDhVoUGPEnVOA9AAMKDuQUGimWqJSQ3fbWBIXFH_BsCmXdtLrbzikshUTwtqBLXSF4kPHHChPkBUqr0ypQ87Iy0o0sn7jc-BIopA2vlUcs58pyrLeQ7yiIVj_L7tUeN2TN1Xqo4zPIdzkFpfkKwXN29ER6e522FrJAicVQqaw1UPPNO5ELoo84v0O5wltR1iit2ZDMNg16fTPi-yxITEuAQoW_9MRn76fXslyt-1-gELfaIz6jvkN996A2e9-zl_A94icSV6Kx3AF5Khd3kAs7f0Ts4yNSveyIsJPpvd6IOK86IkeSS1A1olZ4VsPtzh4WK-yLqEQrl7iQYmmu6Zex4Uy9C1S6P3X7RVibI_N2z4fZOMwOYftf2BnA7BB2RuEPA9g-hGcXeP7v5nGYjcPuRZ7z3Zu_AQAA___kZwi5
+
+query T
+EXPLAIN (VEC, VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
+----
+│
+├ Node 1
+│ └ *colexec.Materializer
+│   └ *colexec.noopOperator
+│     └ *colexec.ParallelUnorderedSynchronizer
+│       ├ *colrpc.Inbox
+│       └ *colexec.mergeJoinLeftOuterOp
+│         ├ *colrpc.Inbox
+│         └ *colexec.routerOutputOp
+│           └ *colexec.HashRouter
+│             └ *colexec.CancelChecker
+│               └ *colexec.colBatchScan
+└ Node 2
+  └ *colrpc.Outbox
+    └ *colexec.deselectorOp
+      └ *colexec.mergeJoinLeftOuterOp
+        ├ *colexec.routerOutputOp
+        │ └ *colexec.HashRouter
+        │   └ *colexec.CancelChecker
+        │     └ *colexec.colBatchScan
+        └ *colrpc.Inbox
 
 query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2

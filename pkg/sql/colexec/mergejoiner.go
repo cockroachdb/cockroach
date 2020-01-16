@@ -154,6 +154,10 @@ type mergeJoinInput struct {
 	source Operator
 }
 
+func (i *mergeJoinInput) String() string {
+	return fmt.Sprintf("eqCols = %v\toutCols = %v\tsourceTypes = %v", i.eqCols, i.outCols, i.sourceTypes)
+}
+
 // The merge join operator uses a probe and build approach to generate the
 // join. What this means is that instead of going through and expanding the
 // cross product row by row, the operator performs two passes.
