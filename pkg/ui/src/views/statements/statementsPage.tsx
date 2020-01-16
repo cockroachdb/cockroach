@@ -30,6 +30,7 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
+import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
 import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
@@ -167,7 +168,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
-
+    const data = this.getStatementsData();
     return (
       <React.Fragment>
         <PageConfig>
@@ -195,14 +196,23 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               {this.renderLastCleared()}
             </h4>
           </div>
-          <StatementsSortedTable
-            className="statements-table"
-            data={this.getStatementsData()}
-            columns={makeStatementsColumns(statements, selectedApp, search)}
-            sortSetting={this.state.sortSetting}
-            onChangeSortSetting={this.changeSortSetting}
-            drawer
-          />
+          {data.length > 0 ? (
+            <div className="statements-table-wrapper">
+              <StatementsSortedTable
+                className="statements-table"
+                data={data}
+                columns={makeStatementsColumns(statements, selectedApp, search)}
+                sortSetting={this.state.sortSetting}
+                onChangeSortSetting={this.changeSortSetting}
+                drawer
+              />
+            </div>
+          ) : <Empty
+                title="This page helps you identify frequently executed or high latency SQL statements."
+                description="No SQL statements were executed since this page was last cleared."
+                buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
+              />
+          }
         </section>
         <Pagination
           size="small"
