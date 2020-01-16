@@ -37,9 +37,6 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	go func() {
 		errCh <- c.RunE(tenantCtx, c.Node(1),
 			"./cockroach", "mt", "start-sql",
-			// TODO(tbg): make this test secure.
-			// "--certs-dir", "certs",
-			"--insecure",
 			"--tenant-id", "123",
 			"--http-addr", "127.0.0.1:8081",
 			"--kv-addrs", strings.Join(kvAddrs, ","),
@@ -47,6 +44,7 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 			"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0")+":36257",
 			// Ensure that log files get created.
 			"--log='file-defaults: {dir: .}'",
+			c.secureFlags(),
 		)
 		close(errCh)
 	}()

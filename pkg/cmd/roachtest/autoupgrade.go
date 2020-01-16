@@ -69,7 +69,8 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.WorkerStatus("decommission")
 			port := fmt.Sprintf("{pgport:%d}", node)
 			if err := c.RunE(ctx, c.Node(node),
-				fmt.Sprintf("./cockroach node decommission %d --insecure --port=%s", node, port)); err != nil {
+				fmt.Sprintf("./cockroach node decommission %d %s --port=%s", node, c.secureFlags(),
+					port)); err != nil {
 				return err
 			}
 			t.WorkerStatus("stop")

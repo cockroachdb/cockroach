@@ -321,7 +321,8 @@ func registerKVQuiescenceDead(r *testRegistry) {
 				run(kv+" --seed 1 {pgurl:1}", true)
 			})
 			// Gracefully shut down third node (doesn't matter whether it's graceful or not).
-			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
+			c.Run(ctx, c.Node(nodes),
+				"./cockroach quit --host=:{pgport:3} "+c.secureFlags())
 			c.Stop(ctx, c.Node(nodes))
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
@@ -487,7 +488,7 @@ func registerKVGracefulDraining(r *testRegistry) {
 						}
 					}
 					m.ExpectDeath()
-					c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
+					c.Run(ctx, c.Node(nodes), "./cockroach quit --host=:{pgport:3} "+c.secureFlags())
 					c.Stop(ctx, c.Node(nodes))
 					t.Status("letting workload run with one node down")
 					select {

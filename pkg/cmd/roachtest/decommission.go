@@ -212,13 +212,14 @@ func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, durati
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
 			defer time.Sleep(time.Second) // work around quit returning too early
-			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port)
+			return c.RunE(ctx, c.Node(node), fmt.Sprintf("./cockroach quit --host=:%s %s", port, c.secureFlags()))
 		}
 
 		decom := func(id int) error {
 			port := fmt.Sprintf("{pgport:%d}", pinnedNode) // always use the pinned node
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(pinnedNode), fmt.Sprintf("./cockroach node decommission --insecure --wait=all --host=:%s %d", port, id))
+			return c.RunE(ctx, c.Node(pinnedNode), fmt.Sprintf("./cockroach node decommission %s --wait=all --host=:%s %d",
+				c.secureFlags(), port, id))
 		}
 
 		tBegin, whileDown := timeutil.Now(), true
@@ -1107,10 +1108,8 @@ func (h *decommTestHelper) getRandNodeOtherThan(ids ...int) int {
 func execCLI(
 	ctx context.Context, t *test, c *cluster, runNode int, extraArgs ...string,
 ) (string, error) {
-	args := []string{"./cockroach"}
+	args := []string{"./cockroach", c.secureFlags(), fmt.Sprintf("--port={pgport:%d}", runNode)}
 	args = append(args, extraArgs...)
-	args = append(args, "--insecure")
-	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
 	t.l.Printf("%s\n", buf)
 	return string(buf), err

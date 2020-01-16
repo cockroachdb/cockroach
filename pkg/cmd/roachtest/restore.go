@@ -347,10 +347,11 @@ func registerRestore(r *testRegistry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
-					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
+					c.Run(ctx, c.Node(1),
+						`./cockroach sql `+c.secureFlags()+` -e "CREATE DATABASE restore2tb"`)
 					// TODO(dan): It'd be nice if we could keep track over time of how
 					// long this next line took.
-					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+					c.Run(ctx, c.Node(1), `./cockroach sql `+c.secureFlags()+` -e "
 				RESTORE csv.bank FROM
 				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank'
 				WITH into_db = 'restore2tb'"`)
