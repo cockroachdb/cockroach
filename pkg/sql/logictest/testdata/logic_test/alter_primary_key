@@ -122,8 +122,92 @@ SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
 1 2 3
 4 5 6
 
+statement error pq: cannot change the primary key of an interleaved parent
+ALTER TABLE parent ALTER PRIMARY KEY USING COLUMNS (x)
+
 statement error pq: unimplemented: "parent" is interleaved by table "child"
 DROP TABLE parent
 
 statement ok
 DROP TABLE parent CASCADE
+
+# Test that we can change the primary key of an interleaved child.
+statement ok
+DROP TABLE IF EXISTS child;
+CREATE TABLE parent (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y));
+CREATE TABLE child (
+  x INT, y INT NOT NULL, z INT NOT NULL,
+  FAMILY (x, y, z), PRIMARY KEY (x, y, z)
+) INTERLEAVE IN PARENT parent (x, y);
+INSERT INTO parent VALUES (1, 2), (4, 5);
+INSERT INTO child VALUES (1, 2, 3), (4, 5, 6);
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (y, z)
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE child (
+       x INT8 NOT NULL,
+       y INT8 NOT NULL,
+       z INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (y ASC, z ASC),
+       FAMILY fam_0_x_y_z (x, y, z)
+)
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE y >=2 AND y <= 6] OFFSET 2
+----
+scan  ·      ·
+·     table  child@primary
+·     spans  /2-/7
+
+query III rowsort
+SELECT * FROM child WHERE y >=2 AND y <= 6
+----
+1 2 3
+4 5 6
+
+# We can drop parent because it isn't an interleaved parent anymore.
+statement ok
+DROP TABLE parent
+
+# Test that we can change the primary key of an interleaved child
+# that also has a secondary index interleaved.
+statement ok
+DROP TABLE IF EXISTS child;
+CREATE TABLE parent (x INT PRIMARY KEY);
+CREATE TABLE child (
+  x INT, y INT, PRIMARY KEY (x, y), z INT NOT NULL, W INT,
+  FAMILY (x, y, z, w)
+) INTERLEAVE IN PARENT parent (x);
+CREATE INDEX i ON child (x, w) INTERLEAVE IN PARENT parent (x);
+INSERT INTO parent VALUES (1);
+INSERT INTO child VALUES (1, 2, 3, 4);
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT parent (x)
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE child (
+         x INT8 NOT NULL,
+         y INT8 NOT NULL,
+         z INT8 NOT NULL,
+         w INT8 NULL,
+         CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
+         INDEX i (x ASC, w ASC) INTERLEAVE IN PARENT parent (x),
+         FAMILY fam_0_x_y_z_w (x, y, z, w)
+       ) INTERLEAVE IN PARENT parent (x)
+
+# If child@i was not properly rewritten, we wouldn't be able to select
+# all columns in child from it without an index join
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM child@i] OFFSET 2
+----
+scan  ·      ·
+·     table  child@i
+·     spans  ALL
+
+query IIII
+SELECT * FROM child@i
+----
+1 2 3 4
