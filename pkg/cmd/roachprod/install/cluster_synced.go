@@ -67,7 +67,7 @@ type SyncedCluster struct {
 	VPCs       []string
 	// all other fields are populated in newCluster.
 	Nodes          []int
-	Secure         bool
+	Insecure       bool
 	Env            string
 	Args           []string
 	Tag            string
