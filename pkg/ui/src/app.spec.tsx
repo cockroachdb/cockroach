@@ -42,6 +42,7 @@ import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
+import NotFound from "oss/src/views/app/components/NotFound";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
@@ -407,6 +408,83 @@ describe("Routing to", () => {
     it("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/node/node-id-attr");
       assert.lengthOf(appWrapper.find(RaftMessages), 1);
+    });
+  });
+
+  { /* old route redirects */}
+  describe("'/cluster' path", () => {
+    it("redirected to '/metrics/overview/cluster'", () => {
+      navigateToPath("/cluster");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/metrics/overview/cluster");
+    });
+  });
+
+  describe("'/cluster/all/:${dashboardNameAttr}' path", () => {
+    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+      const dashboardNameAttr = "some-dashboard-name";
+      navigateToPath(`/cluster/all/${dashboardNameAttr}`);
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/cluster`);
+    });
+  });
+
+  describe("'/cluster/node/:${nodeIDAttr}/:${dashboardNameAttr}' path", () => {
+    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+      const dashboardNameAttr = "some-dashboard-name";
+      const nodeIDAttr = 1;
+      navigateToPath(`/cluster/node/${nodeIDAttr}/${dashboardNameAttr}`);
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/node/${nodeIDAttr}`);
+    });
+  });
+
+  describe("'/cluster/nodes' path", () => {
+    it("redirected to '/overview/list'", () => {
+      navigateToPath("/cluster/nodes");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/overview/list");
+    });
+  });
+
+  describe("'/cluster/nodes/:${nodeIDAttr}' path", () => {
+    it("redirected to '/node/:${nodeIDAttr}'", () => {
+      const nodeIDAttr = 1;
+      navigateToPath(`/cluster/nodes/${nodeIDAttr}`);
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, `/node/${nodeIDAttr}`);
+    });
+  });
+
+  describe("'/cluster/nodes/:${nodeIDAttr}/logs' path", () => {
+    it("redirected to '/node/:${nodeIDAttr}/logs'", () => {
+      const nodeIDAttr = 1;
+      navigateToPath(`/cluster/nodes/${nodeIDAttr}/logs`);
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, `/node/${nodeIDAttr}/logs`);
+    });
+  });
+
+  describe("'/cluster/events' path", () => {
+    it("redirected to '/events'", () => {
+      navigateToPath("/cluster/events");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/events");
+    });
+  });
+
+  describe("'/cluster/nodes' path", () => {
+    it("redirected to '/overview/list'", () => {
+      navigateToPath("/cluster/nodes");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/overview/list");
+    });
+  });
+
+  describe("'/unknown-url' path", () => {
+    it("routes to <NotFound> component", () => {
+      navigateToPath("/some-random-ulr");
+      assert.lengthOf(appWrapper.find(NotFound), 1);
     });
   });
 });
