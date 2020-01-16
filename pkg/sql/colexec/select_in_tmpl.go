@@ -142,12 +142,13 @@ type selectInOp_TYPE struct {
 
 type projectInOp_TYPE struct {
 	OneInputNode
-	allocator *Allocator
-	colIdx    int
-	outputIdx int
-	filterRow []_GOTYPE
-	hasNulls  bool
-	negate    bool
+	allocator       *Allocator
+	colIdx          int
+	outputIdx       int
+	outputColStatus colAddedStatus
+	filterRow       []_GOTYPE
+	hasNulls        bool
+	negate          bool
 }
 
 var _ Operator = &projectInOp_TYPE{}
@@ -198,7 +199,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	for {
 		batch := si.input.Next(ctx)
 		if batch.Length() == 0 {
-			return batch
+			return coldata.ZeroBatch
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -267,11 +268,12 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 
 func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	batch := pi.input.Next(ctx)
-	if pi.outputIdx == batch.Width() {
-		pi.allocator.AppendColumn(batch, coltypes.Bool)
-	}
 	if batch.Length() == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if pi.outputColStatus == colNotAdded {
+		pi.allocator.AddColumn(batch, coltypes.Bool, pi.outputIdx)
+		pi.outputColStatus = colAdded
 	}
 
 	vec := batch.ColVec(pi.colIdx)

@@ -51,9 +51,11 @@ func NewRowNumberOperator(
 // and should not be used directly.
 type rowNumberBase struct {
 	OneInputNode
-	allocator       *Allocator
-	outputColIdx    int
-	partitionColIdx int
+	allocator          *Allocator
+	outputColIdx       int
+	outputColStatus    colAddedStatus
+	partitionColIdx    int
+	partitionColStatus colAddedStatus
 
 	rowNumber int64
 }
@@ -72,16 +74,18 @@ var _ Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
 	// {{ if .HasPartition }}
-	if r.partitionColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Bool)
+	if r.partitionColStatus == colNotAdded {
+		r.allocator.AddColumn(batch, coltypes.Bool, r.partitionColIdx)
+		r.partitionColStatus = colAdded
 	}
 	// {{ end }}
-	if r.outputColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Int64)
-	}
-	if batch.Length() == 0 {
-		return batch
+	if r.outputColStatus == colNotAdded {
+		r.allocator.AddColumn(batch, coltypes.Int64, r.outputColIdx)
+		r.outputColStatus = colAdded
 	}
 
 	// {{ if .HasPartition }}

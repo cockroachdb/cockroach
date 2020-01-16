@@ -94,9 +94,11 @@ type rankInitFields struct {
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new rank needs to be assigned
 	// to the corresponding tuple.
-	distinctCol     []bool
-	outputColIdx    int
-	partitionColIdx int
+	distinctCol        []bool
+	outputColIdx       int
+	outputColStatus    colAddedStatus
+	partitionColIdx    int
+	partitionColStatus colAddedStatus
 }
 
 // {{range .}}
@@ -125,16 +127,18 @@ func (r *_RANK_STRINGOp) Init() {
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
 	// {{ if .HasPartition }}
-	if r.partitionColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Bool)
+	if r.partitionColStatus == colNotAdded {
+		r.allocator.AddColumn(batch, coltypes.Bool, r.partitionColIdx)
+		r.partitionColStatus = colAdded
 	}
 	// {{ end }}
-	if r.outputColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Int64)
-	}
-	if batch.Length() == 0 {
-		return batch
+	if r.outputColStatus == colNotAdded {
+		r.allocator.AddColumn(batch, coltypes.Int64, r.outputColIdx)
+		r.outputColStatus = colAdded
 	}
 
 	// {{ if .HasPartition }}

@@ -24,24 +24,21 @@ type ordinalityOp struct {
 
 	allocator *Allocator
 	// ordinalityCol is the index of the column in which ordinalityOp will write
-	// the ordinal number. It is colNotAppended if the column has not been
-	// appended yet.
-	ordinalityCol int
+	// the ordinal number.
+	ordinalityCol       int
+	ordinalityColStatus colAddedStatus
 	// counter is the number of tuples seen so far.
 	counter int64
 }
 
 var _ Operator = &ordinalityOp{}
 
-const colNotAppended = -1
-
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
 func NewOrdinalityOp(allocator *Allocator, input Operator) Operator {
 	c := &ordinalityOp{
-		OneInputNode:  NewOneInputNode(input),
-		allocator:     allocator,
-		ordinalityCol: colNotAppended,
-		counter:       1,
+		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
+		counter:      1,
 	}
 	return c
 }
@@ -52,13 +49,13 @@ func (c *ordinalityOp) Init() {
 
 func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	bat := c.input.Next(ctx)
-	if c.ordinalityCol == colNotAppended {
-		c.ordinalityCol = bat.Width()
-		c.allocator.AppendColumn(bat, coltypes.Int64)
-	}
-
 	if bat.Length() == 0 {
-		return bat
+		return coldata.ZeroBatch
+	}
+	if c.ordinalityColStatus == colNotAdded {
+		c.ordinalityCol = bat.Width()
+		c.allocator.AddColumn(bat, coltypes.Int64, c.ordinalityCol)
+		c.ordinalityColStatus = colAdded
 	}
 
 	vec := bat.ColVec(c.ordinalityCol).Int64()

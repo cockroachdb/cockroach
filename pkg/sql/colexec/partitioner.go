@@ -62,8 +62,9 @@ type windowSortingPartitioner struct {
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new partition begins with the
 	// corresponding tuple.
-	distinctCol     []bool
-	partitionColIdx int
+	distinctCol        []bool
+	partitionColIdx    int
+	partitionColStatus colAddedStatus
 }
 
 func (p *windowSortingPartitioner) Init() {
@@ -72,11 +73,12 @@ func (p *windowSortingPartitioner) Init() {
 
 func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	b := p.input.Next(ctx)
-	if p.partitionColIdx == b.Width() {
-		p.allocator.AppendColumn(b, coltypes.Bool)
-	}
 	if b.Length() == 0 {
-		return b
+		return coldata.ZeroBatch
+	}
+	if p.partitionColStatus == colNotAdded {
+		p.allocator.AddColumn(b, coltypes.Bool, p.partitionColIdx)
+		p.partitionColStatus = colAdded
 	}
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()

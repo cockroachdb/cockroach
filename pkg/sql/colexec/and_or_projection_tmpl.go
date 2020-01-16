@@ -40,9 +40,10 @@ type _OP_LOWERProjOp struct {
 	leftFeedOp       *feedOperator
 	rightFeedOp      *feedOperator
 
-	leftIdx   int
-	rightIdx  int
-	outputIdx int
+	leftIdx         int
+	rightIdx        int
+	outputIdx       int
+	outputColStatus colAddedStatus
 
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to modify the
@@ -108,14 +109,14 @@ func (o *_OP_LOWERProjOp) Init() {
 // populates the result of the logical operation.
 func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	batch := o.input.Next(ctx)
-	if o.outputIdx == batch.Width() {
-		o.allocator.AppendColumn(batch, coltypes.Bool)
-	}
 	origLen := batch.Length()
-	// NB: we don't short-circuit if the batch is length 0 here, because we have
-	// to make sure to run both of the projection chains. This is unfortunate.
-	// TODO(yuzefovich): add this back in once batches are right-sized by
-	// planning.
+	if origLen == 0 {
+		return coldata.ZeroBatch
+	}
+	if o.outputColStatus == colNotAdded {
+		o.allocator.AddColumn(batch, coltypes.Bool, o.outputIdx)
+		o.outputColStatus = colAdded
+	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
 		copy(o.origSel[:origLen], sel[:origLen])
@@ -127,13 +128,6 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// actually run the projection.
 	o.leftFeedOp.batch = batch
 	batch = o.leftProjOpChain.Next(ctx)
-
-	if origLen == 0 {
-		// Run the right-side projection on the remaining tuples.
-		o.rightFeedOp.batch = batch
-		batch = o.rightProjOpChain.Next(ctx)
-		return batch
-	}
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do

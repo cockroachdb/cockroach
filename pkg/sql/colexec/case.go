@@ -27,9 +27,10 @@ type caseOp struct {
 	caseOps []Operator
 	elseOp  Operator
 
-	thenIdxs  []int
-	outputIdx int
-	typ       coltypes.T
+	thenIdxs        []int
+	outputIdx       int
+	outputColStatus colAddedStatus
+	typ             coltypes.T
 
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to destructively
@@ -110,38 +111,28 @@ func (c *caseOp) Init() {
 func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	c.buffer.advance(ctx)
 	origLen := c.buffer.batch.Length()
-	if c.buffer.batch.Width() == c.outputIdx {
-		c.allocator.AppendColumn(c.buffer.batch, c.typ)
+	if origLen == 0 {
+		return coldata.ZeroBatch
 	}
-	// NB: we don't short-circuit if the batch is length 0 here, because we have
-	// to make sure to run all of our case arms. This is unfortunate.
-	// TODO(jordan): add this back in once batches are right-sized by planning.
+	if c.outputColStatus == colNotAdded {
+		c.allocator.AddColumn(c.buffer.batch, c.typ, c.outputIdx)
+		c.outputColStatus = colAdded
+	}
 	var origHasSel bool
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		origHasSel = true
 		copy(c.origSel, sel)
 	}
 
-	// It is possible that we have a typeless zero-length batch, and we cannot
-	// get a particular columnar vector from it, so we have special casing here
-	// for non-zero length batches.
-	// TODO(yuzefovich): remove it once we can short-circuit.
-	var (
-		outputCol  coldata.Vec
-		destVecs   []coldata.Vec
-		prevLen    = origLen
-		prevHasSel bool
-	)
-	if origLen > 0 {
-		outputCol = c.buffer.batch.ColVec(c.outputIdx)
-		destVecs = []coldata.Vec{outputCol}
-		if sel := c.buffer.batch.Selection(); sel != nil {
-			prevHasSel = true
-			c.prevSel = c.prevSel[:origLen]
-			copy(c.prevSel[:origLen], sel[:origLen])
-		}
+	prevLen := origLen
+	prevHasSel := false
+	if sel := c.buffer.batch.Selection(); sel != nil {
+		prevHasSel = true
+		c.prevSel = c.prevSel[:origLen]
+		copy(c.prevSel[:origLen], sel[:origLen])
 	}
-	c.allocator.PerformOperation(destVecs, func() {
+	outputCol := c.buffer.batch.ColVec(c.outputIdx)
+	c.allocator.PerformOperation([]coldata.Vec{outputCol}, func() {
 		for i := range c.caseOps {
 			// Run the next case operator chain. It will project its THEN expression
 			// for all tuples that matched its WHEN expression and that were not

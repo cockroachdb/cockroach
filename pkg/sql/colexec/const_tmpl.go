@@ -80,10 +80,11 @@ func NewConstOp(
 type const_TYPEOp struct {
 	OneInputNode
 
-	allocator *Allocator
-	typ       coltypes.T
-	outputIdx int
-	constVal  _GOTYPE
+	allocator       *Allocator
+	typ             coltypes.T
+	outputIdx       int
+	outputColStatus colAddedStatus
+	constVal        _GOTYPE
 }
 
 func (c const_TYPEOp) Init() {
@@ -93,11 +94,12 @@ func (c const_TYPEOp) Init() {
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
-	if batch.Width() == c.outputIdx {
-		c.allocator.AppendColumn(batch, c.typ)
-	}
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if c.outputColStatus == colNotAdded {
+		c.allocator.AddColumn(batch, c.typ, c.outputIdx)
+		c.outputColStatus = colAdded
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec._TemplateType()
@@ -134,9 +136,10 @@ func NewConstNullOp(allocator *Allocator, input Operator, outputIdx int, typ col
 
 type constNullOp struct {
 	OneInputNode
-	allocator *Allocator
-	outputIdx int
-	typ       coltypes.T
+	allocator       *Allocator
+	outputIdx       int
+	outputColStatus colAddedStatus
+	typ             coltypes.T
 }
 
 var _ Operator = &constNullOp{}
@@ -148,13 +151,12 @@ func (c constNullOp) Init() {
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
-
-	if batch.Width() == c.outputIdx {
-		c.allocator.AppendColumn(batch, c.typ)
-	}
-
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if c.outputColStatus == colNotAdded {
+		c.allocator.AddColumn(batch, c.typ, c.outputIdx)
+		c.outputColStatus = colAdded
 	}
 
 	col := batch.ColVec(c.outputIdx)

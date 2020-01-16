@@ -83,6 +83,12 @@ func (b *bufferedBatch) AppendCol(coldata.Vec) {
 	execerror.VectorizedInternalPanic("AppendCol(coldata.Vec) should not be called on bufferedBatch")
 }
 
+// ReplaceCol is not implemented because bufferedBatch is only initialized
+// when the column schema is known.
+func (b *bufferedBatch) ReplaceCol(coldata.Vec, int) {
+	execerror.VectorizedInternalPanic("ReplaceCol(coldata.Vec, int) should not be called on bufferedBatch")
+}
+
 // Reset is not implemented because bufferedBatch is not reused with
 // different column schemas at the moment.
 func (b *bufferedBatch) Reset(types []coltypes.T, length int) {

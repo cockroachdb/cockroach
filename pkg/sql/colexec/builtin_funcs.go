@@ -26,15 +26,16 @@ import (
 
 type defaultBuiltinFuncOperator struct {
 	OneInputNode
-	allocator      *Allocator
-	evalCtx        *tree.EvalContext
-	funcExpr       *tree.FuncExpr
-	columnTypes    []types.T
-	argumentCols   []int
-	outputIdx      int
-	outputType     *types.T
-	outputPhysType coltypes.T
-	converter      func(tree.Datum) (interface{}, error)
+	allocator       *Allocator
+	evalCtx         *tree.EvalContext
+	funcExpr        *tree.FuncExpr
+	columnTypes     []types.T
+	argumentCols    []int
+	outputIdx       int
+	outputColStatus colAddedStatus
+	outputType      *types.T
+	outputPhysType  coltypes.T
+	converter       func(tree.Datum) (interface{}, error)
 
 	row tree.Datums
 	da  sqlbase.DatumAlloc
@@ -49,11 +50,12 @@ func (b *defaultBuiltinFuncOperator) Init() {
 func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	batch := b.input.Next(ctx)
 	n := batch.Length()
-	if b.outputIdx == batch.Width() {
-		b.allocator.AppendColumn(batch, b.outputPhysType)
-	}
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if b.outputColStatus == colNotAdded {
+		b.allocator.AddColumn(batch, b.outputPhysType, b.outputIdx)
+		b.outputColStatus = colAdded
 	}
 
 	sel := batch.Selection()
@@ -110,9 +112,10 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 type substringFunctionOperator struct {
 	OneInputNode
-	allocator    *Allocator
-	argumentCols []int
-	outputIdx    int
+	allocator       *Allocator
+	argumentCols    []int
+	outputIdx       int
+	outputColStatus colAddedStatus
 }
 
 var _ Operator = &substringFunctionOperator{}
@@ -123,13 +126,13 @@ func (s *substringFunctionOperator) Init() {
 
 func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
-	if s.outputIdx == batch.Width() {
-		s.allocator.AppendColumn(batch, coltypes.Bytes)
-	}
-
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if s.outputColStatus == colNotAdded {
+		s.allocator.AddColumn(batch, coltypes.Bytes, s.outputIdx)
+		s.outputColStatus = colAdded
 	}
 
 	sel := batch.Selection()

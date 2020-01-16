@@ -116,10 +116,11 @@ func GetCastOperator(
 
 type castOpNullAny struct {
 	OneInputNode
-	allocator *Allocator
-	colIdx    int
-	outputIdx int
-	toType    coltypes.T
+	allocator       *Allocator
+	colIdx          int
+	outputIdx       int
+	outputColStatus colAddedStatus
+	toType          coltypes.T
 }
 
 var _ Operator = &castOpNullAny{}
@@ -130,12 +131,13 @@ func (c *castOpNullAny) Init() {
 
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if c.outputIdx == batch.Width() {
-		c.allocator.AppendColumn(batch, c.toType)
-	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if c.outputColStatus == colNotAdded {
+		c.allocator.AddColumn(batch, c.toType, c.outputIdx)
+		c.outputColStatus = colAdded
 	}
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
@@ -168,11 +170,12 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 
 type castOp_FROMTYPE_TOTYPE struct {
 	OneInputNode
-	allocator *Allocator
-	colIdx    int
-	outputIdx int
-	fromType  coltypes.T
-	toType    coltypes.T
+	allocator       *Allocator
+	colIdx          int
+	outputIdx       int
+	outputColStatus colAddedStatus
+	fromType        coltypes.T
+	toType          coltypes.T
 }
 
 var _ Operator = &castOp_FROMTYPE_TOTYPE{}
@@ -183,12 +186,13 @@ func (c *castOp_FROMTYPE_TOTYPE) Init() {
 
 func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if c.outputIdx == batch.Width() {
-		c.allocator.AppendColumn(batch, coltypes._TOTYPE)
-	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
+	}
+	if c.outputColStatus == colNotAdded {
+		c.allocator.AddColumn(batch, coltypes._TOTYPE, c.outputIdx)
+		c.outputColStatus = colAdded
 	}
 	vec := batch.ColVec(c.colIdx)
 	col := vec._FROMTYPE()
