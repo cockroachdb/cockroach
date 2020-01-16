@@ -47,7 +47,7 @@ interface EnqueueRangeState {
   error: Error;
 }
 
-class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, EnqueueRangeState> {
+export class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, EnqueueRangeState> {
   state: EnqueueRangeState = {
     queue: QUEUES[0],
     rangeID: "",
