@@ -348,16 +348,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			// TODO (rohany,solongordon): Figure out whats going on with interleaved tables later.
-			//  For now, we will disallow primary key change operations on tables that are interleaved
-			//  or have interleaved children.
-			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
-				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
-					return errors.New("table being altered cannot have interleaved children or be interleaved")
-				}
-				return nil
-			}); err != nil {
-				return err
+			// Disable primary key changes on tables that are interleaved parents.
+			if len(n.tableDesc.PrimaryIndex.InterleavedBy) != 0 {
+				return errors.New("cannot change the primary key of an interleaved parent")
 			}
 
 			nameExists := func(name string) bool {
@@ -465,11 +458,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
 					return err
 				}
+				// If the index that we are rewriting is interleaved, we need to setup the rewritten
+				// index to be interleaved as well. Since we cloned the index, the interleave descriptor
+				// on the new index is already set up. So, we just need to add the backreference from the
+				// parent to this new index.
+				if len(newIndex.Interleave.Ancestors) != 0 {
+					if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, newIndex); err != nil {
+						return err
+					}
+				}
 				oldIndexIDs = append(oldIndexIDs, idx.ID)
 				newIndexIDs = append(newIndexIDs, newIndex.ID)
 			}
 
 			swapArgs := &sqlbase.PrimaryKeySwap{
+				OldPrimaryIndexId: n.tableDesc.PrimaryIndex.ID,
 				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
 				NewIndexes:        newIndexIDs,
 				OldIndexes:        oldIndexIDs,
