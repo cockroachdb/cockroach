@@ -340,16 +340,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			// TODO (rohany,solongordon): Figure out whats going on with interleaved tables later.
-			//  For now, we will disallow primary key change operations on tables that are interleaved
-			//  or have interleaved children.
-			if err := n.tableDesc.ForeachNonDropIndex(func(i *sqlbase.IndexDescriptor) error {
-				if len(i.InterleavedBy) != 0 || len(i.Interleave.Ancestors) != 0 {
-					return errors.New("table being altered cannot have interleaved children or be interleaved")
-				}
-				return nil
-			}); err != nil {
-				return err
+			// Disable primary key changes on tables that are interleaved parents.
+			if len(n.tableDesc.PrimaryIndex.InterleavedBy) != 0 {
+				return errors.New("cannot change the primary key of an interleaved parent")
 			}
 
 			nameExists := func(name string) bool {
@@ -462,6 +455,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			swapArgs := &sqlbase.PrimaryKeySwap{
+				OldPrimaryIndexId: n.tableDesc.PrimaryIndex.ID,
 				NewPrimaryIndexId: newPrimaryIndexDesc.ID,
 				NewIndexes:        newIndexIDs,
 				OldIndexes:        oldIndexIDs,
