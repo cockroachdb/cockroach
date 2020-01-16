@@ -144,3 +144,7 @@ func ListFromStrings(strs []string) (List, error) {
 	}
 	return ret, nil
 }
+
+func RolePrivilegeFromString(str string) Kind {
+	return ByName[str]
+}

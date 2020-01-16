@@ -332,7 +332,7 @@ create_user_stmt ::=
 create_role_stmt ::=
 	'CREATE' role_or_group string_or_placeholder
 	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
-	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privileges
+	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privilege_list
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -1009,7 +1009,7 @@ opt_password ::=
 role_or_group ::=
 	'ROLE'
 
-role_privileges ::=
+role_privilege_list ::=
 	( role_privilege ) ( ( ',' role_privilege ) )*
 
 create_changefeed_stmt ::=

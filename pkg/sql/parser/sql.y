@@ -31,6 +31,7 @@ import (
 
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+    "github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -320,6 +321,12 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 }
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
+}
+func (u *sqlSymUnion) rolePrivilegeType() roleprivilege.Kind {
+    return u.val.(roleprivilege.Kind)
+}
+func (u *sqlSymUnion) rolePrivilegeList() roleprivilege.List {
+    return u.val.(roleprivilege.List)
 }
 func (u *sqlSymUnion) onConflict() *tree.OnConflict {
     return u.val.(*tree.OnConflict)
@@ -814,8 +821,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ReadWriteMode> transaction_read_mode
 
 %type <str> name opt_name opt_name_parens opt_to_savepoint
-%type <str> privilege savepoint_name
-
+%type <str> privilege savepoint_name role_privilege
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
@@ -1009,6 +1015,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.TargetList> opt_on_targets_roles
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
+%type <roleprivilege.List> role_privilege_list
 %type <tree.AuditMode> audit_mode
 
 %type <str> relocate_kw
@@ -5028,7 +5035,7 @@ opt_password:
     $$.val = nil
   }
 
-// Add documentation for [WITH role_privileges]
+// Add documentation for [WITH role_privilege_list]
 
 
 // %Help: CREATE ROLE - define a new role
@@ -5044,9 +5051,9 @@ create_role_stmt:
   {
     $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
   }
-| CREATE role_or_group string_or_placeholder WITH role_privileges
+| CREATE role_or_group string_or_placeholder WITH role_privilege_list
   {
-    $$.val = &tree.CreateRole{Name: $3.expr()}
+    $$.val = &tree.CreateRole{Name: $3.expr(), IfHasWith: true, RolePrivileges: $5.rolePrivilegeList()}
   }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
 
@@ -5078,9 +5085,21 @@ role_privilege:
   CREATEROLE
   | NOCREATEROLE
 
-role_privileges:
+
+// WIP - FIX RULES
+role_privilege_list:
   role_privilege
-  | role_privileges ',' role_privilege
+  {
+    rolePrivList, err := roleprivilege.ListFromStrings(tree.NameList{tree.Name($1)}.ToStrings())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = rolePrivList
+  }
+  | role_privilege_list ',' role_privilege
+  {
+    $$.val = append($1.rolePrivilegeList(), roleprivilege.RolePrivilegeFromString(string(tree.Name($3))))
+  }
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
