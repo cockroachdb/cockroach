@@ -21,10 +21,10 @@ package tree
 
 import (
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -1193,8 +1193,10 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 
 // CreateRole represents a CREATE ROLE statement.
 type CreateRole struct {
-	Name        Expr
-	IfNotExists bool
+	Name           Expr
+	RolePrivileges roleprivilege.List
+	IfHasWith      bool
+	IfNotExists    bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1202,6 +1204,10 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ROLE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
+	}
+	if node.IfHasWith {
+		ctx.WriteString("WITH ")
+		node.RolePrivileges.Format(&ctx.Buffer)
 	}
 	ctx.FormatNode(node.Name)
 }

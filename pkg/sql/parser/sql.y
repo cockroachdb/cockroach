@@ -507,7 +507,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -546,7 +546,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NONE NORMAL
+%token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NO_INDEX_JOIN NONE NORMAL
 %token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -5028,6 +5028,9 @@ opt_password:
     $$.val = nil
   }
 
+// Add documentation for [WITH role_privileges]
+
+
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
 // %Text: CREATE ROLE [IF NOT EXISTS] <name>
@@ -5040,6 +5043,10 @@ create_role_stmt:
 | CREATE role_or_group IF NOT EXISTS string_or_placeholder
   {
     $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
+  }
+| CREATE role_or_group string_or_placeholder WITH role_privileges
+  {
+    $$.val = &tree.CreateRole{Name: $3.expr()}
   }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
 
@@ -5066,6 +5073,14 @@ create_view_stmt:
   }
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
+
+role_privilege:
+  CREATEROLE
+  | NOCREATEROLE
+
+role_privileges:
+  role_privilege
+  | role_privileges ',' role_privilege
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
@@ -9601,6 +9616,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NOCREATEROLE
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -9861,6 +9877,7 @@ reserved_keyword:
 | COLUMN
 | CONSTRAINT
 | CREATE
+| CREATEROLE
 | CURRENT_CATALOG
 | CURRENT_DATE
 | CURRENT_ROLE

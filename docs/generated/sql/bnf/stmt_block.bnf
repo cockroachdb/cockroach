@@ -332,6 +332,7 @@ create_user_stmt ::=
 create_role_stmt ::=
 	'CREATE' role_or_group string_or_placeholder
 	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
+	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privileges
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -736,6 +737,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOCREATEROLE'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -1006,6 +1008,9 @@ opt_password ::=
 
 role_or_group ::=
 	'ROLE'
+
+role_privileges ::=
+	( role_privilege ) ( ( ',' role_privilege ) )*
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1348,6 +1353,10 @@ opt_with ::=
 	'WITH'
 	| 
 
+role_privilege ::=
+	'CREATEROLE'
+	| 'NOCREATEROLE'
+
 changefeed_targets ::=
 	single_table_pattern_list
 	| 'TABLE' single_table_pattern_list
@@ -1661,6 +1670,7 @@ reserved_keyword ::=
 	| 'COLUMN'
 	| 'CONSTRAINT'
 	| 'CREATE'
+	| 'CREATEROLE'
 	| 'CURRENT_CATALOG'
 	| 'CURRENT_DATE'
 	| 'CURRENT_ROLE'
