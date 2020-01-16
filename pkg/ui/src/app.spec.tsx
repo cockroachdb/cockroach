@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React from "react";
 import { assert } from "chai";
 import { Action, Store } from "redux";
@@ -41,6 +40,10 @@ describe("Routing to", () => {
   });
   const history: History = syncHistoryWithStore(memoryHistory, store);
   const appWrapper: ReactWrapper = mount(<App history={history} store={store}/>);
+
+  after(() => {
+    appWrapper.unmount();
+  });
 
   const navigateToPath = (path: string) => {
     history.push(path);
