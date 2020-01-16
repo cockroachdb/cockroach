@@ -562,12 +562,14 @@ a  public  t  readwrite  DROP
 a  public  t  readwrite  GRANT
 a  public  t  readwrite  SELECT
 a  public  t  readwrite  UPDATE
+a  public  t  readwrite  ZONECONFIG
 a  public  t  root       ALL
 a  public  t  test-user  CREATE
 a  public  t  test-user  DROP
 a  public  t  test-user  GRANT
 a  public  t  test-user  SELECT
 a  public  t  test-user  UPDATE
+a  public  t  test-user  ZONECONFIG
 
 query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
@@ -577,11 +579,13 @@ a  public  t  readwrite  DROP
 a  public  t  readwrite  GRANT
 a  public  t  readwrite  SELECT
 a  public  t  readwrite  UPDATE
+a  public  t  readwrite  ZONECONFIG
 a  public  t  test-user  CREATE
 a  public  t  test-user  DROP
 a  public  t  test-user  GRANT
 a  public  t  test-user  SELECT
 a  public  t  test-user  UPDATE
+a  public  t  test-user  ZONECONFIG
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
@@ -595,11 +599,13 @@ a  public  t  readwrite  DROP
 a  public  t  readwrite  GRANT
 a  public  t  readwrite  SELECT
 a  public  t  readwrite  UPDATE
+a  public  t  readwrite  ZONECONFIG
 a  public  t  root       ALL
 a  public  t  test-user  CREATE
 a  public  t  test-user  DROP
 a  public  t  test-user  GRANT
 a  public  t  test-user  UPDATE
+a  public  t  test-user  ZONECONFIG
 
 query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
@@ -609,10 +615,12 @@ a  public  t  readwrite  DROP
 a  public  t  readwrite  GRANT
 a  public  t  readwrite  SELECT
 a  public  t  readwrite  UPDATE
+a  public  t  readwrite  ZONECONFIG
 a  public  t  test-user  CREATE
 a  public  t  test-user  DROP
 a  public  t  test-user  GRANT
 a  public  t  test-user  UPDATE
+a  public  t  test-user  ZONECONFIG
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -677,12 +685,14 @@ a  public  v  readwrite  DROP
 a  public  v  readwrite  GRANT
 a  public  v  readwrite  SELECT
 a  public  v  readwrite  UPDATE
+a  public  v  readwrite  ZONECONFIG
 a  public  v  root       ALL
 a  public  v  test-user  CREATE
 a  public  v  test-user  DROP
 a  public  v  test-user  GRANT
 a  public  v  test-user  SELECT
 a  public  v  test-user  UPDATE
+a  public  v  test-user  ZONECONFIG
 
 query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
@@ -692,11 +702,13 @@ a  public  v  readwrite  DROP
 a  public  v  readwrite  GRANT
 a  public  v  readwrite  SELECT
 a  public  v  readwrite  UPDATE
+a  public  v  readwrite  ZONECONFIG
 a  public  v  test-user  CREATE
 a  public  v  test-user  DROP
 a  public  v  test-user  GRANT
 a  public  v  test-user  SELECT
 a  public  v  test-user  UPDATE
+a  public  v  test-user  ZONECONFIG
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
@@ -710,11 +722,13 @@ a  public  v  readwrite  DROP
 a  public  v  readwrite  GRANT
 a  public  v  readwrite  SELECT
 a  public  v  readwrite  UPDATE
+a  public  v  readwrite  ZONECONFIG
 a  public  v  root       ALL
 a  public  v  test-user  CREATE
 a  public  v  test-user  DROP
 a  public  v  test-user  GRANT
 a  public  v  test-user  UPDATE
+a  public  v  test-user  ZONECONFIG
 
 query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
@@ -724,10 +738,12 @@ a  public  v  readwrite  DROP
 a  public  v  readwrite  GRANT
 a  public  v  readwrite  SELECT
 a  public  v  readwrite  UPDATE
+a  public  v  readwrite  ZONECONFIG
 a  public  v  test-user  CREATE
 a  public  v  test-user  DROP
 a  public  v  test-user  GRANT
 a  public  v  test-user  UPDATE
+a  public  v  test-user  ZONECONFIG
 
 query TTTTT
 SHOW GRANTS FOR readwrite, "test-user"
@@ -741,10 +757,12 @@ a  public              v     readwrite  DROP
 a  public              v     readwrite  GRANT
 a  public              v     readwrite  SELECT
 a  public              v     readwrite  UPDATE
+a  public              v     readwrite  ZONECONFIG
 a  public              v     test-user  CREATE
 a  public              v     test-user  DROP
 a  public              v     test-user  GRANT
 a  public              v     test-user  UPDATE
+a  public              v     test-user  ZONECONFIG
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"

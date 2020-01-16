@@ -2099,6 +2099,7 @@ admin    test           GRANT           NULL
 admin    test           INSERT          NULL
 admin    test           SELECT          NULL
 admin    test           UPDATE          NULL
+admin    test           ZONECONFIG      NULL
 root     test           ALL             NULL
 root     test           CREATE          NULL
 root     test           DELETE          NULL
@@ -2107,6 +2108,7 @@ root     test           GRANT           NULL
 root     test           INSERT          NULL
 root     test           SELECT          NULL
 root     test           UPDATE          NULL
+root     test           ZONECONFIG      NULL
 
 # information_schema.sequences
 

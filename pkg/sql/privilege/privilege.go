@@ -36,6 +36,7 @@ const (
 	INSERT
 	DELETE
 	UPDATE
+	ZONECONFIG
 )
 
 // Predefined sets of privileges.
@@ -51,19 +52,20 @@ func (k Kind) Mask() uint32 {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG,
 }
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
-	"ALL":    ALL,
-	"CREATE": CREATE,
-	"DROP":   DROP,
-	"GRANT":  GRANT,
-	"SELECT": SELECT,
-	"INSERT": INSERT,
-	"DELETE": DELETE,
-	"UPDATE": UPDATE,
+	"ALL":        ALL,
+	"CREATE":     CREATE,
+	"DROP":       DROP,
+	"GRANT":      GRANT,
+	"SELECT":     SELECT,
+	"INSERT":     INSERT,
+	"DELETE":     DELETE,
+	"UPDATE":     UPDATE,
+	"ZONECONFIG": ZONECONFIG,
 }
 
 // List is a list of privileges.
