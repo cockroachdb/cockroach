@@ -17,12 +17,14 @@ Stack:
 ```
 goroutine 12 [running]:
   doing something
+
 ```
 
 <details><summary>Log preceding fatal error</summary><p>
 
 ```
 logging something
+
 ```
 
 </p></details>

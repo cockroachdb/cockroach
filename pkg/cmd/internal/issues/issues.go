@@ -70,16 +70,19 @@ Fatal error:
 
 Stack:
 {{threeticks}}
-{{ $fop.FirstStack}}{{threeticks}}
+{{ $fop.FirstStack }}
+{{threeticks}}
 
 <details><summary>Log preceding fatal error</summary><p>
 
 {{threeticks}}
-{{ $fop.LastLines }}{{threeticks}}
+{{ $fop.LastLines }}
+{{threeticks}}
 
 </p></details>{{end}}{{ else -}}
 {{threeticks}}
-{{ .CondensedMessage.Digest 50 -}}{{ threeticks }}{{end}}
+{{ .CondensedMessage.Digest 50 }}
+{{ threeticks }}{{end}}
 
 <details><summary>Repro</summary><p>
 {{if .Parameters -}}
