@@ -3381,3 +3381,28 @@ ALTER TABLE t2 DROP CONSTRAINT fk1; ALTER TABLE t2 DROP CONSTRAINT fk2; TRUNCATE
 
 statement ok
 DROP TABLE t2 CASCADE; DROP TABLE t1 CASCADE
+
+# Test FK check that is using a non-unique index (#43969). In this case the
+# index on k2 is preferred because it doesn't contain unnecessary column v.
+statement ok
+CREATE TABLE nonunique_idx_parent (
+  k1 INT,
+  k2 INT,
+  v INT,
+  CONSTRAINT "primary" PRIMARY KEY (k1, k2),
+  INDEX (k2)
+)
+
+statement ok
+CREATE TABLE nonunique_idx_child (
+  k INT PRIMARY KEY,
+  ref1 INT,
+  ref2 INT,
+  CONSTRAINT "fk" FOREIGN KEY (ref1, ref2) REFERENCES nonunique_idx_parent (k1, k2)
+)
+
+statement ok
+INSERT INTO nonunique_idx_parent VALUES (1, 10)
+
+statement ok
+INSERT INTO nonunique_idx_child VALUES (0, 1, 10)

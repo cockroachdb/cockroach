@@ -684,7 +684,8 @@ type InsertFastPathFKCheck struct {
 	ReferencedIndex cat.Index
 
 	// InsertCols contains the FK columns from the origin table, in the order of
-	// the ReferencedIndex columns.
+	// the ReferencedIndex columns. For each, the value in the array indicates the
+	// index of the column in the input table.
 	InsertCols []ColumnOrdinal
 
 	MatchMethod tree.CompositeKeyMatchMethod

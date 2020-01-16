@@ -101,7 +101,9 @@ func EncodePartialIndexSpan(
 }
 
 // EncodePartialIndexKey encodes a partial index key; only the first numCols of
-// index.ColumnIDs are encoded.
+// the index key columns are encoded. The index key columns are
+//  - index.ColumnIDs for unique indexes, and
+//  - append(index.ColumnIDs, index.ExtraColumnIDs) for non-unique indexes.
 func EncodePartialIndexKey(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -110,7 +112,17 @@ func EncodePartialIndexKey(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
-	colIDs := index.ColumnIDs[:numCols]
+	var colIDs, extraColIDs []ColumnID
+	if numCols <= len(index.ColumnIDs) {
+		colIDs = index.ColumnIDs[:numCols]
+	} else {
+		if index.Unique || numCols > len(index.ColumnIDs)+len(index.ExtraColumnIDs) {
+			return nil, false, errors.Errorf("encoding too many columns (%d)", numCols)
+		}
+		colIDs = index.ColumnIDs
+		extraColIDs = index.ExtraColumnIDs[:numCols-len(index.ColumnIDs)]
+	}
+
 	// We know we will append to the key which will cause the capacity to grow so
 	// make it bigger from the get-go.
 	// Add twice the key prefix as an initial guess.
@@ -118,7 +130,8 @@ func EncodePartialIndexKey(
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = make([]byte, len(keyPrefix), 2*len(keyPrefix)+3*len(index.Interleave.Ancestors)+2*len(values))
 	copy(key, keyPrefix)
-	dirs := directions(index.ColumnDirections)[:numCols]
+
+	dirs := directions(index.ColumnDirections)
 
 	if len(index.Interleave.Ancestors) > 0 {
 		for i, ancestor := range index.Interleave.Ancestors {
@@ -137,7 +150,7 @@ func EncodePartialIndexKey(
 			var n bool
 			key, n, err = EncodeColumns(colIDs[:length], dirs[:length], colMap, values, key)
 			if err != nil {
-				return key, containsNull, err
+				return nil, false, err
 			}
 			containsNull = containsNull || n
 			if partial {
@@ -158,8 +171,17 @@ func EncodePartialIndexKey(
 
 	var n bool
 	key, n, err = EncodeColumns(colIDs, dirs, colMap, values, key)
+	if err != nil {
+		return nil, false, err
+	}
 	containsNull = containsNull || n
-	return key, containsNull, err
+
+	key, n, err = EncodeColumns(extraColIDs, nil /* directions */, colMap, values, key)
+	if err != nil {
+		return nil, false, err
+	}
+	containsNull = containsNull || n
+	return key, containsNull, nil
 }
 
 type directions []IndexDescriptor_Direction
