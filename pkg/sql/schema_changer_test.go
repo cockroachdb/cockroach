@@ -3551,6 +3551,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 func TestTruncateWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/43990")
+
 	backfillNotification := make(chan struct{})
 	backfillCount := int64(0)
 	params, _ := tests.CreateTestServerParams()
