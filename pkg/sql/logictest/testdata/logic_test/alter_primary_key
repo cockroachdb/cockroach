@@ -80,3 +80,50 @@ SELECT * FROM t_composite@primary
 # Test that we can drop tables after a primary key change.
 statement ok
 DROP TABLE t_composite
+
+# Test altering a primary key interleaving into another table.
+statement ok
+CREATE TABLE parent (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y));
+CREATE TABLE child (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y, z));
+INSERT INTO parent VALUES (1, 2), (4, 5);
+INSERT INTO child VALUES (1, 2, 3), (4, 5, 6);
+ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT parent(x, y)
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE child (
+           x INT8 NOT NULL,
+           y INT8 NOT NULL,
+           z INT8 NOT NULL,
+           CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
+           UNIQUE INDEX old_primary_key (x ASC),
+           FAMILY fam_0_x_y_z (x, y, z)
+       ) INTERLEAVE IN PARENT parent (x, y)
+
+
+query II rowsort
+SELECT * FROM parent
+----
+1 2
+4 5
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
+----
+scan  ·            ·
+·     table        child@primary
+·     spans        /1/2/#/57/2-/4/6/#/57/3
+·     filter       (y >= 2) AND (y <= 6)
+
+query III rowsort
+SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
+----
+1 2 3
+4 5 6
+
+statement error pq: unimplemented: "parent" is interleaved by table "child"
+DROP TABLE parent
+
+statement ok
+DROP TABLE parent CASCADE
