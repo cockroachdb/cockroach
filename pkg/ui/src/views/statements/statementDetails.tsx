@@ -142,7 +142,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   }
 }
 
-class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
+export class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
 
   constructor(props: StatementDetailsProps) {
     super(props);
@@ -171,11 +171,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   render() {
     return (
       <div>
-        <Helmet>
-          <title>
-            { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
-          </title>
-        </Helmet>
+        <Helmet title={`Details | ${(this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "")} App | " : ""`} />
         <section className="section"><h1 className="base-heading">Statement Details</h1></section>
         <section className="section section--container">
           <Loading
