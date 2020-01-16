@@ -32,9 +32,13 @@ import {
   DatabaseTablesList,
 } from "src/views/databases/containers/databases";
 import { TableMain } from "src/views/databases/containers/tableDetails";
-import { DataDistributionPage } from "oss/src/views/cluster/containers/dataDistribution";
-import { StatementsPage } from "oss/src/views/statements/statementsPage";
-import { StatementDetails } from "oss/src/views/statements/statementDetails";
+import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
+import { StatementsPage } from "src/views/statements/statementsPage";
+import { StatementDetails } from "src/views/statements/statementDetails";
+import Debug from "src/views/reports/containers/debug";
+import { ReduxDebug } from "src/views/reports/containers/redux";
+import { CustomChart } from "src/views/reports/containers/customChart";
+import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
@@ -333,6 +337,38 @@ describe("Routing to", () => {
     it("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
       assert.lengthOf(appWrapper.find(StatementDetails), 1);
+    });
+  });
+
+  { /* debug pages */}
+  describe("'/debug' path", () => {
+    it("routes to <Debug> component", () => {
+      navigateToPath("/debug");
+      assert.lengthOf(appWrapper.find(Debug), 1);
+    });
+  });
+
+  // TODO (koorosh): Disabled due to strange failure on internal
+  // behaviour of ReduxDebug component under test env.
+  xdescribe("'/debug/redux' path", () => {
+    it("routes to <ReduxDebug> component", () => {
+      navigateToPath("/debug/redux");
+      assert.lengthOf(appWrapper.find(ReduxDebug), 1);
+    });
+  });
+
+  describe("'/debug/chart' path", () => {
+    it("routes to <CustomChart> component", () => {
+      navigateToPath("/debug/chart");
+      // assert.lengthOf(appWrapper.find(Debug), 1);
+      assert.lengthOf(appWrapper.find(CustomChart), 1);
+    });
+  });
+
+  describe("'/debug/enqueue_range' path", () => {
+    it("routes to <EnqueueRange> component", () => {
+      navigateToPath("/debug/enqueue_range");
+      assert.lengthOf(appWrapper.find(EnqueueRange), 1);
     });
   });
 });

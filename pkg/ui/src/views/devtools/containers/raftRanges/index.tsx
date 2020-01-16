@@ -61,7 +61,7 @@ type RangesMainProps = RangesMainData & RangesMainActions;
  * Renders the main content of the raft ranges page, which is primarily a data
  * table of all ranges and their replicas.
  */
-class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
+export class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   state: RangesMainState = {
     showState: true,
     showReplicas: true,
