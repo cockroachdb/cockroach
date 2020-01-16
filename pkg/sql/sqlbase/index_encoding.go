@@ -783,6 +783,9 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a row encoded as a primary index.
+// This function mirrors the encoding logic in prepareInsertOrUpdateBatch in pkg/sql/row/writer.go.
+// It is somewhat duplicated here due to the different arguments that prepareOrInsertUpdateBatch needs
+// and uses to generate the k/v's for the row it inserts.
 func EncodePrimaryIndex(
 	tableDesc *TableDescriptor, index *IndexDescriptor, colMap map[ColumnID]int, values []tree.Datum,
 ) ([]IndexEntry, error) {
@@ -808,7 +811,9 @@ func EncodePrimaryIndex(
 			columnsToEncode = columnsToEncode[:0]
 		}
 		familyKey := keys.MakeFamilyKey(indexKey, uint32(family.ID))
-		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID {
+		// The decoders expect that column family 0 is encoded with a TUPLE value tag, so we
+		// don't want to use the untagged value encoding.
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
 			datum := values[colMap[family.DefaultColumnID]]
 			if datum != tree.DNull {
 				col, err := tableDesc.FindColumnByID(family.DefaultColumnID)
