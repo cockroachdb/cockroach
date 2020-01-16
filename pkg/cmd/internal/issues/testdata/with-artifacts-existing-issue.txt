@@ -6,7 +6,8 @@ createComment owner=cockroachdb repo=cockroach issue=30 github.IssueComment{}:
 [(storage).kv/splits/nodes=3/quiesce=true failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on [release-123.45@abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
 
 ```
-The test failed on branch=master, cloud=gce:```
+The test failed on branch=master, cloud=gce:
+```
 
 <details><summary>Repro</summary><p>
 Parameters:
