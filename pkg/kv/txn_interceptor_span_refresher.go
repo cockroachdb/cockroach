@@ -146,8 +146,9 @@ func (sr *txnSpanRefresher) SendLocked(
 		// Sanity check: we're supposed to control the read timestamp. What we're
 		// tracking in sr.refreshedTimestamp is not supposed to get out of sync
 		// with what batches use (which comes from tc.mu.txn).
-		log.Fatalf(ctx, "unexpected batch read timestamp: %s. Expected refreshed timestamp: %s. ba: %s",
-			batchReadTimestamp, sr.refreshedTimestamp, ba)
+		return nil, roachpb.NewError(errors.AssertionFailedf(
+			"unexpected batch read timestamp: %s. Expected refreshed timestamp: %s. ba: %s",
+			batchReadTimestamp, sr.refreshedTimestamp, ba))
 	}
 
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
