@@ -7670,6 +7670,8 @@ a_expr:
   }
 | a_expr AT TIME ZONE a_expr %prec AT
   {
+    // TODO(otan): After 20.1, switch to {$5.expr(), $1.expr()} to match postgres,
+    // and delete the reciprocal method.
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("timezone"), Exprs: tree.Exprs{$1.expr(), $5.expr()}}
   }
   // These operators must be called out explicitly in order to make use of
