@@ -58,7 +58,7 @@ function numberToString(n: number) {
   return n.toString();
 }
 
-function computeValue(value: number, format: (n: number) => string = numberToString) {
+export function computeValue(value: number, format: (n: number) => string = numberToString) {
   if (!_.isNumber(value)) {
     return "-";
   }
