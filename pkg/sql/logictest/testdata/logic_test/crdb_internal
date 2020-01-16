@@ -27,6 +27,7 @@ jobs
 kv_node_status
 kv_store_status
 leases
+namespaces
 node_build_info
 node_metrics
 node_queries
@@ -606,3 +607,46 @@ query B
 SELECT crdb_internal.is_admin()
 ----
 false
+
+subtest namespaces_test
+
+user root
+
+statement ok
+CREATE DATABASE namespaces_test_db
+
+statement ok
+CREATE TABLE namespaces_test_db.namespaces_test(a int)
+
+query IIT
+SELECT * FROM crdb_internal.namespaces WHERE name = 'namespaces_test' OR name = 'namespaces_test_db' ORDER BY name
+----
+61  62  namespaces_test
+0   61  namespaces_test_db
+
+user testuser
+
+query IIT
+SELECT * FROM crdb_internal.namespaces WHERE name = 'namespaces_test' OR name = 'namespaces_test_db' ORDER BY name
+----
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE namespaces_test_db TO testuser
+
+statement ok
+GRANT ALL ON namespaces_test_db.namespaces_test TO testuser
+
+user testuser
+
+query IIT
+SELECT * FROM crdb_internal.namespaces WHERE name = 'namespaces_test' OR name = 'namespaces_test_db' ORDER BY name
+----
+61  62  namespaces_test
+0   61  namespaces_test_db
+
+user root
+
+statement ok
+DROP DATABASE namespaces_test_db CASCADE

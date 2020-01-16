@@ -2159,7 +2159,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 func (s *adminServer) queryZone(
 	ctx context.Context, userName string, id sqlbase.ID,
 ) (zonepb.ZoneConfig, bool, error) {
-	const query = `SELECT config FROM system.zones WHERE id = $1`
+	const query = `SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = $1`
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-query-zone", nil /* txn */, userName, query, id,
 	)
@@ -2205,7 +2205,7 @@ func (s *adminServer) queryZonePath(
 func (s *adminServer) queryNamespaceID(
 	ctx context.Context, userName string, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
-	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
+	const query = `SELECT id FROM crdb_internal.namespaces WHERE parent_id = $1 AND name = $2`
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-query-namespace-ID", nil /* txn */, userName, query, parentID, name,
 	)

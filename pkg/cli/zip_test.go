@@ -48,6 +48,7 @@ SELECT concat('crdb_internal.', table_name) as name FROM [ SHOW TABLES FROM crdb
 'create_statements',
 'forward_dependencies',
 'index_columns',
+'namespaces', -- same as system.namespace
 'table_columns',
 'table_indexes',
 'ranges',

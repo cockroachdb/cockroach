@@ -70,6 +70,7 @@ const (
 	CrdbInternalLocalQueriesTableID
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
+	CrdbInternalNamespacesTableID
 	CrdbInternalPartitionsTableID
 	CrdbInternalPredefinedCommentsTableID
 	CrdbInternalRangesNoLeasesTableID

@@ -84,6 +84,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
 		sqlbase.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
 		sqlbase.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
+		sqlbase.CrdbInternalNamespacesTableID:           crdbInternalNamespacesTable,
 		sqlbase.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
 		sqlbase.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
 		sqlbase.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
@@ -129,6 +130,42 @@ CREATE TABLE crdb_internal.node_build_info (
 				tree.NewDString(v),
 			); err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalNamespacesTable = virtualSchemaTable{
+	comment: `shows database and table descriptors which are visible to the user`,
+	schema: `
+CREATE TABLE crdb_internal.namespaces (
+	parent_id INT NOT NULL,
+	id INT NOT NULL,
+	name STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		// Record database descriptors for name lookups.
+		for _, desc := range descs {
+			if p.CheckAnyPrivilege(ctx, desc) != nil {
+				continue
+			}
+			if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+				addRow(
+					tree.NewDInt(0),
+					tree.NewDInt(tree.DInt(db.ID)),
+					tree.NewDString(db.Name),
+				)
+			} else if table, ok := desc.(*sqlbase.TableDescriptor); ok {
+				addRow(
+					tree.NewDInt(tree.DInt(table.ParentID)),
+					tree.NewDInt(tree.DInt(table.ID)),
+					tree.NewDString(table.Name),
+				)
 			}
 		}
 		return nil
