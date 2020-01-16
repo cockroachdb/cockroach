@@ -603,6 +603,9 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 }
 
 func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
+	// Create a RangeFeedCheckpoint over the Processor's entire span. Each
+	// individual registration will trim this down to just the key span that
+	// it is listening on in registration.maybeStripEvent before publishing.
 	var event roachpb.RangeFeedEvent
 	event.MustSetValue(&roachpb.RangeFeedCheckpoint{
 		Span:       p.Span.AsRawSpanWithNoLocals(),
