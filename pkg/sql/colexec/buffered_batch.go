@@ -29,6 +29,9 @@ func newBufferedBatch(allocator *Allocator, types []coltypes.T, initialSize int)
 // bufferedBatch is a custom implementation of coldata.Batch interface (only
 // a subset of methods is implemented) which stores the length as uint64. It
 // should be used whenever we're doing possibly unbounded buffering of tuples.
+// WARNING: do *not* use Length() method on bufferedBatch to get the number of
+// buffered tuples because it might return incorrect result. Instead, use
+// 'length' field directly.
 type bufferedBatch struct {
 	colVecs []coldata.Vec
 	length  uint64
@@ -36,11 +39,13 @@ type bufferedBatch struct {
 
 var _ coldata.Batch = &bufferedBatch{}
 
+// Length method should *only* be used to check whether the batch has a zero
+// length.
 func (b *bufferedBatch) Length() uint16 {
-	execerror.VectorizedInternalPanic("Length() should not be called on bufferedBatch; instead, " +
-		"length field should be accessed directly")
-	// This code is unreachable, but the compiler cannot infer that.
-	return 0
+	if b.length == 0 {
+		return 0
+	}
+	return 1
 }
 
 func (b *bufferedBatch) SetLength(uint16) {
