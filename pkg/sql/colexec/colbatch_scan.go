@@ -69,7 +69,6 @@ func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	if err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	bat.SetSelection(false)
 	return bat
 }
 

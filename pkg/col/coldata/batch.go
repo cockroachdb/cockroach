@@ -40,6 +40,9 @@ type Batch interface {
 	SetSelection(bool)
 	// AppendCol appends the given Vec to this batch.
 	AppendCol(Vec)
+	// ReplaceCol replaces the current Vec at the provided index with the
+	// provided Vec.
+	ReplaceCol(Vec, int)
 	// Reset modifies the caller in-place to have the given length and columns
 	// with the given coltypes. If it's possible, Reset will reuse the existing
 	// columns and allocations, invalidating existing references to the Batch or
@@ -116,10 +119,38 @@ func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
 }
 
 // ZeroBatch is a schema-less Batch of length 0.
-var ZeroBatch = NewMemBatchWithSize(nil /* types */, 0 /* size */)
+var ZeroBatch = &zeroBatch{MemBatch: NewMemBatchWithSize(nil /* types */, 0 /* size */).(*MemBatch)}
 
-func init() {
-	ZeroBatch.SetLength(0)
+// zeroBatch is a wrapper around MemBatch that prohibits modifications of the
+// batch.
+type zeroBatch struct {
+	*MemBatch
+}
+
+var _ Batch = &zeroBatch{}
+
+func (b *zeroBatch) Length() uint16 {
+	return 0
+}
+
+func (b *zeroBatch) SetLength(uint16) {
+	panic("length should not be changed on zero batch")
+}
+
+func (b *zeroBatch) SetSelection(bool) {
+	panic("selection should not be changed on zero batch")
+}
+
+func (b *zeroBatch) AppendCol(Vec) {
+	panic("no columns should be appended to zero batch")
+}
+
+func (b *zeroBatch) ReplaceCol(Vec, int) {
+	panic("no columns should be replaced in zero batch")
+}
+
+func (b *zeroBatch) Reset([]coltypes.T, int) {
+	panic("zero batch should not be reset")
 }
 
 // MemBatch is an in-memory implementation of Batch.
@@ -180,6 +211,11 @@ func (m *MemBatch) SetLength(n uint16) {
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
 	m.b = append(m.b, col)
+}
+
+// ReplaceCol implements the Batch interface.
+func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
+	m.b[colIdx] = col
 }
 
 // Reset implements the Batch interface.
