@@ -62,24 +62,23 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
+	// Iterate over the roles that 'user' is a member of.
+	// Check for hasCreateRole permission
+	hasCreateRole := false
 	for role := range memberOf {
-		if privs.CheckPrivilege(role, privilege) {
-			return nil
+		hasCreateRoleStmt := fmt.Sprintf("select 1 from %s WHERE username = '%s'", userTableName, role)
+		hasCreateRoleRows, err := p.ExecCfg().InternalExecutor.QueryRow(
+			ctx, "hasCreateRole", p.Txn(), hasCreateRoleStmt)
+
+		fmt.Println(hasCreateRoleStmt)
+		fmt.Println(user, role, hasCreateRoleRows, err)
+		if len(hasCreateRoleRows) != 0 {
+			hasCreateRole = true
 		}
 	}
 
-	if isRole {
-		hasCreateRole, err := p.ExecCfg().InternalExecutor.Query(
-			ctx, "hasCreateRole", p.Txn(),
-			fmt.Sprintf("select hasCreateRole from system.users WHERE username = %s", user),
-			nil)
-
-		fmt.Println(user, hasCreateRole, err)
-		//if len(hasCreateRole) < 1 {
-		//	fmt.Println("Role does not have create role privilege")
-		//	return nil, err
-		//}
+	if !hasCreateRole {
+		return nil, errors.New("User does not have CREATE ROLE privilege")
 	}
 
 	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
