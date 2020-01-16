@@ -445,6 +445,15 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		return err
 	}
 
+	// Change the permission mask for all created files.
+	//
+	// We're considering everything produced by a cockroach node
+	// to potentially contain sensitive information, so it should
+	// not be world-readable.
+	disableOtherPermissionBits()
+
+	// TODO(knz): the following call is not in the right place.
+	// See: https://github.com/cockroachdb/cockroach/issues/44041
 	if s, err := serverCfg.Stores.GetPreventedStartupMessage(); err != nil {
 		return err
 	} else if s != "" {
