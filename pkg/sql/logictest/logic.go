@@ -1705,6 +1705,13 @@ func (t *logicTest) processSubtest(
 			cleanupUserFunc := t.setUser(fields[1])
 			defer cleanupUserFunc()
 
+		case "skip":
+			reason := "skipped"
+			if len(fields) > 1 {
+				reason = fields[1]
+			}
+			t.t().Skip(reason)
+
 		case "skipif":
 			if len(fields) < 2 {
 				return errors.Errorf("skipif command requires one argument, found: %v", fields)
