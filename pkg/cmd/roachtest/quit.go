@@ -360,10 +360,12 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
-		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
-			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
+		args := []string{
+			"./cockroach", "node", "drain", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
-		)
+		}
+		args = append(args, cockroachSqlSecureFlagsSlice()...)
+		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID), args...)
 		t.l.Printf("cockroach node drain:\n%s\n", buf)
 		if err != nil {
 			t.Fatal(err)
@@ -392,10 +394,11 @@ func registerQuitTransfersLeases(r *testRegistry) {
 }
 
 func runQuit(ctx context.Context, t *test, c *cluster, nodeID int, extraArgs ...string) []byte {
-	args := append([]string{
-		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
-		fmt.Sprintf("--port={pgport:%d}", nodeID)},
-		extraArgs...)
+	args := []string{
+		"./cockroach", "quit", "--logtostderr=INFO",
+		fmt.Sprintf("--port={pgport:%d}", nodeID)}
+	args = append(args, cockroachSqlSecureFlagsSlice()...)
+	args = append(args, extraArgs...)
 	buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID), args...)
 	t.l.Printf("cockroach quit:\n%s\n", buf)
 	if err != nil {

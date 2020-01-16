@@ -109,9 +109,9 @@ OR
 
 	const nodeID = 1 // where to put the replica, matches node number in roachtest
 	for rangeID := range lostRangeIDs {
-		c.Run(ctx, c.Node(nodeID), "./cockroach", "debug", "reset-quorum",
-			fmt.Sprint(rangeID), "--insecure",
-		)
+		args := []string{"./cockroach", "debug", "reset-quorum", fmt.Sprint(rangeID)}
+		args = append(args, cockroachSqlSecureFlagsSlice()...)
+		c.Run(ctx, c.Node(nodeID), args...)
 	}
 
 	// Table should come back to life (though empty).

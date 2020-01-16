@@ -82,7 +82,9 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	// Use a 120s connect timeout to work around the fact that the server will
 	// declare itself ready before it's actually 100% ready. See:
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
-	c.Run(ctx, c.Node(1), `COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --insecure -e "DROP DATABASE IF EXISTS tinybank"`)
+	c.Run(ctx, c.Node(1),
+		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql `+cockroachSqlSecureFlags()+
+		` -e "DROP DATABASE IF EXISTS tinybank"`)
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
 		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1")
 
