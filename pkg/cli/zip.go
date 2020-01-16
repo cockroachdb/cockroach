@@ -417,13 +417,16 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						})
 						return err
 					}); err != nil {
-					return z.createError("/goroutines", err)
-				}
-				for _, file := range goroutinesResp.Files {
-					// NB: the files have a .txt.gz suffix already.
-					name := prefix + "/goroutines/" + file.Name
-					if err := z.createRawOrError(name, file.Contents, err); err != nil {
+					if err := z.createError(prefix+"/goroutines", err); err != nil {
 						return err
+					}
+				} else {
+					for _, file := range goroutinesResp.Files {
+						// NB: the files have a .txt.gz suffix already.
+						name := prefix + "/goroutines/" + file.Name
+						if err := z.createRawOrError(name, file.Contents, err); err != nil {
+							return err
+						}
 					}
 				}
 

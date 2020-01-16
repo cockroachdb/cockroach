@@ -75,7 +75,7 @@ select '''
 
 	for _, test := range tests {
 		// Populate the test input.
-		if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
+		if f, err = os.OpenFile(fname, os.O_WRONLY, 0644); err != nil {
 			fmt.Fprintln(stderr, err)
 			return
 		}

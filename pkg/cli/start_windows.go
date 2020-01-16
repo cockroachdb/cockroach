@@ -25,3 +25,7 @@ func handleSignalDuringShutdown(os.Signal) {
 func maybeRerunBackground() (bool, error) {
 	return false, nil
 }
+
+func disableOtherPermissionBits() {
+	// No-op on windows, which does not support umask.
+}
