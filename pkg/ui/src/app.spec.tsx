@@ -39,6 +39,9 @@ import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
 import { CustomChart } from "src/views/reports/containers/customChart";
 import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
+import { RangesMain } from "src/views/devtools/containers/raftRanges";
+import { RaftMessages } from "src/views/devtools/containers/raftMessages";
+import Raft from "src/views/devtools/containers/raft";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
@@ -369,6 +372,41 @@ describe("Routing to", () => {
     it("routes to <EnqueueRange> component", () => {
       navigateToPath("/debug/enqueue_range");
       assert.lengthOf(appWrapper.find(EnqueueRange), 1);
+    });
+  });
+
+  { /* raft pages */}
+  describe("'/raft' path", () => {
+    it("routes to <Raft> component", () => {
+      navigateToPath("/raft");
+      assert.lengthOf(appWrapper.find(Raft), 1);
+    });
+
+    it("redirected to '/raft/ranges'", () => {
+      navigateToPath("/raft");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/raft/ranges");
+    });
+  });
+
+  describe("'/raft/ranges' path", () => {
+    it("routes to <RangesMain> component", () => {
+      navigateToPath("/raft/ranges");
+      assert.lengthOf(appWrapper.find(RangesMain), 1);
+    });
+  });
+
+  describe("'/raft/messages/all' path", () => {
+    it("routes to <RaftMessages> component", () => {
+      navigateToPath("/raft/messages/all");
+      assert.lengthOf(appWrapper.find(RaftMessages), 1);
+    });
+  });
+
+  describe("'/raft/messages/node/:${nodeIDAttr}' path", () => {
+    it("routes to <RaftMessages> component", () => {
+      navigateToPath("/raft/messages/node/node-id-attr");
+      assert.lengthOf(appWrapper.find(RaftMessages), 1);
     });
   });
 });
