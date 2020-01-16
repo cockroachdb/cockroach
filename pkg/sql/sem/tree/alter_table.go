@@ -208,7 +208,8 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
 type AlterTableAlterPrimaryKey struct {
-	Columns IndexElemList
+	Columns    IndexElemList
+	Interleave *InterleaveDef
 }
 
 // Format implements the NodeFormatter interface.
@@ -216,6 +217,9 @@ func (node *AlterTableAlterPrimaryKey) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER PRIMARY KEY USING COLUMNS (")
 	ctx.FormatNode(&node.Columns)
 	ctx.WriteString(")")
+	if node.Interleave != nil {
+		ctx.FormatNode(node.Interleave)
+	}
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.

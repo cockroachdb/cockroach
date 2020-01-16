@@ -2003,7 +2003,7 @@ alter_table_cmd ::=
 	| 'DROP' opt_column column_name opt_drop_behavior
 	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using
 	| 'ADD' table_constraint opt_validate_behavior
-	| 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')'
+	| 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' opt_interleave
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
