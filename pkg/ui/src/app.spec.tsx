@@ -32,6 +32,9 @@ import {
   DatabaseTablesList,
 } from "src/views/databases/containers/databases";
 import { TableMain } from "src/views/databases/containers/tableDetails";
+import { DataDistributionPage } from "oss/src/views/cluster/containers/dataDistribution";
+import { StatementsPage } from "oss/src/views/statements/statementsPage";
+import { StatementDetails } from "oss/src/views/statements/statementDetails";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
@@ -271,6 +274,65 @@ describe("Routing to", () => {
     it("routes to <TableMain> component", () => {
       navigateToPath("/database/some-db-name/table/some-table-name");
       assert.lengthOf(appWrapper.find(TableMain), 1);
+    });
+  });
+
+  { /* data distribution */}
+  describe("'/data-distribution' path", () => {
+    it("routes to <DataDistributionPage> component", () => {
+      navigateToPath("/data-distribution");
+      assert.lengthOf(appWrapper.find(DataDistributionPage), 1);
+    });
+  });
+
+  { /* statement statistics */}
+  describe("'/statements' path", () => {
+    it("routes to <StatementsPage> component", () => {
+      navigateToPath("/statements");
+      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+    });
+  });
+
+  describe("'/statements/:${appAttr}' path", () => {
+    it("routes to <StatementsPage> component", () => {
+      navigateToPath("/statements/(internal)");
+      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+    });
+  });
+
+  describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
+    it("routes to <StatementDetails> component", () => {
+      navigateToPath("/statements/(internal)/true");
+      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+    });
+  });
+
+  describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
+    it("routes to <StatementDetails> component", () => {
+      navigateToPath("/statements/implicit-txn-attr/statement-attr");
+      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+    });
+  });
+
+  describe("'/statement' path", () => {
+    it("redirected to '/statements'", () => {
+      navigateToPath("/statement");
+      const location = history.getCurrentLocation();
+      assert.equal(location.pathname, "/statements");
+    });
+  });
+
+  describe("'/statement/:${statementAttr}' path", () => {
+    it("routes to <StatementDetails> component", () => {
+      navigateToPath("/statement/statement-attr");
+      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+    });
+  });
+
+  describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
+    it("routes to <StatementDetails> component", () => {
+      navigateToPath("/statement/implicit-attr/statement-attr/");
+      assert.lengthOf(appWrapper.find(StatementDetails), 1);
     });
   });
 });
