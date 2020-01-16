@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination, Tooltip } from "antd";
+import { Icon, Pagination } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import React from "react";
