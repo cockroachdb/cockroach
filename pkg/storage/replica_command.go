@@ -557,6 +557,8 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	return roachpb.NewError(lastErr)
 }
 
+var errTxnRestarted = errors.New("merge transaction restarted")
+
 // AdminMerge extends this range to subsume the range that comes next
 // in the key space. The merge is performed inside of a distributed
 // transaction which writes the left hand side range descriptor (the
@@ -576,14 +578,13 @@ func (r *Replica) AdminMerge(
 	var reply roachpb.AdminMergeResponse
 
 	runMergeTxn := func(txn *client.Txn) error {
+		// Force a client-side retry. See the comment on the retry loop after this
+		// closure for details.
+		if txn.Epoch() > 0 {
+			return errTxnRestarted
+		}
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
-
-		// Observe the commit timestamp to force a client-side retry. See the
-		// comment on the retry loop after this closure for details.
-		//
-		// TODO(benesch): expose a proper API for preventing the fast path.
-		_ = txn.CommitTimestamp()
 
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
@@ -774,14 +775,15 @@ func (r *Replica) AdminMerge(
 	// chance to succeed.
 	//
 	// Note that client.DB.Txn performs retries using the same transaction, so we
-	// have to use our own retry loop.
+	// have to use our own retry loop. We detect those automatic retries by
+	// observing the epoch and returning errTxnRestart.
 	for {
 		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
 		}
-		if _, canRetry := errors.Cause(err).(*roachpb.TransactionRetryWithProtoRefreshError); !canRetry {
+		if !crdberrors.Is(err, errTxnRestarted) {
 			if err != nil {
 				return reply, roachpb.NewErrorf("merge failed: %s", err)
 			}
