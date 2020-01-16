@@ -38,7 +38,7 @@ interface LogProps {
 /**
  * Renders the main content of the logs page.
  */
-class Logs extends React.Component<LogProps & RouterState, {}> {
+export class Logs extends React.Component<LogProps & RouterState, {}> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));
@@ -92,9 +92,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
     if (this.props.logs.lastError && this.props.logs.lastError.message === "Forbidden") {
       return (
         <div>
-          <Helmet>
-            <title>{ title }</title>
-          </Helmet>
+          <Helmet title={ title } />
           <div className="section section--heading">
             <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
           </div>
@@ -107,9 +105,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
 
     return (
       <div>
-        <Helmet>
-          <title>{ title }</title>
-        </Helmet>
+        <Helmet title={ title } />
         <div className="section section--heading">
           <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>

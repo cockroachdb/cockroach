@@ -62,7 +62,7 @@ interface NodeOverviewProps extends RouterState {
 /**
  * Renders the Node Overview page.
  */
-class NodeOverview extends React.Component<NodeOverviewProps, {}> {
+export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
   componentWillMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();
@@ -91,9 +91,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
     return (
       <div>
-        <Helmet>
-          <title>{`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`}</title>
-        </Helmet>
+        <Helmet title={`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`} />
         <div className="section section--heading">
           <h2 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>

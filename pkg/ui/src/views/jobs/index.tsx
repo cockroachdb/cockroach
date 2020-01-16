@@ -246,7 +246,7 @@ const titleTooltip = (
   </span>
 );
 
-class JobsTable extends React.Component<JobsTableProps> {
+export class JobsTable extends React.Component<JobsTableProps> {
   refresh(props = this.props) {
     props.refreshJobs(new JobsRequest({
       status: props.status,
@@ -315,9 +315,7 @@ class JobsTable extends React.Component<JobsTableProps> {
   render() {
     return (
       <div className="jobs-page">
-        <Helmet>
-          <title>Jobs</title>
-        </Helmet>
+        <Helmet title="Jobs" />
         <section className="section">
           <h1 className="base-heading">
             Jobs

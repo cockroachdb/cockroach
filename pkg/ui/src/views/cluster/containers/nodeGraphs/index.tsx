@@ -91,7 +91,7 @@ type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */
-class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
+export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   // Magic to add react router to the context.
   // See https://github.com/ReactTraining/react-router/issues/975
   // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
@@ -215,9 +215,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
     return (
       <div>
-        <Helmet>
-          <title>{ title }</title>
-        </Helmet>
+        <Helmet title={title} />
         <section className="section"><h1 className="base-heading">{ title }</h1></section>
         <PageConfig>
           <PageConfigItem>
