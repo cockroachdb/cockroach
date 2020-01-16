@@ -116,7 +116,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
+		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc, n.n.String())
 		if err != nil {
 			return err
 		}
@@ -234,7 +234,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, jobDesc string,
 ) ([]string, error) {
 	var droppedViews []string
 
@@ -268,6 +268,39 @@ func (p *planner) dropTableImpl(
 		for _, ref := range idx.InterleavedBy {
 			if err := p.removeInterleave(ctx, ref); err != nil {
 				return droppedViews, err
+			}
+			// Need to recursively drop interleaved tables and interleaved indexes (on other tables).
+			// The interleaving relationship is tree structured, so we don't need to worry about
+			// an infinite loop. Cascade is enabled by this point, so we can go ahead and delete.
+			tableID, indexID := ref.Table, ref.Index
+			if tableID != tableDesc.ID {
+				table, err := p.Tables().getMutableTableVersionByID(ctx, tableID, p.txn)
+				if err != nil {
+					return nil, err
+				}
+				// We could be dropping this table within the same DROP statement, so don't do anything
+				// if it is already getting dropped.
+				if !table.Dropped() {
+					index, err := table.FindIndexByID(indexID)
+					if err != nil {
+						return nil, err
+					}
+					if index.ID == table.PrimaryIndex.ID {
+						// The whole table is interleaved into this one, so drop the entire table.
+						views, err := p.dropTableImpl(ctx, table, jobDesc)
+						if err != nil {
+							return nil, err
+						}
+						droppedViews = append(droppedViews, views...)
+					} else {
+						// Just the index is interleaved, so drop it.
+						views, _, err := p.dropIndexImpl(ctx, table, index, tree.DropCascade, ignoreIdxConstraint, jobDesc)
+						if err != nil {
+							return nil, err
+						}
+						droppedViews = append(droppedViews, views...)
+					}
+				}
 			}
 		}
 	}
@@ -612,7 +645,7 @@ func (p *planner) removeTableComment(
 // dropObject drops a descriptor based its type. Returns the names of any
 // additional views that were also dropped due to `cascade` behavior.
 func (p *planner) dropObject(
-	ctx context.Context, desc *MutableTableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, desc *MutableTableDescriptor, behavior tree.DropBehavior, jobDesc string,
 ) ([]string, error) {
 	if desc.IsView() {
 		// TODO(knz): dependent dropped views should be qualified here.
@@ -621,5 +654,5 @@ func (p *planner) dropObject(
 		return nil, p.dropSequenceImpl(ctx, desc, behavior)
 	}
 	// TODO(knz): dependent dropped table names should be qualified here.
-	return p.dropTableImpl(ctx, desc)
+	return p.dropTableImpl(ctx, desc, jobDesc)
 }

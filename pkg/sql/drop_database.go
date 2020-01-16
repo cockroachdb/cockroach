@@ -141,7 +141,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	for _, toDel := range n.td {
-		cascadedObjects, err := p.dropObject(ctx, toDel.desc, tree.DropCascade)
+		cascadedObjects, err := p.dropObject(ctx, toDel.desc, tree.DropCascade, n.n.String())
 		if err != nil {
 			return err
 		}

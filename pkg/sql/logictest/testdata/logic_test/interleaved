@@ -199,6 +199,24 @@ DROP TABLE p2 CASCADE
 statement error pgcode 42P01 relation "p0" does not exist
 SELECT * FROM p0
 
+# Dropping p2 with cascade dropped all the other tables as well. Recreate the needed ones.
+statement ok
+CREATE TABLE p1_0 (
+  i INT,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL,
+  PRIMARY KEY (i, s1),
+  FAMILY (i, s1, s2),
+  FAMILY (d)
+);
+CREATE TABLE p1_1 (
+  i INT PRIMARY KEY,
+  s1 STRING,
+  s2 STRING,
+  d DECIMAL
+)
+
 # Validation and descriptor bookkeeping
 
 # TODO(dan): Interleave these two indexes once we support the syntax.
