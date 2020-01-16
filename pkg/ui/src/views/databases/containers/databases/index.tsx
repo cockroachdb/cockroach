@@ -84,7 +84,7 @@ interface DatabaseListActions {
 type DatabaseListProps = DatabaseListData & DatabaseListActions;
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
-export class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
+class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
   componentWillMount() {
     this.props.refreshDatabases();
   }
@@ -111,7 +111,7 @@ export class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 }
 
 // DatabaseTablesList displays the "Grants" sub-tab of the main database page.
-export class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
+class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   componentWillMount() {
     this.props.refreshDatabases();
   }
@@ -179,6 +179,6 @@ const databaseGrantsListConnected = connect(
 )(DatabaseGrantsList);
 
 export {
-  databaseTablesListConnected as ConnectedDatabaseTablesList,
-  databaseGrantsListConnected as ConnectedDatabaseGrantsList,
+  databaseTablesListConnected as DatabaseTablesList,
+  databaseGrantsListConnected as DatabaseGrantsList,
 };
