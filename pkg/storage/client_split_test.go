@@ -1405,6 +1405,7 @@ func runSetupSplitSnapshotRace(
 	sc.TestingKnobs.IntentResolverKnobs.DisableAsyncIntentResolution = true
 	// Avoid fighting with the merge queue while trying to reproduce this race.
 	sc.TestingKnobs.DisableMergeQueue = true
+	sc.TestingKnobs.DisableGCQueue = true
 	// Disable the split delay mechanism, or it'll spend 10s going in circles.
 	// (We can't set it to zero as otherwise the default overrides us).
 	sc.RaftDelaySplitToSuppressSnapshotTicks = -1
