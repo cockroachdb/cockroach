@@ -78,7 +78,6 @@ class SqlBox extends React.Component<SqlBoxProps, SqlBoxState> {
 
   render() {
     const { code } = this.state;
-    console.log(this.props.value)
     return (
       <div className="box-highlight">
         {code && code.map((value: string) => this.replaceSystemData(value))}

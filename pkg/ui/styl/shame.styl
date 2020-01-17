@@ -405,7 +405,6 @@
     font-family Lato-Regular
     text-align left
     color $body-color
-
 .drawer--preset-black
   display flex
   align-items center
@@ -474,6 +473,24 @@
       color #87beff
       font-family RobotoMono-Bold
 
+.cockroach--tabs
+  .ant-tabs-bar
+    border-bottom 1px solid $grey2
+  .ant-tabs-tab
+    font-family SourceSansPro-Regular
+    font-size 16px
+    line-height 1.5
+    letter-spacing normal
+    color $placeholder
+    &:hover
+      color $adminui-grey-1 
+  .ant-tabs-tab-active
+    color $adminui-grey-1 
+  .ant-tabs-ink-bar
+    height 3px
+    border-radius 40px
+    background-color $blue
+
 .page--header
   &__titile
     margin-bottom 25px
@@ -491,4 +508,4 @@
       font-size 12px
       line-height 1.67
       letter-spacing 0.3px
-      color $popover-color 
+      color $popover-color
