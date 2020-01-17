@@ -63,7 +63,7 @@ func TestVerifier(t *testing.T) {
 		}),
 	)
 
-	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutorWithUser))
+	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))
 	withDB := ptstorage.WithDatabase(pts, s.DB())
 	db := client.NewDB(s.DB().AmbientContext, tsf, s.Clock())
 	ptv := ptverifier.New(db, pts)

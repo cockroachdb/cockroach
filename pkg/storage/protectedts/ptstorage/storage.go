@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
@@ -43,13 +44,13 @@ import (
 // storage interacts with the durable state of the protectedts subsystem.
 type storage struct {
 	settings *cluster.Settings
-	ex       sqlutil.InternalExecutorWithUser
+	ex       sqlutil.InternalExecutor
 }
 
 var _ protectedts.Storage = (*storage)(nil)
 
 // New creates a new Storage.
-func New(settings *cluster.Settings, ex sqlutil.InternalExecutorWithUser) protectedts.Storage {
+func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.Storage {
 	return &storage{settings: settings, ex: ex}
 }
 
@@ -67,8 +68,9 @@ func (p *storage) Protect(ctx context.Context, txn *client.Txn, r *ptpb.Record) 
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 	s := makeSettings(p.settings)
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-protect", txn,
-		security.NodeUser, protectQuery,
+	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
 		r.MetaType, r.Meta,
@@ -118,8 +120,9 @@ func (p *storage) MarkVerified(ctx context.Context, txn *client.Txn, id uuid.UUI
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-MarkVerified", txn,
-		security.NodeUser, markVerifiedQuery, id.GetBytesMut())
+	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
@@ -133,8 +136,9 @@ func (p *storage) Release(ctx context.Context, txn *client.Txn, id uuid.UUID) er
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-Release", txn,
-		security.NodeUser, releaseQuery, id.GetBytesMut())
+	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}

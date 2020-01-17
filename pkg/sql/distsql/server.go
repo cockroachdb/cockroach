@@ -283,7 +283,7 @@ func (ds *ServerImpl) setupFlow(
 			sd.DurationAdditionMode = duration.AdditionModeLegacy
 		}
 		ie := &lazyInternalExecutor{
-			newInternalExecutor: func() tree.SessionBoundInternalExecutor {
+			newInternalExecutor: func() tree.InternalExecutor {
 				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
 			},
 		}
@@ -570,27 +570,27 @@ func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) er
 	return err
 }
 
-// lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
+// lazyInternalExecutor is a tree.InternalExecutor that initializes
 // itself only on the first call to QueryRow.
 type lazyInternalExecutor struct {
 	// Set when an internal executor has been initialized.
-	tree.SessionBoundInternalExecutor
+	tree.InternalExecutor
 
 	// Used for initializing the internal executor exactly once.
 	once sync.Once
 
 	// newInternalExecutor must be set when instantiating a lazyInternalExecutor,
 	// it provides an internal executor to use when necessary.
-	newInternalExecutor func() tree.SessionBoundInternalExecutor
+	newInternalExecutor func() tree.InternalExecutor
 }
 
-var _ tree.SessionBoundInternalExecutor = &lazyInternalExecutor{}
+var _ tree.InternalExecutor = &lazyInternalExecutor{}
 
 func (ie *lazyInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
 	ie.once.Do(func() {
-		ie.SessionBoundInternalExecutor = ie.newInternalExecutor()
+		ie.InternalExecutor = ie.newInternalExecutor()
 	})
-	return ie.SessionBoundInternalExecutor.QueryRow(ctx, opName, txn, stmt, qargs...)
+	return ie.InternalExecutor.QueryRow(ctx, opName, txn, stmt, qargs...)
 }

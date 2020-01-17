@@ -31,7 +31,7 @@ func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
 	tableDesc *sqlbase.TableDescriptor,
-	ie tree.SessionBoundInternalExecutor,
+	ie tree.InternalExecutor,
 	txn *client.Txn,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
@@ -223,7 +223,7 @@ func validateForeignKey(
 	ctx context.Context,
 	srcTable *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
-	ie tree.SessionBoundInternalExecutor,
+	ie tree.InternalExecutor,
 	txn *client.Txn,
 ) error {
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, fk.ReferencedTableID)

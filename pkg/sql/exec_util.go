@@ -967,12 +967,6 @@ type SessionArgs struct {
 	ConnResultsBufferSize int64
 }
 
-// isDefined returns true iff the SessionArgs is well-defined.
-// This method exists because SessionArgs is passed by value but it
-// matters to the functions using it whether the value was explicitly
-// specified or left empty.
-func (s SessionArgs) isDefined() bool { return len(s.User) != 0 }
-
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
