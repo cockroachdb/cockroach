@@ -296,6 +296,13 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
   }
 
+  arrowRenderer = (isOpen: boolean) => {
+    if (!isOpen) {
+      return <span><Icon type="caret-up" /></span>;
+    }
+    return <span className="active"><Icon type="caret-down" /></span>;
+  }
+
   render() {
     const { opened, width, custom } = this.state;
     const selectedValue = this.findSelectedValue();
@@ -315,7 +322,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             </span>
             <div className="Select-control">
               <div className="Select-arrow-zone">
-                <span className="Select-arrow"></span>
+                {this.arrowRenderer(opened)}
               </div>
             </div>
           </div>

@@ -81,7 +81,7 @@
       vertical-align: middle;
     &.active
       .__option-label
-        font-family SourceSansPro-Bold
+        font-family Lato-Regular
         line-height 1.71
         color $link-color
 
@@ -179,7 +179,7 @@
           padding 0
           color #5f6c87
           &:hover
-            background #f6f6f6
+            background $background-color
         &.ant-fullcalendar-selected-day
           .ant-fullcalendar-value
             background #eff5fd
@@ -188,8 +188,14 @@
               background #e0efff
               color #2367cd
         &.ant-fullcalendar-disabled-cell
-            background #f6f6f6
+          background $background-color
+          color #a3a5af
+          .ant-fullcalendar-value
+            background $background-color
             color #a3a5af
+            &:hover
+              background $background-color
+              color #a3a5af
         &.ant-fullcalendar-today
           &:hover
             background transparent
@@ -209,11 +215,11 @@
                 background #e0efff
           &.ant-fullcalendar-disabled-cell
             &:hover
-              background #f6f6f6
+              background $background-color
             .ant-fullcalendar-value
                 font-family Lato-Bold
                 color #a3a5af
-                background #f6f6f6
+                background $background-color
                 border 1px solid #a3a5af
                 &:hover
-                  background #f6f6f6
+                  background $background-color
