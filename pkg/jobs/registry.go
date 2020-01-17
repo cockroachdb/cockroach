@@ -742,7 +742,8 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 			// otherwise we'd just immediately cancel them.
 			if liveness.NodeID == r.nodeID.Get() {
 				if !liveness.IsLive(r.clock.Now()) {
-					return nil
+					return errors.Errorf(
+						"trying to adopt jobs on node %d which is not live", liveness.NodeID)
 				}
 			}
 		}
@@ -795,46 +796,37 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		}
 
 		r.mu.Lock()
-		_, running := r.mu.jobs[*id]
+		_, runningOnNode := r.mu.jobs[*id]
 		r.mu.Unlock()
 
-		var needsResume bool
-		if payload.Lease.NodeID == r.nodeID.Get() {
-			// If we hold the lease for a job, check to see if we're actually running
-			// that job, and resume it if we're not. Otherwise, the job will be stuck
-			// until this node is restarted, as the other nodes in the cluster see
-			// that we hold a valid lease and assume we're running the job.
-			//
-			// We end up in this state—a valid lease for a canceled job—when we
-			// overcautiously cancel all jobs due to e.g. a slow heartbeat response.
-			// If that heartbeat managed to successfully extend the liveness lease,
-			// we'll have stopped running jobs on which we still had valid leases.
-			//
-			// This path also takes care of the case where a node adopts a job
-			// and is then restarted; the node will attempt to restart
-			// any previously-leased job.
-			needsResume = !running
-		} else {
-			// If we are currently running a job that another node has the lease on,
-			// stop running it.
-			if running {
+		if notLeaseHolder := payload.Lease.NodeID != r.nodeID.Get(); notLeaseHolder {
+			// Another node holds the lease on the job, see if we should steal it.
+			if runningOnNode {
+				// If we are currently running a job that another node has the lease on,
+				// stop running it.
 				log.Warningf(ctx, "job %d: node %d owns lease; canceling", *id, payload.Lease.NodeID)
 				r.unregister(*id)
 				continue
 			}
 			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
 			if !ok {
-				log.Warningf(ctx, "job %d: skipping: no liveness record for node %d",
-					*id, payload.Lease.NodeID)
+				// This case should never happen.
+				log.ReportOrPanic(ctx, nil, "job %d: skipping: no liveness record for the job's node %d",
+					log.Safe(*id), payload.Lease.NodeID)
 				continue
 			}
-			needsResume = !nodeStatus.isLive
+			if nodeStatus.isLive {
+				// The other node is live and holds the lease on the job - don't adopt it.
+				continue
+			}
 		}
-
-		if !needsResume {
+		// Below we know that this node holds the lease on the job.
+		if runningOnNode {
+			// No need to adopt; the job is already running on this node.
 			continue
 		}
 
+		// Adopt job and resume it.
 		job := &Job{id: id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
 		if err := job.adopt(ctx, payload.Lease); err != nil {
