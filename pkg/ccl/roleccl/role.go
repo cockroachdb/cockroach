@@ -37,7 +37,8 @@ func createRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true /* isRole */, "CREATE ROLE")
+	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true, /* isRole */
+		"CREATE ROLE", createRole.RolePrivileges)
 }
 
 func dropRolePlanHook(
@@ -96,7 +97,10 @@ func grantRolePlanHook(
 		for _, r := range grant.Roles {
 			// If the user is an admin, don't check if the user is allowed to add/drop
 			// users in the role. However, if the role being modified is the admin role, then
-			// make sure the user is an admin with the admin option.
+			//
+			//
+			//
+			//ke sure the user is an admin with the admin option.
 			if hasAdminRole && string(r) != sqlbase.AdminRole {
 				continue
 			}

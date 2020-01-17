@@ -625,6 +625,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
+%type <tree.Statement> alter_role_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1122,10 +1123,11 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_user_stmt     // EXTEND WITH HELP: ALTER USER
+| alter_role_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -2608,7 +2610,7 @@ drop_user_stmt:
 // %Help: DROP ROLE - remove a role
 // %Category: Priv
 // %Text: DROP ROLE [IF EXISTS] <role> [, ...]
-// %SeeAlso: CREATE ROLE, SHOW ROLES
+// %SeeAlso: CREATE ROLE, ALTER ROLE, SHOW ROLES
 drop_role_stmt:
   DROP ROLE string_or_placeholder_list
   {
@@ -3855,7 +3857,7 @@ show_users_stmt:
 // %Help: SHOW ROLES - list defined roles
 // %Category: Priv
 // %Text: SHOW ROLES
-// %SeeAlso: CREATE ROLE, DROP ROLE
+// %SeeAlso: CREATE ROLE, ALTER ROLE, DROP ROLE
 show_roles_stmt:
   SHOW ROLES
   {
@@ -5037,11 +5039,10 @@ opt_password:
 
 // Add documentation for [WITH role_privilege_list]
 
-
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
 // %Text: CREATE ROLE [IF NOT EXISTS] <name>
-// %SeeAlso: DROP ROLE, SHOW ROLES
+// %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
   CREATE role_or_group string_or_placeholder
   {
@@ -5055,7 +5056,26 @@ create_role_stmt:
   {
     $$.val = &tree.CreateRole{Name: $3.expr(), IfHasWith: true, RolePrivileges: $5.rolePrivilegeList()}
   }
+| CREATE role_or_group string_or_placeholder IF NOT EXISTS WITH role_privilege_list
+  {
+    $$.val = &tree.CreateRole{Name: $3.expr(), IfNotExists: true, IfHasWith: true, RolePrivileges: $8.rolePrivilegeList()}
+  }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
+
+// %Help: ALTER ROLE - alter a role
+// %Category: Priv
+// %Text: ALTER ROLE [IF NOT EXISTS] <name> [WITH] options...
+// %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
+alter_role_stmt:
+  ALTER role_or_group string_or_placeholder WITH role_privilege_list
+  {
+    $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), RolePrivileges: $5.rolePrivilegeList()}
+  }
+| ALTER role_or_group string_or_placeholder IF EXISTS WITH role_privilege_list
+  {
+    $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), IfExists: true, RolePrivileges: $7.rolePrivilegeList()}
+  }
+| ALTER role_or_group error // SHOW HELP: ALTER ROLE
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
@@ -5086,7 +5106,6 @@ role_privilege:
   | NOCREATEROLE
 
 
-// WIP - FIX RULES
 role_privilege_list:
   role_privilege
   {
