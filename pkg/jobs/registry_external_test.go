@@ -81,7 +81,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
 		const cancelInterval = time.Duration(math.MaxInt64)
-		const adoptInterval = time.Nanosecond
+		const adoptInterval = time.Millisecond
 
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 		nodeID := &base.NodeIDContainer{}

@@ -140,7 +140,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	jobs.DefaultAdoptInterval = 5 * time.Millisecond
 
 	ctx := context.TODO()
 
@@ -495,9 +495,9 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.success = true
 		e.fail = true
+		check(t)
 		// It should restart.
 		e.resume++
-		check(t)
 		// But let it succeed.
 		successErr = nil
 		resumeCheckCh <- struct{}{}
@@ -522,9 +522,9 @@ func TestRegistryLifecycle(t *testing.T) {
 		resumeCh <- jobErr
 		e.resumeExit++
 		e.fail = true
+		check(t)
 		// It should restart.
 		e.resume++
-		check(t)
 		// But let it fail.
 		failErr = nil
 		resumeCheckCh <- struct{}{}

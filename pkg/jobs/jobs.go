@@ -557,3 +557,31 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	}
 	return progress, nil
 }
+
+// CurrentStatus returns the current job status from the jobs table or error.
+func (j *Job) CurrentStatus(ctx context.Context) (Status, error) {
+	if j.id == nil {
+		return "", errors.New("job has not been created")
+	}
+	var statusString *tree.DString
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, selectStmt, *j.id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return errors.Errorf("no such job %d found", *j.id)
+		}
+
+		var ok bool
+		statusString, ok = row[0].(*tree.DString)
+		if !ok {
+			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return Status(*statusString), nil
+}
