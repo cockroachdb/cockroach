@@ -269,8 +269,9 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
 	args := base.TestServerArgs{
-		PartOfCluster: true,
-		Insecure:      true,
+		PartOfCluster:    true,
+		Insecure:         true,
+		WaitForBootstrap: true,
 		Stopper: initBacktrace(
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
@@ -347,7 +348,12 @@ func setupTransientCluster(
 		if c.s != nil {
 			joinAddr = c.s.ServingRPCAddr()
 		}
+
 		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
+		if c.s == nil {
+			// The first node also auto-inits the cluster.
+			args.WaitForBootstrap = false
+		}
 
 		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.
@@ -367,7 +373,7 @@ func setupTransientCluster(
 
 		serv := serverFactory.New(args).(*server.TestServer)
 
-		if i == 0 {
+		if c.s == nil {
 			c.s = serv
 		}
 		servers = append(servers, serv)

@@ -1398,10 +1398,8 @@ func (s *Server) Start(ctx context.Context) error {
 		//
 		// - gossip connects (i.e. we're joining an existing cluster, perhaps
 		//   freshly bootstrapped but this node doesn't have to know)
-		// - we auto-bootstrap (if no join flags were given)
-		// - a client bootstraps a cluster via node.
-		//
-		// TODO(knz): This may need tweaking when #24118 is addressed.
+		// - we auto-bootstrap (if requested e.g. by start-single-node)
+		// - a client bootstraps a cluster via cockroach init.
 
 		startRPCServer(workersCtx)
 
@@ -1429,18 +1427,16 @@ func (s *Server) Start(ctx context.Context) error {
 			}()
 		}
 
-		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
-
-		if len(s.cfg.GossipBootstrapResolvers) == 0 {
-			// If the _unfiltered_ list of hosts from the --join flag is
-			// empty, then this node can bootstrap a new cluster. We disallow
-			// this if this node is being started with itself specified as a
-			// --join host, because that's too likely to be operator error.
+		if s.cfg.AutoInitializeCluster {
+			// If the user invoked using start-single-node,
+			// then this node can bootstrap a new cluster.
 			if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 				return errors.Wrap(err, "while bootstrapping")
 			}
 			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 		}
+
+		log.Info(ctx, "awaiting init command or join with an already initialized node.")
 
 		initRes, err := s.initServer.awaitBootstrap()
 		close(ready)

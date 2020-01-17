@@ -210,6 +210,15 @@ type Config struct {
 	// connections to determine connection health and update the local view
 	// of remote clocks.
 	RPCHeartbeatInterval time.Duration
+
+	// AutoInitializeCluster, if set, causes the server to bootstrap the
+	// cluster. Note that if two nodes are started with this flag set
+	// and also configured to join each other, each node will bootstrap
+	// its own unique cluster and the join will fail.
+	//
+	// The flag exists mostly for the benefit of tests, and for
+	// `cockroach start-single-node`.
+	AutoInitializeCluster bool
 }
 
 func wrapError(err error) error {

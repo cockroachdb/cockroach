@@ -102,6 +102,7 @@ func initCLIDefaults() {
 	debugCtx.maxResults = 1000
 	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 
+	serverCfg.AutoInitializeCluster = false
 	serverCfg.ReadyFn = nil
 	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
