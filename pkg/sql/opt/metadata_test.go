@@ -27,6 +27,8 @@ func TestMetadata(t *testing.T) {
 	schID := md.AddSchema(&testcat.Schema{})
 	colID := md.AddColumn("col", types.Int)
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
+	seqID := md.AddSequence(&testcat.Sequence{})
+	md.AddView(&testcat.View{})
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -42,6 +44,14 @@ func TestMetadata(t *testing.T) {
 	}
 	if md.AddTable(tab, &tree.TableName{}) != tabID {
 		t.Fatalf("unexpected table id")
+	}
+	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
+		t.Fatalf("unexpected sequence id")
+	}
+
+	md.AddView(&testcat.View{ViewID: 101})
+	if len(md.AllViews()) != 1 {
+		t.Fatalf("unexpected views")
 	}
 
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
@@ -62,6 +72,14 @@ func TestMetadata(t *testing.T) {
 
 	if mdNew.TableMeta(tabID).Table != tab {
 		t.Fatalf("unexpected table")
+	}
+
+	if mdNew.Sequence(seqID).(*testcat.Sequence).SeqID != 100 {
+		t.Fatalf("unexpected sequence")
+	}
+
+	if v := mdNew.AllViews(); len(v) != 1 && v[0].(*testcat.View).ViewID != 101 {
+		t.Fatalf("unexpected view")
 	}
 
 	depsUpToDate, err = md.CheckDependencies(context.TODO(), testCat)
