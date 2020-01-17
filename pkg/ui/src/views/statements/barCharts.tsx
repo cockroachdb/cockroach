@@ -20,7 +20,7 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
-const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
+export const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;
 
 const formatTwoPlaces = d3.format(".2f");
@@ -193,35 +193,6 @@ export const countBarChart = makeBarChart(countBars, approximify);
 export const retryBarChart = makeBarChart(retryBars, approximify);
 export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev, formatTwoPlaces);
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
-
-export function countBreakdown(s: StatementStatistics) {
-  const count = longToInt(s.stats.count);
-  const firstAttempts = longToInt(s.stats.first_attempt_count);
-  const retries = count - firstAttempts;
-  const maxRetries = longToInt(s.stats.max_retries);
-
-  // const scale = d3.scale.linear()
-  //   .domain([0, count])
-  //   .range([0, 100]);
-
-  return {
-    firstAttemptsBarChart() {
-      return firstAttempts;
-    },
-
-    retriesBarChart() {
-      return retries;
-    },
-
-    maxRetriesBarChart() {
-      return maxRetries;
-    },
-
-    totalCountBarChart() {
-      return count;
-    },
-  };
-}
 
 export function rowsBreakdown(s: StatementStatistics) {
   const mean = s.stats.num_rows.mean;
