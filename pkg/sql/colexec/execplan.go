@@ -1410,7 +1410,6 @@ func planProjectionOperators(
 		}
 
 		buffer := NewBufferOp(input)
-		internalMemUsed += buffer.(InternalMemoryOperator).InternalMemoryUsage()
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
 		caseOutputIdx := len(columnTypes)

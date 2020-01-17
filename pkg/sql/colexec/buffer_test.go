@@ -43,23 +43,4 @@ func TestBufferOp(t *testing.T) {
 		require.Nil(t, b.Selection())
 		require.Equal(t, uint16(0), b.Length())
 	})
-
-	t.Run("TestBufferRestoresOriginalBatch", func(t *testing.T) {
-		buffer.rewind()
-		b := buffer.Next(ctx)
-		b.SetSelection(true)
-		sel := b.Selection()
-		sel[0] = 1
-		b.SetLength(1)
-
-		// We have modified the selection batch, but rewinding the buffer should
-		// restore the returned batch to the original state.
-		buffer.rewind()
-		b = buffer.Next(ctx)
-		require.Nil(t, b.Selection())
-		require.Equal(t, uint16(len(inputTuples)), b.Length())
-		b = buffer.Next(ctx)
-		require.Nil(t, b.Selection())
-		require.Equal(t, uint16(0), b.Length())
-	})
 }
