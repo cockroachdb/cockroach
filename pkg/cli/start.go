@@ -958,7 +958,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// So we also pay attention to any additional signal received beyond
 	// this point (maybe some service monitor was impatient and sends
 	// another signal to hasten the shutdown process).
-	// And we also pay attention to an additional timeout.
 	//
 	// If any such trigger to hasten occurs, we simply return, which
 	// will cause the process to exit and the server goroutines to be
@@ -973,9 +972,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint))
 		handleSignalDuringShutdown(sig)
 		panic("unreachable")
-
-	case <-time.After(time.Minute):
-		return errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
 
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
