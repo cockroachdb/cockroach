@@ -355,6 +355,7 @@ func init() {
 type runner struct {
 	db          db
 	sqlExecutor *sql.InternalExecutor
+	settings    *cluster.Settings
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -383,6 +384,7 @@ type Manager struct {
 	db           db
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
+	settings     *cluster.Settings
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -393,6 +395,7 @@ func NewManager(
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
+	settings *cluster.Settings,
 ) *Manager {
 	opts := client.LeaseManagerOptions{
 		ClientID:      clientID,
@@ -404,6 +407,7 @@ func NewManager(
 		db:           db,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
+		settings:     settings,
 	}
 }
 
@@ -547,6 +551,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
+		settings:    m.settings,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		minVersion := migration.includedInBootstrap
@@ -608,7 +613,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		tKey := sqlbase.MakePublicTableNameKey(ctx, r.sqlExecutor.Settings(), desc.GetParentID(), desc.GetName())
+		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {

@@ -786,14 +786,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		func(
 			ctx context.Context, sessionData *sessiondata.SessionData,
 		) sqlutil.InternalExecutor {
-			ie := sql.NewSessionBoundInternalExecutor(
+			ie := sql.MakeInternalExecutor(
 				ctx,
-				sessionData,
 				s.pgServer.SQLServer,
 				s.sqlMemMetrics,
 				s.st,
 			)
-			return ie
+			ie.SetSessionData(sessionData)
+			return &ie
 		}
 
 	for _, m := range s.pgServer.Metrics() {
@@ -1606,6 +1606,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.clock,
 		mmKnobs,
 		s.NodeID().String(),
+		s.ClusterSettings(),
 	)
 
 	var bootstrapVersion roachpb.Version
