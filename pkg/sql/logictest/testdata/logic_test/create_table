@@ -10,5 +10,21 @@ statement ok
 DROP TABLE TEST2
 
 # Regression for #43894
+subtest regression_43894
 statement ok
 CREATE TABLE IF NOT EXISTS t43894 (PRIMARY KEY (a), a UUID NOT NULL, b JSONB NOT NULL DEFAULT '5')
+
+subtest telemetry_tests
+
+statement ok
+CREATE TABLE new_table (a timetz(3))
+
+statement ok
+ALTER TABLE new_table ADD COLUMN c timetz(4)
+
+# Cannot really get more exact than this (i.e. looking at usage_count), as it increments on each run.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name IN ('sql.schema.new_column_type.timetz_3_', 'sql.schema.new_column_type.timetz_4_') AND usage_count > 0 ORDER BY feature_name
+----
+sql.schema.new_column_type.timetz_3_
+sql.schema.new_column_type.timetz_4_

@@ -23,3 +23,9 @@ import (
 func SerialColumnNormalizationCounter(inputType, normType string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.schema.serial.%s.%s", normType, inputType))
 }
+
+// SchemaNewTypeCounter is to be implemented every time a new data type
+// is used in a schema, i.e. by CREATE TABLE or ALTER TABLE ADD COLUMN.
+func SchemaNewTypeCounter(t string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.new_column_type." + t)
+}
