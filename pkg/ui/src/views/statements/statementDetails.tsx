@@ -29,11 +29,11 @@ import { Pick } from "src/util/pick";
 import Loading from "src/views/shared/components/loading";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
-import { computeValue } from "src/views/shared/components/summaryBar";
+import { formatNumberForDisplay } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
 import { SummaryCard } from "../shared/components/summaryCard";
-import { approximify, countBreakdown, latencyBreakdown, rowsBreakdown } from "./barCharts";
+import { approximify, latencyBreakdown, longToInt, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
 
 const { TabPane } = Tabs;
@@ -211,9 +211,13 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
 
     const count = FixLong(stats.count).toInt();
 
-    const { firstAttemptsBarChart, retriesBarChart, maxRetriesBarChart, totalCountBarChart } = countBreakdown(this.props.statement);
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
     const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
+
+    const totalCountBarChart = longToInt(this.props.statement.stats.count);
+    const firstAttemptsBarChart = longToInt(this.props.statement.stats.first_attempt_count);
+    const retriesBarChart = totalCountBarChart - firstAttemptsBarChart;
+    const maxRetriesBarChart = longToInt(this.props.statement.stats.max_retries);
 
     const statsByNode = this.props.statement.byNode;
     const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
@@ -230,13 +234,13 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 <Row>
                   <Col span={12}>
                     <div className="summary--card__counting">
-                      <h3 className="summary--card__counting--value">{computeValue(count * stats.service_lat.mean, duration)}</h3>
+                      <h3 className="summary--card__counting--value">{formatNumberForDisplay(count * stats.service_lat.mean, duration)}</h3>
                       <p className="summary--card__counting--label">Total Time</p>
                     </div>
                   </Col>
                   <Col span={12}>
                     <div className="summary--card__counting">
-                      <h3 className="summary--card__counting--value">{computeValue(stats.service_lat.mean, duration)}</h3>
+                      <h3 className="summary--card__counting--value">{formatNumberForDisplay(stats.service_lat.mean, duration)}</h3>
                       <p className="summary--card__counting--label">Mean Service Latency</p>
                     </div>
                   </Col>
@@ -267,19 +271,19 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
                 <h2 className="summary--card__title">Execution Count</h2>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">First Attempts</h4>
-                  <p className="summary--card__item--value">{ firstAttemptsBarChart() }</p>
+                  <p className="summary--card__item--value">{ firstAttemptsBarChart }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Retries</h4>
-                  <p className="summary--card__item--value summary--card__item--value-red">{ retriesBarChart() }</p>
+                  <p className="summary--card__item--value summary--card__item--value-red">{ retriesBarChart }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Max Retries</h4>
-                  <p className="summary--card__item--value summary--card__item--value-red">{ maxRetriesBarChart() }</p>
+                  <p className="summary--card__item--value summary--card__item--value-red">{ maxRetriesBarChart }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Total</h4>
-                  <p className="summary--card__item--value">{ totalCountBarChart() }</p>
+                  <p className="summary--card__item--value">{ totalCountBarChart }</p>
                 </div>
                 <p className="summary--card__divider"></p>
                 <h2 className="summary--card__title">Rows Affected</h2>
