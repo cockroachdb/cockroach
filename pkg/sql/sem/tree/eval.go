@@ -3472,7 +3472,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if t.Width() > 0 && int(t.Width()) < len(s) {
 				s = s[:t.Width()]
 			}
-			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv), nil
+			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv)
 		}
 
 	case types.BytesFamily:
@@ -3863,9 +3863,9 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	switch d := unwrapped.(type) {
 	case *DString:
-		return NewDCollatedString(string(*d), expr.Locale, &ctx.CollationEnv), nil
+		return NewDCollatedString(string(*d), expr.Locale, &ctx.CollationEnv)
 	case *DCollatedString:
-		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv), nil
+		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv)
 	default:
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
 	}

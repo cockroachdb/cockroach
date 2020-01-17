@@ -70,10 +70,10 @@ func TestInterner(t *testing.T) {
 	dec4, _ := tree.ParseDDecimal("1e0")
 	dec5, _ := tree.ParseDDecimal("1")
 
-	coll1 := tree.NewDCollatedString("foo", "sv_SE", &tree.CollationEnvironment{})
-	coll2 := tree.NewDCollatedString("foo", "sv_SE", &tree.CollationEnvironment{})
-	coll3 := tree.NewDCollatedString("foo", "en_US", &tree.CollationEnvironment{})
-	coll4 := tree.NewDCollatedString("food", "en_US", &tree.CollationEnvironment{})
+	coll1, _ := tree.NewDCollatedString("foo", "sv_SE", &tree.CollationEnvironment{})
+	coll2, _ := tree.NewDCollatedString("foo", "sv_SE", &tree.CollationEnvironment{})
+	coll3, _ := tree.NewDCollatedString("foo", "en_US", &tree.CollationEnvironment{})
+	coll4, _ := tree.NewDCollatedString("food", "en_US", &tree.CollationEnvironment{})
 
 	tz1 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)
 	tz2 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)

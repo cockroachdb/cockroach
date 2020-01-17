@@ -206,7 +206,11 @@ func truncateDatum(evalCtx *tree.EvalContext, d tree.Datum, maxBytes int) tree.D
 
 		// Note: this will end up being larger than maxBytes due to the key and
 		// locale, so this is just a best-effort attempt to limit the size.
-		return tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
+		res, err := tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
+		if err != nil {
+			return d
+		}
+		return res
 
 	case *tree.DOidWrapper:
 		return &tree.DOidWrapper{
@@ -252,8 +256,11 @@ func deepCopyDatum(evalCtx *tree.EvalContext, d tree.Datum) tree.Datum {
 		return tree.NewDString(deepCopyString(string(*t)))
 
 	case *tree.DCollatedString:
-		contents := deepCopyString(t.Contents)
-		return tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
+		return &tree.DCollatedString{
+			Contents: deepCopyString(t.Contents),
+			Locale:   t.Locale,
+			Key:      t.Key,
+		}
 
 	case *tree.DOidWrapper:
 		return &tree.DOidWrapper{
