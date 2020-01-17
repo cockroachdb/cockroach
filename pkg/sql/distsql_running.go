@@ -324,7 +324,7 @@ func (dsp *DistSQLPlanner) Run(
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
 		var stmtStr string
-		if planCtx.planner != nil {
+		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
 		}
 		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, false /* showInputTypes */)
