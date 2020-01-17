@@ -46,7 +46,6 @@ func registerAcceptance(r *testRegistry) {
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
-			skip: "#43957",
 			fn:   runVersionUpgrade,
 			// This test doesn't like running on old versions because it upgrades to
 			// the latest released version and then it tries to "head", where head is
