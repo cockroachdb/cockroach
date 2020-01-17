@@ -68,6 +68,7 @@ interface TableProps {
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
   drawer?: boolean;
+  firstCellHeader?: boolean;
 }
 
 export interface ExpandableConfig {
@@ -144,7 +145,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   renderRow = (rowIndex: number) => {
-    const { columns, expandableConfig, drawer } = this.props;
+    const { columns, expandableConfig, drawer, firstCellHeader } = this.props;
     const classes = classNames(
       "sort-table__row",
       "sort-table__row--body",
@@ -171,7 +172,7 @@ export class SortableTable extends React.Component<TableProps> {
         {expandableConfig ? this.expansionControl(expanded) : null}
         {_.map(columns, (c: SortableColumn, colIndex: number) => {
           return (
-            <td className={classNames("sort-table__cell", c.className)} key={colIndex}>
+            <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellHeader && colIndex === 0 }, c.className)} key={colIndex}>
               {c.cell(rowIndex)}
             </td>
           );
@@ -231,7 +232,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellHeader } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -256,9 +257,13 @@ export class SortableTable extends React.Component<TableProps> {
                     }
                   }
                 }
+                if (firstCellHeader && colIndex === 0) {
+                  classes.push("sort-table__cell--header");
+                }
                 return (
                   <th className={classNames(classes)} key={colIndex} onClick={onClick}>
                     {c.title}
+                    {!_.isUndefined(c.sortKey) && <span className="sortable__actions" />}
                   </th>
                 );
               })}
