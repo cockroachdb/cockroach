@@ -42,4 +42,4 @@ export class Highlight extends React.Component<SqlBoxProps> {
       </span>
     );
   }
-};
+}

@@ -14,16 +14,25 @@
 $dropdown-hover-color = darken($background-color, 2.5%)
 
 .dropdown
-  padding 10px 24px 11px
+  padding 7.5px 9px 7.5px 19px;
   vertical-align middle
-  border 1px solid $button-border-color
-  border-radius 4px
-  display inline-flex
+  border 1px solid $grey-light
+  border-radius 3px
   white-space nowrap
   padding-right 10px
   color $body-color
   cursor pointer
   position relative
+  background #fff
+  display flex
+  align-items center
+
+  .dropdown__title, .Select-value-label
+    color $adminui-grey-1 !important
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
 
   &:hover
     background-color $dropdown-hover-color
@@ -42,9 +51,8 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     display inline-block
     -webkit-user-select none
     -moz-user-select none
-    -ms-user-select: none;
-    user-select: none;
-    text-transform uppercase
+    -ms-user-select none
+    user-select none
     letter-spacing 2px
     line-height 17px
   
@@ -64,8 +72,8 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     vertical-align middle
     -webkit-user-select none
     -moz-user-select none
-    -ms-user-select: none;
-    user-select: none;
+    -ms-user-select none
+    user-select none
     text-transform uppercase
     letter-spacing 2px
     line-height 17px
@@ -76,7 +84,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   &__side-arrow
     font-family Lato-Bold
     display none
-    color $link-color
+    color $adminui-grey-1
     cursor pointer
     -webkit-user-select none
     -moz-user-select none
