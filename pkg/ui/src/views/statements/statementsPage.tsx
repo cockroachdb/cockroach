@@ -193,7 +193,14 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
               {this.renderLastCleared()}
             </h4>
           </div>
-          {data.length > 0 ? (
+          {data.length === 0 && search.length === 0 && (
+            <Empty
+              title="This page helps you identify frequently executed or high latency SQL statements."
+              description="No SQL statements were executed since this page was last cleared."
+              buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
+            />
+          )}
+          {(data.length > 0 || search.length > 0) && (
             <div className="statements-table-wrapper">
               <StatementsSortedTable
                 className="statements-table"
@@ -203,12 +210,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
                 onChangeSortSetting={this.changeSortSetting}
               />
             </div>
-          ) : <Empty
-                title="This page helps you identify frequently executed or high latency SQL statements."
-                description="No SQL statements were executed since this page was last cleared."
-                buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
-              />
-          }
+          )}
         </section>
         {data.length > 0 && (
           <Pagination

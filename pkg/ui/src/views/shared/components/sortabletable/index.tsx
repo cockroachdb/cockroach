@@ -232,7 +232,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellHeader } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellHeader, count } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -277,6 +277,12 @@ export class SortableTable extends React.Component<TableProps> {
           <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
             <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
           </DrawerComponent>
+        )}
+        {count === 0 && (
+          <div className="table__no-results">
+            <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
+            <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+          </div>
         )}
       </React.Fragment>
     );
