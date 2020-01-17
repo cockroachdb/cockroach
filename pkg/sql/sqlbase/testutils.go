@@ -235,7 +235,11 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			}
 			buf.WriteRune(r)
 		}
-		return tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
+		d, err := tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
+		if err != nil {
+			panic(err)
+		}
+		return d
 	case types.OidFamily:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
 	case types.UnknownFamily:

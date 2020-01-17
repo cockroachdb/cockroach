@@ -1198,24 +1198,35 @@ type collationEnvironmentCacheEntry struct {
 	collator *collate.Collator
 }
 
-func (env *CollationEnvironment) getCacheEntry(locale string) collationEnvironmentCacheEntry {
+func (env *CollationEnvironment) getCacheEntry(
+	locale string,
+) (collationEnvironmentCacheEntry, error) {
 	entry, ok := env.cache[locale]
 	if !ok {
 		if env.cache == nil {
 			env.cache = make(map[string]collationEnvironmentCacheEntry)
 		}
-		entry = collationEnvironmentCacheEntry{locale, collate.New(language.MustParse(locale))}
+		tag, err := language.Parse(locale)
+		if err != nil {
+			err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to parse locale %q", locale)
+			return collationEnvironmentCacheEntry{}, err
+		}
+
+		entry = collationEnvironmentCacheEntry{locale, collate.New(tag)}
 		env.cache[locale] = entry
 	}
-	return entry
+	return entry, nil
 }
 
 // NewDCollatedString is a helper routine to create a *DCollatedString. Panics
 // if locale is invalid. Not safe for concurrent use.
 func NewDCollatedString(
 	contents string, locale string, env *CollationEnvironment,
-) *DCollatedString {
-	entry := env.getCacheEntry(locale)
+) (*DCollatedString, error) {
+	entry, err := env.getCacheEntry(locale)
+	if err != nil {
+		return nil, err
+	}
 	if env.buffer == nil {
 		env.buffer = &collate.Buffer{}
 	}
@@ -1223,7 +1234,7 @@ func NewDCollatedString(
 	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
 	copy(d.Key, key)
 	env.buffer.Reset()
-	return &d
+	return &d, nil
 }
 
 // AmbiguousFormat implements the Datum interface.
