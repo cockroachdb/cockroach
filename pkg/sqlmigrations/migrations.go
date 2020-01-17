@@ -239,14 +239,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		workFn: func(ctx context.Context, r runner) error {
 			// Note that these particular schema changes are idempotent.
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 				`ALTER TABLE system.reports_meta ALTER generated TYPE TIMESTAMP WITH TIME ZONE`,
 			); err != nil {
 				return err
 			}
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 				"ALTER TABLE system.replication_constraint_stats ALTER violation_start "+
 					"TYPE TIMESTAMP WITH TIME ZONE",
 			); err != nil {
@@ -769,7 +769,12 @@ func runStmtAsRootWithRetry(
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		_, err := r.sqlExecutor.Exec(ctx, opName, nil /* txn */, stmt, qargs...)
+		_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{
+				User:     security.RootUser,
+				Database: "system",
+			},
+			stmt, qargs...)
 		if err == nil {
 			break
 		}
