@@ -34,9 +34,9 @@ export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 function StatementLink(props: { statement: string, app: string, implicitTxn: boolean, search: string }) {
   const summary = summarize(props.statement);
-  // const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
+  const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
-    // <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="statement__tooltip">
         <Tooltip overlayClassName="preset-black" placement="bottom" title={
           <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
@@ -46,7 +46,7 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
           </div>
         </Tooltip>
       </div>
-    // </Link>
+    </Link>
   );
 }
 
