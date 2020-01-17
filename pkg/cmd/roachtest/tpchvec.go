@@ -33,10 +33,7 @@ func registerTPCHVec(r *testRegistry) {
 	)
 
 	var queriesToSkip = map[int]string{
-		// TODO(yuzefovich): remove this once the bug is fixed.
-		9:  "incomplete flow shutdown #43269",
 		12: "the query is skipped by tpch workload",
-		15: "unsupported: create view",
 	}
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
@@ -102,7 +99,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 			}
 			vectorizeSetting := "off"
 			if vectorize {
-				vectorizeSetting = "experimental_always"
+				vectorizeSetting = "experimental_on"
 			}
 			operation := fmt.Sprintf(
 				"running TPCH queries %s with vectorize=%s %d times each",
