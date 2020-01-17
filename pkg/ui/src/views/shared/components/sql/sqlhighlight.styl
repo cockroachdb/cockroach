@@ -10,21 +10,44 @@
 
 @require "~styl/base/palette.styl"
 
-.sql-highlight
+.box-highlight
   font-family Inconsolata-Regular
   padding 20px
   width 100%
   margin-bottom 10px
+  min-height 282px;
   white-space pre-wrap
+  background-color $headings-color
+  .table-target
+    color $popover-border-color
+    &:hover
+      text-decoration underline
 
 .sql-highlight.hljs
-  background-color $headings-color
-  color white
+  color $popover-border-color
   overflow-x auto
-
+  font-family RobotoMono-Medium
+  font-size 12px
+  font-weight 500
+  line-height 1.83
+  white-space pre-wrap
+  word-wrap break-word
   .hljs-string
     color $syntax-string-color
 
   .hljs-keyword
   .hljs-literal
-    color $syntax-keyword-color
+  .hljs-attribute
+  .hljs-built_in
+    color $light-blue
+
+.ant-tooltip.hljs
+  .ant-tooltip-content
+    width 535px
+  .ant-tooltip-inner, .sql-highlight.hljs
+    background-color #242a35
+  .ant-tooltip-inner
+    padding 8px
+  .sql-highlight.hljs
+    padding 0
+    margin 0

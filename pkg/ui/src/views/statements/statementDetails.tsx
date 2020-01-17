@@ -28,7 +28,7 @@ import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
 import Loading from "src/views/shared/components/loading";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { SqlBox } from "src/views/shared/components/sql/box";
+import SqlBox from "src/views/shared/components/sql/box";
 import { formatNumberForDisplay } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
