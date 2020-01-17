@@ -26,7 +26,7 @@ func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	case types.BytesFamily:
 		d = NewDBytes(DBytes(s))
 	case types.CollatedStringFamily:
-		d = NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
+		d, err = NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
 	case types.ArrayFamily:
 		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents())
 		if err != nil {
