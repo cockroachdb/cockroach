@@ -457,14 +457,11 @@ func (s *Server) newSessionDataAndMutator(
 	args SessionArgs,
 ) (*sessiondata.SessionData, *sessionDataMutator) {
 	sd := &sessiondata.SessionData{
-		User:          args.User,
-		RemoteAddr:    args.RemoteAddr,
-		SequenceState: sessiondata.NewSequenceState(),
-		DataConversion: sessiondata.DataConversionConfig{
-			Location: time.UTC,
-		},
+		User:              args.User,
+		RemoteAddr:        args.RemoteAddr,
 		ResultsBufferSize: args.ConnResultsBufferSize,
 	}
+	s.populateMinimalSessionData(sd)
 
 	m := &sessionDataMutator{
 		data:     sd,
@@ -473,6 +470,22 @@ func (s *Server) newSessionDataAndMutator(
 	}
 
 	return sd, m
+}
+
+// populateMinimalSessionData populates sd with some minimal values needed for
+// not crashing.
+func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
+	if sd.SequenceState == nil {
+		sd.SequenceState = sessiondata.NewSequenceState()
+	}
+	if sd.DataConversion == (sessiondata.DataConversionConfig{}) {
+		sd.DataConversion = sessiondata.DataConversionConfig{
+			Location: time.UTC,
+		}
+	}
+	if len(sd.SearchPath.GetPathArray()) == 0 {
+		sd.SearchPath = sqlbase.DefaultSearchPath
+	}
 }
 
 // newConnExecutor creates a new connExecutor.

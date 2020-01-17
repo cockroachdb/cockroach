@@ -239,14 +239,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		workFn: func(ctx context.Context, r runner) error {
 			// Note that these particular schema changes are idempotent.
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.Exec(ctx, "update-reports-meta-generated", nil, /* txn */
 				`ALTER TABLE system.reports_meta ALTER generated TYPE TIMESTAMP WITH TIME ZONE`,
 			); err != nil {
 				return err
 			}
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.Exec(ctx, "update-reports-meta-generated", nil, /* txn */
 				"ALTER TABLE system.replication_constraint_stats ALTER violation_start "+
 					"TYPE TIMESTAMP WITH TIME ZONE",
 			); err != nil {
@@ -354,7 +352,8 @@ func init() {
 
 type runner struct {
 	db          db
-	sqlExecutor *sql.InternalExecutor
+	sqlExecutor *sql.SessionBoundInternalExecutor
+	settings    *cluster.Settings
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -381,18 +380,20 @@ type Manager struct {
 	stopper      *stop.Stopper
 	leaseManager leaseManager
 	db           db
-	sqlExecutor  *sql.InternalExecutor
+	sqlExecutor  *sql.SessionBoundInternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
+	settings     *cluster.Settings
 }
 
 // NewManager initializes and returns a new Manager object.
 func NewManager(
 	stopper *stop.Stopper,
 	db *client.DB,
-	executor *sql.InternalExecutor,
+	executor *sql.SessionBoundInternalExecutor,
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
+	settings *cluster.Settings,
 ) *Manager {
 	opts := client.LeaseManagerOptions{
 		ClientID:      clientID,
@@ -404,6 +405,7 @@ func NewManager(
 		db:           db,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
+		settings:     settings,
 	}
 }
 
@@ -547,6 +549,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
+		settings:    m.settings,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		minVersion := migration.includedInBootstrap
@@ -608,7 +611,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		tKey := sqlbase.MakePublicTableNameKey(ctx, r.sqlExecutor.Settings(), desc.GetParentID(), desc.GetName())
+		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -715,8 +718,8 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	q := fmt.Sprintf(
 		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
 		sqlbase.DeprecatedNamespaceTable.ID)
-	rows, _, err := r.sqlExecutor.QueryWithUser(
-		ctx, "read-deprecated-namespace-table", nil /* txn */, security.NodeUser, q)
+	rows, err := r.sqlExecutor.Query(
+		ctx, "read-deprecated-namespace-table", nil /* txn */, q)
 	if err != nil {
 		return err
 	}

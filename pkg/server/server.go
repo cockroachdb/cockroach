@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
@@ -1599,13 +1600,29 @@ func (s *Server) Start(ctx context.Context) error {
 	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
+	migrationsExecutor := sql.NewSessionBoundInternalExecutor(
+		ctx,
+		&sessiondata.SessionData{
+			User: security.NodeUser,
+			// Migrations need an executor with query distribution turned off. This is
+			// because the node crashes if migrations fail to execute, and query
+			// distribution introduces more moving parts. Local execution is more
+			// robust; for example, the DistSender has retries if it can't connect to
+			// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
+			// particularly fragile immediately after a node is started (i.e. the
+			// present situation).
+			DistSQLMode: sessiondata.DistSQLOff,
+			Database:    "system",
+		},
+		s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings())
 	migMgr := sqlmigrations.NewManager(
 		s.stopper,
 		s.db,
-		s.internalExecutor,
+		migrationsExecutor,
 		s.clock,
 		mmKnobs,
 		s.NodeID().String(),
+		s.ClusterSettings(),
 	)
 
 	var bootstrapVersion roachpb.Version

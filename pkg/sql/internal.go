@@ -121,6 +121,7 @@ func NewSessionBoundInternalExecutor(
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
+	s.populateMinimalSessionData(sessionData)
 	return &SessionBoundInternalExecutor{
 		impl: internalExecutorImpl{
 			s:           s,
@@ -137,7 +138,7 @@ func NewSessionBoundInternalExecutor(
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// sargs, if not nil, is used to initialize the executor's session data. If nil,
+// sargs, if not empty, is used to initialize the executor's session data. If nil,
 // then ie.sessionData must be set and it will be used (i.e. the executor must
 // be "session bound").
 func (ie *internalExecutorImpl) initConnEx(
@@ -323,11 +324,6 @@ func (ie *InternalExecutor) ExecWithUser(
 		return 0, err
 	}
 	return res.rowsAffected, res.err
-}
-
-// Settings returns the cluster settings.
-func (ie *InternalExecutor) Settings() *cluster.Settings {
-	return ie.s.cfg.Settings
 }
 
 // Query executes the supplied SQL statement and returns the resulting rows.

@@ -23,7 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -466,9 +469,18 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 		// Migration has been baked in. Ignore it.
 		return nil
 	}
+
+	// Mimic the executor used by the production code.
+	executor := mt.server.DistSQLServer().(*distsql.ServerImpl).SessionBoundInternalExecutorFactory(
+		ctx, &sessiondata.SessionData{
+			User:        security.NodeUser,
+			DistSQLMode: sessiondata.DistSQLOff,
+			Database:    "system",
+		}).(*sql.SessionBoundInternalExecutor)
 	return m.workFn(ctx, runner{
+		settings:    mt.server.ClusterSettings(),
 		db:          mt.kvDB,
-		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
+		sqlExecutor: executor,
 	})
 }
 
