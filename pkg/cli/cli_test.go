@@ -1358,6 +1358,7 @@ Available Commands:
   quit              drain and shutdown node
 
   sql               open a sql shell
+  auth-session      log in and out of HTTP sessions
   node              list, inspect or remove nodes
   dump              dump sql tables
 
