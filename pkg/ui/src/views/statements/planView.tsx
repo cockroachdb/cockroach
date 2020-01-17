@@ -327,7 +327,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
         <thead>
         <tr className="plan-view-table__row--header">
           <th className="plan-view-table__cell">
-            {this.props.title}
+            <h2 className="summary--card__title">{this.props.title}</h2>
             <div className="plan-view-table__tooltip">
               <ToolTipWrapper
                 text={lastSampledHelpText}>
@@ -346,20 +346,11 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
               <div
                 id="plan-view-inner-container"
                 ref={this.innerContainer}
-                className={this.state.expanded ? "" : "plan-view-container-scroll"}
               >
                 <PlanNodes
                   nodes={flattenedPlanNodes}
                 />
               </div>
-              {this.state.showExpandDirections &&
-                <div className="plan-view-container-directions"
-                     onClick={() => this.toggleExpanded()}
-                >
-                  {!this.state.expanded && "See full plan"}
-                  {this.state.expanded && "Collapse plan"}
-                </div>
-              }
             </div>
           </td>
         </tr>
