@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -41,21 +40,8 @@ var _ sqlutil.InternalExecutor = &InternalExecutor{}
 // doesn't offer a session interface for maintaining session state or for
 // running explicit SQL transactions. However, it supports running SQL
 // statements inside a higher-lever (KV) txn and inheriting session variables
-// from another session (for the latter see SessionBoundInternalExecutor).
+// from another session.
 type InternalExecutor struct {
-	internalExecutorImpl
-}
-
-// SessionBoundInternalExecutor is like InternalExecutor, except that it is
-// initialized with values for session variables. Conversely, it doesn't offer
-// the *WithUser methods of the InternalExecutor.
-type SessionBoundInternalExecutor struct {
-	impl internalExecutorImpl
-}
-
-// internalExecutorImpl supports the implementation of InternalExecutor and
-// SessionBoundInternalExecutor.
-type internalExecutorImpl struct {
 	s *Server
 
 	// mon is the monitor used by all queries executed through the
@@ -67,9 +53,8 @@ type internalExecutorImpl struct {
 	memMetrics MemoryMetrics
 
 	// sessionData, if not nil, represents the session variables used by
-	// statements executed on this internalExecutor. This field supports the
-	// implementation of SessionBoundInternalExecutor. Note that a session bound
-	// internal executor cannot modify session data.
+	// statements executed on this internalExecutor. Note that queries executed by
+	// the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
 
 	// The internal executor uses its own TableCollection. A TableCollection
@@ -96,39 +81,17 @@ func MakeInternalExecutor(
 		settings,
 	)
 	return InternalExecutor{
-		internalExecutorImpl: internalExecutorImpl{
-			s:          s,
-			mon:        &monitor,
-			memMetrics: memMetrics,
-		},
+		s:          s,
+		mon:        &monitor,
+		memMetrics: memMetrics,
 	}
 }
 
-// NewSessionBoundInternalExecutor creates a SessionBoundInternalExecutor.
-func NewSessionBoundInternalExecutor(
-	ctx context.Context,
-	sessionData *sessiondata.SessionData,
-	s *Server,
-	memMetrics MemoryMetrics,
-	settings *cluster.Settings,
-) *SessionBoundInternalExecutor {
-	monitor := mon.MakeUnlimitedMonitor(
-		ctx,
-		"internal SQL executor",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount,
-		memMetrics.MaxBytesHist,
-		math.MaxInt64, /* noteworthy */
-		settings,
-	)
-	return &SessionBoundInternalExecutor{
-		impl: internalExecutorImpl{
-			s:           s,
-			mon:         &monitor,
-			memMetrics:  memMetrics,
-			sessionData: sessionData,
-		},
-	}
+// SetSessionData binds the session variables that will be used by queries
+// performed through this executor from now on.
+func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
+	ie.s.populateMinimalSessionData(sessionData)
+	ie.sessionData = sessionData
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -137,13 +100,12 @@ func NewSessionBoundInternalExecutor(
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// sargs, if not nil, is used to initialize the executor's session data. If nil,
-// then ie.sessionData must be set and it will be used (i.e. the executor must
-// be "session bound").
-func (ie *internalExecutorImpl) initConnEx(
+// sd will constitute the executor's session state.
+func (ie *InternalExecutor) initConnEx(
 	ctx context.Context,
 	txn *client.Txn,
-	sargs SessionArgs,
+	sd *sessiondata.SessionData,
+	sdMut sessionDataMutator,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
 ) (*StmtBuf, *sync.WaitGroup, error) {
@@ -153,43 +115,32 @@ func (ie *internalExecutorImpl) initConnEx(
 		lastDelivered: -1,
 	}
 
-	var sd *sessiondata.SessionData
-	var sdMut *sessionDataMutator
-	if sargs.isDefined() {
-		if ie.sessionData != nil {
-			log.Fatal(ctx, "sargs used on a session bound executor")
-		}
-		sd, sdMut = ie.s.newSessionDataAndMutator(sargs)
-	} else {
-		if ie.sessionData == nil {
-			log.Fatal(ctx, "initConnEx called with no sargs, and the executor is also not session bound")
-		}
-		sd = ie.sessionData
-		// sdMut stays nil for session bound executors.
-	}
-
 	stmtBuf := NewStmtBuf()
 	var ex *connExecutor
 	var err error
 	if txn == nil {
 		ex, err = ie.s.newConnExecutor(
 			ctx,
-			sd, sdMut,
+			sd, &sdMut,
 			stmtBuf,
 			clientComm,
 			ie.memMetrics,
-			&ie.s.InternalMetrics)
+			&ie.s.InternalMetrics,
+			dontResetSessionDataToDefaults,
+		)
 	} else {
 		ex, err = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sd, sdMut,
+			sd, &sdMut,
 			stmtBuf,
 			clientComm,
 			ie.mon,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			txn,
-			ie.tcModifier)
+			ie.tcModifier,
+			dontResetSessionDataToDefaults,
+		)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -214,7 +165,8 @@ func (ie *internalExecutorImpl) initConnEx(
 }
 
 // Query executes the supplied SQL statement and returns the resulting rows.
-// The statement is executed as the root user.
+// If no user has been previously set through SetSessionData, the statement is
+// executed as the root user.
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 func (ie *InternalExecutor) Query(
@@ -222,8 +174,26 @@ func (ie *InternalExecutor) Query(
 ) ([]tree.Datums, error) {
 	datums, _, err := ie.queryInternal(
 		ctx, opName, txn,
-		internalExecRootSession,
-		SessionArgs{},
+		ie.maybeRootSessionDataOverride(opName),
+		stmt, qargs...)
+	return datums, err
+}
+
+// QueryEx is like Query, but allows the caller to control specific fields from
+// the session data.
+// sessionData overrides the respective fields from any previously session data
+// set through SetSessionData().
+func (ie *InternalExecutor) QueryEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	sessionData sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	datums, _, err := ie.queryInternal(
+		ctx, opName, txn,
+		ie.ensureSessionDataOverride(opName, sessionData),
 		stmt, qargs...)
 	return datums, err
 }
@@ -231,25 +201,28 @@ func (ie *InternalExecutor) Query(
 // QueryWithCols is like Query, but it also returns the computed ResultColumns
 // of the input query.
 func (ie *InternalExecutor) QueryWithCols(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	return ie.queryInternal(
-		ctx, opName, txn,
-		internalExecRootSession,
-		SessionArgs{},
-		stmt, qargs...)
-}
-
-func (ie *internalExecutorImpl) queryInternal(
 	ctx context.Context,
 	opName string,
 	txn *client.Txn,
-	sessionMode internalExecSessionMode,
-	sargs SessionArgs,
+	o sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	res, err := ie.execInternal(ctx, opName, txn, sessionMode, sargs, stmt, qargs...)
+	return ie.queryInternal(
+		ctx, opName, txn,
+		ie.ensureSessionDataOverride(opName, o),
+		stmt, qargs...)
+}
+
+func (ie *InternalExecutor) queryInternal(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
+	res, err := ie.execInternal(ctx, opName, txn, sessionDataOverride, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -258,6 +231,8 @@ func (ie *internalExecutorImpl) queryInternal(
 
 // QueryWithUser is like Query, except it changes the username to that
 // specified.
+//
+// QueryWithUser is deprecated. Use QueryEx() instead.
 func (ie *InternalExecutor) QueryWithUser(
 	ctx context.Context,
 	opName string,
@@ -267,7 +242,7 @@ func (ie *InternalExecutor) QueryWithUser(
 	qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
 	return ie.queryInternal(ctx,
-		opName, txn, internalExecFixedUserSession, SessionArgs{User: userName}, stmt, qargs...)
+		opName, txn, sqlbase.InternalExecutorSessionDataOverride{User: userName}, stmt, qargs...)
 }
 
 // QueryRow is like Query, except it returns a single row, or nil if not row is
@@ -289,18 +264,26 @@ func (ie *InternalExecutor) QueryRow(
 	}
 }
 
-// Exec executes the supplied SQL statement. Statements are currently executed
-// as the root user with the system database as current database.
-//
-// If txn is not nil, the statement will be executed in the respective txn.
-//
-// Returns the number of rows affected.
+// Exec is like Query(), except it doesn't return the query results, just the
+// number of rows affected.
 func (ie *InternalExecutor) Exec(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) (int, error) {
-	res, err := ie.execInternal(
-		ctx, opName, txn, internalExecRootSession, SessionArgs{}, stmt, qargs...,
-	)
+	return ie.ExecEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+}
+
+// ExecEx is like Exec, but allows the caller to override some session data.
+func (ie *InternalExecutor) ExecEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	o sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	res, err := ie.execInternal(ctx, opName, txn,
+		ie.ensureSessionDataOverride(opName, o),
+		stmt, qargs...)
 	if err != nil {
 		return 0, err
 	}
@@ -309,6 +292,8 @@ func (ie *InternalExecutor) Exec(
 
 // ExecWithUser is like Exec, except it changes the username to that
 // specified.
+//
+// ExecWithUser is deprecated. Use ExecEx() instead.
 func (ie *InternalExecutor) ExecWithUser(
 	ctx context.Context,
 	opName string,
@@ -317,83 +302,8 @@ func (ie *InternalExecutor) ExecWithUser(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	res, err := ie.execInternal(ctx,
-		opName, txn, internalExecFixedUserSession, SessionArgs{User: userName}, stmt, qargs...)
-	if err != nil {
-		return 0, err
-	}
-	return res.rowsAffected, res.err
-}
-
-// Settings returns the cluster settings.
-func (ie *InternalExecutor) Settings() *cluster.Settings {
-	return ie.s.cfg.Settings
-}
-
-// Query executes the supplied SQL statement and returns the resulting rows.
-// The statement is executed as the root user.
-//
-// If txn is not nil, the statement will be executed in the respective txn.
-func (ie *SessionBoundInternalExecutor) Query(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-) ([]tree.Datums, error) {
-	rows, _, err := ie.impl.queryInternal(
-		ctx, opName, txn,
-		internalExecInheritSession,
-		SessionArgs{},
-		stmt, qargs...)
-	return rows, err
-}
-
-// QueryWithCols is like Query, but it also returns the computed ResultColumns
-// of the input query.
-func (ie *SessionBoundInternalExecutor) QueryWithCols(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	return ie.impl.queryInternal(
-		ctx, opName, txn,
-		internalExecInheritSession,
-		SessionArgs{},
-		stmt, qargs...)
-}
-
-// QueryRow is like Query, except it returns a single row, or nil if not row is
-// found, or an error if more that one row is returned.
-func (ie *SessionBoundInternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-) (tree.Datums, error) {
-	rows, _ /* cols */, err := ie.impl.queryInternal(
-		ctx, opName, txn,
-		internalExecInheritSession,
-		SessionArgs{},
-		stmt, qargs...)
-	if err != nil {
-		return nil, err
-	}
-	switch len(rows) {
-	case 0:
-		return nil, nil
-	case 1:
-		return rows[0], nil
-	default:
-		return nil, &tree.MultipleResultsError{SQL: stmt}
-	}
-}
-
-// Exec executes the supplied SQL statement.
-//
-// If txn is not nil, the statement will be executed in the respective txn.
-//
-// Returns the number of rows affected.
-func (ie *SessionBoundInternalExecutor) Exec(
-	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
-) (int, error) {
-	res, err := ie.impl.execInternal(
-		ctx, opName, txn,
-		internalExecInheritSession,
-		SessionArgs{},
-		stmt, qargs...,
-	)
+	res, err := ie.execInternal(
+		ctx, opName, txn, sqlbase.InternalExecutorSessionDataOverride{User: userName}, stmt, qargs...)
 	if err != nil {
 		return 0, err
 	}
@@ -407,64 +317,74 @@ type result struct {
 	err          error
 }
 
-type internalExecSessionMode int
+// applyOverrides overrides the respective fields from sd for all the fields set on o.
+func applyOverrides(o sqlbase.InternalExecutorSessionDataOverride, sd *sessiondata.SessionData) {
+	if o.User != "" {
+		sd.User = o.User
+	}
+	if o.Database != "" {
+		sd.Database = o.Database
+	}
+	if o.ApplicationName != "" {
+		sd.ApplicationName = o.ApplicationName
+	}
+}
 
-const (
-	// internalExecInheritSession will pick up the internalExecutor's
-	// existing sessionData.
-	internalExecInheritSession internalExecSessionMode = iota
-	// internalExecRootSession will create a new session from scratch
-	// with the root user, the system database as current database, an
-	// auto-generated internal application_name and all session defaults
-	// otherwise.
-	// This is equivalent to passing internalExecUseFixedUserSession with
-	// the result of newInternalSessionUserArgs(security.RootUser).
-	internalExecRootSession
-	// internalExecFixedUser will use the provided username in
-	// SessionArgs and reset everything else as per internalExecRootSession.
-	internalExecFixedUserSession
-)
+func (ie *InternalExecutor) maybeRootSessionDataOverride(
+	opName string,
+) sqlbase.InternalExecutorSessionDataOverride {
+	if ie.sessionData == nil {
+		return sqlbase.InternalExecutorSessionDataOverride{
+			User:            security.RootUser,
+			Database:        "system",
+			ApplicationName: sqlbase.InternalAppNamePrefix + "-" + opName,
+		}
+	}
+	o := sqlbase.InternalExecutorSessionDataOverride{}
+	if ie.sessionData.User == "" {
+		o.User = security.RootUser
+	}
+	if ie.sessionData.Database == "" {
+		o.Database = "system"
+	}
+	if ie.sessionData.ApplicationName == "" {
+		o.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+	}
+	return o
+}
+
+func (ie *InternalExecutor) ensureSessionDataOverride(
+	opName string, o sqlbase.InternalExecutorSessionDataOverride,
+) sqlbase.InternalExecutorSessionDataOverride {
+	o.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+	return o
+}
 
 // execInternal executes a statement.
 //
-// sargs, if not nil, is used to initialize the executor's session data. If nil,
-// then ie.sessionData must be set and it will be used (i.e. the executor must
-// be "session bound").
-func (ie *internalExecutorImpl) execInternal(
+// sessionDataOverride can be used to control select fields in the executor's
+// session data. It overrides what has been previously set through
+// SetSessionData(), if anything.
+func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
 	opName string,
 	txn *client.Txn,
-	sessionMode internalExecSessionMode,
-	sargs SessionArgs,
+	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
 ) (retRes result, retErr error) {
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
-	switch sessionMode {
-	case internalExecInheritSession, internalExecRootSession:
-		if sargs.isDefined() {
-			log.Fatalf(ctx, "programming error: session args provided with mode %d", sessionMode)
-		}
-		if sessionMode == internalExecRootSession {
-			sargs = SessionArgs{User: security.RootUser}
-		}
+	var sd *sessiondata.SessionData
+	if ie.sessionData != nil {
+		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
+		sdCopy := *ie.sessionData
+		sd = &sdCopy
+	} else {
+		sd = ie.s.newSessionData(SessionArgs{})
 	}
-
-	switch sessionMode {
-	case internalExecFixedUserSession:
-		if !sargs.isDefined() {
-			log.Fatal(ctx, "programming error: mode fixed user with undefined sargs")
-		}
-		// Clear all fields except user.
-		sargs = SessionArgs{User: sargs.User}
-		fallthrough
-	case internalExecRootSession:
-		sargs.SessionDefaults = map[string]string{
-			"database":         "system",
-			"application_name": sqlbase.InternalAppNamePrefix + "-" + opName,
-		}
-	}
+	applyOverrides(sessionDataOverride, sd)
+	sdMutator := ie.s.makeSessionDataMutator(sd, nil /* defaults */)
 
 	defer func() {
 		// We wrap errors with the opName, but not if they're retriable - in that
@@ -517,7 +437,7 @@ func (ie *internalExecutorImpl) execInternal(
 		}
 		resCh <- result{err: err}
 	}
-	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sargs, syncCallback, errCallback)
+	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sd, sdMutator, syncCallback, errCallback)
 	if err != nil {
 		return result{}, err
 	}

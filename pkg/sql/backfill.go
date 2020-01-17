@@ -1207,10 +1207,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// goroutines.
 			newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
 			// TODO(vivek): This is not a great API. Leaving #34304 open.
-			ie := newEvalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
-			ie.impl.tcModifier = tc
+			ie := newEvalCtx.InternalExecutor.(*InternalExecutor)
+			ie.tcModifier = tc
 			defer func() {
-				ie.impl.tcModifier = nil
+				ie.tcModifier = nil
 			}()
 
 			row, err := newEvalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
@@ -1501,7 +1501,7 @@ func validateCheckInTxn(
 	txn *client.Txn,
 	checkName string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		newTc := &TableCollection{
 			leaseMgr: leaseMgr,
@@ -1512,9 +1512,9 @@ func validateCheckInTxn(
 			return err
 		}
 
-		ie.impl.tcModifier = newTc
+		ie.tcModifier = newTc
 		defer func() {
-			ie.impl.tcModifier = nil
+			ie.tcModifier = nil
 		}()
 	}
 
@@ -1541,7 +1541,7 @@ func validateFkInTxn(
 	txn *client.Txn,
 	fkName string,
 ) error {
-	ie := evalCtx.InternalExecutor.(*SessionBoundInternalExecutor)
+	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
 		newTc := &TableCollection{
 			leaseMgr: leaseMgr,
@@ -1552,9 +1552,9 @@ func validateFkInTxn(
 			return err
 		}
 
-		ie.impl.tcModifier = newTc
+		ie.tcModifier = newTc
 		defer func() {
-			ie.impl.tcModifier = nil
+			ie.tcModifier = nil
 		}()
 	}
 

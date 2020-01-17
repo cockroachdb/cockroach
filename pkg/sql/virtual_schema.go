@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"runtime/debug"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -248,6 +249,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 			}
 		} else {
 			if !e.validWithNoDatabaseContext {
+				debug.PrintStack()
 				return nil, errInvalidDbPrefix
 			}
 		}
