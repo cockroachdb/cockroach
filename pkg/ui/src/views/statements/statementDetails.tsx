@@ -8,18 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Row, Tabs, Icon } from "antd";
-import d3 from "d3";
+import { Col, Icon, Row, Tabs } from "antd";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
-import { Params, RouterProps } from "react-router/lib/Router";
+import { InjectedRouter, Params } from "react-router/lib/Router";
 import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshStatements } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
+import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { combineStatementStats, ExecutionStatistics, flattenStatementStats, NumericStat, StatementStatistics, stdDev } from "src/util/appStats";
 import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
@@ -30,13 +29,12 @@ import { Pick } from "src/util/pick";
 import Loading from "src/views/shared/components/loading";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SqlBox } from "src/views/shared/components/sql/box";
-import { SummaryBar, SummaryHeadlineStat, computeValue } from "src/views/shared/components/summaryBar";
+import { computeValue } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
 import { SummaryCard } from "../shared/components/summaryCard";
 import { approximify, countBreakdown, latencyBreakdown, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
-import { routerActions } from "react-router-redux";
 
 const { TabPane } = Tabs;
 
@@ -74,9 +72,11 @@ interface StatementDetailsOwnProps {
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
+  nodesSummary: NodesSummary;
+  router: InjectedRouter;
 }
 
-type StatementDetailsProps = StatementDetailsOwnProps & RouterState & InjectedRouter;
+type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;
@@ -104,38 +104,26 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   };
 
   render() {
-    const tooltip = !this.props.description ? null : (
-        <div className="numeric-stats-table__tooltip">
-          <ToolTipWrapper text={this.props.description}>
-            <div className="numeric-stats-table__tooltip-hover-area">
-              <div className="numeric-stats-table__info-icon">i</div>
-            </div>
-          </ToolTipWrapper>
-        </div>
-      );
-
+    const { rows } = this.props;
     return (
-      <table className="numeric-stats-table">
+      <table className="sort-table statements-table">
         <thead>
-          <tr className="numeric-stats-table__row--header">
-            <th className="numeric-stats-table__cell">
-              { this.props.title }
-              { tooltip }
-            </th>
-            <th className="numeric-stats-table__cell">Mean {this.props.measure}</th>
-            <th className="numeric-stats-table__cell">Standard Deviation</th>
+          <tr className="sort-table__row sort-table__row--header">
+            <th className="sort-table__cell sort-table__cell--header">Phase</th>
+            <th className="sort-table__cell">Mean {this.props.measure}</th>
+            <th className="sort-table__cell">Standard Deviation</th>
           </tr>
         </thead>
-        <tbody style={{ textAlign: "right" }}>
+        <tbody>
           {
-            this.props.rows.map((row: NumericStatRow) => {
-              const classNames = "numeric-stats-table__row--body" +
-                (row.summary ? " numeric-stats-table__row--summary" : "");
+            rows.map((row: NumericStatRow) => {
+              const classNames = "sort-table__row sort-table__row--body" +
+                (row.summary ? " sort-table__row--summary" : "");
               return (
                 <tr className={classNames}>
-                  <th className="numeric-stats-table__cell" style={{ textAlign: "left" }}>{ row.name }</th>
-                  <td className="numeric-stats-table__cell">{ row.bar ? row.bar() : null }</td>
-                  <td className="numeric-stats-table__cell">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
+                  <th className="sort-table__cell sort-table__cell--header" style={{ textAlign: "left" }}>{ row.name }</th>
+                  <td className="sort-table__cell">{ row.bar ? row.bar() : null }</td>
+                  <td className="sort-table__cell sort-table__cell--active">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
                 </tr>
               );
             })
@@ -203,7 +191,6 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     if (!this.props.statement) {
       return null;
     }
-
     const { stats, statement, app, opt, failed, implicit_txn } = this.props.statement;
 
     if (!stats) {
@@ -234,9 +221,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
 
     const statsByNode = this.props.statement.byNode;
     const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
-
     const duration = (v: number) => Duration(v * 1e9);
-
     return (
       <Tabs defaultActiveKey="1" className="cockroach--tabs">
         <TabPane tab="Overview" key="1">
