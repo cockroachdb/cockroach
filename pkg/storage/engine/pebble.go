@@ -247,13 +247,14 @@ func DefaultPebbleOptions() *pebble.Options {
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
-		l.EnsureDefaults()
-		l.BlockSize = 32 << 10 // 32 KB
+		l.BlockSize = 32 << 10       // 32 KB
+		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
 		l.FilterType = pebble.TableFilter
 		if i > 0 {
 			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
 		}
+		l.EnsureDefaults()
 	}
 
 	// Do not create bloom filters for the last level (i.e. the largest level
