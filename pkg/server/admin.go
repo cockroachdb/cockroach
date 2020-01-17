@@ -1109,8 +1109,12 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.server.internalExecutor.ExecWithUser(
-			ctx, "admin-set-ui-data", nil /* txn */, userName, query, key, val)
+		rowsAffected, err := s.server.internalExecutor.ExecEx(
+			ctx, "admin-set-ui-data", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{
+				User: userName,
+			},
+			query, key, val)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
