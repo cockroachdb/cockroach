@@ -1221,12 +1221,12 @@ type AlterRolePrivileges struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ROLE ")
+	ctx.FormatNode(node.Name)
 	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
+		ctx.WriteString(" IF EXISTS ")
 	}
 	ctx.WriteString(" WITH ")
 	node.RolePrivileges.Format(&ctx.Buffer)
-	ctx.FormatNode(node.Name)
 }
 
 // CreateView represents a CREATE VIEW statement.
