@@ -42,31 +42,14 @@ func TestPost(t *testing.T) {
 		issueNumber = 30
 	)
 
-	for key, value := range map[string]string{
+	unset := setEnv(map[string]string{
 		teamcityVCSNumberEnv: sha,
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
 		tagsEnv:              envTags,
 		goFlagsEnv:           envGoFlags,
-	} {
-		if val, ok := os.LookupEnv(key); ok {
-			defer func() {
-				if err := os.Setenv(key, val); err != nil {
-					t.Error(err)
-				}
-			}()
-		} else {
-			defer func() {
-				if err := os.Unsetenv(key); err != nil {
-					t.Error(err)
-				}
-			}()
-		}
-
-		if err := os.Setenv(key, value); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
+	defer unset()
 
 	testCases := []struct {
 		name        string
@@ -267,5 +250,34 @@ func TestInvalidAssignee(t *testing.T) {
 	}
 	if !isInvalidAssignee(r) {
 		t.Fatalf("expected invalid assignee")
+	}
+}
+
+func setEnv(kv map[string]string) func() {
+	undo := map[string]*string{}
+	for key, value := range kv {
+		val, ok := os.LookupEnv(key)
+		if ok {
+			undo[key] = &val
+		} else {
+			undo[key] = nil
+		}
+
+		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
+	return func() {
+		for key, value := range undo {
+			if value != nil {
+				if err := os.Setenv(key, *value); err != nil {
+					panic(err)
+				}
+			} else {
+				if err := os.Unsetenv(key); err != nil {
+					panic(err)
+				}
+			}
+		}
 	}
 }
