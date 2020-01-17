@@ -3219,7 +3219,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			if c.N > 0 && c.N < uint(len(s)) {
 				s = s[:c.N]
 			}
-			return NewDCollatedString(s, c.Locale, &ctx.CollationEnv), nil
+			return NewDCollatedString(s, c.Locale, &ctx.CollationEnv)
 		case *coltypes.TName:
 			return NewDName(s), nil
 		}
@@ -3552,9 +3552,9 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	switch d := unwrapped.(type) {
 	case *DString:
-		return NewDCollatedString(string(*d), expr.Locale, &ctx.CollationEnv), nil
+		return NewDCollatedString(string(*d), expr.Locale, &ctx.CollationEnv)
 	case *DCollatedString:
-		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv), nil
+		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv)
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
 	}

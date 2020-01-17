@@ -331,7 +331,8 @@ func DecodeTableKey(
 			if err != nil {
 				return nil, nil, err
 			}
-			return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
+			d, err := tree.NewDCollatedString(r, t.Locale, &a.env)
+			return d, rkey, err
 		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
@@ -533,7 +534,11 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			}, rest, nil
 		case types.TCollatedString:
 			b, data, err := encoding.DecodeUntaggedBytesValue(buf)
-			return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+			if err != nil {
+				return nil, b, err
+			}
+			d, err := tree.NewDCollatedString(string(data), typ.Locale, &a.env)
+			return d, b, err
 		case types.TArray:
 			return decodeArray(a, typ.Typ, buf)
 		case types.TTuple:
@@ -794,7 +799,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 		if err != nil {
 			return nil, err
 		}
-		return tree.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
+		return tree.NewDCollatedString(string(v), *typ.Locale, &a.env)
 	case ColumnType_UUID:
 		v, err := value.GetBytes()
 		if err != nil {
