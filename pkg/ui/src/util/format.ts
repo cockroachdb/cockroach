@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 export const kibi = 1024;
-const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
-const durationUnits: string[] = ["ns", "µs", "ms", "s"];
+export const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
 
 interface UnitValue {
   value: number;
@@ -81,6 +81,18 @@ export function BytesWithPrecision(bytes: number, precision: number): string {
 }
 
 /**
+ * Cast bytes to provided scale units
+ */
+// tslint:disable-next-line: variable-name
+export const BytesFitScale = (scale: string) => ( bytes: number) => {
+  if (!bytes) {
+    return `0.00 ${scale}`;
+  }
+  const n = byteUnits.indexOf(scale);
+  return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
+};
+
+/**
  * Percentage creates a string representation of a fraction as a percentage.
  */
 export function Percentage(numerator: number, denominator: number): string {
@@ -112,3 +124,15 @@ export function Duration(nanoseconds: number): string {
   const unitVal = nanoseconds / scale.value;
   return unitVal.toFixed(1) + " " + scale.units;
 }
+
+/**
+ * Cast nanonseconds to provided scale units
+ */
+// tslint:disable-next-line: variable-name
+export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
+  if (!nanoseconds) {
+    return `0.00 ${scale}`;
+  }
+  const n = durationUnits.indexOf(scale) ;
+  return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+};

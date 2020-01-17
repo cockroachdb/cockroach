@@ -16,7 +16,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
+import {  DurationFitScale, BytesFitScale, ComputeByteScale, ComputeDurationScale} from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -172,7 +172,7 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
 
   axisDomain.label = scale.units;
 
-  axisDomain.guideFormat = Bytes;
+  axisDomain.guideFormat = BytesFitScale(scale.units);
   return axisDomain;
 }
 
@@ -184,7 +184,7 @@ function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
 
   axisDomain.label = scale.units;
 
-  axisDomain.guideFormat = Duration;
+  axisDomain.guideFormat = DurationFitScale(scale.units);
   return axisDomain;
 }
 
