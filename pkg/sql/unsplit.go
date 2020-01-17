@@ -124,7 +124,8 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		indexName = n.index.Name
 	}
 	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.Query(
-		params.ctx, "split points query", params.p.txn, statement,
+		params.ctx, "split points query", params.p.txn,
+		statement,
 		dbDesc.Name,
 		n.tableDesc.Name,
 		indexName,
