@@ -200,34 +200,34 @@ func (r *Registry) makeJobID() int64 {
 // job will be started with (canceling ctx will not cause the job to cancel).
 func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
-) (<-chan error, error) {
+) (*Job, <-chan error, error) {
 	j := r.NewJob(record)
-	id := r.makeJobID()
 	resumer, err := r.createResumer(j, r.settings)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	resumeCtx, cancel := r.makeCtx()
 	// Grab the lock on resuming the job before we insert it in the jobs table so
 	// that it cannot be resumed by another routine.
-	if err := r.register(*j.ID(), cancel); err != nil {
+	id := r.makeJobID()
+	if err := r.register(id, cancel); err != nil {
 		// We just created the id for the job, it could not be registered already.
-		return nil, err
+		return nil, nil, err
 	}
 	if err := j.insert(ctx, id, r.newLease()); err != nil {
 		r.unregister(*j.ID())
-		return nil, err
+		return nil, nil, err
 	}
 	if err := j.Started(ctx); err != nil {
 		r.unregister(*j.ID())
-		return nil, err
+		return nil, nil, err
 	}
 	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
 	if err != nil {
 		r.unregister(*j.ID())
-		return nil, err
+		return nil, nil, err
 	}
-	return errCh, err
+	return j, errCh, err
 }
 
 // Run starts previously unstarted jobs from a list of scheduled
@@ -906,17 +906,18 @@ func (r *Registry) cancelAll(ctx context.Context) {
 // only one function can cross and try to resume the job.
 func (r *Registry) register(jobID int64, cancel func()) error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	// We need to prevent different routines trying to adopt and resume the job.
 	if _, alreadyRegistered := r.mu.jobs[jobID]; alreadyRegistered {
 		return errors.Errorf("job %d: already registered", jobID)
 	}
 	r.mu.jobs[jobID] = cancel
-	r.mu.Unlock()
 	return nil
 }
 
 func (r *Registry) unregister(jobID int64) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	cancel, ok := r.mu.jobs[jobID]
 	// It is possible for a job to be double unregistered. unregister is always
 	// called at the end of resume. But it can also be called during cancelAll
@@ -925,5 +926,4 @@ func (r *Registry) unregister(jobID int64) {
 		cancel()
 		delete(r.mu.jobs, jobID)
 	}
-	r.mu.Unlock()
 }
