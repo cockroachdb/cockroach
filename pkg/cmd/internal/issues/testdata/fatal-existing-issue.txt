@@ -17,12 +17,14 @@ Stack:
 ```
 goroutine 12 [running]:
   doing something
+
 ```
 
 <details><summary>Log preceding fatal error</summary><p>
 
 ```
 logging something
+
 ```
 
 </p></details>
@@ -36,6 +38,8 @@ Parameters:
 ```
 make stressrace TESTS=TestGossipHandlesReplacedNode PKG=./pkg/storage TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
 ```
+
+[roachdash](https://roachdash.crdb.dev/?filter=status%3Aopen+t%3A.%2ATestGossipHandlesReplacedNode.%2A&sort=title&restgroup=false&display=lastcommented+project)
 
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 

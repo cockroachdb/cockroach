@@ -70,16 +70,19 @@ Fatal error:
 
 Stack:
 {{threeticks}}
-{{ $fop.FirstStack}}{{threeticks}}
+{{ $fop.FirstStack }}
+{{threeticks}}
 
 <details><summary>Log preceding fatal error</summary><p>
 
 {{threeticks}}
-{{ $fop.LastLines }}{{threeticks}}
+{{ $fop.LastLines }}
+{{threeticks}}
 
 </p></details>{{end}}{{ else -}}
 {{threeticks}}
-{{ .CondensedMessage.Digest 50 -}}{{ threeticks }}{{end}}
+{{ .CondensedMessage.Digest 50 }}
+{{ threeticks }}{{end}}
 
 <details><summary>Repro</summary><p>
 {{if .Parameters -}}
@@ -88,10 +91,14 @@ Parameters:
 - {{ . }}{{end}}{{end}}
 
 {{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
-{{end -}}
+{{else -}}
 {{threeticks}}
 make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1
 {{threeticks}}
+
+{{end -}}
+
+[roachdash](https://roachdash.crdb.dev/?filter={{urlquery "status:open t:.*" .TestName ".*" }}&sort=title&restgroup=false&display=lastcommented+project)
 
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 `
