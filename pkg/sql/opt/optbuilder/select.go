@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -121,7 +122,7 @@ func (b *Builder) buildDataSource(
 		return b.buildZip(source.Items, inScope)
 
 	case *tree.Subquery:
-		outScope = b.buildStmt(source.Select, nil /* desiredTypes */, inScope)
+		outScope = b.buildSelectStmt(source.Select, nil /* desiredTypes */, inScope)
 
 		// Treat the subquery result as an anonymous data source (i.e. column names
 		// are not qualified). Remove hidden columns, as they are not accessible
@@ -256,7 +257,7 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildStmt(sel, nil /* desiredTypes */, &scope{builder: b})
+	outScope = b.buildSelect(sel, nil /* desiredTypes */, &scope{builder: b})
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
@@ -716,7 +717,7 @@ func (b *Builder) buildSelectStmt(
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
-		return b.buildStmt(stmt.Select, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, desiredTypes, inScope)
 
 	case *tree.SelectClause:
 		return b.buildSelectClause(stmt, nil /* orderBy */, nil /* locking */, desiredTypes, inScope)
@@ -732,17 +733,6 @@ func (b *Builder) buildSelectStmt(
 	}
 }
 
-func (b *Builder) processWiths(
-	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
-) *scope {
-	inScope = b.buildCTEs(with, inScope)
-	prevAtRoot := inScope.atRoot
-	inScope.atRoot = false
-	outScope := buildStmt(inScope)
-	inScope.atRoot = prevAtRoot
-	return outScope
-}
-
 // buildSelect builds a set of memo groups that represent the given select
 // expression.
 //
@@ -752,6 +742,7 @@ func (b *Builder) buildSelect(
 	stmt *tree.Select, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	wrapped := stmt.Select
+	with := stmt.With
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
 	locking := stmt.Locking
@@ -759,6 +750,17 @@ func (b *Builder) buildSelect(
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
 		wrapped = stmt.Select
+		if stmt.With != nil {
+			if with != nil {
+				// (WITH ... (WITH ...))
+				// Currently we are unable to nest the scopes inside ParenSelect so we
+				// must refuse the syntax so that the query does not get invalid results.
+				panic(unimplemented.NewWithIssue(
+					24303, "multiple WITH clauses in parentheses",
+				))
+			}
+			with = s.Select.With
+		}
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
 				panic(pgerror.Newf(
@@ -780,8 +782,33 @@ func (b *Builder) buildSelect(
 		}
 	}
 
+	return b.processWiths(with, inScope, func(inScope *scope) *scope {
+		return b.buildSelectStmtWithoutParens(
+			wrapped, orderBy, limit, locking, desiredTypes, inScope,
+		)
+	})
+}
+
+// buildSelectStmtWithoutParens builds a set of memo groups that represent
+// the given select statement components. The wrapped select statement can
+// be any variant except ParenSelect, which should be unwrapped by callers.
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildSelectStmtWithoutParens(
+	wrapped tree.SelectStatement,
+	orderBy tree.OrderBy,
+	limit *tree.Limit,
+	locking []*tree.LockingItem,
+	desiredTypes []*types.T,
+	inScope *scope,
+) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
-	switch t := stmt.Select.(type) {
+	switch t := wrapped.(type) {
+	case *tree.ParenSelect:
+		panic(errors.AssertionFailedf(
+			"%T in buildSelectStmtWithoutParens", wrapped))
+
 	case *tree.SelectClause:
 		outScope = b.buildSelectClause(t, orderBy, locking, desiredTypes, inScope)
 
@@ -795,7 +822,7 @@ func (b *Builder) buildSelect(
 
 	default:
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"unknown select statement: %T", stmt.Select))
+			"unknown select statement: %T", wrapped))
 	}
 
 	if outScope.ordering.Empty() && orderBy != nil {
@@ -831,7 +858,7 @@ func (b *Builder) buildSelect(
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause,
 	orderBy tree.OrderBy,
-	locking tree.LockingClause,
+	locking []*tree.LockingItem,
 	desiredTypes []*types.T,
 	inScope *scope,
 ) (outScope *scope) {
@@ -1091,7 +1118,7 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 // select and an incompatible operation is in use, a locking error is raised.
 // The method also validates that only supported locking modes are used.
 func (b *Builder) validateLockingForSelectClause(
-	sel *tree.SelectClause, locking tree.LockingClause, scope *scope,
+	sel *tree.SelectClause, locking []*tree.LockingItem, scope *scope,
 ) {
 	if len(locking) == 0 {
 		return
@@ -1151,7 +1178,7 @@ func (b *Builder) validateLockingForSelectClause(
 }
 
 // rejectIfLocking raises a locking error if a locking clause was specified.
-func (b *Builder) rejectIfLocking(locking tree.LockingClause, context string) {
+func (b *Builder) rejectIfLocking(locking []*tree.LockingItem, context string) {
 	if len(locking) == 0 {
 		return
 	}
