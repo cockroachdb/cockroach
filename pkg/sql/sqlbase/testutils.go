@@ -182,7 +182,11 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 			}
 			buf.WriteRune(r)
 		}
-		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
+		d, err := tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
+		if err != nil {
+			panic(err)
+		}
+		return d
 	case ColumnType_NAME:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
