@@ -720,8 +720,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	q := fmt.Sprintf(
 		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
 		sqlbase.DeprecatedNamespaceTable.ID)
-	rows, _, err := r.sqlExecutor.QueryWithUser(
-		ctx, "read-deprecated-namespace-table", nil /* txn */, security.NodeUser, q)
+	rows, err := r.sqlExecutor.Query(ctx, "read-deprecated-namespace-table", nil /* txn */, q)
 	if err != nil {
 		return err
 	}
