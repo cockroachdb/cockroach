@@ -1813,7 +1813,11 @@ func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) op
 		panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
 	}
 
-	return c.f.ConstructConst(tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv))
+	d, err := tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv)
+	if err != nil {
+		panic(err)
+	}
+	return c.f.ConstructConst(d)
 }
 
 // MakeUnorderedSubquery returns a SubqueryPrivate that specifies no ordering.

@@ -318,7 +318,8 @@ func DecodeTableKey(
 		if err != nil {
 			return nil, nil, err
 		}
-		return tree.NewDCollatedString(r, valType.Locale(), &a.env), rkey, err
+		d, err := tree.NewDCollatedString(r, valType.Locale(), &a.env)
+		return d, rkey, err
 	case types.JsonFamily:
 		return tree.DNull, []byte{}, nil
 	case types.BytesFamily:
@@ -527,7 +528,11 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		return a.NewDString(tree.DString(data)), b, nil
 	case types.CollatedStringFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
-		return tree.NewDCollatedString(string(data), t.Locale(), &a.env), b, err
+		if err != nil {
+			return nil, b, err
+		}
+		d, err := tree.NewDCollatedString(string(data), t.Locale(), &a.env)
+		return d, b, err
 	case types.BitFamily:
 		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
 		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
@@ -880,7 +885,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return tree.NewDCollatedString(string(v), typ.Locale(), &a.env), nil
+		return tree.NewDCollatedString(string(v), typ.Locale(), &a.env)
 	case types.UuidFamily:
 		v, err := value.GetBytes()
 		if err != nil {
