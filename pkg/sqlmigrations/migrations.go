@@ -754,7 +754,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	rows, err := r.sqlExecutor.QueryEx(
 		ctx, "read-deprecated-namespace-table", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{
-			User: security.NodeUser,
+			User: security.RootUser,
 		},
 		q)
 	if err != nil {
