@@ -744,13 +744,15 @@ func (r *testRunner) runTest(
 		}
 	}
 
-	// Detect replica divergence (i.e. ranges in which replicas have arrived
-	// at the same log position with different states).
-	c.FailOnReplicaDivergence(ctx, t)
-	// Detect dead nodes in an inner defer. Note that this will call
-	// t.printfAndFail() when appropriate, which will cause the code below to
-	// enter the t.Failed() branch.
-	c.FailOnDeadNodes(ctx, t)
+	if !t.Failed() {
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		c.FailOnReplicaDivergence(ctx, t)
+		// Detect dead nodes in an inner defer. Note that this will call
+		// t.printfAndFail() when appropriate, which will cause the code below to
+		// enter the t.Failed() branch.
+		c.FailOnDeadNodes(ctx, t)
+	}
 
 	if t.Failed() {
 		r.collectClusterLogs(ctx, c, t.l)
@@ -768,11 +770,8 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	if err := c.FetchLogs(ctx); err != nil {
-		l.Printf("failed to download logs: %s", err)
-	}
 	l.PrintfCtx(ctx, "collecting cluster logs")
-	if err := c.FetchDebugZip(ctx); err != nil {
+	if err := c.FetchLogs(ctx); err != nil {
 		l.Printf("failed to download logs: %s", err)
 	}
 	if err := c.FetchDmesg(ctx); err != nil {
@@ -786,6 +785,9 @@ func (r *testRunner) collectClusterLogs(ctx context.Context, c *cluster, l *logg
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
 		l.Printf("failed to copy roachprod state: %s", err)
+	}
+	if err := c.FetchDebugZip(ctx); err != nil {
+		l.Printf("failed to collect zip: %s", err)
 	}
 }
 
