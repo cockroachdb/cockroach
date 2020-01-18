@@ -20,6 +20,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func (b *Builder) processWiths(
+	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
+) *scope {
+	inScope = b.buildCTEs(with, inScope)
+	prevAtRoot := inScope.atRoot
+	inScope.atRoot = false
+	outScope := buildStmt(inScope)
+	inScope.atRoot = prevAtRoot
+	return outScope
+}
+
 func (b *Builder) buildCTE(
 	cte *tree.CTE, inScope *scope, isRecursive bool,
 ) (memo.RelExpr, physical.Presentation) {
