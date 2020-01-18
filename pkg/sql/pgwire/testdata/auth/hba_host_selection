@@ -11,8 +11,8 @@ set_hba
 host all all 0.0.0.0/32 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER ADDRESS    METHOD OPTIONS
-host   all      root all        cert
+# TYPE DATABASE USER ADDRESS    METHOD        OPTIONS
+host   all      root all        cert-password
 host   all      all  0.0.0.0/32 cert
 
 connect user=testuser
@@ -41,8 +41,8 @@ set_hba
 host all all 127.0.0.0/8 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER ADDRESS     METHOD OPTIONS
-host   all      root all         cert
+# TYPE DATABASE USER ADDRESS     METHOD        OPTIONS
+host   all      root all         cert-password
 host   all      all  127.0.0.0/8 cert
 
 connect user=testuser

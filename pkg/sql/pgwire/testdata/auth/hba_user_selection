@@ -22,8 +22,8 @@ set_hba
 host all root 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER ADDRESS   METHOD OPTIONS
-host   all      root all       cert
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
 host   all      root 0.0.0.0/0 cert
 
 connect user=root
@@ -51,8 +51,8 @@ set_hba
 host all testuser 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER     ADDRESS   METHOD OPTIONS
-host   all      root     all       cert
+# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
+host   all      root     all       cert-password
 host   all      testuser 0.0.0.0/0 cert
 
 connect user=testuser
@@ -78,8 +78,8 @@ set_hba
 host all "a","b","testuser" 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER       ADDRESS   METHOD OPTIONS
-host   all      root       all       cert
+# TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
+host   all      root       all       cert-password
 host   all      "a"        0.0.0.0/0 cert
 host   all      "b"        0.0.0.0/0 cert
 host   all      "testuser" 0.0.0.0/0 cert
@@ -98,7 +98,7 @@ host all passworduser 0.0.0.0/0 cert-password
 ----
 # Active authentication configuration on this node:
 # TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
-host   all      root         all       cert
+host   all      root         all       cert-password
 host   all      testuser     0.0.0.0/0 cert
 host   all      passworduser 0.0.0.0/0 cert-password
 
@@ -126,7 +126,7 @@ host all testuser,passworduser 0.0.0.0/0 cert-password
 ----
 # Active authentication configuration on this node:
 # TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
-host   all      root         all       cert
+host   all      root         all       cert-password
 host   all      testuser     0.0.0.0/0 cert-password
 host   all      passworduser 0.0.0.0/0 cert-password
 
@@ -161,8 +161,8 @@ host all testuser,all 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER         ADDRESS   METHOD   OPTIONS
-host   all      root         all       cert
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
 host   all      all          0.0.0.0/0 cert
 host   all      passworduser 0.0.0.0/0 password
 
@@ -183,8 +183,8 @@ host all testuser,"all" 0.0.0.0/0 cert
 host all passworduser 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER         ADDRESS   METHOD   OPTIONS
-host   all      root         all       cert
+# TYPE DATABASE USER         ADDRESS   METHOD        OPTIONS
+host   all      root         all       cert-password
 host   all      testuser     0.0.0.0/0 cert
 host   all      "all"        0.0.0.0/0 cert
 host   all      passworduser 0.0.0.0/0 password

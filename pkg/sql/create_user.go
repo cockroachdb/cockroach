@@ -75,7 +75,15 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	}
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
-		return errors.New("cluster in insecure mode; user cannot use password authentication")
+		// We disallow setting a non-empty password in insecure mode
+		// because insecure means an observer may have MITM'ed the change
+		// and learned the password.
+		//
+		// It's valid to clear the password (WITH PASSWORD NULL) however
+		// since that forces cert auth when moving back to secure mode,
+		// and certs can't be MITM'ed over the insecure SQL connection.
+		return pgerror.New(pgcode.InvalidPassword,
+			"setting or updating a password is not supported in insecure mode")
 	}
 
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.

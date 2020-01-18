@@ -58,13 +58,6 @@ send "\\q\r"
 eexpect $prompt
 end_test
 
-start_test "Check that root cannot use password."
-# Run as root but with a non-existent certs directory.
-send "$argv sql --url='postgresql://root@localhost:26257?sslmode=verify-full&sslrootcert=$certs_dir/ca.crt'\r"
-eexpect "ERROR: connections with user root must use a client certificate"
-eexpect "Failed running \"sql\""
-end_test
-
 start_test "Check that CREATE USER WITH PASSWORD can be used from transactions."
 # Create a user from a transaction.
 send "$argv sql --certs-dir=$certs_dir\r"

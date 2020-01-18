@@ -19,8 +19,8 @@ set_hba
 host all root 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
-# TYPE DATABASE USER ADDRESS   METHOD OPTIONS
-host   all      root all       cert
+# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
+host   all      root all       cert-password
 host   all      root 0.0.0.0/0 cert
 
 connect user=root sslmode=disable
