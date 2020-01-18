@@ -246,7 +246,7 @@ var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "cert"},
+	Method:   hba.String{Value: "cert-password"},
 }
 
 // DefaultHBAConfig is used when the stored HBA configuration string

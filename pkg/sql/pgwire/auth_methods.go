@@ -12,6 +12,7 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 
@@ -64,17 +65,23 @@ func loadDefaultMethods() {
 
 // AuthMethod defines a method for authentication of a connection.
 type AuthMethod func(
+	ctx context.Context,
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	hashedPassword []byte,
+	pwRetrieveFn PasswordRetrievalFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error)
 
+// PasswordRetrievalFn defines a method to retrieve the hashed
+// password for the user logging in.
+type PasswordRetrievalFn = func(context.Context) ([]byte, error)
+
 func authPassword(
+	ctx context.Context,
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	hashedPassword []byte,
+	pwRetrieveFn PasswordRetrievalFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
@@ -89,6 +96,11 @@ func authPassword(
 	if err != nil {
 		return nil, err
 	}
+	hashedPassword, err := pwRetrieveFn(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return security.UserAuthPasswordHook(
 		false /*insecure*/, password, hashedPassword,
 	), nil
@@ -103,9 +115,10 @@ func passwordString(pwdData []byte) (string, error) {
 }
 
 func authCert(
+	_ context.Context,
 	_ AuthConn,
 	tlsState tls.ConnectionState,
-	hashedPassword []byte,
+	pwRetrieveFn PasswordRetrievalFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
@@ -120,9 +133,10 @@ func authCert(
 }
 
 func authCertPassword(
+	ctx context.Context,
 	c AuthConn,
 	tlsState tls.ConnectionState,
-	hashedPassword []byte,
+	pwRetrieveFn PasswordRetrievalFn,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 ) (security.UserAuthHook, error) {
@@ -132,17 +146,27 @@ func authCertPassword(
 	} else {
 		fn = authCert
 	}
-	return fn(c, tlsState, hashedPassword, execCfg, entry)
+	return fn(ctx, c, tlsState, pwRetrieveFn, execCfg, entry)
 }
 
 func authTrust(
-	_ AuthConn, _ tls.ConnectionState, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+	_ context.Context,
+	_ AuthConn,
+	_ tls.ConnectionState,
+	_ PasswordRetrievalFn,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	return func(_ string, _ bool) error { return nil }, nil
 }
 
 func authReject(
-	_ AuthConn, _ tls.ConnectionState, _ []byte, _ *sql.ExecutorConfig, _ *hba.Entry,
+	_ context.Context,
+	_ AuthConn,
+	_ tls.ConnectionState,
+	_ PasswordRetrievalFn,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
 ) (security.UserAuthHook, error) {
 	return func(_ string, _ bool) error {
 		return errors.New("authentication rejected by configuration")

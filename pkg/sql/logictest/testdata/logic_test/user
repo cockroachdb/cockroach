@@ -121,9 +121,6 @@ testuser
 
 user root
 
-statement error pq: user root cannot use password authentication
-ALTER USER root WITH PASSWORD 'foo'
-
 statement ok
 SET SESSION AUTHORIZATION DEFAULT
 
