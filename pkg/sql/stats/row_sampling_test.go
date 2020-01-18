@@ -108,9 +108,15 @@ func TestTruncateDatum(t *testing.T) {
 	expected3 := tree.DString("Hello 世")
 	runTest(&original3, &expected3)
 
-	original4 := tree.NewDCollatedString(`IT was lovely summer weather in the country, and the golden
+	original4, err := tree.NewDCollatedString(`IT was lovely summer weather in the country, and the golden
 corn, the green oats, and the haystacks piled up in the meadows looked beautiful`,
 		"en_US", &tree.CollationEnvironment{})
-	expected4 := tree.NewDCollatedString("IT was lov", "en_US", &tree.CollationEnvironment{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected4, err := tree.NewDCollatedString("IT was lov", "en_US", &tree.CollationEnvironment{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	runTest(original4, expected4)
 }
