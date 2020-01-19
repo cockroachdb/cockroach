@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -202,49 +202,32 @@ func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
 	j := r.NewJob(record)
-	errCh, err := r.StartJob(ctx, resultsCh, j)
-	return j, errCh, err
-}
-
-// StartJob starts a previously unstarted job. The job may already have been
-// created but must not have ever been started. The ctx passed to this function
-// is not the context the job will be started with (canceling ctx will not
-// cause the job to cancel).
-func (r *Registry) StartJob(
-	ctx context.Context, resultsCh chan<- tree.Datums, j *Job,
-) (<-chan error, error) {
 	resumer, err := r.createResumer(j, r.settings)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	// NB: We create the job here rather than in CreateAndStartJob because
-	// we want to verify that we can create the resumer before we write the
-	// record.
-	if j.ID() == nil {
-		// In the case where we're creating a new job, we create the job
-		// with a known ID, rather than relying on the column's DEFAULT
-		// unique_rowid(), to avoid a race condition where the job exists
-		// in the jobs table but is not yet present in our registry, which
-		// would allow another node to adopt it.
-		id := r.makeJobID()
-		if err := j.insert(ctx, id, r.newLease()); err != nil {
-			return nil, err
-		}
-	}
-
 	resumeCtx, cancel := r.makeCtx()
-	r.register(*j.ID(), cancel)
-
+	// Grab the lock on resuming the job before we insert it in the jobs table so
+	// that it cannot be resumed by another routine.
+	id := r.makeJobID()
+	if err := r.register(id, cancel); err != nil {
+		// We just created the id for the job, it could not be registered already.
+		return nil, nil, err
+	}
+	if err := j.insert(ctx, id, r.newLease()); err != nil {
+		r.unregister(*j.ID())
+		return nil, nil, err
+	}
 	if err := j.Started(ctx); err != nil {
 		r.unregister(*j.ID())
-		return nil, err
+		return nil, nil, err
 	}
 	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
 	if err != nil {
-		return nil, err
+		r.unregister(*j.ID())
+		return nil, nil, err
 	}
-	return errCh, nil
+	return j, errCh, err
 }
 
 // Run starts previously unstarted jobs from a list of scheduled
@@ -641,17 +624,93 @@ func (r retryJobError) Error() string {
 	return string(r)
 }
 
+// stepThroughStateMachine implements the state machine of the job lifecycle.
+// The job is executed with the ctx, so ctx must only be canceled if the job
+// should also be canceled. resultsCh is passed to the resumable func and should
+// be closed by the caller after errCh sends a value. errCh returns an error if
+// the job was not completed with success. status is the current job status.
+func (r *Registry) stepThroughStateMachine(
+	ctx context.Context,
+	phs interface{},
+	resumer Resumer,
+	resultsCh chan<- tree.Datums,
+	job *Job,
+	status Status,
+	jobErr error,
+) error {
+	log.Infof(ctx, "job %d: stepping through state %s", *job.ID(), status)
+	switch status {
+	case StatusRunning:
+		if jobErr != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"unexpected error provided for a running job")
+		}
+		err := resumer.Resume(ctx, phs, resultsCh)
+		if err == nil {
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusSucceeded, nil)
+		}
+		if ctx.Err() != nil {
+			// The context was canceled. Tell the user, but don't attempt to
+			// mark the job as failed because it can be resumed by another node.
+			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
+		}
+		// TODO(spaskob): enforce a limit on retries.
+		if e, ok := err.(retryJobError); ok {
+			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
+		}
+		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, err.status, err)
+		}
+		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, err)
+	case StatusPaused:
+		return errors.Errorf("job %s", status)
+	case StatusCanceled:
+		resumer.OnTerminal(ctx, status, resultsCh)
+		return errors.Errorf("job %s", status)
+	case StatusSucceeded:
+		if jobErr != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"job %d: successful bu unexpected error provided", *job.ID())
+		}
+		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
+			// If it didn't succeed, mark it failed.
+			// TODO(spaskob): this is silly, we should remove the OnSuccess
+			// hooks and execute them in resume so that the client can handle
+			// these errors better.
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed,
+				errors.Wrapf(err, "job %d: could not mark as succeeded", *job.ID()))
+		}
+		resumer.OnTerminal(ctx, status, resultsCh)
+		return nil
+	case StatusFailed:
+		if jobErr == nil {
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"job %d: has StatusFailed but no error was provided", *job.ID())
+		}
+		if err := job.Failed(ctx, jobErr, resumer.OnFailOrCancel); err != nil {
+			// If we can't transactionally mark the job as failed then it will
+			// be restarted during the next adopt loop and retried.
+			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)
+		}
+		resumer.OnTerminal(ctx, status, resultsCh)
+		return jobErr
+	default:
+		return errors.AssertionFailedf("job %d: has unsupported status %s", *job.ID(), status)
+	}
+}
+
 // resume starts or resumes a job. If no error is returned then the job was
 // asynchronously executed. The job is executed with the ctx, so ctx must
 // only by canceled if the job should also be canceled. resultsCh is passed
 // to the resumable func and should be closed by the caller after errCh sends
-// a value. errCh returns an error if the job was not completed with success.
+// a value.
 func (r *Registry) resume(
 	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
 ) (<-chan error, error) {
 	errCh := make(chan error, 1)
 	taskName := fmt.Sprintf(`job-%d`, *job.ID())
 	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
+		// Bookkeeping.
 		payload := job.Payload()
 		phs, cleanup := r.planFn("resume-"+taskName, payload.Username)
 		defer cleanup()
@@ -659,49 +718,14 @@ func (r *Registry) resume(
 		var span opentracing.Span
 		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 		defer span.Finish()
-		resumeErr := resumer.Resume(ctx, phs, resultsCh)
-		if resumeErr != nil && ctx.Err() != nil {
-			// The context was canceled. Tell the user, but don't attempt to mark the
-			// job as failed because it can be resumed by another node.
-			resumeErr = NewRetryJobError("node liveness error")
-		}
-		if e, ok := resumeErr.(retryJobError); ok {
-			r.unregister(*job.id)
-			errCh <- errors.Errorf("job %d: %s: restarting in background", *job.id, e)
-			return
-		}
-		var status Status
-		defer r.unregister(*job.id)
-		if err, ok := errors.Cause(resumeErr).(*InvalidStatusError); ok &&
-			(err.status == StatusPaused || err.status == StatusCanceled) {
-			// If we couldn't operate on the job because it was paused or canceled, send
-			// the more understandable "job paused" or "job canceled" error message to
-			// the user.
-			resumeErr = errors.Errorf("job %s", err.status)
-			status = err.status
-		} else {
-			// Attempt to mark the job as succeeded.
-			if resumeErr == nil {
-				status = StatusSucceeded
-				if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
-					// If it didn't succeed, mark it failed.
-					resumeErr = errors.Wrapf(err, "could not mark job %d as succeeded", *job.id)
-				}
-			}
-			if resumeErr != nil {
-				status = StatusFailed
-				if err := job.Failed(ctx, resumeErr, resumer.OnFailOrCancel); err != nil {
-					// If we can't transactionally mark the job as failed then it will be
-					// restarted during the next adopt loop and retried.
-					resumeErr = errors.Wrapf(err, "could not mark job %d as failed: %s", *job.id, resumeErr)
-				}
-			}
-		}
 
-		if job.CheckTerminalStatus(ctx) {
-			resumer.OnTerminal(ctx, status, resultsCh)
+		// Run the actual job.
+		status, err := job.CurrentStatus(ctx)
+		if err == nil {
+			err = r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, status, nil)
 		}
-		errCh <- resumeErr
+		r.unregister(*job.ID())
+		errCh <- err
 	}); err != nil {
 		return nil, err
 	}
@@ -743,12 +767,15 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 			if liveness.NodeID == r.nodeID.Get() {
 				if !liveness.IsLive(r.clock.Now().GoTime()) {
 					return errors.Errorf(
-						"trying to adopt jobs on node %d which is not live", liveness.NodeID)
+						"trying to adopt jobs on node %d which is not live", r.nodeID.Get())
 				}
 			}
 		}
 	}
 
+	if log.V(3) {
+		log.Infof(ctx, "evaluating %d jobs for adoption", len(rows))
+	}
 	for _, row := range rows {
 		id := (*int64)(row[0].(*tree.DInt))
 
@@ -774,6 +801,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		// has been upgraded to 2.1 then we know nothing is running the job and it
 		// can be safely failed.
 		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
+			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", id)
 			payload.Error = "job predates cluster upgrade and must be re-run"
 			payloadBytes, err := protoutil.Marshal(payload)
 			if err != nil {
@@ -816,31 +844,36 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 				continue
 			}
 			if nodeStatus.isLive {
-				// The other node is live and holds the lease on the job - don't adopt it.
+				if log.V(2) {
+					log.Infof(ctx, "job %d: skipping: another node is live and holds the lease", *id)
+				}
 				continue
 			}
 		}
 		// Below we know that this node holds the lease on the job.
-		if runningOnNode {
-			// No need to adopt; the job is already running on this node.
-			continue
-		}
-
-		// Adopt job and resume it.
 		job := &Job{id: id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
+		if err := r.register(*id, cancel); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "job %d: skipping: the job is already running on this node", *id)
+			}
+			continue
+		}
+		// Adopt job and resume it.
 		if err := job.adopt(ctx, payload.Lease); err != nil {
+			r.unregister(*id)
 			return errors.Wrap(err, "unable to acquire lease")
 		}
-		r.register(*id, cancel)
 
 		resultsCh := make(chan tree.Datums)
 		resumer, err := r.createResumer(job, r.settings)
 		if err != nil {
+			r.unregister(*id)
 			return err
 		}
 		errCh, err := r.resume(resumeCtx, resumer, resultsCh, job)
 		if err != nil {
+			r.unregister(*id)
 			return err
 		}
 		go func() {
@@ -881,14 +914,23 @@ func (r *Registry) cancelAll(ctx context.Context) {
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 }
 
-func (r *Registry) register(jobID int64, cancel func()) {
+// register registers an about to be resumed job in memory so that it can be
+// killed and that no one else tries to resume it. This essentially works as a
+// barrier that only one function can cross and try to resume the job.
+func (r *Registry) register(jobID int64, cancel func()) error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	// We need to prevent different routines trying to adopt and resume the job.
+	if _, alreadyRegistered := r.mu.jobs[jobID]; alreadyRegistered {
+		return errors.Errorf("job %d: already registered", jobID)
+	}
 	r.mu.jobs[jobID] = cancel
-	r.mu.Unlock()
+	return nil
 }
 
 func (r *Registry) unregister(jobID int64) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	cancel, ok := r.mu.jobs[jobID]
 	// It is possible for a job to be double unregistered. unregister is always
 	// called at the end of resume. But it can also be called during cancelAll
@@ -897,5 +939,4 @@ func (r *Registry) unregister(jobID int64) {
 		cancel()
 		delete(r.mu.jobs, jobID)
 	}
-	r.mu.Unlock()
 }
