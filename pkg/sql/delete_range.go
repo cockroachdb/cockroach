@@ -40,6 +40,9 @@ type deleteRangeNode struct {
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
 	desc *sqlbase.ImmutableTableDescriptor
+	// interleavedDesc are the table descriptors of any child interleaved tables
+	// the delete is operating on.
+	interleavedDesc []*sqlbase.ImmutableTableDescriptor
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
@@ -62,12 +65,17 @@ var _ batchedPlanNode = &deleteRangeNode{}
 // without actually scanning them.
 // This should be called after plan simplification for optimal results.
 //
+// fkTables is required primarily when performing deletes with interleaved child
+// tables as we need to pass those foreign key table references to the Fetcher
+// (to ensure that keys deleted from child tables are truly within the range to be deleted).
+//
 // This logic should be kept in sync with exec.Builder.canUseDeleteRange.
 // TODO(andyk): Remove when the heuristic planner code is removed.
 func maybeCreateDeleteFastNode(
 	ctx context.Context,
 	source planNode,
 	desc *ImmutableTableDescriptor,
+	fkTables row.FkTableMetadata,
 	fastPathInterleaved bool,
 	rowsNeeded bool,
 ) (*deleteRangeNode, bool) {
@@ -119,10 +127,16 @@ func maybeCreateDeleteFastNode(
 		return nil, false
 	}
 
+	interleavedDesc := make([]*sqlbase.ImmutableTableDescriptor, 0, len(fkTables))
+	for _, tableEntry := range fkTables {
+		interleavedDesc = append(interleavedDesc, tableEntry.Desc)
+	}
+
 	return &deleteRangeNode{
 		interleavedFastPath: fastPathInterleaved,
 		spans:               scan.spans,
 		desc:                desc,
+		interleavedDesc:     interleavedDesc,
 	}, true
 }
 
@@ -154,18 +168,29 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.maybeSetSystemConfig(d.desc.GetID()); err != nil {
 		return err
 	}
-	if err := d.fetcher.Init(
-		false, false, false, &params.p.alloc,
-		row.FetcherTableArgs{
-			Desc:  d.desc,
-			Index: &d.desc.PrimaryIndex,
-		}); err != nil {
-		return err
-	}
+
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
 		}
+	}
+
+	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
+	allTables[0] = row.FetcherTableArgs{
+		Desc:  d.desc,
+		Index: &d.desc.PrimaryIndex,
+		Spans: d.spans,
+	}
+	for i, interleaved := range d.interleavedDesc {
+		allTables[i+1] = row.FetcherTableArgs{
+			Desc:  interleaved,
+			Index: &interleaved.PrimaryIndex,
+			Spans: d.spans,
+		}
+	}
+	if err := d.fetcher.Init(
+		false, false, false, &params.p.alloc, allTables...); err != nil {
+		return err
 	}
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
