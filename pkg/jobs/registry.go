@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -634,10 +634,12 @@ func (r *Registry) stepThroughStateMachine(
 	status Status,
 	jobErr error,
 ) error {
+	log.Infof(ctx, "job %d: stepping through state %s", *job.ID(), status)
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
-			return errors.Wrap(jobErr, "unexpected error provided for a running job")
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"unexpected error provided for a running job")
 		}
 		err := resumer.Resume(ctx, phs, resultsCh)
 		if err == nil {
@@ -648,6 +650,7 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.id)
 		}
+		// TODO(spaskob): enforce a limit on retries.
 		if e, ok := err.(retryJobError); ok {
 			return errors.Errorf("job %d: %s: restarting in background", *job.id, e)
 		}
@@ -673,10 +676,14 @@ func (r *Registry) stepThroughStateMachine(
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, nil)
 	case StatusSucceeded:
 		if jobErr != nil {
-			return errors.Wrap(jobErr, "unexpected error provided for a succeddful job")
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"job %d: successful bu unexpected error provided", *job.ID())
 		}
 		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
 			// If it didn't succeed, mark it failed.
+			// TODO(spaskob): this is silly, we should remove the OnSuccess
+			// hooks and execute them in resume so that the client can handle
+			// these errors better.
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "could not mark job %d as succeeded", *job.id))
 		}
 		resumer.OnTerminal(ctx, status, resultsCh)
@@ -713,7 +720,8 @@ func (r *Registry) stepThroughStateMachine(
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, err)
 	case StatusFailed:
 		if jobErr == nil {
-			return errors.New("job has StatusFailed but nil error provided")
+			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				"job %d: has StatusFailed but no error was provided", *job.ID())
 		}
 		if err := job.Failed(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as failed then it will
@@ -722,14 +730,17 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return jobErr
+	default:
+		return errors.AssertionFailedf("job %d: has unsupported status %s", *job.ID(), status)
 	}
 	return nil
 }
 
 // resume starts or resumes a job. If no error is returned then the job was
-// asynchronously executed. The job is executed with the ctx, so ctx must only
-// by canceled if the job should also be canceled. resultsCh is passed to the
-// resumable func and should be closed by the caller after errCh sends a value.
+// asynchronously executed. The job is executed with the ctx, so ctx must
+// only by canceled if the job should also be canceled. resultsCh is passed
+// to the resumable func and should be closed by the caller after errCh sends
+// a value.
 func (r *Registry) resume(
 	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
 ) (<-chan error, error) {
@@ -943,9 +954,9 @@ func (r *Registry) cancelAll(ctx context.Context) {
 	r.mu.jobs = make(map[int64]context.CancelFunc)
 }
 
-// register an about to be resumed job in memory so that it can be killed and
-// that no one else tries to resume it. This essentially works as a barrier that
-// only one function can cross and try to resume the job.
+// register registers an about to be resumed job in memory so that it can be
+// killed and that no one else tries to resume it. This essentially works as a
+// barrier that only one function can cross and try to resume the job.
 func (r *Registry) register(jobID int64, cancel func()) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
