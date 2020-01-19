@@ -170,6 +170,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	spans := make([]roachpb.Span, len(d.spans))
+	var prev []byte
 	copy(spans, d.spans)
 	if !d.autoCommitEnabled {
 		// Without autocommit, we're going to run each batch one by one, respecting
@@ -186,7 +187,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 			spans = spans[:0]
 			var err error
-			if spans, err = d.processResults(b.Results, spans); err != nil {
+			if spans, prev, err = d.processResults(b.Results, spans, prev); err != nil {
 				return err
 			}
 		}
@@ -203,7 +204,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return err
 		}
-		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
+		if resumeSpans, _, err := d.processResults(b.Results, nil /* resumeSpans */, prev); err != nil {
 			return err
 		} else if len(resumeSpans) != 0 {
 			// This shouldn't ever happen - we didn't pass a limit into the batch.
@@ -234,10 +235,9 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *client.Batch, spans r
 // encountered during result processing, they're appended to the resumeSpans
 // input parameter.
 func (d *deleteRangeNode) processResults(
-	results []client.Result, resumeSpans []roachpb.Span,
-) (roachpb.Spans, error) {
+	results []client.Result, resumeSpans []roachpb.Span, prev []byte,
+) (roachpb.Spans, []byte, error) {
 	for _, r := range results {
-		var prev []byte
 		for _, keyBytes := range r.Keys {
 			// If prefix is same, don't bother decoding key.
 			if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
@@ -246,10 +246,10 @@ func (d *deleteRangeNode) processResults(
 
 			after, ok, _, err := d.fetcher.ReadIndexKey(keyBytes)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if !ok {
-				return nil, errors.AssertionFailedf("key did not match descriptor")
+				return nil, nil, errors.AssertionFailedf("key did not match descriptor")
 			}
 			k := keyBytes[:len(keyBytes)-len(after)]
 			if !bytes.Equal(k, prev) {
@@ -261,7 +261,7 @@ func (d *deleteRangeNode) processResults(
 			resumeSpans = append(resumeSpans, *r.ResumeSpan)
 		}
 	}
-	return resumeSpans, nil
+	return resumeSpans, prev, nil
 }
 
 // Next implements the planNode interface.
