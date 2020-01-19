@@ -84,7 +84,9 @@ func TestRegistryCancelation(t *testing.T) {
 	register := func() {
 		didRegister = true
 		jobID++
-		registry.register(jobID, func() { cancelCount++ })
+		if err := registry.register(jobID, func() { cancelCount++ }); err != nil {
+			t.Fatal(err)
+		}
 	}
 	unregister := func() {
 		registry.unregister(jobID)
