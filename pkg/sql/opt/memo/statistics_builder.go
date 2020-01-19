@@ -1478,8 +1478,16 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	groupingColSet := groupNode.Private().(*GroupingPrivate).GroupingCols
 
 	if groupingColSet.Empty() {
-		// ScalarGroupBy or GroupBy with empty grouping columns.
-		s.RowCount = 1
+		if groupNode.Op() == opt.ScalarGroupByOp {
+			// ScalarGroupBy always returns exactly one row.
+			s.RowCount = 1
+		} else {
+			// GroupBy with empty grouping columns returns 0 or 1 rows, depending
+			// on whether input has rows. If input has < 1 row, use that, as that
+			// represents the probability of having 0 vs. 1 rows.
+			inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
+			s.RowCount = min(1, inputStats.RowCount)
+		}
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
 		// columns.

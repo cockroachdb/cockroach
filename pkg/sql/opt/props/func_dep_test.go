@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFuncDeps_DowngradeKey(t *testing.T) {
@@ -31,6 +32,18 @@ func TestFuncDeps_DowngradeKey(t *testing.T) {
 	fd2.DowngradeKey()
 	fd2.Verify()
 	verifyFD(t, fd2, "()-->(1-3)")
+}
+
+func TestFuncDeps_ConstCols(t *testing.T) {
+	fd := &props.FuncDepSet{}
+	require.Equal(t, "()", fd.ConstantCols().String())
+	fd.AddConstants(c(1, 2))
+	require.Equal(t, "(1,2)", fd.ConstantCols().String())
+
+	fd2 := makeAbcdeFD(t)
+	require.Equal(t, "()", fd2.ConstantCols().String())
+	fd2.AddConstants(c(1, 2))
+	require.Equal(t, "(1,2)", fd.ConstantCols().String())
 }
 
 // Other tests also exercise the ColsAreKey methods.
