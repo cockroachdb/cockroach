@@ -333,7 +333,7 @@ group-by
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
  ├── stats: [rows=9.5617925, distinct(2)=9.5617925, null(2)=0]
- ├── cost: 11.1156179
+ ├── cost: 11.1256179
  ├── key: (2)
  ├── fd: (2)-->(3)
  ├── prune: (3)
