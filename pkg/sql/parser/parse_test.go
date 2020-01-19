@@ -1689,6 +1689,23 @@ func TestParse2(t *testing.T) {
 		{`SELECT '\abc\' NOT SIMILAR TO '-\___-\' ESCAPE '-'`, `SELECT not_similar_to_escape(e'\\abc\\', e'-\\___-\\', '-')`},
 		{`SELECT 'a' NOT SIMILAR TO '\a' ESCAPE ''`, `SELECT not_similar_to_escape('a', e'\\a', '')`},
 
+		// using dollar-quotes
+		{`SELECT $$a'a$$`, `SELECT e'a\'a'`},
+		{`SELECT $$a\\na$$`, `SELECT e'a\\\\na'`},
+		{`SELECT $select$\\n$select$`, `SELECT e'\\\\n'`},
+		{`SELECT $$a"a$$`, `SELECT 'a"a'`},
+		{`SELECT $$full$$`, `SELECT 'full'`}, // must quote column name keyword
+		{`SELECT $select$full$select$`, `SELECT 'full'`},
+		{`SELECT $select$a$$b$select$`, `SELECT 'a$$b'`},
+		{`SELECT $$Dianne's horse$$`, `SELECT e'Dianne\'s horse'`},
+		{`SELECT $SomeTag$Dianne's horse$SomeTag$`, `SELECT e'Dianne\'s horse'`},
+		{`SELECT $function$
+BEGIN
+RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);
+END;
+$function$`,
+			`SELECT e'\nBEGIN\nRETURN ($1 ~ $q$[\\t\\r\\n\\v\\\\]$q$);\nEND;\n'`},
+
 		{`SELECT (ARRAY (1, 2))[1]`, `SELECT (ARRAY[1, 2])[1]`},
 
 		// Interval constructor gets eagerly processed.
