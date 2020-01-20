@@ -1214,7 +1214,8 @@ func (b *Builder) validateLockingInFrom(
 			panic(errors.AssertionFailedf("unknown locking wait policy: %s", li.WaitPolicy))
 		}
 
-		// Validate locking targets.
+		// Validate locking targets by checking that all targets are well-formed
+		// and all point to real relations present in the FROM clause.
 		for _, target := range li.Targets {
 			// Insist on unqualified alias names here. We could probably do
 			// something smarter, but it's better to just mirror Postgres
@@ -1223,12 +1224,29 @@ func (b *Builder) validateLockingInFrom(
 				panic(pgerror.Newf(pgcode.Syntax,
 					"%s must specify unqualified relation names", li.Strength))
 			}
+
+			// Search for the target in fromScope. If a target is missing from
+			// the scope then raise an error. This will end up looping over all
+			// columns in scope for each of the locking targets. We could use a
+			// more efficient data structure (e.g. a hash map of relation names)
+			// to improve the complexity here, but we don't expect the number of
+			// columns to be small enough that doing so is likely not worth it.
+			found := false
+			for _, col := range fromScope.cols {
+				if target.TableName == col.table.TableName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				panic(pgerror.Newf(
+					pgcode.UndefinedTable,
+					"relation %q in %s clause not found in FROM clause",
+					target.TableName, li.Strength,
+				))
+			}
 		}
 	}
-
-	// TODO(nvanbenschoten): Postgres verifies that all locking targets
-	// point to real relations in the FROM clause. We should verify the
-	// same thing here.
 }
 
 // rejectIfLocking raises a locking error if a locking clause was specified.
