@@ -46,6 +46,17 @@ type Operator interface {
 	execinfra.OpNode
 }
 
+// OperatorInitStatus indicates whether Init method has already been called on
+// an Operator.
+type OperatorInitStatus int
+
+const (
+	// OperatorNotInitialized indicates that Init has not been called yet.
+	OperatorNotInitialized OperatorInitStatus = iota
+	// OperatorInitialized indicates that Init has already been called.
+	OperatorInitialized
+)
+
 // NonExplainable is a marker interface which identifies an Operator that
 // should be omitted from the output of EXPLAIN (VEC). Note that VERBOSE
 // explain option will override the omitting behavior.
