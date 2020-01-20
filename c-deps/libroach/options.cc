@@ -83,7 +83,7 @@ class DBLogger : public rocksdb::Logger {
     }
 
     // First try with a small fixed size buffer.
-    char space[1024];
+    char space[2048];
 
     // It's possible for methods that use a va_list to invalidate the data in
     // it upon use. The fix is to make a copy of the structure before using it
@@ -99,7 +99,7 @@ class DBLogger : public rocksdb::Logger {
     }
 
     // Repeatedly increase buffer size until it fits.
-    int length = sizeof(space);
+    size_t length = sizeof(space);
     while (true) {
       if (result < 0) {
         // Older behavior: just try doubling the buffer size.
