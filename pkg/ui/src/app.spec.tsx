@@ -11,13 +11,12 @@
 import React from "react";
 import { assert } from "chai";
 import { Action, Store } from "redux";
-import { createMemoryHistory } from "react-router";
-import { syncHistoryWithStore } from "react-router-redux";
+import { createMemoryHistory } from "history";
 import { mount, ReactWrapper } from "enzyme";
 
 import "src/enzymeInit";
 import { App } from "src/app";
-import { AdminUIState, createAdminUIStore, History } from "src/redux/state";
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
 import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import NodeList from "src/views/clusterviz/containers/map/nodeList";
@@ -33,23 +32,22 @@ import {
 } from "src/views/databases/containers/databases";
 import { TableMain } from "src/views/databases/containers/tableDetails";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
-import { StatementsPage } from "src/views/statements/statementsPage";
-import { StatementDetails } from "src/views/statements/statementDetails";
+import StatementsPage from "src/views/statements/statementsPage";
+import StatementDetails from "src/views/statements/statementDetails";
 import Debug from "src/views/reports/containers/debug";
-import { ReduxDebug } from "src/views/reports/containers/redux";
-import { CustomChart } from "src/views/reports/containers/customChart";
+import ReduxDebug from "src/views/reports/containers/redux";
+import CustomChart from "src/views/reports/containers/customChart";
 import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
-import NotFound from "oss/src/views/app/components/NotFound";
+import NotFound from "src/views/app/components/NotFound";
 
 describe("Routing to", () => {
-  const store: Store<AdminUIState, Action> = createAdminUIStore();
-  const memoryHistory = createMemoryHistory({
-    entries: ["/"],
+  const history = createMemoryHistory({
+    initialEntries: ["/"],
   });
-  const history: History = syncHistoryWithStore(memoryHistory, store);
+  const store: Store<AdminUIState, Action> = createAdminUIStore(history);
   const appWrapper: ReactWrapper = mount(<App history={history} store={store}/>);
 
   after(() => {
@@ -69,7 +67,7 @@ describe("Routing to", () => {
 
     it("redirected to '/overview'", () => {
       navigateToPath("/");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/overview/list");
     });
   });
@@ -82,7 +80,7 @@ describe("Routing to", () => {
 
     it("redirected to '/overview'", () => {
       navigateToPath("/overview");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/overview/list");
     });
   });
@@ -116,7 +114,7 @@ describe("Routing to", () => {
 
     it("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/metrics");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/metrics/overview/cluster");
     });
   });
@@ -143,7 +141,7 @@ describe("Routing to", () => {
 
     it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
     });
   });
@@ -163,7 +161,7 @@ describe("Routing to", () => {
 
     it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard/node");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
     });
   });
@@ -175,7 +173,6 @@ describe("Routing to", () => {
     });
   });
 
-  { /* node details */}
   describe("'/node' path", () => {
     it("routes to <NodeList> component", () => {
       navigateToPath("/node");
@@ -184,7 +181,7 @@ describe("Routing to", () => {
 
     it("redirected to '/overview/list'", () => {
       navigateToPath("/node");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/overview/list");
     });
   });
@@ -203,7 +200,6 @@ describe("Routing to", () => {
     });
   });
 
-  { /* events & jobs */}
   describe("'/events' path", () => {
     it("routes to <EventPageUnconnected> component", () => {
       navigateToPath("/events");
@@ -218,7 +214,6 @@ describe("Routing to", () => {
     });
   });
 
-  { /* databases */}
   describe("'/databases' path", () => {
     it("routes to <DatabaseTablesList> component", () => {
       navigateToPath("/databases");
@@ -227,7 +222,7 @@ describe("Routing to", () => {
 
     it("redirected to '/databases/tables'", () => {
       navigateToPath("/databases");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/databases/tables");
     });
   });
@@ -249,7 +244,7 @@ describe("Routing to", () => {
   describe("'/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
     it("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
       navigateToPath("/databases/database/some-db-name/table/some-table-name");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/database/some-db-name/table/some-table-name");
     });
   });
@@ -257,7 +252,7 @@ describe("Routing to", () => {
   describe("'/database' path", () => {
     it("redirected to '/databases'", () => {
       navigateToPath("/databases/tables");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/databases/tables");
     });
   });
@@ -265,7 +260,7 @@ describe("Routing to", () => {
   describe("'/database/:${databaseNameAttr}' path", () => {
     it("redirected to '/databases'", () => {
       navigateToPath("/database/some-db-name");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/databases/tables");
     });
   });
@@ -273,7 +268,7 @@ describe("Routing to", () => {
   describe("'/database/:${databaseNameAttr}/table' path", () => {
     it("redirected to '/databases/tables'", () => {
       navigateToPath("/database/some-db-name/table");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/databases/tables");
     });
   });
@@ -325,7 +320,7 @@ describe("Routing to", () => {
   describe("'/statement' path", () => {
     it("redirected to '/statements'", () => {
       navigateToPath("/statement");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/statements");
     });
   });
@@ -385,7 +380,7 @@ describe("Routing to", () => {
 
     it("redirected to '/raft/ranges'", () => {
       navigateToPath("/raft");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/raft/ranges");
     });
   });
@@ -415,7 +410,7 @@ describe("Routing to", () => {
   describe("'/cluster' path", () => {
     it("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/cluster");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/metrics/overview/cluster");
     });
   });
@@ -424,7 +419,7 @@ describe("Routing to", () => {
     it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       const dashboardNameAttr = "some-dashboard-name";
       navigateToPath(`/cluster/all/${dashboardNameAttr}`);
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/cluster`);
     });
   });
@@ -434,7 +429,7 @@ describe("Routing to", () => {
       const dashboardNameAttr = "some-dashboard-name";
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/node/${nodeIDAttr}/${dashboardNameAttr}`);
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/node/${nodeIDAttr}`);
     });
   });
@@ -442,7 +437,7 @@ describe("Routing to", () => {
   describe("'/cluster/nodes' path", () => {
     it("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/overview/list");
     });
   });
@@ -451,7 +446,7 @@ describe("Routing to", () => {
     it("redirected to '/node/:${nodeIDAttr}'", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}`);
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, `/node/${nodeIDAttr}`);
     });
   });
@@ -460,7 +455,7 @@ describe("Routing to", () => {
     it("redirected to '/node/:${nodeIDAttr}/logs'", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}/logs`);
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, `/node/${nodeIDAttr}/logs`);
     });
   });
@@ -468,7 +463,7 @@ describe("Routing to", () => {
   describe("'/cluster/events' path", () => {
     it("redirected to '/events'", () => {
       navigateToPath("/cluster/events");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/events");
     });
   });
@@ -476,7 +471,7 @@ describe("Routing to", () => {
   describe("'/cluster/nodes' path", () => {
     it("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
-      const location = history.getCurrentLocation();
+      const location = history.location;
       assert.equal(location.pathname, "/overview/list");
     });
   });
