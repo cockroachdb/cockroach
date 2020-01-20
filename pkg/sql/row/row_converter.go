@@ -224,6 +224,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
+	ctx context.Context,
 	tableDesc *sqlbase.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
@@ -274,6 +275,7 @@ func NewDatumRowConverter(
 	}
 
 	ri, err := MakeInserter(
+		ctx,
 		nil, /* txn */
 		immutDesc,
 		cols,

@@ -164,10 +164,23 @@ func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg
 }
 
 // Step is part of the TxnSender interface.
-func (m *MockTransactionalSender) Step() error { panic("unimplemented") }
+func (m *MockTransactionalSender) Step(_ context.Context) error {
+	// At least one test (e.g sql/TestPortalsDestroyedOnTxnFinish) requires
+	// the ability to run simple statements that do not access storage,
+	// and that requires a non-panicky Step().
+	return nil
+}
 
-// DisableStepping is part of the TxnSender interface.
-func (m *MockTransactionalSender) DisableStepping() error { panic("unimplemented") }
+// ConfigureStepping is part of the TxnSender interface.
+func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMode) SteppingMode {
+	// See Step() above.
+	return SteppingDisabled
+}
+
+// GetSteppingMode is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode {
+	return SteppingDisabled
+}
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {

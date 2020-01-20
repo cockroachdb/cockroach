@@ -1077,22 +1077,39 @@ func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string)
 }
 
 // Step is part of the TxnSender interface.
-func (tc *TxnCoordSender) Step() error {
+func (tc *TxnCoordSender) Step(ctx context.Context) error {
+	// log.Infof(ctx, "STEP %+v", errors.New("WOOF"))
 	if tc.typ != client.RootTxn {
-		return errors.AssertionFailedf("cannot call Step() in leaf txn")
+		return errors.WithContextTags(
+			errors.AssertionFailedf("cannot call Step() in leaf txn"), ctx)
 	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked()
+	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
 }
 
-// DisableStepping is part of the TxnSender interface.
-func (tc *TxnCoordSender) DisableStepping() error {
+// ConfigureStepping is part of the TxnSender interface.
+func (tc *TxnCoordSender) ConfigureStepping(
+	ctx context.Context, mode client.SteppingMode,
+) (prevMode client.SteppingMode) {
 	if tc.typ != client.RootTxn {
-		return errors.AssertionFailedf("cannot call DisableStepping() in leaf txn")
+		panic(errors.WithContextTags(
+			errors.AssertionFailedf("cannot call ConfigureStepping() in leaf txn"), ctx))
 	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	tc.interceptorAlloc.txnSeqNumAllocator.disableSteppingLocked()
-	return nil
+	prevMode = tc.interceptorAlloc.txnSeqNumAllocator.configureSteppingLocked(mode)
+	// if mode != prevMode {
+	// log.Infof(ctx, "CONFIGURE STEPPING: %v -> %v // %+v", prevMode, mode, errors.New("WOOF"))
+	// }
+	return prevMode
+}
+
+// GetSteppingMode is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode client.SteppingMode) {
+	curMode = client.SteppingDisabled
+	if tc.interceptorAlloc.txnSeqNumAllocator.steppingModeEnabled {
+		curMode = client.SteppingEnabled
+	}
+	return curMode
 }

@@ -467,7 +467,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}(rowexec.SamplerProgressInterval)
 	rowexec.SamplerProgressInterval = 10
 
-	resetKVBatchSize := row.SetKVBatchSize(10)
+	resetKVBatchSize := row.TestingSetKVBatchSize(10)
 	defer resetKVBatchSize()
 
 	var allowRequest chan struct{}

@@ -55,6 +55,11 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because DROP SEQUENCE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *dropSequenceNode) ReadingOwnWrites() {}
+
 func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, toDel := range n.td {

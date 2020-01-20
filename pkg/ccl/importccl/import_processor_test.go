@@ -110,7 +110,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				}
 
 				kvCh := make(chan row.KVBatch, batchSize)
-				conv, err := makeInputConverter(converterSpec, &evalCtx, kvCh)
+				conv, err := makeInputConverter(ctx, converterSpec, &evalCtx, kvCh)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}

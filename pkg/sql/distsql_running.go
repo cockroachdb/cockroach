@@ -988,6 +988,13 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 	maybeDistribute bool,
 ) bool {
 	for _, postqueryPlan := range postqueryPlans {
+		// We place a sequence point before every postquery, so
+		// that each subsequent postquery can observe the writes
+		// by the previous step.
+		if err := planner.Txn().Step(ctx); err != nil {
+			recv.SetError(err)
+			return false
+		}
 		if err := dsp.planAndRunPostquery(
 			ctx,
 			postqueryPlan,

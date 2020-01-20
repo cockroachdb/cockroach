@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/errors"
@@ -128,29 +129,50 @@ func (s *txnSeqNumAllocator) importLeafFinalState(tfs *roachpb.LeafTxnFinalState
 
 // stepLocked bumps the read seqnum to the current write seqnum.
 // Used by the TxnCoordSender's Step() method.
-func (s *txnSeqNumAllocator) stepLocked() error {
-	if s.steppingModeEnabled && s.readSeq > s.writeSeq {
+func (s *txnSeqNumAllocator) stepLocked(ctx context.Context) error {
+	if !s.steppingModeEnabled {
+		return errors.AssertionFailedf("stepping mode is not enabled")
+	}
+	if s.readSeq > s.writeSeq {
 		return errors.AssertionFailedf(
 			"cannot step() after mistaken initialization (%d,%d)", s.writeSeq, s.readSeq)
 	}
-	s.steppingModeEnabled = true
 	s.readSeq = s.writeSeq
 	return nil
 }
 
-// disableSteppingLocked cancels the stepping behavior and
-// restores read-latest-write behavior.
-// Used by the TxnCoordSender's DisableStepping() method.
-func (s *txnSeqNumAllocator) disableSteppingLocked() {
-	s.steppingModeEnabled = false
-	s.readSeq = 0
+// configureSteppingLocked configures the stepping mode.
+//
+// When enabling stepping from the non-enabled state, the read seqnum
+// is set to the current write seqnum, as if a snapshot was taken at
+// the point stepping was enabled.
+//
+// The read seqnum is otherwise not modified when trying to enable
+// stepping when it was previously enabled already. This is the
+// behavior needed to provide the documented API semantics of
+// sender.ConfigureStepping() (see client/sender.go).
+func (s *txnSeqNumAllocator) configureSteppingLocked(
+	newMode client.SteppingMode,
+) (prevMode client.SteppingMode) {
+	prevEnabled := s.steppingModeEnabled
+	enabled := newMode == client.SteppingEnabled
+	s.steppingModeEnabled = enabled
+	if !prevEnabled && enabled {
+		s.readSeq = s.writeSeq
+	}
+	prevMode = client.SteppingDisabled
+	if prevEnabled {
+		prevMode = client.SteppingEnabled
+	}
+	return prevMode
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) epochBumpedLocked() {
+	// Note: we do not touch steppingModeEnabled here: if stepping mode
+	// was enabled on the txn, it remains enabled.
 	s.writeSeq = 0
 	s.readSeq = 0
-	s.steppingModeEnabled = false
 }
 
 // closeLocked is part of the txnInterceptor interface.

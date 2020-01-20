@@ -62,6 +62,7 @@ type fkExistenceCheckForUpdate struct {
 
 // makeFkExistenceCheckHelperForUpdate instantiates an update helper.
 func makeFkExistenceCheckHelperForUpdate(
+	ctx context.Context,
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
@@ -75,13 +76,13 @@ func makeFkExistenceCheckHelperForUpdate(
 
 	// Instantiate a helper for the referencing tables.
 	var err error
-	if ret.inbound, err = makeFkExistenceCheckHelperForDelete(txn, table, otherTables, colMap,
+	if ret.inbound, err = makeFkExistenceCheckHelperForDelete(ctx, txn, table, otherTables, colMap,
 		alloc); err != nil {
 		return ret, err
 	}
 
 	// Instantiate a helper for the referenced table(s).
-	ret.outbound, err = makeFkExistenceCheckHelperForInsert(txn, table, otherTables, colMap, alloc)
+	ret.outbound, err = makeFkExistenceCheckHelperForInsert(ctx, txn, table, otherTables, colMap, alloc)
 	ret.outbound.checker = ret.inbound.checker
 
 	// We need *some* KV batch checker to perform the checks. It doesn't

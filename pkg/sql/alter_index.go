@@ -44,6 +44,11 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: indexDesc}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER INDEX performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterIndexNode) ReadingOwnWrites() {}
+
 func (n *alterIndexNode) startExec(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to

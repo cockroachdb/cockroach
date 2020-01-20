@@ -31,9 +31,13 @@ var insertFastPathNodePool = sync.Pool{
 	},
 }
 
-// Check that exec.InsertFastPathMaxRows does not exceed maxInsertBatchSize
-// (this is a compile error if the value is negative).
-const _ uint = maxInsertBatchSize - exec.InsertFastPathMaxRows
+// Check that exec.InsertFastPathMaxRows does not exceed the default
+// maxInsertBatchSize.
+func init() {
+	if maxInsertBatchSize < exec.InsertFastPathMaxRows {
+		panic("decrease exec.InsertFastPathMaxRows")
+	}
+}
 
 // insertFastPathNode is a faster implementation of inserting values in a table
 // and performing FK checks. It is used when all the foreign key checks can be
