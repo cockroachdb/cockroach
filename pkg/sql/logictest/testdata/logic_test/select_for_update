@@ -25,24 +25,35 @@ SELECT 1 FOR UPDATE FOR SHARE FOR NO KEY UPDATE FOR KEY SHARE
 ----
 1
 
-# Postgres gives an error if you specify a table that isn't available in the
-# FROM list for the OF ... clause, but since we're ignoring this list anyway,
-# we didn't bother to add that behavior.
-
-query I
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a
-----
-1
 
-query I
+query error pgcode 42P01 relation "a" in FOR SHARE clause not found in FROM clause
 SELECT 1 FOR SHARE OF a, b
+
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
+SELECT 1 FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
+
+query I
+SELECT 1 FROM
+    (SELECT 1) a,
+    (SELECT 1) b,
+    (SELECT 1) c,
+    (SELECT 1) d,
+    (SELECT 1) e,
+    (SELECT 1) f
+FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
 ----
 1
 
-query I
-SELECT 1 FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
-----
-1
+# However, we do mirror Postgres in that we require FOR UPDATE targets to be
+# unqualified names and reject anything else.
+
+query error pgcode 42601 FOR UPDATE must specify unqualified relation names
+SELECT 1 FOR UPDATE OF public.a
+
+query error pgcode 42601 FOR UPDATE must specify unqualified relation names
+SELECT 1 FOR UPDATE OF db.public.a
 
 # We can't support SKIP LOCKED or NOWAIT, since they would actually behave
 # differently - NOWAIT returns an error to the client instead of blocking,
@@ -110,26 +121,50 @@ SELECT 1 FOR READ ONLY
 statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
 SELECT 1 UNION SELECT 1 FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
+SELECT * FROM (SELECT 1 UNION SELECT 1) a FOR UPDATE
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
 VALUES (1) FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
+SELECT * FROM (VALUES (1)) a FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
 SELECT DISTINCT 1 FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT * FROM (SELECT DISTINCT 1) a FOR UPDATE
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
 SELECT 1 GROUP BY 1 FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
+SELECT * FROM (SELECT 1 GROUP BY 1) a FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
 SELECT 1 HAVING TRUE FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT * FROM (SELECT 1 HAVING TRUE) a FOR UPDATE
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
 SELECT count(1) FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT * FROM (SELECT count(1)) a FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
 SELECT count(1) OVER () FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT * FROM (SELECT count(1) OVER ()) a FOR UPDATE
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
 SELECT generate_series(1, 2) FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT * FROM (SELECT generate_series(1, 2)) a FOR UPDATE
 
 # Set-returning functions in the from list are allowed.
 query I
@@ -137,3 +172,48 @@ SELECT * FROM generate_series(1, 2) FOR UPDATE
 ----
 1
 2
+
+query I
+SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
+----
+1
+2
+
+# Use of SELECT FOR UPDATE/SHARE requires UPDATE privileges, not just SELECT privileges.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+statement ok
+GRANT GRANT on t to testuser
+
+user testuser
+
+statement error pgcode 42501 user testuser does not have SELECT privilege on relation t
+SELECT * FROM t
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+statement ok
+SELECT * FROM t
+
+statement error pgcode 42501 user testuser does not have UPDATE privilege on relation t
+SELECT * FROM t FOR UPDATE
+
+statement error pgcode 42501 user testuser does not have UPDATE privilege on relation t
+SELECT * FROM t FOR SHARE
+
+statement ok
+GRANT UPDATE ON t TO testuser
+
+statement ok
+SELECT * FROM t FOR UPDATE
+
+statement ok
+SELECT * FROM t FOR SHARE
+
+user root
+
+statement ok
+DROP TABLE t

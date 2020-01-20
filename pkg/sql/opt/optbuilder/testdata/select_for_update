@@ -1,0 +1,923 @@
+exec-ddl
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+----
+
+exec-ddl
+CREATE TABLE u (a INT PRIMARY KEY, c INT)
+----
+
+exec-ddl
+CREATE VIEW v AS SELECT a FROM t AS t2
+----
+
+# ------------------------------------------------------------------------------
+# Basic tests.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t FOR UPDATE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM t FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-no-key-update
+
+build
+SELECT * FROM t FOR SHARE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-share
+
+build
+SELECT * FROM t FOR KEY SHARE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-key-share
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-share
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-no-key-update
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM t FOR UPDATE OF t
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM t FOR UPDATE OF t2
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT 1 FROM t FOR UPDATE OF t
+----
+project
+ ├── columns: "?column?":3(int!null)
+ ├── scan t
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ └── projections
+      └── const: 1 [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with table aliases.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t AS t2 FOR UPDATE
+----
+scan t2
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM t AS t2 FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t AS t2 FOR UPDATE OF t2
+----
+scan t2
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+# ------------------------------------------------------------------------------
+# Tests with numeric table references.
+# Cockroach numeric references start after 53 for user tables.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM [53 AS t] FOR UPDATE
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM [53 AS t] FOR UPDATE OF t
+----
+scan t
+ ├── columns: a:1(int!null) b:2(int)
+ └── locking: for-update
+
+build
+SELECT * FROM [53 AS t] FOR UPDATE OF t2
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+# ------------------------------------------------------------------------------
+# Tests with views.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM v FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t2
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM v FOR UPDATE OF v
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t2
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM v FOR UPDATE OF v2
+----
+error (42P01): relation "v2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM v FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM v FOR UPDATE OF t2
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+# ------------------------------------------------------------------------------
+# Tests with aliased views.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM v AS v2 FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t2
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM v AS v2 FOR UPDATE OF v
+----
+error (42P01): relation "v" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM v AS v2 FOR UPDATE OF v2
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t2
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+# ------------------------------------------------------------------------------
+# Tests with subqueries.
+# 
+# Row-level locking clauses only apply to subqueries in the FROM clause of a
+# SELECT statement. They don't apply to subqueries in the projection or in
+# the filter.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM (SELECT a FROM t) FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM (SELECT a FROM t FOR UPDATE)
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-no-key-update
+
+build
+SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-no-key-update
+
+build
+SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+project
+ ├── columns: a:1(int!null)
+ └── scan t
+      ├── columns: a:1(int!null) b:2(int)
+      └── locking: for-update
+
+build
+SELECT (SELECT a FROM t) FOR UPDATE
+----
+project
+ ├── columns: a:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: t.a:1(int!null)
+                └── project
+                     ├── columns: t.a:1(int!null)
+                     └── scan t
+                          └── columns: t.a:1(int!null) b:2(int)
+
+build
+SELECT (SELECT a FROM t FOR UPDATE)
+----
+project
+ ├── columns: a:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: t.a:1(int!null)
+                └── project
+                     ├── columns: t.a:1(int!null)
+                     └── scan t
+                          ├── columns: t.a:1(int!null) b:2(int)
+                          └── locking: for-update
+
+build
+SELECT (SELECT a FROM t) FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT (SELECT a FROM t FOR UPDATE OF t)
+----
+project
+ ├── columns: a:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: t.a:1(int!null)
+                └── project
+                     ├── columns: t.a:1(int!null)
+                     └── scan t
+                          ├── columns: t.a:1(int!null) b:2(int)
+                          └── locking: for-update
+
+build
+SELECT (SELECT a FROM t) AS r FOR UPDATE
+----
+project
+ ├── columns: r:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: a:1(int!null)
+                └── project
+                     ├── columns: a:1(int!null)
+                     └── scan t
+                          └── columns: a:1(int!null) b:2(int)
+
+build
+SELECT (SELECT a FROM t FOR UPDATE) AS r
+----
+project
+ ├── columns: r:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: a:1(int!null)
+                └── project
+                     ├── columns: a:1(int!null)
+                     └── scan t
+                          ├── columns: a:1(int!null) b:2(int)
+                          └── locking: for-update
+
+build
+SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
+----
+project
+ ├── columns: r:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: a:1(int!null)
+                └── project
+                     ├── columns: a:1(int!null)
+                     └── scan t
+                          ├── columns: a:1(int!null) b:2(int)
+                          └── locking: for-update
+
+build
+SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+----
+select
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan t
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: a:3(int!null)
+           │    └── scan t
+           │         └── columns: a:3(int!null) b:4(int)
+           └── variable: a [type=int]
+
+build
+SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+----
+select
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan t
+ │    └── columns: a:1(int!null) b:2(int)
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: a:3(int!null)
+           │    └── scan t
+           │         ├── columns: a:3(int!null) b:4(int)
+           │         └── locking: for-update
+           └── variable: a [type=int]
+
+build
+SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+----
+select
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan t
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: a:3(int!null)
+           │    └── scan t
+           │         └── columns: a:3(int!null) b:4(int)
+           └── variable: a [type=int]
+
+build
+SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+----
+select
+ ├── columns: a:1(int!null) b:2(int)
+ ├── scan t
+ │    └── columns: a:1(int!null) b:2(int)
+ └── filters
+      └── any: eq [type=bool]
+           ├── project
+           │    ├── columns: a:3(int!null)
+           │    └── scan t
+           │         ├── columns: a:3(int!null) b:4(int)
+           │         └── locking: for-update
+           └── variable: a [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with common-table expressions.
+#
+# Unlike with FROM subqueries, row-level locking clauses do not apply to WITH
+# queries referenced by the primary query. To achieve row locking within a WITH
+# query, a locking clause should be specified within the WITH query.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM [SELECT a FROM t] FOR UPDATE
+----
+with &1
+ ├── columns: a:3(int!null)
+ ├── project
+ │    ├── columns: t.a:1(int!null)
+ │    └── scan t
+ │         └── columns: t.a:1(int!null) b:2(int)
+ └── with-scan &1
+      ├── columns: a:3(int!null)
+      └── mapping:
+           └──  t.a:1(int) => a:3(int)
+
+build
+WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
+----
+with &1 (cte)
+ ├── columns: a:3(int!null)
+ ├── project
+ │    ├── columns: t.a:1(int!null)
+ │    └── scan t
+ │         └── columns: t.a:1(int!null) b:2(int)
+ └── with-scan &1 (cte)
+      ├── columns: a:3(int!null)
+      └── mapping:
+           └──  t.a:1(int) => a:3(int)
+
+build
+SELECT * FROM [SELECT a FROM t FOR UPDATE]
+----
+with &1
+ ├── columns: a:3(int!null)
+ ├── project
+ │    ├── columns: t.a:1(int!null)
+ │    └── scan t
+ │         ├── columns: t.a:1(int!null) b:2(int)
+ │         └── locking: for-update
+ └── with-scan &1
+      ├── columns: a:3(int!null)
+      └── mapping:
+           └──  t.a:1(int) => a:3(int)
+
+build
+WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
+----
+with &1 (cte)
+ ├── columns: a:3(int!null)
+ ├── project
+ │    ├── columns: t.a:1(int!null)
+ │    └── scan t
+ │         ├── columns: t.a:1(int!null) b:2(int)
+ │         └── locking: for-update
+ └── with-scan &1 (cte)
+      ├── columns: a:3(int!null)
+      └── mapping:
+           └──  t.a:1(int) => a:3(int)
+
+# ------------------------------------------------------------------------------
+# Tests with joins.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u
+      │    └── columns: u.a:3(int!null) c:4(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) b:2(int)
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-share
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t2
+      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-share
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t2.a [type=int]
+                └── variable: u2.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-no-key-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-key-share
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+build
+SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-no-key-update
+      ├── scan u
+      │    ├── columns: u.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u.a [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with joins of aliased tables and aliased joins.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t2
+      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t2.a [type=int]
+                └── variable: u2.a [type=int]
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u
+----
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t2
+      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    └── columns: u2.a:3(int!null) c:4(int)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t2.a [type=int]
+                └── variable: u2.a [type=int]
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t2
+      │    └── columns: t2.a:1(int!null) b:2(int)
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t2.a [type=int]
+                └── variable: u2.a [type=int]
+
+build
+SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t2
+      │    ├── columns: t2.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t2.a [type=int]
+                └── variable: u2.a [type=int]
+
+
+# Postgres doesn't support applying locking clauses to joins. The following
+# queries all return the error: "FOR UPDATE cannot be applied to a join".
+# We could do the same, but it's not hard to support these, so we do.
+
+build
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u2.a [type=int]
+
+build
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
+----
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u
+----
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
+----
+error (42P01): relation "u2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
+----
+project
+ ├── columns: a:1(int!null) b:2(int) c:4(int)
+ └── inner-join (hash)
+      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
+      ├── scan t
+      │    ├── columns: t.a:1(int!null) b:2(int)
+      │    └── locking: for-update
+      ├── scan u2
+      │    ├── columns: u2.a:3(int!null) c:4(int)
+      │    └── locking: for-update
+      └── filters
+           └── eq [type=bool]
+                ├── variable: t.a [type=int]
+                └── variable: u2.a [type=int]
+
+# ------------------------------------------------------------------------------
+# Tests with joins.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t, u FOR UPDATE
+----
+inner-join (cross)
+ ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── scan t
+ │    ├── columns: t.a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ ├── scan u
+ │    ├── columns: u.a:3(int!null) c:4(int)
+ │    └── locking: for-update
+ └── filters (true)
+
+build
+SELECT * FROM t, u FOR UPDATE OF t
+----
+inner-join (cross)
+ ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── scan t
+ │    ├── columns: t.a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ ├── scan u
+ │    └── columns: u.a:3(int!null) c:4(int)
+ └── filters (true)
+
+build
+SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
+----
+inner-join (cross)
+ ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── scan t
+ │    ├── columns: t.a:1(int!null) b:2(int)
+ │    └── locking: for-share
+ ├── scan u
+ │    ├── columns: u.a:3(int!null) c:4(int)
+ │    └── locking: for-update
+ └── filters (true)
+
+build
+SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── scan t
+ │    ├── columns: t.a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ ├── scan sub
+ │    ├── columns: sub.a:3(int!null) c:4(int)
+ │    └── locking: for-update
+ └── filters (true)
+
+build
+SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
+----
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
+ ├── scan t
+ │    └── columns: t.a:1(int!null) b:2(int)
+ ├── scan sub
+ │    ├── columns: sub.a:3(int!null) c:4(int)
+ │    └── locking: for-update
+ └── filters (true)
+
+# ------------------------------------------------------------------------------
+# Tests with virtual tables.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM information_schema.columns FOR UPDATE
+----
+error (42601): FOR UPDATE not allowed with virtual tables

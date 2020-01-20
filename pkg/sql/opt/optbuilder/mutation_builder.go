@@ -234,6 +234,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		indexFlags,
+		noRowLocking,
 		includeMutations,
 		inScope,
 	)
@@ -244,7 +245,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
 	if fromClausePresent {
-		fromScope := mb.b.buildFromTables(from, inScope)
+		fromScope := mb.b.buildFromTables(from, noRowLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.outScope, fromScope)
@@ -335,6 +336,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
 		indexFlags,
+		noRowLocking,
 		includeMutations,
 		inScope,
 	)
@@ -1160,6 +1162,7 @@ func (mb *mutationBuilder) addInsertionCheck(fkOrdinal int, insertCols opt.ColLi
 		refTabMeta,
 		refOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
+		noRowLocking,
 		includeMutations,
 		mb.b.allocScope(),
 	)
@@ -1303,6 +1306,7 @@ func (mb *mutationBuilder) addDeletionCheck(
 		origTabMeta,
 		origOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
+		noRowLocking,
 		includeMutations,
 		mb.b.allocScope(),
 	)
