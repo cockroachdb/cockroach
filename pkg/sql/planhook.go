@@ -97,6 +97,9 @@ type PlanHookState interface {
 	ResolveMutableTableDescriptor(
 		ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
 	) (table *MutableTableDescriptor, err error)
+	ShowCreate(
+		ctx context.Context, dbPrefix string, allDescs []sqlbase.Descriptor, desc *sqlbase.TableDescriptor, ignoreFKs shouldOmitFKClausesFromCreate,
+	) (string, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

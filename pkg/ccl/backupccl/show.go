@@ -55,7 +55,7 @@ func showBackupPlanHook(
 	case tree.BackupFileDetails:
 		shower = backupShowerFiles
 	default:
-		shower = backupShowerDefault(ctx, backup.ShouldIncludeSchemas)
+		shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas)
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -112,7 +112,7 @@ func backupShowerHeaders(showSchemas bool) sqlbase.ResultColumns {
 	return baseHeaders
 }
 
-func backupShowerDefault(ctx context.Context, showSchemas bool) backupShower {
+func backupShowerDefault(ctx context.Context, p sql.PlanHookState, showSchemas bool) backupShower {
 	return backupShower{
 		header: backupShowerHeaders(showSchemas),
 		fn: func(desc BackupDescriptor) []tree.Datums {
@@ -157,7 +157,7 @@ func backupShowerDefault(ctx context.Context, showSchemas bool) backupShower {
 						tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
 					}
 					if showSchemas {
-						schema, err := sql.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
+						schema, err := p.ShowCreate(ctx, dbName, desc.Descriptors, table, sql.OmitMissingFKClausesFromCreate)
 						if err != nil {
 							continue
 						}
