@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import * as d3 from "d3";
 
 import { NodesSummary } from "src/redux/nodes";

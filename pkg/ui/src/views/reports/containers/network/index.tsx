@@ -14,8 +14,9 @@ import moment from "moment";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
 import { createSelector } from "reselect";
+import { withRouter, RouteComponentProps } from "react-router-dom";
+
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -47,7 +48,7 @@ export interface NoConnection {
   to: Identity;
 }
 
-type NetworkProps = NetworkOwnProps & RouterState;
+type NetworkProps = NetworkOwnProps & RouteComponentProps;
 
 export interface NetworkFilter {
   [key: string]: Array<string>;
@@ -392,7 +393,6 @@ const nodeSummaryErrors = createSelector(
 );
 
 const mapStateToProps = (state: AdminUIState) => ({
-  // RootState contains declaration for whole state
   nodesSummary: nodesSummarySelector(state),
   nodeSummaryErrors: nodeSummaryErrors(state),
 });
@@ -402,4 +402,4 @@ const mapDispatchToProps = {
   refreshLiveness,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(Network);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Network));

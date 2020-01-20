@@ -13,7 +13,7 @@ import _ from "lodash";
 import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
 import React from "react";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -95,7 +95,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
       <div className="database-summary">
         <SummaryCard>
           <div className="database-summary-title">
-            <h2>{dbID}</h2>
+            <h2 className="base-heading">{dbID}</h2>
           </div>
           <div className="l-columns">
             <div className="l-columns__left">

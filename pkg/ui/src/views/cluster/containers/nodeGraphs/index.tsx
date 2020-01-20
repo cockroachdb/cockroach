@@ -10,16 +10,15 @@
 
 import _ from "lodash";
 import React from "react";
-import PropTypes from "prop-types";
 import { Helmet } from "react-helmet";
-import { InjectedRouter, RouterState } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
+import { withRouter, RouteComponentProps } from "react-router-dom";
+import { Action, bindActionCreators, Dispatch } from "redux";
 
 import {
   nodeIDAttr, dashboardNameAttr,
 } from "src/util/constants";
-
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
@@ -46,6 +45,7 @@ import queuesDashboard from "./dashboards/queues";
 import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
+import { getMatchParamByName } from "src/util/query";
 
 interface GraphDashboard {
   label: string;
@@ -86,21 +86,12 @@ interface NodeGraphsOwnProps {
   hoverState: HoverState;
 }
 
-type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
+type NodeGraphsProps = NodeGraphsOwnProps & RouteComponentProps;
 
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
  */
 export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
-  // Magic to add react router to the context.
-  // See https://github.com/ReactTraining/react-router/issues/975
-  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
-  // 'withRouter' HoC after upgrading to react-router 4.x.
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState; };
-
   /**
    * Selector to compute node dropdown options from the current node summary
    * collection.
@@ -133,19 +124,20 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   setClusterPath(nodeID: string, dashboardName: string) {
+    const push = this.props.history.push;
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push(`/metrics/${dashboardName}/cluster`);
+      push(`/metrics/${dashboardName}/cluster`);
     } else {
-      this.context.router.push(`/metrics/${dashboardName}/node/${nodeID}`);
+      push(`/metrics/${dashboardName}/node/${nodeID}`);
     }
   }
 
   nodeChange = (selected: DropdownOption) => {
-    this.setClusterPath(selected.value, this.props.params[dashboardNameAttr]);
+    this.setClusterPath(selected.value, getMatchParamByName(this.props.match, dashboardNameAttr));
   }
 
   dashChange = (selected: DropdownOption) => {
-    this.setClusterPath(this.props.params[nodeIDAttr], selected.value);
+    this.setClusterPath(getMatchParamByName(this.props.match, nodeIDAttr), selected.value);
   }
 
   componentWillMount() {
@@ -157,14 +149,14 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary } = this.props;
-    const selectedDashboard = params[dashboardNameAttr];
+    const { match, nodesSummary } = this.props;
+    const selectedDashboard = getMatchParamByName(match, dashboardNameAttr);
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
       : defaultDashboard;
 
     const title = dashboards[dashboard].label + " Dashboard";
-    const selectedNode = params[nodeIDAttr] || "";
+    const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = (selectedNode !== "") ? [selectedNode] : null;
 
     // When "all" is the selected source, some graphs display a line for every
@@ -254,7 +246,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 }
 
-export default connect(
+export default withRouter(connect(
   (state: AdminUIState) => {
     return {
       nodesSummary: nodesSummarySelector(state),
@@ -263,10 +255,14 @@ export default connect(
       hoverState: hoverStateSelector(state),
     };
   },
-  () => ({
-    refreshNodes,
-    refreshLiveness,
-    hoverOn,
-    hoverOff,
-  }),
-)(NodeGraphs);
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        refreshNodes,
+        refreshLiveness,
+        hoverOn,
+        hoverOff,
+      },
+      dispatch,
+    ),
+)(NodeGraphs));

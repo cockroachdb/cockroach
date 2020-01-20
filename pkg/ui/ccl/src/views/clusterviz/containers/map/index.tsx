@@ -7,7 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import { InjectedRouter, RouterState } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import cn from "classnames";
 
@@ -20,6 +20,8 @@ import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
+import { getMatchParamByName } from "src/util/query";
+
 import { Button } from "src/components/button";
 import { Dropdown } from "src/components/dropdown";
 
@@ -32,18 +34,19 @@ interface ClusterVisualizationProps {
   clusterDataError: Error | null;
 }
 
-export class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
+export class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouteComponentProps> {
   readonly items = [
     { value: "list", name: "Node List" },
     { value: "map", name: "Node Map" },
   ];
 
   handleMapTableToggle = (value: string) => {
-    this.props.router.push(`/overview/${value}`);
+    this.props.history.push(`/overview/${value}`);
   }
 
   render() {
-    const tiers = parseLocalityRoute(this.props.params.splat);
+    const splat = getMatchParamByName(this.props.match, "splat");
+    const tiers = parseLocalityRoute(splat);
 
     // TODO(couchand): integrate with license swapper
     const showingLicensePage = this.props.licenseDataExists && !this.props.enterpriseEnabled;
@@ -91,4 +94,4 @@ function mapStateToProps(state: AdminUIState) {
   };
 }
 
-export default connect(mapStateToProps)(ClusterVisualization);
+export default withRouter(connect(mapStateToProps)(ClusterVisualization));

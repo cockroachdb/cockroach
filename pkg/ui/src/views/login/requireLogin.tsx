@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { withRouter, WithRouterProps } from "react-router";
+import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import {RouteComponentProps} from "react-router-dom";
 
 import { AdminUIState } from "src/redux/state";
 import { selectLoginState, LoginState, getLoginPage } from "src/redux/login";
@@ -19,7 +20,7 @@ interface RequireLoginProps {
   loginState: LoginState;
 }
 
-class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> {
+class RequireLogin extends React.Component<RouteComponentProps & RequireLoginProps> {
   componentWillMount() {
     this.checkLogin();
   }
@@ -29,10 +30,10 @@ class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> 
   }
 
   checkLogin() {
-    const { location, router } = this.props;
+    const { location, history } = this.props;
 
     if (!this.hasAccess()) {
-      router.push(getLoginPage(location));
+      history.push(getLoginPage(location));
     }
   }
 
@@ -50,12 +51,12 @@ class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> 
 }
 
 // tslint:disable-next-line:variable-name
-const RequireLoginConnected = connect(
+const RequireLoginConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       loginState: selectLoginState(state),
     };
   },
-)(withRouter(RequireLogin));
+)(RequireLogin));
 
 export default RequireLoginConnected;
