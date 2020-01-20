@@ -256,8 +256,8 @@ func main() {
 			log.Fatal(err)
 		}
 		if len(pkgs) > 0 {
-			// 5 minutes total seems OK, but at least a minute per test.
-			duration := (5 * time.Minute) / time.Duration(len(pkgs))
+			// 10 minutes total seems OK, but at least a minute per test.
+			duration := (10 * time.Minute) / time.Duration(len(pkgs))
 			if duration < time.Minute {
 				duration = time.Minute
 			}
@@ -267,7 +267,7 @@ func main() {
 			for name, pkg := range pkgs {
 				tests := "-"
 				if len(pkg.tests) > 0 {
-					tests = "(" + strings.Join(pkg.tests, "|") + ")"
+					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
 				}
 
 				cmd := exec.Command(
