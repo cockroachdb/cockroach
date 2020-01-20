@@ -1,0 +1,33 @@
+statement ok
+CREATE TABLE c (
+	a INT NOT NULL,
+	b INT NULL,
+	INDEX c_a_b_idx (a ASC, b ASC),
+	FAMILY fam_0_a_rowid (a, rowid),
+	FAMILY fam_1_b (b)
+)
+
+statement ok
+COMMENT ON TABLE c IS 'table'
+
+statement ok
+COMMENT ON COLUMN c.a IS 'column'
+
+statement ok
+COMMENT ON INDEX c_a_b_idx IS 'index'
+
+query TT colnames
+SHOW CREATE c
+----
+table_name create_statement
+c           CREATE TABLE c (
+            a INT8 NOT NULL,
+            b INT8 NULL,
+            INDEX c_a_b_idx (a ASC, b ASC),
+            FAMILY fam_0_a_rowid (a, rowid),
+            FAMILY fam_1_b (b)
+);
+COMMENT ON TABLE c IS 'table';
+COMMENT ON COLUMN c.a IS 'column';
+COMMENT ON INDEX c_a_b_idx IS 'index'
+
