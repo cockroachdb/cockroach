@@ -15,9 +15,10 @@ import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
 import { bindActionCreators, Dispatch, Action } from "redux";
 import { createSelector } from "reselect";
+import { withRouter, RouteComponentProps } from "react-router-dom";
+
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -45,7 +46,7 @@ interface NoConnection {
   to: Identity;
 }
 
-type NetworkProps = NetworkOwnProps & RouterState;
+type NetworkProps = NetworkOwnProps & RouteComponentProps;
 
 // staleTable is a table of all stale nodes.
 function staleTable(staleIdentities: Identity[]) {
@@ -481,4 +482,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(Network);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Network));

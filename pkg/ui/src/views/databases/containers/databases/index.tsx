@@ -10,11 +10,11 @@
 
 import _ from "lodash";
 import React from "react";
-import PropTypes from "prop-types";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
+import { Dispatch, Action, bindActionCreators } from "redux";
+import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
@@ -28,7 +28,6 @@ import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants
 import NonTableSummary from "./nonTableSummary";
 
 import "./databases.styl";
-import { Dispatch, Action, bindActionCreators } from "redux";
 
 const databasePages = [
   { value: "tables", label: "Tables" },
@@ -81,10 +80,10 @@ interface DatabaseListActions {
   refreshDatabases: typeof refreshDatabases;
 }
 
-type DatabaseListProps = DatabaseListData & DatabaseListActions;
+type DatabaseListProps = DatabaseListData & DatabaseListActions & RouteComponentProps;
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
-class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
+class DatabaseTablesList extends React.Component<DatabaseListProps> {
   componentWillMount() {
     this.props.refreshDatabases();
   }
@@ -111,7 +110,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 }
 
 // DatabaseTablesList displays the "Grants" sub-tab of the main database page.
-class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
+class DatabaseGrantsList extends React.Component<DatabaseListProps> {
   componentWillMount() {
     this.props.refreshDatabases();
   }
@@ -167,16 +166,16 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   );
 
 // Connect the DatabaseTablesList class with our redux store.
-const databaseTablesListConnected = connect(
+const databaseTablesListConnected = withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(DatabaseTablesList);
+)(DatabaseTablesList));
 
 // Connect the DatabaseGrantsList class with our redux store.
-const databaseGrantsListConnected = connect(
+const databaseGrantsListConnected = withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(DatabaseGrantsList);
+)(DatabaseGrantsList));
 
 export {
   databaseTablesListConnected as DatabaseTablesList,

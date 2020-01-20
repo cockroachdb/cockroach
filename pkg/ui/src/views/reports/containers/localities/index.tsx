@@ -13,6 +13,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { bindActionCreators, Dispatch, Action } from "redux";
+import { withRouter } from "react-router-dom";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
@@ -144,4 +145,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(Localities);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Localities));

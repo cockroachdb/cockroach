@@ -15,8 +15,9 @@ import React from "react";
 import Helmet from "react-helmet";
 import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
-import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -32,11 +33,12 @@ import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { Search } from "../app/components/Search";
-import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import { getMatchParamByName } from "src/util/query";
+
+import "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type RouteProps = RouteComponentProps<any, any>;
 
 interface StatementsPageProps {
   statements: AggregateStatistics[];
@@ -57,9 +59,9 @@ interface StatementsPageState {
   search?: string;
 }
 
-export class StatementsPage extends React.Component<StatementsPageProps & RouteProps, StatementsPageState> {
+class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
 
-  constructor(props: StatementsPageProps & RouteProps) {
+  constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
     this.state = {
       sortSetting: {
@@ -81,7 +83,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
   }
 
   selectApp = (app: DropdownOption) => {
-    this.props.router.push(`/statements/${app.value}`);
+    this.props.history.push(`/statements/${app.value}`);
   }
 
   componentWillMount() {
@@ -143,7 +145,9 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
 
   renderCounts = () => {
     const { pagination: { current, pageSize }, search } = this.state;
-    const selectedApp = this.props.params[appAttr] || null;
+    const { match } = this.props;
+    const appAttrValue = getMatchParamByName(match, appAttr);
+    const selectedApp = appAttrValue || "";
     const total = this.filteredStatementsData().length;
     const pageCount = current * pageSize > total ? total : current * pageSize;
     const count = total > 10 ? pageCount : current * total;
@@ -164,8 +168,9 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
 
   renderStatements = () => {
     const { pagination, search } = this.state;
-    const { statements } = this.props;
-    const selectedApp = this.props.params[appAttr] || "";
+    const { statements, match } = this.props;
+    const appAttrValue = getMatchParamByName(match, appAttr);
+    const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
 
@@ -218,13 +223,11 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
   }
 
   render() {
+    const { match } = this.props;
+    const app = getMatchParamByName(match, appAttr);
     return (
       <React.Fragment>
-        <Helmet>
-          <title>
-            { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
-          </title>
-        </Helmet>
+        <Helmet title={ app ? `${app} App | Statements` : "Statements"} />
 
         <section className="section">
           <h1 className="base-heading">Statements</h1>
@@ -256,15 +259,17 @@ function keyByStatementAndImplicitTxn(stmt: ExecutionStatistics): string {
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
   (state: StatementsState) => state.cachedData.statements,
-  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
-  (state: CachedDataReducerState<StatementsResponseMessage>, props: RouteProps) => {
+  (_state: StatementsState, props: RouteComponentProps) => props,
+  (state: CachedDataReducerState<StatementsResponseMessage>, props: RouteComponentProps<any>) => {
     if (!state.data) {
       return null;
     }
 
     let statements = flattenStatementStats(state.data.statements);
-    if (props.params[appAttr]) {
-      let criteria = props.params[appAttr];
+    const app = getMatchParamByName(props.match, appAttr);
+
+    if (app) {
+      let criteria = app;
       let showInternal = false;
       if (criteria === "(unset)") {
         criteria = "";
@@ -355,20 +360,20 @@ export const selectLastReset = createSelector(
 );
 
 // tslint:disable-next-line:variable-name
-const StatementsPageConnected = connect(
-  (state: StatementsState, props: RouteProps) => ({
+const StatementsPageConnected = withRouter(connect(
+  (state: StatementsState, props: RouteComponentProps) => ({
     statements: selectStatements(state, props),
     statementsError: state.cachedData.statements.lastError,
     apps: selectApps(state),
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
   }),
-  dispatch => bindActionCreators(
+  (dispatch) => bindActionCreators(
     {
       refreshStatements,
     },
     dispatch,
   ),
-)(StatementsPage);
+)(StatementsPage));
 
 export default StatementsPageConnected;

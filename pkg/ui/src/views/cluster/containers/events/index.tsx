@@ -10,10 +10,11 @@
 
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Link } from "react-router";
+import { Link, withRouter } from "react-router-dom";
 import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
+import { Action, bindActionCreators, Dispatch } from "redux";
 
 import "./events.styl";
 
@@ -169,20 +170,24 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const eventBoxConnected = connect(
+const eventBoxConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
       eventsValid: eventsValidSelector(state),
     };
   },
-  () => ({
-    refreshEvents,
-  }),
-)(EventBoxUnconnected);
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        refreshEvents,
+      },
+      dispatch,
+    ),
+)(EventBoxUnconnected));
 
 // Connect the EventsList class with our redux store.
-const eventPageConnected = connect(
+const eventPageConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
@@ -190,11 +195,15 @@ const eventPageConnected = connect(
       sortSetting: eventsSortSetting.selector(state),
     };
   },
-  () => ({
-    refreshEvents,
-    setSort: eventsSortSetting.set,
-  }),
-)(EventPageUnconnected);
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        refreshEvents,
+        setSort: eventsSortSetting.set,
+      },
+      dispatch,
+    ),
+)(EventPageUnconnected));
 
 export { eventBoxConnected as EventBox };
 export { eventPageConnected as EventPage };

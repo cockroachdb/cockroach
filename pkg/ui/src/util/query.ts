@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
+import { match as Match } from "react-router-dom";
 
 interface ParamsObj {
   [key: string]: string;
@@ -44,4 +45,12 @@ export function queryToObj(location: Location, key: string, value: string) {
 export function queryByName(location: Location, key: string) {
   const urlParams = new URLSearchParams(location.search);
   return urlParams.get(key);
+}
+
+export function getMatchParamByName(match: Match<any>, key: string ) {
+  const param = match.params[key];
+  if (param) {
+    return decodeURIComponent(param);
+  }
+  return null;
 }

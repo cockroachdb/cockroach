@@ -12,8 +12,9 @@ import _ from "lodash";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link, withRouter } from "react-router-dom";
 import { bindActionCreators, Dispatch, Action } from "redux";
+
 import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -295,9 +296,9 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
   );
 
 // Connect the RangesMain class with our redux store.
-const rangesMainConnected = connect(
+const rangesMainConnected = withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(RangesMain);
+)(RangesMain));
 
 export { rangesMainConnected as default };

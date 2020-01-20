@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
-import { InjectedRouter, RouterState } from "react-router";
 import { bindActionCreators, Dispatch, Action } from "redux";
 import { createSelector } from "reselect";
+import {RouteComponentProps, withRouter} from "react-router-dom";
+
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { hoverOff as hoverOffAction, hoverOn as hoverOnAction, hoverStateSelector, HoverState } from "src/redux/hover";
 import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
@@ -26,6 +26,7 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import messagesDashboard from "./messages";
+import { getMatchParamByName } from "src/util/query";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -38,18 +39,9 @@ interface NodeGraphsOwnProps {
   hoverState: HoverState;
 }
 
-type RaftMessagesProps = NodeGraphsOwnProps & RouterState;
+type RaftMessagesProps = NodeGraphsOwnProps & RouteComponentProps;
 
-export class RaftMessages extends React.Component<RaftMessagesProps, {}> {
-  // Magic to add react router to the context.
-  // See https://github.com/ReactTraining/react-router/issues/975
-  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
-  // 'withRouter' HoC after upgrading to react-router 4.x.
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState; };
-
+export class RaftMessages extends React.Component<RaftMessagesProps> {
   /**
    * Selector to compute node dropdown options from the current node summary
    * collection.
@@ -78,10 +70,11 @@ export class RaftMessages extends React.Component<RaftMessagesProps, {}> {
   }
 
   setClusterPath(nodeID: string) {
+    const push = this.props.history.push;
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push("/raft/messages/all/");
+      push("/raft/messages/all/");
     } else {
-      this.context.router.push(`/raft/messages/node/${nodeID}`);
+      push(`/raft/messages/node/${nodeID}`);
     }
   }
 
@@ -98,9 +91,9 @@ export class RaftMessages extends React.Component<RaftMessagesProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
+    const { match, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
 
-    const selectedNode = params[nodeIDAttr] || "";
+    const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = (selectedNode !== "") ? [selectedNode] : null;
 
     // When "all" is the selected source, some graphs display a line for every
@@ -167,7 +160,6 @@ export class RaftMessages extends React.Component<RaftMessagesProps, {}> {
     );
   }
 }
-
 const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
   nodesSummary: nodesSummarySelector(state),
   nodesQueryValid: state.cachedData.nodes.valid,
@@ -186,4 +178,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(RaftMessages);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(RaftMessages));

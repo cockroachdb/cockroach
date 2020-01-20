@@ -12,7 +12,7 @@ import { Tooltip } from "antd";
 import * as docsURL from "oss/src/util/docs";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";

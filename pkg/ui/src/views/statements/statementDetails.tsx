@@ -14,14 +14,21 @@ import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { Action } from "redux";
 import { connect } from "react-redux";
-import { Link, RouterState } from "react-router";
-import { Params } from "react-router/lib/Router";
+import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
 import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
+
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { combineStatementStats, ExecutionStatistics, flattenStatementStats, NumericStat, StatementStatistics, stdDev } from "src/util/appStats";
+import {
+  combineStatementStats,
+  ExecutionStatistics,
+  flattenStatementStats,
+  NumericStat,
+  StatementStatistics,
+  stdDev,
+} from "src/util/appStats";
 import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
@@ -35,6 +42,7 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
 import { approximify, countBreakdown, latencyBreakdown, rowsBreakdown } from "./barCharts";
 import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
+import { getMatchParamByName } from "src/util/query";
 
 interface Fraction {
   numerator: number;
@@ -72,7 +80,7 @@ interface StatementDetailsOwnProps {
   refreshStatements: typeof refreshStatements;
 }
 
-type StatementDetailsProps = StatementDetailsOwnProps & RouterState;
+type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;
@@ -169,9 +177,10 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   }
 
   render() {
+    const app = getMatchParamByName(this.props.match, appAttr);
     return (
       <div>
-        <Helmet title={`Details | ${(this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "")} App | " : ""`} />
+        <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
         <section className="section"><h1 className="base-heading">Statement Details</h1></section>
         <section className="section section--container">
           <Loading
@@ -192,7 +201,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     const { stats, statement, app, distSQL, opt, failed, implicit_txn } = this.props.statement;
 
     if (!stats) {
-      const sourceApp = this.props.params[appAttr];
+      const sourceApp = getMatchParamByName(this.props.match, appAttr);
       const listUrl = "/statements" + (sourceApp ? "/" + sourceApp : "");
 
       return (
@@ -443,10 +452,10 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(params: Params): (stat: ExecutionStatistics) => boolean {
-  const statement = params[statementAttr];
-  const implicitTxn = (params[implicitTxnAttr] === "true");
-  let app = params[appAttr];
+function filterByRouterParamsPredicate(match: Match<any>): (stat: ExecutionStatistics) => boolean {
+  const statement = getMatchParamByName(match, statementAttr);
+  const implicitTxn = (getMatchParamByName(match, implicitTxnAttr) === "true");
+  let app = getMatchParamByName(match, appAttr);
 
   if (!app) {
     return (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.implicit_txn === implicitTxn;
@@ -460,16 +469,15 @@ function filterByRouterParamsPredicate(params: Params): (stat: ExecutionStatisti
 
 export const selectStatement = createSelector(
   (state: StatementsState) => state.cachedData.statements.data && state.cachedData.statements.data.statements,
-  (_state: StatementsState, props: { params: { [key: string]: string } }) => props,
+  (_state: StatementsState, props: RouteComponentProps) => props,
   (statements, props) => {
     if (!statements) {
       return null;
     }
 
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(flattened, filterByRouterParamsPredicate(props.params));
-
-    const statement = props.params[statementAttr];
+    const results = _.filter(flattened, filterByRouterParamsPredicate(props.match));
+    const statement = getMatchParamByName(props.match, statementAttr);
     return {
       statement,
       stats: combineStatementStats(results.map(s => s.stats)),
@@ -484,7 +492,7 @@ export const selectStatement = createSelector(
   },
 );
 
-const mapStateToProps = (state: AdminUIState, props: RouterState) => ({
+const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
   statement: selectStatement(state, props),
   statementsError: state.cachedData.statements.lastError,
   nodeNames: nodeDisplayNameByIDSelector(state),
@@ -496,12 +504,12 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
       refreshStatements,
     },
     dispatch,
-);
+  );
 
 // tslint:disable-next-line:variable-name
-const StatementDetailsConnected = connect(
+const StatementDetailsConnected = withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(StatementDetails);
+)(StatementDetails));
 
 export default StatementDetailsConnected;

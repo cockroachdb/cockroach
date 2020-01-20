@@ -9,11 +9,12 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { connect } from "react-redux";
 import moment, { Moment } from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
+import { Action, Dispatch, bindActionCreators } from "redux";
 
 import {
   LivenessStatus,
@@ -530,10 +531,14 @@ const NodesMainConnected = connect(
       nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
-  () => ({
-    refreshNodes,
-    refreshLiveness,
-  }),
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        refreshNodes,
+        refreshLiveness,
+      },
+      dispatch,
+    ),
 )(NodesMain);
 
 export { NodesMainConnected as NodesOverview };

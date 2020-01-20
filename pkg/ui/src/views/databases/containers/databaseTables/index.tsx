@@ -12,7 +12,7 @@ import tableIcon from "!!raw-loader!assets/tableIcon.svg";
 import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { bindActionCreators, Dispatch, Action } from "redux";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";

@@ -11,9 +11,11 @@
 import _ from "lodash";
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
-import { withRouter, WithRouterProps } from "react-router";
+import {RouteComponentProps, withRouter} from "react-router-dom";
 import { connect } from "react-redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 
+import { AdminUIState } from "src/redux/state";
 import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";
 import Print from "src/views/reports/containers/range/print";
@@ -47,7 +49,7 @@ interface EnqueueRangeState {
   error: Error;
 }
 
-export class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, EnqueueRangeState> {
+export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteComponentProps, EnqueueRangeState> {
   state: EnqueueRangeState = {
     queue: QUEUES[0],
     rangeID: "",
@@ -86,11 +88,11 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouter
       _.parseInt(this.state.nodeID),
       this.state.skipShouldQueue,
     ).then(
-      (response) => {
-        this.setState({ response: response, error: null });
+      response => {
+        this.setState({ response, error: null });
       },
-      (err) => {
-        this.setState({ response: null, error: err });
+      error => {
+        this.setState({ response: null, error });
       },
     );
   }
@@ -233,21 +235,25 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouter
 }
 
 // tslint:disable-next-line:variable-name
-const EnqueueRangeConnected = connect(
+const EnqueueRangeConnected = withRouter(connect(
   () => {
     return {};
   },
-  () => ({
-    handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
-      const req = new EnqueueRangeRequest({
-        queue: queue,
-        range_id: rangeID,
-        node_id: nodeID,
-        skip_should_queue: skipShouldQueue,
-      });
-      return enqueueRange(req);
-    },
-  }),
-)(withRouter(EnqueueRange));
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
+          const req = new EnqueueRangeRequest({
+            queue: queue,
+            range_id: rangeID,
+            node_id: nodeID,
+            skip_should_queue: skipShouldQueue,
+          });
+          return enqueueRange(req);
+        },
+      },
+      dispatch,
+    ),
+)(EnqueueRange));
 
 export default EnqueueRangeConnected;

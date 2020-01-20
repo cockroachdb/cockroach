@@ -13,8 +13,9 @@ import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouterState } from "react-router";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators, Dispatch, Action } from "redux";
+
 import * as protos from "src/js/protos";
 import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -23,6 +24,7 @@ import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import Loading from "src/views/shared/components/loading";
+import { getMatchParamByName } from "src/util/query";
 
 type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
 
@@ -31,7 +33,7 @@ interface ProblemRangesOwnProps {
   refreshProblemRanges: typeof refreshProblemRanges;
 }
 
-type ProblemRangesProps = ProblemRangesOwnProps & RouterState;
+type ProblemRangesProps = ProblemRangesOwnProps & RouteComponentProps;
 
 function isLoading(state: CachedDataReducerState<any>) {
   return _.isNil(state) || (_.isNil(state.data) && _.isNil(state.lastError));
@@ -73,7 +75,7 @@ function ProblemRangeList(props: {
 
 function problemRangeRequestFromProps(props: ProblemRangesProps) {
   return new protos.cockroach.server.serverpb.ProblemRangesRequest({
-    node_id: props.params[nodeIDAttr],
+    node_id: getMatchParamByName(props.match, nodeIDAttr),
   });
 }
 
@@ -101,13 +103,15 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   }
 
   renderReportBody() {
-    const { problemRanges } = this.props;
+    const { problemRanges, match } = this.props;
+    const nodeId = getMatchParamByName(match, nodeIDAttr);
+
     if (isLoading(this.props.problemRanges)) {
       return null;
     }
 
     if (!_.isNil(problemRanges.lastError)) {
-      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+      if (nodeId === null) {
         return (
           <div>
             <h2 className="base-heading">Error loading Problem Ranges for the Cluster</h2>
@@ -117,7 +121,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       } else {
         return (
           <div>
-            <h2 className="base-heading">Error loading Problem Ranges for node n{this.props.params[nodeIDAttr]}</h2>
+            <h2 className="base-heading">Error loading Problem Ranges for node n{nodeId}</h2>
             {problemRanges.lastError.toString()}
           </div>
         );
@@ -130,10 +134,10 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       return _.isEmpty(d.error_message);
     }));
     if (validIDs.length === 0) {
-      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+      if (nodeId === null) {
         return <h2 className="base-heading">No nodes returned any results</h2>;
       } else {
-        return <h2 className="base-heading">No results reported for node n{this.props.params[nodeIDAttr]}</h2>;
+        return <h2 className="base-heading">No results reported for node n{nodeId}</h2>;
       }
     }
 
@@ -226,7 +230,7 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(
+export default withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(ProblemRanges);
+)(ProblemRanges));

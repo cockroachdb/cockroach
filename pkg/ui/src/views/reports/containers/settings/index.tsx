@@ -13,6 +13,8 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { bindActionCreators, Dispatch, Action } from "redux";
+import { withRouter } from "react-router-dom";
+
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -112,4 +114,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(Settings);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Settings));
