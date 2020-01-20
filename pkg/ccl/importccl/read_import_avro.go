@@ -428,12 +428,13 @@ type avroInputReader struct {
 var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
+	ctx context.Context,
 	kvCh chan row.KVBatch,
 	tableDesc *sqlbase.TableDescriptor,
 	avro roachpb.AvroOptions,
 	evalCtx *tree.EvalContext,
 ) (*avroInputReader, error) {
-	conv, err := row.NewDatumRowConverter(tableDesc, nil /* targetColNames */, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(ctx, tableDesc, nil /* targetColNames */, evalCtx, kvCh)
 
 	if err != nil {
 		return nil, err

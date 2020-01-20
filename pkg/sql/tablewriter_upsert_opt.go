@@ -113,7 +113,9 @@ type optTableUpserter struct {
 }
 
 // init is part of the tableWriter interface.
-func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
+func (tu *optTableUpserter) init(
+	ctx context.Context, txn *client.Txn, evalCtx *tree.EvalContext,
+) error {
 	tu.tableWriterBase.init(txn)
 	tableDesc := tu.tableDesc()
 
@@ -169,6 +171,7 @@ func (tu *optTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) err
 
 	var err error
 	tu.ru, err = row.MakeUpdater(
+		ctx,
 		txn,
 		tu.tableDesc(),
 		tu.fkTables,

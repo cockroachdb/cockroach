@@ -72,6 +72,7 @@ const (
 // expectation of which values are passed as oldValues to UpdateRow. All the columns
 // passed in requestedCols will be included in FetchCols at the beginning.
 func MakeUpdater(
+	ctx context.Context,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
@@ -83,14 +84,14 @@ func MakeUpdater(
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
 	rowUpdater, err := makeUpdaterWithoutCascader(
-		txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
+		ctx, txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
 	)
 	if err != nil {
 		return Updater{}, err
 	}
 	if checkFKs == CheckFKs {
 		rowUpdater.cascader, err = makeUpdateCascader(
-			txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
+			ctx, txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
 		)
 		if err != nil {
 			return Updater{}, err
@@ -108,6 +109,7 @@ var returnTruePseudoError error = returnTrue{}
 // makeUpdaterWithoutCascader is the same function as MakeUpdater but does not
 // create a cascader.
 func makeUpdaterWithoutCascader(
+	ctx context.Context,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	fkTables FkTableMetadata,
@@ -195,14 +197,14 @@ func makeUpdaterWithoutCascader(
 		// them, so request them all.
 		var err error
 		if ru.rd, err = makeRowDeleterWithoutCascader(
-			txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
+			ctx, txn, tableDesc, fkTables, tableCols, SkipFKs, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 		if ru.ri, err = MakeInserter(
-			txn, tableDesc, tableCols, SkipFKs, nil /* fkTables */, alloc,
+			ctx, txn, tableDesc, tableCols, SkipFKs, nil /* fkTables */, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
@@ -277,7 +279,7 @@ func makeUpdaterWithoutCascader(
 		if primaryKeyColChange {
 			updateCols = nil
 		}
-		if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(txn, tableDesc, fkTables,
+		if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(ctx, txn, tableDesc, fkTables,
 			updateCols, ru.FetchColIDtoRowIndex, alloc); err != nil {
 			return Updater{}, err
 		}

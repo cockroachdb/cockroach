@@ -409,6 +409,7 @@ var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
+	ctx context.Context,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
 	descs map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
@@ -417,7 +418,7 @@ func newPgDumpReader(
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+			conv, err := row.NewDatumRowConverter(ctx, table.Desc, nil /* targetColNames */, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}

@@ -34,6 +34,7 @@ type fkExistenceCheckForDelete struct {
 
 // makeFkExistenceCheckHelperForDelete instantiates a delete helper.
 func makeFkExistenceCheckHelperForDelete(
+	ctx context.Context,
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
@@ -94,6 +95,26 @@ func makeFkExistenceCheckHelperForDelete(
 			h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
 		}
 		h.fks[mutatedIdx.ID] = append(h.fks[mutatedIdx.ID], fk)
+	}
+
+	if len(h.fks) > 0 {
+		// TODO(knz,radu): FK existence checks need to see the writes
+		// performed by the mutation.
+		//
+		// In order to make this true, we need to split the existence
+		// checks into a separate sequencing step, and have the first
+		// check happen no early than the end of all the "main" part of
+		// the statement. Unfortunately, the organization of the code does
+		// not allow this today.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/33475
+		//
+		// In order to "make do" and preserve a modicum of FK semantics we
+		// thus need to disable step-wise execution here. The result is that
+		// it will also enable any interleaved read part to observe the
+		// mutation, and thus introduce the risk of a Halloween problem for
+		// any mutation that uses FK relationships.
+		_ = txn.ConfigureStepping(ctx, client.SteppingDisabled)
 	}
 
 	return h, nil

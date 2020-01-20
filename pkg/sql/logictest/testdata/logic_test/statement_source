@@ -72,10 +72,10 @@ SELECT * FROM a ORDER BY b
 # Regression for #30936: ensure that wrapped planNodes with non-needed columns work ok
 
 statement ok
-CREATE TABLE b (a int, b int)
+CREATE TABLE b (a int, b int);
 
 query II
-SELECT * FROM b WHERE EXISTS (SELECT * FROM [INSERT INTO b VALUES (1,2) RETURNING a,b]);
+SELECT * FROM (VALUES (1, 2)) WHERE EXISTS (SELECT * FROM [INSERT INTO b VALUES (1,2) RETURNING a,b]);
 ----
 1 2
 

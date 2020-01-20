@@ -202,7 +202,7 @@ func (th *testHelper) newRecordStream(
 	// we're using nil kv channel for this test).
 	defer row.TestingSetDatumRowConverterBatchSize(numRecords + 1)()
 	evalCtx := tree.MakeTestingEvalContext(nil)
-	conv, err := row.NewDatumRowConverter(th.schemaTable, nil, &evalCtx, nil)
+	conv, err := row.NewDatumRowConverter(context.Background(), th.schemaTable, nil, &evalCtx, nil)
 	require.NoError(t, err)
 
 	opts := roachpb.AvroOptions{

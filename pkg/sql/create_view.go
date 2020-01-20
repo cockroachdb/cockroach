@@ -37,6 +37,11 @@ type createViewNode struct {
 	planDeps planDependencies
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because CREATE VIEW performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *createViewNode) ReadingOwnWrites() {}
+
 func (n *createViewNode) startExec(params runParams) error {
 	// TODO(arul): Allow temporary views once temp tables work for regular tables.
 	if n.temporary {

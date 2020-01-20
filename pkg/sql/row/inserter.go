@@ -40,6 +40,7 @@ type Inserter struct {
 //
 // insertCols must contain every column in the primary key.
 func MakeInserter(
+	ctx context.Context,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
@@ -62,7 +63,7 @@ func MakeInserter(
 
 	if checkFKs == CheckFKs {
 		var err error
-		if ri.Fks, err = makeFkExistenceCheckHelperForInsert(txn, tableDesc, fkTables,
+		if ri.Fks, err = makeFkExistenceCheckHelperForInsert(ctx, txn, tableDesc, fkTables,
 			ri.InsertColIDtoRowIndex, alloc); err != nil {
 			return ri, err
 		}

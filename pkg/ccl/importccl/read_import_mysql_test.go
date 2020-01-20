@@ -42,7 +42,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table}}
 
 	kvCh := make(chan row.KVBatch, 10)
-	converter, err := newMysqldumpReader(kvCh, tables, testEvalCtx)
+	converter, err := newMysqldumpReader(ctx, kvCh, tables, testEvalCtx)
 
 	if err != nil {
 		t.Fatal(err)

@@ -32,12 +32,13 @@ type mysqloutfileReader struct {
 var _ inputConverter = &mysqloutfileReader{}
 
 func newMysqloutfileReader(
+	ctx context.Context,
 	kvCh chan row.KVBatch,
 	opts roachpb.MySQLOutfileOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*mysqloutfileReader, error) {
-	conv, err := row.NewDatumRowConverter(tableDesc, nil /* targetColNames */, evalCtx, kvCh)
+	conv, err := row.NewDatumRowConverter(ctx, tableDesc, nil /* targetColNames */, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

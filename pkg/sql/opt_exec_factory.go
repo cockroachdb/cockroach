@@ -1200,6 +1200,8 @@ func (ef *execFactory) ConstructInsert(
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1218,7 +1220,7 @@ func (ef *execFactory) ConstructInsert(
 	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
+		ctx, ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1270,6 +1272,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1277,7 +1281,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
+		ctx, ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1345,6 +1349,8 @@ func (ef *execFactory) ConstructUpdate(
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1376,6 +1382,7 @@ func (ef *execFactory) ConstructUpdate(
 	// CBO will have already determined the set of fetch and update columns, and
 	// passes those sets into the updater (which will basically be a no-op).
 	ru, err := row.MakeUpdater(
+		ctx,
 		ef.planner.txn,
 		tabDesc,
 		fkTables,
@@ -1494,6 +1501,8 @@ func (ef *execFactory) ConstructUpsert(
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1509,7 +1518,7 @@ func (ef *execFactory) ConstructUpsert(
 
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
-		ef.planner.txn, tabDesc, insertColDescs, row.CheckFKs, fkTables, &ef.planner.alloc,
+		ctx, ef.planner.txn, tabDesc, insertColDescs, row.CheckFKs, fkTables, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1521,6 +1530,7 @@ func (ef *execFactory) ConstructUpsert(
 	// columns, and passes those sets into the updater (which will basically be a
 	// no-op).
 	ru, err := row.MakeUpdater(
+		ctx,
 		ef.planner.txn,
 		tabDesc,
 		fkTables,
@@ -1603,6 +1613,8 @@ func (ef *execFactory) ConstructDelete(
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
+	ctx := ef.planner.extendedEvalCtx.Context
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1629,6 +1641,7 @@ func (ef *execFactory) ConstructDelete(
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
 	rd, err := row.MakeDeleter(
+		ctx,
 		ef.planner.txn,
 		tabDesc,
 		fkTables,

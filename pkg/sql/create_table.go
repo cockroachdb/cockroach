@@ -107,6 +107,11 @@ var storageParamExpectedTypes = map[string]storageParamType{
 	`user_catalog_table`:                          storageParamUnimplemented,
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because CREATE TABLE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *createTableNode) ReadingOwnWrites() {}
+
 func (n *createTableNode) startExec(params runParams) error {
 	isTemporary := n.n.Temporary
 
@@ -267,96 +272,107 @@ func (n *createTableNode) startExec(params runParams) error {
 	// If we are in an explicit txn or the source has placeholders, we execute the
 	// CTAS query synchronously.
 	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {
-		// This is a very simplified version of the INSERT logic: no CHECK
-		// expressions, no FK checks, no arbitrary insertion order, no
-		// RETURNING, etc.
+		err = func() error {
+			// The data fill portion of CREATE AS must operate on a read snapshot,
+			// so that it doesn't end up observing its own writes.
+			prevMode := params.p.Txn().ConfigureStepping(params.ctx, client.SteppingEnabled)
+			defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
 
-		// Instantiate a row inserter and table writer. It has a 1-1
-		// mapping to the definitions in the descriptor.
-		ri, err := row.MakeInserter(
-			params.p.txn,
-			sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
-			desc.Columns,
-			row.SkipFKs,
-			nil, /* fkTables */
-			&params.p.alloc)
+			// This is a very simplified version of the INSERT logic: no CHECK
+			// expressions, no FK checks, no arbitrary insertion order, no
+			// RETURNING, etc.
+
+			// Instantiate a row inserter and table writer. It has a 1-1
+			// mapping to the definitions in the descriptor.
+			ri, err := row.MakeInserter(
+				params.ctx,
+				params.p.txn,
+				sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
+				desc.Columns,
+				row.SkipFKs,
+				nil, /* fkTables */
+				&params.p.alloc)
+			if err != nil {
+				return err
+			}
+			ti := tableInserterPool.Get().(*tableInserter)
+			*ti = tableInserter{ri: ri}
+			tw := tableWriter(ti)
+			if n.run.autoCommit == autoCommitEnabled {
+				tw.enableAutoCommit()
+			}
+			defer func() {
+				tw.close(params.ctx)
+				*ti = tableInserter{}
+				tableInserterPool.Put(ti)
+			}()
+			if err := tw.init(params.p.txn, params.p.EvalContext()); err != nil {
+				return err
+			}
+
+			// Prepare the buffer for row values. At this point, one more column has
+			// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
+			// a PRIMARY KEY is not specified by the user.
+			rowBuffer := make(tree.Datums, len(desc.Columns))
+			pkColIdx := len(desc.Columns) - 1
+
+			// The optimizer includes the rowID expression as part of the input
+			// expression. But the heuristic planner does not do this, so construct
+			// a rowID expression to be evaluated separately.
+			var defTypedExpr tree.TypedExpr
+			if n.run.synthRowID {
+				// Prepare the rowID expression.
+				defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
+				defExpr, err := parser.ParseExpr(defExprSQL)
+				if err != nil {
+					return err
+				}
+				defTypedExpr, err = params.p.analyzeExpr(
+					params.ctx,
+					defExpr,
+					nil, /*sources*/
+					tree.IndexedVarHelper{},
+					types.Any,
+					false, /*requireType*/
+					"CREATE TABLE AS")
+				if err != nil {
+					return err
+				}
+			}
+
+			for {
+				if err := params.p.cancelChecker.Check(); err != nil {
+					return err
+				}
+				if next, err := n.sourcePlan.Next(params); !next {
+					if err != nil {
+						return err
+					}
+					_, err := tw.finalize(
+						params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+					if err != nil {
+						return err
+					}
+					break
+				}
+
+				// Populate the buffer and generate the PK value.
+				copy(rowBuffer, n.sourcePlan.Values())
+				if n.run.synthRowID {
+					rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
+					if err != nil {
+						return err
+					}
+				}
+
+				if err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+					return err
+				}
+			}
+			return nil
+		}()
 		if err != nil {
 			return err
-		}
-		ti := tableInserterPool.Get().(*tableInserter)
-		*ti = tableInserter{ri: ri}
-		tw := tableWriter(ti)
-		if n.run.autoCommit == autoCommitEnabled {
-			tw.enableAutoCommit()
-		}
-		defer func() {
-			tw.close(params.ctx)
-			*ti = tableInserter{}
-			tableInserterPool.Put(ti)
-		}()
-		if err := tw.init(params.p.txn, params.p.EvalContext()); err != nil {
-			return err
-		}
-
-		// Prepare the buffer for row values. At this point, one more column has
-		// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
-		// a PRIMARY KEY is not specified by the user.
-		rowBuffer := make(tree.Datums, len(desc.Columns))
-		pkColIdx := len(desc.Columns) - 1
-
-		// The optimizer includes the rowID expression as part of the input
-		// expression. But the heuristic planner does not do this, so construct
-		// a rowID expression to be evaluated separately.
-		var defTypedExpr tree.TypedExpr
-		if n.run.synthRowID {
-			// Prepare the rowID expression.
-			defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
-			defExpr, err := parser.ParseExpr(defExprSQL)
-			if err != nil {
-				return err
-			}
-			defTypedExpr, err = params.p.analyzeExpr(
-				params.ctx,
-				defExpr,
-				nil, /*sources*/
-				tree.IndexedVarHelper{},
-				types.Any,
-				false, /*requireType*/
-				"CREATE TABLE AS")
-			if err != nil {
-				return err
-			}
-		}
-
-		for {
-			if err := params.p.cancelChecker.Check(); err != nil {
-				return err
-			}
-			if next, err := n.sourcePlan.Next(params); !next {
-				if err != nil {
-					return err
-				}
-				_, err := tw.finalize(
-					params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-				if err != nil {
-					return err
-				}
-				break
-			}
-
-			// Populate the buffer and generate the PK value.
-			copy(rowBuffer, n.sourcePlan.Values())
-			if n.run.synthRowID {
-				rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
-				if err != nil {
-					return err
-				}
-			}
-
-			err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-			if err != nil {
-				return err
-			}
 		}
 	}
 
@@ -1366,6 +1382,7 @@ func MakeTableDesc(
 			return desc, errors.Errorf("unsupported table def: %T", def)
 		}
 	}
+
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
 	for _, def := range n.Defs {

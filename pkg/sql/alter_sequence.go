@@ -42,6 +42,11 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 	return &alterSequenceNode{n: n, seqDesc: seqDesc}, nil
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER SEQUENCE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterSequenceNode) ReadingOwnWrites() {}
+
 func (n *alterSequenceNode) startExec(params runParams) error {
 	desc := n.seqDesc
 
