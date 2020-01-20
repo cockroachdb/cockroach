@@ -11,7 +11,7 @@
 import { Divider } from "antd";
 import _ from "lodash";
 import moment from "moment";
-import { queryByName, queryToObj, queryToString, removeURLParameters } from "oss/src/util/query";
+import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
 import React from "react";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -201,9 +201,12 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
     const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
+    const params = new URLSearchParams(location.search);
+    params.set("start", start);
+    params.set("end", moment.utc(dateEnd).format("X"));
     history.push({
       pathname: location.pathname,
-      search: `${removeURLParameters(location, ["start", "end"])}&start=${start}&end=${moment.utc(dateEnd).format("X")}`,
+      search: `?${params.toString()}`,
     });
   }
 
