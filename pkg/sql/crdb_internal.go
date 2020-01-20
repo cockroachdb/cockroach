@@ -1260,7 +1260,7 @@ CREATE TABLE crdb_internal.create_statements (
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, OmitFKClausesFromCreate)
+					createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, OmitFKClausesFromCreate)
 					if err != nil {
 						return err
 					}
@@ -1268,7 +1268,7 @@ CREATE TABLE crdb_internal.create_statements (
 					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, allIdx, table, alterStmts, validateStmts); err != nil {
 						return err
 					}
-					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, IncludeFkClausesInCreate)
+					stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, IncludeFkClausesInCreate)
 				}
 				if err != nil {
 					return err
