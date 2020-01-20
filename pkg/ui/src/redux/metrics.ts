@@ -17,7 +17,8 @@
 
 import _ from "lodash";
 import { Action } from "redux";
-import { delay, take, fork, call, all, put } from "redux-saga/effects";
+import { delay } from "redux-saga/effects";
+import { take, fork, call, all, put } from "redux-saga/effects";
 
 import * as protos from  "src/js/protos";
 import { PayloadAction } from "src/interfaces/action";

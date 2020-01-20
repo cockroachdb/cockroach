@@ -12,7 +12,7 @@ import { Highlight } from "oss/src/views/shared/components/sql/highlight";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouterState } from "react-router";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import { generateTableID, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -23,6 +23,7 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import { getMatchParamByName } from "src/util/query";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -54,7 +55,7 @@ interface TableMainActions {
  * TableMainProps is the type of the props object that must be passed to
  * TableMain component.
  */
-type TableMainProps = TableMainData & TableMainActions & RouterState;
+type TableMainProps = TableMainData & TableMainActions & RouteComponentProps;
 
 /**
  * TableMain renders the main content of the databases page, which is primarily a
@@ -62,20 +63,24 @@ type TableMainProps = TableMainData & TableMainActions & RouterState;
  */
 export class TableMain extends React.Component<TableMainProps, {}> {
   componentWillMount() {
+    const database = getMatchParamByName(this.props.match, databaseNameAttr);
+    const table = getMatchParamByName(this.props.match, tableNameAttr);
     this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
-      database: this.props.params[databaseNameAttr],
-      table: this.props.params[tableNameAttr],
+      database,
+      table,
     }));
     this.props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
-      database: this.props.params[databaseNameAttr],
-      table: this.props.params[tableNameAttr],
+      database,
+      table,
     }));
   }
 
   render() {
-    const { tableInfo, grantsSortSetting } = this.props;
+    const { tableInfo, grantsSortSetting, match } = this.props;
+    const database = getMatchParamByName(match, databaseNameAttr);
+    const table = getMatchParamByName(match, tableNameAttr);
 
-    const title = this.props.params[databaseNameAttr] + "." + this.props.params[tableNameAttr];
+    const title = `${database}.${table}`;
 
     if (tableInfo) {
       return <div>
@@ -134,15 +139,15 @@ export class TableMain extends React.Component<TableMainProps, {}> {
  *         SELECTORS
  */
 
-export function selectTableInfo(state: AdminUIState, props: RouterState): TableInfo {
-  const db = props.params[databaseNameAttr];
-  const table = props.params[tableNameAttr];
+export function selectTableInfo(state: AdminUIState, props: RouteComponentProps): TableInfo {
+  const db = getMatchParamByName(props.match, databaseNameAttr);
+  const table = getMatchParamByName(props.match, tableNameAttr);
   const details = state.cachedData.tableDetails[generateTableID(db, table)];
   const stats = state.cachedData.tableStats[generateTableID(db, table)];
   return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
-const mapStateToProps = (state: AdminUIState, ownProps: RouterState) => ({
+const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => ({
   tableInfo: selectTableInfo(state, ownProps),
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
 });
@@ -154,9 +159,9 @@ const mapDispatchToProps = {
 };
 
 // Connect the TableMain class with our redux store.
-const tableMainConnected = connect(
+const tableMainConnected = withRouter(connect(
   mapStateToProps,
   mapDispatchToProps,
-)(TableMain);
+)(TableMain));
 
 export default tableMainConnected;

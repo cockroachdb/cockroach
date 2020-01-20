@@ -12,7 +12,7 @@ import _ from "lodash";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
 import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
@@ -29,6 +29,7 @@ import { INodeStatus } from "src/util/proto";
 
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
+import { queryByName } from "src/util/query";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -36,14 +37,13 @@ export interface CustomChartProps {
   nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   metricsMetadata: MetricsMetadata;
-  location: Location;
 }
 
 interface UrlState {
   charts: string;
 }
 
-class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
+class CustomChart extends React.Component<CustomChartProps & RouteComponentProps> {
   // Selector which computes dropdown options based on the nodes available on
   // the cluster.
   private nodeOptions = createSelector(
@@ -100,7 +100,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     this.props.refreshMetricMetadata();
   }
 
-  componentWillReceiveProps(props: CustomChartProps & WithRouterProps) {
+  componentWillReceiveProps(props: CustomChartProps & RouteComponentProps) {
     this.refresh(props);
   }
 
@@ -281,7 +281,7 @@ const mapDispatchToProps = {
   refreshMetricMetadata,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(CustomChart));
 
 function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
   return _.has(nodeStatus.store_statuses[0].metrics, metricName);

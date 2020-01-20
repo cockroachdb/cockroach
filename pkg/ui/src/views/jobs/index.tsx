@@ -16,6 +16,8 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { withRouter } from "react-router-dom";
+
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -387,4 +389,4 @@ const mapDispatchToProps = {
   refreshJobs,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(JobsTable as any);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(JobsTable));

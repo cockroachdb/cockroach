@@ -8,7 +8,7 @@
 
 import React from "react";
 import moment from "moment";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import { INodeStatus } from "src/util/proto";
 import { nodeCapacityStats, livenessNomenclature } from "src/redux/nodes";

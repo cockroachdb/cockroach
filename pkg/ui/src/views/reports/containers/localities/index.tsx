@@ -12,6 +12,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { withRouter } from "react-router-dom";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
@@ -139,4 +140,4 @@ const mapDispatchToProps = {
   refreshNodes,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(Localities);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Localities));

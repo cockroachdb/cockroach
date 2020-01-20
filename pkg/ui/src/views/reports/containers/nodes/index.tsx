@@ -15,7 +15,8 @@ import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
+import { withRouter, RouteComponentProps } from "react-router-dom";
+
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -37,7 +38,7 @@ interface NodesTableRowParams {
   cellTitle?: (ns: protos.cockroach.server.status.statuspb.INodeStatus) => string;
 }
 
-type NodesProps = NodesOwnProps & RouterState;
+type NodesProps = NodesOwnProps & RouteComponentProps;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
@@ -376,4 +377,4 @@ const mapDispatchToProps = {
   refreshLiveness,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(Nodes);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Nodes));
