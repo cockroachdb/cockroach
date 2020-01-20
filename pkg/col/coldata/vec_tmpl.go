@@ -81,14 +81,6 @@ func (m *memColumn) Append(args SliceArgs) {
 			}
 			fromCol.UpdateOffsetsToBeNonDecreasing(uint64(maxIdx + 1))
 			// {{else}}
-			// Ensure that the slice has the capacity for all non-variable width
-			// types.
-			desiredCap := args.DestIdx + args.SrcEndIdx - args.SrcStartIdx
-			if uint64(cap(toCol)) < desiredCap {
-				newToCol := make([]_GOTYPE, desiredCap)
-				copy(newToCol, toCol[:args.DestIdx])
-				toCol = newToCol
-			}
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
 			// {{end}}
 			for _, selIdx := range sel {

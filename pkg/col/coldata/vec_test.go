@@ -463,10 +463,11 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 }
 
 func BenchmarkAppend(b *testing.B) {
-	const typ = coltypes.Int64
-
-	src := NewMemColumn(typ, int(BatchSize()))
-	sel := make([]uint16, len(src.Int64()))
+	rng, _ := randutil.NewPseudoRand()
+	sel := make([]uint16, BatchSize())
+	for i, selIdx := range rng.Perm(len(sel)) {
+		sel[i] = uint16(selIdx)
+	}
 
 	benchCases := []struct {
 		name string
@@ -484,27 +485,34 @@ func BenchmarkAppend(b *testing.B) {
 		},
 	}
 
-	for _, bc := range benchCases {
-		bc.args.Src = src
-		bc.args.ColType = typ
-		bc.args.SrcEndIdx = uint64(BatchSize())
-		dest := NewMemColumn(typ, int(BatchSize()))
-		b.Run(bc.name, func(b *testing.B) {
-			b.SetBytes(8 * int64(BatchSize()))
-			for i := 0; i < b.N; i++ {
-				dest.Append(bc.args)
-				// "Reset" dest for another round.
-				dest.SetCol(dest.Int64()[:BatchSize()])
+	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+		for _, nullProbability := range []float64{0, 0.2} {
+			src := NewMemColumn(typ, int(BatchSize()))
+			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, int(BatchSize()), nullProbability)
+			for _, bc := range benchCases {
+				bc.args.Src = src
+				bc.args.ColType = typ
+				bc.args.SrcEndIdx = uint64(BatchSize())
+				dest := NewMemColumn(typ, int(BatchSize()))
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
+					b.SetBytes(8 * int64(BatchSize()))
+					bc.args.DestIdx = 0
+					for i := 0; i < b.N; i++ {
+						dest.Append(bc.args)
+						bc.args.DestIdx += uint64(BatchSize())
+					}
+				})
 			}
-		})
+		}
 	}
 }
 
 func BenchmarkCopy(b *testing.B) {
-	const typ = coltypes.Int64
-
-	src := NewMemColumn(typ, int(BatchSize()))
-	sel := make([]uint16, len(src.Int64()))
+	rng, _ := randutil.NewPseudoRand()
+	sel := make([]uint16, BatchSize())
+	for i, selIdx := range rng.Perm(len(sel)) {
+		sel[i] = uint16(selIdx)
+	}
 
 	benchCases := []struct {
 		name string
@@ -524,16 +532,28 @@ func BenchmarkCopy(b *testing.B) {
 		},
 	}
 
-	for _, bc := range benchCases {
-		bc.args.Src = src
-		bc.args.ColType = typ
-		bc.args.SrcEndIdx = uint64(BatchSize())
-		dest := NewMemColumn(typ, int(BatchSize()))
-		b.Run(bc.name, func(b *testing.B) {
-			b.SetBytes(8 * int64(BatchSize()))
-			for i := 0; i < b.N; i++ {
-				dest.Copy(bc.args)
+	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+		for _, nullProbability := range []float64{0, 0.2} {
+			src := NewMemColumn(typ, int(BatchSize()))
+			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, int(BatchSize()), nullProbability)
+			for _, bc := range benchCases {
+				bc.args.Src = src
+				bc.args.ColType = typ
+				bc.args.SrcEndIdx = uint64(BatchSize())
+				dest := NewMemColumn(typ, int(BatchSize()))
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
+					b.SetBytes(8 * int64(BatchSize()))
+					for i := 0; i < b.N; i++ {
+						dest.Copy(bc.args)
+						if typ == coltypes.Bytes {
+							// We need to reset flat bytes so that we could copy into it
+							// (otherwise it'll panic on the second copy due to maxSetIndex
+							// being not zero).
+							dest.Bytes().Reset()
+						}
+					}
+				})
 			}
-		})
+		}
 	}
 }
