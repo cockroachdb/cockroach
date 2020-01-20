@@ -11,20 +11,21 @@
 import React from "react";
 import { Action, Store } from "redux";
 import { Provider } from "react-redux";
-import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
+import { Route, Redirect, Switch } from "react-router-dom";
+import { History } from "history";
+import { ConnectedRouter } from "connected-react-router";
 
 import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr, implicitTxnAttr,
 } from "src/util/constants";
+import { AdminUIState } from "src/redux/state";
 
-import { AdminUIState, History } from "src/redux/state";
-
-import loginRoutes from "src/routes/login";
+import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 
 import NotFound from "src/views/app/components/NotFound";
-import Layout from "src/views/app/containers/layout";
-import { ConnectedDatabaseTablesList, ConnectedDatabaseGrantsList } from "src/views/databases/containers/databases";
+import { Layout } from "src/views/app/containers/layout";
+import { DatabaseGrantsList, DatabaseTablesList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
@@ -49,8 +50,6 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
-import { normalizeConnectedComponent } from "src/util/normalizeConnectedComponent";
-import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -78,140 +77,112 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
   return (
     <Provider store={store}>
-      <Router history={history}>
-        { /* login */}
-        {loginRoutes(store)}
+      <ConnectedRouter history={history}>
+          <Switch>
+            { /* login */}
+            { createLoginRoute() }
+            { createLogoutRoute(store) }
+            <Route path="/">
+              <Layout>
+                <Switch>
+                  <Redirect exact from="/" to="/overview" />
+                  { /* overview page */ }
+                  { visualizationRoutes() }
 
-        <Route path="/" component={normalizeConnectedComponent(Layout)}>
-          <IndexRedirect to="overview"/>
+                  { /* time series metrics */ }
+                  <Redirect exact from="/metrics" to="/metrics/overview/cluster" />
+                  <Redirect exact from={`/metrics/:${dashboardNameAttr}`} to={`/metrics/:${dashboardNameAttr}/cluster`} />
+                  <Route exact path={`/metrics/:${dashboardNameAttr}/cluster`} component={ NodeGraphs } />
+                  <Redirect exact path={`/metrics/:${dashboardNameAttr}/node`} to={ `/metrics/:${dashboardNameAttr}/cluster` } />
+                  <Route path={ `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}` } component={ NodeGraphs } />
 
-          { /* overview page */}
-          {visualizationRoutes()}
+                  { /* node details */ }
+                  <Redirect exact from="/node" to="/overview/list" />
+                  <Route exact path={ `/node/:${nodeIDAttr}` } component={ NodeOverview } />
+                  <Route path={ `/node/:${nodeIDAttr}/logs` } component={ NodeLogs } />
 
-          { /* time series metrics */}
-          <Route path="metrics">
-            <IndexRedirect to="overview/cluster"/>
-            <Route path={`:${dashboardNameAttr}`}>
-              <IndexRedirect to="cluster"/>
-              <Route path="cluster" component={normalizeConnectedComponent(NodeGraphs)}/>
-              <Route path="node">
-                <IndexRedirect to={`/metrics/:${dashboardNameAttr}/cluster`}/>
-                <Route path={`:${nodeIDAttr}`} component={normalizeConnectedComponent(NodeGraphs)}/>
-              </Route>
+                  { /* events & jobs */ }
+                  <Route path="/events" component={ EventPage } />
+                  <Route path="/jobs" component={ JobsPage } />
+
+                  { /* databases */ }
+                  <Redirect exact from="/databases" to="/databases/tables" />
+                  <Route path="/databases/tables" component={ DatabaseTablesList } />
+                  <Route path="/databases/grants" component={ DatabaseGrantsList } />
+                  <Redirect
+                    from={ `/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+                    to={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+                  />
+
+                  <Redirect exact from="/database" to="/databases" />
+                  <Redirect exact from={ `/database/:${databaseNameAttr}`} to="/databases" />
+                  <Redirect exact from={ `/database/:${databaseNameAttr}/table`} to="/databases" />
+                  <Route path={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
+
+                  { /* data distribution */ }
+                  <Route path="/data-distribution" component={ DataDistributionPage } />
+
+                  { /* statement statistics */ }
+                  <Route exact path="/statements" component={ StatementsPage }/>
+                  <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
+                  <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+
+                  <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
+                  <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
+                  <Route exact path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
+
+                  { /* debug pages */ }
+                  <Route exact path="/debug" component={Debug}/>
+                  <Route path="/debug/redux" component={ReduxDebug}/>
+                  <Route path="/debug/chart" component={CustomChart}/>
+                  <Route path="/debug/enqueue_range" component={EnqueueRange}/>
+
+                  <Route path="/raft">
+                    <Raft>
+                      <Switch>
+                        <Redirect exact from="/raft" to="/raft/ranges" />
+                        <Route path="/raft/ranges" component={RaftRanges}/>
+                        <Route path="/raft/messages/all" component={RaftMessages}/>
+                        <Route path={`/raft/messages/node/:${nodeIDAttr}`} component={RaftMessages}/>
+                      </Switch>
+                    </Raft>
+                  </Route>
+
+                  <Route path="/reports/problemranges" component={ ProblemRanges } />
+                  <Route path={`/reports/problemranges/:${nodeIDAttr}`} component={ ProblemRanges }/>
+                  <Route path="/reports/localities" component={ Localities } />
+                  <Route path="/reports/network" component={ Network } />
+                  <Route path="/reports/nodes" component={ Nodes } />
+                  <Route path="/reports/settings" component={ Settings } />
+                  <Route path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
+                  <Route path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
+                  <Route path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
+
+                  { /* old route redirects */ }
+                  <Redirect exact from="/cluster" to="/metrics/overview/cluster" />
+                  <Redirect
+                    from={`/cluster/all/:${dashboardNameAttr}`}
+                    to={`/metrics/:${dashboardNameAttr}/cluster`}
+                  />
+                  <Redirect
+                    from={`/cluster/node/:${nodeIDAttr}/:${dashboardNameAttr}`}
+                    to={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
+                  />
+                  <Redirect exact from="/cluster/nodes" to="/overview/list" />
+                  <Redirect exact from={`/cluster/nodes/:${nodeIDAttr}`} to={`/node/:${nodeIDAttr}`} />
+                  <Redirect from={`/cluster/nodes/:${nodeIDAttr}/logs`} to={`/node/:${nodeIDAttr}/logs`}/>
+                  <Redirect from="/cluster/events" to="/events"/>
+
+                  <Redirect exact from="/nodes" to="/overview/list" />
+
+                  { /* 404 */ }
+                  <Route path="*" component={ NotFound } />
+                </Switch>
+              </Layout>
             </Route>
-          </Route>
-
-          { /* node details */}
-          <Route path="node">
-            <IndexRedirect to="/overview/list"/>
-            <Route path={`:${nodeIDAttr}`}>
-              <IndexRoute component={normalizeConnectedComponent(NodeOverview)}/>
-              <Route path="logs" component={normalizeConnectedComponent(NodeLogs)}/>
-            </Route>
-          </Route>
-
-          { /* events & jobs */}
-          <Route path="events" component={normalizeConnectedComponent(EventPage)}/>
-          <Route path="jobs" component={normalizeConnectedComponent(JobsPage)}/>
-
-          { /* databases */}
-          <Route path="databases">
-            <IndexRedirect to="tables"/>
-            <Route path="tables" component={normalizeConnectedComponent(ConnectedDatabaseTablesList)}/>
-            <Route path="grants" component={normalizeConnectedComponent(ConnectedDatabaseGrantsList)}/>
-            <Redirect
-              from={`database/:${databaseNameAttr}/table/:${tableNameAttr}`}
-              to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
-            />
-          </Route>
-          <Route path="database">
-            <IndexRedirect to="/databases"/>
-            <Route path={`:${databaseNameAttr}`}>
-              <IndexRedirect to="/databases"/>
-              <Route path="table">
-                <IndexRedirect to="/databases"/>
-                <Route path={`:${tableNameAttr}`} component={normalizeConnectedComponent(TableDetails)}/>
-              </Route>
-            </Route>
-          </Route>
-
-          { /* data distribution */}
-          <Route path="data-distribution" component={normalizeConnectedComponent(DataDistributionPage)}/>
-
-          { /* statement statistics */}
-          <Route path="statements">
-            <IndexRoute component={normalizeConnectedComponent(StatementsPage)}/>
-            <Route path={`:${appAttr}`} component={normalizeConnectedComponent(StatementsPage)}/>
-            <Route path={`:${appAttr}/:${statementAttr}`} component={normalizeConnectedComponent(StatementDetails)}/>
-            <Route path={`:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                   component={normalizeConnectedComponent(StatementDetails)}/>
-          </Route>
-          <Route path="statement">
-            <IndexRedirect to="/statements"/>
-            <Route path={`:${statementAttr}`} component={normalizeConnectedComponent(StatementDetails)}/>
-            <Route path={`:${implicitTxnAttr}/:${statementAttr}`}
-                   component={normalizeConnectedComponent(StatementDetails)}/>
-          </Route>
-
-          { /* debug pages */}
-          <Route path="debug">
-            <IndexRoute component={Debug}/>
-            <Route path="redux" component={normalizeConnectedComponent(ReduxDebug)}/>
-            <Route path="chart" component={normalizeConnectedComponent(CustomChart)}/>
-            <Route path="enqueue_range" component={normalizeConnectedComponent(EnqueueRange)}/>
-          </Route>
-          <Route path="raft" component={Raft}>
-            <IndexRedirect to="ranges"/>
-            <Route path="ranges" component={normalizeConnectedComponent(RaftRanges)}/>
-            <Route path="messages/all" component={normalizeConnectedComponent(RaftMessages)}/>
-            <Route path={`messages/node/:${nodeIDAttr}`} component={normalizeConnectedComponent(RaftMessages)}/>
-          </Route>
-          <Route path="reports">
-            <Route path="problemranges" component={normalizeConnectedComponent(ProblemRanges)}>
-              <Route path={`:${nodeIDAttr}`} component={normalizeConnectedComponent(ProblemRanges)}/>
-            </Route>
-            <Route path="localities" component={normalizeConnectedComponent(Localities)}/>
-            <Route path="nodes">
-              <IndexRoute component={ normalizeConnectedComponent(Nodes) } />
-              <Route path="history" component={ normalizeConnectedComponent(ConnectedDecommissionedNodeHistory) } />
-            </Route>
-            <Route path="network" component={ normalizeConnectedComponent(Network) }>
-              <Route path={`:${nodeIDAttr}`} component={ normalizeConnectedComponent(Network) } />
-            </Route>
-            <Route path="settings" component={normalizeConnectedComponent(Settings)}/>
-            <Route path={`certificates/:${nodeIDAttr}`} component={normalizeConnectedComponent(Certificates)}/>
-            <Route path={`range/:${rangeIDAttr}`} component={normalizeConnectedComponent(Range)}/>
-            <Route path={`stores/:${nodeIDAttr}`} component={normalizeConnectedComponent(Stores)}/>
-          </Route>
-
-          { /* old route redirects */}
-          <Route path="cluster">
-            <IndexRedirect to="/metrics/overview/cluster"/>
-            <Redirect
-              from={`all/:${dashboardNameAttr}`}
-              to={`/metrics/:${dashboardNameAttr}/cluster`}
-            />
-            <Redirect
-              from={`node/:${nodeIDAttr}/:${dashboardNameAttr}`}
-              to={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
-            />
-            <Route path="nodes">
-              <IndexRedirect to="/overview/list"/>
-              <Route path={`:${nodeIDAttr}`}>
-                <IndexRedirect to={`/node/:${nodeIDAttr}`}/>
-                <Redirect from="logs" to={`/node/:${nodeIDAttr}/logs`}/>
-              </Route>
-            </Route>
-            <Redirect from="events" to="/events"/>
-          </Route>
-          <Route path="nodes">
-            <IndexRedirect to="/overview/list"/>
-          </Route>
-
-          { /* 404 */}
-          <Route path="*" component={NotFound}/>
-        </Route>
-      </Router>
+          </Switch>
+      </ConnectedRouter>
     </Provider>
   );
 };
