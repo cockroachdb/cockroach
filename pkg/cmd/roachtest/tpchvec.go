@@ -30,11 +30,29 @@ func registerTPCHVec(r *testRegistry) {
 		vecOnConfig     = 0
 		vecOffConfig    = 1
 		numRunsPerQuery = 3
+		// vecOnSlowerFailFactor describes the threshold at which we fail the test
+		// if vec ON is slower that vec OFF, meaning that if
+		// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
+		// This will help catch any regressions.
+		vecOnSlowerFailFactor = 1.5
 	)
 
-	var queriesToSkip = map[int]string{
+	// queriesToSkipByVersionPrefix is a map from version prefix to another map
+	// that contains query numbers to be skipped (as well as the reasons for why
+	// they are skipped).
+	queriesToSkipByVersionPrefix := make(map[string]map[int]string)
+	queriesToSkipByVersionPrefix["v19.2"] = map[int]string{
+		5:  "can cause OOM",
+		7:  "can cause OOM",
+		8:  "can cause OOM",
+		9:  "can cause OOM",
+		12: "the query is skipped by tpch workload",
+		19: "can cause OOM",
+	}
+	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{
 		12: "the query is skipped by tpch workload",
 	}
+
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
 			"nation", "region", "part", "supplier",
@@ -76,6 +94,27 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, conn)
 		timeByQueryNum := make([]map[int][]float64, 2)
+		version, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var queriesToSkip map[int]string
+		for versionPrefix, toSkip := range queriesToSkipByVersionPrefix {
+			if strings.HasPrefix(version, versionPrefix) {
+				queriesToSkip = toSkip
+				break
+			}
+		}
+		var queriesToRun string
+		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
+			if _, ok := queriesToSkip[queryNum]; !ok {
+				if queriesToRun == "" {
+					queriesToRun = fmt.Sprintf("%d", queryNum)
+				} else {
+					queriesToRun = fmt.Sprintf("%s,%d", queriesToRun, queryNum)
+				}
+			}
+		}
 		for configIdx, vectorize := range []bool{true, false} {
 			// To reduce the variance on the first query we're interested in, we'll
 			// do an aggregation over all tables. This will make comparison on two
@@ -85,16 +124,6 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				count := fmt.Sprintf("SELECT count(*) FROM %s;", table)
 				if _, err := conn.Exec(count); err != nil {
 					t.Fatal(err)
-				}
-			}
-			var queriesToRun string
-			for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-				if _, ok := queriesToSkip[queryNum]; !ok {
-					if queriesToRun == "" {
-						queriesToRun = fmt.Sprintf("%d", queryNum)
-					} else {
-						queriesToRun = fmt.Sprintf("%s,%d", queriesToRun, queryNum)
-					}
 				}
 			}
 			vectorizeSetting := "off"
@@ -169,6 +198,18 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 						fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
 							"%.2fs ON vs %.2fs OFF",
 							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime, vecOnTime, vecOffTime))
+				}
+				// Note that it is possible that some queries will hit memory limits on
+				// some of the runs when running with vec ON. In order to reduce the
+				// noise about regressions, we require that a query had at least 3
+				// successful runs (some queries might have 4 because of the memory
+				// limit errors - those do not count towards --max-ops flag of tpch
+				// workload).
+				// TODO(yuzefovich): remove the first condition once we have disk
+				// spilling in all components.
+				if len(vecOnTimes) >= numRunsPerQuery && vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
+					t.Fatal(fmt.Sprintf("[q%d] vec ON is slower by %.2f%% that vec OFF",
+						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime))
 				}
 			}
 		}
