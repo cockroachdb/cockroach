@@ -119,17 +119,24 @@ func TestShowBackup(t *testing.T) {
 	// Test that tables, views and sequences are all supported.
 	{
 		viewTableSeq := localFoo + "/tableviewseq"
-		sqlDB.Exec(t, `CREATE TABLE data.tableA (a int primary key, b int)`)
+		sqlDB.Exec(t, `CREATE TABLE data.tableA (a int primary key, b int, INDEX tableA_b_idx (b ASC))`)
+		sqlDB.Exec(t, `COMMENT ON TABLE data.tableA IS 'table'`)
+		sqlDB.Exec(t, `COMMENT ON COLUMN data.tableA.a IS 'column'`)
+		sqlDB.Exec(t, `COMMENT ON INDEX data.tableA_b_idx IS 'index'`)
 		sqlDB.Exec(t, `CREATE VIEW data.viewA AS SELECT a from data.tableA`)
 		sqlDB.Exec(t, `CREATE SEQUENCE data.seqA START 1 INCREMENT 2 MAXVALUE 20`)
 		sqlDB.Exec(t, `BACKUP data.tableA, data.viewA, data.seqA TO $1;`, viewTableSeq)
 
 		expectedCreateTable := `CREATE TABLE tablea (
-				a INT8 NOT NULL,
-				b INT8 NULL,
-				CONSTRAINT "primary" PRIMARY KEY (a ASC),
-				FAMILY "primary" (a, b)
-			)`
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	INDEX tablea_b_idx (b ASC),
+	FAMILY "primary" (a, b)
+);
+COMMENT ON TABLE tablea IS 'table';
+COMMENT ON COLUMN tablea.a IS 'column';
+COMMENT ON INDEX tablea_b_idx IS 'index'`
 		expectedCreateView := `CREATE VIEW viewa (a) AS SELECT a FROM data.public.tablea`
 		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
 

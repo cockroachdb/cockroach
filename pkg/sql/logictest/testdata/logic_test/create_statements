@@ -10,6 +10,24 @@ CREATE TABLE v (
   FAMILY "primary" ("'", s, rowid)
 )
 
+statement ok
+CREATE TABLE c (
+	a INT NOT NULL,
+	b INT NULL,
+	INDEX c_a_b_idx (a ASC, b ASC),
+	FAMILY fam_0_a_rowid (a, rowid),
+	FAMILY fam_1_b (b)
+)
+
+statement ok
+COMMENT ON TABLE c IS 'table'
+
+statement ok
+COMMENT ON COLUMN c.a IS 'column'
+
+statement ok
+COMMENT ON INDEX c_a_b_idx IS 'index'
+
 query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
 ----
@@ -39,6 +57,25 @@ CREATE TABLE v (
    INDEX "v_auto_index_fk_'_ref_t" ("'" ASC),
    FAMILY "primary" ("'", s, rowid)
 )  {"ALTER TABLE v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES t(rowid)","ALTER TABLE v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v(s)"}  {"ALTER TABLE v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE v VALIDATE CONSTRAINT fk_s_ref_v"}
+CREATE TABLE c (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  INDEX c_a_b_idx (a ASC, b ASC),
+  FAMILY fam_0_a_rowid (a, rowid),
+  FAMILY fam_1_b (b)
+);
+COMMENT ON TABLE c IS 'table';
+COMMENT ON COLUMN c.a IS 'column';
+COMMENT ON INDEX c_a_b_idx IS 'index'  CREATE TABLE c (
+                                       a INT8 NOT NULL,
+                                       b INT8 NULL,
+                                       INDEX c_a_b_idx (a ASC, b ASC),
+                                       FAMILY fam_0_a_rowid (a, rowid),
+                                       FAMILY fam_1_b (b)
+);
+COMMENT ON TABLE c IS 'table';
+COMMENT ON COLUMN c.a IS 'column';
+COMMENT ON INDEX c_a_b_idx IS 'index'  {}  {}
 
 statement error invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
