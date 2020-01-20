@@ -13,6 +13,7 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators, Dispatch, Action } from "redux";
+
 import * as protos from "src/js/protos";
 import { generateTableID, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
