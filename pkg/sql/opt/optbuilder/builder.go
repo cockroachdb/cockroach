@@ -248,8 +248,13 @@ func (b *Builder) buildStmt(
 		}
 	}
 
-	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
+	case *tree.Select:
+		return b.buildSelect(stmt, noRowLocking, desiredTypes, inScope)
+
+	case *tree.ParenSelect:
+		return b.buildSelect(stmt.Select, noRowLocking, desiredTypes, inScope)
+
 	case *tree.Delete:
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
 			return b.buildDelete(stmt, inScope)
@@ -258,33 +263,6 @@ func (b *Builder) buildStmt(
 	case *tree.Insert:
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
 			return b.buildInsert(stmt, inScope)
-		})
-
-	case *tree.ParenSelect:
-		return b.processWiths(stmt.Select.With, inScope, func(inScope *scope) *scope {
-			return b.buildSelect(stmt.Select, desiredTypes, inScope)
-		})
-
-	case *tree.Select:
-		rStmt := stmt
-		with := stmt.With
-		wrapped := stmt.Select
-		for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
-			stmt = s.Select
-			if stmt.With != nil {
-				if with != nil {
-					// (WITH ... (WITH ...))
-					// Currently we are unable to nest the scopes inside ParenSelect so we
-					// must refuse the syntax so that the query does not get invalid results.
-					panic(unimplemented.NewWithIssue(24303, "multiple WITH clauses in parentheses"))
-				}
-				with = s.Select.With
-			}
-			wrapped = stmt.Select
-		}
-
-		return b.processWiths(with, inScope, func(inScope *scope) *scope {
-			return b.buildSelect(rStmt, desiredTypes, inScope)
 		})
 
 	case *tree.Update:

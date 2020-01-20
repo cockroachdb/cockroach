@@ -813,20 +813,11 @@ func (node LockingStrength) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node LockingStrength) docTable(p *PrettyCfg) []pretty.TableRow {
-	var keyword string
-	switch node {
-	case ForNone:
+	str := node.String()
+	if str == "" {
 		return nil
-	case ForUpdate:
-		keyword = "FOR UPDATE"
-	case ForNoKeyUpdate:
-		keyword = "FOR NO KEY UPDATE"
-	case ForShare:
-		keyword = "FOR SHARE"
-	case ForKeyShare:
-		keyword = "FOR KEY SHARE"
 	}
-	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
+	return []pretty.TableRow{p.row("", pretty.Keyword(str))}
 }
 
 func (node LockingWaitPolicy) doc(p *PrettyCfg) pretty.Doc {
@@ -834,16 +825,11 @@ func (node LockingWaitPolicy) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node LockingWaitPolicy) docTable(p *PrettyCfg) []pretty.TableRow {
-	var keyword string
-	switch node {
-	case LockWaitBlock:
+	str := node.String()
+	if str == "" {
 		return nil
-	case LockWaitSkip:
-		keyword = "SKIP LOCKED"
-	case LockWaitError:
-		keyword = "NOWAIT"
 	}
-	return []pretty.TableRow{p.row("", pretty.Keyword(keyword))}
+	return []pretty.TableRow{p.row("", pretty.Keyword(str))}
 }
 
 func (p *PrettyCfg) peelCompOperand(e Expr) Expr {

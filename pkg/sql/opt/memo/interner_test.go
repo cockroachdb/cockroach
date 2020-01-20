@@ -177,11 +177,25 @@ func TestInterner(t *testing.T) {
 			{val1: float64(0), val2: math.Copysign(0, -1), equal: false},
 		}},
 
+		{hashFn: in.hasher.HashRune, eqFn: in.hasher.IsRuneEqual, variations: []testVariation{
+			{val1: rune(0), val2: rune(0), equal: true},
+			{val1: rune('a'), val2: rune('b'), equal: false},
+			{val1: rune('a'), val2: rune('A'), equal: false},
+			{val1: rune('🐛'), val2: rune('🐛'), equal: true},
+		}},
+
 		{hashFn: in.hasher.HashString, eqFn: in.hasher.IsStringEqual, variations: []testVariation{
 			{val1: "", val2: "", equal: true},
 			{val1: "abc", val2: "abcd", equal: false},
 			{val1: "", val2: " ", equal: false},
 			{val1: "the quick brown fox", val2: "the quick brown fox", equal: true},
+		}},
+
+		{hashFn: in.hasher.HashByte, eqFn: in.hasher.IsByteEqual, variations: []testVariation{
+			{val1: byte(0), val2: byte(0), equal: true},
+			{val1: byte('a'), val2: byte('b'), equal: false},
+			{val1: byte('a'), val2: byte('A'), equal: false},
+			{val1: byte('z'), val2: byte('z'), equal: true},
 		}},
 
 		{hashFn: in.hasher.HashBytes, eqFn: in.hasher.IsBytesEqual, variations: []testVariation{
@@ -411,6 +425,30 @@ func TestInterner(t *testing.T) {
 		}},
 
 		// PhysProps hash/isEqual methods are tested in TestInternerPhysProps.
+
+		{hashFn: in.hasher.HashLockingItem, eqFn: in.hasher.IsLockingItemEqual, variations: []testVariation{
+			{val1: (*tree.LockingItem)(nil), val2: (*tree.LockingItem)(nil), equal: true},
+			{
+				val1:  (*tree.LockingItem)(nil),
+				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				equal: false,
+			},
+			{
+				val1:  &tree.LockingItem{Strength: tree.ForShare},
+				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				equal: false,
+			},
+			{
+				val1:  &tree.LockingItem{WaitPolicy: tree.LockWaitSkip},
+				val2:  &tree.LockingItem{WaitPolicy: tree.LockWaitError},
+				equal: false,
+			},
+			{
+				val1:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				val2:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				equal: true,
+			},
+		}},
 
 		{hashFn: in.hasher.HashRelExpr, eqFn: in.hasher.IsRelExprEqual, variations: []testVariation{
 			{val1: (*ScanExpr)(nil), val2: (*ScanExpr)(nil), equal: true},

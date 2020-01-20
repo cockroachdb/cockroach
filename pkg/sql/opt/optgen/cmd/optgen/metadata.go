@@ -183,6 +183,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"JobCommand":     {fullName: "tree.JobCommand", passByVal: true},
 		"IndexOrdinal":   {fullName: "cat.IndexOrdinal", passByVal: true},
 		"ViewDeps":       {fullName: "opt.ViewDeps", passByVal: true},
+		"LockingItem":    {fullName: "*tree.LockingItem", isPointer: true},
 	}
 
 	// Add types of generated op and private structs.

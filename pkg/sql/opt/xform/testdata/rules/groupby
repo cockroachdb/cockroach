@@ -1193,7 +1193,7 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
 ----
-memo (optimized, ~9KB, required=[presentation: array_agg:5])
+memo (optimized, ~10KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
