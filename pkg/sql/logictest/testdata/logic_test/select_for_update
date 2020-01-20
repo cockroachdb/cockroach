@@ -25,22 +25,24 @@ SELECT 1 FOR UPDATE FOR SHARE FOR NO KEY UPDATE FOR KEY SHARE
 ----
 1
 
-# Postgres gives an error if you specify a table that isn't available in the
-# FROM list for the OF ... clause, but since we're ignoring this list anyway,
-# we didn't bother to add that behavior.
-
-query I
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
 SELECT 1 FOR UPDATE OF a
-----
-1
 
-query I
+query error pgcode 42P01 relation "a" in FOR SHARE clause not found in FROM clause
 SELECT 1 FOR SHARE OF a, b
-----
-1
+
+query error pgcode 42P01 relation "a" in FOR UPDATE clause not found in FROM clause
+SELECT 1 FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
 
 query I
-SELECT 1 FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
+SELECT 1 FROM
+    (SELECT 1) a,
+    (SELECT 1) b,
+    (SELECT 1) c,
+    (SELECT 1) d,
+    (SELECT 1) e,
+    (SELECT 1) f
+FOR UPDATE OF a FOR SHARE OF b, c FOR NO KEY UPDATE OF d FOR KEY SHARE OF e, f
 ----
 1
 

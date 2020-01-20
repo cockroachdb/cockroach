@@ -73,8 +73,18 @@ scan t
 build
 SELECT * FROM t FOR UPDATE OF t2
 ----
-scan t
- └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT 1 FROM t FOR UPDATE OF t
+----
+project
+ ├── columns: "?column?":3(int!null)
+ ├── scan t
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    └── locking: for-update
+ └── projections
+      └── const: 1 [type=int]
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -90,8 +100,7 @@ scan t2
 build
 SELECT * FROM t AS t2 FOR UPDATE OF t
 ----
-scan t2
- └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t AS t2 FOR UPDATE OF t2
@@ -122,8 +131,7 @@ scan t
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t2
 ----
-scan t
- └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
 
 # ------------------------------------------------------------------------------
 # Tests with views.
@@ -150,26 +158,17 @@ project
 build
 SELECT * FROM v FOR UPDATE OF v2
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t2
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "v2" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM v FOR UPDATE OF t
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t2
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM v FOR UPDATE OF t2
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t2
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
 
 # ------------------------------------------------------------------------------
 # Tests with aliased views.
@@ -187,10 +186,7 @@ project
 build
 SELECT * FROM v AS v2 FOR UPDATE OF v
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t2
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "v" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM v AS v2 FOR UPDATE OF v2
@@ -245,15 +241,10 @@ project
       ├── columns: a:1(int!null) b:2(int)
       └── locking: for-no-key-update
 
-# TODO(nvanbenschoten): To match Postgres perfectly, this would throw an error.
-# It's not clear that it's worth going out of our way to mirror that behavior.
 build
 SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
@@ -285,10 +276,7 @@ project
 build
 SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
 ----
-project
- ├── columns: a:1(int!null)
- └── scan t
-      └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
@@ -335,18 +323,7 @@ project
 build
 SELECT (SELECT a FROM t) FOR UPDATE OF t
 ----
-project
- ├── columns: a:3(int)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: t.a:1(int!null)
-                └── project
-                     ├── columns: t.a:1(int!null)
-                     └── scan t
-                          └── columns: t.a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT (SELECT a FROM t FOR UPDATE OF t)
@@ -401,18 +378,7 @@ project
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
 ----
-project
- ├── columns: r:3(int)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: a:1(int!null)
-                └── project
-                     ├── columns: a:1(int!null)
-                     └── scan t
-                          └── columns: a:1(int!null) b:2(int)
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
@@ -656,18 +622,7 @@ project
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u.a:3(int!null) c:4(int)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) b:2(int)
-      ├── scan u
-      │    └── columns: u.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u.a [type=int]
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -766,50 +721,17 @@ project
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t2
-      │    └── columns: t2.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t2
-      │    └── columns: t2.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t2.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t2
-      │    └── columns: t2.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t2.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
@@ -889,50 +811,17 @@ project
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
 ----
-project
- ├── columns: a:1(int!null) b:2(int) c:4(int)
- └── inner-join (hash)
-      ├── columns: t.a:1(int!null) b:2(int) u2.a:3(int!null) c:4(int)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) b:2(int)
-      ├── scan u2
-      │    └── columns: u2.a:3(int!null) c:4(int)
-      └── filters
-           └── eq [type=bool]
-                ├── variable: t.a [type=int]
-                └── variable: u2.a [type=int]
+error (42P01): relation "u2" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
@@ -1010,13 +899,7 @@ inner-join-apply
 build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
 ----
-inner-join-apply
- ├── columns: a:1(int!null) b:2(int) a:3(int!null) c:4(int)
- ├── scan t
- │    └── columns: t.a:1(int!null) b:2(int)
- ├── scan sub
- │    └── columns: sub.a:3(int!null) c:4(int)
- └── filters (true)
+error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
 
 build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
