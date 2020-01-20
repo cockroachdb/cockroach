@@ -20,6 +20,7 @@ import (
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
 	OneInputNode
+	initStatus OperatorInitStatus
 
 	// read is true if someone has read the current batch already.
 	read  bool
@@ -45,7 +46,10 @@ func (b *bufferOp) InternalMemoryUsage() int {
 }
 
 func (b *bufferOp) Init() {
-	b.input.Init()
+	if b.initStatus == OperatorNotInitialized {
+		b.input.Init()
+		b.initStatus = OperatorInitialized
+	}
 }
 
 // rewind resets this buffer to be readable again.
