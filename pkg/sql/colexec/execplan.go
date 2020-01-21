@@ -610,8 +610,9 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
 			}
+			outputIdx := len(spec.Input[0].ColumnTypes)
+			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx), true
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
-			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true
 
 		case core.HashJoiner != nil:
 			createHashJoinerWithOnExprPlanning := func(
