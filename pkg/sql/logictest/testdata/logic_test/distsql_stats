@@ -8,7 +8,7 @@ statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
 
 statement ok
-CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, e BOOL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
 
 # Split into ten parts.
 statement ok
@@ -19,13 +19,13 @@ statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
-# Generate all combinations of values 1 to 10.
+# Generate all combinations of values 1 to 4.
 statement ok
-INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
-   generate_series(1, 10) AS a(a),
-   generate_series(1, 10) AS b(b),
-   generate_series(1, 10) AS c(c),
-   generate_series(1, 10) AS d(d)
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL, (a+b+c+d) % 2 = 0 FROM
+   generate_series(1, 4) AS a(a),
+   generate_series(1, 4) AS b(b),
+   generate_series(1, 4) AS c(c),
+   generate_series(1, 4) AS d(d)
 
 # Verify data placement.
 query TTTI colnames,rowsort
@@ -51,7 +51,7 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count, his
 FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  histogram_id
-s1               {a}           10000      10              0           NULL
+s1               {a}           256        4               0           NULL
 
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = true
@@ -71,7 +71,7 @@ FROM
 	[SHOW STATISTICS FOR TABLE data];
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
-s1               {a}           10000      10              0           true
+s1               {a}           256        4               0           true
 
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
@@ -80,16 +80,10 @@ query TIRI colnames
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
-1            0           0                    1000
-2            0           0                    1000
-3            0           0                    1000
-4            0           0                    1000
-5            0           0                    1000
-6            0           0                    1000
-7            0           0                    1000
-8            0           0                    1000
-9            0           0                    1000
-10           0           0                    1000
+1            0           0                    64
+2            0           0                    64
+3            0           0                    64
+4            0           0                    64
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
@@ -106,8 +100,8 @@ FROM
 	[SHOW STATISTICS FOR TABLE data];
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
-s1               {a}           10000      10              0           true
-NULL             {b}           10000      10              0           true
+s1               {a}           256        4               0           true
+NULL             {b}           256        4               0           true
 
 # Verify that we can package statistics into a json object and later restore them.
 let $json_stats
@@ -131,8 +125,8 @@ FROM
 	[SHOW STATISTICS FOR TABLE data];
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
-s1               {a}           10000      10              0           true
-NULL             {b}           10000      10              0           true
+s1               {a}           256        4               0           true
+NULL             {b}           256        4               0           true
 
 # Verify that any other statistics are blown away when we INJECT.
 statement ok
@@ -142,9 +136,9 @@ query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
-s3               {c}           10000      10              0
+s1               {a}           256        4               0
+NULL             {b}           256        4               0
+s3               {c}           256        4               0
 
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
@@ -153,8 +147,8 @@ query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s1               {a}           10000      10              0
-NULL             {b}           10000      10              0
+s1               {a}           256        4               0
+NULL             {b}           256        4               0
 
 # Test AS OF SYSTEM TIME
 
@@ -168,8 +162,8 @@ query TTIII colnames
 SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-NULL             {b}           10000      10              0
-s2               {a}           10000      10              0
+NULL             {b}           256        4               0
+s2               {a}           256        4               0
 
 #
 # Test default column statistics
@@ -178,18 +172,19 @@ s2               {a}           10000      10              0
 statement ok
 CREATE STATISTICS s3 FROM data
 
-# With default column statistics, only index columns have a histogram_id
-# (specifically the first column in each index).
+# With default column statistics, only index columns (plus boolean columns)
+# have a histogram_id (specifically the first column in each index).
 query TIIIB colnames
 SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
 FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's3'
 ----
 column_names  row_count  distinct_count  null_count  has_histogram
-{a}           10000      10              0           true
-{c}           10000      10              0           true
-{b}           10000      10              0           false
-{d}           10000      10              0           false
+{a}           256        4               0           true
+{c}           256        4               0           true
+{b}           256        4               0           false
+{d}           256        4               0           false
+{e}           256        2               0           true
 
 # Add indexes, including duplicate index on column c.
 statement ok
@@ -205,10 +200,11 @@ FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's4'
 ----
 column_names  row_count  distinct_count  null_count
-{a}           10000      10              0
-{c}           10000      10              0
-{b}           10000      10              0
-{d}           10000      10              0
+{a}           256        4               0
+{c}           256        4               0
+{b}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
 
 statement ok
 DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
@@ -224,10 +220,11 @@ FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = 's5'
 ----
 column_names  row_count  distinct_count  null_count
-{a}           10000      10              0
-{b}           10000      10              0
-{c}           10000      10              0
-{d}           10000      10              0
+{a}           256        4               0
+{b}           256        4               0
+{c}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
 
 # Table with a hidden primary key and no other indexes.
 statement ok
@@ -278,10 +275,11 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-s5               {b}           10000      10              0
-s5               {c}           10000      10              0
-s5               {d}           10000      10              0
-s6               {a}           10000      10              0
+s5               {b}           256        4               0
+s5               {c}           256        4               0
+s5               {d}           256        4               0
+s5               {e}           256        2               0
+s6               {a}           256        4               0
 
 # Combine default columns and numeric reference.
 statement ok
@@ -293,10 +291,11 @@ FROM [SHOW STATISTICS FOR TABLE data]
 WHERE statistics_name = '__auto__'
 ----
 column_names  row_count  distinct_count  null_count
-{a}           10000      10              0
-{b}           10000      10              0
-{c}           10000      10              0
-{d}           10000      10              0
+{a}           256        4               0
+{b}           256        4               0
+{c}           256        4               0
+{d}           256        4               0
+{e}           256        2               0
 
 #
 # Test delete stats
@@ -339,6 +338,11 @@ __auto__         {d}
 __auto__         {d}
 __auto__         {d}
 __auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
 
 statement ok
 CREATE STATISTICS s7 ON a FROM [53]
@@ -367,6 +371,11 @@ __auto__         {d}
 __auto__         {d}
 __auto__         {d}
 __auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
 s7               {a}
 
 statement ok
@@ -397,6 +406,11 @@ __auto__         {d}
 __auto__         {d}
 __auto__         {d}
 __auto__         {d}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
+__auto__         {e}
 s8               {a}
 
 # Regression test for #33195.
