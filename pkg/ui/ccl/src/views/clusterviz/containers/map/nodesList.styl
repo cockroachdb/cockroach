@@ -1,0 +1,32 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+@require '~src/components/core/index.styl'
+
+$node-switcher-height = 48px
+
+.fixed-panel
+  flex-grow 1
+  position relative
+  height 100%
+  &__panel-switcher
+    display flex
+    flex-direction row
+    align-items center
+    background-color $colors--white
+    z-index  5
+    padding $spacing-xx-small $spacing-smaller $spacing-xx-small $spacing-small
+    border 1px solid rgb(237, 237, 237)
+    border-bottom none
+    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+    border-radius 3px
+    height $node-switcher-height
+  &__content
+    width 100%
+    height "calc( 100% - %s )" % $node-switcher-height
+    overflow: auto

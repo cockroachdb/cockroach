@@ -20,24 +20,19 @@
   text-decoration inherit
 
 .text--heading-1
-  font-size $font-size--xx-large
-  line-height $line-height--xx-large
-  font-weight $font-weight--light
+  @extend $text--heading-1
 
 .text--heading-2
-  font-size $font-size--x-large
-  line-height $line-height--x-large
-  font-weight $font-weight--bold
+  @extend $text--heading-2
+
+.text--heading-3
+  @extend $text--heading-3
 
 .text--body
-  font-size $font-size--medium
-  line-height $line-height--medium
-  font-weight $font-weight--light
+  @extend $text--body
 
 .text--body-strong
-  font-size $font-size--medium
-  line-height $line-height--medium
-  font-weight $font-weight--bold
+  @extend $text--body-strong
 
 .text--disabled
   color $colors--disabled

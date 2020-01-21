@@ -254,7 +254,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
           <PageConfigItem>
             <TimeScaleDropdown />
           </PageConfigItem>
-          <button className="chart-edit-button chart-edit-button--add" onClick={this.addChart}>Add Chart</button>
+          <button className="edit-button chart-edit-button chart-edit-button--add" onClick={this.addChart}>Add Chart</button>
         </PageConfig>
         <section className="section">
           <div className="l-columns">

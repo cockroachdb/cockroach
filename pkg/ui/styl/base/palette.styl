@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require '~src/components/core/index'
+
 // Primary Palette
 $headings-color = #152849
 $healthy-color = #66AA26
-$warning-color   = #F2BE2C
-$alert-color    = #ED7785
+$warning-color   = $colors--warning
+$alert-color    = $colors--alert
 $adminui-grey-1    = #242a35
 $adminui-grey-2    = #5f6c87
 $adminui-blue-1-base    = #3a7ce1
@@ -24,7 +26,7 @@ $tooltip-color = #B8BBBC
 $tooltip-shadow = rgba(0, 0, 0, .20)
 $table-border-color = #EDEDED
 $button-border-color = #C8CBD4
-$background-color  = #F6F6F6
+$background-color  = $colors--background
 $main-blue-color = #3A7DE1  // This should match MAIN_BLUE from colors.tsx
 $grey = #b8bbbc
 

@@ -7,8 +7,31 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
 
 .geopath
   fill white
   stroke $table-border-color
   stroke-width .5px
+
+.cluster-visualization-layout
+  width 100%
+  height 100%
+  display flex
+  flex-direction column
+  overflow hidden
+  background-color white
+  &--show-license
+    height unset
+  &__content
+    display flex
+    flex-direction row
+    justify-content space-between
+    background-color $colors--white
+    box-shadow 0 0 4px 0 rgba(0, 0, 0, 0.2)
+    z-index 5
+    padding $spacing-xx-small $spacing-smaller $spacing-xx-small $spacing-small
+  &__content-item
+    align-self center
+  &__content-item--show-license
+    display none
