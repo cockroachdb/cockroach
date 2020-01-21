@@ -41,26 +41,27 @@ const systemDatabases = [
   "system",
 ];
 
+interface DatabaseListNavProps {
+  selected: string;
+  onChange: (value: string) => void;
+}
 // DatabaseListNav displays the database page navigation bar.
-class DatabaseListNav extends React.Component<{selected: string}, {}> {
-  // Magic to add react router to the context.
-  // See https://github.com/ReactTraining/react-router/issues/975
-  // TODO(mrtracy): Switch this, and the other uses of contextTypes, to use the
-  // 'withRouter' HoC after upgrading to react-router 4.x.
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState; };
-
+class DatabaseListNav extends React.Component<DatabaseListNavProps> {
   render() {
-    return <PageConfig>
-      <PageConfigItem>
-        <Dropdown title="View" options={databasePages} selected={this.props.selected}
-                  onChange={(selected: DropdownOption) => {
-                    this.context.router.push(`databases/${selected.value}`);
-                  }} />
-      </PageConfigItem>
-    </PageConfig>;
+    const { selected, onChange } = this.props;
+    return (
+      <PageConfig>
+        <PageConfigItem>
+          <Dropdown
+            title="View"
+            options={databasePages}
+            selected={selected}
+            onChange={({ value }: DropdownOption) => {
+              onChange(value);
+            }} />
+        </PageConfigItem>
+      </PageConfig>
+    );
   }
 }
 
@@ -88,13 +89,17 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
     this.props.refreshDatabases();
   }
 
+  handleOnNavigationListChange = (value: string) => {
+    this.props.history.push(`/databases/${value}`);
+  }
+
   render() {
     const { user, system } = this.props.databasesByType;
 
     return <div>
       <Helmet title="Tables | Databases" />
       <section className="section"><h1 className="base-heading">Databases</h1></section>
-      <DatabaseListNav selected="tables"/>
+      <DatabaseListNav selected="tables" onChange={this.handleOnNavigationListChange}/>
       <div className="section databases">
         {
           user.map(n => <DatabaseSummaryTables name={n} key={n} />)
@@ -115,13 +120,17 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps> {
     this.props.refreshDatabases();
   }
 
+  handleOnNavigationListChange = (value: string) => {
+    this.props.history.push(`/databases/${value}`);
+  }
+
   render() {
     const { user, system } = this.props.databasesByType;
 
     return <div>
       <Helmet title="Grants | Databases" />
       <section className="section"><h1 className="base-heading">Databases</h1></section>
-      <DatabaseListNav selected="grants"/>
+      <DatabaseListNav selected="grants" onChange={this.handleOnNavigationListChange}/>
       <div className="section databases">
         {
           user.map(n => <DatabaseSummaryGrants name={n} key={n} />)
