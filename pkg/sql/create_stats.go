@@ -265,7 +265,8 @@ const maxNonIndexCols = 100
 // collect statistics on a, {a, b}, b, and {b, c}.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
-// other columns from the table. We only collect histograms for index columns.
+// other columns from the table. We only collect histograms for index columns,
+// plus any other boolean columns (where the "histogram" is tiny).
 //
 // TODO(rytaft): This currently only generates one single-column stat per
 // index. Add code to collect multi-column stats once they are supported.
@@ -307,7 +308,7 @@ func createStatsDefaultColumns(
 		if col.Type.Family() != types.JsonFamily && !requestedCols.Contains(int(col.ID)) {
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 				ColumnIDs:    []sqlbase.ColumnID{col.ID},
-				HasHistogram: false,
+				HasHistogram: col.Type.Family() == types.BoolFamily,
 			})
 			nonIdxCols++
 		}
