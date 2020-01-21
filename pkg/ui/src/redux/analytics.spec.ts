@@ -12,7 +12,7 @@ import { assert } from "chai";
 import * as sinon from "sinon";
 
 import Analytics from "analytics-node";
-import { Location } from "history";
+import { Location, createLocation, createHashHistory } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
@@ -21,8 +21,6 @@ import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 import * as protos from "src/js/protos";
-
-import { createLocation } from "src/hacks/createLocation";
 
 const sandbox = sinon.createSandbox();
 
@@ -34,7 +32,7 @@ describe("analytics listener", function() {
     let pageSpy: sinon.SinonSpy;
 
     beforeEach(function () {
-      store = createAdminUIStore();
+      store = createAdminUIStore(createHashHistory());
       pageSpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call
@@ -221,7 +219,7 @@ describe("analytics listener", function() {
     let identifySpy: sinon.SinonSpy;
 
     beforeEach(function () {
-      store = createAdminUIStore();
+      store = createAdminUIStore(createHashHistory());
       identifySpy = sandbox.spy();
 
       // Analytics is a completely fake object, we don't want to call

@@ -12,6 +12,7 @@ import { assert } from "chai";
 import { Store } from "redux";
 import moment from "moment";
 import sinon from "sinon";
+import { createHashHistory } from "history";
 
 import * as protos from "src/js/protos";
 import { API_PREFIX } from "src/util/api";
@@ -42,7 +43,7 @@ describe("alerts", function() {
   let state: typeof store.getState;
 
   beforeEach(function () {
-    store = createAdminUIStore();
+    store = createAdminUIStore(createHashHistory());
     dispatch = store.dispatch;
     state = store.getState;
     // localSettings persist values in sessionStorage and

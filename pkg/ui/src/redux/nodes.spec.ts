@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
+import { createHashHistory } from "history";
 
 import {MetricConstants, INodeStatus} from "src/util/proto";
 import * as protos from "src/js/protos";
@@ -40,7 +41,7 @@ function makeNodesState(...addresses: { id: number, address: string, status?: Li
   addresses.forEach(addr => {
     livenessData.statuses[addr.id] = addr.status || LivenessStatus.LIVE;
   });
-  const store = createAdminUIStore();
+  const store = createAdminUIStore(createHashHistory());
   store.dispatch(nodesReducerObj.receiveData(nodeData));
   store.dispatch(livenessReducerObj.receiveData(new protos.cockroach.server.serverpb.LivenessResponse(livenessData)));
   return store.getState();
@@ -117,7 +118,7 @@ describe("node data selectors", function() {
     });
 
     it("returns empty collection for empty state", function() {
-      const store = createAdminUIStore();
+      const store = createAdminUIStore(createHashHistory());
       assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
     });
   });
@@ -147,7 +148,7 @@ describe("node data selectors", function() {
           ],
         },
       ];
-      const store = createAdminUIStore();
+      const store = createAdminUIStore(createHashHistory());
       store.dispatch(nodesReducerObj.receiveData(data));
       const state = store.getState();
 
