@@ -470,6 +470,12 @@ func (f *FuncDepSet) DowngradeKey() {
 	}
 }
 
+// RemoveKey marks the FD set as having no key.
+func (f *FuncDepSet) RemoveKey() {
+	f.hasKey = noKey
+	f.key = opt.ColSet{}
+}
+
 // CopyFrom copies the given FD into this FD, replacing any existing data.
 func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 	// Make certain to copy FDs to the slice owned by this set.
