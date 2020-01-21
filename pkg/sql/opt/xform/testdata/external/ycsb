@@ -1,0 +1,189 @@
+import file=ycsb_schema
+----
+
+# --------------------------------------------------
+# Workload A: Update heavy
+#
+# This workload has a mix of 50/50 reads and writes. Application example:
+# a session store recording recent actions.
+# --------------------------------------------------
+
+# 50% of the workload.
+opt
+SELECT * FROM usertable WHERE ycsb_key = 'user123'
+----
+scan usertable
+ ├── columns: ycsb_key:1(varchar!null) field0:2(string) field1:3(string) field2:4(string) field3:5(string) field4:6(string) field5:7(string) field6:8(string) field7:9(string) field8:10(string) field9:11(string)
+ ├── constraint: /1: [/'user123' - /'user123']
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-11)
+
+# 50% of the workload.
+opt
+UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
+----
+update usertable
+ ├── columns: <none>
+ ├── fetch columns: ycsb_key:12(varchar) field5:18(string)
+ ├── update-mapping:
+ │    └──  column23:23 => field5:7
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column23:23(string!null) ycsb_key:12(varchar!null) field5:18(string)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(12,18,23)
+      ├── scan usertable
+      │    ├── columns: ycsb_key:12(varchar!null) field5:18(string)
+      │    ├── constraint: /12: [/'user123' - /'user123']
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(12,18)
+      └── projections
+           └── const: 'field5data' [type=string]
+
+# --------------------------------------------------
+# Workload B: Read mostly
+#
+# This workload has a 95/5 reads/write mix. Application example: photo
+# tagging; add a tag is an update, but most operations are to read tags.
+# --------------------------------------------------
+
+# NOTE: same statements as Workload A, just a different mix. 95% of the
+# workload is the SELECT statement and 5% of the workload is the UPDATE
+# statement.
+
+# --------------------------------------------------
+# Workload C: Read only
+#
+# This workload is 100% read. Application example: user profile cache,
+# where profiles are constructed elsewhere (e.g., Hadoop).
+# --------------------------------------------------
+
+# NOTE: consists entirely of the SELECT statement from workload A.
+
+# --------------------------------------------------
+# Workload D: Read latest
+#
+# In this workload, new records are inserted, and the most recently
+# inserted records are the most popular. Application example: user
+# status updates; people want to read the latest.
+# --------------------------------------------------
+
+# NOTE: 95% of the workload is the SELECT statement from workload A.
+
+# 5% of the workload.
+opt
+INSERT INTO usertable VALUES (
+    'user123',
+    'field0data',
+    'field1data',
+    'field2data',
+    'field3data',
+    'field4data',
+    'field5data',
+    'field6data',
+    'field7data',
+    'field8data',
+    'field9data'
+)
+----
+insert usertable
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├──  column1:12 => ycsb_key:1
+ │    ├──  column2:13 => field0:2
+ │    ├──  column3:14 => field1:3
+ │    ├──  column4:15 => field2:4
+ │    ├──  column5:16 => field3:5
+ │    ├──  column6:17 => field4:6
+ │    ├──  column7:18 => field5:7
+ │    ├──  column8:19 => field6:8
+ │    ├──  column9:20 => field7:9
+ │    ├──  column10:21 => field8:10
+ │    └──  column11:22 => field9:11
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── values
+      ├── columns: column1:12(string!null) column2:13(string!null) column3:14(string!null) column4:15(string!null) column5:16(string!null) column6:17(string!null) column7:18(string!null) column8:19(string!null) column9:20(string!null) column10:21(string!null) column11:22(string!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(12-22)
+      └── ('user123', 'field0data', 'field1data', 'field2data', 'field3data', 'field4data', 'field5data', 'field6data', 'field7data', 'field8data', 'field9data') [type=tuple{string, string, string, string, string, string, string, string, string, string, string}]
+
+# --------------------------------------------------
+# Workload E: Short ranges
+#
+# In this workload, short ranges of records are queried, instead of
+# individual records. Application example: threaded conversations,
+# where each scan is for the posts in a given thread (assumed to be
+# clustered by thread id).
+# --------------------------------------------------
+
+# NOTE: 5% of the workload is the INSERT statement from workload D.
+
+# 95% of the workload.
+opt
+SELECT * FROM usertable WHERE ycsb_key >= 'user123' LIMIT 321
+----
+scan usertable
+ ├── columns: ycsb_key:1(varchar!null) field0:2(string) field1:3(string) field2:4(string) field3:5(string) field4:6(string) field5:7(string) field6:8(string) field7:9(string) field8:10(string) field9:11(string)
+ ├── constraint: /1: [/'user123' - ]
+ ├── limit: 321
+ ├── key: (1)
+ └── fd: (1)-->(2-11)
+
+# --------------------------------------------------
+# Workload F: Read-modify-write
+#
+# In this workload, the client will read a record, modify it, and write
+# back the changes. Application example: user database, where user
+# records are read and modified by the user or to record user activity.
+# --------------------------------------------------
+
+# NOTE: 50% of the workload is the SELECT statement from workload A.
+
+# NOTE: the following two statements are run together in a transaction
+# to perform a read-modify-write operation. This makes up 50% of the
+# workload.
+
+opt
+SELECT field5 FROM usertable WHERE ycsb_key = 'user123'
+----
+project
+ ├── columns: field5:7(string)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ └── scan usertable
+      ├── columns: ycsb_key:1(varchar!null) field5:7(string)
+      ├── constraint: /1: [/'user123' - /'user123']
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,7)
+
+opt
+UPDATE usertable SET field5 = 'field5data' WHERE ycsb_key = 'user123'
+----
+update usertable
+ ├── columns: <none>
+ ├── fetch columns: ycsb_key:12(varchar) field5:18(string)
+ ├── update-mapping:
+ │    └──  column23:23 => field5:7
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: column23:23(string!null) ycsb_key:12(varchar!null) field5:18(string)
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(12,18,23)
+      ├── scan usertable
+      │    ├── columns: ycsb_key:12(varchar!null) field5:18(string)
+      │    ├── constraint: /12: [/'user123' - /'user123']
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(12,18)
+      └── projections
+           └── const: 'field5data' [type=string]
