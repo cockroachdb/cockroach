@@ -16,6 +16,11 @@ COPY cockroach.sh cockroach /cockroach/
 # are resolved appropriately when passed as args.
 WORKDIR /cockroach/
 
+# Include the directory into the path
+# to make it easier to invoke commands
+# via Docker
+ENV PATH=/cockroach:$PATH
+
 ENV COCKROACH_CHANNEL=official-docker
 
 EXPOSE 26257 8080
