@@ -63,17 +63,19 @@ var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
 	restoreOptSkipMissingFKs:       sql.KVStringOptRequireNoValue,
 	restoreOptSkipMissingSequences: sql.KVStringOptRequireNoValue,
 	restoreOptSkipMissingViews:     sql.KVStringOptRequireNoValue,
+	backupOptEncPassphrase:         sql.KVStringOptRequireValue,
 }
 
 func loadBackupDescs(
 	ctx context.Context,
 	uris []string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, makeExternalStorageFromURI)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, makeExternalStorageFromURI, encryption)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
@@ -91,7 +93,10 @@ func loadBackupDescs(
 // default) original backup locality values to URIs that currently contain
 // the backup files.
 func getBackupLocalityInfo(
-	ctx context.Context, uris []string, p sql.PlanHookState,
+	ctx context.Context,
+	uris []string,
+	p sql.PlanHookState,
+	encryption *roachpb.FileEncryptionOptions,
 ) (jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	var info jobspb.RestoreDetails_BackupLocalityInfo
 	if len(uris) == 1 {
@@ -114,9 +119,9 @@ func getBackupLocalityInfo(
 	// First read the main backup descriptor, which is required to be at the first
 	// URI in the list. We don't read the table descriptors, so there's no need to
 	// upgrade them.
-	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName)
+	mainBackupDesc, err := readBackupDescriptor(ctx, stores[0], BackupDescriptorName, encryption)
 	if err != nil {
-		manifest, manifestErr := readBackupDescriptor(ctx, stores[0], BackupManifestName)
+		manifest, manifestErr := readBackupDescriptor(ctx, stores[0], BackupManifestName, encryption)
 		if manifestErr != nil {
 			return info, err
 		}
@@ -129,7 +134,7 @@ func getBackupLocalityInfo(
 	for _, filename := range mainBackupDesc.PartitionDescriptorFilenames {
 		found := false
 		for i, store := range stores {
-			if desc, err := readBackupPartitionDescriptor(ctx, store, filename); err == nil {
+			if desc, err := readBackupPartitionDescriptor(ctx, store, filename, encryption); err == nil {
 				if desc.BackupID != mainBackupDesc.ID {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",
@@ -1159,6 +1164,7 @@ func restore(
 	oldTableIDs []sqlbase.ID,
 	spans []roachpb.Span,
 	job *jobs.Job,
+	encryption *roachpb.FileEncryptionOptions,
 ) (roachpb.BulkOpSummary, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
@@ -1279,6 +1285,7 @@ func restore(
 				Files:         readyForImportSpan.files,
 				EndTime:       endTime,
 				Rekeys:        rekeys,
+				Encryption:    encryption,
 			}
 
 			log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
@@ -1422,18 +1429,38 @@ func doRestorePlan(
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
+	var encryption *roachpb.FileEncryptionOptions
+	if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+		if len(from) < 1 || len(from[0]) < 1 {
+			return errors.New("invalid base backup specified")
+		}
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][0])
+		if err != nil {
+			return errors.Wrapf(err, "make storage")
+		}
+		defer store.Close()
+		opts, err := ReadEncryptionOptions(ctx, store)
+		if err != nil {
+			return err
+		}
+		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+		encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+	}
 	defaultURIs := make([]string, len(from))
 	localityInfo := make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
 	for i, uris := range from {
 		// The first URI in the list must contain the main BACKUP manifest.
 		defaultURIs[i] = uris[0]
-		info, err := getBackupLocalityInfo(ctx, uris, p)
+		info, err := getBackupLocalityInfo(ctx, uris, p, encryption)
 		if err != nil {
 			return err
 		}
 		localityInfo[i] = info
 	}
-	mainBackupDescs, err := loadBackupDescs(ctx, defaultURIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
+
+	mainBackupDescs, err := loadBackupDescs(
+		ctx, defaultURIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
+	)
 	if err != nil {
 		return err
 	}
@@ -1524,6 +1551,7 @@ func doRestorePlan(
 			BackupLocalityInfo: localityInfo,
 			TableDescs:         tables,
 			OverrideDB:         opts[restoreOptIntoDB],
+			Encryption:         encryption,
 		},
 		Progress: jobspb.RestoreProgress{},
 	})
@@ -1543,8 +1571,9 @@ func loadBackupSQLDescs(
 	ctx context.Context,
 	details jobspb.RestoreDetails,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupDescriptor, BackupDescriptor, []sqlbase.Descriptor, error) {
-	backupDescs, err := loadBackupDescs(ctx, details.URIs, makeExternalStorageFromURI)
+	backupDescs, err := loadBackupDescs(ctx, details.URIs, makeExternalStorageFromURI, encryption)
 	if err != nil {
 		return nil, BackupDescriptor{}, nil, err
 	}
@@ -1721,7 +1750,7 @@ func (r *restoreResumer) Resume(
 	p := phs.(sql.PlanHookState)
 
 	backupDescs, latestBackupDesc, sqlDescs, err := loadBackupSQLDescs(
-		ctx, details, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		ctx, details, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, details.Encryption,
 	)
 	if err != nil {
 		return err
@@ -1756,6 +1785,7 @@ func (r *restoreResumer) Resume(
 		oldTableIDs,
 		spans,
 		r.job,
+		details.Encryption,
 	)
 	r.res = res
 	if err != nil {
