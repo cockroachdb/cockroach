@@ -14,16 +14,11 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-// maxVarLen specifies a length limit for variable length types (e.g. byte slices).
-const maxVarLen = 64
 
 func randomType(rng *rand.Rand) coltypes.T {
 	return coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
@@ -36,109 +31,6 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 		typs[i] = randomType(rng)
 	}
 	return typs
-}
-
-var locations []*time.Location
-
-func init() {
-	// Load some random time zones.
-	for _, locationName := range []string{
-		"Africa/Addis_Ababa",
-		"America/Anchorage",
-		"Antarctica/Davis",
-		"Asia/Ashkhabad",
-		"Australia/Sydney",
-		"Europe/Minsk",
-		"Pacific/Palau",
-	} {
-		loc, err := timeutil.LoadLocation(locationName)
-		if err == nil {
-			locations = append(locations, loc)
-		}
-	}
-}
-
-// RandomVec populates vec with n random values of typ, setting each value to
-// null with a probability of nullProbability. It is assumed that n is in bounds
-// of the given vec.
-// bytesFixedLength (when greater than zero) specifies the fixed length of the
-// bytes slice to be generated. It is used only if typ == coltypes.Bytes.
-func RandomVec(
-	rng *rand.Rand,
-	typ coltypes.T,
-	bytesFixedLength int,
-	vec coldata.Vec,
-	n int,
-	nullProbability float64,
-) {
-	switch typ {
-	case coltypes.Bool:
-		bools := vec.Bool()
-		for i := 0; i < n; i++ {
-			if rng.Float64() < 0.5 {
-				bools[i] = true
-			} else {
-				bools[i] = false
-			}
-		}
-	case coltypes.Bytes:
-		bytes := vec.Bytes()
-		for i := 0; i < n; i++ {
-			bytesLen := bytesFixedLength
-			if bytesLen <= 0 {
-				bytesLen = rng.Intn(maxVarLen)
-			}
-			randBytes := make([]byte, bytesLen)
-			// Read always returns len(bytes[i]) and nil.
-			_, _ = rand.Read(randBytes)
-			bytes.Set(i, randBytes)
-		}
-	case coltypes.Decimal:
-		decs := vec.Decimal()
-		for i := 0; i < n; i++ {
-			// int64(rng.Uint64()) to get negative numbers, too
-			decs[i].SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
-		}
-	case coltypes.Int16:
-		ints := vec.Int16()
-		for i := 0; i < n; i++ {
-			ints[i] = int16(rng.Uint64())
-		}
-	case coltypes.Int32:
-		ints := vec.Int32()
-		for i := 0; i < n; i++ {
-			ints[i] = int32(rng.Uint64())
-		}
-	case coltypes.Int64:
-		ints := vec.Int64()
-		for i := 0; i < n; i++ {
-			ints[i] = int64(rng.Uint64())
-		}
-	case coltypes.Float64:
-		floats := vec.Float64()
-		for i := 0; i < n; i++ {
-			floats[i] = rng.Float64()
-		}
-	case coltypes.Timestamp:
-		timestamps := vec.Timestamp()
-		for i := 0; i < n; i++ {
-			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
-			loc := locations[rng.Intn(len(locations))]
-			timestamps[i] = timestamps[i].In(loc)
-		}
-	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", typ))
-	}
-	vec.Nulls().UnsetNulls()
-	if nullProbability == 0 {
-		return
-	}
-
-	for i := 0; i < n; i++ {
-		if rng.Float64() < nullProbability {
-			vec.Nulls().SetNull(uint16(i))
-		}
-	}
 }
 
 // RandomBatch returns a batch with a capacity of capacity and a number of
@@ -157,7 +49,7 @@ func RandomBatch(
 		length = capacity
 	}
 	for i, typ := range typs {
-		RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
+		coldata.RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
 	batch.SetLength(uint16(length))
 	return batch

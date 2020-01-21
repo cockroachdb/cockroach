@@ -93,12 +93,10 @@ func (c const_TYPEOp) Init() {
 func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
-	if batch.Width() == c.outputIdx {
-		c.allocator.AppendColumn(batch, c.typ)
-	}
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	c.allocator.MaybeAddColumn(batch, c.typ, c.outputIdx)
 	vec := batch.ColVec(c.outputIdx)
 	col := vec._TemplateType()
 	c.allocator.PerformOperation(
@@ -148,14 +146,10 @@ func (c constNullOp) Init() {
 func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
-
-	if batch.Width() == c.outputIdx {
-		c.allocator.AppendColumn(batch, c.typ)
-	}
-
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	c.allocator.MaybeAddColumn(batch, c.typ, c.outputIdx)
 
 	col := batch.ColVec(c.outputIdx)
 	nulls := col.Nulls()

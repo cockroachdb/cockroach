@@ -49,12 +49,10 @@ func (b *defaultBuiltinFuncOperator) Init() {
 func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	batch := b.input.Next(ctx)
 	n := batch.Length()
-	if b.outputIdx == batch.Width() {
-		b.allocator.AppendColumn(batch, b.outputPhysType)
-	}
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	b.allocator.MaybeAddColumn(batch, b.outputPhysType, b.outputIdx)
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
@@ -123,14 +121,11 @@ func (s *substringFunctionOperator) Init() {
 
 func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
-	if s.outputIdx == batch.Width() {
-		s.allocator.AppendColumn(batch, coltypes.Bytes)
-	}
-
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	s.allocator.MaybeAddColumn(batch, coltypes.Bytes, s.outputIdx)
 
 	sel := batch.Selection()
 	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()

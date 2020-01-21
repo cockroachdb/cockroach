@@ -90,12 +90,10 @@ type _OP_NAME struct {
 func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	n := batch.Length()
-	if p.outputIdx == batch.Width() {
-		p.allocator.AppendColumn(batch, coltypes._RET_TYP)
-	}
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	p.allocator.MaybeAddColumn(batch, coltypes._RET_TYP, p.outputIdx)
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec._RET_TYP()
 	vec1 := batch.ColVec(p.col1Idx)

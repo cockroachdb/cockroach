@@ -125,17 +125,13 @@ func (r *_RANK_STRINGOp) Init() {
 
 func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
-	// {{ if .HasPartition }}
-	if r.partitionColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Bool)
-	}
-	// {{ end }}
-	if r.outputColIdx == batch.Width() {
-		r.allocator.AppendColumn(batch, coltypes.Int64)
-	}
 	if batch.Length() == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	// {{ if .HasPartition }}
+	r.allocator.MaybeAddColumn(batch, coltypes.Bool, r.partitionColIdx)
+	// {{ end }}
+	r.allocator.MaybeAddColumn(batch, coltypes.Int64, r.outputColIdx)
 
 	// {{ if .HasPartition }}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
