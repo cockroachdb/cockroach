@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -72,6 +73,7 @@ const (
 
 const (
 	backupOptRevisionHistory = "revision_history"
+	backupOptEncPassphrase   = "encryption_passphrase"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )
@@ -100,6 +102,7 @@ var useTBI = settings.RegisterBoolSetting(
 
 var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
 	backupOptRevisionHistory: sql.KVStringOptRequireNoValue,
+	backupOptEncPassphrase:   sql.KVStringOptRequireValue,
 }
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
@@ -110,7 +113,10 @@ var BackupCheckpointInterval = time.Minute
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
 func ReadBackupDescriptorFromURI(
-	ctx context.Context, uri string, makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	ctx context.Context,
+	uri string,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	encryption *roachpb.FileEncryptionOptions,
 ) (BackupDescriptor, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri)
 
@@ -118,9 +124,9 @@ func ReadBackupDescriptorFromURI(
 		return BackupDescriptor{}, err
 	}
 	defer exportStore.Close()
-	backupDesc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorName)
+	backupDesc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorName, encryption)
 	if err != nil {
-		backupManifest, manifestErr := readBackupDescriptor(ctx, exportStore, BackupManifestName)
+		backupManifest, manifestErr := readBackupDescriptor(ctx, exportStore, BackupManifestName, encryption)
 		if manifestErr != nil {
 			return BackupDescriptor{}, err
 		}
@@ -135,7 +141,10 @@ func ReadBackupDescriptorFromURI(
 // readBackupDescriptor reads and unmarshals a BackupDescriptor from filename in
 // the provided export store.
 func readBackupDescriptor(
-	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
 ) (BackupDescriptor, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -146,8 +155,18 @@ func readBackupDescriptor(
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
+	if encryption != nil {
+		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		if err != nil {
+			return BackupDescriptor{}, err
+		}
+	}
 	var backupDesc BackupDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
+		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
+			return BackupDescriptor{}, errors.Wrapf(
+				err, "file appears encrypted -- try specifying %q", backupOptEncPassphrase)
+		}
 		return BackupDescriptor{}, err
 	}
 	for _, d := range backupDesc.Descriptors {
@@ -171,7 +190,10 @@ func readBackupDescriptor(
 }
 
 func readBackupPartitionDescriptor(
-	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
 ) (BackupPartitionDescriptor, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
@@ -181,6 +203,12 @@ func readBackupPartitionDescriptor(
 	descBytes, err := ioutil.ReadAll(r)
 	if err != nil {
 		return BackupPartitionDescriptor{}, err
+	}
+	if encryption != nil {
+		descBytes, err = storageccl.DecryptFile(descBytes, encryption.Key)
+		if err != nil {
+			return BackupPartitionDescriptor{}, err
+		}
 	}
 	var backupDesc BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
@@ -530,6 +558,9 @@ func optsToKVOptions(opts map[string]string) tree.KVOptions {
 	for _, k := range sortedOpts {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if v := opts[k]; v != "" {
+			if k == backupOptEncPassphrase {
+				v = "redacted"
+			}
 			opt.Value = tree.NewDString(v)
 		}
 		kvopts = append(kvopts, opt)
@@ -597,6 +628,7 @@ func writeBackupDescriptor(
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	filename string,
+	encryption *roachpb.FileEncryptionOptions,
 	desc *BackupDescriptor,
 ) error {
 	sort.Sort(BackupFileDescriptors(desc.Files))
@@ -604,6 +636,12 @@ func writeBackupDescriptor(
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
+	}
+	if encryption != nil {
+		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		if err != nil {
+			return err
+		}
 	}
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
@@ -615,11 +653,18 @@ func writeBackupPartitionDescriptor(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	filename string,
+	encryption *roachpb.FileEncryptionOptions,
 	desc *BackupPartitionDescriptor,
 ) error {
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
+	}
+	if encryption != nil {
+		descBuf, err = storageccl.EncryptFile(descBuf, encryption.Key)
+		if err != nil {
+			return err
+		}
 	}
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
@@ -750,6 +795,7 @@ func backup(
 	checkpointDesc *BackupDescriptor,
 	resultsCh chan<- tree.Datums,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	encryption *roachpb.FileEncryptionOptions,
 ) (roachpb.BulkOpSummary, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
@@ -875,6 +921,7 @@ func backup(
 					StartTime:                           span.start,
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          roachpb.MVCCFilter(backupDesc.MVCCFilter),
+					Encryption:                          encryption,
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
@@ -916,7 +963,7 @@ func backup(
 					checkpointMu.Lock()
 					backupDesc.Files = checkpointFiles
 					err := writeBackupDescriptor(
-						ctx, settings, defaultStore, BackupDescriptorCheckpointName, backupDesc,
+						ctx, settings, defaultStore, BackupDescriptorCheckpointName, encryption, backupDesc,
 					)
 					checkpointMu.Unlock()
 					if err != nil {
@@ -970,14 +1017,14 @@ func backup(
 					return err
 				}
 				defer store.Close()
-				return writeBackupPartitionDescriptor(ctx, store, filename, &desc)
+				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
 			}(); err != nil {
 				return mu.exported, err
 			}
 		}
 	}
 
-	if err := writeBackupDescriptor(ctx, settings, defaultStore, BackupDescriptorName, backupDesc); err != nil {
+	if err := writeBackupDescriptor(ctx, settings, defaultStore, BackupDescriptorName, encryption, backupDesc); err != nil {
 		return mu.exported, err
 	}
 
@@ -1000,6 +1047,38 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
+func readEncryptionOptions(
+	ctx context.Context, src cloud.ExternalStorage,
+) (*EncryptionInfo, error) {
+	r, err := src.ReadFile(ctx, "encryption-info")
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	encInfoBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	var encInfo EncryptionInfo
+	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
+		return nil, err
+	}
+	return &encInfo, nil
+}
+
+func writeEncryptionOptions(
+	ctx context.Context, opts *EncryptionInfo, dest cloud.ExternalStorage,
+) error {
+	buf, err := protoutil.Marshal(opts)
+	if err != nil {
+		return err
+	}
+	if err := dest.WriteFile(ctx, "encryption-info", bytes.NewReader(buf)); err != nil {
+		return err
+	}
+	return nil
+}
+
 // VerifyUsableExportTarget ensures that the target location does not already
 // contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
 // that the location is writable and locking out accidental concurrent
@@ -1011,6 +1090,7 @@ func VerifyUsableExportTarget(
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
 	readable string,
+	encryption *roachpb.FileEncryptionOptions,
 ) error {
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
 		// TODO(dt): If we audit exactly what not-exists error each ExternalStorage
@@ -1035,7 +1115,7 @@ func VerifyUsableExportTarget(
 			readable, BackupDescriptorCheckpointName)
 	}
 	if err := writeBackupDescriptor(
-		ctx, settings, exportStore, BackupDescriptorCheckpointName, &BackupDescriptor{},
+		ctx, settings, exportStore, BackupDescriptorCheckpointName, encryption, &BackupDescriptor{},
 	); err != nil {
 		return errors.Wrapf(err, "cannot write to %s", readable)
 	}
@@ -1135,6 +1215,11 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
+		var encryptionPassphrase []byte
+		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+			encryptionPassphrase = []byte(passphrase)
+		}
+
 		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets, backupStmt.DescriptorCoverage)
 		if err != nil {
 			return err
@@ -1170,8 +1255,23 @@ func backupPlanHook(
 			return err
 		}
 
+		var encryption *roachpb.FileEncryptionOptions
 		var prevBackups []BackupDescriptor
 		if len(incrementalFrom) > 0 {
+			if encryptionPassphrase != nil {
+				exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incrementalFrom[0])
+				if err != nil {
+					return err
+				}
+				defer exportStore.Close()
+				opts, err := readEncryptionOptions(ctx, exportStore)
+				if err != nil {
+					return err
+				}
+				encryption = &roachpb.FileEncryptionOptions{
+					Key: storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
+				}
+			}
 			clusterID := p.ExecCfg().ClusterID()
 			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
 			for i, uri := range incrementalFrom {
@@ -1181,7 +1281,9 @@ func backupPlanHook(
 				// since all we need to do is get the past backups' table/index spans,
 				// but it will be safer for future code to avoid having older-style
 				// descriptors around.
-				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
+				desc, err := ReadBackupDescriptorFromURI(
+					ctx, uri, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption,
+				)
 				if err != nil {
 					return errors.Wrapf(err, "failed to read backup from %q", uri)
 				}
@@ -1334,9 +1436,29 @@ func backupPlanHook(
 			return err
 		}
 
+		// If we didn't load any prior backups from which get encryption info, we
+		// need to pick a new salt and record it.
+		if encryptionPassphrase != nil && encryption == nil {
+			salt, err := storageccl.GenerateSalt()
+			if err != nil {
+				return err
+			}
+			exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI)
+			if err != nil {
+				return err
+			}
+			defer exportStore.Close()
+			if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt}, exportStore); err != nil {
+				return err
+			}
+			encryption = &roachpb.FileEncryptionOptions{Key: storageccl.GenerateKey(encryptionPassphrase, salt)}
+		}
+
 		// TODO (lucy): For partitioned backups, also add verification for other
 		// stores we are writing to in addition to the default.
-		if err := VerifyUsableExportTarget(ctx, p.ExecCfg().Settings, defaultStore, defaultURI); err != nil {
+		if err := VerifyUsableExportTarget(
+			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
+		); err != nil {
 			return err
 		}
 
@@ -1355,6 +1477,7 @@ func backupPlanHook(
 				URI:              defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
 				BackupDescriptor: descBytes,
+				Encryption:       encryption,
 			},
 			Progress: jobspb.BackupProgress{},
 		})
@@ -1409,11 +1532,12 @@ func (b *backupResumer) Resume(
 		storageByLocalityKV[kv] = &conf
 	}
 	var checkpointDesc *BackupDescriptor
+
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	if desc, err := readBackupDescriptor(ctx, defaultStore, BackupDescriptorCheckpointName); err == nil {
+	if desc, err := readBackupDescriptor(ctx, defaultStore, BackupDescriptorCheckpointName, details.Encryption); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
 		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
@@ -1439,6 +1563,7 @@ func (b *backupResumer) Resume(
 		checkpointDesc,
 		resultsCh,
 		b.makeExternalStorage,
+		details.Encryption,
 	)
 	if err != nil {
 		return err
