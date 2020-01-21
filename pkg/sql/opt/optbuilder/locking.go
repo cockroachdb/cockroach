@@ -95,7 +95,7 @@ func (lm *lockingSpec) apply(locking tree.LockingClause) {
 	*lm = append(*lm, locking...)
 }
 
-// filter returns the desired row-level locking mode for the specifies table as
+// filter returns the desired row-level locking mode for the specified table as
 // a new consolidated lockingSpec. If no matching locking mode is found then the
 // resulting spec will remain un-set. If a matching locking mode for the table
 // is found then the resulting spec will contain exclusively that locking mode
@@ -156,10 +156,10 @@ func (lm lockingSpec) withoutTargets() lockingSpec {
 
 // ignoreLockingForCTE is a placeholder for the following comment:
 //
-// We intentionally do not propate any row-level locking information from the
+// We intentionally do not propagate any row-level locking information from the
 // current scope to the CTE. This mirrors Postgres' behavior. It also avoids a
 // number of awkward questions like how row-level locking would interact with
-// mutating commong table expressions.
+// mutating common table expressions.
 //
 // From https://www.postgresql.org/docs/12/sql-select.html#SQL-FOR-UPDATE-SHARE
 // > these clauses do not apply to WITH queries referenced by the primary query.
