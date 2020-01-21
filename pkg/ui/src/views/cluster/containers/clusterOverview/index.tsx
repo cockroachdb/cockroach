@@ -188,7 +188,7 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
       );
     }
 
-    return <section className="cluster-summary" children={children} />;
+    return <section className="cluster-summary" children={React.Children.toArray(children)} />;
   }
 }
 
@@ -212,7 +212,7 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(
 /**
  * Renders the main content of the cluster visualization page.
  */
-export default class ClusterOverview extends React.Component {
+export default class ClusterOverview extends React.Component<any, any> {
   render() {
     return (
       <div className="cluster-page">
