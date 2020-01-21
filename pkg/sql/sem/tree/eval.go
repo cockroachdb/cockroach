@@ -2641,6 +2641,25 @@ type SessionBoundInternalExecutor interface {
 	) (Datums, error)
 }
 
+// PrivilegedAccessor gives access to certain queries that would otherwise
+// require someone with RootUser access to query a given data source.
+// It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
+type PrivilegedAccessor interface {
+	// LookupNamespaceID returns the id of the namespace given it's parent id and name.
+	// It is meant as a replacement for looking up the system.namespace directly.
+	// Returns the id, a bool representing whether the namespace exists, and an error
+	// if there is one.
+	LookupNamespaceID(
+		ctx context.Context, parentID int64, name string,
+	) (DInt, bool, error)
+
+	// LookupZoneConfig returns the zone config given a namespace id.
+	// It is meant as a replacement for looking up system.zones directly.
+	// Returns the config byte array, a bool representing whether the namespace exists,
+	// and an error if there is one.
+	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
+}
+
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
@@ -2767,6 +2786,8 @@ type EvalContext struct {
 	InternalExecutor SessionBoundInternalExecutor
 
 	Planner EvalPlanner
+
+	PrivilegedAccessor PrivilegedAccessor
 
 	SessionAccessor EvalSessionAccessor
 

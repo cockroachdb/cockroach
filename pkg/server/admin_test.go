@@ -59,7 +59,13 @@ import (
 func getAdminJSONProto(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message,
 ) error {
-	return serverutils.GetJSONProto(ts, adminPrefix+path, response)
+	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
+}
+
+func getAdminJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+) error {
+	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
 }
 
 func postAdminJSONProto(
@@ -236,88 +242,114 @@ func TestAdminAPIDatabases(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
-	// Test databases endpoint.
 	const testdb = "test"
 	query := "CREATE DATABASE " + testdb
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
 
-	var resp serverpb.DatabasesResponse
-	if err := getAdminJSONProto(s, "databases", &resp); err != nil {
+	// We have to create the non-admin user before calling
+	// "GRANT ... TO authenticatedUserNameNoAdmin".
+	// This is done in "GetAuthenticatedHTTPClient".
+	if _, err := ts.GetAuthenticatedHTTPClient(false); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedDBs := []string{"defaultdb", "postgres", "system", testdb}
-	if a, e := len(resp.Databases), len(expectedDBs); a != e {
-		t.Fatalf("length of result %d != expected %d", a, e)
-	}
-
-	sort.Strings(resp.Databases)
-	for i, e := range expectedDBs {
-		if a := resp.Databases[i]; a != e {
-			t.Fatalf("database name %s != expected %s", a, e)
-		}
-	}
-
-	// Test database details endpoint.
+	// Grant permissions to view the tables for the given viewing user.
 	privileges := []string{"SELECT", "UPDATE"}
-	testuser := "testuser"
-	createUserQuery := "CREATE USER " + testuser
-	if _, err := db.Exec(createUserQuery); err != nil {
+	query = fmt.Sprintf(
+		"GRANT %s ON DATABASE %s TO %s",
+		strings.Join(privileges, ", "),
+		testdb,
+		authenticatedUserNameNoAdmin,
+	)
+	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
 
-	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	if _, err := db.Exec(grantQuery); err != nil {
-		t.Fatal(err)
-	}
-
-	var details serverpb.DatabaseDetailsResponse
-	if err := getAdminJSONProto(s, "databases/"+testdb, &details); err != nil {
-		t.Fatal(err)
-	}
-
-	if a, e := len(details.Grants), 4; a != e {
-		t.Fatalf("# of grants %d != expected %d", a, e)
-	}
-
-	userGrants := make(map[string][]string)
-	for _, grant := range details.Grants {
-		switch grant.User {
-		case sqlbase.AdminRole, security.RootUser, testuser:
-			userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
-		default:
-			t.Fatalf("unknown grant to user %s", grant.User)
-		}
-	}
-	for u, p := range userGrants {
-		switch u {
-		case sqlbase.AdminRole:
-			if !reflect.DeepEqual(p, []string{"ALL"}) {
-				t.Fatalf("privileges %v != expected %v", p, privileges)
+	for _, tc := range []struct {
+		expectedDBs []string
+		isAdmin     bool
+	}{
+		{[]string{"defaultdb", "postgres", "system", testdb}, true},
+		{[]string{testdb}, false},
+	} {
+		t.Run(fmt.Sprintf("isAdmin:%t", tc.isAdmin), func(t *testing.T) {
+			// Test databases endpoint.
+			var resp serverpb.DatabasesResponse
+			if err := getAdminJSONProtoWithAdminOption(
+				s,
+				"databases",
+				&resp,
+				tc.isAdmin,
+			); err != nil {
+				t.Fatal(err)
 			}
-		case security.RootUser:
-			if !reflect.DeepEqual(p, []string{"ALL"}) {
-				t.Fatalf("privileges %v != expected %v", p, privileges)
-			}
-		case testuser:
-			sort.Strings(p)
-			if !reflect.DeepEqual(p, privileges) {
-				t.Fatalf("privileges %v != expected %v", p, privileges)
-			}
-		default:
-			t.Fatalf("unknown grant to user %s", u)
-		}
-	}
 
-	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{testdb})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := details.DescriptorID, int64(path[1]); a != e {
-		t.Fatalf("db had descriptorID %d, expected %d", a, e)
+			if a, e := len(resp.Databases), len(tc.expectedDBs); a != e {
+				t.Fatalf("length of result %d != expected %d", a, e)
+			}
+
+			sort.Strings(resp.Databases)
+			for i, e := range tc.expectedDBs {
+				if a := resp.Databases[i]; a != e {
+					t.Fatalf("database name %s != expected %s", a, e)
+				}
+			}
+
+			// Test database details endpoint.
+			var details serverpb.DatabaseDetailsResponse
+			if err := getAdminJSONProtoWithAdminOption(
+				s,
+				"databases/"+testdb,
+				&details,
+				tc.isAdmin,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if a, e := len(details.Grants), 4; a != e {
+				t.Fatalf("# of grants %d != expected %d", a, e)
+			}
+
+			userGrants := make(map[string][]string)
+			for _, grant := range details.Grants {
+				switch grant.User {
+				case sqlbase.AdminRole, security.RootUser, authenticatedUserNameNoAdmin:
+					userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
+				default:
+					t.Fatalf("unknown grant to user %s", grant.User)
+				}
+			}
+			for u, p := range userGrants {
+				switch u {
+				case sqlbase.AdminRole:
+					if !reflect.DeepEqual(p, []string{"ALL"}) {
+						t.Fatalf("privileges %v != expected %v", p, privileges)
+					}
+				case security.RootUser:
+					if !reflect.DeepEqual(p, []string{"ALL"}) {
+						t.Fatalf("privileges %v != expected %v", p, privileges)
+					}
+				case authenticatedUserNameNoAdmin:
+					sort.Strings(p)
+					if !reflect.DeepEqual(p, privileges) {
+						t.Fatalf("privileges %v != expected %v", p, privileges)
+					}
+				default:
+					t.Fatalf("unknown grant to user %s", u)
+				}
+			}
+
+			// Verify Descriptor ID.
+			path, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{testdb})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a, e := details.DescriptorID, int64(path[1]); a != e {
+				t.Fatalf("db had descriptorID %d, expected %d", a, e)
+			}
+		})
 	}
 }
 
