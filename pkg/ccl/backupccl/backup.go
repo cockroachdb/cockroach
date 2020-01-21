@@ -1440,7 +1440,33 @@ func (b *backupResumer) Resume(
 		resultsCh,
 		b.makeExternalStorage,
 	)
+	if err != nil {
+		return err
+	}
 	b.res = res
+
+	err = b.clearStats(ctx, p.ExecCfg().DB)
+	if err != nil {
+		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
+	}
+	return nil
+}
+
+func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
+	details := b.job.Details().(jobspb.BackupDetails)
+	var backupDesc BackupDescriptor
+	if err := protoutil.Unmarshal(details.BackupDescriptor, &backupDesc); err != nil {
+		return err
+	}
+	backupDesc.Statistics = nil
+	descBytes, err := protoutil.Marshal(&backupDesc)
+	if err != nil {
+		return err
+	}
+	details.BackupDescriptor = descBytes
+	err = DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return b.job.WithTxn(txn).SetDetails(ctx, details)
+	})
 	return err
 }
 
