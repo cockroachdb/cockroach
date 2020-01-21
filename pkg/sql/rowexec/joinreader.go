@@ -228,10 +228,7 @@ func newJoinReader(
 	if execinfra.SettingUseTempStorageJoins.Get(&st.SV) {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// joinReader will overflow to disk if this limit is not enough.
-		limit := flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = execinfra.SettingWorkMemBytes.Get(&st.SV)
-		}
+		limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
 		jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joiner-limited")
 		jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "joinreader-disk")
 		drc := rowcontainer.NewDiskBackedIndexedRowContainer(

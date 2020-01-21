@@ -83,6 +83,14 @@ type spooler interface {
 	// spooled tuples. It should return nil if all the tuples belong to the same
 	// partition.
 	getPartitionsCol() []bool
+	// getWindowedBatch returns a batch that is a "window" into all Vecs of the
+	// already spooled data, with tuples in range [startIdx, endIdx). This batch
+	// is not allowed to be modified and is only safe to use until the next call
+	// to this method.
+	// TODO(yuzefovich): one idea we might want to implement at some point is
+	// adding a wrapper on top of a coldata.Batch that is coldata.ImmutableBatch
+	// that returns coldata.ImmutableVecs to enforce immutability.
+	getWindowedBatch(startIdx, endIdx uint64) coldata.Batch
 }
 
 // allSpooler is the spooler that spools all tuples from the input. It is used
@@ -98,7 +106,8 @@ type allSpooler struct {
 	// Vec in this slice is the entire column from the input.
 	bufferedTuples *bufferedBatch
 	// spooled indicates whether spool() has already been called.
-	spooled bool
+	spooled       bool
+	windowedBatch coldata.Batch
 }
 
 var _ spooler = &allSpooler{}
@@ -114,6 +123,7 @@ func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T
 func (p *allSpooler) init() {
 	p.input.Init()
 	p.bufferedTuples = newBufferedBatch(p.allocator, p.inputTypes, 0 /* initialSize */)
+	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
 }
 
 func (p *allSpooler) spool(ctx context.Context) {
@@ -161,8 +171,19 @@ func (p *allSpooler) getPartitionsCol() []bool {
 	return nil
 }
 
+func (p *allSpooler) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
+	for i, t := range p.inputTypes {
+		window := p.bufferedTuples.colVecs[i].Window(t, startIdx, endIdx)
+		p.windowedBatch.ColVec(i).SetCol(window.Col())
+		p.windowedBatch.ColVec(i).SetNulls(window.Nulls())
+	}
+	p.windowedBatch.SetLength(uint16(endIdx - startIdx))
+	return p.windowedBatch
+}
+
 func (p *allSpooler) reset() {
 	p.bufferedTuples.reset()
+	p.spooled = false
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
 	}
@@ -218,7 +239,6 @@ type colSorter interface {
 
 func (p *sortOp) Init() {
 	p.input.init()
-	p.output = p.allocator.NewMemBatch(p.inputTypes)
 }
 
 // sortState represents the state of the sort operator.
@@ -251,11 +271,11 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
-		p.output.ResetInternalBatch()
 		if newEmitted == p.emitted {
 			return coldata.ZeroBatch
 		}
 
+		p.resetOutput()
 		p.allocator.PerformOperation(p.output.ColVecs(), func() {
 			for j := 0; j < len(p.inputTypes); j++ {
 				// TODO(yuzefovich): at this point, we have already fully sorted the
@@ -383,6 +403,14 @@ func (p *sortOp) sort(ctx context.Context) {
 	}
 }
 
+func (p *sortOp) resetOutput() {
+	if p.output == nil {
+		p.output = p.allocator.NewMemBatch(p.inputTypes)
+	} else {
+		p.output.ResetInternalBatch()
+	}
+}
+
 func (p *sortOp) reset() {
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
@@ -405,34 +433,15 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(allocator *Allocator) coldata.Batch {
+func (p *sortOp) ExportBuffered() coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
-	p.output.ResetInternalBatch()
 	newExported := p.exported + uint64(coldata.BatchSize())
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()
 	}
-	// TODO(yuzefovich): refactor spooler interface so that the spooler could
-	// return buffered tuples as batches and we didn't need to copy the data.
-	// We're using the provided Allocator.
-	allocator.PerformOperation(p.output.ColVecs(), func() {
-		for j := 0; j < len(p.inputTypes); j++ {
-			p.output.ColVec(j).Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:     p.inputTypes[j],
-						Src:         p.input.getValues(j),
-						SrcStartIdx: p.exported,
-						SrcEndIdx:   newExported,
-					},
-				},
-			)
-		}
-
-	})
-	p.output.SetLength(uint16(newExported - p.exported))
+	b := p.input.getWindowedBatch(p.exported, newExported)
 	p.exported = newExported
-	return p.output
+	return b
 }

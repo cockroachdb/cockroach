@@ -83,11 +83,11 @@ func TestCaseOp(t *testing.T) {
 			spec.Input[0].ColumnTypes = tc.inputTypes
 			spec.Post.RenderExprs[0].Expr = tc.renderExpr
 			args := NewColOperatorArgs{
-				Spec:                               spec,
-				Inputs:                             inputs,
-				StreamingMemAccount:                testMemAcc,
-				UseStreamingMemAccountForBuffering: true,
+				Spec:                spec,
+				Inputs:              inputs,
+				StreamingMemAccount: testMemAcc,
 			}
+			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := NewColOperator(ctx, flowCtx, args)
 			if err != nil {
 				return nil, err

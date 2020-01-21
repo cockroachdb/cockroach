@@ -100,11 +100,11 @@ func TestIsNullProjOp(t *testing.T) {
 					},
 				}
 				args := NewColOperatorArgs{
-					Spec:                               spec,
-					Inputs:                             input,
-					StreamingMemAccount:                testMemAcc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                spec,
+					Inputs:              input,
+					StreamingMemAccount: testMemAcc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
@@ -190,11 +190,11 @@ func TestIsNullSelOp(t *testing.T) {
 					},
 				}
 				args := NewColOperatorArgs{
-					Spec:                               spec,
-					Inputs:                             input,
-					StreamingMemAccount:                testMemAcc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                spec,
+					Inputs:              input,
+					StreamingMemAccount: testMemAcc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
