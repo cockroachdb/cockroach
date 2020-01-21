@@ -130,13 +130,11 @@ func (c *castOpNullAny) Init() {
 
 func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if c.outputIdx == batch.Width() {
-		c.allocator.AppendColumn(batch, c.toType)
-	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	c.allocator.MaybeAddColumn(batch, c.toType, c.outputIdx)
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
 	vecNulls := vec.Nulls()
@@ -183,13 +181,11 @@ func (c *castOp_FROMTYPE_TOTYPE) Init() {
 
 func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
-	if c.outputIdx == batch.Width() {
-		c.allocator.AppendColumn(batch, coltypes._TOTYPE)
-	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return coldata.ZeroBatch
 	}
+	c.allocator.MaybeAddColumn(batch, coltypes._TOTYPE, c.outputIdx)
 	vec := batch.ColVec(c.colIdx)
 	col := vec._FROMTYPE()
 	projVec := batch.ColVec(c.outputIdx)

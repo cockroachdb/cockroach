@@ -240,8 +240,13 @@ func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) stri
   if cap({{.Tgt}}) >= __desiredCap {
   	{{.Tgt}} = {{.Tgt}}[:__desiredCap]
   } else {
-    __new_slice := make([]apd.Decimal, __desiredCap)
-    copy(__new_slice, {{.Tgt}})
+    __prevCap := cap({{.Tgt}})
+    __capToAllocate := __desiredCap
+    if __capToAllocate < 2 * __prevCap {
+      __capToAllocate = 2 * __prevCap
+    }
+    __new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
+    copy(__new_slice, {{.Tgt}}[:{{.TgtIdx}}])
     {{.Tgt}} = __new_slice
   }
   __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
