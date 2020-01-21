@@ -29,9 +29,10 @@ export function queryToString(obj: any) {
 export function queryToObj(location: Location, key: string, value: string) {
   const params = new URLSearchParams(location.search);
   const paramObj: ParamsObj = {};
-  for (const data of params.keys()) {
-    paramObj[data] = params.get(data);
-  }
+
+  params.forEach((paramValue, paramKey) => {
+    paramObj[paramKey] = paramValue;
+  });
   if (key) {
     if (value.length > 0 || (typeof value === "number")) {
       paramObj[key] = value;

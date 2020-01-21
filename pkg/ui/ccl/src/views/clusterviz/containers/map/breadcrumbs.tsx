@@ -36,7 +36,7 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
           />
         {intersperse(
           paths.map((path, idx) => (
-            <span>
+            <span key={idx}>
               {idx === paths.length - 1
                 ? getLocalityLabel(path)
                 : <Link
