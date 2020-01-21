@@ -600,11 +600,6 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			for _, colvec := range rf.machine.colvecs {
-				if colvec.Type() != coltypes.Unhandled {
-					colvec.Nulls().UnsetNulls()
-				}
-			}
 			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
