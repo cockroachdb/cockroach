@@ -1,7 +1,5 @@
 # LogicTest: 5node-dist-vec
 
-skip #43357
-
 # Regression test for #39317.
 
 statement ok

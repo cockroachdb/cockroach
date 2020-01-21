@@ -752,7 +752,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildLeftGroups(
 				outStartIdx := int(destStartIdx)
 				out := o.output.ColVec(outColIdx)
 				var src coldata.Vec
-				if batch.Width() > int(inColIdx) {
+				if batch.Length() > 0 {
 					src = batch.ColVec(int(inColIdx))
 				}
 				colType := input.sourceTypes[inColIdx]
@@ -930,7 +930,7 @@ func (o *mergeJoin_JOIN_TYPE_STRING_FILTER_INFO_STRINGOp) buildRightGroups(
 				outStartIdx := int(destStartIdx)
 				out := o.output.ColVec(outColIdx + colOffset)
 				var src coldata.Vec
-				if batch.Width() > int(inColIdx) {
+				if batch.Length() > 0 {
 					src = batch.ColVec(int(inColIdx))
 				}
 				colType := input.sourceTypes[inColIdx]
