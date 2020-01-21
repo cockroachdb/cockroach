@@ -125,7 +125,7 @@ func verifyRDIter(
 	expectedKeys []engine.MVCCKey,
 ) {
 	t.Helper()
-	testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
+	verify := func(t *testing.T, useSpanSet, reverse bool) {
 		if useSpanSet {
 			var spans spanset.SpanSet
 			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
@@ -142,16 +142,22 @@ func verifyRDIter(
 			}, hlc.Timestamp{WallTime: 42})
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaDataIterator(desc, readWriter, replicatedOnly)
+		iter := NewReplicaDataIterator(desc, readWriter, replicatedOnly, reverse /* seekEnd */)
 		defer iter.Close()
 		i := 0
-		for ; ; iter.Next() {
+		if reverse {
+			i = len(expectedKeys) - 1
+		}
+		for {
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatal(err)
 			} else if !ok {
 				break
 			}
-			if i >= len(expectedKeys) {
+			if !reverse && i >= len(expectedKeys) {
+				t.Fatal("there are more keys in the iteration than expected")
+			}
+			if reverse && i < 0 {
 				t.Fatal("there are more keys in the iteration than expected")
 			}
 			if key := iter.Key(); !key.Equal(expectedKeys[i]) {
@@ -159,11 +165,22 @@ func verifyRDIter(
 				k2, ts2 := expectedKeys[i].Key, expectedKeys[i].Timestamp
 				t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 			}
-			i++
+			if reverse {
+				i--
+				iter.Prev()
+			} else {
+				i++
+				iter.Next()
+			}
 		}
-		if i != len(expectedKeys) {
+		if (reverse && i >= 0) || (!reverse && i != len(expectedKeys)) {
 			t.Fatal("there are fewer keys in the iteration than expected")
 		}
+	}
+	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+		testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
+			verify(t, useSpanSet, reverse)
+		})
 	})
 }
 
@@ -224,7 +241,8 @@ func TestReplicaDataIterator(t *testing.T) {
 
 	// Verify that the replicated-only iterator ignores unreplicated keys.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
-	iter := NewReplicaDataIterator(&desc, eng, true /* replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, eng,
+		true /* replicatedOnly */, false /* seekEnd */)
 	defer iter.Close()
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {

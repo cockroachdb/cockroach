@@ -81,13 +81,11 @@ func (i *Iterator) SeekGE(key engine.MVCCKey) {
 
 // SeekLT is part of the engine.Iterator interface.
 func (i *Iterator) SeekLT(key engine.MVCCKey) {
-	// NB: this isn't exactly right because the key provided to SeekLT is
-	// exclusive so requesting the first key in an allowed span should not
-	// be permitted, but it's close enough.
+	const spanKeyExclusive = true
 	if i.spansOnly {
-		i.err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
+		i.err = i.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}, spanKeyExclusive)
 	} else {
-		i.err = i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, i.ts)
+		i.err = i.spans.checkAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, i.ts, spanKeyExclusive)
 	}
 	if i.err == nil {
 		i.invalid = false

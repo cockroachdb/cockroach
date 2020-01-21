@@ -37,7 +37,7 @@ type KeyRange struct {
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
-	it       engine.SimpleIterator
+	it       engine.Iterator
 	a        bufalloc.ByteAllocator
 }
 
@@ -112,7 +112,7 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 
 // NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
 func NewReplicaDataIterator(
-	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool,
+	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool, seekEnd bool,
 ) *ReplicaDataIterator {
 	it := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
@@ -124,9 +124,26 @@ func NewReplicaDataIterator(
 		ranges: rangeFunc(d),
 		it:     it,
 	}
+	if seekEnd {
+		ri.seekEnd()
+	} else {
+		ri.seekStart()
+	}
+	return ri
+}
+
+// seekStart seeks the iterator to the start of its data range.
+func (ri *ReplicaDataIterator) seekStart() {
+	ri.curIndex = 0
 	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
 	ri.advance()
-	return ri
+}
+
+// seekEnd seeks the iterator to the end of its data range.
+func (ri *ReplicaDataIterator) seekEnd() {
+	ri.curIndex = len(ri.ranges) - 1
+	ri.it.SeekLT(ri.ranges[ri.curIndex].End)
+	ri.retreat()
 }
 
 // Close the underlying iterator.
@@ -158,10 +175,31 @@ func (ri *ReplicaDataIterator) advance() {
 	}
 }
 
+// Prev advances the iterator one key backwards.
+func (ri *ReplicaDataIterator) Prev() {
+	ri.it.Prev()
+	ri.retreat()
+}
+
+// retreat is the opposite of advance.
+func (ri *ReplicaDataIterator) retreat() {
+	for {
+		if ok, _ := ri.Valid(); ok && ri.ranges[ri.curIndex].Start.Less(ri.it.UnsafeKey()) {
+			return
+		}
+		ri.curIndex--
+		if ri.curIndex >= 0 {
+			ri.it.SeekLT(ri.ranges[ri.curIndex].End)
+		} else {
+			return
+		}
+	}
+}
+
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	ok, err := ri.it.Valid()
-	ok = ok && ri.curIndex < len(ri.ranges)
+	ok = ok && ri.curIndex >= 0 && ri.curIndex < len(ri.ranges)
 	return ok, err
 }
 
@@ -177,6 +215,18 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	value := ri.it.UnsafeValue()
 	ri.a, value = ri.a.Copy(value, 0)
 	return value
+}
+
+// UnsafeKey returns the same value as Key, but the memory is invalidated on
+// the next call to {Next,Prev,Close}.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.it.UnsafeKey()
+}
+
+// UnsafeValue returns the same value as Value, but the memory is invalidated on
+// the next call to {Next,Prev,Close}.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.it.UnsafeValue()
 }
 
 // ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
