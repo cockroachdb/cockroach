@@ -1074,3 +1074,11 @@ SELECT * FROM foo JOIN bar ON generate_series(0, 1) < 2
 
 query error aggregate functions are not allowed in ON
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
+
+# Regression test for #44029 (outer join on two single-row clauses, with two
+# results).
+query IIII
+SELECT * FROM (VALUES (1, 2)) a(a1,a2) FULL JOIN (VALUES (3, 4)) b(b1,b2) ON a1=b1 ORDER BY a2
+----
+NULL  NULL  3     4
+1     2     NULL  NULL
