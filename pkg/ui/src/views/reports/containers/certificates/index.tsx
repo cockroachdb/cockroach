@@ -31,7 +31,7 @@ interface CertificatesOwnProps {
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 
-type CertificatesProps = CertificatesOwnProps & RouterState;
+type CertificatesProps = CertificatesOwnProps & RouteComponentProps;
 
 const emptyRow = (
   <tr className="certs-table__row">
