@@ -1646,11 +1646,11 @@ func TestMergeJoiner(t *testing.T) {
 			func(input []Operator) (Operator, error) {
 				spec := createSpecForMergeJoiner(tc)
 				args := NewColOperatorArgs{
-					Spec:                               spec,
-					Inputs:                             input,
-					StreamingMemAccount:                testMemAcc,
-					UseStreamingMemAccountForBuffering: true,
+					Spec:                spec,
+					Inputs:              input,
+					StreamingMemAccount: testMemAcc,
 				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err

@@ -73,7 +73,7 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n uint64) {
 // set on it.
 func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 	// Note that we're not checking whether this Bytes is a window because
-	// although this function modifies the "window" Bytes, it maintains the
+	// although this function might modify the "window" Bytes, it maintains the
 	// invariant that we need to have.
 	prev := b.offsets[0]
 	for j := uint64(1); j <= n; j++ {
@@ -90,9 +90,9 @@ func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n uint64) {
 // b.maxSetIndex+1 are non-decreasing. Note that this method can be a noop when
 // i <= b.maxSetIndex+1.
 func (b *Bytes) maybeBackfillOffsets(i int) {
-	if b.isWindow {
-		panic("maybeBackfillOffsets is called on a window into Bytes")
-	}
+	// Note that we're not checking whether this Bytes is a window because
+	// although this function might modify the "window" Bytes, it maintains the
+	// invariant that we need to have.
 	for j := b.maxSetIndex + 2; j <= i; j++ {
 		b.offsets[j] = b.offsets[b.maxSetIndex+1]
 	}
