@@ -208,14 +208,13 @@ export class AnalyticsSync {
         let search = "";
 
         if (location.search && location.search.length > 1) {
-            const query = location.search.slice(1);
-            const params = new URLSearchParams(query);
+          const query = location.search.slice(1);
+          const params = new URLSearchParams(query);
 
-            for (const param of params) {
-                params.set(param[0], this.redact(param[1]));
-            }
-
-            search = "?" + params.toString();
+          params.forEach((value, key) => {
+            params.set(key, this.redact(value));
+          });
+          search = "?" + params.toString();
         }
 
         this.analyticsService.page({
@@ -280,6 +279,6 @@ history.listen((location: Location) => {
 
 // Record the initial page that was accessed; listen won't fire for the first
 // page loaded.
-analytics.page(history.getCurrentLocation());
+analytics.page(history.location);
 // Identify the cluster.
 analytics.identify();

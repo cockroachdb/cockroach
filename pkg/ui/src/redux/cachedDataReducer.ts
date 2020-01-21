@@ -18,10 +18,10 @@ import _ from "lodash";
 import { Action, Dispatch } from "redux";
 import assert from "assert";
 import moment from "moment";
-import { hashHistory } from "react-router";
-import { push } from "react-router-redux";
+import { push } from "connected-react-router";
 import { ThunkAction } from "redux-thunk";
 
+import { createHashHistory } from "history";
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
 
@@ -205,7 +205,7 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
           // timeoutFetch offers.  Major changes to this plumbing are warranted.
           if (error.message === "Unauthorized") {
             // TODO(couchand): This is an unpleasant dependency snuck in here...
-            const location = hashHistory.getCurrentLocation();
+            const { location } = createHashHistory();
             if (location && !location.pathname.startsWith("/login")) {
               dispatch(push(getLoginPage(location)));
             }
