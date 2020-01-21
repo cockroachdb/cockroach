@@ -1,5 +1,3 @@
-skip #43357
-
 statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
 -----
