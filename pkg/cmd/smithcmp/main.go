@@ -168,17 +168,23 @@ func main() {
 			name := fmt.Sprintf("s%d", i)
 			prep = fmt.Sprintf("PREPARE %s AS\n%s;", name, randStatement.stmt)
 			var sb strings.Builder
-			fmt.Fprintf(&sb, "EXECUTE %s (", name)
+			fmt.Fprintf(&sb, "EXECUTE %s", name)
 			for i, typ := range randStatement.placeholders {
 				if i > 0 {
 					sb.WriteString(", ")
+				} else {
+					sb.WriteString(" (")
 				}
 				d := sqlbase.RandDatum(rng, typ, true)
 				fmt.Println(i, typ, d, tree.Serialize(d))
 				sb.WriteString(tree.Serialize(d))
 			}
-			fmt.Fprintf(&sb, ");")
+			if len(randStatement.placeholders) > 0 {
+				fmt.Fprintf(&sb, ")")
+			}
+			fmt.Fprintf(&sb, ";")
 			exec = sb.String()
+			fmt.Println(exec)
 		}
 		if compare {
 			if err := cmpconn.CompareConns(ctx, timeout, conns, prep, exec); err != nil {
