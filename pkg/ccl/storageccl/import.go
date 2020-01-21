@@ -172,6 +172,13 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		dataSize := int64(len(fileContents))
 		log.Eventf(ctx, "fetched file (%s)", humanizeutil.IBytes(dataSize))
 
+		if args.Encryption != nil {
+			fileContents, err = DecryptFile(fileContents, args.Encryption.Key)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		if len(file.Sha512) > 0 {
 			checksum, err := SHA512ChecksumData(fileContents)
 			if err != nil {
