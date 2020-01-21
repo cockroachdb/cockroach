@@ -198,12 +198,18 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
 
   setQueryParamsByDates = (duration: moment.Duration, dateEnd: moment.Moment) => {
     const { location, history } = this.props;
+    const { pathname, search } = location;
+    const urlParams = new URLSearchParams(search);
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
     const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
+
+    urlParams.set("start", start);
+    urlParams.set("end", moment.utc(dateEnd).format("X"));
+
     history.push({
-      pathname: location.pathname,
-      search: `?start=${start}&end=${moment.utc(dateEnd).format("X")}`,
+      pathname,
+      search: urlParams.toString(),
     });
   }
 
