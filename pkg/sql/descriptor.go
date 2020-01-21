@@ -164,6 +164,35 @@ func getDescriptorID(
 	return sqlbase.ID(gr.ValueInt()), nil
 }
 
+// lookupDescriptorByID looks up the descriptor for `id` and returns it.
+// It can be a table or database descriptor.
+// Returns the descriptor (if found), a bool representing whether the
+// descriptor was found and an error if any.
+func lookupDescriptorByID(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+) (sqlbase.DescriptorProto, bool, error) {
+	var desc sqlbase.DescriptorProto
+	for _, lookupFn := range []func() (sqlbase.DescriptorProto, error){
+		func() (sqlbase.DescriptorProto, error) {
+			return sqlbase.GetTableDescFromID(ctx, txn, id)
+		},
+		func() (sqlbase.DescriptorProto, error) {
+			return sqlbase.GetDatabaseDescFromID(ctx, txn, id)
+		},
+	} {
+		var err error
+		desc, err = lookupFn()
+		if err != nil {
+			if err == sqlbase.ErrDescriptorNotFound {
+				continue
+			}
+			return nil, false, err
+		}
+		return desc, true, nil
+	}
+	return nil, false, nil
+}
+
 // getDescriptorByID looks up the descriptor for `id`, validates it,
 // and unmarshals it into `descriptor`.
 //

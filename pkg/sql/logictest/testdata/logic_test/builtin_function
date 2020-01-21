@@ -2369,3 +2369,104 @@ query T
 select to_hex('abc')
 ----
 616263
+
+# Test crdb_internal commands which execute as root, but
+# only checks for permissions afterwards.
+subtest crdb_internal_privileged_only
+
+user root
+
+statement ok
+CREATE DATABASE root_test
+
+statement ok
+CREATE TABLE root_test.t(a int)
+
+statement ok
+ALTER DATABASE root_test CONFIGURE ZONE USING num_replicas = 5
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
+----
+NULL
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+----
+61
+
+query I
+SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
+----
+62
+
+query T
+SELECT crdb_internal.get_zone_config(-1)::string
+----
+NULL
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
+----
+\x280550015801
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
+----
+NULL
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
+----
+NULL
+
+query error insufficient privilege
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+
+query T
+SELECT crdb_internal.get_zone_config(-1)::string
+----
+NULL
+
+query error insufficient privilege
+SELECT crdb_internal.get_zone_config(61)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
+
+# give testuser permissions on everything and retest
+user root
+
+statement ok
+GRANT ALL ON DATABASE root_test TO testuser
+
+statement ok
+GRANT ALL ON root_test.t TO testuser
+
+user testuser
+
+query I
+SELECT crdb_internal.get_namespace_id(0, 'root_test')
+----
+61
+
+query I
+SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
+----
+62
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
+----
+\x280550015801
+
+query T
+SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
+----
+NULL
+
+# reset state to default
+user root
+
+statement ok
+DROP DATABASE root_test CASCADE
