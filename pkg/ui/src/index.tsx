@@ -13,12 +13,16 @@ import * as ReactDOM from "react-dom";
 import "src/polyfills";
 import "src/protobufInit";
 import { alertDataSync } from "src/redux/alerts";
-import {App} from "src/app";
-import {store, history} from "src/redux/state";
 import "src/redux/analytics";
 
+import {App} from "src/app";
+import {store, history} from "src/redux/state";
+
 ReactDOM.render(
-  <App history={history} store={store} />,
+  <App
+    history={history}
+    store={store}
+  />,
   document.getElementById("react-layout"),
 );
 
