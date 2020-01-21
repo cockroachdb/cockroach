@@ -133,8 +133,11 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
+	rw := r.Engine().NewReadOnly()
+	defer rw.Close()
+
 	br, result, pErr :=
-		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, &ba, true /* readOnly */)
+		evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, &ba, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -173,8 +176,11 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
+	rw := r.Engine().NewReadOnly()
+	defer rw.Close()
+
 	br, result, pErr := evaluateBatch(
-		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, &ba, true, /* readOnly */
+		ctx, storagebase.CmdIDKey(""), rw, rec, nil, &ba, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()
