@@ -3316,6 +3316,84 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Returns a namespace_id based on parentID and a given name.
+	// Allows a non-admin to query the system.namespace table, but performs
+	// the relevant permission checks to ensure secure access.
+	// Returns NULL if none is found.
+	// Errors if there is no permission for the current user to view the descriptor.
+	"crdb_internal.get_namespace_id": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"parent_id", types.Int}, {"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
+				parentID := tree.MustBeDInt(args[0])
+				name := tree.MustBeDString(args[1])
+
+				r, err := ctx.InternalExecutor.QueryRowAsRoot(
+					ctx.Ctx(),
+					"crdb-internal-get-descriptor-id",
+					ctx.Txn,
+					query,
+					parentID,
+					name,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if r == nil {
+					return tree.DNull, nil
+				}
+				id := tree.MustBeDInt(r[0])
+				if err = checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
+					// For things like ranges, descriptors not exist.
+					if err != sqlbase.ErrDescriptorNotFound {
+						return nil, err
+					}
+				}
+				return tree.NewDInt(id), nil
+			},
+		},
+	),
+
+	// Returns the zone config based on a given namespace id.
+	// Returns NULL if a zone configuration is not found.
+	// Errors if there is no permission for the current user to view the zone config.
+	"crdb_internal.get_zone_config": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"namespace_id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := tree.MustBeDInt(args[0])
+				if err := checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
+					// For things like ranges, descriptors not exist.
+					if err != sqlbase.ErrDescriptorNotFound {
+						return nil, err
+					}
+				}
+
+				const query = `SELECT config FROM system.zones WHERE id = $1`
+				r, err := ctx.InternalExecutor.QueryRowAsRoot(
+					ctx.Ctx(),
+					"crdb-internal-get-zone",
+					ctx.Txn,
+					query,
+					id,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if r == nil {
+					return tree.DNull, nil
+				}
+				bytes := tree.MustBeDBytes(r[0])
+				return tree.NewDBytes(bytes), nil
+			},
+		},
+	),
+
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
@@ -5269,6 +5347,49 @@ var errInsufficientPriv = pgerror.New(
 
 func checkPrivilegedUser(ctx *tree.EvalContext) error {
 	if ctx.SessionData.User != security.RootUser {
+		return errInsufficientPriv
+	}
+	return nil
+}
+
+// checkDescriptorPermissions returns nil if the executing user has permissions
+// to check the permissions of a descriptor given it's ID.
+func checkDescriptorPermissions(ctx *tree.EvalContext, id sqlbase.ID) error {
+	var desc sqlbase.DescriptorProto
+	var found bool
+	for _, lookupFn := range []func() (sqlbase.DescriptorProto, error){
+		func() (sqlbase.DescriptorProto, error) {
+			return sqlbase.GetTableDescFromID(
+				ctx.Context,
+				ctx.Txn,
+				id,
+			)
+		},
+		func() (sqlbase.DescriptorProto, error) {
+			return sqlbase.GetDatabaseDescFromID(
+				ctx.Context,
+				ctx.Txn,
+				id,
+			)
+		},
+	} {
+		var err error
+		desc, err = lookupFn()
+		if err != nil {
+			if err == sqlbase.ErrDescriptorNotFound {
+				continue
+			}
+			return err
+		}
+		found = true
+		break
+	}
+
+	if !found {
+		return sqlbase.ErrDescriptorNotFound
+	}
+
+	if err := ctx.SessionAccessor.CheckAnyPrivilegeFromProto(ctx.Context, desc); err != nil {
 		return errInsufficientPriv
 	}
 	return nil

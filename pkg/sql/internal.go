@@ -156,7 +156,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	var sd *sessiondata.SessionData
 	var sdMut *sessionDataMutator
 	if sargs.isDefined() {
-		if ie.sessionData != nil {
+		if ie.sessionData != nil && sargs.User != security.RootUser {
 			log.Fatal(ctx, "sargs used on a session bound executor")
 		}
 		sd, sdMut = ie.s.newSessionDataAndMutator(sargs)
@@ -289,6 +289,13 @@ func (ie *InternalExecutor) QueryRow(
 	}
 }
 
+// QueryRowAsRoot is like QueryRow, except as a Root user.
+func (ie *InternalExecutor) QueryRowAsRoot(
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+) (tree.Datums, error) {
+	return ie.QueryRow(ctx, opName, txn, statement, qargs)
+}
+
 // Exec executes the supplied SQL statement. Statements are currently executed
 // as the root user with the system database as current database.
 //
@@ -362,9 +369,43 @@ func (ie *SessionBoundInternalExecutor) QueryWithCols(
 func (ie *SessionBoundInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) (tree.Datums, error) {
-	rows, _ /* cols */, err := ie.impl.queryInternal(
-		ctx, opName, txn,
+	return ie.queryRow(
+		ctx,
+		opName,
+		txn,
 		internalExecInheritSession,
+		stmt,
+		qargs...,
+	)
+}
+
+// QueryRowAsRoot is like QueryRow, but executes as root user.
+func (ie *SessionBoundInternalExecutor) QueryRowAsRoot(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	return ie.queryRow(
+		ctx,
+		opName,
+		txn,
+		internalExecRootSession,
+		stmt,
+		qargs...,
+	)
+}
+
+func (ie *SessionBoundInternalExecutor) queryRow(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	session internalExecSessionMode,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	rows, _ /* cols */, err := ie.impl.queryInternal(
+		ctx,
+		opName,
+		txn,
+		session,
 		SessionArgs{},
 		stmt, qargs...)
 	if err != nil {

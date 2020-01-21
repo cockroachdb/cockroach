@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -115,6 +117,17 @@ func (p *planner) CheckPrivilege(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
+}
+
+// CheckAnyPrivilegeFromProto implements the EvalSessionAccessor interface.
+func (p *planner) CheckAnyPrivilegeFromProto(
+	ctx context.Context, descriptor protoutil.Message,
+) error {
+	cast, ok := descriptor.(sqlbase.DescriptorProto)
+	if !ok {
+		return errors.New("could not cast descriptor into sqlbase descriptor")
+	}
+	return p.CheckAnyPrivilege(ctx, cast)
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.

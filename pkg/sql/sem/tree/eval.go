@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -2623,6 +2624,10 @@ type EvalSessionAccessor interface {
 
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
+
+	// CheckAnyPrivilegeFromProto returns nil if user has any privileges at all.
+	// Requires a sqlbase.DescriptorProto, but cannot be imported due to an import cycle.
+	CheckAnyPrivilegeFromProto(ctx context.Context, descriptor protoutil.Message) error
 }
 
 // SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
@@ -2637,6 +2642,11 @@ type SessionBoundInternalExecutor interface {
 
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
 	QueryRow(
+		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	) (Datums, error)
+
+	// QueryRowAsRoot is part of the sqlutil.InternalExecutor interface.
+	QueryRowAsRoot(
 		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 	) (Datums, error)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,4 +134,11 @@ func (ep *DummySessionAccessor) SetSessionVar(_ context.Context, _, _ string) er
 // HasAdminRole is part of the tree.EvalSessionAccessor interface.
 func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
+}
+
+// CheckAnyPrivilegeFromProto is part of the tree.EvalSessionAccessor interface.
+func (ep *DummySessionAccessor) CheckAnyPrivilegeFromProto(
+	_ context.Context, _ protoutil.Message,
+) error {
+	return errors.WithStack(errEvalSessionVar)
 }

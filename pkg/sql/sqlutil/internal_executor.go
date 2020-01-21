@@ -59,6 +59,11 @@ type InternalExecutor interface {
 	QueryRow(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
+
+	// QueryRowAsRoot is like QueryRow, except as a Root user.
+	QueryRowAsRoot(
+		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+	) (tree.Datums, error)
 }
 
 // InternalExecutorWithUser is like an InternalExecutor but allows the client to
