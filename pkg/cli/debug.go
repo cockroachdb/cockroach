@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/gc"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -286,7 +287,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
+	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated, false /* seekEnd */)
 	defer iter.Close()
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
@@ -555,13 +556,13 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		info, err := storage.RunGC(
+		info, err := gc.Run(
 			context.Background(),
 			&desc,
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
-			storage.NoopGCer{},
+			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
 		)
