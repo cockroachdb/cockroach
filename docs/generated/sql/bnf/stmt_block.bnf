@@ -338,7 +338,7 @@ create_role_stmt ::=
 	'CREATE' role_or_group string_or_placeholder
 	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
 	| 'CREATE' role_or_group string_or_placeholder 'WITH' role_privilege_list
-	| 'CREATE' role_or_group string_or_placeholder 'IF' 'NOT' 'EXISTS' 'WITH' role_privilege_list
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder 'WITH' role_privilege_list
 
 create_ddl_stmt ::=
 	create_changefeed_stmt

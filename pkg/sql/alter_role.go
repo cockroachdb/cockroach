@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
@@ -39,8 +40,10 @@ func (p *planner) AlterRolePrivileges(
 		return nil, err
 	}
 
-	// Check if role has SU privilege - WIP no SU roles right now
-	if err := p.hasCreateRolePrivilege(ctx); err != nil {
+	// Note that for Postgres, only superuser can ALTER another superuser
+	// CockroachDB does not support superuser privilege right now
+	// However we make it so the admin role cannot be edited (done in startExec)
+	if err := p.HasCreateRolePrivilege(ctx); err != nil {
 		return nil, err
 	}
 	if err := p.CheckPrivilege(ctx, tDesc, privilege.UPDATE); err != nil {
@@ -51,6 +54,7 @@ func (p *planner) AlterRolePrivileges(
 	if err != nil {
 		return nil, err
 	}
+
 	return &alterRoleNode{
 		name:           name,
 		ifExists:       n.IfExists,
@@ -71,6 +75,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 	if name == "" {
 		return errNoUserNameSpecified
+	}
+	if name == "admin" {
+		return errors.New("Cannot edit admin role")
 	}
 	normalizedUsername, err := NormalizeAndValidateUsername(name)
 	if err != nil {

@@ -1205,11 +1205,11 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
+	ctx.FormatNode(node.Name)
 	if node.IfHasWith {
-		ctx.WriteString("WITH ")
+		ctx.WriteString(" WITH ")
 		node.RolePrivileges.Format(&ctx.Buffer)
 	}
-	ctx.FormatNode(node.Name)
 }
 
 type AlterRolePrivileges struct {

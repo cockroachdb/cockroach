@@ -5056,9 +5056,9 @@ create_role_stmt:
   {
     $$.val = &tree.CreateRole{Name: $3.expr(), IfHasWith: true, RolePrivileges: $5.rolePrivilegeList()}
   }
-| CREATE role_or_group string_or_placeholder IF NOT EXISTS WITH role_privilege_list
+| CREATE role_or_group IF NOT EXISTS string_or_placeholder WITH role_privilege_list
   {
-    $$.val = &tree.CreateRole{Name: $3.expr(), IfNotExists: true, IfHasWith: true, RolePrivileges: $8.rolePrivilegeList()}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, IfHasWith: true, RolePrivileges: $8.rolePrivilegeList()}
   }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
 

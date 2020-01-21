@@ -60,6 +60,7 @@ func ErrNameString(s string) string {
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C
+
 // (NFC).
 func (n Name) Normalize() string {
 	return lex.NormalizeName(string(n))

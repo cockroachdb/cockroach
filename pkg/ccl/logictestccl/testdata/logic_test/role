@@ -781,3 +781,26 @@ REVOKE public FROM testuser
 statement error user or role public does not exist
 REVOKE admin FROM public
 
+# Test "WITH CREATEROLE" option
+
+statement ok
+CREATE ROLE rolewithcreate WITH CREATEROLE
+
+statement ok
+CREATE ROLE rolewithoutcreate WITH NOCREATEROLE
+
+statement ok
+CREATE ROLE rolewithcreate2 IF NOT EXISTS WITH CREATEROLE
+
+statement ok
+CREATE USER testuser3
+
+user testuser3
+
+statement error
+CREATE ROLE rolef
+
+
+
+
+
