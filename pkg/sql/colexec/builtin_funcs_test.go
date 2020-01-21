@@ -121,7 +121,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 	if hasNulls {
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(uint64(i))
 			}
 		}
 	}
@@ -132,7 +132,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
-			sel[i] = uint16(i)
+			sel[i] = uint64(i)
 		}
 	}
 

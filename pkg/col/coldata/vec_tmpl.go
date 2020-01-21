@@ -73,13 +73,13 @@ func (m *memColumn) Append(args SliceArgs) {
 			// whether the value is NULL. It is possible that Bytes' invariant of
 			// non-decreasing offsets on the source is currently not maintained, so
 			// we explicitly enforce it.
-			maxIdx := uint16(0)
+			maxIdx := uint64(0)
 			for _, selIdx := range sel {
 				if selIdx > maxIdx {
 					maxIdx = selIdx
 				}
 			}
-			fromCol.UpdateOffsetsToBeNonDecreasing(uint64(maxIdx + 1))
+			fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 			// {{else}}
 			toCol = execgen.SLICE(toCol, 0, int(args.DestIdx))
 			// {{end}}
@@ -104,18 +104,18 @@ func _COPY_WITH_SEL(
 	if args.Src.MaybeHasNulls() {
 		nulls := args.Src.Nulls()
 		for i, selIdx := range sel[args.SrcStartIdx:args.SrcEndIdx] {
-			if nulls.NullAt64(uint64(selIdx)) {
+			if nulls.NullAt(selIdx) {
 				// {{if .SelOnDest}}
 				// Remove an unused warning in some cases.
 				_ = i
-				m.nulls.SetNull64(uint64(selIdx))
+				m.nulls.SetNull(selIdx)
 				// {{else}}
-				m.nulls.SetNull64(uint64(i) + args.DestIdx)
+				m.nulls.SetNull(uint64(i) + args.DestIdx)
 				// {{end}}
 			} else {
 				v := execgen.UNSAFEGET(fromCol, int(selIdx))
 				// {{if .SelOnDest}}
-				m.nulls.UnsetNull64(uint64(selIdx))
+				m.nulls.UnsetNull(selIdx)
 				execgen.SET(toCol, int(selIdx), v)
 				// {{else}}
 				execgen.SET(toCol, i+int(args.DestIdx), v)
@@ -155,15 +155,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	case _TYPES_T:
 		fromCol := args.Src._TemplateType()
 		toCol := m._TemplateType()
-		if args.Sel64 != nil {
-			sel := args.Sel64
-			if args.SelOnDest {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
-			} else {
-				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, false)
-			}
-			return
-		} else if args.Sel != nil {
+		if args.Sel != nil {
 			sel := args.Sel
 			if args.SelOnDest {
 				_COPY_WITH_SEL(m, args, sel, toCol, fromCol, true)
@@ -172,7 +164,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 			}
 			return
 		}
-		// No Sel or Sel64.
+		// No Sel.
 		execgen.COPYSLICE(toCol, fromCol, int(args.DestIdx), int(args.SrcStartIdx), int(args.SrcEndIdx))
 		m.nulls.set(args.SliceArgs)
 	// {{end}}
@@ -197,7 +189,7 @@ func (m *memColumn) Window(colType coltypes.T, start uint64, end uint64) Vec {
 	}
 }
 
-func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
+func (m *memColumn) PrettyValueAt(colIdx uint64, colType coltypes.T) string {
 	if m.nulls.NullAt(colIdx) {
 		return "NULL"
 	}
@@ -215,7 +207,7 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType coltypes.T) string {
 
 // SetValueAt is an inefficient helper to set the value in a Vec when the type
 // is unknown.
-func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
+func SetValueAt(v Vec, elem interface{}, rowIdx uint64, colType coltypes.T) {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
@@ -230,7 +222,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx uint16, colType coltypes.T) {
 
 // GetValueAt is an inefficient helper to get the value in a Vec when the type
 // is unknown.
-func GetValueAt(v Vec, rowIdx uint16, colType coltypes.T) interface{} {
+func GetValueAt(v Vec, rowIdx uint64, colType coltypes.T) interface{} {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:

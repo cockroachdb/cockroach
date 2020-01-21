@@ -248,7 +248,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 	// overwriting it. If the passed-in Batch is not suitable for use, a new one
 	// is allocated.
 	b.Reset(c.typs, n)
-	b.SetLength(uint16(n))
+	b.SetLength(uint64(n))
 	// Reset the batch, this resets the selection vector as well.
 	b.ResetInternalBatch()
 

@@ -1631,7 +1631,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	nTuples := int(coldata.BatchSize()) * 4
-	for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
+	for _, outBatchSize := range []uint64{1, 16, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
 		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
 			func(t *testing.T) {
 				typs := []coltypes.T{coltypes.Int64}
@@ -1668,7 +1668,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 					leftNulls := b.ColVec(0).Nulls()
 					rightOutCol := b.ColVec(1).Int64()
 					rightNulls := b.ColVec(1).Nulls()
-					for j := uint16(0); j < b.Length(); j++ {
+					for j := uint64(0); j < b.Length(); j++ {
 						leftVal := leftOutCol[j]
 						leftNull := leftNulls.NullAt(j)
 						rightVal := rightOutCol[j]
@@ -1708,7 +1708,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	for _, numInputBatches := range []int{1, 2, 16} {
-		for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize()} {
+		for _, outBatchSize := range []uint64{1, 16, coldata.BatchSize()} {
 			t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
 				func(t *testing.T) {
 					nTuples := int(coldata.BatchSize()) * numInputBatches

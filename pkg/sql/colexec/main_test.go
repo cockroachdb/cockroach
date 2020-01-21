@@ -55,11 +55,11 @@ func TestMain(m *testing.M) {
 	}())
 }
 
-func generateBatchSize() uint16 {
+func generateBatchSize() uint64 {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {
 		rng, _ := randutil.NewPseudoRand()
-		batchSize := uint16(coldata.MinBatchSize +
+		batchSize := uint64(coldata.MinBatchSize +
 			rng.Intn(coldata.MaxBatchSize-coldata.MinBatchSize))
 		return batchSize
 	}

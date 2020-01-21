@@ -34,7 +34,7 @@ type Allocator struct {
 }
 
 func selVectorSize(capacity int) int64 {
-	return int64(capacity * sizeOfUint16)
+	return int64(capacity * sizeOfUint64)
 }
 
 func getVecMemoryFootprint(vec coldata.Vec) int64 {
@@ -222,12 +222,12 @@ const (
 	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
-	sizeOfUint16   = int(unsafe.Sizeof(uint16(0)))
+	sizeOfUint64   = int(unsafe.Sizeof(uint64(0)))
 )
 
 // sizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
-var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint16
+var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint64
 
 // estimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.

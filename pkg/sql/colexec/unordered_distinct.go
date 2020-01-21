@@ -104,26 +104,26 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	// Create and return the next batch of input to a maximum size of
 	// coldata.BatchSize(). The rows in the new batch are specified by the
 	// corresponding slice in the selection vector.
-	nSelected := uint16(0)
-	batchEnd := op.outputBatchStart + uint64(coldata.BatchSize())
+	nSelected := uint64(0)
+	batchEnd := op.outputBatchStart + coldata.BatchSize()
 	if batchEnd > op.distinctCount {
 		batchEnd = op.distinctCount
 	}
-	nSelected = uint16(batchEnd - op.outputBatchStart)
+	nSelected = batchEnd - op.outputBatchStart
 
 	op.allocator.PerformOperation(op.output.ColVecs(), func() {
 		for i, colIdx := range op.ht.outCols {
 			toCol := op.output.ColVec(i)
-			fromCol := op.ht.vals.colVecs[colIdx]
+			fromCol := op.ht.vals.ColVec(int(colIdx))
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						ColType:     op.ht.valTypes[op.ht.outCols[i]],
 						Src:         fromCol,
+						Sel:         op.sel,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,
 					},
-					Sel64: op.sel,
 				},
 			)
 		}
@@ -138,6 +138,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 // benchmarks.
 func (op *unorderedDistinct) reset() {
 	op.outputBatchStart = 0
-	op.ht.vals.reset()
+	op.ht.vals.ResetInternalBatch()
+	op.ht.vals.SetLength(0)
 	op.buildFinished = false
 }

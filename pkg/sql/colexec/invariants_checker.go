@@ -56,7 +56,7 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)
 		if v.Type() == coltypes.Bytes {
-			v.Bytes().AssertOffsetsAreNonDecreasing(uint64(n))
+			v.Bytes().AssertOffsetsAreNonDecreasing(n)
 		}
 	}
 	return b

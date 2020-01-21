@@ -189,9 +189,9 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)
 			vec.Nulls().UnsetNulls()
-			numNulls := uint16(int(nullFraction * float64(batch.Length())))
+			numNulls := uint64(nullFraction * float64(batch.Length()))
 			// Set the first numNulls elements to null.
-			for i := uint16(0); i < batch.Length() && i < numNulls; i++ {
+			for i := uint64(0); i < batch.Length() && i < numNulls; i++ {
 				vec.Nulls().SetNull(i)
 			}
 		}

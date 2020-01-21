@@ -28,7 +28,7 @@ func TestMemColumnWindow(t *testing.T) {
 	c := NewMemColumn(coltypes.Int64, int(BatchSize()))
 
 	ints := c.Int64()
-	for i := uint16(0); i < BatchSize(); i++ {
+	for i := uint64(0); i < BatchSize(); i++ {
 		ints[i] = int64(i)
 		if i%2 == 0 {
 			// Set every other value to null.
@@ -36,17 +36,17 @@ func TestMemColumnWindow(t *testing.T) {
 		}
 	}
 
-	startWindow := uint16(1)
-	endWindow := uint16(0)
+	startWindow := uint64(1)
+	endWindow := uint64(0)
 	for startWindow > endWindow {
-		startWindow = uint16(rng.Intn(int(BatchSize())))
-		endWindow = uint16(1 + rng.Intn(int(BatchSize())))
+		startWindow = uint64(rng.Intn(int(BatchSize())))
+		endWindow = uint64(1 + rng.Intn(int(BatchSize())))
 	}
 
-	window := c.Window(coltypes.Int64, uint64(startWindow), uint64(endWindow))
+	window := c.Window(coltypes.Int64, startWindow, endWindow)
 	windowInts := window.Int64()
 	// Verify that every other value is null.
-	for i, j := startWindow, uint16(0); i < endWindow; i, j = i+1, j+1 {
+	for i, j := startWindow, uint64(0); i < endWindow; i, j = i+1, j+1 {
 		if i%2 == 0 {
 			if !window.Nulls().NullAt(j) {
 				t.Fatalf("expected null at %d (original index: %d)", j, i)
@@ -118,13 +118,13 @@ func TestNullRanges(t *testing.T) {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
 
-		for i := uint64(0); i < uint64(BatchSize()); i++ {
+		for i := uint64(0); i < BatchSize(); i++ {
 			if i >= tc.start && i < tc.end {
-				if !c.Nulls().NullAt64(i) {
+				if !c.Nulls().NullAt(i) {
 					t.Fatalf("expected null at %d, start: %d end: %d", i, tc.start, tc.end)
 				}
 			} else {
-				if c.Nulls().NullAt64(i) {
+				if c.Nulls().NullAt(i) {
 					t.Fatalf("expected non-null at %d, start: %d end: %d", i, tc.start, tc.end)
 				}
 			}
@@ -137,9 +137,9 @@ func TestAppend(t *testing.T) {
 	const typ = coltypes.Int64
 
 	src := NewMemColumn(typ, int(BatchSize()))
-	sel := make([]uint16, len(src.Int64()))
+	sel := make([]uint64, len(src.Int64()))
 	for i := range sel {
-		sel[i] = uint16(i)
+		sel[i] = uint64(i)
 	}
 
 	testCases := []struct {
@@ -151,7 +151,7 @@ func TestAppend(t *testing.T) {
 			name: "AppendSimple",
 			args: SliceArgs{
 				// DestIdx must be specified to append to the end of dest.
-				DestIdx: uint64(BatchSize()),
+				DestIdx: BatchSize(),
 			},
 			expectedLength: int(BatchSize()) * 2,
 		},
@@ -206,7 +206,7 @@ func TestAppend(t *testing.T) {
 		tc.args.ColType = typ
 		if tc.args.SrcEndIdx == 0 {
 			// SrcEndIdx is always required.
-			tc.args.SrcEndIdx = uint64(BatchSize())
+			tc.args.SrcEndIdx = BatchSize()
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			dest := NewMemColumn(typ, int(BatchSize()))
@@ -220,7 +220,7 @@ func TestAppend(t *testing.T) {
 // case when the last element of Bytes vector is NULL.
 func TestAppendBytesWithLastNull(t *testing.T) {
 	src := NewMemColumn(coltypes.Bytes, 4)
-	sel := []uint16{0, 2, 3}
+	sel := []uint64{0, 2, 3}
 	src.Bytes().Set(0, []byte("zero"))
 	src.Nulls().SetNull(1)
 	src.Bytes().Set(2, []byte("two"))
@@ -242,7 +242,7 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 				sliceArgs.Sel = sel
 				for expIdx, srcIdx := range sel {
 					if src.Nulls().NullAt(srcIdx) {
-						expected.Nulls().SetNull(uint16(expIdx))
+						expected.Nulls().SetNull(uint64(expIdx))
 					} else {
 						expected.Bytes().Set(expIdx, src.Bytes().Get(int(srcIdx)))
 					}
@@ -250,8 +250,8 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 			} else {
 				sliceArgs.Sel = nil
 				for expIdx := 0; expIdx < 3; expIdx++ {
-					if src.Nulls().NullAt(uint16(expIdx)) {
-						expected.Nulls().SetNull(uint16(expIdx))
+					if src.Nulls().NullAt(uint64(expIdx)) {
+						expected.Nulls().SetNull(uint64(expIdx))
 					} else {
 						expected.Bytes().Set(expIdx, src.Bytes().Get(expIdx))
 					}
@@ -278,13 +278,9 @@ func TestCopy(t *testing.T) {
 	for i := range srcInts {
 		srcInts[i] = int64(i + 1)
 	}
-	sel := make([]uint16, len(src.Int64()))
+	sel := make([]uint64, len(src.Int64()))
 	for i := range sel {
-		sel[i] = uint16(i)
-	}
-	sel64 := make([]uint64, len(src.Int64()))
-	for i := range sel64 {
-		sel64[i] = uint64(i)
+		sel[i] = uint64(i)
 	}
 
 	sum := func(ints []int64) int {
@@ -311,7 +307,7 @@ func TestCopy(t *testing.T) {
 				SliceArgs: SliceArgs{
 					// Use DestIdx 1 to make sure that it is respected.
 					DestIdx:   1,
-					SrcEndIdx: uint64(BatchSize()) - 1,
+					SrcEndIdx: BatchSize() - 1,
 				},
 			},
 			// expectedSum uses sum of positive integers formula.
@@ -321,15 +317,11 @@ func TestCopy(t *testing.T) {
 			name: "CopyWithSel",
 			args: CopySliceArgs{
 				SliceArgs: SliceArgs{
-					// Set sel, but this should be ignored in favor of Sel64.
-					Sel:         sel,
+					Sel:         sel[1:],
 					DestIdx:     25,
 					SrcStartIdx: 1,
 					SrcEndIdx:   2,
 				},
-				// Since sel64 and sel refer to the same indices, slice sel64 to be able
-				// to tell which sel was used.
-				Sel64: sel64[1:],
 			},
 			// We'll have just the third element in the resulting slice.
 			expectedSum: 3,
@@ -368,7 +360,7 @@ func TestCopyNulls(t *testing.T) {
 	}
 	// Set some nulls in the destination vector.
 	for i := 0; i < 5; i++ {
-		dst.Nulls().SetNull(uint16(i))
+		dst.Nulls().SetNull(uint64(i))
 	}
 
 	// Set up the source vector.
@@ -379,7 +371,7 @@ func TestCopyNulls(t *testing.T) {
 	}
 	// Set some nulls in the source.
 	for i := 3; i < 8; i++ {
-		src.Nulls().SetNull(uint16(i))
+		src.Nulls().SetNull(uint64(i))
 	}
 
 	copyArgs := CopySliceArgs{
@@ -397,19 +389,19 @@ func TestCopyNulls(t *testing.T) {
 	// Verify that original nulls aren't deleted, and that
 	// the nulls in the source have been copied over.
 	for i := 0; i < 8; i++ {
-		require.True(t, dst.Nulls().NullAt(uint16(i)), "expected null at %d, found not null", i)
+		require.True(t, dst.Nulls().NullAt(uint64(i)), "expected null at %d, found not null", i)
 	}
 
 	// Verify that the data from src has been copied over.
 	for i := 8; i < 10; i++ {
 		require.True(t, dstInts[i] == 2, "data from src was not copied over")
-		require.True(t, !dst.Nulls().NullAt(uint16(i)), "no extra nulls were added")
+		require.True(t, !dst.Nulls().NullAt(uint64(i)), "no extra nulls were added")
 	}
 
 	// Verify that the remaining elements in dst have not been touched.
 	for i := 10; i < int(BatchSize()); i++ {
 		require.True(t, dstInts[i] == 1, "data in dst outside copy range has been changed")
-		require.True(t, !dst.Nulls().NullAt(uint16(i)), "no extra nulls were added")
+		require.True(t, !dst.Nulls().NullAt(uint64(i)), "no extra nulls were added")
 	}
 }
 
@@ -444,7 +436,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 			Src:         src,
 			SrcStartIdx: 1,
 			SrcEndIdx:   3,
-			Sel:         []uint16{0, 1, 3},
+			Sel:         []uint64{0, 1, 3},
 		},
 	}
 
@@ -464,9 +456,9 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 
 func BenchmarkAppend(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	sel := make([]uint16, BatchSize())
+	sel := make([]uint64, BatchSize())
 	for i, selIdx := range rng.Perm(len(sel)) {
-		sel[i] = uint16(selIdx)
+		sel[i] = uint64(selIdx)
 	}
 
 	benchCases := []struct {
@@ -492,14 +484,14 @@ func BenchmarkAppend(b *testing.B) {
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.ColType = typ
-				bc.args.SrcEndIdx = uint64(BatchSize())
+				bc.args.SrcEndIdx = BatchSize()
 				dest := NewMemColumn(typ, int(BatchSize()))
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(BatchSize()))
 					bc.args.DestIdx = 0
 					for i := 0; i < b.N; i++ {
 						dest.Append(bc.args)
-						bc.args.DestIdx += uint64(BatchSize())
+						bc.args.DestIdx += BatchSize()
 					}
 				})
 			}
@@ -509,9 +501,9 @@ func BenchmarkAppend(b *testing.B) {
 
 func BenchmarkCopy(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	sel := make([]uint16, BatchSize())
+	sel := make([]uint64, BatchSize())
 	for i, selIdx := range rng.Perm(len(sel)) {
-		sel[i] = uint16(selIdx)
+		sel[i] = uint64(selIdx)
 	}
 
 	benchCases := []struct {
@@ -539,7 +531,7 @@ func BenchmarkCopy(b *testing.B) {
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.ColType = typ
-				bc.args.SrcEndIdx = uint64(BatchSize())
+				bc.args.SrcEndIdx = BatchSize()
 				dest := NewMemColumn(typ, int(BatchSize()))
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(BatchSize()))

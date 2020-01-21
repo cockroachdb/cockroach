@@ -86,7 +86,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	if input == &o.right {
 		bufferedGroup = o.proberState.rBufferedGroup
 	}
-	lastBufferedTupleIdx := bufferedGroup.length - 1
+	lastBufferedTupleIdx := bufferedGroup.Length() - 1
 	tupleToLookAtIdx := uint64(rowIdx)
 	sel := batch.Selection()
 	if sel != nil {
@@ -106,13 +106,13 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			// per batch. In some cases (like INNER JOIN, or LEFT OUTER JOIN with the
 			// right side being an input) this check will always return false since
 			// nulls couldn't be buffered up though.
-			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt64(uint64(lastBufferedTupleIdx)) {
+			if bufferedGroup.ColVec(int(colIdx)).Nulls().NullAt(uint64(lastBufferedTupleIdx)) {
 				return true
 			}
 			bufferedCol := bufferedGroup.ColVec(int(colIdx))._TemplateType()
 			prevVal := execgen.UNSAFEGET(bufferedCol, int(lastBufferedTupleIdx))
 			var curVal _GOTYPE
-			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt64(tupleToLookAtIdx) {
+			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
 				return true
 			}
 			col := batch.ColVec(int(colIdx))._TemplateType()

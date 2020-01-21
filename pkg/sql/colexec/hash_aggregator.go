@@ -90,7 +90,7 @@ type hashAggregator struct {
 		coldata.Batch
 
 		// sels stores the intermediate selection vector for each hash code.
-		sels map[uint64][]uint16
+		sels map[uint64][]uint64
 
 		// group is a boolean vector where "true" represent the beginning of a group
 		// in the column. It is shared among all aggregation functions. Since
@@ -111,7 +111,7 @@ type hashAggregator struct {
 	// keyMapping stores the key values for each aggregation group. It is a
 	// bufferedBatch because in the worst case where all keys in the grouping
 	// columns are distinct, we need to store every single key in the input.
-	keyMapping *bufferedBatch
+	keyMapping coldata.Batch
 
 	output struct {
 		coldata.Batch
@@ -249,10 +249,10 @@ func (op *hashAggregator) Init() {
 	// input tuples to the scratch buffer.
 	op.scratch.Batch =
 		op.allocator.NewMemBatchWithSize(op.valTypes, op.batchTupleLimit+int(coldata.BatchSize()))
-	op.scratch.sels = make(map[uint64][]uint16)
+	op.scratch.sels = make(map[uint64][]uint64)
 	op.scratch.group = make([]bool, op.batchTupleLimit+int(coldata.BatchSize()))
 
-	op.keyMapping = newBufferedBatch(op.allocator, op.groupTypes, op.batchTupleLimit)
+	op.keyMapping = op.allocator.NewMemBatchWithSize(op.groupTypes, op.batchTupleLimit)
 
 	op.hashBuffer = make([]uint64, op.batchTupleLimit+int(coldata.BatchSize()))
 }
@@ -276,7 +276,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			op.onlineAgg()
 			op.state = hashAggregatorBuffering
 		case hashAggregatorOutputting:
-			curOutputIdx := uint16(0)
+			curOutputIdx := uint64(0)
 			op.output.ResetInternalBatch()
 
 			// If there is pending output, we try to finish outputting the aggregation
@@ -344,15 +344,15 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 // reaches batchTupleLimit. It returns true when the hash aggregator has
 // consumed all batches from input.
 func (op *hashAggregator) bufferBatch(ctx context.Context) bool {
-	bufferedTupleCount := 0
+	bufferedTupleCount := uint64(0)
 
-	for bufferedTupleCount < op.batchTupleLimit {
+	for bufferedTupleCount < uint64(op.batchTupleLimit) {
 		b := op.input.Next(ctx)
 		batchSize := b.Length()
 		if b.Length() == 0 {
 			break
 		}
-		bufferedTupleCount += int(batchSize)
+		bufferedTupleCount += batchSize
 		op.allocator.PerformOperation(op.scratch.ColVecs(), func() {
 			for i, colIdx := range op.valCols {
 				op.scratch.ColVec(i).Append(
@@ -360,13 +360,13 @@ func (op *hashAggregator) bufferBatch(ctx context.Context) bool {
 						ColType:   op.valTypes[i],
 						Src:       b.ColVec(int(colIdx)),
 						Sel:       b.Selection(),
-						DestIdx:   uint64(op.scratch.Length()),
-						SrcEndIdx: uint64(batchSize),
+						DestIdx:   op.scratch.Length(),
+						SrcEndIdx: batchSize,
 					},
 				)
 			}
 		})
-		op.scratch.SetLength(uint16(bufferedTupleCount))
+		op.scratch.SetLength(bufferedTupleCount)
 	}
 
 	return bufferedTupleCount == 0
@@ -376,21 +376,21 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	nKeys := op.scratch.Length()
 	hashBuffer := op.hashBuffer[:nKeys]
 
-	initHash(hashBuffer, uint64(nKeys), defaultInitHashValue)
+	initHash(hashBuffer, nKeys, defaultInitHashValue)
 
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
 			op.valTypes[colIdx],
 			op.scratch.ColVec(int(colIdx)),
-			uint64(nKeys),
+			nKeys,
 			nil, /* sel */
 			op.cancelChecker,
 			op.decimalScratch)
 	}
 
 	if op.testingKnobs.numOfHashBuckets != 0 {
-		finalizeHash(hashBuffer, uint64(nKeys), op.testingKnobs.numOfHashBuckets)
+		finalizeHash(hashBuffer, nKeys, op.testingKnobs.numOfHashBuckets)
 	}
 
 	// Resets the selection vectors to reuse the memory allocated.
@@ -402,9 +402,9 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	// a selection vector.
 	for selIdx, hashCode := range hashBuffer {
 		if _, ok := op.scratch.sels[hashCode]; !ok {
-			op.scratch.sels[hashCode] = make([]uint16, 0)
+			op.scratch.sels[hashCode] = make([]uint64, 0)
 		}
-		op.scratch.sels[hashCode] = append(op.scratch.sels[hashCode], uint16(selIdx))
+		op.scratch.sels[hashCode] = append(op.scratch.sels[hashCode], uint64(selIdx))
 	}
 }
 
@@ -413,7 +413,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 // on each aggregation function to perform aggregation.
 func (op *hashAggregator) onlineAgg() {
 	// Unwrap colvecs to avoid calling .ColVec() in a tight loop each time.
-	keyMappingVecs := op.keyMapping.colVecs
+	keyMappingVecs := op.keyMapping.ColVecs()
 	scratchBufferVecs := op.scratch.ColVecs()
 
 	for hashCode, sel := range op.scratch.sels {
@@ -455,8 +455,8 @@ func (op *hashAggregator) onlineAgg() {
 			groupStartIdx := remaining[0]
 
 			// Build new agg functions.
-			aggFunc := &hashAggFuncs{keyIdx: op.keyMapping.length}
-			op.keyMapping.length++
+			keyIdx := op.keyMapping.Length()
+			aggFunc := &hashAggFuncs{keyIdx: keyIdx}
 
 			// Store the key of the current aggregating group into keyMapping.
 			op.allocator.PerformOperation(keyMappingVecs, func() {
@@ -468,10 +468,11 @@ func (op *hashAggregator) onlineAgg() {
 						Src:         scratchBufferVecs[colIdx],
 						ColType:     op.valTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
-						SrcStartIdx: uint64(remaining[0]),
-						SrcEndIdx:   uint64(remaining[0] + 1),
+						SrcStartIdx: remaining[0],
+						SrcEndIdx:   remaining[0] + 1,
 					})
 				}
+				op.keyMapping.SetLength(keyIdx + 1)
 			})
 
 			aggFunc.fns, _, _ =
@@ -514,9 +515,10 @@ func (op *hashAggregator) reset() {
 	op.scratch.ResetInternalBatch()
 	op.scratch.SetLength(0)
 
-	op.keyMapping.reset()
+	op.keyMapping.ResetInternalBatch()
+	op.keyMapping.SetLength(0)
 
-	op.scratch.sels = make(map[uint64][]uint16)
+	op.scratch.sels = make(map[uint64][]uint64)
 }
 
 // hashAggFuncs stores the aggregation functions for the corresponding

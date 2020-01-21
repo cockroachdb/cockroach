@@ -150,7 +150,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	if hasNulls {
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(uint64(i))
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := uint16(0); i < coldata.BatchSize(); i++ {
+		for i := uint64(0); i < coldata.BatchSize(); i++ {
 			sel[i] = i
 		}
 	}
@@ -207,10 +207,10 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	if hasNulls {
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(uint16(i))
+				batch.ColVec(0).Nulls().SetNull(uint64(i))
 			}
 			if rand.Float64() < nullProbability {
-				batch.ColVec(1).Nulls().SetNull(uint16(i))
+				batch.ColVec(1).Nulls().SetNull(uint64(i))
 			}
 		}
 	}
@@ -218,7 +218,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 	if useSelectionVector {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		for i := uint16(0); i < coldata.BatchSize(); i++ {
+		for i := uint64(0); i < coldata.BatchSize(); i++ {
 			sel[i] = i
 		}
 	}

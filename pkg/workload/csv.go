@@ -135,7 +135,7 @@ func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
 }
 
 func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
-	if col.Nulls().NullAt64(uint64(rowIdx)) {
+	if col.Nulls().NullAt(uint64(rowIdx)) {
 		return `NULL`
 	}
 	switch col.Type() {

@@ -280,7 +280,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input, nil /* typs */)
+			tupleSource := newOpTestInput(uint64(tc.batchSize), tc.input, nil /* typs */)
 			a, err := NewOrderedAggregator(
 				testAllocator,
 				tupleSource,
@@ -593,7 +593,7 @@ func TestAggregatorRandom(t *testing.T) {
 								// the row counts outside of the if block.
 								expRowCounts[curGroup]++
 								if hasNulls && rng.Float64() < nullProbability {
-									aggColNulls.SetNull64(uint64(i))
+									aggColNulls.SetNull(uint64(i))
 								} else {
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
@@ -698,7 +698,7 @@ func BenchmarkAggregator(b *testing.B) {
 											nulls := cols[1].Nulls()
 											for i := 0; i < nTuples; i++ {
 												if rng.Float64() < nullProbability {
-													nulls.SetNull(uint16(i))
+													nulls.SetNull(uint64(i))
 												}
 											}
 										}
@@ -869,7 +869,7 @@ func TestHashAggregator(t *testing.T) {
 		},
 	}
 
-	for _, numOfHashBuckets := range []uint64{0 /* no limit */, 1, uint64(coldata.BatchSize())} {
+	for _, numOfHashBuckets := range []uint64{0 /* no limit */, 1, coldata.BatchSize()} {
 		for _, tc := range tcs {
 			if err := tc.init(); err != nil {
 				t.Fatal(err)

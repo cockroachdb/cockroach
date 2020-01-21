@@ -34,7 +34,7 @@ type routerOutput interface {
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
-	addBatch(context.Context, coldata.Batch, []uint16) bool
+	addBatch(context.Context, coldata.Batch, []uint64) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
 }
@@ -254,7 +254,7 @@ func (o *routerOutputOp) cancel(ctx context.Context) {
 //  writing rows to a fast output if we have to write to disk for a single
 //  slow output.
 func (o *routerOutputOp) addBatch(
-	ctx context.Context, batch coldata.Batch, selection []uint16,
+	ctx context.Context, batch coldata.Batch, selection []uint64,
 ) bool {
 	if len(selection) > int(batch.Length()) {
 		selection = selection[:batch.Length()]
@@ -281,11 +281,11 @@ func (o *routerOutputOp) addBatch(
 	// selection.
 	o.mu.numUnread += len(selection)
 
-	for toAppend := uint16(len(selection)); toAppend > 0; {
+	for toAppend := uint64(len(selection)); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
 			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
 		}
-		available := uint16(o.outputBatchSize) - o.mu.pendingBatch.Length()
+		available := uint64(o.outputBatchSize) - o.mu.pendingBatch.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -298,8 +298,8 @@ func (o *routerOutputOp) addBatch(
 							ColType:   t,
 							Src:       batch.ColVec(i),
 							Sel:       selection[:numAppended],
-							DestIdx:   uint64(o.mu.pendingBatch.Length()),
-							SrcEndIdx: uint64(numAppended),
+							DestIdx:   o.mu.pendingBatch.Length(),
+							SrcEndIdx: numAppended,
 						},
 					},
 				)

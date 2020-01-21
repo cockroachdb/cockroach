@@ -67,7 +67,7 @@ func _REHASH_BODY(
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
 	nKeys uint64,
-	sel []uint16,
+	sel []uint64,
 	_HAS_SEL bool,
 	_HAS_NULLS bool,
 ) { // */}}
@@ -84,10 +84,10 @@ func _REHASH_BODY(
 		// {{ if .HasSel }}
 		selIdx := sel[i]
 		// {{ else }}
-		selIdx := i
+		selIdx := uint64(i)
 		// {{ end }}
 		// {{ if .HasNulls }}
-		if nulls.NullAt(uint16(selIdx)) {
+		if nulls.NullAt(selIdx) {
 			continue
 		}
 		// {{ end }}
@@ -112,7 +112,7 @@ func rehash(
 	t coltypes.T,
 	col coldata.Vec,
 	nKeys uint64,
-	sel []uint16,
+	sel []uint64,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
 ) {
