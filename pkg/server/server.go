@@ -705,6 +705,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
+		VersionUpgradeHook: func(ctx context.Context, newV roachpb.Version) error {
+			if !cluster.Version.ActiveVersionOrEmpty(ctx, s.st).Less(newV) {
+				return nil
+			}
+			var b client.Batch
+			req := roachpb.MigrateRequest{NewVersion: newV}
+			req.Key = keys.LocalMax
+			req.EndKey = keys.MaxKey
+			b.AddRawRequest(&req)
+			// TODO(tbg): make sure all stores have synced once to persist any
+			// raft command applications.
+			return errors.Wrap(s.db.Run(ctx, &b), "while preparing version upgrade")
+		},
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -1965,7 +1978,7 @@ func (s *Server) bootstrapVersion() roachpb.Version {
 func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.Version) error {
 	if err := s.node.bootstrapCluster(
 		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
-		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,
+		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig, s.cfg.TestingKnobs,
 	); err != nil {
 		return err
 	}

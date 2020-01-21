@@ -113,6 +113,9 @@ type TruncatedStateType int
 const (
 	// TruncatedStateLegacyReplicated means use the legacy (replicated) key.
 	TruncatedStateLegacyReplicated TruncatedStateType = iota
+	// TruncatedStateLegacyReplicatedAndNoAppliedKey means use the legacy key
+	// and also don't use the RangeAppliedKey. This is for testing use only.
+	TruncatedStateLegacyReplicatedAndNoAppliedKey
 	// TruncatedStateUnreplicated means use the new (unreplicated) key.
 	TruncatedStateUnreplicated
 )
@@ -141,7 +144,7 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if truncStateType == TruncatedStateLegacyReplicated {
+	if truncStateType != TruncatedStateUnreplicated {
 		if err := rsl.SetLegacyRaftTruncatedState(ctx, readWriter, ms, state.TruncatedState); err != nil {
 			return enginepb.MVCCStats{}, err
 		}

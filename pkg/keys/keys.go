@@ -401,16 +401,6 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 	return MakeRangeKey(key, LocalRangeDescriptorSuffix, nil)
 }
 
-// RangeDescriptorJointKey returns a range-local key for the "joint descriptor"
-// for the range with specified key. This key is not versioned and it is set if
-// and only if the range is in a joint configuration that it yet has to transition
-// out of.
-func RangeDescriptorJointKey(key roachpb.RKey) roachpb.Key {
-	return MakeRangeKey(key, LocalRangeDescriptorJointSuffix, nil)
-}
-
-var _ = RangeDescriptorJointKey // silence unused check
-
 // TransactionKey returns a transaction key based on the provided
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.

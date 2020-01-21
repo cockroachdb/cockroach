@@ -28,9 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2942,4 +2944,87 @@ func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
 		})
 	}
 	return targets
+}
+
+func TestMigrate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ctx := context.Background()
+
+	for _, testCase := range []struct {
+		name string
+		typ  stateloader.TruncatedStateType
+	}{
+		{"ts=new,as=new", stateloader.TruncatedStateUnreplicated},
+		{"ts=legacy,as=new", stateloader.TruncatedStateLegacyReplicated},
+		{"ts=legacy,as=legacy", stateloader.TruncatedStateLegacyReplicatedAndNoAppliedKey},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			args := base.TestClusterArgs{}
+			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{TruncatedStateTypeOverride: &testCase.typ}
+			args.ServerArgs.Knobs.Server = &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: 1,
+				// VersionNoLegacyTruncatedAndAppliedState is special: it
+				// enables assertions against legacy truncated and applied state
+				// when it is active. Additionally, SET CLUSTER SETTING will
+				// call Migrate only when activating this version (so we're
+				// making sure it does not do it in this test).
+				BootstrapVersionOverride: cluster.VersionByKey(cluster.VersionNoLegacyTruncatedAndAppliedState - 1),
+			}
+			tc := testcluster.StartTestCluster(t, 3, args)
+			defer tc.Stopper().Stop(ctx)
+
+			visitAllRepls := func(f func(*storage.Replica) error) error {
+				for i := 0; i < tc.NumServers(); i++ {
+					return tc.Server(i).GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+						var err error
+						s.VisitReplicas(func(repl *storage.Replica) bool {
+							err = f(repl)
+							return err == nil
+						})
+						return err
+					})
+				}
+				return nil
+			}
+
+			getLegacy := func() []string {
+				t.Helper()
+				var out []string
+				require.NoError(t, visitAllRepls(func(repl *storage.Replica) error {
+					sl := stateloader.Make(repl.RangeID)
+					_, legacy, err := sl.LoadRaftTruncatedState(ctx, repl.Engine())
+					if err != nil {
+						return err
+					}
+					if legacy {
+						// Legacy truncated state.
+						out = append(out, fmt.Sprintf("ts(r%d)", repl.RangeID))
+					}
+					as, err := sl.LoadRangeAppliedState(ctx, repl.Engine())
+					if err != nil {
+						return err
+					}
+					if as == nil {
+						// Not using AppliedState yet.
+						out = append(out, fmt.Sprintf("as(r%d)", repl.RangeID))
+					}
+					return nil
+				}))
+				return out
+			}
+
+			if out := getLegacy(); (len(out) == 0) != (testCase.typ == stateloader.TruncatedStateUnreplicated) {
+				t.Fatalf("expected no legacy keys iff bootstrapped with unreplicated truncated state, got legacy keys: %v", out)
+			} else {
+				// NB: we'll never spot a legacy applied state here. This is
+				// because that migration is so aggressive that it has already
+				// happened as part of the initial up-replication.
+				t.Logf("legacy keys before migration: %v", out)
+			}
+
+			_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`, cluster.BinaryServerVersion.String())
+			require.NoError(t, err)
+			require.Zero(t, getLegacy())
+		})
+	}
 }

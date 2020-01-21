@@ -60,7 +60,9 @@ func WriteInitialReplicaState(
 	s.Stats = &ms
 	s.Lease = &lease
 	s.GCThreshold = &gcThreshold
-	s.UsingAppliedStateKey = true
+	if truncStateType != TruncatedStateLegacyReplicatedAndNoAppliedKey {
+		s.UsingAppliedStateKey = true
+	}
 
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")

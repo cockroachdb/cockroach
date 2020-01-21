@@ -155,4 +155,7 @@ const (
 	// VerifyProtectedTimestamp determines whether the specified protection record
 	// will be respected by this Range.
 	AdminVerifyProtectedTimestamp
+	// Migrate proactively forces a range to transition out of any legacy
+	// modes of operation.
+	Migrate
 )

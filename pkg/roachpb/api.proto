@@ -1467,6 +1467,23 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
+// MigrateRequest forces all ranges overlapping it to proactively move out of
+// any legacy modes that they are currently in. When this command returns, the
+// ranges are ready to run with the most up to date cluster version supported
+// by this binary.
+message MigrateRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The new version that will become active next.
+  Version NewVersion = 2 [(gogoproto.nullable) = false];
+}
+
+// MigrateResponse is the response to an Migrate operation.
+message MigrateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // AdminVerifyProtectedTimestampRequest is the argument to the
 // AdminVerifyProtectedTimestamp method which ensures that the specified record
 // will be seen before data can be garbage collected at the timestamp.
@@ -1704,6 +1721,7 @@ message RequestUnion {
     SubsumeRequest subsume = 43;
     RangeStatsRequest range_stats = 44;
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
+    MigrateRequest migrate = 50;
   }
   reserved 8, 15, 23, 25, 27;
 }
@@ -1755,6 +1773,7 @@ message ResponseUnion {
     SubsumeResponse subsume = 43;
     RangeStatsResponse range_stats = 44;
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
+    MigrateResponse migrate = 50;
   }
   reserved 8, 15, 23, 25, 27, 28;
 }

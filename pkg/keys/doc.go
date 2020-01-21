@@ -195,10 +195,9 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	//   as a whole. They are replicated and addressable. Typical examples are
 	//   the range descriptor and transaction records. They all share
 	//   `LocalRangePrefix`.
-	QueueLastProcessedKey,   // "qlpt"
-	RangeDescriptorJointKey, // "rdjt"
-	RangeDescriptorKey,      // "rdsc"
-	TransactionKey,          // "txn-"
+	QueueLastProcessedKey, // "qlpt"
+	RangeDescriptorKey,    // "rdsc"
+	TransactionKey,        // "txn-"
 
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the

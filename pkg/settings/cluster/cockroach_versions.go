@@ -54,8 +54,10 @@ const (
 	VersionPrimaryKeyChanges
 	VersionAuthLocalAndTrustRejectMethods
 	VersionPrimaryKeyColumnsOutOfFamilyZero
+	VersionNoLegacyTruncatedAndAppliedState
 
 	// Add new versions here (step one of two).
+
 )
 
 // versionsSingleton lists all historical versions here in chronological order,
@@ -377,6 +379,16 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 9},
 	},
 
+	{
+		// VersionNoLegacyTruncatedAndAppliedState does not enable any new
+		// functionality, but we know that once it is active, the truncated
+		// state of all ranges in the cluster is unreplicated, and we are using
+		// the RangeAppliedState for all ranges as well. This means that in the
+		// 20.2 cycle we are free to remove any holdover code handling their
+		// predecessors.
+		Key:     VersionNoLegacyTruncatedAndAppliedState,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 10},
+	},
 	// Add new versions here (step two of two).
 
 })
