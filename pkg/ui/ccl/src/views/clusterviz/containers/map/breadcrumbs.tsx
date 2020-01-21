@@ -14,10 +14,11 @@ import { generateLocalityRoute } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
 import { intersperse } from "src/util/intersperse";
 import { getLocalityLabel } from "src/util/localities";
-import { MAIN_BLUE } from "src/views/shared/colors";
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 import { trustIcon } from "src/util/trust";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+
+import "./breadcrumbs.styl";
 
 interface BreadcrumbsProps {
   tiers: LocalityTier[];
@@ -28,26 +29,26 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
     const paths = breadcrumbPaths(this.props.tiers);
 
     return (
-      <div style={{ textTransform: "uppercase", fontWeight: "bold", letterSpacing: 1 }}>
+      <div className="breadcrumbs">
         <span
+          className="breadcrumbs__icon"
           dangerouslySetInnerHTML={trustIcon(mapPinIcon)}
-          style={{ paddingRight: 5, position: "relative", top: 2 }}
-        />
+          />
         {intersperse(
           paths.map((path, idx) => (
             <span>
               {idx === paths.length - 1
                 ? getLocalityLabel(path)
                 : <Link
-                    to={CLUSTERVIZ_ROOT + generateLocalityRoute(path)}
-                    style={{ color: MAIN_BLUE, textDecoration: "none" }}
-                  >
+                  to={CLUSTERVIZ_ROOT + generateLocalityRoute(path)}
+                  className="breadcrumbs__link"
+                >
                     {getLocalityLabel(path)}
                   </Link>
               }
             </span>
           )),
-          <span className="breadcrumb-sep"> &gt; </span>,
+          <span className="breadcrumbs__separator"> &gt; </span>,
         )}
       </div>
     );

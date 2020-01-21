@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-$font-family--base = SourceSansPro
+font-face('SourceSansPro-Bold')
+font-face('SourceSansPro-Regular')
+font-face('SFMono')
+
+$font-family--base = SourceSansPro-Regular
 $font-family--monospace = SFMono
 
 $font-weight--bold = 600
@@ -24,6 +28,7 @@ $font-size--small = 12px
 
 $line-height--xx-large = 64px
 $line-height--x-large = 48px
+$line-height--larger = 40px
 $line-height--large = 32px
 $line-height--medium = 24px
 $line-height--small = 20px
@@ -36,8 +41,48 @@ $letter-spacing--compact = .01em
 $spacing-base = 8px
 $spacing-xx-small = 4px
 $spacing-x-small = 8px
+$spacing-smaller = 12px
 $spacing-small = 16px
+$spacing-medium-small = 20px
 $spacing-medium = 24px
+$spacing-mid-large = 28px
 $spacing-large = 32px
 $spacing-x-large = 40px
 $spacing-xx-large = 48px
+
+$text--heading-1
+  font-family $font-family--base
+  font-size $font-size--xx-large
+  line-height $line-height--xx-large
+  font-weight $font-weight--light
+
+$text--heading-2
+  font-family $font-family--base
+  font-size $font-size--x-large
+  line-height $line-height--x-large
+  font-weight $font-weight--bold
+
+$text--heading-3
+  font-family $font-family--base
+  font-size $font-size--large
+  line-height $line-height--large
+  font-weight $font-weight--medium
+
+$text--heading-6
+  font-family $font-family--base
+  font-size $font-size--small
+  line-height $line-height--x-small
+  font-weight $font-weight--medium
+  text-transform uppercase
+
+$text--body
+  font-family $font-family--base
+  font-size $font-size--medium
+  line-height $line-height--medium
+  font-weight $font-weight--light
+
+$text--body-strong
+  font-family $font-family--base
+  font-size $font-size--medium
+  line-height $line-height--medium
+  font-weight $font-weight--bold

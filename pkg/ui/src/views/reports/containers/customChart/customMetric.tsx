@@ -190,7 +190,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
           <input type="checkbox" checked={perNode} onChange={this.changePerNode} />
         </td>
         <td className="metric-table__cell">
-          <button className="metric-edit-button" onClick={this.deleteOption}>Remove Metric</button>
+          <button className="edit-button metric-edit-button" onClick={this.deleteOption}>Remove Metric</button>
         </td>
       </tr>
     );
@@ -295,9 +295,9 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
           options={axisUnitsOptions}
           onChange={this.changeAxisUnits}
         />
-        <button className="chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
+        <button className="edit-button chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
         { table }
-        <button className="metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
+        <button className="edit-button metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
       </div>
     );
   }

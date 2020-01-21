@@ -17,6 +17,7 @@ export interface TextProps {
   textType?: TextTypes;
   disabled?: boolean;
   children: React.ReactNode;
+  className?: string;
 }
 
 export enum TextTypes {
@@ -62,16 +63,18 @@ const getClassByTextType = (textType: TextTypes) => {
 Text.defaultProps = {
   textType: TextTypes.Body,
   disabled: false,
+  className: "",
 };
 
 export function Text(props: TextProps) {
-  const { textType, disabled } = props;
+  const { textType, disabled, className } = props;
   const textTypeClass = cn(
     "text",
     getClassByTextType(textType),
     {
       "text--disabled": disabled,
     },
+    className,
   );
   return (
     <span className={textTypeClass}>

@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,11 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./icon";
-export * from "./globalNavigation";
-export * from "./sideNavigation";
-export * from "./tabNavigation";
-export * from "./text";
-export * from "./table";
-export * from "./tooltip";
-export * from "./select";
+export * from "./dropdown";

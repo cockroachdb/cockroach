@@ -8,40 +8,34 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require '~styl/base/palette.styl'
+@require '~src/components/core/index.styl'
 
-.embedded-table .sort-table
-  border-left none
-  border-right none
-  
-  .sort-table__cell
-    &:last-child
-      border-right none
+.embedded-table
+  padding 0 $spacing-medium-small $spacing-medium-small
 
-.bar-chart__label
-  font-family Lato-Regular
-  font-size 12px
-  font-weight 300
-  fill $body-color
+.nodes-overview
+  background $colors--neutral-1
+  &__panel
+    background $colors--neutral-0
+    margin-bottom $spacing-small
+    border 1px solid rgb(237, 237, 237)
+    box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+    border-radius 3px
 
-.bar-chart__label.total
-  fill #cfd2dc
+.status-column
+  &--color-warning
+  &--color-suspect
+    color $colors--functional-orange-3
+  &--color-dead
+    color $colors--functional-red-3
 
+.nodes-list-container
+  background $background-color
+  display flex
+  flex-direction column
 
-// The following rule is for Chrome, the height attribute applied
-// from JavaScript is for Firefox.
-.bar-chart__bar.used
-  height 5px
-  fill $link-color
+.nodes-list-container > *
+  margin-bottom $spacing-smaller
 
-.node-status-icon
-  display inline-block
-  margin-right 6px
-  line-height 16px
-  vertical-align middle
-  width 16px
-  height 16px
-
-.node-status-icon > svg
-  width 16px
-  height 16px
+.nodes-list-container > *:last-child
+  margin-bottom 0
