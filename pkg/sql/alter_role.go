@@ -22,7 +22,7 @@ import (
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
 type alterRoleNode struct {
-	name           tree.Expr
+	name           func() (string, error)
 	ifExists       bool
 	rolePrivileges roleprivilege.List
 
@@ -33,7 +33,7 @@ type alterRoleNode struct {
 // Privileges: UPDATE on the users table.
 func (p *planner) AlterRolePrivileges(
 	ctx context.Context, n *tree.AlterRolePrivileges,
-) (planNode, error) {
+) (*alterRoleNode, error) {
 	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
@@ -47,29 +47,43 @@ func (p *planner) AlterRolePrivileges(
 		return nil, err
 	}
 
+	name, err := p.TypeAsString(n.Name, "ALTER ROLE")
+	if err != nil {
+		return nil, err
+	}
 	return &alterRoleNode{
-		name:           n.Name,
+		name:           name,
 		ifExists:       n.IfExists,
 		rolePrivileges: n.RolePrivileges,
 	}, nil
 }
 
-// alterRolePrivilegesRun is the run-time state of
-// alterRolePrivilegesRun for local execution.
+// alterRoleRun is the run-time state of
+// alterRoleRun	 for local execution.
 type alterRoleRun struct {
 	rowsAffected int
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {
-	// The root user is not allowed a password.
-	err := error(nil)
+	name, err := n.name()
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return errNoUserNameSpecified
+	}
+	normalizedUsername, err := NormalizeAndValidateUsername(name)
+	if err != nil {
+		return err
+	}
+
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		"update-role",
 		params.p.txn,
 		// parameterize permissions using map and function WIP (for when extra role privileges are added)
 		`UPDATE system.users SET "hasCreateRole" = $2 WHERE username = $1`,
-		n.name,
+		normalizedUsername,
 		n.rolePrivileges.ToBitField()&roleprivilege.CREATEROLE.Mask() != 0,
 	)
 	if err != nil {
