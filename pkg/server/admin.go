@@ -2159,20 +2159,31 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 func (s *adminServer) queryZone(
 	ctx context.Context, userName string, id sqlbase.ID,
 ) (zonepb.ZoneConfig, bool, error) {
-	const query = `SELECT config FROM system.zones WHERE id = $1`
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
-		ctx, "admin-query-zone", nil /* txn */, userName, query, id,
+	const query = `SELECT crdb_internal.get_zone_config($1)`
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
+		ctx,
+		"admin-query-zone",
+		nil, /* txn */
+		userName,
+		query,
+		id,
 	)
 	if err != nil {
 		return *zonepb.NewZoneConfig(), false, err
 	}
 
-	if len(rows) == 0 {
-		return *zonepb.NewZoneConfig(), false, nil
+	if len(rows) != 1 {
+		return *zonepb.NewZoneConfig(), false, errors.Errorf("invalid number of rows returned: %s (%d)", query, id)
 	}
 
 	var zoneBytes []byte
-	scanner := resultScanner{}
+	scanner := makeResultScanner(cols)
+	if isNull, err := scanner.IsNull(rows[0], cols[0].Name); err != nil {
+		return *zonepb.NewZoneConfig(), false, err
+	} else if isNull {
+		return *zonepb.NewZoneConfig(), false, nil
+	}
+
 	err = scanner.ScanIndex(rows[0], 0, &zoneBytes)
 	if err != nil {
 		return *zonepb.NewZoneConfig(), false, err
@@ -2205,20 +2216,26 @@ func (s *adminServer) queryZonePath(
 func (s *adminServer) queryNamespaceID(
 	ctx context.Context, userName string, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
-	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+	const query = `SELECT crdb_internal.get_namespace_id($1, $2)`
+	rows, cols, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-query-namespace-ID", nil /* txn */, userName, query, parentID, name,
 	)
 	if err != nil {
 		return 0, err
 	}
 
-	if len(rows) == 0 {
-		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
+	if len(rows) != 1 {
+		return 0, errors.Errorf("invalid number of rows returned: %s (%d, %s)", query, parentID, name)
 	}
 
 	var id int64
-	scanner := resultScanner{}
+	scanner := makeResultScanner(cols)
+	if isNull, err := scanner.IsNull(rows[0], cols[0].Name); err != nil {
+		return 0, err
+	} else if isNull {
+		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
+	}
+
 	err = scanner.ScanIndex(rows[0], 0, &id)
 	if err != nil {
 		return 0, err
