@@ -201,7 +201,7 @@ func (hj *externalHashJoiner) partitionBatch(
 						},
 					})
 				}
-				scratchBatch.SetLength(uint16(len(sel)))
+				scratchBatch.SetLength(uint64(len(sel)))
 			})
 			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
 				execerror.VectorizedInternalPanic(err)

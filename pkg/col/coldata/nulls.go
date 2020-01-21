@@ -65,21 +65,6 @@ func (n *Nulls) MaybeHasNulls() bool {
 	return n.maybeHasNulls
 }
 
-// NullAt returns true if the ith value of the column is null.
-func (n *Nulls) NullAt(i uint16) bool {
-	return n.NullAt64(uint64(i))
-}
-
-// SetNull sets the ith value of the column to null.
-func (n *Nulls) SetNull(i uint16) {
-	n.SetNull64(uint64(i))
-}
-
-// UnsetNull unsets the ith value of the column.
-func (n *Nulls) UnsetNull(i uint16) {
-	n.UnsetNull64(uint64(i))
-}
-
 // SetNullRange sets all the values in [start, end) to null.
 func (n *Nulls) SetNullRange(start uint64, end uint64) {
 	if start >= end {
@@ -157,9 +142,9 @@ func (n *Nulls) UnsetNullRange(start, end uint64) {
 }
 
 // Truncate sets all values with index greater than or equal to start to null.
-func (n *Nulls) Truncate(start uint16) {
+func (n *Nulls) Truncate(start uint64) {
 	end := uint64(len(n.nulls) * 8)
-	n.SetNullRange(uint64(start), end)
+	n.SetNullRange(start, end)
 }
 
 // UnsetNulls sets the column to have no null values.
@@ -174,9 +159,9 @@ func (n *Nulls) UnsetNulls() {
 
 // UnsetNullsAfter sets all values with index greater than or equal to idx to
 // non-null.
-func (n *Nulls) UnsetNullsAfter(idx uint16) {
+func (n *Nulls) UnsetNullsAfter(idx uint64) {
 	end := uint64(len(n.nulls) * 8)
-	n.UnsetNullRange(uint64(idx), end)
+	n.UnsetNullRange(idx, end)
 }
 
 // SetNulls sets the column to have only null values.
@@ -189,19 +174,19 @@ func (n *Nulls) SetNulls() {
 	}
 }
 
-// NullAt64 returns true if the ith value of the column is null.
-func (n *Nulls) NullAt64(i uint64) bool {
+// NullAt returns true if the ith value of the column is null.
+func (n *Nulls) NullAt(i uint64) bool {
 	return n.nulls[i/8]&bitMask[i%8] == 0
 }
 
-// SetNull64 sets the ith value of the column to null.
-func (n *Nulls) SetNull64(i uint64) {
+// SetNull sets the ith value of the column to null.
+func (n *Nulls) SetNull(i uint64) {
 	n.maybeHasNulls = true
 	n.nulls[i/8] &= flippedBitMask[i%8]
 }
 
-// UnsetNull64 unsets the ith values of the column.
-func (n *Nulls) UnsetNull64(i uint64) {
+// UnsetNull unsets the ith values of the column.
+func (n *Nulls) UnsetNull(i uint64) {
 	n.nulls[i/8] |= bitMask[i%8]
 }
 
@@ -250,15 +235,15 @@ func (n *Nulls) set(args SliceArgs) {
 		if args.Sel != nil {
 			for i := uint64(0); i < toDuplicate; i++ {
 				if src.NullAt(args.Sel[args.SrcStartIdx+i]) {
-					n.SetNull64(args.DestIdx + i)
+					n.SetNull(args.DestIdx + i)
 				}
 			}
 		} else {
 			for i := uint64(0); i < toDuplicate; i++ {
 				// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
 				// like n.nulls[i] |= vec.nulls[i].
-				if src.NullAt64(args.SrcStartIdx + i) {
-					n.SetNull64(args.DestIdx + i)
+				if src.NullAt(args.SrcStartIdx + i) {
+					n.SetNull(args.DestIdx + i)
 				}
 			}
 		}

@@ -19,7 +19,6 @@ import (
 
 var (
 	zeroBoolColumn   = make([]bool, coldata.MaxBatchSize)
-	zeroUint16Column = make([]uint16, coldata.MaxBatchSize)
 	zeroUint64Column = make([]uint64, coldata.MaxBatchSize)
 
 	zeroDecimalValue  apd.Decimal
@@ -54,7 +53,7 @@ func CopyBatch(allocator *Allocator, original coldata.Batch) coldata.Batch {
 				SliceArgs: coldata.SliceArgs{
 					ColType:   typs[colIdx],
 					Src:       col,
-					SrcEndIdx: uint64(original.Length()),
+					SrcEndIdx: original.Length(),
 				},
 			})
 		}
@@ -67,11 +66,11 @@ func CopyBatch(allocator *Allocator, original coldata.Batch) coldata.Batch {
 // vectors on inputBatch as well (in which case windowedBatch will also have a
 // "windowed" selection vector).
 func makeWindowIntoBatch(
-	windowedBatch, inputBatch coldata.Batch, startIdx uint16, inputTypes []coltypes.T,
+	windowedBatch, inputBatch coldata.Batch, startIdx uint64, inputTypes []coltypes.T,
 ) {
 	inputBatchLen := inputBatch.Length()
-	windowStart := uint64(startIdx)
-	windowEnd := uint64(inputBatchLen)
+	windowStart := startIdx
+	windowEnd := inputBatchLen
 	if sel := inputBatch.Selection(); sel != nil {
 		// We have a selection vector on the input batch, and in order to avoid
 		// deselecting (i.e. moving the data over), we will provide an adjusted
@@ -79,14 +78,14 @@ func makeWindowIntoBatch(
 		windowedBatch.SetSelection(true)
 		windowIntoSel := sel[startIdx:inputBatchLen]
 		copy(windowedBatch.Selection(), windowIntoSel)
-		maxSelIdx := uint16(0)
+		maxSelIdx := uint64(0)
 		for _, selIdx := range windowIntoSel {
 			if selIdx > maxSelIdx {
 				maxSelIdx = selIdx
 			}
 		}
 		windowStart = 0
-		windowEnd = uint64(maxSelIdx + 1)
+		windowEnd = maxSelIdx + 1
 	} else {
 		windowedBatch.SetSelection(false)
 	}

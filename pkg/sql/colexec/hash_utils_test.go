@@ -29,7 +29,7 @@ func TestHashFunctionFamily(t *testing.T) {
 
 	ctx := context.Background()
 	bucketsA, bucketsB := make([]uint64, coldata.BatchSize()), make([]uint64, coldata.BatchSize())
-	nKeys := uint64(coldata.BatchSize())
+	nKeys := coldata.BatchSize()
 	keyTypes := []coltypes.T{coltypes.Int64}
 	keys := []coldata.Vec{testAllocator.NewMemColumn(keyTypes[0], int(coldata.BatchSize()))}
 	for i := int64(0); i < int64(coldata.BatchSize()); i++ {

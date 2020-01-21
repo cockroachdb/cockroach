@@ -56,10 +56,10 @@ func _ASSIGN_NE(_, _, _ interface{}) uint64 {
 
 // {{/*
 func _MATCH_LOOP(
-	sel []uint16,
+	sel []uint64,
 	lhs coldata.Vec,
 	rhs coldata.Vec,
-	aggKeyIdx uint16,
+	aggKeyIdx uint64,
 	lhsNull bool,
 	diff []bool,
 	_LHS_MAYBE_HAS_NULLS bool,
@@ -108,13 +108,13 @@ func _MATCH_LOOP(
 // NOTE: the return vector will reuse the memory allocated for the selection
 //       vector.
 func (v hashAggFuncs) match(
-	sel []uint16,
+	sel []uint64,
 	b coldata.Batch,
 	keyCols []uint32,
 	keyTypes []coltypes.T,
 	keyMapping coldata.Batch,
 	diff []bool,
-) (bool, []uint16) {
+) (bool, []uint64) {
 	// We want to directly write to the selection vector to avoid extra
 	// allocation.
 	b.SetSelection(true)
@@ -126,7 +126,7 @@ func (v hashAggFuncs) match(
 	for keyIdx, colIdx := range keyCols {
 		lhs := keyMapping.ColVec(keyIdx)
 		lhsHasNull := lhs.MaybeHasNulls()
-		lhsNull := lhs.Nulls().NullAt64(v.keyIdx)
+		lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 
 		rhs := b.ColVec(int(colIdx))
 		rhsHasNull := rhs.MaybeHasNulls()
@@ -165,12 +165,12 @@ func (v hashAggFuncs) match(
 	}
 
 	if len(matched) > 0 {
-		b.SetLength(uint16(len(matched)))
+		b.SetLength(uint64(len(matched)))
 		anyMatched = true
 	}
 
 	// Reset diff slice back to all false.
-	for n := uint16(0); n < uint16(len(diff)); n += uint16(copy(diff, zeroBoolColumn)) {
+	for n := uint64(0); n < uint64(len(diff)); n += uint64(copy(diff, zeroBoolColumn)) {
 	}
 
 	return anyMatched, remaining

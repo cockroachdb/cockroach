@@ -104,7 +104,7 @@ type tupleHashDistributor struct {
 	buckets []uint64
 	// selections stores the selection vectors that actually define how to
 	// distribute the tuples from the batch.
-	selections [][]uint16
+	selections [][]uint64
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker  CancelChecker
@@ -112,9 +112,9 @@ type tupleHashDistributor struct {
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
-	selections := make([][]uint16, numOutputs)
+	selections := make([][]uint64, numOutputs)
 	for i := range selections {
-		selections[i] = make([]uint16, 0, coldata.BatchSize())
+		selections[i] = make([]uint64, 0, coldata.BatchSize())
 	}
 	return &tupleHashDistributor{
 		initHashValue: initHashValue,
@@ -125,8 +125,8 @@ func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDis
 
 func (d *tupleHashDistributor) distribute(
 	ctx context.Context, b coldata.Batch, types []coltypes.T, hashCols []uint32,
-) [][]uint16 {
-	n := uint64(b.Length())
+) [][]uint64 {
+	n := b.Length()
 	initHash(d.buckets, n, d.initHashValue)
 
 	for _, i := range hashCols {
@@ -150,7 +150,7 @@ func (d *tupleHashDistributor) distribute(
 	} else {
 		for i := range d.buckets[:n] {
 			outputIdx := d.buckets[i]
-			d.selections[outputIdx] = append(d.selections[outputIdx], uint16(i))
+			d.selections[outputIdx] = append(d.selections[outputIdx], uint64(i))
 		}
 	}
 	return d.selections

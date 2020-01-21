@@ -267,25 +267,25 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 		switch col.Type() {
 		case coltypes.Bool:
 			for rowIdx, datum := range col.Bool()[:numRows] {
-				if !nulls.NullAt64(uint64(rowIdx)) {
+				if !nulls.NullAt(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
 		case coltypes.Int64:
 			for rowIdx, datum := range col.Int64()[:numRows] {
-				if !nulls.NullAt64(uint64(rowIdx)) {
+				if !nulls.NullAt(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
 		case coltypes.Int16:
 			for rowIdx, datum := range col.Int16()[:numRows] {
-				if !nulls.NullAt64(uint64(rowIdx)) {
+				if !nulls.NullAt(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
 		case coltypes.Float64:
 			for rowIdx, datum := range col.Float64()[:numRows] {
-				if !nulls.NullAt64(uint64(rowIdx)) {
+				if !nulls.NullAt(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
@@ -305,7 +305,7 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			// all as bytes and let the caller deal with the ambiguity.
 			colBytes := col.Bytes()
 			for rowIdx := 0; rowIdx < numRows; rowIdx++ {
-				if !nulls.NullAt64(uint64(rowIdx)) {
+				if !nulls.NullAt(uint64(rowIdx)) {
 					datums[rowIdx*numCols+colIdx] = colBytes.Get(rowIdx)
 				}
 			}

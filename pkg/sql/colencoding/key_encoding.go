@@ -34,7 +34,7 @@ import (
 // See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
 	vecs []coldata.Vec,
-	idx uint16,
+	idx uint64,
 	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	indexColIdx []int,
@@ -133,7 +133,7 @@ func DecodeIndexKeyToCols(
 // DecodeKeyValsToCols additionally returns whether a NULL was encountered when decoding.
 func DecodeKeyValsToCols(
 	vecs []coldata.Vec,
-	idx uint16,
+	idx uint64,
 	indexColIdx []int,
 	types []types.T,
 	directions []sqlbase.IndexDescriptor_Direction,
@@ -171,7 +171,7 @@ func DecodeKeyValsToCols(
 // See the analog, DecodeTableKey, in sqlbase/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
-	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
+	vec coldata.Vec, idx uint64, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, bool, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, false, errors.AssertionFailedf("invalid direction: %d", log.Safe(dir))
@@ -267,7 +267,7 @@ func decodeTableKeyToCol(
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
 func UnmarshalColumnValueToCol(
-	vec coldata.Vec, idx uint16, typ *types.T, value roachpb.Value,
+	vec coldata.Vec, idx uint64, typ *types.T, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
 		vec.Nulls().SetNull(idx)

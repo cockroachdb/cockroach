@@ -251,10 +251,10 @@ func benchmarkLogicalProjOp(
 		nulls2 := batch.ColVec(0).Nulls()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			if rng.Float64() < nullProbability {
-				nulls1.SetNull(uint16(i))
+				nulls1.SetNull(uint64(i))
 			}
 			if rng.Float64() < nullProbability {
-				nulls2.SetNull(uint16(i))
+				nulls2.SetNull(uint64(i))
 			}
 		}
 	}
@@ -263,7 +263,7 @@ func benchmarkLogicalProjOp(
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
-			sel[i] = uint16(i)
+			sel[i] = uint64(i)
 		}
 	}
 	input := NewRepeatableBatchSource(testAllocator, batch)

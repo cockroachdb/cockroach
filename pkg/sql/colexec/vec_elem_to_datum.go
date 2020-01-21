@@ -27,7 +27,7 @@ import (
 // semtype ct. Note that this function handles nulls as well, so there is no
 // need for a separate null check.
 func PhysicalTypeColElemToDatum(
-	col coldata.Vec, rowIdx uint16, da sqlbase.DatumAlloc, ct *types.T,
+	col coldata.Vec, rowIdx uint64, da sqlbase.DatumAlloc, ct *types.T,
 ) tree.Datum {
 	if col.MaybeHasNulls() {
 		if col.Nulls().NullAt(rowIdx) {

@@ -54,10 +54,10 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if length == 0 {
 		return bat
 	}
-	newSeen := c.seen + uint64(length)
+	newSeen := c.seen + length
 	if newSeen >= c.limit {
 		c.done = true
-		bat.SetLength(uint16(c.limit - c.seen))
+		bat.SetLength(c.limit - c.seen)
 		return bat
 	}
 	c.seen = newSeen

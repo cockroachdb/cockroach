@@ -238,7 +238,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	lastVal := p.lastVal
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
-	firstIdx := uint16(0)
+	firstIdx := uint64(0)
 	if sel != nil {
 		firstIdx = sel[0]
 	}
@@ -386,7 +386,7 @@ func _CHECK_DISTINCT_WITH_NULLS(
 ) { // */}}
 
 	// {{define "checkDistinctWithNulls" -}}
-	null := nulls.NullAt(uint16(checkIdx))
+	null := nulls.NullAt(uint64(checkIdx))
 	if null {
 		if !lastValNull {
 			// The current value is null while the previous was not.

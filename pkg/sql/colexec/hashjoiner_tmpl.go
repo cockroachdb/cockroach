@@ -27,8 +27,8 @@ import (
 // {{/*
 
 func _COLLECT_PROBE_OUTER(
-	hj *hashJoiner, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
-) uint16 { // */}}
+	hj *hashJoiner, batchSize uint64, nResults uint64, batch coldata.Batch, _USE_SEL bool,
+) uint64 { // */}}
 	// {{define "collectProbeOuter" -}}
 	// Early bounds checks.
 	_ = hj.ht.headID[batchSize-1]
@@ -76,8 +76,8 @@ func _COLLECT_PROBE_OUTER(
 }
 
 func _COLLECT_PROBE_NO_OUTER(
-	hj *hashJoiner, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
-) uint16 { // */}}
+	hj *hashJoiner, batchSize uint64, nResults uint64, batch coldata.Batch, _USE_SEL bool,
+) uint64 { // */}}
 	// {{define "collectProbeNoOuter" -}}
 	// Early bounds checks.
 	_ = hj.ht.headID[batchSize-1]
@@ -111,15 +111,15 @@ func _COLLECT_PROBE_NO_OUTER(
 }
 
 func _COLLECT_LEFT_ANTI(
-	hj *hashJoiner, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
-) uint16 { // */}}
+	hj *hashJoiner, batchSize uint64, nResults uint64, batch coldata.Batch, _USE_SEL bool,
+) uint64 { // */}}
 	// {{define "collectLeftAnti" -}}
 	// Early bounds checks.
 	_ = hj.ht.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		currentID := hj.ht.headID[i]
 		if currentID == 0 {
 			// currentID of 0 indicates that ith probing row didn't have a match, so
@@ -138,7 +138,7 @@ func _COLLECT_LEFT_ANTI(
 	return 0
 }
 
-func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize uint16, _USE_SEL bool) { // */}}
+func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize uint64, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectProbeOuter" -}}
 	// Early bounds checks.
 	_ = hj.ht.groupID[batchSize-1]
@@ -148,7 +148,7 @@ func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize uint16, _USE_SEL bo
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := hj.ht.groupID[i]
 		rowUnmatched := id == 0
@@ -167,7 +167,7 @@ func _DISTINCT_COLLECT_PROBE_OUTER(hj *hashJoiner, batchSize uint16, _USE_SEL bo
 }
 
 func _DISTINCT_COLLECT_PROBE_NO_OUTER(
-	hj *hashJoiner, batchSize uint16, nResults uint16, _USE_SEL bool,
+	hj *hashJoiner, batchSize uint64, nResults uint64, _USE_SEL bool,
 ) { // */}}
 	// {{define "distinctCollectProbeNoOuter" -}}
 	// Early bounds checks.
@@ -177,7 +177,7 @@ func _DISTINCT_COLLECT_PROBE_NO_OUTER(
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		if hj.ht.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = hj.ht.groupID[i] - 1
@@ -198,8 +198,8 @@ func _DISTINCT_COLLECT_PROBE_NO_OUTER(
 // collect prepares the buildIdx and probeIdx arrays where the buildIdx and
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
-func (hj *hashJoiner) collect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
-	nResults := uint16(0)
+func (hj *hashJoiner) collect(batch coldata.Batch, batchSize uint64, sel []uint64) uint64 {
+	nResults := uint64(0)
 
 	if hj.spec.left.outer {
 		if sel != nil {
@@ -231,8 +231,8 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize uint16, sel []uint1
 // distinctCollect prepares the batch with the joined output columns where the build
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
-func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
-	nResults := uint16(0)
+func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize uint64, sel []uint64) uint64 {
+	nResults := uint64(0)
 
 	if hj.spec.left.outer {
 		nResults = batchSize
