@@ -1625,3 +1625,47 @@ select
       ├── a = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
       ├── b = 10 [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
       └── c = 10 [type=bool, outer=(3), constraints=(/3: [/10 - /10]; tight), fd=()-->(3)]
+
+# Test that a histogram on a boolean column is used.
+exec-ddl
+CREATE TABLE hist_bool (a INT, b BOOL)
+----
+
+exec-ddl
+ALTER TABLE hist_bool INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 2,
+    "histo_col_type": "BOOL",
+    "histo_buckets": [
+      {"num_eq": 900, "num_range": 0, "distinct_range": 0, "upper_bound": "false"},
+      {"num_eq": 100, "num_range": 0, "distinct_range": 0, "upper_bound": "true"}
+    ]
+  }
+]'
+----
+
+norm
+SELECT * FROM hist_bool WHERE b = false
+----
+select
+ ├── columns: a:1(int) b:2(bool!null)
+ ├── stats: [rows=900, distinct(2)=1, null(2)=0]
+ │   histogram(2)=  0   900
+ │                <--- false
+ ├── fd: ()-->(2)
+ ├── scan hist_bool
+ │    ├── columns: a:1(int) b:2(bool)
+ │    └── stats: [rows=1000, distinct(2)=2, null(2)=0]
+ │        histogram(2)=  0   900   0  100
+ │                     <--- false --- true
+ └── filters
+      └── b = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
