@@ -149,9 +149,9 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := uint16(0); i < n; i++ {
-			if vecNulls.NullAt(uint16(i)) {
-				projNulls.SetNull(uint16(i))
+		for i := uint64(0); i < n; i++ {
+			if vecNulls.NullAt(uint64(i)) {
+				projNulls.SetNull(uint64(i))
 			} else {
 				execerror.VectorizedInternalPanic(fmt.Errorf("unexpected non-null at index %d", i))
 			}
@@ -211,8 +211,8 @@ func (c *castOp_FROMTYPE_TOTYPE) Next(ctx context.Context) coldata.Batch {
 				} else {
 					col = _FROM_TYPE_SLICE(col, 0, int(n))
 					for execgen.RANGE(i, col, 0, int(n)) {
-						if vecNulls.NullAt(uint16(i)) {
-							projNulls.SetNull(uint16(i))
+						if vecNulls.NullAt(uint64(i)) {
+							projNulls.SetNull(uint64(i))
 						} else {
 							v := _FROM_TYPE_UNSAFEGET(col, int(i))
 							var r _GOTYPE

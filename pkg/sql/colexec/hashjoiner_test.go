@@ -911,7 +911,7 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, outputBatchSize := range []uint16{1, 17, coldata.BatchSize()} {
+	for _, outputBatchSize := range []uint64{1, 17, coldata.BatchSize()} {
 		if outputBatchSize > coldata.BatchSize() {
 			// It is possible for varied coldata.BatchSize() to be smaller than
 			// requested outputBatchSize. Such configuration is invalid, and we skip

@@ -26,7 +26,7 @@ func TestDeselector(t *testing.T) {
 	tcs := []struct {
 		colTypes []coltypes.T
 		tuples   []tuple
-		sel      []uint16
+		sel      []uint64
 		expected []tuple
 	}{
 		{
@@ -38,25 +38,25 @@ func TestDeselector(t *testing.T) {
 		{
 			colTypes: []coltypes.T{coltypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
-			sel:      []uint16{},
+			sel:      []uint64{},
 			expected: tuples{},
 		},
 		{
 			colTypes: []coltypes.T{coltypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
-			sel:      []uint16{1},
+			sel:      []uint64{1},
 			expected: tuples{{1}},
 		},
 		{
 			colTypes: []coltypes.T{coltypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
-			sel:      []uint16{0, 2},
+			sel:      []uint64{0, 2},
 			expected: tuples{{0}, {2}},
 		},
 		{
 			colTypes: []coltypes.T{coltypes.Int64},
 			tuples:   tuples{{0}, {1}, {2}},
-			sel:      []uint16{0, 1, 2},
+			sel:      []uint64{0, 1, 2},
 			expected: tuples{{0}, {1}, {2}},
 		},
 	}
@@ -94,7 +94,7 @@ func BenchmarkDeselector(b *testing.B) {
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
 		sel := randomSel(rng, coldata.BatchSize(), probOfOmitting)
-		batchLen := uint16(len(sel))
+		batchLen := uint64(len(sel))
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*int(coldata.BatchSize()), nBatches*int(batchLen)), func(b *testing.B) {

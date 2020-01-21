@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 		rng, _ := randutil.NewPseudoRand()
 		// Pick a random batch size in [coldata.MinBatchSize, coldata.MaxBatchSize]
 		// range.
-		randomBatchSize := uint16(coldata.MinBatchSize +
+		randomBatchSize := uint64(coldata.MinBatchSize +
 			rng.Intn(coldata.MaxBatchSize-coldata.MinBatchSize))
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
 		coldata.SetBatchSizeForTests(randomBatchSize)

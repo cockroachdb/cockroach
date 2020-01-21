@@ -69,7 +69,7 @@ type OrderedSynchronizer struct {
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
-	inputIndices []uint16
+	inputIndices []uint64
 	// heap is a min heap which stores indices into inputBatches. The "current
 	// value" of ith input batch is the tuple at inputIndices[i] position of
 	// inputBatches[i] batch. If an input is fully exhausted, it will be removed
@@ -138,7 +138,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		heap.Init(o)
 	}
 	o.output.ResetInternalBatch()
-	outputIdx := uint16(0)
+	outputIdx := uint64(0)
 	o.allocator.PerformOperation(o.output.ColVecs(), func() {
 		for outputIdx < coldata.BatchSize() {
 			if o.Len() == 0 {
@@ -196,7 +196,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
-	o.inputIndices = make([]uint16, len(o.inputs))
+	o.inputIndices = make([]uint64, len(o.inputs))
 	o.output = o.allocator.NewMemBatch(o.columnTypes)
 	o.outNulls = make([]*coldata.Nulls, len(o.columnTypes))
 	o.outColsMap = make([]int, len(o.columnTypes))

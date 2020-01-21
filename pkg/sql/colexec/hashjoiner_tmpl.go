@@ -78,7 +78,7 @@ func _CHECK_COL_BODY(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
-	nToCheck uint16,
+	nToCheck uint64,
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
 	_ALLOW_NULL_EQUALITY bool,
@@ -88,7 +88,7 @@ func _CHECK_COL_BODY(
 	buildIsNull := false
 	// Early bounds check.
 	_ = ht.toCheck[nToCheck-1]
-	for i := uint16(0); i < nToCheck; i++ {
+	for i := uint64(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
 
 		toCheck := ht.toCheck[i]
@@ -107,7 +107,7 @@ func _CHECK_COL_BODY(
 			/* {{end}} */
 
 			/* {{if .BuildHasNulls }} */
-			buildIsNull = buildVec.Nulls().NullAt64(keyID - 1)
+			buildIsNull = buildVec.Nulls().NullAt(keyID - 1)
 			/* {{end}} */
 
 			/* {{if .AllowNullEquality}} */
@@ -139,7 +139,7 @@ func _CHECK_COL_WITH_NULLS(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
-	nToCheck uint16,
+	nToCheck uint64,
 	_USE_SEL bool,
 ) { // */}}
 	// {{define "checkColWithNulls"}}
@@ -173,7 +173,7 @@ func _REHASH_BODY(
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
 	nKeys uint64,
-	sel []uint16,
+	sel []uint64,
 	_HAS_SEL bool,
 	_HAS_NULLS bool,
 ) { // */}}
@@ -193,7 +193,7 @@ func _REHASH_BODY(
 		selIdx := i
 		// {{ end }}
 		// {{ if .HasNulls }}
-		if nulls.NullAt(uint16(selIdx)) {
+		if nulls.NullAt(uint64(selIdx)) {
 			continue
 		}
 		// {{ end }}
@@ -208,15 +208,15 @@ func _REHASH_BODY(
 }
 
 func _COLLECT_RIGHT_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
-) uint16 { // */}}
+	prober *hashJoinProber, batchSize uint64, nResults uint64, batch coldata.Batch, _USE_SEL bool,
+) uint64 { // */}}
 	// {{define "collectRightOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 
 		for {
@@ -256,15 +256,15 @@ func _COLLECT_RIGHT_OUTER(
 }
 
 func _COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
-) uint16 { // */}}
+	prober *hashJoinProber, batchSize uint64, nResults uint64, batch coldata.Batch, _USE_SEL bool,
+) uint64 { // */}}
 	// {{define "collectNoOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 		for currentID != 0 {
 			if nResults >= prober.outputBatchSize {
@@ -289,7 +289,7 @@ func _COLLECT_NO_OUTER(
 	return 0
 }
 
-func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
+func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint64, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectRightOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.groupID[batchSize-1]
@@ -299,7 +299,7 @@ func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _US
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := prober.ht.groupID[i]
 		rowUnmatched := id == 0
@@ -318,7 +318,7 @@ func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _US
 }
 
 func _DISTINCT_COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, _USE_SEL bool,
+	prober *hashJoinProber, batchSize uint64, nResults uint64, _USE_SEL bool,
 ) { // */}}
 	// {{define "distinctCollectNoOuter"}}
 	// Early bounds checks.
@@ -328,7 +328,7 @@ func _DISTINCT_COLLECT_NO_OUTER(
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := uint64(0); i < batchSize; i++ {
 		if prober.ht.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			prober.buildIdx[nResults] = prober.ht.groupID[i] - 1
@@ -359,7 +359,7 @@ func (ht *hashTable) rehash(
 	t coltypes.T,
 	col coldata.Vec,
 	nKeys uint64,
-	sel []uint16,
+	sel []uint64,
 ) {
 	switch t {
 	// {{range $hashType := .HashTemplate}}
@@ -390,11 +390,11 @@ func (ht *hashTable) rehash(
 // to differs. If the bucket has reached the end, the key is rejected. If the
 // hashTable disallows null equality, then if any element in the key is null,
 // there is no match.
-func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint64, sel []uint64) {
 	switch t {
 	// {{range $neType := .NETemplate}}
 	case _TYPES_T:
-		buildVec := ht.vals.colVecs[ht.keyCols[keyColIdx]]
+		buildVec := ht.vals.ColVec(int(ht.keyCols[keyColIdx]))
 		probeVec := ht.keys[keyColIdx]
 
 		buildKeys := buildVec._TemplateType()
@@ -424,8 +424,8 @@ func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel 
 // collect prepares the buildIdx and probeIdx arrays where the buildIdx and
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
-func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
-	nResults := uint16(0)
+func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint64, sel []uint64) uint64 {
+	nResults := uint64(0)
 
 	if prober.spec.outer {
 		if sel != nil {
@@ -448,9 +448,9 @@ func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
 func (prober *hashJoinProber) distinctCollect(
-	batch coldata.Batch, batchSize uint16, sel []uint16,
-) uint16 {
-	nResults := uint16(0)
+	batch coldata.Batch, batchSize uint64, sel []uint64,
+) uint64 {
+	nResults := uint64(0)
 
 	if prober.spec.outer {
 		nResults = batchSize

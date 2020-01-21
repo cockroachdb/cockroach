@@ -59,7 +59,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
-			for i := uint16(0); i < n; i++ {
+			for i := uint64(0); i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]
@@ -136,7 +136,7 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
-			for i := uint16(0); i < n; i++ {
+			for i := uint64(0); i < n; i++ {
 				rowIdx := i
 				if sel != nil {
 					rowIdx = sel[i]

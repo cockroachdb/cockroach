@@ -167,8 +167,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, part
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{ if eq .Nulls true }}
-	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[i])
-	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt64(s.order[j])
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
 	// {{ if eq .DirString "Asc" }}
 	// If ascending, nulls always sort first, so we encode that logic here.
 	if n1 && n2 {

@@ -45,7 +45,7 @@ func (a *Allocator) NewMemBatch(types []coltypes.T) coldata.Batch {
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
 func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
-	selVectorSize := size * sizeOfUint16
+	selVectorSize := size * sizeOfUint64
 	estimatedStaticMemoryUsage := int64(estimateBatchSizeBytes(types, size) + selVectorSize)
 	if err := a.acc.Grow(a.ctx, estimatedStaticMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
@@ -148,12 +148,12 @@ const (
 	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 	sizeOfTime    = int(unsafe.Sizeof(time.Time{}))
-	sizeOfUint16  = int(unsafe.Sizeof(uint16(0)))
+	sizeOfUint64  = int(unsafe.Sizeof(uint64(0)))
 )
 
 // sizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
-var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint16
+var sizeOfBatchSizeSelVector = int(coldata.BatchSize()) * sizeOfUint64
 
 // estimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.

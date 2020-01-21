@@ -29,7 +29,7 @@ type SliceArgs struct {
 	Src Vec
 	// Sel is an optional slice specifying indices to append to the destination
 	// slice. Note that Src{Start,End}Idx apply to Sel.
-	Sel []uint16
+	Sel []uint64
 	// DestIdx is the first index that Append will append to.
 	DestIdx uint64
 	// SrcStartIdx is the index of the first element in Src that Append will
@@ -45,9 +45,6 @@ type SliceArgs struct {
 // Vec.Copy.
 type CopySliceArgs struct {
 	SliceArgs
-	// Sel64 overrides Sel. Used when the amount of data being copied exceeds the
-	// representation capabilities of a []uint16.
-	Sel64 []uint64
 	// SelOnDest, if true, uses the selection vector as a lens into the
 	// destination as well as the source. Normally, when SelOnDest is false, the
 	// selection vector is applied to the source vector, but the results are
@@ -114,7 +111,7 @@ type Vec interface {
 
 	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
-	PrettyValueAt(idx uint16, colType coltypes.T) string
+	PrettyValueAt(idx uint64, colType coltypes.T) string
 
 	// MaybeHasNulls returns true if the column possibly has any null values, and
 	// returns false if the column definitely has no null values.

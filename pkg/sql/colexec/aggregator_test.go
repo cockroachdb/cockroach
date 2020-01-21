@@ -267,7 +267,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			tupleSource := newOpTestInput(uint16(tc.batchSize), tc.input, nil /* typs */)
+			tupleSource := newOpTestInput(uint64(tc.batchSize), tc.input, nil /* typs */)
 			a, err := NewOrderedAggregator(
 				testAllocator,
 				tupleSource,
@@ -517,7 +517,7 @@ func TestAggregatorRandom(t *testing.T) {
 								// the row counts outside of the if block.
 								expRowCounts[curGroup]++
 								if hasNulls && rng.Float64() < nullProbability {
-									aggColNulls.SetNull64(uint64(i))
+									aggColNulls.SetNull(uint64(i))
 								} else {
 									expNulls[curGroup] = false
 									expCounts[curGroup]++
@@ -559,7 +559,7 @@ func TestAggregatorRandom(t *testing.T) {
 								minCol := b.ColVec(3)
 								maxCol := b.ColVec(4)
 								avgCol := b.ColVec(5)
-								for j := uint16(0); j < b.Length(); j++ {
+								for j := uint64(0); j < b.Length(); j++ {
 									rowCount := rowCountCol.Int64()[j]
 									count := countCol.Int64()[j]
 									sum := sumCol.Float64()[j]
@@ -668,7 +668,7 @@ func BenchmarkAggregator(b *testing.B) {
 											nulls := cols[1].Nulls()
 											for i := 0; i < nTuples; i++ {
 												if rng.Float64() < nullProbability {
-													nulls.SetNull(uint16(i))
+													nulls.SetNull(uint64(i))
 												}
 											}
 										}

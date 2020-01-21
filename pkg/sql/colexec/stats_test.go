@@ -136,7 +136,7 @@ func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)
 	}
-	batch.SetLength(uint16(batchSize))
+	batch.SetLength(uint64(batchSize))
 	return newFiniteChunksSource(batch, nBatches, 1 /* matchLen */)
 }
 

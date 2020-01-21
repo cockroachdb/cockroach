@@ -380,7 +380,7 @@ func (d *dummyQueue) Enqueue(batch coldata.Batch) error {
 					Sel:         batch.Selection(),
 					DestIdx:     0,
 					SrcStartIdx: 0,
-					SrcEndIdx:   uint64(batch.Length()),
+					SrcEndIdx:   batch.Length(),
 				})
 		}
 	})
@@ -405,7 +405,7 @@ func (d *dummyQueue) Dequeue(batch coldata.Batch) error {
 				Sel:         batchToCopy.Selection(),
 				DestIdx:     0,
 				SrcStartIdx: 0,
-				SrcEndIdx:   uint64(batchToCopy.Length()),
+				SrcEndIdx:   batchToCopy.Length(),
 			})
 		}
 	})

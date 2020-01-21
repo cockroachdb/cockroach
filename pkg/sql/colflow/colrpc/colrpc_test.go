@@ -293,7 +293,7 @@ func TestOutboxInbox(t *testing.T) {
 								coldata.SliceArgs{
 									ColType:   typs[i],
 									Src:       outputBatch.ColVec(i),
-									SrcEndIdx: uint64(outputBatch.Length()),
+									SrcEndIdx: outputBatch.Length(),
 								},
 							)
 						}
@@ -334,8 +334,8 @@ func TestOutboxInbox(t *testing.T) {
 				for i := range typs {
 					require.Equal(
 						t,
-						inputBatch.ColVec(i).Window(typs[i], 0, uint64(inputBatch.Length())),
-						outputBatch.ColVec(i).Window(typs[i], 0, uint64(outputBatch.Length())),
+						inputBatch.ColVec(i).Window(typs[i], 0, inputBatch.Length()),
+						outputBatch.ColVec(i).Window(typs[i], 0, outputBatch.Length()),
 						"batchNum: %d", batchNum,
 					)
 				}

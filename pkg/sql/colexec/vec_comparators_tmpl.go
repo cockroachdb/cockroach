@@ -69,13 +69,13 @@ type vecComparator interface {
 	// compare compares values from two vectors. vecIdx is the index of the vector
 	// and valIdx is the index of the value in that vector to compare. Returns -1,
 	// 0, or 1.
-	compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int
+	compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint64) int
 
 	// set sets the value of the vector at dstVecIdx at index dstValIdx to the value
 	// at the vector at srcVecIdx at index srcValIdx.
 	// NOTE: whenever set is used, the caller is responsible for updating the
 	// memory accounts.
-	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx uint16)
+	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx uint64)
 
 	// setVec updates the vector at idx.
 	setVec(idx int, vec coldata.Vec)
@@ -87,7 +87,7 @@ type _TYPEVecComparator struct {
 	nulls []*coldata.Nulls
 }
 
-func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint16) int {
+func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 uint64) int {
 	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
 	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
 	if n1 && n2 {
@@ -109,7 +109,7 @@ func (c *_TYPEVecComparator) setVec(idx int, vec coldata.Vec) {
 	c.nulls[idx] = vec.Nulls()
 }
 
-func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint16) {
+func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx uint64) {
 	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {

@@ -30,7 +30,7 @@ type routerOutput interface {
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
-	addBatch(coldata.Batch, []uint16) bool
+	addBatch(coldata.Batch, []uint64) bool
 	// cancel tells the output to stop producing batches.
 	cancel()
 }
@@ -173,7 +173,7 @@ func (o *routerOutputOp) cancel() {
 // same batch with different selection vectors to many different outputs.
 // True is returned if the the output changes state to blocked (note: if the
 // output is already blocked, false is returned).
-func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool {
+func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint64) bool {
 	if len(selection) > int(batch.Length()) {
 		selection = selection[:batch.Length()]
 	}
@@ -210,10 +210,10 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 	// Append the batch to o.mu.data. The batch at writeIdx is at most
 	// o.outputBatchSize-1, so if all of the elements cannot be accommodated at
 	// that index, spill over to the following batch.
-	for toAppend := uint16(len(selection)); toAppend > 0; writeIdx++ {
+	for toAppend := uint64(len(selection)); toAppend > 0; writeIdx++ {
 		dst := o.mu.data[writeIdx]
 
-		available := uint16(o.outputBatchSize) - dst.Length()
+		available := uint64(o.outputBatchSize) - dst.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -229,7 +229,7 @@ func (o *routerOutputOp) addBatch(batch coldata.Batch, selection []uint16) bool 
 						ColType:   t,
 						Src:       batch.ColVec(i),
 						Sel:       selection,
-						DestIdx:   uint64(dst.Length()),
+						DestIdx:   dst.Length(),
 						SrcEndIdx: uint64(len(selection)),
 					},
 				)
@@ -303,7 +303,7 @@ type HashRouter struct {
 		// with the same index in the current coldata.Batch.
 		buckets []uint64
 		// selections is scratch space for selection vectors used by router outputs.
-		selections [][]uint16
+		selections [][]uint64
 	}
 }
 
@@ -350,9 +350,9 @@ func newHashRouterWithOutputs(
 		unblockedEventsChan: unblockEventsChan,
 	}
 	r.scratch.buckets = make([]uint64, coldata.BatchSize())
-	r.scratch.selections = make([][]uint16, len(outputs))
+	r.scratch.selections = make([][]uint64, len(outputs))
 	for i := range r.scratch.selections {
-		r.scratch.selections[i] = make([]uint16, 0, coldata.BatchSize())
+		r.scratch.selections[i] = make([]uint64, 0, coldata.BatchSize())
 	}
 	return r
 }
@@ -436,7 +436,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	}
 
 	for _, i := range r.hashCols {
-		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
+		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), b.Length(), b.Selection())
 	}
 
 	// Reset selections.
@@ -457,7 +457,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	} else {
 		for i, hash := range r.scratch.buckets[:b.Length()] {
 			outputIdx := hash % uint64(len(r.outputs))
-			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], uint16(i))
+			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], uint64(i))
 		}
 	}
 

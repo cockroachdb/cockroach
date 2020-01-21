@@ -115,7 +115,7 @@ func RandomVec(
 
 	for i := 0; i < n; i++ {
 		if rng.Float64() < nullProbability {
-			vec.Nulls().SetNull(uint16(i))
+			vec.Nulls().SetNull(uint64(i))
 		}
 	}
 }

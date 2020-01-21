@@ -74,11 +74,11 @@ type topKSorter struct {
 	// topK stores the top K rows. It is not sorted internally.
 	topK coldata.Batch
 	// heap is a max heap which stores indices into topK.
-	heap []uint16
+	heap []uint64
 	// sel is a selection vector which specifies an ordering on topK.
-	sel []uint16
+	sel []uint64
 	// emitted is the count of rows which have been emitted so far.
-	emitted uint16
+	emitted uint64
 	output  coldata.Batch
 }
 
@@ -118,11 +118,11 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
 	inputBatch := t.input.Next(ctx)
-	inputBatchIdx := uint16(0)
-	spooledRows := uint16(0)
-	remainingRows := t.k
+	inputBatchIdx := uint64(0)
+	spooledRows := uint64(0)
+	remainingRows := uint64(t.k)
 	for remainingRows > 0 && inputBatch.Length() > 0 {
-		toLength := uint64(spooledRows)
+		toLength := spooledRows
 		fromLength := inputBatch.Length()
 		if remainingRows < inputBatch.Length() {
 			// t.topK will be full after this batch.
@@ -140,7 +140,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 						Src:       vec,
 						Sel:       inputBatch.Selection(),
 						DestIdx:   toLength,
-						SrcEndIdx: uint64(fromLength),
+						SrcEndIdx: fromLength,
 					},
 				)
 			}
@@ -155,9 +155,9 @@ func (t *topKSorter) spool(ctx context.Context) {
 	t.updateComparators(topKVecIdx, t.topK)
 
 	// Initialize the heap.
-	t.heap = make([]uint16, t.topK.Length())
+	t.heap = make([]uint64, t.topK.Length())
 	for i := range t.heap {
-		t.heap[i] = uint16(i)
+		t.heap[i] = uint64(i)
 	}
 	heap.Init(t)
 
@@ -192,9 +192,9 @@ func (t *topKSorter) spool(ctx context.Context) {
 	// which specifies the rows in sorted order by popping everything off the
 	// heap. Note that it's a max heap so we need to fill the selection vector in
 	// reverse.
-	t.sel = make([]uint16, t.topK.Length())
+	t.sel = make([]uint64, t.topK.Length())
 	for i := 0; i < int(t.topK.Length()); i++ {
-		t.sel[len(t.sel)-i-1] = heap.Pop(t).(uint16)
+		t.sel[len(t.sel)-i-1] = heap.Pop(t).(uint64)
 	}
 }
 
@@ -217,8 +217,8 @@ func (t *topKSorter) emit() coldata.Batch {
 						ColType:     t.inputTypes[i],
 						Src:         t.topK.ColVec(i),
 						Sel:         t.sel,
-						SrcStartIdx: uint64(t.emitted),
-						SrcEndIdx:   uint64(t.emitted + toEmit),
+						SrcStartIdx: t.emitted,
+						SrcEndIdx:   t.emitted + toEmit,
 					},
 				},
 			)
@@ -229,7 +229,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	return t.output
 }
 
-func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint16) int {
+func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 uint64) int {
 	for i := range t.orderingCols {
 		info := t.orderingCols[i]
 		res := t.comparators[info.ColIdx].compare(vecIdx1, vecIdx2, rowIdx1, rowIdx2)
@@ -270,7 +270,7 @@ func (t *topKSorter) Swap(i, j int) {
 
 // Push is part of heap.Interface and is only meant to be used internally.
 func (t *topKSorter) Push(x interface{}) {
-	t.heap = append(t.heap, x.(uint16))
+	t.heap = append(t.heap, x.(uint64))
 }
 
 // Pop is part of heap.Interface and is only meant to be used internally.

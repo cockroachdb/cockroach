@@ -101,7 +101,7 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	if a.curIdx != -1 {
 		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(uint16(idx + 1))
+		a.nulls.UnsetNullsAfter(uint64(idx + 1))
 	}
 }
 
@@ -114,7 +114,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// If we haven't found any non-nulls for this group so far, the output for
 		// this group should be null.
 		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(uint16(a.curIdx))
+			a.nulls.SetNull(uint64(a.curIdx))
 		}
 		a.curIdx++
 		a.done = true
@@ -174,14 +174,14 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// current group. The `a.curIdx` check is necessary because for the first
 		// group in the result set there is no "current group."
 		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
-			a.nulls.SetNull(uint16(a.curIdx))
+			a.nulls.SetNull(uint64(a.curIdx))
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
 	var isNull bool
 	// {{ if .HasNulls }}
-	isNull = nulls.NullAt(uint16(i))
+	isNull = nulls.NullAt(uint64(i))
 	// {{ else }}
 	isNull = false
 	// {{ end }}

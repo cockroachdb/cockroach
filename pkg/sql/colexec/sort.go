@@ -104,7 +104,7 @@ type allSpooler struct {
 	inputTypes []coltypes.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this slice is the entire column from the input.
-	bufferedTuples *bufferedBatch
+	bufferedTuples coldata.Batch
 	// spooled indicates whether spool() has already been called.
 	spooled       bool
 	windowedBatch coldata.Batch
@@ -122,7 +122,7 @@ func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = newBufferedBatch(p.allocator, p.inputTypes, 0 /* initialSize */)
+	p.bufferedTuples = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
 	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
 }
 
@@ -133,19 +133,20 @@ func (p *allSpooler) spool(ctx context.Context) {
 	p.spooled = true
 	batch := p.input.Next(ctx)
 	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
-		p.allocator.PerformOperation(p.bufferedTuples.colVecs, func() {
-			for i := 0; i < len(p.bufferedTuples.colVecs); i++ {
-				p.bufferedTuples.colVecs[i].Append(
+		numBufferedTuples := p.bufferedTuples.Length()
+		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
+			for i, colVec := range p.bufferedTuples.ColVecs() {
+				colVec.Append(
 					coldata.SliceArgs{
 						ColType:   p.inputTypes[i],
 						Src:       batch.ColVec(i),
 						Sel:       batch.Selection(),
-						DestIdx:   p.bufferedTuples.length,
-						SrcEndIdx: uint64(batch.Length()),
+						DestIdx:   numBufferedTuples,
+						SrcEndIdx: batch.Length(),
 					},
 				)
 			}
-			p.bufferedTuples.length += uint64(batch.Length())
+			p.bufferedTuples.SetLength(numBufferedTuples + batch.Length())
 		})
 	}
 }
@@ -154,14 +155,14 @@ func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
 		execerror.VectorizedInternalPanic("getValues() is called before spool()")
 	}
-	return p.bufferedTuples.colVecs[i]
+	return p.bufferedTuples.ColVec(i)
 }
 
 func (p *allSpooler) getNumTuples() uint64 {
 	if !p.spooled {
 		execerror.VectorizedInternalPanic("getNumTuples() is called before spool()")
 	}
-	return p.bufferedTuples.length
+	return p.bufferedTuples.Length()
 }
 
 func (p *allSpooler) getPartitionsCol() []bool {
@@ -173,16 +174,17 @@ func (p *allSpooler) getPartitionsCol() []bool {
 
 func (p *allSpooler) getWindowedBatch(startIdx, endIdx uint64) coldata.Batch {
 	for i, t := range p.inputTypes {
-		window := p.bufferedTuples.colVecs[i].Window(t, startIdx, endIdx)
+		window := p.bufferedTuples.ColVec(i).Window(t, startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
-	p.windowedBatch.SetLength(uint16(endIdx - startIdx))
+	p.windowedBatch.SetLength(endIdx - startIdx)
 	return p.windowedBatch
 }
 
 func (p *allSpooler) reset() {
-	p.bufferedTuples.reset()
 	p.spooled = false
+	p.bufferedTuples.SetLength(0)
+	p.bufferedTuples.ResetInternalBatch()
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
 	}
@@ -266,7 +268,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
-		newEmitted := p.emitted + uint64(coldata.BatchSize())
+		newEmitted := p.emitted + coldata.BatchSize()
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
@@ -287,16 +289,16 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
 							ColType:     p.inputTypes[j],
+							Sel:         p.order,
 							Src:         p.input.getValues(j),
 							SrcStartIdx: p.emitted,
 							SrcEndIdx:   newEmitted,
 						},
-						Sel64: p.order,
 					},
 				)
 			}
 		})
-		p.output.SetLength(uint16(newEmitted - p.emitted))
+		p.output.SetLength(newEmitted - p.emitted)
 		p.emitted = newEmitted
 		return p.output
 	}
@@ -436,7 +438,7 @@ func (p *sortOp) ExportBuffered() coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
-	newExported := p.exported + uint64(coldata.BatchSize())
+	newExported := p.exported + coldata.BatchSize()
 	if newExported > p.input.getNumTuples() {
 		newExported = p.input.getNumTuples()
 	}

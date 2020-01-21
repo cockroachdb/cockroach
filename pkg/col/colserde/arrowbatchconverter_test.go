@@ -58,7 +58,7 @@ func copyBatch(original coldata.Batch) coldata.Batch {
 			SliceArgs: coldata.SliceArgs{
 				ColType:   typs[colIdx],
 				Src:       col,
-				SrcEndIdx: uint64(original.Length()),
+				SrcEndIdx: original.Length(),
 			},
 		})
 	}
@@ -85,8 +85,8 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		require.Equal(t, typ, actualVec.Type())
 		require.Equal(
 			t,
-			expectedVec.Nulls().Slice(0, uint64(expected.Length())),
-			actualVec.Nulls().Slice(0, uint64(actual.Length())),
+			expectedVec.Nulls().Slice(0, expected.Length()),
+			actualVec.Nulls().Slice(0, actual.Length()),
 		)
 		if typ == coltypes.Bytes {
 			// Cannot use require.Equal for this type.
@@ -113,8 +113,8 @@ func assertEqualBatches(t *testing.T, expected, actual coldata.Batch) {
 		} else {
 			require.Equal(
 				t,
-				expectedVec.Window(expectedVec.Type(), 0, uint64(expected.Length())),
-				actualVec.Window(actualVec.Type(), 0, uint64(actual.Length())),
+				expectedVec.Window(expectedVec.Type(), 0, expected.Length()),
+				actualVec.Window(actualVec.Type(), 0, actual.Length()),
 			)
 		}
 	}
@@ -251,9 +251,9 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)
 			vec.Nulls().UnsetNulls()
-			numNulls := uint16(int(nullFraction * float64(batch.Length())))
+			numNulls := uint64(nullFraction * float64(batch.Length()))
 			// Set the first numNulls elements to null.
-			for i := uint16(0); i < batch.Length() && i < numNulls; i++ {
+			for i := uint64(0); i < batch.Length() && i < numNulls; i++ {
 				vec.Nulls().SetNull(i)
 			}
 		}

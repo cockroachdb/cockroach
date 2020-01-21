@@ -31,12 +31,12 @@ import (
 // getDataAndFullSelection is a test helper that generates tuples representing
 // a one-column coltypes.Int64 batch where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
-func getDataAndFullSelection() (tuples, []uint16) {
+func getDataAndFullSelection() (tuples, []uint64) {
 	data := make(tuples, coldata.BatchSize())
-	fullSelection := make([]uint16, coldata.BatchSize())
+	fullSelection := make([]uint64, coldata.BatchSize())
 	for i := range data {
 		data[i] = tuple{i}
-		fullSelection[i] = uint16(i)
+		fullSelection[i] = uint64(i)
 	}
 	return data, fullSelection
 }
@@ -50,12 +50,12 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	// Since the actual data doesn't matter, we will just be reusing data for each
 	// test case.
 	testCases := []struct {
-		inputBatchSize   uint16
+		inputBatchSize   uint64
 		outputBatchSize  int
 		blockedThreshold int
 		// selection determines which indices to add to the router output as well
 		// as how many elements from data are compared to the output.
-		selection []uint16
+		selection []uint64
 		name      string
 	}{
 		{
@@ -424,13 +424,13 @@ func TestRouterOutputRandom(t *testing.T) {
 
 type callbackRouterOutput struct {
 	ZeroInputNode
-	addBatchCb func(coldata.Batch, []uint16) bool
+	addBatchCb func(coldata.Batch, []uint64) bool
 	cancelCb   func()
 }
 
 var _ routerOutput = callbackRouterOutput{}
 
-func (o callbackRouterOutput) addBatch(batch coldata.Batch, selection []uint16) bool {
+func (o callbackRouterOutput) addBatch(batch coldata.Batch, selection []uint64) bool {
 	if o.addBatchCb != nil {
 		return o.addBatchCb(batch, selection)
 	}
@@ -453,7 +453,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	batchSize := coldata.BatchSize()
 	if batchSize != expectedBatchSize {
 		coldata.SetBatchSizeForTests(expectedBatchSize)
-		defer func(batchSize uint16) { coldata.SetBatchSizeForTests(batchSize) }(batchSize)
+		defer func(batchSize uint64) { coldata.SetBatchSizeForTests(batchSize) }(batchSize)
 		batchSize = expectedBatchSize
 	}
 	data := make(tuples, batchSize)
@@ -481,7 +481,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		// Capture the index.
 		outputIdx := i
 		outputs[i] = callbackRouterOutput{
-			addBatchCb: func(batch coldata.Batch, sel []uint16) bool {
+			addBatchCb: func(batch coldata.Batch, sel []uint64) bool {
 				for _, j := range sel {
 					key := batch.ColVec(0).Int64()[j]
 					if _, ok := valsYetToSee[key]; !ok {
@@ -524,7 +524,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	for i := range outputs {
 		// We'll just be checking canceled.
 		outputs[i] = callbackRouterOutput{
-			addBatchCb: func(_ coldata.Batch, _ []uint16) bool {
+			addBatchCb: func(_ coldata.Batch, _ []uint64) bool {
 				atomic.AddInt64(&numAddBatches, 1)
 				return false
 			},
@@ -629,7 +629,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	typs := []coltypes.T{coltypes.Int64}
 
 	r, routerOutputs := NewHashRouter(
-		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
+		testAllocator, newOpFixedSelTestInput(sel, uint64(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
 	)
 
 	if len(routerOutputs) != 1 {
@@ -738,7 +738,7 @@ func TestHashRouterRandom(t *testing.T) {
 						if b.Length() == 0 {
 							break
 						}
-						atomic.AddUint64(&results, uint64(b.Length()))
+						atomic.AddUint64(&results, b.Length())
 						resultsByOp[i] += int(b.Length())
 					}
 					wg.Done()

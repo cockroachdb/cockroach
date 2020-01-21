@@ -51,9 +51,9 @@ func (b *BatchBuffer) Next(context.Context) coldata.Batch {
 type RepeatableBatchSource struct {
 	ZeroInputNode
 	internalBatch coldata.Batch
-	batchLen      uint16
+	batchLen      uint64
 	// sel specifies the desired selection vector for the batch.
-	sel []uint16
+	sel []uint64
 
 	batchesToReturn int
 	batchesReturned int
@@ -69,7 +69,7 @@ func NewRepeatableBatchSource(batch coldata.Batch) *RepeatableBatchSource {
 		batchLen:      batch.Length(),
 	}
 	if batch.Selection() != nil {
-		src.sel = make([]uint16, batch.Length())
+		src.sel = make([]uint64, batch.Length())
 		copy(src.sel, batch.Selection())
 	}
 	return src

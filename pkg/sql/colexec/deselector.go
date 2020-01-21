@@ -65,7 +65,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 						ColType:   t,
 						Src:       fromCol,
 						Sel:       sel,
-						SrcEndIdx: uint64(batch.Length()),
+						SrcEndIdx: batch.Length(),
 					},
 				},
 			)

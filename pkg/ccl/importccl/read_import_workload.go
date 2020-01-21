@@ -53,7 +53,7 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 func makeDatumFromColOffset(
 	alloc *sqlbase.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
-	if col.Nulls().NullAt64(uint64(rowIdx)) {
+	if col.Nulls().NullAt(uint64(rowIdx)) {
 		return tree.DNull, nil
 	}
 	switch col.Type() {

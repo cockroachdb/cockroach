@@ -221,7 +221,7 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 		// size, we can use it for the distinct vector.
 		op.distinct = op.ht.visited
 
-		for i := uint64(0); i < op.ht.vals.length; i++ {
+		for i := uint64(0); i < op.ht.vals.Length(); i++ {
 			op.distinct[i] = false
 			for !op.ht.head[headID] || curID == 0 {
 				op.distinct[i] = true
@@ -236,29 +236,29 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 	// Create and return the next batch of input to a maximum size of
 	// coldata.BatchSize(). The rows in the new batch is specified by the corresponding
 	// slice in the selection vector.
-	nSelected := uint16(0)
+	nSelected := uint64(0)
 
-	batchEnd := op.batchStart + uint64(coldata.BatchSize())
-	if batchEnd > op.ht.vals.length {
-		batchEnd = op.ht.vals.length
+	batchEnd := op.batchStart + coldata.BatchSize()
+	if batchEnd > op.ht.vals.Length() {
+		batchEnd = op.ht.vals.Length()
 	}
-	nSelected = uint16(batchEnd - op.batchStart)
+	nSelected = batchEnd - op.batchStart
 
 	copy(op.distinctCol, op.distinct[op.batchStart:batchEnd])
 
 	op.ht.allocator.PerformOperation(op.batch.ColVecs(), func() {
 		for i, colIdx := range op.ht.outCols {
 			toCol := op.batch.ColVec(i)
-			fromCol := op.ht.vals.colVecs[colIdx]
+			fromCol := op.ht.vals.ColVec(int(colIdx))
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						ColType:     op.ht.valTypes[op.ht.outCols[i]],
+						Sel:         op.sel,
 						Src:         fromCol,
 						SrcStartIdx: op.batchStart,
 						SrcEndIdx:   batchEnd,
 					},
-					Sel64: op.sel,
 				},
 			)
 		}
@@ -274,7 +274,7 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 // benchmarks.
 func (op *hashGrouper) reset() {
 	op.batchStart = 0
-	op.ht.vals.reset()
+	op.ht.vals.SetLength(0)
 	op.buildFinished = false
 }
 
