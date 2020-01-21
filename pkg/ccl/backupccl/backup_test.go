@@ -434,6 +434,25 @@ func backupAndRestore(
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+		const stmt = "SELECT payload FROM system.jobs ORDER BY created DESC LIMIT 1"
+		var payloadBytes []byte
+		sqlDB.QueryRow(t, stmt).Scan(&payloadBytes)
+
+		payload := &jobspb.Payload{}
+		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+			t.Fatal("cannot unmarshal job payload from system.jobs")
+		}
+
+		backupDesc := &backupccl.BackupDescriptor{}
+		backupDetails := payload.Details.(*jobspb.Payload_Backup).Backup
+		if err := protoutil.Unmarshal(backupDetails.BackupDescriptor, backupDesc); err != nil {
+			t.Fatal("cannot unmarshal backup descriptor from job payload from system.jobs")
+		}
+		if backupDesc.Statistics != nil {
+			t.Fatal("expected statistics field of backup descriptor payload to be nil")
+		}
+
 		sqlDB.ExpectErr(t, "already contains a BACKUP file", backupQuery, backupURIArgs...)
 	}
 
