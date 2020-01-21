@@ -35,6 +35,13 @@ type caseOp struct {
 	// the input batch. We need to do this because we're going to destructively
 	// modify the selection vector in order to do the work of the case statement.
 	origSel []uint16
+	// prevSel is a buffer used to keep track of the selection vector before
+	// running a case arm (i.e. "previous to the current case arm"). We need to
+	// keep track of it because case arm will modify the selection vector of the
+	// batch, and then we need to figure out which tuples have not been matched
+	// by the current case arm (those present in the "previous" sel and not
+	// present in the "current" sel).
+	prevSel []uint16
 }
 
 var _ InternalMemoryOperator = &caseOp{}
@@ -57,8 +64,8 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 }
 
 func (c *caseOp) InternalMemoryUsage() int {
-	// We internally use a single selection vector, origSel.
-	return sizeOfBatchSizeSelVector
+	// We internally use two selection vectors, origSel and prevSel.
+	return 2 * sizeOfBatchSizeSelVector
 }
 
 // NewCaseOp returns an operator that runs a case statement.
@@ -89,6 +96,7 @@ func NewCaseOp(
 		outputIdx: outputIdx,
 		typ:       typ,
 		origSel:   make([]uint16, coldata.BatchSize()),
+		prevSel:   make([]uint16, coldata.BatchSize()),
 	}
 }
 
@@ -101,7 +109,7 @@ func (c *caseOp) Init() {
 
 func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	c.buffer.advance(ctx)
-	origLen := c.buffer.batch.Batch.Length()
+	origLen := c.buffer.batch.Length()
 	if c.buffer.batch.Width() == c.outputIdx {
 		c.allocator.AppendColumn(c.buffer.batch, c.typ)
 	}
@@ -109,7 +117,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	// to make sure to run all of our case arms. This is unfortunate.
 	// TODO(jordan): add this back in once batches are right-sized by planning.
 	var origHasSel bool
-	if sel := c.buffer.batch.Batch.Selection(); sel != nil {
+	if sel := c.buffer.batch.Selection(); sel != nil {
 		origHasSel = true
 		copy(c.origSel, sel)
 	}
@@ -119,24 +127,30 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	// for non-zero length batches.
 	// TODO(yuzefovich): remove it once we can short-circuit.
 	var (
-		outputCol coldata.Vec
-		batch     coldata.Batch
-		destVecs  []coldata.Vec
+		outputCol  coldata.Vec
+		destVecs   []coldata.Vec
+		prevLen    = origLen
+		prevHasSel bool
 	)
 	if origLen > 0 {
-		outputCol = c.buffer.batch.Batch.ColVec(c.outputIdx)
+		outputCol = c.buffer.batch.ColVec(c.outputIdx)
 		destVecs = []coldata.Vec{outputCol}
+		if sel := c.buffer.batch.Selection(); sel != nil {
+			prevHasSel = true
+			c.prevSel = c.prevSel[:origLen]
+			copy(c.prevSel[:origLen], sel[:origLen])
+		}
 	}
 	c.allocator.PerformOperation(destVecs, func() {
 		for i := range c.caseOps {
 			// Run the next case operator chain. It will project its THEN expression
 			// for all tuples that matched its WHEN expression and that were not
 			// already matched.
-			batch = c.caseOps[i].Next(ctx)
+			batch := c.caseOps[i].Next(ctx)
 			// The batch's projection column now additionally contains results for all
 			// of the tuples that passed the ith WHEN clause. The batch's selection
 			// vector is set to the same selection of tuples.
-			// Now, we must subtract this selection vector from the last buffered
+			// Now, we must subtract this selection vector from the previous
 			// selection vector, so that the next operator gets to operate on the
 			// remaining set of tuples in the input that haven't matched an arm of the
 			// case statement.
@@ -157,8 +171,8 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			// current case arm.
 			var subtractIdx int
 			var curIdx uint16
-			if origLen > 0 {
-				inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[i])
+			if batch.Length() > 0 {
+				inputCol := batch.ColVec(c.thenIdxs[i])
 				// Copy the results into the output vector, using the toSubtract selection
 				// vector to copy only the elements that we actually wrote according to the
 				// current case arm.
@@ -173,49 +187,62 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 						},
 						SelOnDest: true,
 					})
-				if oldSel := c.buffer.batch.Batch.Selection(); oldSel != nil {
-					// We have an old selection vector, which represents the tuples that
-					// haven't yet been matched. Remove the ones that just matched from the
-					// old selection vector.
-					for i := range oldSel[:c.buffer.batch.Batch.Length()] {
-						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == oldSel[i] {
-							// The ith element of the old selection vector matched the current one
-							// in toSubtract. Skip writing this element, removing it from the old
-							// selection vector.
+				if prevHasSel {
+					// We have a previous selection vector, which represents the tuples
+					// that haven't yet been matched. Remove the ones that just matched
+					// from the previous selection vector.
+					for i := range c.prevSel {
+						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == c.prevSel[i] {
+							// The ith element of the previous selection vector matched the
+							// current one in toSubtract. Skip writing this element, removing
+							// it from the previous selection vector.
 							subtractIdx++
 							continue
 						}
-						oldSel[curIdx] = oldSel[i]
+						c.prevSel[curIdx] = c.prevSel[i]
 						curIdx++
 					}
 				} else {
 					// No selection vector means there have been no matches yet, and we were
 					// considering the entire batch of tuples for this case arm. Make a new
 					// selection vector with all of the tuples but the ones that just matched.
-					c.buffer.batch.Batch.SetSelection(true)
-					oldSel = c.buffer.batch.Batch.Selection()
-					for i := uint16(0); i < c.buffer.batch.Batch.Length(); i++ {
+					c.prevSel = c.prevSel[:cap(c.prevSel)]
+					for i := uint16(0); i < origLen; i++ {
 						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
 							subtractIdx++
 							continue
 						}
-						oldSel[curIdx] = i
+						c.prevSel[curIdx] = i
 						curIdx++
 					}
 				}
-				c.buffer.batch.Batch.SetLength(curIdx)
-
-				// Now our selection vector is set to exclude all the things that have
-				// matched so far. Reset the buffer and run the next case arm.
-				c.buffer.rewind()
+				// Set the buffered batch into the desired state.
+				c.buffer.batch.SetLength(curIdx)
+				prevLen = curIdx
+				c.buffer.batch.SetSelection(true)
+				prevHasSel = true
+				copy(c.buffer.batch.Selection()[:curIdx], c.prevSel)
+				c.prevSel = c.prevSel[:curIdx]
+			} else {
+				// There were no matches with the current WHEN arm, so we simply need
+				// to restore the buffered batch into the previous state.
+				c.buffer.batch.SetLength(prevLen)
+				c.buffer.batch.SetSelection(prevHasSel)
+				if prevHasSel {
+					copy(c.buffer.batch.Selection()[:prevLen], c.prevSel)
+					c.prevSel = c.prevSel[:prevLen]
+				}
 			}
+			// Now our selection vector is set to exclude all the things that have
+			// matched so far. Reset the buffer and run the next case arm.
+			c.buffer.rewind()
 		}
 		// Finally, run the else operator, which will project into all tuples that
 		// are remaining in the selection vector (didn't match any case arms). Once
 		// that's done, restore the original selection vector and return the batch.
-		batch = c.elseOp.Next(ctx)
-		if origLen > 0 {
-			inputCol := c.buffer.batch.Batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
+		batch := c.elseOp.Next(ctx)
+		if batch.Length() > 0 {
+			inputCol := batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
 			outputCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
@@ -229,10 +256,11 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 				})
 		}
 	})
-	batch.SetLength(origLen)
-	batch.SetSelection(origHasSel)
+	// Restore the original state of the buffered batch.
+	c.buffer.batch.SetLength(origLen)
+	c.buffer.batch.SetSelection(origHasSel)
 	if origHasSel {
-		copy(batch.Selection()[:origLen], c.origSel[:origLen])
+		copy(c.buffer.batch.Selection()[:origLen], c.origSel[:origLen])
 	}
-	return batch
+	return c.buffer.batch
 }
