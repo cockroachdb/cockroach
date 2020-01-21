@@ -8,3 +8,18 @@ CREATE TABLE TEST1 (COL1 SERIAL PRIMARY KEY, COL2 INT8, COL3 INT8, CONSTRAINT du
 
 statement ok
 DROP TABLE TEST2
+
+subtest telemetry_tests
+
+statement ok
+CREATE TABLE new_table (a timestamp)
+
+statement ok
+ALTER TABLE new_table ADD COLUMN c timestamptz
+
+# Cannot really get more exact than this (i.e. looking at usage_count), as it increments on each run.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name IN ('sql.schema.new_column_type.timestamp', 'sql.schema.new_column_type.timestamptz') AND usage_count > 0 ORDER BY feature_name
+----
+sql.schema.new_column_type.timestamp
+sql.schema.new_column_type.timestamptz
