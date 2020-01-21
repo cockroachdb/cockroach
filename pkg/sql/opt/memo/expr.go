@@ -461,6 +461,14 @@ func (s *ScanPrivate) IsCanonical() bool {
 		s.HardLimit == 0
 }
 
+// IsLocking returns true if the ScanPrivate is configured to use a row-level
+// locking mode. This can be the case either because the Scan is in the scope of
+// a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
+// as part of the row retrieval of a DELETE or UPDATE statement.
+func (s *ScanPrivate) IsLocking() bool {
+	return s.Locking != nil
+}
+
 // NeedResults returns true if the mutation operator can return the rows that
 // were mutated.
 func (m *MutationPrivate) NeedResults() bool {

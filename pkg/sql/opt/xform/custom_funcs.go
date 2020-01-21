@@ -58,6 +58,14 @@ func (c *CustomFuncs) IsCanonicalScan(scan *memo.ScanPrivate) bool {
 	return scan.IsCanonical()
 }
 
+// IsLocking returns true if the ScanPrivate is configured to use a row-level
+// locking mode. This can be the case either because the Scan is in the scope of
+// a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
+// as part of the row retrieval of a DELETE or UPDATE statement.
+func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
+	return scan.IsLocking()
+}
+
 // GenerateIndexScans enumerates all secondary indexes on the given Scan
 // operator's table and generates an alternate Scan operator for each index that
 // includes the set of needed columns specified in the ScanOpDef.

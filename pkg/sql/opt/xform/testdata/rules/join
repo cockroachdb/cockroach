@@ -1980,9 +1980,28 @@ memo (optimized, ~6KB, required=[presentation: c:3])
  ├── G7: (variable b)
  └── G8: (const 1)
 
-# --------------------------
+# GenerateZigzagJoins is disabled in the presence of a row-level locking clause.
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
+----
+select
+ ├── columns: q:2(int!null) r:3(int!null)
+ ├── fd: ()-->(2,3)
+ ├── index-join pqr
+ │    ├── columns: q:2(int) r:3(int)
+ │    ├── fd: ()-->(2)
+ │    └── scan pqr@q
+ │         ├── columns: p:1(int!null) q:2(int!null)
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── locking: for-update
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── filters
+      └── r = 2 [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+# --------------------------------------------------
 # GenerateInvertedIndexZigzagJoins
-# --------------------------
+# --------------------------------------------------
 
 exec-ddl
 CREATE TABLE t5 (
@@ -2573,6 +2592,27 @@ project
       │         ├── constraint: /5/3: [/'2019-01-01' - /'2019-01-01']
       │         └── fd: ()-->(5)
       └── filters (true)
+
+# GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
+# locking clause.
+opt
+SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
+----
+select
+ ├── columns: b:2(jsonb) a:1(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t5
+ │    ├── columns: a:1(int!null) b:2(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t5@b_idx
+ │         ├── columns: a:1(int!null)
+ │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
+ │         ├── locking: for-update
+ │         └── key: (1)
+ └── filters
+      └── b @> '{"a": 1, "c": 2}' [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # AssociateJoin
