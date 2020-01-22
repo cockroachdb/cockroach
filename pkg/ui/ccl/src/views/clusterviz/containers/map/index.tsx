@@ -68,9 +68,7 @@ export class ClusterVisualization extends React.Component<ClusterVisualizationPr
               items={this.items}
               onChange={this.handleMapTableToggle}
             >
-              <Button type="flat" size="small">
-                Node Map
-              </Button>
+              Node Map
             </Dropdown>
           </div>
           <div className={contentItemClasses}><Breadcrumbs tiers={tiers} /></div>
