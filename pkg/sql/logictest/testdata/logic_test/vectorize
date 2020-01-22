@@ -1064,3 +1064,10 @@ query I
 SELECT max(c) FROM a
 ----
 2000
+
+# Regression test for starting wrapped processors multiple times.
+statement ok
+CREATE TABLE t44133_0(c0 STRING); CREATE TABLE t44133_1(c0 STRING UNIQUE NOT NULL)
+
+statement ok
+SELECT * FROM t44133_0, t44133_1 WHERE t44133_0.c0 NOT BETWEEN t44133_1.c0 AND '' AND (t44133_1.c0 IS NULL)

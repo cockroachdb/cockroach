@@ -1,0 +1,95 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvnemeses;
+option go_package = "kvnemeses";
+
+import "errorspb/errors.proto";
+import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
+
+message BatchOperation {
+  repeated Operation ops = 1 [(gogoproto.nullable) = false];
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+enum ClosureTxnType {
+  Commit = 0;
+  Rollback = 1;
+  // TODO(dan): Ambiguous = 2;
+}
+
+message ClosureTxnOperation {
+  string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
+  repeated Operation ops = 2 [(gogoproto.nullable) = false];
+  Result result = 3 [(gogoproto.nullable) = false];
+  ClosureTxnType type = 4;
+}
+
+message GetOperation {
+  bytes key = 1;
+  bytes result_value = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message PutOperation {
+  bytes key = 1;
+  bytes value = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message SplitOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MergeOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message Operation {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.onlyone) = true;
+
+  BatchOperation batch = 1;
+
+  // TODO(dan): The original prototype of kvnemeses had separate operations for
+  // {Begin,Use,Commit,Rollback}Txn, which helped generate more interesting
+  // concurrency traffic. This had some issues with deadlock in the txn wait
+  // queue, but it seems like it should be possible to bring it back somehow.
+  ClosureTxnOperation closure_txn = 2;
+
+  GetOperation get = 7;
+  PutOperation put = 8;
+  SplitOperation split = 9;
+  MergeOperation merge = 10;
+}
+
+enum ResultType {
+  Unknown = 0;
+  NoError = 1;
+  Error = 2;
+  Value = 3;
+}
+
+message Result {
+  ResultType type = 1;
+  errorspb.EncodedError err = 2;
+  bytes value = 3;
+}
+
+message Step {
+  option (gogoproto.goproto_stringer) = false;
+  Operation op = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
+}

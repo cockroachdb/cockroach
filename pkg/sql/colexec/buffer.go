@@ -20,6 +20,7 @@ import (
 // and makes it available to be read multiple times by downstream consumers.
 type bufferOp struct {
 	OneInputNode
+	initStatus OperatorInitStatus
 
 	// read is true if someone has read the current batch already.
 	read  bool
@@ -37,7 +38,14 @@ func NewBufferOp(input Operator) Operator {
 }
 
 func (b *bufferOp) Init() {
-	b.input.Init()
+	// bufferOp can be an input to multiple operator chains, so Init on it can be
+	// called multiple times. However, we do not want to call Init many times on
+	// the input to bufferOp, so we do this check whether Init has already been
+	// performed.
+	if b.initStatus == OperatorNotInitialized {
+		b.input.Init()
+		b.initStatus = OperatorInitialized
+	}
 }
 
 // rewind resets this buffer to be readable again.

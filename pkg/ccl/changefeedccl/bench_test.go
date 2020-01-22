@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -218,7 +219,7 @@ func createBenchmarkChangefeed(
 		m:        th,
 	}
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
-	sf := makeSpanFrontier(spans...)
+	sf := span.MakeFrontier(spans...)
 	tickFn := emitEntries(
 		s.ClusterSettings(), details, sf, encoder, sink, rowsFn, TestingKnobs{}, metrics)
 
@@ -232,7 +233,7 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := makeSpanFrontier(spans...)
+			sf := span.MakeFrontier(spans...)
 			for {
 				// This is basically the ChangeAggregator processor.
 				resolvedSpans, err := tickFn(ctx)

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,7 +82,7 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`golden`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
@@ -109,7 +110,7 @@ func TestCloudStorageSink(t *testing.T) {
 		t2 := &sqlbase.TableDescriptor{Name: `t2`}
 
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `single-node`
 		s, err := makeCloudStorageSink(
@@ -182,7 +183,7 @@ func TestCloudStorageSink(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
@@ -262,7 +263,7 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`zombie`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
@@ -303,7 +304,7 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`bucketing`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `bucketing`
 		const targetMaxFileSize = 6
@@ -330,7 +331,7 @@ func TestCloudStorageSink(t *testing.T) {
 			"v4\nv5\n",
 		}, slurpDir(t, dir))
 
-		// Forward the spanFrontier here and trigger an empty flush to update
+		// Forward the SpanFrontier here and trigger an empty flush to update
 		// the sink's `inclusiveLowerBoundTs`
 		sf.Forward(testSpan, ts(5))
 		require.NoError(t, s.Flush(ctx))
@@ -353,7 +354,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// ts at >= this one before this call starts.
 		//
 		// The resolved timestamp file should precede the data files that were
-		// started after the spanFrontier was forwarded to ts(5).
+		// started after the SpanFrontier was forwarded to ts(5).
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(5)))
 		require.Equal(t, []string{
 			"v1\nv2\nv3\n",
@@ -365,7 +366,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// Flush then writes the rest. Since we use the time of the EmitRow
 		// or EmitResolvedTimestamp calls to order files, the resolved timestamp
 		// file should precede the last couple files since they started buffering
-		// after the spanFrontier was forwarded to ts(5).
+		// after the SpanFrontier was forwarded to ts(5).
 		require.NoError(t, s.Flush(ctx))
 		require.Equal(t, []string{
 			"v1\nv2\nv3\n",
@@ -391,7 +392,7 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`file-ordering`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
@@ -450,7 +451,7 @@ func TestCloudStorageSink(t *testing.T) {
 	t.Run(`ordering-among-schema-versions`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
-		sf := makeSpanFrontier(testSpan)
+		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
