@@ -52,7 +52,11 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
     {
       key: "id",
       title: "ID",
-      sorter: true,
+      sorter: (a, b) => {
+        if (a.nodeId < b.nodeId) { return -1; }
+        if (a.nodeId > b.nodeId) { return 1; }
+        return 0;
+      },
       render: (_text, record) => (
         <Text>{`n${record.nodeId}`}</Text>
       ),
@@ -69,7 +73,11 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
     {
       key: "decommissionedOn",
       title: "Decommissioned On",
-      sorter: true,
+      sorter: (a, b) => {
+        if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
+        if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
+        return 0;
+      },
       render: (_text, record) => {
         return record.decommissionedDate.format("LL[ at ]h:mm a");
       },
@@ -120,7 +128,6 @@ const decommissionedNodesTableData = createSelector(
       return LongToMoment(deadTime);
     };
 
-    // DecommissionedNodeList displays 5 most recent nodes.
     const data = _.chain(decommissionedStatuses)
       .orderBy([(ns: INodeStatus) => getDecommissionedTime(ns.desc.node_id)], ["desc"])
       .map((ns: INodeStatus, idx: number) => {
