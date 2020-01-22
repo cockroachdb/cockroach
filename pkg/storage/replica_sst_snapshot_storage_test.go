@@ -51,8 +51,8 @@ func TestSSTSnapshotStorage(t *testing.T) {
 		require.NoError(t, f.Close())
 	}()
 
-	// Check that even though the files aren't created, they are still recorded in SSTs().
-	require.Equal(t, len(scratch.SSTs()), 1)
+	// The files are lazily created and also lazily added to the SSTs() slice.
+	require.Equal(t, len(scratch.SSTs()), 0)
 
 	// Check that the storage lazily creates the files on write.
 	for _, fileName := range scratch.SSTs() {
@@ -64,6 +64,8 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	_, err = f.Write([]byte("foo"))
 	require.NoError(t, err)
+	// After the SST file has been written to, it should be recorded in SSTs().
+	require.Equal(t, len(scratch.SSTs()), 1)
 
 	// After writing to files, check that they have been flushed to disk.
 	for _, fileName := range scratch.SSTs() {
@@ -124,7 +126,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
 
-	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
+	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0, eng)
 	require.NoError(t, err)
 	err = msstw.Finish(ctx)
 	require.NoError(t, err)
