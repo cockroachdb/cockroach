@@ -60,6 +60,22 @@ const (
 	// hypothetically ping pong back and forth between two nodes, making one full
 	// and then the other.
 	rebalanceToMaxFractionUsedThreshold = 0.925
+
+	// The rangeRebalanceThreshold in the options specifies a percentage based
+	// threshold that result in just mean +1/-1 (at 5% percent threshold) when the number of ranges
+	// per node is less than 30. With the current (distributed) rebalancing logic in place, this leads
+	// to unnecessary rebalancing back and forth.
+	// The node, with less than the average number of replicas, receiving a new replica can throttle
+	// the speed by rejecting learner snapshots when too many nodes want to rebalance to that node.
+	// A node with more than the average number of replicas however doesn't have a way to
+	// control the speed at which the replicas are moving out.
+	// This isn't a problem when nodes have 40+ replicas as +/-5% in that case is 4 replicas.
+	// For nodes with 3-4 replicas only, the +/-5% translates to just +/-1 replica and leads to continued
+	// rebalancing.
+	// To eliminate this - we ensure a min number of ranges to each side. In effect this boosts the
+	// rebalance threshold when the number of ranges is low. As the number of ranges grow, the
+	// percentage based threshold overcomes the fixed threshold.
+	minRangeRebalanceThreshold = 2
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -1208,11 +1224,11 @@ func underfullRangeThreshold(options scorerOptions, mean float64) float64 {
 }
 
 func overfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean * (1 + thresholdFraction)
+	return mean + math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
 func underfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean * (1 - thresholdFraction)
+	return mean - math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
 func rebalanceFromConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
