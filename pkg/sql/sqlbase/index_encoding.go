@@ -239,35 +239,71 @@ func MakeSpanFromEncDatums(
 	return roachpb.Span{Key: startKey, EndKey: endKey}, containsNull, nil
 }
 
-// NeededColumnFamilyIDs returns a slice of FamilyIDs which contain
-// the families needed to load a set of neededCols
+// NeededColumnFamilyIDs returns the minimal set of column families required to
+// retrieve neededCols for the specified table and index.
 func NeededColumnFamilyIDs(
-	colIdxMap map[ColumnID]int, families []ColumnFamilyDescriptor, neededCols util.FastIntSet,
+	neededCols util.FastIntSet, table *TableDescriptor, index *IndexDescriptor,
 ) []FamilyID {
-	// Column family 0 is always included so we can distinguish null rows from
-	// absent rows.
-	needed := []FamilyID{0}
-	for i := range families {
-		family := &families[i]
+	colIdxMap := table.ColumnIdxMap()
+
+	var indexedIDs util.FastIntSet
+	var compositeIDs util.FastIntSet
+	for _, columnID := range index.ColumnIDs {
+		indexedIDs.Add(int(columnID))
+	}
+	for _, columnID := range index.CompositeColumnIDs {
+		compositeIDs.Add(int(columnID))
+	}
+
+	// The column family with ID 0 is special because it always has a KV entry.
+	// Other column families will omit a value if all their columns are null, so
+	// we may need to retrieve family 0 to use as a sentinel for distinguishing
+	// between null values and the absence of a row.
+	var family0 *ColumnFamilyDescriptor
+
+	// Iterate over the column families to find which ones contain needed
+	// columns. We also keep track of whether all of the needed family columns are
+	// nullable, since this means we need column family 0 as a sentinel.
+	var neededFamilyIDs []FamilyID
+	allFamiliesNullable := true
+	for i := range table.Families {
+		family := &table.Families[i]
 		if family.ID == 0 {
-			// Already added above.
-			continue
+			// Set column family 0 aside in case we need it as a sentinel.
+			family0 = family
 		}
+		needed := false
+		nullable := true
 		for _, columnID := range family.ColumnIDs {
 			columnOrdinal := colIdxMap[columnID]
-			if neededCols.Contains(columnOrdinal) {
-				needed = append(needed, family.ID)
-				break
+			// We need this column family if it includes a needed column, unless that
+			// column can be decoded from the key, meaning it is indexed and not
+			// composite.
+			if neededCols.Contains(columnOrdinal) &&
+				(!indexedIDs.Contains(int(columnID)) || compositeIDs.Contains(int(columnID))) {
+				needed = true
+			}
+			if !table.Columns[columnOrdinal].Nullable {
+				nullable = false
+			}
+		}
+		if needed {
+			neededFamilyIDs = append(neededFamilyIDs, family.ID)
+			if !nullable || family.ID == 0 {
+				allFamiliesNullable = false
 			}
 		}
 	}
+	if family0 == nil {
+		panic("column family 0 not found")
+	}
 
-	// TODO(solon): There is a further optimization possible here: if there is at
-	// least one non-nullable column in the needed column families, we can
-	// potentially omit the primary family, since the primary keys are encoded
-	// in all families. (Note that composite datums are an exception.)
+	// If all the needed families are nullable, we need family 0 as a sentinel.
+	if allFamiliesNullable {
+		return append([]FamilyID{0}, neededFamilyIDs...)
+	}
 
-	return needed
+	return neededFamilyIDs
 }
 
 // SplitSpanIntoSeparateFamilies can only be used to split a span representing
