@@ -11,7 +11,7 @@
 @require '~src/components/core/index.styl'
 
 .embedded-table
-  padding 0 $spacing-medium-small $spacing-medium-small
+  padding 0 $spacing-medium-small $spacing-base
 
 .nodes-overview
   background $colors--neutral-1
@@ -39,3 +39,10 @@
 
 .nodes-list-container > *:last-child
   margin-bottom 0
+
+.nodes-overview__panel .crl-table-wrapper .ant-table-row:hover .nodes-table__link
+  color $colors--primary-blue-3
+  text-decoration underline
+
+.nodes-table__link
+  color $colors--neutral-7

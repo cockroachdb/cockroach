@@ -133,8 +133,8 @@ class NodeList extends React.Component<LiveNodeListProps> {
         if (!!record.nodeId) {
           return (
             <React.Fragment>
-              <Link to={`/node/${record.nodeId}`}>
-                <Text>{record.nodeId}</Text>
+              <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+                <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
                 <Text>{record.region}</Text>
               </Link>
             </React.Fragment>);
@@ -234,7 +234,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       key: "logs",
       title: "",
       render: (_text, record) => record.nodeId && (
-        <div className="cell--show-on-hover">
+        <div className="cell--show-on-hover nodes-table__link">
           <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>
         </div>),
     },
@@ -273,14 +273,14 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "nodes",
       title: "decommissioned nodes",
       render: (_text, record) => (
-        <Link  to={`/node/${record.nodeId}`}>
-          <Text>{record.nodeId}</Text>
+        <Link className="nodes-table__link" to={`/node/${record.nodeId}`}>
+          <Text textType={TextTypes.BodyStrong}>{`N${record.nodeId} `}</Text>
           <Text>{record.region}</Text>
         </Link>),
     },
     {
       key: "decommissionedSince",
-      title: "decommissioned since",
+      title: "decommissioned on",
       render: (_text, record) => record.decommissionedDate.format("LL[ at ]h:mm a"),
     },
     {
@@ -313,8 +313,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
         <TableSection
           id={`nodes-overview__decommissioned-nodes`}
           title="Recently Decommissioned Nodes"
-          // TODO (koorosh): Uncomment link after Decommissioned node history page is added
-          // footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
+          footer={<Link to={`reports/nodes/history`}>View all decommissioned nodes </Link>}
           isCollapsible={isCollapsible}
           className="embedded-table">
           <Table dataSource={dataSource} columns={this.columns} />
