@@ -2917,6 +2917,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// TODO(owenqian): update expectedSSTs to use rditer.ConstrainToKeys
 			expectedSSTs = append(expectedSSTs, sstFile.Data())
 		}
 

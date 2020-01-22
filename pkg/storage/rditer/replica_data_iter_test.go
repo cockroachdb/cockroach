@@ -265,3 +265,50 @@ func TestReplicaDataIterator(t *testing.T) {
 		})
 	}
 }
+
+func TestConstrainToKeysEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	span := roachpb.Span{
+		Key: roachpb.Key("a"),
+		EndKey:   roachpb.Key("z"),
+	}
+	if _, empty := ConstrainToKeys(eng, span); !empty {
+		t.Errorf("Expected empty range")
+	}
+}
+
+func TestConstrainToKeysNonEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	startKey := roachpb.RKey("a")
+	endKey := roachpb.RKey("z")
+	span := roachpb.Span{
+		Key:    startKey.AsRawKey(),
+		EndKey: endKey.AsRawKey(),
+	}
+	desc := roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: startKey,
+		EndKey:   endKey,
+	}
+	createRangeData(t, eng, desc)
+	span, empty := ConstrainToKeys(eng, span)
+	if empty {
+		t.Errorf("Expected non-empty range")
+	}
+
+	key := keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.MakeV4())
+	ts := hlc.Timestamp{}
+	if err := engine.MVCCPut(context.Background(), eng, nil, key, ts, roachpb.MakeValueFromString("value"), nil); err != nil {
+		if !span.Key.Equal(key) || !span.EndKey.Equal(key){
+			t.Errorf("Expected span.Key and span.EndKey to equal %d. Instead Key: %d, EndKey: %d", key, span.Key, span.EndKey);
+		}
+	}
+}

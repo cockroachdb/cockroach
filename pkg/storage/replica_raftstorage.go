@@ -1063,6 +1063,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSSTFile := &engine.MemFile{}
 			subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
+			// TODO(owenqian): skip ClearRange if rditer.ConstrainToKeys returns an empty range
 			if err := engine.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
