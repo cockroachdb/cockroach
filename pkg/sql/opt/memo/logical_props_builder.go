@@ -1883,6 +1883,10 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
 			if !inputCols.Intersects(notNullInputCols) {
 				rel.FuncDeps.DowngradeKey()
+			} else if key, ok := rel.FuncDeps.StrictKey(); ok && key.Empty() {
+				// The cross-product has an empty key when both sides have an empty key;
+				// but the outer join can have two rows so the empty key doesn't hold.
+				rel.FuncDeps.DowngradeKey()
 			}
 			rel.FuncDeps.MakeOuter(h.leftProps.OutputCols, notNullInputCols)
 			rel.FuncDeps.MakeOuter(h.rightProps.OutputCols, notNullInputCols)
