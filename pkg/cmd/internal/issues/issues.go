@@ -35,8 +35,6 @@ const (
 	teamcityBuildBranchEnv = "TC_BUILD_BRANCH"
 	tagsEnv                = "TAGS"
 	goFlagsEnv             = "GOFLAGS"
-	githubUser             = "cockroachdb"
-	githubRepo             = "cockroach"
 	// CockroachPkgPrefix is the crdb package prefix.
 	CockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 	// Based on the following observed API response the maximum here is 1<<16-1.
@@ -46,6 +44,11 @@ const (
 	// 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
 	// is too long (maximum is 65536 characters)}]
 	githubIssueBodyMaximumLength = 60000
+)
+
+var (
+	githubUser = "cockroachdb" // changeable for testing
+	githubRepo = "cockroach"   // changeable for testing
 )
 
 func enforceMaxLength(s string) string {
@@ -84,7 +87,7 @@ Stack:
 {{ .CondensedMessage.Digest 50 }}
 {{ threeticks }}{{end}}
 
-<details><summary>Repro</summary><p>
+<details><summary>More</summary><p>
 {{if .Parameters -}}
 Parameters:
 {{range .Parameters }}
@@ -98,13 +101,24 @@ make stressrace TESTS={{.TestName}} PKG=./pkg/{{shortpkg .PackageName}} TESTTIME
 
 {{end -}}
 
-[roachdash](https://roachdash.crdb.dev/?filter={{urlquery "status:open t:.*" .TestName ".*" }}&sort=title&restgroup=false&display=lastcommented+project)
-
+{{ if .RelatedIssues }}Related:{{end}}{{range .RelatedIssues}}
+- #{{ .Number}} {{ .Title }} {{ range .Labels }} [{{ .Name }}]({{ .URL }}){{- end}}
+{{end}}
+[See this test on roachdash](https://roachdash.crdb.dev/?filter={{urlquery "status:open t:.*" .TestName ".*" }}&sort=title&restgroup=false&display=lastcommented+project)
 <sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
 `
 
 var (
+	// Set of labels attached to created issues.
 	issueLabels = []string{"O-robot", "C-test-failure"}
+	// Label we expect when checking existing issues. Sometimes users open
+	// issues about flakes and don't assign all the labels. We want to at
+	// least require the test-failure label to avoid pathological situations
+	// in which a test name is so generic that it matches lots of random issues.
+	// Note that we'll only post a comment into an existing label if the labels
+	// match 100%, but we also cross-link issues whose labels differ. But we
+	// require that they all have searchLabel as a baseline.
+	searchLabel = issueLabels[1]
 )
 
 // If the assignee would be the key in this map, assign to the value instead.
@@ -274,6 +288,7 @@ type TemplateData struct {
 	ArtifactsURL     string
 	URL              string
 	Assignee         interface{} // lazy
+	RelatedIssues    []github.Issue
 }
 
 type lazy struct {
@@ -290,21 +305,10 @@ func (l *lazy) String() string {
 	return fmt.Sprint(l.s)
 }
 
-func (p *poster) execTemplate(ctx context.Context, tpl string, req PostRequest) (string, error) {
-	tlp, err := template.New("").Funcs(template.FuncMap{
-		"threeticks": func() string { return "```" },
-		"commiturl": func(sha string) string {
-			return fmt.Sprintf("https://github.com/cockroachdb/cockroach/commits/%s", sha)
-		},
-		"shortpkg": func(fullpkg string) string {
-			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
-		},
-	}).Parse(tpl)
-	if err != nil {
-		return "", err
-	}
-
-	data := TemplateData{
+func (p *poster) templateData(
+	ctx context.Context, req PostRequest, relatedIssues []github.Issue,
+) TemplateData {
+	return TemplateData{
 		PostRequest:      req,
 		Parameters:       p.parameters(),
 		CondensedMessage: CondensedMessage(req.Message),
@@ -326,6 +330,22 @@ func (p *poster) execTemplate(ctx context.Context, tpl string, req PostRequest) 
 			}
 			return handle
 		}},
+		RelatedIssues: relatedIssues,
+	}
+}
+
+func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData) (string, error) {
+	tlp, err := template.New("").Funcs(template.FuncMap{
+		"threeticks": func() string { return "```" },
+		"commiturl": func(sha string) string {
+			return fmt.Sprintf("https://github.com/cockroachdb/cockroach/commits/%s", sha)
+		},
+		"shortpkg": func(fullpkg string) string {
+			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
+		},
+	}).Parse(tpl)
+	if err != nil {
+		return "", err
 	}
 
 	var buf strings.Builder
@@ -341,42 +361,58 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 		req.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 	}
 
-	title, err := p.execTemplate(ctx, req.TitleTemplate, req)
+	title, err := p.execTemplate(ctx, req.TitleTemplate, p.templateData(ctx, req, nil))
 	if err != nil {
 		return err
 	}
 
-	searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`,
-		title, githubUser, githubRepo)
-	for _, label := range issueLabels {
-		searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
-	}
+	// We carry out two searches below, one attempting to find an issue that we
+	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
+	// that would match if it weren't for their branch label.
+	qBase := fmt.Sprintf(
+		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
+		githubRepo, githubUser, searchLabel, title)
 
-	var foundIssue *int
-	result, _, err := p.searchIssues(ctx, searchQuery, &github.SearchOptions{
+	releaseLabel := fmt.Sprintf("branch-%s", p.branch)
+	qExisting := qBase + " label:" + releaseLabel
+	qRelated := qBase + " -label:" + releaseLabel
+
+	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 1,
 		},
 	})
 	if err != nil {
-		return errors.Wrapf(err, "failed to search GitHub with query %s",
-			github.Stringify(searchQuery))
-	}
-	if *result.Total > 0 {
-		foundIssue = result.Issues[0].Number
+		return errors.Wrapf(err, "failed to search GitHub for %s", qExisting)
 	}
 
-	body, err := p.execTemplate(ctx, req.BodyTemplate, req)
+	rRelated, _, err := p.searchIssues(ctx, qRelated, &github.SearchOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 10,
+		},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to search GitHub for %s", qRelated)
+	}
+
+	var foundIssue *int
+	if len(rExisting.Issues) > 0 {
+		// We found an existing issue to post a comment into.
+		foundIssue = rExisting.Issues[0].Number
+	}
+
+	body, err := p.execTemplate(ctx, req.BodyTemplate, p.templateData(ctx, req, rRelated.Issues))
 	if err != nil {
 		return err
 	}
 
+	createLabels := append(issueLabels, searchLabel, releaseLabel)
+	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
-		labels := append(issueLabels, req.ExtraLabels...)
 		issueRequest := github.IssueRequest{
 			Title:     &title,
 			Body:      &body,
-			Labels:    &labels,
+			Labels:    &createLabels,
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
@@ -474,7 +510,9 @@ type PostRequest struct {
 	Artifacts,
 	// The email of the author, used to determine who to assign the issue to.
 	AuthorEmail string
-	// Additional labels that will be added to the issue. The labels must exist.
+	// Additional labels that will be added to the issue. They will be created
+	// as necessary (as a side effect of creating an issue with them). An
+	// existing issue may be adopted even if it does not have these labels.
 	ExtraLabels []string
 }
 

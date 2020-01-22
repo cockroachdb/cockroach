@@ -630,7 +630,10 @@ func (r *testRunner) runTest(
 					Message:      msg,
 					Artifacts:    artifacts,
 					AuthorEmail:  authorEmail,
-					ExtraLabels:  []string{"O-roachtest"},
+					// Issues posted from roachtest are identifiable as such and
+					// they are also release blockers (this label may be removed
+					// by a human upon closer investigation).
+					ExtraLabels: []string{"O-roachtest", "release-blocker"},
 				}
 				if err := issues.Post(
 					context.Background(),
