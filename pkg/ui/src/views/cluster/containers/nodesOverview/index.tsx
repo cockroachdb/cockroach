@@ -45,7 +45,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
 enum AggregatedNodeStatus {
-  READY = 6,
+  LIVE = 6,
   WARNING = 7,
 }
 
@@ -210,9 +210,9 @@ class NodeList extends React.Component<LiveNodeListProps> {
         let tooltipText: string;
 
         switch (record.status) {
-          case AggregatedNodeStatus.READY:
+          case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
-            status =  _.capitalize(AggregatedNodeStatus[record.status]);
+            status = _.capitalize(AggregatedNodeStatus[record.status]);
             break;
           default:
             status = _.capitalize(LivenessStatus[record.status]);
@@ -400,7 +400,7 @@ const liveNodesTableData = createSelector(
           usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
           availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
           status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ?
-            AggregatedNodeStatus.READY : AggregatedNodeStatus.WARNING,
+            AggregatedNodeStatus.LIVE : AggregatedNodeStatus.WARNING,
           children: nestedRows,
         };
       })
