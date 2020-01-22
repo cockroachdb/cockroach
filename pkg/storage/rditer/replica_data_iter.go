@@ -50,6 +50,26 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 	}
 }
 
+// ConstrainToKeys returns a Span constrained to the keys present in the given Range.
+// Returns (span, true) if the Range is contains no keys, otherwise (span, false).
+func ConstrainToKeys(reader engine.Reader, span roachpb.Span) (_ roachpb.Span, empty bool) {
+	it := reader.NewIterator(engine.IterOptions{LowerBound: span.Key, UpperBound: span.EndKey})
+	defer it.Close()
+	it.SeekGE(engine.MakeMVCCMetadataKey(span.Key))
+	if valid, _ := it.Valid(); !valid {
+		return roachpb.Span{}, true
+	}
+	startKey := it.Key().Key
+
+	it.SeekLT(engine.MakeMVCCMetadataKey(span.EndKey))
+	if valid, _ := it.Valid(); !valid {
+		return roachpb.Span{}, true
+	}
+
+	endKey := it.Key().Key.Next()
+	return roachpb.Span{Key: startKey, EndKey: endKey}, false
+}
+
 // MakeReplicatedKeyRanges returns all key ranges that are fully Raft
 // replicated for the given Range.
 //
