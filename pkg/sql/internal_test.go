@@ -124,7 +124,9 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 
 	for _, tc := range testData {
 		t.Run(tc.user, func(t *testing.T) {
-			rows, cols, err := ie.QueryWithUser(ctx, "test", nil /* txn */, tc.user, "SELECT crdb_internal.is_admin()")
+			rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{User: tc.user},
+				"SELECT crdb_internal.is_admin()")
 			if err != nil {
 				t.Fatal(err)
 			}

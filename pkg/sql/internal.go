@@ -199,7 +199,7 @@ func (ie *InternalExecutor) QueryEx(
 	return datums, err
 }
 
-// QueryWithCols is like Query, but it also returns the computed ResultColumns
+// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
 // of the input query.
 func (ie *InternalExecutor) QueryWithCols(
 	ctx context.Context,
@@ -262,24 +262,6 @@ func (ie *InternalExecutor) QueryRowEx(
 	default:
 		return nil, &tree.MultipleResultsError{SQL: stmt}
 	}
-}
-
-// QueryWithUser is like Query, except it changes the username to that
-// specified.
-//
-// QueryWithUser is deprecated. Use QueryEx() instead.
-func (ie *InternalExecutor) QueryWithUser(
-	ctx context.Context,
-	opName string,
-	txn *client.Txn,
-	userName string,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	return ie.queryInternal(ctx,
-		opName, txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: userName},
-		stmt, qargs...)
 }
 
 // Exec executes the supplied SQL statement and returns the number of rows
