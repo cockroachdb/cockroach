@@ -23,18 +23,15 @@ import (
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sql/util" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
-//
-// Note that implementations might be "session bound" - meaning they inherit
-// session variables from a parent session - or not.
 type InternalExecutor interface {
-	// Exec executes the supplied SQL statement. Statements are currently executed
-	// as the root user with the system database as current database.
+	// Exec executes the supplied SQL statement and returns the number of rows
+	// affected (not like the results; see Query()). If no user has been previously
+	// set through SetSessionData, the statement is executed as the root user.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
 	//
-	// Returns the number of rows affected.
-	//
-	// Exec is deprecated. Use ExecEx() instead.
+	// Exec is deprecated because it may transparently execute a query as root. Use
+	// ExecEx instead.
 	Exec(
 		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 	) (int, error)
@@ -54,11 +51,13 @@ type InternalExecutor interface {
 	) (int, error)
 
 	// Query executes the supplied SQL statement and returns the resulting rows.
-	// The statement is executed as the root user.
+	// If no user has been previously set through SetSessionData, the statement is
+	// executed as the root user.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
 	//
-	// Query is deprecated. Use QueryEx() instead.
+	// Query is deprecated because it may transparently execute a query as root. Use
+	// QueryEx instead.
 	Query(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) ([]tree.Datums, error)
@@ -77,11 +76,8 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) ([]tree.Datums, error)
 
-	// QueryWithCols executes the supplied SQL statement and returns the resulting
-	// rows and their column types.
-	// The statement is executed as the root user.
-	//
-	// If txn is not nil, the statement will be executed in the respective txn.
+	// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
+	// of the input query.
 	QueryWithCols(
 		ctx context.Context, opName string, txn *client.Txn,
 		o sqlbase.InternalExecutorSessionDataOverride, statement string, qargs ...interface{},
@@ -90,7 +86,7 @@ type InternalExecutor interface {
 	// QueryRow is like Query, except it returns a single row, or nil if not row is
 	// found, or an error if more that one row is returned.
 	//
-	// QueryRow is deprecated. Use QueryRowEx() instead.
+	// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
 	QueryRow(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
