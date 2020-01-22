@@ -1824,6 +1824,21 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"timeofday": makeBuiltin(
+		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ctxTime := ctx.GetRelativeParseTime()
+				// From postgres@a166d408eb0b35023c169e765f4664c3b114b52e src/backend/utils/adt/timestamp.c#L1637,
+				// we should support "%a %b %d %H:%M:%S.%%06d %Y %Z".
+				return tree.NewDString(ctxTime.Format("Mon Jan 2 15:04:05.000000 2006 -0700")), nil
+			},
+			Info: "Returns the current system time on one of the cluster nodes as a string.",
+		},
+	),
+
 	"extract": makeBuiltin(
 		tree.FunctionProperties{Category: categoryDateAndTime},
 		tree.Overload{
