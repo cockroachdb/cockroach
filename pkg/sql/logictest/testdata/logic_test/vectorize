@@ -703,7 +703,10 @@ SET tracing=off
 # Making sure that colBatchScan operator can parallelize scans.
 # This test is similar to that in testplannerlogic/select
 statement ok
-CREATE TABLE tpar (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+CREATE TABLE tpar (
+    a INT PRIMARY KEY, item STRING, price FLOAT, FAMILY (a, item, price),
+    UNIQUE INDEX item (item), UNIQUE INDEX p (price)
+)
 
 statement ok
 ALTER TABLE tpar SPLIT AT VALUES(5)

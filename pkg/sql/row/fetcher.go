@@ -893,7 +893,7 @@ func (rf *Fetcher) processKV(
 	}
 
 	// For covering secondary indexes, allow for decoding as a primary key.
-	if (!table.isSecondaryIndex || table.index.EncodingType == sqlbase.PrimaryIndexEncoding) &&
+	if table.index.GetEncodingType(table.desc.PrimaryIndex.ID) == sqlbase.PrimaryIndexEncoding &&
 		len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value

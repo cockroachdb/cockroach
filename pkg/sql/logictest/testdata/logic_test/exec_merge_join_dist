@@ -3,10 +3,10 @@
 # Regression test for #39317.
 
 statement ok
-CREATE TABLE l (a INT PRIMARY KEY, b INT)
+CREATE TABLE l (a INT PRIMARY KEY, b INT, FAMILY (a, b))
 
 statement ok
-CREATE TABLE r (a INT PRIMARY KEY, b INT)
+CREATE TABLE r (a INT PRIMARY KEY, b INT, FAMILY (a, b))
 
 statement ok
 INSERT INTO l VALUES (1, 10), (2, 20), (3, 30)
