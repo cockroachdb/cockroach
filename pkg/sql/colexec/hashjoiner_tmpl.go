@@ -109,6 +109,9 @@ func _CHECK_COL_BODY(
 			/* {{if .AllowNullEquality}} */
 			if probeIsNull && buildIsNull {
 				continue
+			} else if probeIsNull {
+				ht.differs[toCheck] = true
+				continue
 			}
 			/* {{end}} */
 			if probeIsNull {
