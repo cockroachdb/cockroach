@@ -3316,6 +3316,68 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Returns a namespace_id based on parentID and a given name.
+	// Allows a non-admin to query the system.namespace table, but performs
+	// the relevant permission checks to ensure secure access.
+	// Returns NULL if none is found.
+	// Errors if there is no permission for the current user to view the descriptor.
+	"crdb_internal.get_namespace_id": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"parent_id", types.Int}, {"name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.PrivilegedAccessor == nil {
+					return nil, errors.AssertionFailedf("PrivilegedAccessor not set")
+				}
+
+				parentID := tree.MustBeDInt(args[0])
+				name := tree.MustBeDString(args[1])
+				id, found, err := ctx.PrivilegedAccessor.LookupNamespaceID(
+					ctx.Context,
+					int64(parentID),
+					string(name),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(id), nil
+			},
+		},
+	),
+
+	// Returns the zone config based on a given namespace id.
+	// Returns NULL if a zone configuration is not found.
+	// Errors if there is no permission for the current user to view the zone config.
+	"crdb_internal.get_zone_config": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"namespace_id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.PrivilegedAccessor == nil {
+					return nil, errors.AssertionFailedf("PrivilegedAccessor not set")
+				}
+
+				id := tree.MustBeDInt(args[0])
+				bytes, found, err := ctx.PrivilegedAccessor.LookupZoneConfigByNamespaceID(
+					ctx.Context,
+					int64(id),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DNull, nil
+				}
+				return tree.NewDBytes(bytes), nil
+			},
+		},
+	),
+
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
