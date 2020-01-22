@@ -93,8 +93,9 @@ func (p *pebbleBatch) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	panic("unimplemented")
 }
 

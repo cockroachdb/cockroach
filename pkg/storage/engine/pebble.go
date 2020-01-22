@@ -492,9 +492,10 @@ func (p *Pebble) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 }
 
 // Get implements the Engine interface.
@@ -938,9 +939,10 @@ func (p *pebbleReadOnly) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 }
 
 func (p *pebbleReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -1059,9 +1061,10 @@ func (p *pebbleSnapshot) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	return pebbleExportToSst(p, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 }
 
 // Get implements the Reader interface.
@@ -1113,8 +1116,9 @@ func pebbleExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	sstFile := &MemFile{}
 	sstWriter := MakeBackupSSTWriter(sstFile)
 	defer sstWriter.Close()
@@ -1128,12 +1132,15 @@ func pebbleExportToSst(
 			EndTime:     endTS,
 		})
 	defer iter.Close()
+	var curKey roachpb.Key // only used if exportAllRevisions
+	var resumeKey roachpb.Key
+	paginated := targetSize > 0
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
 			// cause this command to be retried.
-			return nil, roachpb.BulkOpSummary{}, err
+			return nil, roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {
 			break
@@ -1143,18 +1150,30 @@ func pebbleExportToSst(
 			break
 		}
 		unsafeValue := iter.UnsafeValue()
+		isNewKey := !exportAllRevisions || !unsafeKey.Key.Equal(curKey)
+		if paginated && exportAllRevisions && isNewKey {
+			curKey = append(curKey[:0], unsafeKey.Key...)
+		}
 
 		// Skip tombstone (len=0) records when start time is zero (non-incremental)
 		// and we are not exporting all versions.
 		skipTombstones := !exportAllRevisions && startTS.IsEmpty()
 		if len(unsafeValue) > 0 || !skipTombstones {
 			if err := rows.Count(unsafeKey.Key); err != nil {
-				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "decoding %s", unsafeKey)
+				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
-			rows.BulkOpSummary.DataSize += int64(len(unsafeKey.Key) + len(unsafeValue))
+			curSize := rows.BulkOpSummary.DataSize
+			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
+			isOverTarget := paginated && curSize > 0 && uint64(newSize) > targetSize
+			if isNewKey && isOverTarget {
+				// Allocate the right size for resumeKey rather than using curKey.
+				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
+				break
+			}
 			if err := sstWriter.Put(unsafeKey, unsafeValue); err != nil {
-				return nil, roachpb.BulkOpSummary{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
 			}
+			rows.BulkOpSummary.DataSize = newSize
 		}
 
 		if exportAllRevisions {
@@ -1167,12 +1186,12 @@ func pebbleExportToSst(
 	if rows.BulkOpSummary.DataSize == 0 {
 		// If no records were added to the sstable, skip completing it and return a
 		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return nil, roachpb.BulkOpSummary{}, nil
+		return nil, roachpb.BulkOpSummary{}, nil, nil
 	}
 
 	if err := sstWriter.Finish(); err != nil {
-		return nil, roachpb.BulkOpSummary{}, err
+		return nil, roachpb.BulkOpSummary{}, nil, err
 	}
 
-	return sstFile.Data(), rows.BulkOpSummary, nil
+	return sstFile.Data(), rows.BulkOpSummary, resumeKey, nil
 }

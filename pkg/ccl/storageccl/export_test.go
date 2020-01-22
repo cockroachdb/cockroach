@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExportCmd(t *testing.T) {
@@ -302,6 +303,7 @@ func assertEqualKVs(
 	startTime, endTime hlc.Timestamp,
 	exportAllRevisions bool,
 	enableTimeBoundIteratorOptimization bool,
+	targetSize uint64,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
@@ -328,17 +330,19 @@ func assertEqualKVs(
 			io.MaxTimestampHint = endTime
 			io.MinTimestampHint = startTime.Next()
 		}
-		sst, _, err := e.ExportToSst(startKey, endKey, startTime, endTime, exportAllRevisions, io)
-		if err != nil {
-			t.Fatal(err)
+		var kvs []engine.MVCCKeyValue
+		for start := startKey; start != nil; {
+			var sst []byte
+			sst, _, start, err = e.ExportToSst(start, endKey, startTime, endTime, exportAllRevisions, targetSize, io)
+			require.NoError(t, err)
+			loaded := loadSST(t, sst, startKey, endKey)
+			kvs = append(kvs, loaded...)
 		}
 
 		// Compare new C++ implementation against the oracle.
 		expectedKVS := loadSST(t, expected, startKey, endKey)
-		kvs := loadSST(t, sst, startKey, endKey)
-
 		if len(kvs) != len(expectedKVS) {
-			t.Fatalf("got %d kvs (%+v) but expected %d (%+v)", len(kvs), kvs, len(expected), expected)
+			t.Fatalf("got %d kvs but expected %d:\n%v\n%v", len(kvs), len(expectedKVS), kvs, expectedKVS)
 		}
 
 		for i := range kvs {
@@ -430,27 +434,40 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 				timestamps[i].Logical < timestamps[j].Logical)
 	})
 
+	testWithTargetSize := func(t *testing.T, targetSize uint64) {
+		if testing.Short() && targetSize > 0 && targetSize < 1<<15 {
+			t.Skipf("testing with size %d is slow", targetSize)
+		}
+		t.Run("ts (0-∞], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, false, targetSize))
+		t.Run("ts (0-∞], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, false, targetSize))
+		t.Run("ts (0-∞], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, true, targetSize))
+		t.Run("ts (0-∞], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, true, targetSize))
+
+		upperBound := randutil.RandIntInRange(rnd, 1, numKeys)
+		lowerBound := rnd.Intn(upperBound)
+
+		// Exercise random key ranges.
+		t.Run("kv [randLower, randUpper), latest, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, false, targetSize))
+		t.Run("kv [randLower, randUpper), all, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, false, targetSize))
+		t.Run("kv [randLower, randUpper), latest, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, true, targetSize))
+		t.Run("kv [randLower, randUpper), all, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, true, targetSize))
+
+		upperBound = randutil.RandIntInRange(rnd, 1, numKeys)
+		lowerBound = rnd.Intn(upperBound)
+
+		// Exercise random timestamps.
+		t.Run("kv (randLowerTime, randUpperTime], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, false, targetSize))
+		t.Run("kv (randLowerTime, randUpperTime], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, false, targetSize))
+		t.Run("kv (randLowerTime, randUpperTime], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, true, targetSize))
+		t.Run("kv (randLowerTime, randUpperTime], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, true, targetSize))
+	}
 	// Exercise min to max time and key ranges.
-	t.Run("ts (0-∞], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, false))
-	t.Run("ts (0-∞], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, false))
-	t.Run("ts (0-∞], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, false, true))
-	t.Run("ts (0-∞], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, tsMin, tsMax, true, true))
+	for _, targetSize := range []uint64{
+		0 /* unlimited */, 1 << 10, 1 << 16, 1 << 20,
+	} {
+		t.Run(fmt.Sprintf("targetSize=%d", targetSize), func(t *testing.T) {
+			testWithTargetSize(t, targetSize)
+		})
+	}
 
-	upperBound := randutil.RandIntInRange(rnd, 1, numKeys)
-	lowerBound := rnd.Intn(upperBound)
-
-	// Exercise random key ranges.
-	t.Run("kv [randLower, randUpper), latest, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, false))
-	t.Run("kv [randLower, randUpper), all, nontimebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, false))
-	t.Run("kv [randLower, randUpper), latest, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, false, true))
-	t.Run("kv [randLower, randUpper), all, timebound", assertEqualKVs(ctx, e, keys[lowerBound], keys[upperBound], tsMin, tsMax, true, true))
-
-	upperBound = randutil.RandIntInRange(rnd, 1, numKeys)
-	lowerBound = rnd.Intn(upperBound)
-
-	// Exercise random timestamps.
-	t.Run("kv (randLowerTime, randUpperTime], latest, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, false))
-	t.Run("kv (randLowerTime, randUpperTime], all, nontimebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, false))
-	t.Run("kv (randLowerTime, randUpperTime], latest, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], false, true))
-	t.Run("kv (randLowerTime, randUpperTime], all, timebound", assertEqualKVs(ctx, e, keyMin, keyMax, timestamps[lowerBound], timestamps[upperBound], true, true))
 }
