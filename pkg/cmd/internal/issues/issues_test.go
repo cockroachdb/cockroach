@@ -35,38 +35,21 @@ func TestPost(t *testing.T) {
 		envTags     = "deadlock"
 		envGoFlags  = "race"
 		sha         = "abcd123"
-		branch      = "release-123.45"
+		branch      = "release-0.1"
 		serverURL   = "https://teamcity.example.com"
 		buildID     = 8008135
 		issueID     = 1337
 		issueNumber = 30
 	)
 
-	for key, value := range map[string]string{
+	unset := setEnv(map[string]string{
 		teamcityVCSNumberEnv: sha,
 		teamcityServerURLEnv: serverURL,
 		teamcityBuildIDEnv:   strconv.Itoa(buildID),
 		tagsEnv:              envTags,
 		goFlagsEnv:           envGoFlags,
-	} {
-		if val, ok := os.LookupEnv(key); ok {
-			defer func() {
-				if err := os.Setenv(key, val); err != nil {
-					t.Error(err)
-				}
-			}()
-		} else {
-			defer func() {
-				if err := os.Unsetenv(key); err != nil {
-					t.Error(err)
-				}
-			}()
-		}
-
-		if err := os.Setenv(key, value); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
+	defer unset()
 
 	testCases := []struct {
 		name        string
@@ -130,109 +113,204 @@ goroutine 13:
 		},
 	}
 
+	const (
+		foundNoIssue                 = "no-issue"
+		foundOnlyMatchingIssue       = "matching-issue"
+		foundMatchingAndRelatedIssue = "matching-and-related-issue"
+		foundOnlyRelatedIssue        = "related-issue"
+	)
+
+	matchingIssue := github.Issue{
+		Title:  github.String("boom"),
+		Number: github.Int(issueNumber),
+		Labels: []github.Label{{
+			Name: github.String("C-test-failure"),
+			URL:  github.String("fake"),
+		}, {
+			Name: github.String("O-robot"),
+			URL:  github.String("fake"),
+		}, {
+			Name: github.String("release-0.1"),
+			URL:  github.String("fake"),
+		}},
+	}
+	relatedIssue := github.Issue{
+		Title:  github.String("boom related"),
+		Number: github.Int(issueNumber + 1),
+		Labels: []github.Label{{
+			Name: github.String("C-test-failure"),
+			URL:  github.String("fake"),
+		}, {
+			Name: github.String("O-robot"),
+			URL:  github.String("fake"),
+		}, {
+			Name: github.String("release-0.2"), // here's the mismatch
+			URL:  github.String("fake"),
+		}},
+	}
+
 	for _, c := range testCases {
-		for _, foundIssue := range []bool{true, false} {
-			name := c.name
-			if foundIssue {
-				name = name + "-existing-issue"
-			}
+		for _, foundIssue := range []string{
+			foundNoIssue, foundOnlyMatchingIssue, foundMatchingAndRelatedIssue, foundOnlyRelatedIssue,
+		} {
+
+			results := map[string][][]github.Issue{
+				foundNoIssue:                 {{}, {}},
+				foundOnlyMatchingIssue:       {{matchingIssue}, {}},
+				foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
+				foundOnlyRelatedIssue:        {{}, {relatedIssue}},
+			}[foundIssue]
+
+			name := c.name + "-" + foundIssue
 			t.Run(name, func(t *testing.T) {
-				var buf strings.Builder
-				p := &poster{}
+				t.Run(c.name, func(t *testing.T) {
+					var buf strings.Builder
+					p := &poster{}
 
-				p.createIssue = func(_ context.Context, owner string, repo string,
-					issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-					body := *issue.Body
-					issue.Body = nil
-					_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s %s:\n", owner, repo, github.Stringify(issue))
-					_, _ = fmt.Fprintln(&buf, body)
-					return &github.Issue{ID: github.Int64(issueID)}, nil, nil
-				}
+					createdIssue := false
+					p.createIssue = func(_ context.Context, owner string, repo string,
+						issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+						createdIssue = true
+						body := *issue.Body
+						issue.Body = nil
+						title := *issue.Title
+						issue.Title = nil
 
-				p.searchIssues = func(_ context.Context, query string,
-					opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
-					result := &github.IssuesSearchResult{}
-					total := 0
-					if foundIssue {
-						total = 1
-						result.Issues = []github.Issue{
-							{Number: github.Int(issueNumber)},
-						}
+						render := ghURL(t, title, body)
+						t.Log(render)
+						_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s:\n%s\n\n%s\n\n%s\n\nRendered: %s", owner, repo, github.Stringify(issue), title, body, render)
+						return &github.Issue{ID: github.Int64(issueID)}, nil, nil
 					}
-					result.Total = &total
-					_, _ = fmt.Fprintf(&buf, "searchIssue query=%s: result %s\n", query, github.Stringify(result))
-					return result, nil, nil
-				}
 
-				p.createComment = func(
-					_ context.Context, owner string, repo string, number int, comment *github.IssueComment,
-				) (*github.IssueComment, *github.Response, error) {
-					body := *comment.Body
-					comment.Body = nil
-					_, _ = fmt.Fprintf(&buf, "createComment owner=%s repo=%s issue=%d %s:\n", owner, repo, number, github.Stringify(comment))
-					_, _ = fmt.Fprintln(&buf, body)
-					return &github.IssueComment{}, nil, nil
-				}
+					p.searchIssues = func(_ context.Context, query string,
+						opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
+						result := &github.IssuesSearchResult{}
 
-				p.listCommits = func(
-					_ context.Context, owner string, repo string, opts *github.CommitsListOptions,
-				) ([]*github.RepositoryCommit, *github.Response, error) {
-					_, _ = fmt.Fprintf(&buf, "listCommits owner=%s repo=%s %s\n", owner, repo, github.Stringify(opts))
-					assignee := assignee
-					return []*github.RepositoryCommit{
-						{
-							Author: &github.User{
-								Login: &assignee,
+						require.NotEmpty(t, results)
+						result.Issues, results = results[0], results[1:]
+
+						result.Total = github.Int(len(result.Issues))
+						_, _ = fmt.Fprintf(&buf, "searchIssue %s: %s\n", query, github.Stringify(&result.Issues))
+						return result, nil, nil
+					}
+
+					createdComment := false
+					p.createComment = func(
+						_ context.Context, owner string, repo string, number int, comment *github.IssueComment,
+					) (*github.IssueComment, *github.Response, error) {
+						assert.Equal(t, *matchingIssue.Number, number)
+						createdComment = true
+						render := ghURL(t, "<comment>", *comment.Body)
+						t.Log(render)
+						_, _ = fmt.Fprintf(&buf, "createComment owner=%s repo=%s issue=%d:\n\n%s\n\nRendered: %s", owner, repo, number, *comment.Body, render)
+						return &github.IssueComment{}, nil, nil
+					}
+
+					p.listCommits = func(
+						_ context.Context, owner string, repo string, opts *github.CommitsListOptions,
+					) ([]*github.RepositoryCommit, *github.Response, error) {
+						_, _ = fmt.Fprintf(&buf, "listCommits owner=%s repo=%s %s\n", owner, repo, github.Stringify(opts))
+						assignee := assignee
+						return []*github.RepositoryCommit{
+							{
+								Author: &github.User{
+									Login: &assignee,
+								},
 							},
-						},
-					}, nil, nil
-				}
-
-				p.listMilestones = func(_ context.Context, owner, repo string,
-					_ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
-					result := []*github.Milestone{
-						{Title: github.String("3.3"), Number: github.Int(milestone)},
-						{Title: github.String("3.2"), Number: github.Int(1)},
+						}, nil, nil
 					}
-					_, _ = fmt.Fprintf(&buf, "listMilestones owner=%s repo=%s: result %s\n", owner, repo, github.Stringify(result))
-					return result, nil, nil
-				}
 
-				p.getLatestTag = func() (string, error) {
-					const tag = "v3.3.0"
-					_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
-					return tag, nil
-				}
+					p.listMilestones = func(_ context.Context, owner, repo string,
+						_ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
+						result := []*github.Milestone{
+							{Title: github.String("3.3"), Number: github.Int(milestone)},
+							{Title: github.String("3.2"), Number: github.Int(1)},
+						}
+						_, _ = fmt.Fprintf(&buf, "listMilestones owner=%s repo=%s: result %s\n", owner, repo, github.Stringify(result))
+						return result, nil, nil
+					}
 
-				p.init()
-				p.branch = branch
+					p.getLatestTag = func() (string, error) {
+						const tag = "v3.3.0"
+						_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
+						return tag, nil
+					}
 
-				ctx := context.Background()
-				req := PostRequest{
-					TitleTemplate: UnitTestFailureTitle,
-					BodyTemplate:  UnitTestFailureBody,
-					PackageName:   c.packageName,
-					TestName:      c.testName,
-					Message:       c.message,
-					Artifacts:     c.artifacts,
-					AuthorEmail:   c.author,
-				}
-				require.NoError(t, p.post(ctx, req))
-				path := filepath.Join("testdata", name+".txt")
-				b, err := ioutil.ReadFile(path)
-				failed := !assert.NoError(t, err)
-				if !failed {
-					exp, act := string(b), buf.String()
-					failed = failed || !assert.Equal(t, exp, act)
-				}
-				const rewrite = false
-				if failed && rewrite {
-					_ = os.MkdirAll(filepath.Dir(path), 0755)
-					require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
-				}
+					p.init()
+					p.branch = branch
+
+					ctx := context.Background()
+					req := PostRequest{
+						TitleTemplate: UnitTestFailureTitle,
+						BodyTemplate:  UnitTestFailureBody,
+						PackageName:   c.packageName,
+						TestName:      c.testName,
+						Message:       c.message,
+						Artifacts:     c.artifacts,
+						AuthorEmail:   c.author,
+						ExtraLabels:   []string{"release-blocker"},
+					}
+					require.NoError(t, p.post(ctx, req))
+					path := filepath.Join("testdata", name+".txt")
+					b, err := ioutil.ReadFile(path)
+					failed := !assert.NoError(t, err)
+					if !failed {
+						exp, act := string(b), buf.String()
+						failed = failed || !assert.Equal(t, exp, act)
+					}
+					const rewrite = true
+					if failed && rewrite {
+						_ = os.MkdirAll(filepath.Dir(path), 0755)
+						require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
+					}
+
+					switch foundIssue {
+					case foundNoIssue, foundOnlyRelatedIssue:
+						require.True(t, createdIssue)
+						require.False(t, createdComment)
+					case foundOnlyMatchingIssue, foundMatchingAndRelatedIssue:
+						require.False(t, createdIssue)
+						require.True(t, createdComment)
+					default:
+						t.Errorf("unhandled: %s", foundIssue)
+					}
+				})
 			})
 		}
 	}
+}
+
+func TestPostEndToEnd(t *testing.T) {
+	t.Skip("only for manual testing")
+
+	env := map[string]string{
+		// githubAPITokenEnv must be set in your actual env.
+
+		teamcityVCSNumberEnv:   "deadbeef",
+		teamcityServerURLEnv:   "https://teamcity.cockroachdb.com",
+		teamcityBuildIDEnv:     "12345",
+		tagsEnv:                "-endtoendenv",
+		goFlagsEnv:             "-somegoflags",
+		teamcityBuildBranchEnv: "release-19.2",
+	}
+	unset := setEnv(env)
+	defer unset()
+
+	// Adjust to your taste. Your token must have access and you must have a fork
+	// of the cockroachdb/cockroach repo.
+	githubUser = "tbg"
+
+	req := PostRequest{
+		TitleTemplate: "test issue 2",
+		BodyTemplate:  "test body",
+		PackageName:   "github.com/cockroachdb/cockroach/pkg/foo/bar",
+		TestName:      "TestFooBarBaz",
+		Message:       "I'm a message",
+		AuthorEmail:   "tobias.schottdorf@gmail.com",
+		ExtraLabels:   []string{"release-blocker"},
+	}
+
+	require.NoError(t, Post(context.Background(), req))
 }
 
 func TestGetAssignee(t *testing.T) {
@@ -268,4 +346,45 @@ func TestInvalidAssignee(t *testing.T) {
 	if !isInvalidAssignee(r) {
 		t.Fatalf("expected invalid assignee")
 	}
+}
+
+// setEnv overrides the env variables corresponding to the input map. The
+// returned closure restores the status quo.
+func setEnv(kv map[string]string) func() {
+	undo := map[string]*string{}
+	for key, value := range kv {
+		val, ok := os.LookupEnv(key)
+		if ok {
+			undo[key] = &val
+		} else {
+			undo[key] = nil
+		}
+
+		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
+	return func() {
+		for key, value := range undo {
+			if value != nil {
+				if err := os.Setenv(key, *value); err != nil {
+					panic(err)
+				}
+			} else {
+				if err := os.Unsetenv(key); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
+}
+
+func ghURL(t *testing.T, title, body string) string {
+	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
+	require.NoError(t, err)
+	q := u.Query()
+	q.Add("title", title)
+	q.Add("body", body)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
