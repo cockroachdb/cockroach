@@ -203,25 +203,35 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 	for i := len(parts) - 1; i >= 0; i-- {
 		// Parses leading sign
 		part := parts[i]
-		neg := false
-		// Consumes [-+]
-		if part != "" {
-			c := part[0]
-			if c == '-' || c == '+' {
-				neg = c == '-'
-				part = part[1:]
+
+		consumeNeg := func(str string) (newStr string, mult int64, ok bool) {
+			neg := false
+			// Consumes [-+]
+			if str != "" {
+				c := str[0]
+				if c == '-' || c == '+' {
+					neg = c == '-'
+					str = str[1:]
+				}
 			}
-		}
-		if len(part) == 0 {
-			return d, newInvalidSQLDurationError(s)
-		}
-		if part[0] == '-' || part[0] == '+' {
-			return d, newInvalidSQLDurationError(s)
+			if len(str) == 0 {
+				return str, 0, false
+			}
+			if str[0] == '-' || str[0] == '+' {
+				return str, 0, false
+			}
+
+			mult = 1
+			if neg {
+				mult = -1
+			}
+			return str, mult, true
 		}
 
-		mult := int64(1)
-		if neg {
-			mult = -1
+		var mult int64
+		var ok bool
+		if part, mult, ok = consumeNeg(part); !ok {
+			return d, newInvalidSQLDurationError(s)
 		}
 
 		if strings.ContainsRune(part, ':') {
@@ -236,45 +246,87 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			//
 			// Instead of supporting unit changing based on int or float, use the
 			// following rules:
+			// - If there is a float at the front, it represents D:(<apply below rules).
 			// - Two fields is H:M or M:S.fff (unless using MINUTE TO SECOND, then M:S).
 			// - Three fields is H:M:S(.fff)?.
-			// - All fields support both int and float.
 			hms := strings.Split(part, ":")
-			var err error
-			var dur time.Duration
-			// Support such as `HH:` and `HH:MM:` as postgres does. Set the last part to "0".
-			if hms[len(hms)-1] == "" {
-				hms[len(hms)-1] = "0"
+
+			// If the first element is blank or is a float, it represents a day.
+			// Take it to days, and simplify logic below to a H:M:S scenario.
+			firstComponentIsFloat := strings.Contains(hms[0], ".")
+			if firstComponentIsFloat || hms[0] == "" {
+				// Negatives are not permitted in this format.
+				// Also, there must be more units in front.
+				if mult != 1 || len(hms) == 1 {
+					return d, newInvalidSQLDurationError(s)
+				}
+				if firstComponentIsFloat {
+					days, err := strconv.ParseFloat(hms[0], 64)
+					if err != nil {
+						return d, newInvalidSQLDurationError(s)
+					}
+					d = d.Add(duration.MakeDuration(0, 1, 0).MulFloat(days))
+				}
+
+				hms = hms[1:]
+				if hms[0], mult, ok = consumeNeg(hms[0]); !ok {
+					return d, newInvalidSQLDurationError(s)
+				}
 			}
+
+			// Postgres fills in the blanks of all H:M:S as if they were zero.
+			for i := 0; i < len(hms); i++ {
+				if hms[i] == "" {
+					hms[i] = "0"
+				}
+			}
+
+			var hours, mins int64
+			var secs float64
+
 			switch len(hms) {
 			case 2:
-				toParse := hms[0] + "h" + hms[1] + "m"
 				// If we find a decimal, it must be the m:s.ffffff format
+				var err error
 				if strings.Contains(hms[1], ".") || itm.DurationField.IsMinuteToSecond() {
-					toParse = hms[0] + "m" + hms[1] + "s"
+					if mins, err = strconv.ParseInt(hms[0], 10, 64); err != nil {
+						return d, newInvalidSQLDurationError(s)
+					}
+					if secs, err = strconv.ParseFloat(hms[1], 64); err != nil {
+						return d, newInvalidSQLDurationError(s)
+					}
+				} else {
+					if hours, err = strconv.ParseInt(hms[0], 10, 64); err != nil {
+						return d, newInvalidSQLDurationError(s)
+					}
+					if mins, err = strconv.ParseInt(hms[1], 10, 64); err != nil {
+						return d, newInvalidSQLDurationError(s)
+					}
 				}
-				if neg {
-					toParse = "-" + toParse
-				}
-				dur, err = time.ParseDuration(toParse)
 			case 3:
-				// Support such as `HH::SS` as postgres does. Set minute part to 0.
-				// TODO(hainesc): `:1:2 -> 1 hour 2 min` as postgres does?
-				if hms[1] == "" {
-					hms[1] = "0"
+				var err error
+				if hours, err = strconv.ParseInt(hms[0], 10, 64); err != nil {
+					return d, newInvalidSQLDurationError(s)
 				}
-				toParse := hms[0] + "h" + hms[1] + "m" + hms[2] + "s"
-				if neg {
-					toParse = "-" + toParse
+				if mins, err = strconv.ParseInt(hms[1], 10, 64); err != nil {
+					return d, newInvalidSQLDurationError(s)
 				}
-				dur, err = time.ParseDuration(toParse)
+				if secs, err = strconv.ParseFloat(hms[2], 64); err != nil {
+					return d, newInvalidSQLDurationError(s)
+				}
 			default:
 				return d, newInvalidSQLDurationError(s)
 			}
-			if err != nil {
-				return d, makeParseError(part, types.Interval, err)
+
+			// None of these units can be negative, as we explicitly strip the negative
+			// unit from the very beginning.
+			if hours < 0 || mins < 0 || secs < 0 {
+				return d, newInvalidSQLDurationError(s)
 			}
-			d = d.Add(duration.MakeDuration(dur.Nanoseconds(), 0, 0))
+
+			d = d.Add(duration.MakeDuration(time.Hour.Nanoseconds(), 0, 0).Mul(mult * hours))
+			d = d.Add(duration.MakeDuration(time.Minute.Nanoseconds(), 0, 0).Mul(mult * mins))
+			d = d.Add(duration.MakeDuration(time.Second.Nanoseconds(), 0, 0).MulFloat(float64(mult) * secs))
 		} else if strings.ContainsRune(part, '-') {
 			// Try to parse as Year-Month.
 			if parsedIdx >= yearMonthParsed {
@@ -300,7 +352,7 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			}
 			if errYear == nil && errMonth == nil {
 				delta := duration.MakeDuration(0, 0, 1).Mul(int64(year)*12 + int64(month))
-				if neg {
+				if mult < 0 {
 					d = d.Sub(delta)
 				} else {
 					d = d.Add(delta)
@@ -339,7 +391,7 @@ func sqlStdToDuration(s string, itm types.IntervalTypeMetadata) (duration.Durati
 			} else if parsedIdx == hmsParsed {
 				// Day part.
 				delta := duration.MakeDuration(0, 1, 0).MulFloat(value)
-				if neg {
+				if mult < 0 {
 					d = d.Sub(delta)
 				} else {
 					d = d.Add(delta)

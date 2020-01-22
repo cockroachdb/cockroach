@@ -660,6 +660,16 @@ eval
 '00:02:00'
 
 eval
+interval '1 year 1 day 02:03:04.567'::int
+----
+31651384
+
+eval
+interval '1 year 1 day 02:03:04.567'::float
+----
+3.1651384567e+07
+
+eval
 '2010-09-28'::date + 3
 ----
 '2010-10-01'
@@ -814,30 +824,6 @@ eval
 '-1mon-2d-3h-4s-5us'::interval::int::interval
 ----
 '-1 mons -2 days -03:00:04'
-
-# MaxInt64
-eval
-9223372036854775807::int::interval::int
-----
-9223372036854775807
-
-# MinInt64
-eval
-(-9223372036854775808)::int::interval::int
-----
--9223372036854775808
-
-# MaxInt64
-eval
-'296533308798y20d15h30m7s'::interval::int::interval
-----
-'296533308798 years 20 days 15:30:07'
-
-# MinInt64
-eval
-'-296533308798y-20d-15h-30m-8s'::interval::int::interval
-----
-'-296533308798 years -20 days -15:30:08'
 
 eval
 '1970-01-01 00:01:00.123456-00:00'::timestamp::decimal

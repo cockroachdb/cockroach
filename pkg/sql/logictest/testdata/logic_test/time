@@ -407,6 +407,18 @@ select column_name, data_type FROM [SHOW COLUMNS FROM time_precision_test] ORDER
 id  INT8
 t   TIME(6)
 
+subtest localtime_test
+
+query B
+select localtime(3) - localtime <= '1ms'::interval
+----
+true
+
+query TTTT
+select pg_typeof(localtime), pg_typeof(current_time), pg_typeof(localtime(3)), pg_typeof(current_time(3))
+----
+time  timetz  time  timetz
+
 subtest regression_42749
 
 # cast to string to prove it is 24:00
@@ -435,7 +447,8 @@ INSERT INTO current_time_test (id) VALUES (1)
 statement ok
 INSERT INTO current_time_test (id, a, b) VALUES
   (2, current_time, current_time),
-  (3, current_time, current_time(3))
+  (3, current_time, current_time(3)),
+  (4, localtime, localtime(3))
 
 query I
 SELECT id FROM current_time_test WHERE
@@ -452,13 +465,16 @@ statement ok
 create table current_time_tzset_test (id integer, a time, b time)
 
 statement ok
-insert into current_time_tzset_test (id, a) values (1, current_time)
+insert into current_time_tzset_test (id, a) values (1, current_time), (2, localtime)
 
 statement ok
 set time zone 0
 
 statement ok
-update current_time_tzset_test set b = current_time
+update current_time_tzset_test set b = current_time where id = 1
+
+statement ok
+update current_time_tzset_test set b = localtime where id = 2
 
 # a was written at an interval 3 hours ahead, and should persist that way.
 # make sure they're roughly 3 hours apart.
@@ -468,5 +484,7 @@ query I
 select id from current_time_tzset_test WHERE
   ((a - b) BETWEEN interval '2hr 59m' and interval '3h') OR
   ((a - b) BETWEEN interval '-21hr -1m' and interval '-21hr')
+ORDER BY id ASC
 ----
 1
+2
