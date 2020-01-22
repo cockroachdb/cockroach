@@ -128,7 +128,7 @@
     "**/url-parse": "^1.4.3"
   },
   "engines": {
-    "node": ">=6",
+    "node": "^12.13.1",
     "yarn": ">=1.7.0"
   },
   "browserslist": [
