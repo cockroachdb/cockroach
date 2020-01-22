@@ -70,10 +70,6 @@ func _ASSIGN_NE(_, _, _ interface{}) uint64 {
 // coltypes.Foo for each type Foo in the coltypes.T type.
 const _TYPES_T = coltypes.Unhandled
 
-// _SEL_IND is the template type variable for the loop variable that's either
-// i or sel[i] depending on whether we're in a selection or not.
-const _SEL_IND = 0
-
 func _CHECK_COL_BODY(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
@@ -83,7 +79,7 @@ func _CHECK_COL_BODY(
 	_BUILD_HAS_NULLS bool,
 	_ALLOW_NULL_EQUALITY bool,
 ) { // */}}
-	// {{define "checkColBody"}}
+	// {{define "checkColBody" -}}
 	probeIsNull := false
 	buildIsNull := false
 	// Early bounds check.
@@ -125,9 +121,7 @@ func _CHECK_COL_BODY(
 				var unique bool
 				_ASSIGN_NE(unique, buildVal, probeVal)
 
-				if unique {
-					ht.differs[toCheck] = true
-				}
+				ht.differs[toCheck] = ht.differs[toCheck] || unique
 			}
 		}
 	}
@@ -142,7 +136,7 @@ func _CHECK_COL_WITH_NULLS(
 	nToCheck uint16,
 	_USE_SEL bool,
 ) { // */}}
-	// {{define "checkColWithNulls"}}
+	// {{define "checkColWithNulls" -}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
 			if ht.allowNullEquality {
@@ -177,7 +171,7 @@ func _REHASH_BODY(
 	_HAS_SEL bool,
 	_HAS_NULLS bool,
 ) { // */}}
-	// {{define "rehashBody"}}
+	// {{define "rehashBody" -}}
 	// Early bounds checks.
 	_ = buckets[nKeys-1]
 	// {{ if .HasSel }}
@@ -210,7 +204,7 @@ func _REHASH_BODY(
 func _COLLECT_RIGHT_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
-	// {{define "collectRightOuter"}}
+	// {{define "collectRightOuter" -}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
@@ -258,7 +252,7 @@ func _COLLECT_RIGHT_OUTER(
 func _COLLECT_NO_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
-	// {{define "collectNoOuter"}}
+	// {{define "collectNoOuter" -}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
@@ -290,7 +284,7 @@ func _COLLECT_NO_OUTER(
 }
 
 func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
-	// {{define "distinctCollectRightOuter"}}
+	// {{define "distinctCollectRightOuter" -}}
 	// Early bounds checks.
 	_ = prober.ht.groupID[batchSize-1]
 	_ = prober.probeRowUnmatched[batchSize-1]
@@ -320,7 +314,7 @@ func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _US
 func _DISTINCT_COLLECT_NO_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, _USE_SEL bool,
 ) { // */}}
-	// {{define "distinctCollectNoOuter"}}
+	// {{define "distinctCollectNoOuter" -}}
 	// Early bounds checks.
 	_ = prober.ht.groupID[batchSize-1]
 	_ = prober.buildIdx[batchSize-1]
