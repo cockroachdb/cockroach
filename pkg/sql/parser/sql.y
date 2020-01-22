@@ -8370,6 +8370,14 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+| LOCALTIMESTAMP
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| LOCALTIME
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
 | CURRENT_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
@@ -8459,6 +8467,24 @@ special_function:
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: tree.Exprs{$3.expr()}}
   }
 | CURRENT_TIME '(' error { return helpWithFunctionByName(sqllex, $1) }
+| LOCALTIMESTAMP '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| LOCALTIMESTAMP '(' a_expr ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: tree.Exprs{$3.expr()}}
+  }
+| LOCALTIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
+| LOCALTIME '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| LOCALTIME '(' a_expr ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: tree.Exprs{$3.expr()}}
+  }
+| LOCALTIME '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_USER '(' ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}

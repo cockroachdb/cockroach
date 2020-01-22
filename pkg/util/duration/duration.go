@@ -25,9 +25,30 @@ import (
 )
 
 const (
-	daysInMonth   = 30
+	// MicrosPerMilli is the amount of microseconds in a millisecond.
+	MicrosPerMilli = 1000
+	// MillisPerSec is the amount of seconds in a millisecond.
+	MillisPerSec = 1000
+	// SecsPerMinute is the amount of seconds in a minute.
+	SecsPerMinute = 60
+	// SecsPerHour is the amount of seconds in an hour.
+	SecsPerHour = 3600
+	// SecsPerDay is the amount of seconds in a day.
+	SecsPerDay = 86400
+	// DaysPerMonth is the assumed amount of days in a month.
+	// is always evaluated to 30, as it is in postgres.
+	DaysPerMonth = 30
+	// DaysPerYear is the number of days in a year.
+	// It is assumed to include a quarter day to account for the leap year.
+	// Matches DAYS_PER_YEAR in postgres.
+	DaysPerYear = 365.25
+	// MonthsPerYear is the amount of months in the year.
+	MonthsPerYear = 12
+)
+
+const (
 	nanosInDay    = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
-	nanosInMonth  = daysInMonth * nanosInDay
+	nanosInMonth  = DaysPerMonth * nanosInDay
 	nanosInSecond = 1000 * 1000 * 1000
 	nanosInMicro  = 1000
 
@@ -37,7 +58,7 @@ const (
 )
 
 var (
-	bigDaysInMonth  = big.NewInt(daysInMonth)
+	bigDaysInMonth  = big.NewInt(DaysPerMonth)
 	bigNanosInDay   = big.NewInt(nanosInDay)
 	bigNanosInMonth = big.NewInt(nanosInMonth)
 )
@@ -188,7 +209,17 @@ func FromBigInt(src *big.Int) (Duration, bool) {
 // The conversion may overflow, in which case the boolean return
 // value is false.
 func (d Duration) AsInt64() (int64, bool) {
-	mSecs, ok := arith.MulHalfPositiveWithOverflow(d.Months, nanosInMonth/nanosInSecond)
+	numYears := d.Months / 12
+	numMonthsInYear := d.Months % 12
+	// To do overflow detection with years, we have to convert to float in order
+	// to maintain accuracy, as DaysPerYear is a floating point number.
+	ySecs := float64(numYears*SecsPerDay) * DaysPerYear
+	// Since float has a higher range than int, fail if the number of seconds in the year
+	// value is greater than what an int can handle.
+	if ySecs > float64(math.MaxInt64) || ySecs < float64(math.MinInt64) {
+		return 0, false
+	}
+	mSecs, ok := arith.MulHalfPositiveWithOverflow(numMonthsInYear, nanosInMonth/nanosInSecond)
 	if !ok {
 		return 0, ok
 	}
@@ -199,15 +230,20 @@ func (d Duration) AsInt64() (int64, bool) {
 	if dSecs, ok = arith.AddWithOverflow(mSecs, dSecs); !ok {
 		return 0, ok
 	}
+	if dSecs, ok = arith.AddWithOverflow(dSecs, int64(ySecs)); !ok {
+		return 0, ok
+	}
 	return arith.AddWithOverflow(dSecs, d.nanos/nanosInSecond)
 }
 
 // AsFloat64 converts a duration to a float64 number of seconds.
 func (d Duration) AsFloat64() float64 {
-	mSecs := float64(d.Months) * float64(nanosInMonth/nanosInSecond)
-	dSecs := float64(d.Days) * float64(nanosInDay/nanosInSecond)
-	// Uses rounded instead of nanos here to remove any on-disk nanos.
-	return float64(d.rounded())/float64(nanosInSecond) + mSecs + dSecs
+	numYears := d.Months / 12
+	numMonthsInYear := d.Months % 12
+	return (float64(d.Nanos()) / float64(time.Second)) +
+		float64(d.Days*SecsPerDay) +
+		float64(numYears*SecsPerDay)*DaysPerYear +
+		float64(numMonthsInYear*DaysPerMonth*SecsPerDay)
 }
 
 // AsBigInt converts a duration to a big.Int with the number of nanoseconds.
@@ -338,7 +374,7 @@ func (d Duration) Encode() (sortNanos int64, months int64, days int64, err error
 	//
 	// TODO(dan): Compute overflow exactly, then document that EncodeBigInt can be
 	// used in overflow cases.
-	years := d.Months/12 + d.Days/daysInMonth/12 + d.nanos/nanosInMonth/12
+	years := d.Months/12 + d.Days/DaysPerMonth/12 + d.nanos/nanosInMonth/12
 	if years > maxYearsInDuration || years < minYearsInDuration {
 		return 0, 0, 0, errEncodeOverflow
 	}
@@ -484,7 +520,7 @@ func (d Duration) Div(x int64) Duration {
 // MulFloat returns a Duration representing a time length of d*x.
 func (d Duration) MulFloat(x float64) Duration {
 	monthInt, monthFrac := math.Modf(float64(d.Months) * x)
-	dayInt, dayFrac := math.Modf((float64(d.Days) * x) + (monthFrac * daysInMonth))
+	dayInt, dayFrac := math.Modf((float64(d.Days) * x) + (monthFrac * DaysPerMonth))
 
 	return MakeDuration(
 		int64((float64(d.nanos)*x)+(dayFrac*float64(nanosInDay))),
@@ -496,7 +532,7 @@ func (d Duration) MulFloat(x float64) Duration {
 // DivFloat returns a Duration representing a time length of d/x.
 func (d Duration) DivFloat(x float64) Duration {
 	monthInt, monthFrac := math.Modf(float64(d.Months) / x)
-	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * daysInMonth))
+	dayInt, dayFrac := math.Modf((float64(d.Days) / x) + (monthFrac * DaysPerMonth))
 
 	return MakeDuration(
 		int64((float64(d.nanos)/x)+(dayFrac*float64(nanosInDay))),
@@ -537,9 +573,9 @@ func (d Duration) shiftPosDaysToMonths() Duration {
 		// rate, we can never transfer more than math.MaxInt64 anyway.
 		maxMonths = math.MaxInt64 - d.Months
 	}
-	monthsFromDays := int64Min(d.Days/daysInMonth, maxMonths)
+	monthsFromDays := int64Min(d.Days/DaysPerMonth, maxMonths)
 	d.Months += monthsFromDays
-	d.Days -= monthsFromDays * daysInMonth
+	d.Days -= monthsFromDays * DaysPerMonth
 	return d
 }
 
@@ -563,9 +599,9 @@ func (d Duration) shiftNegDaysToMonths() Duration {
 		// rate, we can never transfer more than math.MaxInt64 anyway.
 		minMonths = math.MinInt64 - d.Months
 	}
-	monthsFromDays := int64Max(d.Days/daysInMonth, minMonths)
+	monthsFromDays := int64Max(d.Days/DaysPerMonth, minMonths)
 	d.Months += monthsFromDays
-	d.Days -= monthsFromDays * daysInMonth
+	d.Days -= monthsFromDays * DaysPerMonth
 	return d
 }
 
