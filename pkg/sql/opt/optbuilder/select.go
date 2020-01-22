@@ -135,7 +135,7 @@ func (b *Builder) buildDataSource(
 
 	case *tree.Subquery:
 		// Remove any target relations from the current scope's locking spec, as
-		// those only apply to relations in this statements. Interestingly, this
+		// those only apply to relations in this statement. Interestingly, this
 		// would not be necessary if we required all subqueries to have aliases
 		// like Postgres does.
 		locking = locking.withoutTargets()
@@ -1229,7 +1229,7 @@ func (b *Builder) validateLockingInFrom(
 			// the scope then raise an error. This will end up looping over all
 			// columns in scope for each of the locking targets. We could use a
 			// more efficient data structure (e.g. a hash map of relation names)
-			// to improve the complexity here, but we don't expect the number of
+			// to improve the time complexity here, but we expect the number of
 			// columns to be small enough that doing so is likely not worth it.
 			found := false
 			for _, col := range fromScope.cols {
@@ -1259,7 +1259,7 @@ func (b *Builder) rejectIfLocking(locking lockingSpec, context string) {
 }
 
 // raiseLockingContextError raises an error indicating that a row-level locking
-// clause is not permitted in the specified context. locking.set must be true.
+// clause is not permitted in the specified context. locking.isSet() must be true.
 func (b *Builder) raiseLockingContextError(locking lockingSpec, context string) {
 	panic(pgerror.Newf(pgcode.FeatureNotSupported,
 		"%s is not allowed with %s", locking.get().Strength, context))

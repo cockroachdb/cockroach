@@ -30,9 +30,10 @@ type Columnarizer struct {
 	execinfra.ProcessorBase
 	NonExplainable
 
-	allocator *Allocator
-	input     execinfra.RowSource
-	da        sqlbase.DatumAlloc
+	allocator  *Allocator
+	input      execinfra.RowSource
+	da         sqlbase.DatumAlloc
+	initStatus OperatorInitStatus
 
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
@@ -76,13 +77,19 @@ func NewColumnarizer(
 
 // Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
-	c.batch = c.allocator.NewMemBatch(c.typs)
-	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
-	for i := range c.buffered {
-		c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
+	// We don't want to call Start on the input to columnarizer and allocating
+	// internal objects several times if Init method is called more than once, so
+	// we have this check in place.
+	if c.initStatus == OperatorNotInitialized {
+		c.batch = c.allocator.NewMemBatch(c.typs)
+		c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
+		for i := range c.buffered {
+			c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
+		}
+		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+		c.input.Start(c.ctx)
+		c.initStatus = OperatorInitialized
 	}
-	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-	c.input.Start(c.ctx)
 }
 
 // Next is part of the Operator interface.

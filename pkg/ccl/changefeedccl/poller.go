@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -246,7 +247,7 @@ func (p *poller) rangefeedImplIter(ctx context.Context, i int) error {
 	// contention pattern and use additional goroutines. it's not clear which
 	// solution is best without targeted performance testing, so we're choosing
 	// the faster-to-implement solution for now.
-	frontier := makeSpanFrontier(spans...)
+	frontier := span.MakeFrontier(spans...)
 
 	rangeFeedStartTS := lastHighwater
 	for _, span := range p.spans {
