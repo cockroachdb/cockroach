@@ -275,3 +275,156 @@ query I
 SELECT xyz.z FROM y INNER LOOKUP JOIN xyz ON y.y = xyz.y
 ----
 NULL
+
+# Tests for NeededColumnFamilyIDs logic. This function is used for point lookups
+# to determine the minimal set of column families which need to be scanned.
+subtest needed_column_families
+
+statement ok
+CREATE TABLE t1 (
+  a INT PRIMARY KEY, b INT NOT NULL, c INT, d INT,
+  FAMILY (d), FAMILY (c), FAMILY (b), FAMILY (a)
+);
+INSERT INTO t1 VALUES (10, 20, 30, 40)
+
+# A point lookup on the primary key column should use family 0 (even if the
+# column is not in that family) because the column can be decoded from the key.
+query I
+SELECT a FROM t1 WHERE a = 10
+----
+10
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t1@primary
+spans  /10/0-/10/1
+
+# A point lookup on a non-nullable column allows us to scan only that column
+# family.
+query I
+SELECT b FROM t1 WHERE a = 10
+----
+20
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT b FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t1@primary
+spans  /10/2/1-/10/2/2
+
+# Even if we also select the primary key column, we can still scan the single
+# column family because that column can be decoded from the key.
+query II
+SELECT a, b FROM t1 WHERE a = 10
+----
+10  20
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a, b FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t1@primary
+spans  /10/2/1-/10/2/2
+
+# A point lookup on a nullable column requires also scanning column family 0 as
+# a sentinel.
+query I
+SELECT c FROM t1 WHERE a = 10
+----
+30
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT c FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t1@primary
+spans  /10/0-/10/1/2
+
+# A point lookup on two columns in non-adjacent column families results in two
+# spans.
+query II
+SELECT b, d FROM t1 WHERE a = 10
+----
+20  40
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT b, d FROM t1 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t1@primary
+spans  /10/0-/10/1 /10/2/1-/10/2/2
+
+# Unique secondary indexes store non-indexed primary key columns in column
+# family 0.
+statement ok
+CREATE UNIQUE INDEX b_idx ON t1 (b) STORING (c, d)
+
+query I
+SELECT a FROM t1 WHERE b = 20
+----
+10
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a FROM t1 WHERE b = 20] WHERE field IN ('table', 'spans')
+----
+table  t1@b_idx
+spans  /20/0-/20/1
+
+# If the primary key column is composite, we do need to scan its column family
+# to retrieve its value.
+statement ok
+CREATE TABLE t2 (
+  a DECIMAL PRIMARY KEY, b INT, c INT NOT NULL, d INT,
+  FAMILY (d), FAMILY (c), FAMILY (b), FAMILY (a)
+);
+INSERT INTO t2 VALUES (10.00, 20, 30, 40)
+
+# A point lookup on the primary key column should use its family.
+query T
+SELECT a FROM t2 WHERE a = 10
+----
+10.00
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a FROM t2 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t2@primary
+spans  /1E+1/3/1-/1E+1/3/2
+
+# A point lookup on `a` and `b` should scan both of their families.
+query TI
+SELECT a, b FROM t2 WHERE a = 10
+----
+10.00  20
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a, b FROM t2 WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t2@primary
+spans  /1E+1/2/1-/1E+1/3/2
+
+# Secondary indexes always store their composite values in column family 0.
+statement ok
+CREATE UNIQUE INDEX a_idx ON t2 (a) STORING (b, c, d)
+
+# A point lookup on the composite column should use family 0.
+query TI
+SELECT a, b FROM t2@a_idx WHERE a = 10
+----
+10.00  20
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a FROM t2@a_idx WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t2@a_idx
+spans  /1E+1/0-/1E+1/1
+
+# A point lookup on `a` and `b` should use column family 0 and b's family.
+query TI
+SELECT a, b FROM t2@a_idx WHERE a = 10
+----
+10.00  20
+
+query TT
+SELECT field, description FROM [EXPLAIN SELECT a, b FROM t2@a_idx WHERE a = 10] WHERE field IN ('table', 'spans')
+----
+table  t2@a_idx
+spans  /1E+1/0-/1E+1/1 /1E+1/2/1-/1E+1/2/2

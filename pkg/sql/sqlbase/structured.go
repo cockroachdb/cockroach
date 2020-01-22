@@ -3224,23 +3224,28 @@ func (desc *TableDescriptor) ColumnTypes() []types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
-// ColumnTypesWithMutations returns the types of all columns, optionally
-// including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
-	nCols := len(desc.Columns)
-	if mutations {
-		nCols += len(desc.Mutations)
-	}
-	types := make([]types.T, 0, nCols)
-	for i := range desc.Columns {
-		types = append(types, desc.Columns[i].Type)
-	}
+// ColumnsWithMutations returns all column descriptors, optionally including
+// mutation columns.
+func (desc *TableDescriptor) ColumnsWithMutations(mutations bool) []ColumnDescriptor {
+	n := len(desc.Columns)
+	columns := desc.Columns[:n:n] // immutable on append
 	if mutations {
 		for i := range desc.Mutations {
 			if col := desc.Mutations[i].GetColumn(); col != nil {
-				types = append(types, col.Type)
+				columns = append(columns, *col)
 			}
 		}
+	}
+	return columns
+}
+
+// ColumnTypesWithMutations returns the types of all columns, optionally
+// including mutation columns, which will be returned if the input bool is true.
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
+	columns := desc.ColumnsWithMutations(mutations)
+	types := make([]types.T, len(columns))
+	for i := range columns {
+		types[i] = columns[i].Type
 	}
 	return types
 }

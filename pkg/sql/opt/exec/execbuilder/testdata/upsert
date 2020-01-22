@@ -123,6 +123,7 @@ CREATE TABLE indexed (
   b INT,
   c INT DEFAULT(10),
   d INT AS (a + c) STORED,
+  FAMILY (a, b, c, d),
   UNIQUE INDEX secondary (d, b),
   CHECK (c > 0)
 )
