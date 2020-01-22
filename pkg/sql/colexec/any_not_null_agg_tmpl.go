@@ -167,8 +167,8 @@ func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
 func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+	// {{define "findAnyNotNull" -}}
 
-	// {{define "findAnyNotNull"}}
 	if a.groups[i] {
 		// If this is a new group, check if any non-nulls have been found for the
 		// current group. The `a.curIdx` check is necessary because for the first
@@ -189,11 +189,8 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
-		// Explicit template language is used here because the type receiver differs
-		// from the rest of the template file.
-		// TODO(asubiotto): Figure out a way to alias this.
-		// v := {{ .Global.Get "col" "int(i)" }}
-		// {{ .Global.Set "a.col" "a.curIdx" "v" }}
+		v := execgen.UNSAFEGET(col, int(i))
+		execgen.SET(a.col, a.curIdx, v)
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}
