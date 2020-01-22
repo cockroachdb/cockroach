@@ -24,16 +24,17 @@ func TestRandStep(t *testing.T) {
 
 	const minEachType = 5
 	config := GeneratorConfig{
-		OpPGetMissing:    1,
-		OpPGetExisting:   1,
-		OpPPutMissing:    1,
-		OpPPutExisting:   1,
-		OpPBatch:         1,
-		OpPClosureTxn:    1,
-		OpPSplitNew:      1,
-		OpPSplitAgain:    1,
-		OpPMergeNotSplit: 1,
-		OpPMergeIsSplit:  1,
+		OpPGetMissing:              1,
+		OpPGetExisting:             1,
+		OpPPutMissing:              1,
+		OpPPutExisting:             1,
+		OpPBatch:                   1,
+		OpPClosureTxn:              1,
+		OpPClosureTxnCommitInBatch: 1,
+		OpPSplitNew:                1,
+		OpPSplitAgain:              1,
+		OpPMergeNotSplit:           1,
+		OpPMergeIsSplit:            1,
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -76,7 +77,14 @@ func TestRandStep(t *testing.T) {
 				counts[OpPPutMissing]++
 			}
 		case *ClosureTxnOperation:
-			counts[OpPClosureTxn]++
+			if o.CommitInBatch != nil {
+				if o.Type != ClosureTxnType_Commit {
+					t.Fatalf(`commit type %s is invalid with CommitInBatch`, o.Type)
+				}
+				counts[OpPClosureTxnCommitInBatch]++
+			} else {
+				counts[OpPClosureTxn]++
+			}
 		case *BatchOperation:
 			counts[OpPBatch]++
 		case *SplitOperation:

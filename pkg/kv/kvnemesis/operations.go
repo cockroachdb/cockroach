@@ -99,10 +99,7 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		newFctx.indent = fctx.indent + `  `
 		newFctx.receiver = `b`
 		w.WriteString(`{`)
-		w.WriteString("\n")
-		w.WriteString(newFctx.indent)
-		w.WriteString(`b := &Batch{}`)
-		formatOps(w, newFctx, o.Ops)
+		o.format(w, newFctx)
 		w.WriteString("\n")
 		w.WriteString(newFctx.indent)
 		w.WriteString(fctx.receiver)
@@ -119,6 +116,16 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(fctx.receiver)
 		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *client.Txn) error {`, txnName)
 		formatOps(w, newFctx, o.Ops)
+		if o.CommitInBatch != nil {
+			newFctx.receiver = `b`
+			o.CommitInBatch.format(w, newFctx)
+			newFctx.receiver = txnName
+			w.WriteString("\n")
+			w.WriteString(newFctx.indent)
+			w.WriteString(newFctx.receiver)
+			w.WriteString(`.CommitInBatch(ctx, b)`)
+			o.CommitInBatch.Result.format(w)
+		}
 		w.WriteString("\n")
 		w.WriteString(newFctx.indent)
 		switch o.Type {
@@ -166,6 +173,13 @@ func (op SplitOperation) format(w *strings.Builder) {
 func (op MergeOperation) format(w *strings.Builder) {
 	fmt.Fprintf(w, `db.AdminMerge(ctx, %s)`, roachpb.Key(op.Key))
 	op.Result.format(w)
+}
+
+func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
+	w.WriteString("\n")
+	w.WriteString(fctx.indent)
+	w.WriteString(`b := &Batch{}`)
+	formatOps(w, fctx, op.Ops)
 }
 
 func (r Result) format(w *strings.Builder) {
