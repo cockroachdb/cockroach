@@ -917,6 +917,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
+<tr><td><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td></tr>
+<tr><td><code>crdb_internal.get_zone_config(namespace_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td></td></tr>
 <tr><td><code>crdb_internal.is_admin() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Retrieves the current user’s admin status.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.no_constant_folding(input: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
