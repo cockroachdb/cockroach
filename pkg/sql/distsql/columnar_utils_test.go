@@ -12,6 +12,9 @@ package distsql
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -44,6 +47,14 @@ func verifyColOperator(
 	pspec *execinfrapb.ProcessorSpec,
 	memoryLimit int64,
 ) error {
+	const floatPrecision = 0.0000001
+	if colsForEqCheck == nil {
+		colsForEqCheck = make([]uint32, len(outputTypes))
+		for i := range colsForEqCheck {
+			colsForEqCheck[i] = uint32(i)
+		}
+	}
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, err := engine.NewTempEngine(engine.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
@@ -137,24 +148,24 @@ func verifyColOperator(
 	defer outProc.ConsumerClosed()
 	defer outColOp.ConsumerClosed()
 
-	scratchRow := make(sqlbase.EncDatumRow, len(colsForEqCheck))
-	scratchTypes := make([]types.T, len(colsForEqCheck))
-	printRowForChecking := func(r sqlbase.EncDatumRow) string {
-		if colsForEqCheck == nil {
-			return r.String(outputTypes)
-		}
+	printRowForChecking := func(r sqlbase.EncDatumRow) []string {
+		res := make([]string, len(colsForEqCheck))
 		for i, col := range colsForEqCheck {
-			scratchRow[i] = r[col]
-			scratchTypes[i] = outputTypes[col]
+			res[i] = r[col].String(&outputTypes[col])
 		}
-		return scratchRow.String(scratchTypes)
+		return res
 	}
-	var procRows, colOpRows []string
+	var procRows, colOpRows [][]string
 	var procMetas, colOpMetas []execinfrapb.ProducerMetadata
 	for {
 		rowProc, metaProc := outProc.Next()
 		if rowProc != nil {
-			procRows = append(procRows, printRowForChecking(rowProc))
+			row := printRowForChecking(rowProc)
+			if len(row) != len(colsForEqCheck) {
+				return errors.Errorf("unexpectedly processor returned a row of"+
+					"different length\n%s", row)
+			}
+			procRows = append(procRows, row)
 		}
 		if metaProc != nil {
 			if metaProc.Err == nil {
@@ -165,6 +176,11 @@ func verifyColOperator(
 		}
 		rowColOp, metaColOp := outColOp.Next()
 		if rowColOp != nil {
+			row := printRowForChecking(rowColOp)
+			if len(row) != len(colsForEqCheck) {
+				return errors.Errorf("unexpectedly columnar operator returned a row of "+
+					"different length\n%s", row)
+			}
 			colOpRows = append(colOpRows, printRowForChecking(rowColOp))
 		}
 		if metaColOp != nil {
@@ -212,15 +228,66 @@ func verifyColOperator(
 			procRows, colOpRows, procMetas, colOpMetas)
 	}
 
+	printRowsOutput := func(rows [][]string) string {
+		res := ""
+		for i, row := range rows {
+			res = fmt.Sprintf("%s\n%d: %v", res, i, row)
+		}
+		return res
+	}
+
+	datumsMatch := func(expected, actual string, typ *types.T) (bool, error) {
+		switch typ.Family() {
+		case types.FloatFamily:
+			// Some operations on floats (for example, aggregation) can produce
+			// slightly different results in the row-by-row and vectorized engines.
+			// That's why we handle them separately.
+
+			// We first try direct string matching. If that succeeds, then great!
+			if expected == actual {
+				return true, nil
+			}
+			// If only one of the values is NULL, then the datums do not match.
+			if expected == `NULL` || actual == `NULL` {
+				return false, nil
+			}
+			// Now we will try parsing both strings as floats and check whether they
+			// are within allowed precision from each other.
+			expFloat, err := strconv.ParseFloat(expected, 64)
+			if err != nil {
+				return false, err
+			}
+			actualFloat, err := strconv.ParseFloat(actual, 64)
+			if err != nil {
+				return false, err
+			}
+			return math.Abs(expFloat-actualFloat) < floatPrecision, nil
+		default:
+			return expected == actual, nil
+		}
+	}
+
 	if anyOrder {
 		used := make([]bool, len(colOpRows))
-		for i, expStr := range procRows {
+		for i, expStrRow := range procRows {
 			rowMatched := false
-			for j, retStr := range colOpRows {
+			for j, retStrRow := range colOpRows {
 				if used[j] {
 					continue
 				}
-				if expStr == retStr {
+				foundDifference := false
+				for k, col := range colsForEqCheck {
+					match, err := datumsMatch(expStrRow[k], retStrRow[k], &outputTypes[col])
+					if err != nil {
+						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
+							expStrRow, retStrRow, err.Error())
+					}
+					if !match {
+						foundDifference = true
+						break
+					}
+				}
+				if !foundDifference {
 					rowMatched = true
 					used[j] = true
 					break
@@ -228,18 +295,26 @@ func verifyColOperator(
 			}
 			if !rowMatched {
 				return errors.Errorf("different results: no match found for row %d of processor output\n"+
-					"processor output:\n		%v\ncolumnar operator output:\n		%v", i, procRows, colOpRows)
+					"processor output:%s\n\ncolumnar operator output:%s",
+					i, printRowsOutput(procRows), printRowsOutput(colOpRows))
 			}
 		}
 	} else {
-		for i, expStr := range procRows {
-			retStr := colOpRows[i]
+		for i, expStrRow := range procRows {
+			retStrRow := colOpRows[i]
 			// anyOrder is false, so the result rows must match in the same order.
-			if expStr != retStr {
-				return errors.Errorf(
-					"different results on row %d;\nexpected:\n%s\ngot:\n%s",
-					i, expStr, retStr,
-				)
+			for k, col := range colsForEqCheck {
+				match, err := datumsMatch(expStrRow[k], retStrRow[k], &outputTypes[col])
+				if err != nil {
+					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
+						expStrRow, retStrRow, err.Error())
+				}
+				if !match {
+					return errors.Errorf(
+						"different results on row %d;\nexpected:\n%s\ngot:\n%s",
+						i, expStrRow, retStrRow,
+					)
+				}
 			}
 		}
 	}
