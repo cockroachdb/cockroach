@@ -547,6 +547,12 @@ type RangeCond struct {
 	Left      Expr
 	From, To  Expr
 
+	// Typed version of Left for the comparison with To (where it may be
+	// type-checked differently). After type-checking, Left is set to the typed
+	// version for the comparison with From, and leftTo is set to the typed
+	// version for the comparison with To.
+	leftTo TypedExpr
+
 	typeAnnotation
 }
 
@@ -566,14 +572,21 @@ func (node *RangeCond) Format(ctx *FmtCtx) {
 	binExprFmtWithParen(ctx, node.From, "AND", node.To, true)
 }
 
-// TypedLeft returns the RangeCond's left expression as a TypedExpr.
-func (node *RangeCond) TypedLeft() TypedExpr {
+// TypedLeftFrom returns the RangeCond's left expression as a TypedExpr, in the
+// context of a comparison with TypedFrom().
+func (node *RangeCond) TypedLeftFrom() TypedExpr {
 	return node.Left.(TypedExpr)
 }
 
 // TypedFrom returns the RangeCond's from expression as a TypedExpr.
 func (node *RangeCond) TypedFrom() TypedExpr {
 	return node.From.(TypedExpr)
+}
+
+// TypedLeftTo returns the RangeCond's left expression as a TypedExpr, in the
+// context of a comparison with TypedTo().
+func (node *RangeCond) TypedLeftTo() TypedExpr {
+	return node.leftTo
 }
 
 // TypedTo returns the RangeCond's to expression as a TypedExpr.

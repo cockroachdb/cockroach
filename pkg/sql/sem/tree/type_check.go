@@ -1092,16 +1092,16 @@ func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired *types.T) (Typ
 
 // TypeCheck implements the Expr interface.
 func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	leftTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, GT, expr.Left, expr.From)
+	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, GT, expr.Left, expr.From)
 	if err != nil {
 		return nil, err
 	}
-	_, toTyped, _, _, err := typeCheckComparisonOp(ctx, LT, expr.Left, expr.To)
+	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, LT, expr.Left, expr.To)
 	if err != nil {
 		return nil, err
 	}
-
-	expr.Left, expr.From, expr.To = leftTyped, fromTyped, toTyped
+	expr.Left, expr.From = leftFromTyped, fromTyped
+	expr.leftTo, expr.To = leftToTyped, toTyped
 	expr.typ = types.Bool
 	return expr, nil
 }

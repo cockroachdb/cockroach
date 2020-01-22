@@ -94,6 +94,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`12 BETWEEN 24 AND 36`, `false`},
 		{`12 BETWEEN 10 AND 20`, `true`},
 		{`10 BETWEEN a AND 20`, `a <= 10`},
+		{`(1 + 2) BETWEEN b AND c`, `(b <= 3) AND (c >= 3)`},
 		{`a BETWEEN b AND c`, `(a >= b) AND (a <= c)`},
 		{`a BETWEEN SYMMETRIC b AND c`, `((a >= b) AND (a <= c)) OR ((a >= c) AND (a <= b))`},
 		{`a NOT BETWEEN b AND c`, `(a < b) OR (a > c)`},
