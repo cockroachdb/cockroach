@@ -41,7 +41,7 @@ func (d FakeResumer) Resume(_ context.Context, _ interface{}, _ chan<- tree.Datu
 	return nil
 }
 
-func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn) error {
+func (d FakeResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
 	if d.Fail != nil {
 		return d.Fail()
 	}

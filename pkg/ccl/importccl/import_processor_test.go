@@ -495,7 +495,7 @@ func (r *cancellableImportResumer) OnTerminal(
 	r.wrapped.OnTerminal(ctx, status, resultsCh)
 }
 
-func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our OnSuccess handler returned an
 	// error (after pausing the job), we need to short-circuits
