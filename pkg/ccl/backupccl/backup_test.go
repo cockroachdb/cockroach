@@ -2664,6 +2664,35 @@ func TestBackupRestorePermissions(t *testing.T) {
 			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, localFoo,
 		)
 	})
+
+	// Ensure that non-root users with the admin role can backup and restore.
+	t.Run("non-root-admin", func(t *testing.T) {
+		sqlDB.Exec(t, "GRANT admin TO testuser")
+
+		t.Run("backup-table", func(t *testing.T) {
+			testLocalFoo := fmt.Sprintf("nodelocal:///%s", t.Name())
+			testLocalBackupStmt := fmt.Sprintf(`BACKUP data.bank TO '%s'`, testLocalFoo)
+			if _, err := testuser.Exec(testLocalBackupStmt); err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t, `CREATE DATABASE data2`)
+			if _, err := testuser.Exec(`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='data2')`, testLocalFoo); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("backup-database", func(t *testing.T) {
+			testLocalFoo := fmt.Sprintf("nodelocal:///%s", t.Name())
+			testLocalBackupStmt := fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, testLocalFoo)
+			if _, err := testuser.Exec(testLocalBackupStmt); err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t, "DROP DATABASE data")
+			if _, err := testuser.Exec(`RESTORE DATABASE data FROM $1`, testLocalFoo); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
 }
 
 func TestRestoreDatabaseVersusTable(t *testing.T) {

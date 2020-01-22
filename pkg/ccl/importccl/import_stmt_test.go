@@ -11,10 +11,12 @@ package importccl
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -23,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1446,6 +1449,37 @@ func TestImportCSVStmt(t *testing.T) {
 			t, `relation "t" already exists`,
 			fmt.Sprintf(`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]),
 		)
+	})
+
+	// Test basic role based access control. Users who have the admin role should
+	// be able to IMPORT.
+	t.Run("RBAC", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE USER testuser`)
+		sqlDB.Exec(t, `GRANT admin TO testuser`)
+		pgURL, cleanupFunc := sqlutils.PGUrl(
+			t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser", url.User("testuser"),
+		)
+		defer cleanupFunc()
+		testuser, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer testuser.Close()
+
+		t.Run("IMPORT TABLE", func(t *testing.T) {
+			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_table_t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("IMPORT INTO", func(t *testing.T) {
+			if _, err := testuser.Exec("CREATE TABLE rbac_into_t (a INT8 PRIMARY KEY, b STRING)"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_t (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+				t.Fatal(err)
+			}
+		})
 	})
 
 	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
