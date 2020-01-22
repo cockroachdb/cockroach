@@ -280,18 +280,17 @@ func NeededColumnFamilyIDs(
 func SplitSpanIntoSeparateFamilies(
 	appendTo roachpb.Spans, span roachpb.Span, neededFamilies []FamilyID,
 ) roachpb.Spans {
+	span.Key = span.Key[:len(span.Key):len(span.Key)] // avoid mutation and aliasing
 	for i, familyID := range neededFamilies {
-		var tempSpan roachpb.Span
-		tempSpan.Key = make(roachpb.Key, len(span.Key))
-		copy(tempSpan.Key, span.Key)
-		tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
-		tempSpan.EndKey = tempSpan.Key.PrefixEnd()
+		var famSpan roachpb.Span
+		famSpan.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
+		famSpan.EndKey = famSpan.Key.PrefixEnd()
 		if i > 0 && familyID == neededFamilies[i-1]+1 {
 			// This column family is adjacent to the previous one. We can merge
 			// the two spans into one.
-			appendTo[len(appendTo)-1].EndKey = tempSpan.EndKey
+			appendTo[len(appendTo)-1].EndKey = famSpan.EndKey
 		} else {
-			appendTo = append(appendTo, tempSpan)
+			appendTo = append(appendTo, famSpan)
 		}
 	}
 	return appendTo
