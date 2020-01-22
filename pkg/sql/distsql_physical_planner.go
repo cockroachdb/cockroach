@@ -2224,8 +2224,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			RightEqColumns:       rightEqCols,
 			OnExpr:               onExpr,
 			Type:                 joinType,
-			LeftEqColumnsAreKey:  n.pred.leftEqKey,
-			RightEqColumnsAreKey: n.pred.rightEqKey,
+			LeftEqColumnsAreKey:  n.pred.leftEqKey && len(leftEqCols) > 0,
+			RightEqColumnsAreKey: n.pred.rightEqKey && len(rightEqCols) > 0,
 		}
 	} else {
 		core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
