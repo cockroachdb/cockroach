@@ -400,6 +400,15 @@ func (p *planner) Txn() *client.Txn {
 	return p.txn
 }
 
+func (p *planner) step(ctx context.Context) error {
+	if p.extendedEvalCtx.TxnReadOnly {
+		// A read-only txn does not contain writes and thus cannot step.
+		// See the comment over (txnState).stepLocked for a rationale.
+		return nil
+	}
+	return p.txn.Step(ctx)
+}
+
 func (p *planner) User() string {
 	return p.SessionData().User
 }
