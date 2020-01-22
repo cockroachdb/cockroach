@@ -50,7 +50,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	}()
 
 	// Check that even though the files aren't created, they are still recorded in SSTs().
-	require.Equal(t, len(scratch.SSTs()), 1)
+	require.Equal(t, len(scratch.SSTs()), 0)
 
 	// Check that the storage lazily creates the files on write.
 	for _, fileName := range scratch.SSTs() {
