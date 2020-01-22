@@ -549,14 +549,23 @@ typedef void* DBFileLock;
 // DBLockFile sets a lock on the specified file using RocksDB's file locking interface.
 DBStatus DBLockFile(DBSlice filename, DBFileLock* lock);
 
-// DBUnlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for
+// DBUnlockFile unlocks the file associated with the specified lock and GCs any allocated memory for
 // the lock.
 DBStatus DBUnlockFile(DBFileLock lock);
 
 // DBExportToSst exports changes over the keyrange and time interval between the
 // start and end DBKeys to an SSTable using an IncrementalIterator.
-DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
-                       DBEngine* engine, DBString* data, DBString* write_intent, DBString* summary);
+// If target_size is positive, it indicates that the export should produce SSTs
+// which are roughly target size. Specifically, it will produce SSTs which contain
+// all relevant versions of a key and will not add the first version of a new
+// key if it would lead to the SST exceeding the target_size. If export_all_revisions
+// is false, the returned SST will be smaller than target_size so long as the first
+// kv pair is smaller than target_size. If export_all_revisions is true then
+// target_size may be exceeded. If the SST construction stops due to the target_size,
+// then resume will be set to the value of the resume key.
+DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64_t target_size,
+                       DBIterOptions iter_opts, DBEngine* engine, DBString* data,
+                       DBString* write_intent, DBString* summary, DBString* resume);
 
 // DBEnvOpenReadableFile opens a DBReadableFile in the given engine.
 DBStatus DBEnvOpenReadableFile(DBEngine* db, DBSlice path, DBReadableFile* file);

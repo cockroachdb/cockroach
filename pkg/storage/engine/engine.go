@@ -200,9 +200,19 @@ type Reader interface {
 	// within the interval is exported. Deletions are included if all revisions are
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
+	// If targetSize is positive, it indicates that the export should produce SSTs
+	// which are roughly target size. Specifically, it will produce SSTs which contain
+	// all relevant versions of a key and will not add the first version of a new
+	// key if it would lead to the SST exceeding the targetSize. If exportAllRevisions
+	// is false, the returned SST will be smaller than target_size so long as the first
+	// kv pair is smaller than targetSize. If exportAllRevisions is true then
+	// targetSize may be exceeded by as much as the size of all of the versions of
+	// the last key. If the SST construction stops due to the targetSize,
+	// then a non-nil resumeKey will be returned.
 	ExportToSst(
-		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp, exportAllRevisions bool, io IterOptions,
-	) ([]byte, roachpb.BulkOpSummary, error)
+		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
+		exportAllRevisions bool, targetSize uint64, io IterOptions,
+	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise.
 	//
 	// Deprecated: use MVCCGet instead.
