@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -350,8 +351,10 @@ func (s *Server) getReportingInfo(
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, err := s.internalExecutor.Query(
-		ctx, "read-setting", nil /* txn */, "SELECT name FROM system.settings",
+	if datums, err := s.internalExecutor.QueryEx(
+		ctx, "read-setting", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"SELECT name FROM system.settings",
 	); err != nil {
 		log.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
@@ -362,10 +365,11 @@ func (s *Server) getReportingInfo(
 		}
 	}
 
-	if datums, err := s.internalExecutor.Query(
+	if datums, err := s.internalExecutor.QueryEx(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warning(ctx, err)

@@ -99,10 +99,11 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	}
 
 	// Check if the user/role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(
+	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		`select "isRole" from system.users where username = $1`,
 		normalizedUsername,
 	)

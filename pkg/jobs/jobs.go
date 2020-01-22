@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -456,7 +457,9 @@ func (j *Job) load(ctx context.Context) error {
 	var progress *jobspb.Progress
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, stmt, *j.id)
+		row, err := j.registry.ex.QueryRowEx(
+			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			stmt, *j.id)
 		if err != nil {
 			return err
 		}

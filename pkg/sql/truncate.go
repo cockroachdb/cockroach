@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -386,10 +387,11 @@ func reassignReferencedTables(
 func reassignComment(
 	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"select-table-comment",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2`,
 		keys.TableCommentType,
 		oldTableDesc.ID)
@@ -398,10 +400,11 @@ func reassignComment(
 	}
 
 	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
 			"set-table-comment",
 			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.TableCommentType,
 			newTableDesc.ID,
@@ -410,10 +413,11 @@ func reassignComment(
 			return err
 		}
 
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
 			"delete-comment",
 			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.TableCommentType,
 			oldTableDesc.ID)
@@ -444,10 +448,11 @@ func reassignComment(
 func reassignColumnComment(
 	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"select-column-comment",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
 		keys.ColumnCommentType,
 		oldID,
@@ -490,10 +495,11 @@ func reassignColumnComment(
 func reassignIndexComment(
 	ctx context.Context, p *planner, oldTableID, newTableID sqlbase.ID, indexID sqlbase.IndexID,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"select-index-comment",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
 		keys.IndexCommentType,
 		oldTableID,

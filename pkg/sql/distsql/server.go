@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -283,7 +284,7 @@ func (ds *ServerImpl) setupFlow(
 			sd.DurationAdditionMode = duration.AdditionModeLegacy
 		}
 		ie := &lazyInternalExecutor{
-			newInternalExecutor: func() tree.InternalExecutor {
+			newInternalExecutor: func() sqlutil.InternalExecutor {
 				return ds.SessionBoundInternalExecutorFactory(ctx, sd)
 			},
 		}
@@ -574,17 +575,31 @@ func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) er
 // itself only on the first call to QueryRow.
 type lazyInternalExecutor struct {
 	// Set when an internal executor has been initialized.
-	tree.InternalExecutor
+	sqlutil.InternalExecutor
 
 	// Used for initializing the internal executor exactly once.
 	once sync.Once
 
 	// newInternalExecutor must be set when instantiating a lazyInternalExecutor,
 	// it provides an internal executor to use when necessary.
-	newInternalExecutor func() tree.InternalExecutor
+	newInternalExecutor func() sqlutil.InternalExecutor
 }
 
-var _ tree.InternalExecutor = &lazyInternalExecutor{}
+var _ sqlutil.InternalExecutor = &lazyInternalExecutor{}
+
+func (ie *lazyInternalExecutor) QueryRowEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	opts sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	ie.once.Do(func() {
+		ie.InternalExecutor = ie.newInternalExecutor()
+	})
+	return ie.InternalExecutor.QueryRowEx(ctx, opName, txn, opts, stmt, qargs...)
+}
 
 func (ie *lazyInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},

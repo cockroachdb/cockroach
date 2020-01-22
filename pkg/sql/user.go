@@ -99,8 +99,10 @@ func retrieveUserAndPassword(
 	err = runFn(func(ctx context.Context) error {
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 			`WHERE username=$1 AND "isRole" = false`
-		values, err := ie.QueryRow(
-			ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
+		values, err := ie.QueryRowEx(
+			ctx, "get-hashed-pwd", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 		}
@@ -128,8 +130,10 @@ var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 // The map value is true if the map key is a role, false if it is a user.
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "read-users", p.txn, query)
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		ctx, "read-users", p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		query)
 	if err != nil {
 		return nil, err
 	}

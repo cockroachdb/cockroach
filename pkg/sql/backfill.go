@@ -1145,7 +1145,9 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					idx.Name, idx.ColumnNames))
 			}
 			col := idx.ColumnNames[0]
-			row, err := evalCtx.InternalExecutor.QueryRow(ctx, "verify-inverted-idx-count", txn,
+			ie := evalCtx.InternalExecutor.(*InternalExecutor)
+			row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
+				sqlbase.InternalExecutorSessionDataOverride{},
 				fmt.Sprintf(
 					`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%s)), 0) FROM [%d AS t]`,
 					col, tableDesc.ID,
@@ -1213,7 +1215,8 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				ie.tcModifier = nil
 			}()
 
-			row, err := newEvalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
+			row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
+				sqlbase.InternalExecutorSessionDataOverride{},
 				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d] AS OF SYSTEM TIME %s`,
 					tableDesc.ID, idx.ID, readAsOf.AsOfSystemTime()))
 			if err != nil {
@@ -1248,7 +1251,9 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		var tableRowCountTime time.Duration
 		start := timeutil.Now()
 		// Count the number of rows in the table.
-		cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
+		ie := evalCtx.InternalExecutor.(*InternalExecutor)
+		cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
+			sqlbase.InternalExecutorSessionDataOverride{},
 			fmt.Sprintf(`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
 				tableDesc.ID, readAsOf.AsOfSystemTime()))
 		if err != nil {

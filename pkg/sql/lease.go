@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -523,8 +524,10 @@ func CountLeases(
 	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME %s WHERE `,
 		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
-	values, err := executor.QueryRow(
-		ctx, "count-leases", nil /* txn */, stmt, at.GoTime(),
+	values, err := executor.QueryRowEx(
+		ctx, "count-leases", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		stmt, at.GoTime(),
 	)
 	if err != nil {
 		return 0, err
