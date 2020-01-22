@@ -554,7 +554,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
     return (
       <div>
-        <h2>Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC</h2>
+        <h2 className="base-heading">Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC</h2>
         <table className="range-table">
           <tbody>
             {

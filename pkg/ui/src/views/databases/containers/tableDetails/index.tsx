@@ -88,7 +88,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
             <Link to="/databases/tables">&lt; Back to Databases</Link>
           </section>
           <div className="database-summary-title">
-            <h2>{ title }</h2>
+            <h2 className="base-heading">{ title }</h2>
           </div>
           <div className="content l-columns">
             <div className="l-columns__left">

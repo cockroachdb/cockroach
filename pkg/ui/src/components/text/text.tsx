@@ -18,6 +18,7 @@ export interface TextProps {
   disabled?: boolean;
   children: React.ReactNode;
   className?: string;
+  noWrap?: boolean;
 }
 
 export enum TextTypes {
@@ -60,25 +61,52 @@ const getClassByTextType = (textType: TextTypes) => {
   }
 };
 
+const getElementByTextType = (textType: TextTypes) => {
+  switch (textType) {
+    case TextTypes.Heading1:
+      return "h1";
+    case TextTypes.Heading2:
+      return "h2";
+    case TextTypes.Heading3:
+      return "h3";
+    case TextTypes.Heading4:
+      return "h4";
+    case TextTypes.Heading5:
+      return "h5";
+    case TextTypes.Heading6:
+      return "h6";
+    case TextTypes.Body:
+    case TextTypes.BodyStrong:
+    case TextTypes.Caption:
+    case TextTypes.CaptionStrong:
+    default:
+      return "span";
+  }
+};
+
 Text.defaultProps = {
   textType: TextTypes.Body,
   disabled: false,
   className: "",
+  noWrap: false,
 };
 
 export function Text(props: TextProps) {
-  const { textType, disabled, className } = props;
+  const { textType, disabled, noWrap, className } = props;
   const textTypeClass = cn(
     "text",
     getClassByTextType(textType),
     {
       "text--disabled": disabled,
+      "text--no-wrap": noWrap,
     },
     className,
   );
-  return (
-    <span className={textTypeClass}>
-      {props.children}
-    </span>
-  );
+  const elementName = getElementByTextType(textType);
+
+  const componentProps = {
+    className: textTypeClass,
+  };
+
+  return React.createElement(elementName, componentProps, props.children);
 }

@@ -35,7 +35,7 @@ export function Badge(props: BadgeProps) {
   return (
     <div className={classes}>
       { icon && <div className={iconClasses}>{icon}</div> }
-      <div className="badge__text">
+      <div className="badge__text badge__text--no-wrap">
         { text }
       </div>
     </div>

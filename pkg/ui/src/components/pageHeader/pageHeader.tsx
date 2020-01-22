@@ -8,4 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./tabNavigation";
+import * as React from "react";
+
+import "./pageHeader.styl";
+
+export interface PageHeaderProps {
+  children?: React.ReactNode;
+}
+
+export function PageHeader(props: PageHeaderProps) {
+  return (
+    <div className="page-header">
+      {props.children}
+    </div>
+  );
+}

@@ -136,7 +136,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
     return (
       <Fragment>
-        <h2>Enqueue Range Output</h2>
+        <h2 className="base-heading">Enqueue Range Output</h2>
         {response.details.map((details) => (
           <div>
             <h3>Node n{details.node_id}</h3>
@@ -169,7 +169,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
         <div className="content">
           <section className="section">
             <div className="form-container">
-              <h1 className="heading">Manually enqueue range in a replica queue</h1>
+              <h1 className="base-heading heading">Manually enqueue range in a replica queue</h1>
               <br />
               <form onSubmit={this.handleSubmit} className="form-internal" method="post">
                 <label>
