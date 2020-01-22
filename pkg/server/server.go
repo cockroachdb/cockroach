@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/migration/fflag"
 	"io"
 	"io/ioutil"
 	"math"
@@ -37,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/migration/connect"
+	"github.com/cockroachdb/cockroach/pkg/migration/everynode"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -206,11 +209,20 @@ type Server struct {
 
 // NewServer creates a Server from a server.Config.
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
+	// WIP do we know way up here whether this node is bootstrapping the cluster
+	// or not?
+	connectRes, err := connect.Connect(context.Background(), cfg.JoinList)
+	if err != nil {
+		return nil, err
+	}
+	version := fflag.GetHandle(connectRes.BootVersion)
+
 	if err := cfg.ValidateAddrs(context.Background()); err != nil {
 		return nil, err
 	}
 
 	st := cfg.Settings
+	st.Version = version
 
 	if cfg.AmbientCtx.Tracer == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
@@ -540,6 +552,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(
 		storeCfg, s.recorder, s.registry, s.stopper,
 		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
+
+	// WIP is this too late in the boot process?
+	if err := everynode.RunHooksOnThisNode(ctx, s.node, connectRes.EveryNodeHooks...); err != nil {
+		return nil, err
+	}
+
 	roachpb.RegisterInternalServer(s.grpc.Server, s.node)
 	storage.RegisterPerReplicaServer(s.grpc.Server, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc.Server)

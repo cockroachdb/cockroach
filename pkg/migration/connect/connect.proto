@@ -1,0 +1,32 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.connect;
+option go_package = "connect";
+
+import "gogoproto/gogo.proto";
+import "migration/fflag/cluster_version.proto";
+
+message ConnectRequest {
+  // TODO(dan): Add an option to request a node id as described in #32574.
+}
+
+message ConnectResponse {
+  // BootVersion is the initial feature version to use on a booting node.
+  cockroach.base.ClusterVersion boot_version = 1 [(gogoproto.nullable) = false];
+  // EverynodeHooks is the set of everynode.Hooks that must be run before this
+  // node can serve traffic.
+  repeated string every_node_hooks = 2;
+}
+
+service Connect {
+  rpc Connect (ConnectRequest) returns (ConnectResponse) {}
+}

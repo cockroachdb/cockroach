@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/migration/fflag"
 	"math"
 	"sort"
 	"strings"
@@ -1105,7 +1106,7 @@ func MakeTableDesc(
 	// cases where this function is called in tests where st is nil.
 	if st != nil {
 		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
-			version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
+			version.IsActive(fflag.VersionKey(cluster.VersionSecondaryIndexColumnFamilies)) {
 			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 		}
 	}
@@ -1275,7 +1276,7 @@ func MakeTableDesc(
 	// if a primary key column is not in column family 0.
 	if st != nil {
 		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
-			!version.IsActive(cluster.VersionPrimaryKeyColumnsOutOfFamilyZero) {
+			!version.IsActive(fflag.VersionKey(cluster.VersionPrimaryKeyColumnsOutOfFamilyZero)) {
 			var colsInFamZero util.FastIntSet
 			for _, colID := range desc.Families[0].ColumnIDs {
 				colsInFamZero.Add(int(colID))

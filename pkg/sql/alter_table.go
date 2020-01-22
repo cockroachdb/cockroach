@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/migration/fflag"
 	"bytes"
 	"context"
 	gojson "encoding/json"
@@ -306,7 +307,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAlterPrimaryKey:
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
 			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
-			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
+			if !version.IsActive(fflag.VersionKey(cluster.VersionPrimaryKeyChanges)) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version for primary key changes")
 			}

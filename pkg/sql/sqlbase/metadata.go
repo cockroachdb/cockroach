@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/migration/fflag"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -146,7 +147,7 @@ func (ms MetadataSchema) GetInitialValues(
 
 		// TODO(solon): This if/else can be removed in 20.2, as there will be no
 		// need to support the deprecated namespace table.
-		if bootstrapVersion.IsActive(cluster.VersionNamespaceTableWithSchemas) {
+		if bootstrapVersion.IsActive(fflag.VersionKey(cluster.VersionNamespaceTableWithSchemas)) {
 			if parentID != keys.RootNamespaceID {
 				ret = append(ret, roachpb.KeyValue{
 					Key:   NewPublicTableKey(parentID, desc.GetName()).Key(),

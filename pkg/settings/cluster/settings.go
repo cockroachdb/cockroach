@@ -12,6 +12,7 @@ package cluster
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/migration/fflag"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+// WIP migrate all cluster.ClusterVersion references to the one in fflag and
+// remove this alias.
+type ClusterVersion = fflag.ClusterVersion
 
 // Settings is the collection of cluster settings. For a running CockroachDB
 // node, there is a single instance of ClusterSetting which is shared across all
@@ -51,7 +56,10 @@ type Settings struct {
 	// the `pprofui` server as opposed to the raw endpoint).
 	cpuProfiling int32 // atomic
 
-	// Versions describing the range supported by this binary.
+	// WIP this should be used instead of the below.
+	Version *fflag.Handle
+
+	// WIP REMOVE Versions describing the range supported by this binary.
 	binaryMinSupportedVersion    roachpb.Version
 	binaryServerVersion          roachpb.Version
 	beforeClusterVersionChangeMu struct {
@@ -320,7 +328,7 @@ func (cv *clusterVersionSetting) ActiveVersionOrEmpty(
 func (cv *clusterVersionSetting) IsActive(
 	ctx context.Context, st *Settings, versionKey VersionKey,
 ) bool {
-	return cv.ActiveVersion(ctx, st).IsActive(versionKey)
+	return cv.ActiveVersion(ctx, st).IsActive(fflag.VersionKey(versionKey))
 }
 
 // BeforeChange is part of the StateMachineSettingImpl interface
