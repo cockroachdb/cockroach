@@ -254,7 +254,7 @@ class NodeList extends React.Component<LiveNodeListProps> {
       <div className="nodes-overview__panel">
         <TableSection
           id={`nodes-overview__live-nodes`}
-          title={`Live Nodes (${nodesCount})`}
+          title={`Nodes (${nodesCount})`}
           className="embedded-table">
           <Table dataSource={dataSource} columns={columns} />
         </TableSection>
