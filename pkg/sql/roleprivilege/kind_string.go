@@ -9,11 +9,12 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[CREATEROLE-1]
+	_ = x[NOCREATEROLE-2]
 }
 
-const _Kind_name = "CREATEROLE"
+const _Kind_name = "CREATEROLENOCREATEROLE"
 
-var _Kind_index = [...]uint8{0, 10}
+var _Kind_index = [...]uint8{0, 10, 22}
 
 func (i Kind) String() string {
 	i -= 1

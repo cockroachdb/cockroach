@@ -1215,16 +1215,12 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 type AlterRolePrivileges struct {
 	Name           Expr
 	RolePrivileges roleprivilege.List
-	IfExists       bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ROLE ")
 	ctx.FormatNode(node.Name)
-	if node.IfExists {
-		ctx.WriteString(" IF EXISTS ")
-	}
 	ctx.WriteString(" WITH ")
 	node.RolePrivileges.Format(&ctx.Buffer)
 }

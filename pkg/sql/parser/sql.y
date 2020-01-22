@@ -5064,16 +5064,12 @@ create_role_stmt:
 
 // %Help: ALTER ROLE - alter a role
 // %Category: Priv
-// %Text: ALTER ROLE [IF NOT EXISTS] <name> [WITH] options...
+// %Text: ALTER ROLE <name> [WITH] options...
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
   ALTER role_or_group string_or_placeholder WITH role_privilege_list
   {
     $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), RolePrivileges: $5.rolePrivilegeList()}
-  }
-| ALTER role_or_group string_or_placeholder IF EXISTS WITH role_privilege_list
-  {
-    $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), IfExists: true, RolePrivileges: $7.rolePrivilegeList()}
   }
 | ALTER role_or_group error // SHOW HELP: ALTER ROLE
 
@@ -5115,9 +5111,13 @@ role_privilege_list:
     }
     $$.val = rolePrivList
   }
-  | role_privilege_list ',' role_privilege
+  | role_privilege role_privilege_list
   {
-    $$.val = append($1.rolePrivilegeList(), roleprivilege.RolePrivilegeFromString(string(tree.Name($3))))
+		rolePrivList, err := roleprivilege.ListFromStrings(tree.NameList{tree.Name($1)}.ToStrings())
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = append(rolePrivList, $2.rolePrivilegeList()...)
   }
 
 opt_view_recursive:

@@ -12,11 +12,10 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -35,18 +34,19 @@ type alterRoleNode struct {
 func (p *planner) AlterRolePrivileges(
 	ctx context.Context, n *tree.AlterRolePrivileges,
 ) (*alterRoleNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-
 	// Note that for Postgres, only superuser can ALTER another superuser
 	// CockroachDB does not support superuser privilege right now
 	// However we make it so the admin role cannot be edited (done in startExec)
 	if err := p.HasCreateRolePrivilege(ctx); err != nil {
 		return nil, err
 	}
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.UPDATE); err != nil {
+
+	rolePrivilegeBits, err := n.RolePrivileges.ToBitField()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := roleprivilege.CheckRolePrivilegeConflicts(rolePrivilegeBits); err != nil {
 		return nil, err
 	}
 
@@ -57,7 +57,6 @@ func (p *planner) AlterRolePrivileges(
 
 	return &alterRoleNode{
 		name:           name,
-		ifExists:       n.IfExists,
 		rolePrivileges: n.RolePrivileges,
 	}, nil
 }
@@ -77,12 +76,14 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return errNoUserNameSpecified
 	}
 	if name == "admin" {
-		return errors.New("Cannot edit admin role")
+		return errors.New("cannot edit admin role")
 	}
 	normalizedUsername, err := NormalizeAndValidateUsername(name)
 	if err != nil {
 		return err
 	}
+
+	rolePrivilegeBits, err := n.rolePrivileges.ToBitField()
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
@@ -91,7 +92,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// parameterize permissions using map and function WIP (for when extra role privileges are added)
 		`UPDATE system.users SET "hasCreateRole" = $2 WHERE username = $1`,
 		normalizedUsername,
-		n.rolePrivileges.ToBitField()&roleprivilege.CREATEROLE.Mask() != 0,
+		rolePrivilegeBits&roleprivilege.CREATEROLE.Mask() != 0,
 	)
 	if err != nil {
 		return err

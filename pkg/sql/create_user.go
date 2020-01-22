@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,15 +49,7 @@ func (p *planner) CreateUserNode(
 	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
 	rolePrivileges roleprivilege.List,
 ) (*CreateUserNode, error) {
-	tDesc, err := ResolveExistingObject(ctx, p, userTableName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := p.HasCreateRolePrivilege(ctx); err != nil {
-		return nil, err
-	}
-	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
@@ -67,16 +58,25 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	rolePrivilegeBits := uint32(0)
-	if rolePrivileges != nil {
-		rolePrivilegeBits = rolePrivileges.ToBitField()
+	hasCreateRole := false
+	if isRole {
+		rolePrivilegeBits, err := rolePrivileges.ToBitField()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := roleprivilege.CheckRolePrivilegeConflicts(rolePrivilegeBits); err != nil {
+			return nil, err
+		}
+
+		hasCreateRole = rolePrivilegeBits&roleprivilege.CREATEROLE.Mask() != 0
 	}
 
 	return &CreateUserNode{
 		userAuthInfo:  ua,
 		ifNotExists:   ifNotExists,
 		isRole:        isRole,
-		hasCreateRole: rolePrivilegeBits&roleprivilege.CREATEROLE.Mask() != 0,
+		hasCreateRole: hasCreateRole,
 	}, nil
 }
 

@@ -292,7 +292,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 	return ret, nil
 }
 
-func (p *planner) hasCreateRolePrivilege(
+func (p *planner) HasCreateRolePrivilege(
 	ctx context.Context,
 ) error {
 	user := p.SessionData().User
@@ -307,7 +307,7 @@ func (p *planner) hasCreateRolePrivilege(
 	// Check for hasCreateRole permission
 	hasCreateRole := false
 	for role := range memberOf {
-		hasCreateRoleStmt := fmt.Sprintf("select 1 from %s WHERE username = '%s'", userTableName, role)
+		hasCreateRoleStmt := fmt.Sprintf("select 1 from %s WHERE username = '%s' AND \"hasCreateRole\" = true", userTableName, role)
 		hasCreateRoleRows, err := p.ExecCfg().InternalExecutor.QueryRow(
 			ctx, "hasCreateRole", p.Txn(), hasCreateRoleStmt)
 

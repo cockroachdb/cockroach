@@ -76,27 +76,27 @@ func (pl List) names() []string {
 }
 
 // Format prints out the list in a buffer.
-// This keeps the existing order and uses ", " as separator.
+// This keeps the existing order and uses " " as separator.
 func (pl List) Format(buf *bytes.Buffer) {
 	for i, p := range pl {
 		if i > 0 {
-			buf.WriteString(", ")
+			buf.WriteString(" ")
 		}
 		buf.WriteString(p.String())
 	}
 }
 
 // String implements the Stringer interface.
-// This keeps the existing order and uses ", " as separator.
+// This keeps the existing order and uses " " as separator.
 func (pl List) String() string {
-	return strings.Join(pl.names(), ", ")
+	return strings.Join(pl.names(), " ")
 }
 
 // SortedString is similar to String() but returns
-// privileges sorted by name and uses "," as separator.
+// privileges sorted by name and uses " " as separator.
 func (pl List) SortedString() string {
 	names := pl.SortedNames()
-	return strings.Join(names, ",")
+	return strings.Join(names, " ")
 }
 
 // SortedNames returns a list of privilege names
@@ -109,12 +109,15 @@ func (pl List) SortedNames() []string {
 
 // ToBitField returns the bitfield representation of
 // a list of privileges.
-func (pl List) ToBitField() uint32 {
+func (pl List) ToBitField() (uint32, error) {
 	var ret uint32
 	for _, p := range pl {
+		if ret&p.Mask() != 0 {
+			return 0, errors.New("redundant permissions")
+		}
 		ret |= p.Mask()
 	}
-	return ret
+	return ret, nil
 }
 
 // ListFromBitField takes a bitfield of privileges and
@@ -147,4 +150,12 @@ func ListFromStrings(strs []string) (List, error) {
 
 func RolePrivilegeFromString(str string) Kind {
 	return ByName[str]
+}
+
+func CheckRolePrivilegeConflicts(privilegeRoleBits uint32) error {
+	if (privilegeRoleBits&CREATEROLE.Mask() != 0) &&
+		(privilegeRoleBits&NOCREATEROLE.Mask() != 0) {
+		return errors.New("conflicting role privilege options")
+	}
+	return nil
 }
