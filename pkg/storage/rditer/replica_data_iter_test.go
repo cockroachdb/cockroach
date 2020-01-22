@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -264,4 +265,40 @@ func TestReplicaDataIterator(t *testing.T) {
 			verifyRDIter(t, test.desc, eng, false /* replicatedOnly */, test.keys)
 		})
 	}
+}
+
+func TestConstrainToKeysEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	span, empty, err := ConstrainToKeys(eng, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")})
+	require.NoError(t, err)
+	require.True(t, empty)
+	require.Equal(t, roachpb.Span{}, span)
+}
+
+func TestConstrainToKeysNonEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := engine.NewDefaultInMem()
+	defer eng.Close()
+
+	startKey := roachpb.RKey("a")
+	endKey := roachpb.RKey("z")
+	span := roachpb.Span{
+		Key:    startKey.AsRawKey(),
+		EndKey: endKey.AsRawKey(),
+	}
+	desc := roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: startKey,
+		EndKey:   endKey,
+	}
+	createRangeData(t, eng, desc)
+
+	_, empty, err := ConstrainToKeys(eng, span)
+	require.NoError(t, err)
+	require.False(t, empty)
 }

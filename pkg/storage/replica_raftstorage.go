@@ -1063,14 +1063,21 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			subsumedReplSSTFile := &engine.MemFile{}
 			subsumedReplSST := engine.MakeIngestionSSTWriter(subsumedReplSSTFile)
 			defer subsumedReplSST.Close()
-			if err := engine.ClearRangeWithHeuristic(
-				r.store.Engine(),
-				&subsumedReplSST,
-				keyRanges[i].End.Key,
-				totalKeyRanges[i].End.Key,
-			); err != nil {
-				subsumedReplSST.Close()
-				return err
+			unconstrainedSpan := roachpb.Span{Key: keyRanges[i].End.Key, EndKey: totalKeyRanges[i].End.Key}
+			span, empty, err := rditer.ConstrainToKeys(r.Engine(), unconstrainedSpan)
+			if err != nil {
+				return errors.Wrapf(err, "error constraining width of range deletion tombstone")
+			}
+			if !empty {
+				if err := engine.ClearRangeWithHeuristic(
+					r.store.Engine(),
+					&subsumedReplSST,
+					span.Key,
+					span.EndKey,
+				); err != nil {
+					subsumedReplSST.Close()
+					return err
+				}
 			}
 			if err := subsumedReplSST.Finish(); err != nil {
 				return err
