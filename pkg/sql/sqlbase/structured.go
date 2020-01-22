@@ -625,6 +625,19 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 	return f.CloseAndGetString()
 }
 
+// GetEncodingType returns the encoding type of this index. For backward
+// compatibility reasons, this might not match what is stored in
+// desc.EncodingType. The primary index's ID must be passed so we can check if
+// this index is primary or secondary.
+func (desc *IndexDescriptor) GetEncodingType(primaryIndexID IndexID) IndexDescriptorEncodingType {
+	if desc.ID == primaryIndexID {
+		// Primary indexes always use the PrimaryIndexEncoding, regardless of what
+		// desc.EncodingType indicates.
+		return PrimaryIndexEncoding
+	}
+	return desc.EncodingType
+}
+
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
 	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
@@ -3292,23 +3305,28 @@ func (desc *TableDescriptor) ColumnTypes() []types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
-// ColumnTypesWithMutations returns the types of all columns, optionally
-// including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
-	nCols := len(desc.Columns)
-	if mutations {
-		nCols += len(desc.Mutations)
-	}
-	types := make([]types.T, 0, nCols)
-	for i := range desc.Columns {
-		types = append(types, desc.Columns[i].Type)
-	}
+// ColumnsWithMutations returns all column descriptors, optionally including
+// mutation columns.
+func (desc *TableDescriptor) ColumnsWithMutations(mutations bool) []ColumnDescriptor {
+	n := len(desc.Columns)
+	columns := desc.Columns[:n:n] // immutable on append
 	if mutations {
 		for i := range desc.Mutations {
 			if col := desc.Mutations[i].GetColumn(); col != nil {
-				types = append(types, col.Type)
+				columns = append(columns, *col)
 			}
 		}
+	}
+	return columns
+}
+
+// ColumnTypesWithMutations returns the types of all columns, optionally
+// including mutation columns, which will be returned if the input bool is true.
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
+	columns := desc.ColumnsWithMutations(mutations)
+	types := make([]types.T, len(columns))
+	for i := range columns {
+		types[i] = columns[i].Type
 	}
 	return types
 }

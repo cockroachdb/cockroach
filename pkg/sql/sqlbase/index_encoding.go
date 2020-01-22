@@ -239,35 +239,120 @@ func MakeSpanFromEncDatums(
 	return roachpb.Span{Key: startKey, EndKey: endKey}, containsNull, nil
 }
 
-// NeededColumnFamilyIDs returns a slice of FamilyIDs which contain
-// the families needed to load a set of neededCols
+// NeededColumnFamilyIDs returns the minimal set of column families required to
+// retrieve neededCols for the specified table and index. The returned FamilyIDs
+// are in sorted order.
 func NeededColumnFamilyIDs(
-	colIdxMap map[ColumnID]int, families []ColumnFamilyDescriptor, neededCols util.FastIntSet,
+	neededCols util.FastIntSet, table *TableDescriptor, index *IndexDescriptor,
 ) []FamilyID {
-	// Column family 0 is always included so we can distinguish null rows from
-	// absent rows.
-	needed := []FamilyID{0}
-	for i := range families {
-		family := &families[i]
+	if len(table.Families) == 1 {
+		return []FamilyID{table.Families[0].ID}
+	}
+
+	// Build some necessary data structures for column metadata.
+	columns := table.ColumnsWithMutations(true)
+	colIdxMap := table.ColumnIdxMapWithMutations(true)
+	var indexedCols util.FastIntSet
+	var compositeCols util.FastIntSet
+	var extraCols util.FastIntSet
+	for _, columnID := range index.ColumnIDs {
+		columnOrdinal := colIdxMap[columnID]
+		indexedCols.Add(columnOrdinal)
+	}
+	for _, columnID := range index.CompositeColumnIDs {
+		columnOrdinal := colIdxMap[columnID]
+		compositeCols.Add(columnOrdinal)
+	}
+	for _, columnID := range index.ExtraColumnIDs {
+		columnOrdinal := colIdxMap[columnID]
+		extraCols.Add(columnOrdinal)
+	}
+
+	// The column family with ID 0 is special because it always has a KV entry.
+	// Other column families will omit a value if all their columns are null, so
+	// we may need to retrieve family 0 to use as a sentinel for distinguishing
+	// between null values and the absence of a row. Also, secondary indexes store
+	// values here for composite and "extra" columns. ("Extra" means primary key
+	// columns which are not indexed.)
+	var family0 *ColumnFamilyDescriptor
+	hasSecondaryEncoding := index.GetEncodingType(table.PrimaryIndex.ID) == SecondaryIndexEncoding
+
+	// First iterate over the needed columns and look for a few special cases:
+	// columns which can be decoded from the key and columns whose value is stored
+	// in family 0.
+	family0Needed := false
+	nc := neededCols.Copy()
+	neededCols.ForEach(func(columnOrdinal int) {
+		if indexedCols.Contains(columnOrdinal) && !compositeCols.Contains(columnOrdinal) {
+			// We can decode this column from the index key, so no particular family
+			// is needed.
+			nc.Remove(columnOrdinal)
+		}
+		if hasSecondaryEncoding && (compositeCols.Contains(columnOrdinal) ||
+			extraCols.Contains(columnOrdinal)) {
+			// Secondary indexes store composite and "extra" column values in family
+			// 0.
+			family0Needed = true
+			nc.Remove(columnOrdinal)
+		}
+	})
+
+	// Iterate over the column families to find which ones contain needed columns.
+	// We also keep track of whether all of the needed families' columns are
+	// nullable, since this means we need column family 0 as a sentinel, even if
+	// none of its columns are needed.
+	var neededFamilyIDs []FamilyID
+	allFamiliesNullable := true
+	for i := range table.Families {
+		family := &table.Families[i]
+		needed := false
+		nullable := true
 		if family.ID == 0 {
-			// Already added above.
-			continue
+			// Set column family 0 aside in case we need it as a sentinel.
+			family0 = family
+			if family0Needed {
+				needed = true
+			}
+			nullable = false
 		}
 		for _, columnID := range family.ColumnIDs {
-			columnOrdinal := colIdxMap[columnID]
-			if neededCols.Contains(columnOrdinal) {
-				needed = append(needed, family.ID)
+			if needed && !nullable {
+				// Nothing left to check.
 				break
+			}
+			columnOrdinal := colIdxMap[columnID]
+			if nc.Contains(columnOrdinal) {
+				needed = true
+			}
+			if !columns[columnOrdinal].Nullable && (!indexedCols.Contains(columnOrdinal) ||
+				compositeCols.Contains(columnOrdinal) && !hasSecondaryEncoding) {
+				// The column is non-nullable and cannot be decoded from a different
+				// family, so this column family must have a KV entry for every row.
+				nullable = false
+			}
+		}
+		if needed {
+			neededFamilyIDs = append(neededFamilyIDs, family.ID)
+			if !nullable {
+				allFamiliesNullable = false
 			}
 		}
 	}
+	if family0 == nil {
+		panic("column family 0 not found")
+	}
 
-	// TODO(solon): There is a further optimization possible here: if there is at
-	// least one non-nullable column in the needed column families, we can
-	// potentially omit the primary family, since the primary keys are encoded
-	// in all families. (Note that composite datums are an exception.)
+	// If all the needed families are nullable, we also need family 0 as a
+	// sentinel. Note that this is only the case if family 0 was not already added
+	// to neededFamilyIDs.
+	if allFamiliesNullable {
+		// Prepend family 0.
+		neededFamilyIDs = append(neededFamilyIDs, 0)
+		copy(neededFamilyIDs[1:], neededFamilyIDs)
+		neededFamilyIDs[0] = family0.ID
+	}
 
-	return needed
+	return neededFamilyIDs
 }
 
 // SplitSpanIntoSeparateFamilies splits a span representing a single row point
@@ -871,7 +956,7 @@ func EncodeSecondaryIndex(
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 
 	// Use the primary key encoding for covering indexes.
-	if secondaryIndex.EncodingType == PrimaryIndexEncoding {
+	if secondaryIndex.GetEncodingType(tableDesc.PrimaryIndex.ID) == PrimaryIndexEncoding {
 		return EncodePrimaryIndex(tableDesc, secondaryIndex, colMap, values)
 	}
 

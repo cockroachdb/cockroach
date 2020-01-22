@@ -29,8 +29,9 @@
 # Create tables #
 #################
 
+# TODO(solon): Remove the FAMILY declarations when #44699 is resolved.
 statement ok
-CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT)
+CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT, FAMILY (pid1), FAMILY (pa1))
 
 statement ok
 CREATE TABLE parent2 (pid2 INT PRIMARY KEY, pa2 INT)

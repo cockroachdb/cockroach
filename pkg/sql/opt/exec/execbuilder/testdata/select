@@ -269,7 +269,7 @@ EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]
 # Basic filter combinations.
 # ------------------------------------------------------------------------------
 statement ok
-CREATE TABLE a (x INT PRIMARY KEY, y INT);
+CREATE TABLE a (x INT PRIMARY KEY, y INT, FAMILY (x, y));
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
@@ -1237,7 +1237,7 @@ filter     ·            ·                  (x, y, z)  +x,+z
 # Verify that multi-span point lookups are parallelized.
 # ------------------------------------------------------
 statement ok
-CREATE TABLE a (a INT PRIMARY KEY, item STRING, price FLOAT, UNIQUE INDEX item (item), UNIQUE INDEX p (price))
+CREATE TABLE a (a INT PRIMARY KEY, item STRING, price FLOAT, FAMILY (a, item, price), UNIQUE INDEX item (item), UNIQUE INDEX p (price))
 
 statement ok
 CREATE TABLE b (a INT, b INT, c INT NULL, d INT NULL, PRIMARY KEY (a, b), FAMILY (a, b, c, d))

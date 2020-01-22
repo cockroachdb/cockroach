@@ -338,7 +338,8 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 			ib.added = append(ib.added, *idx)
 			for i := range cols {
 				id := cols[i].ID
-				if idx.ContainsColumnID(id) || idx.EncodingType == sqlbase.PrimaryIndexEncoding {
+				if idx.ContainsColumnID(id) ||
+					idx.GetEncodingType(desc.PrimaryIndex.ID) == sqlbase.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}
