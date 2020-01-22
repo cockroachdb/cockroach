@@ -39,7 +39,9 @@ func TestInternalExecutor(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT 1")
+	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,8 +58,9 @@ func TestInternalExecutor(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The following statement will succeed on the 2nd try.
-	row, err = ie.QueryRow(
+	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -78,8 +81,9 @@ func TestInternalExecutor(t *testing.T) {
 	cnt := 0
 	err = s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		cnt++
-		row, err = ie.QueryRow(
+		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if err != nil {
@@ -164,9 +168,12 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 		&sessiondata.SessionData{
 			Database:      expDB,
 			SequenceState: &sessiondata.SequenceState{},
+			User:          security.RootUser,
 		})
 
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "show database")
+	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{},
+		"show database")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,7 +79,9 @@ func (s *Store) insertRangeLogEvent(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.cfg.SQLExecutor.Exec(ctx, "log-range-event", txn, insertEventTableStmt, args...)
+	rows, err := s.cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}

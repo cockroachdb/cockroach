@@ -1020,8 +1020,10 @@ ON CONFLICT (name) DO NOTHING`,
 func updateSystemLocationData(ctx context.Context, r runner) error {
 	// See if the system.locations table already has data in it.
 	// If so, we don't want to do anything.
-	row, err := r.sqlExecutor.QueryRow(ctx, "update-system-locations",
-		nil, `SELECT count(*) FROM system.locations`)
+	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
+		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err
 	}
@@ -1033,8 +1035,9 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	for _, loc := range roachpb.DefaultLocationInformation {
 		stmt := `UPSERT INTO system.locations VALUES ($1, $2, $3, $4)`
 		tier := loc.Locality.Tiers[0]
-		if _, err := r.sqlExecutor.Exec(ctx, "update-system-locations", nil,
-			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude); err != nil {
+		if err := r.execAsRoot(ctx, "update-system-locations",
+			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude,
+		); err != nil {
 			return err
 		}
 	}

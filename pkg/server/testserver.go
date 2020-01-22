@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -548,16 +549,19 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 }
 
 func (ts *TestServer) createAuthUser(userName string, isAdmin bool) error {
-	if _, err := ts.Server.internalExecutor.Exec(context.TODO(),
-		"create-auth-user", nil, "CREATE USER $1", userName,
+	if _, err := ts.Server.internalExecutor.ExecEx(context.TODO(),
+		"create-auth-user", nil,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"CREATE USER $1", userName,
 	); err != nil {
 		return err
 	}
 	if isAdmin {
 		// We can't use the GRANT statement here because we don't want
 		// to rely on CCL code.
-		if _, err := ts.Server.internalExecutor.Exec(context.TODO(),
+		if _, err := ts.Server.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName,
 		); err != nil {
 			return err
@@ -848,8 +852,10 @@ func (ts *TestServer) ForceTableGC(
    JOIN system.namespace dbs ON dbs.id = tables."parentID"
    WHERE dbs.name = $1 AND tables.name = $2
  `
-	row, err := ts.internalExecutor.QueryRow(
-		ctx, "resolve-table-id", nil /* txn */, tableIDQuery, database, table)
+	row, err := ts.internalExecutor.QueryRowEx(
+		ctx, "resolve-table-id", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		tableIDQuery, database, table)
 	if err != nil {
 		return err
 	}

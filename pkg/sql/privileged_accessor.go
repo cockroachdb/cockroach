@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,10 +25,11 @@ func (p *planner) LookupNamespaceID(
 	ctx context.Context, parentID int64, name string,
 ) (tree.DInt, bool, error) {
 	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"crdb-internal-get-descriptor-id",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		query,
 		parentID,
 		name,
@@ -54,10 +56,11 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 	}
 
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"crdb-internal-get-zone",
 		p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		query,
 		id,
 	)

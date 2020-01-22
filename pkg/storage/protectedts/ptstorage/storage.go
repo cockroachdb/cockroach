@@ -102,7 +102,9 @@ func (p *storage) GetRecord(
 	if txn == nil {
 		return nil, errNoTxn
 	}
-	row, err := p.ex.QueryRow(ctx, "protectedts-GetRecord", txn, getRecordQuery, id.GetBytesMut())
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getRecordQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
 	}
@@ -152,7 +154,9 @@ func (p *storage) GetMetadata(ctx context.Context, txn *client.Txn) (ptpb.Metada
 	if txn == nil {
 		return ptpb.Metadata{}, errNoTxn
 	}
-	row, err := p.ex.QueryRow(ctx, "protectedts-GetMetadata", txn, getMetadataQuery)
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getMetadataQuery)
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
 	}
@@ -183,7 +187,9 @@ func (p *storage) GetState(ctx context.Context, txn *client.Txn) (ptpb.State, er
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *client.Txn) ([]ptpb.Record, error) {
-	rows, err := p.ex.Query(ctx, "protectedts-GetRecords", txn, getRecordsQuery)
+	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}

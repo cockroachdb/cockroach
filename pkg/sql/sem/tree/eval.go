@@ -2625,8 +2625,18 @@ type EvalSessionAccessor interface {
 	HasAdminRole(ctx context.Context) (bool, error)
 }
 
-// InternalExecutor is a subset of sqlutil.InternalExecutor used by
-// this sem/tree package which can't even import sqlutil.
+// InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
+// implemented by sql.InternalExecutor) used by this sem/tree package which
+// can't even import sqlutil.
+//
+// Note that the functions offered here should be avoided when possible. They
+// execute the query as root if an user hadn't been previously set on the
+// executor through SetSessionData(). These functions are deprecated in
+// sql.InternalExecutor in favor of a safer interface. Unfortunately, those
+// safer functions cannot be exposed through this interface because they depend
+// on sqlbase, and this package cannot import sqlbase. When possible, downcast
+// this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
+// alternatives.
 type InternalExecutor interface {
 	// Query is part of the sqlutil.InternalExecutor interface.
 	Query(

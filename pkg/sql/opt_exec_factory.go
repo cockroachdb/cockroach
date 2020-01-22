@@ -941,10 +941,11 @@ func (e *urlOutputter) finish() (url.URL, error) {
 // environmentQuery is a helper to run a query to build up the output of
 // showEnv. It expects a query that returns a single string column.
 func (ef *execFactory) environmentQuery(query string) (string, error) {
-	r, err := ef.planner.extendedEvalCtx.InternalExecutor.QueryRow(
+	r, err := ef.planner.extendedEvalCtx.InternalExecutor.(*InternalExecutor).QueryRowEx(
 		ef.planner.EvalContext().Context,
 		"EXPLAIN (env)",
 		ef.planner.Txn(),
+		sqlbase.InternalExecutorSessionDataOverride{},
 		query,
 	)
 	if err != nil {

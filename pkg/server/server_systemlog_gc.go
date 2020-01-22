@@ -17,8 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -90,10 +92,11 @@ func (s *Server) gcSystemLog(
 		var rowsAffected int64
 		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			row, err := s.internalExecutor.QueryRow(
+			row, err := s.internalExecutor.QueryRowEx(
 				ctx,
 				table+"-gc",
 				txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,

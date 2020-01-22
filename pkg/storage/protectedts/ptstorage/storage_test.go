@@ -654,23 +654,13 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 func (ie *wrappedInternalExecutor) Query(
 	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 ) ([]tree.Datums, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return nil, err
-		}
-	}
-	return ie.wrapped.Query(ctx, opName, txn, statement, params...)
+	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return nil, err
-		}
-	}
-	return ie.wrapped.QueryRow(ctx, opName, txn, statement, params...)
+	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
