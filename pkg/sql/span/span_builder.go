@@ -150,16 +150,18 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family sqlbase.FamilyID) ro
 	return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}
 }
 
-// MaybeSplitSpanIntoSeparateFamilies uses the needed columns from SetNeededColumns to maybe split
-// the input span into multiple family specific spans. prefixLen is the number of index columns
-// encoded in the span.
+// MaybeSplitSpanIntoSeparateFamilies uses the needed columns configured by
+// SetNeededColumns to conditionally split the input span into multiple family
+// specific spans. prefixLen is the number of index columns encoded in the span.
+//
+// The function accepts a slice of spans to append to.
 func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
-	span roachpb.Span, prefixLen int, containsNull bool,
+	appendTo roachpb.Spans, span roachpb.Span, prefixLen int, containsNull bool,
 ) roachpb.Spans {
 	if s.neededFamilies != nil && s.CanSplitSpanIntoSeparateFamilies(len(s.neededFamilies), prefixLen, containsNull) {
-		return sqlbase.SplitSpanIntoSeparateFamilies(span, s.neededFamilies)
+		return sqlbase.SplitSpanIntoSeparateFamilies(appendTo, span, s.neededFamilies)
 	}
-	return roachpb.Spans{span}
+	return append(appendTo, span)
 }
 
 // CanSplitSpanIntoSeparateFamilies returns whether a span encoded with prefixLen keys and numNeededFamilies
@@ -230,7 +232,7 @@ func (s *Builder) UnconstrainedSpans(forDelete bool) (roachpb.Spans, error) {
 // scanned. The forDelete parameter indicates whether these spans will be used
 // for row deletion.
 func (s *Builder) appendSpansFromConstraintSpan(
-	spans roachpb.Spans, cs *constraint.Span, needed util.FastIntSet, forDelete bool,
+	appendTo roachpb.Spans, cs *constraint.Span, needed util.FastIntSet, forDelete bool,
 ) (roachpb.Spans, error) {
 	var span roachpb.Span
 	var err error
@@ -259,7 +261,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	if !forDelete && needed.Len() > 0 && span.Key.Equal(span.EndKey) {
 		neededFamilyIDs := sqlbase.NeededColumnFamilyIDs(s.table.ColumnIdxMap(), s.table.Families, needed)
 		if s.CanSplitSpanIntoSeparateFamilies(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
-			return append(spans, sqlbase.SplitSpanIntoSeparateFamilies(span, neededFamilyIDs)...), nil
+			return sqlbase.SplitSpanIntoSeparateFamilies(appendTo, span, neededFamilyIDs), nil
 		}
 	}
 
@@ -271,7 +273,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	if err != nil {
 		return nil, err
 	}
-	return append(spans, span), nil
+	return append(appendTo, span), nil
 }
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a

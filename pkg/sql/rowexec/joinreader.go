@@ -425,8 +425,8 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		}
 		inputRowIndices := jr.keyToInputRowIndices[string(span.Key)]
 		if inputRowIndices == nil {
-			spans = append(
-				spans, jr.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, len(jr.lookupCols), containsNull)...)
+			spans = jr.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+				spans, span, len(jr.lookupCols), containsNull)
 		}
 		jr.keyToInputRowIndices[string(span.Key)] = append(inputRowIndices, i)
 	}
