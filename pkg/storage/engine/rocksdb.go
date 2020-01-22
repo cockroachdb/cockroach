@@ -780,36 +780,38 @@ func (r *RocksDB) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	start := MVCCKey{Key: startKey, Timestamp: startTS}
 	end := MVCCKey{Key: endKey, Timestamp: endTS}
 
 	var data C.DBString
 	var intentErr C.DBString
 	var bulkopSummary C.DBString
+	var resumeKey C.DBString
 
 	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
-		goToCIterOptions(io), r.rdb, &data, &intentErr, &bulkopSummary))
+		C.uint64_t(targetSize), goToCIterOptions(io), r.rdb, &data, &intentErr, &bulkopSummary, &resumeKey))
 
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
 			var e roachpb.WriteIntentError
 			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
-				return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode write intent error")
+				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrap(err, "failed to decode write intent error")
 			}
 
-			return nil, roachpb.BulkOpSummary{}, &e
+			return nil, roachpb.BulkOpSummary{}, nil, &e
 		}
-		return nil, roachpb.BulkOpSummary{}, err
+		return nil, roachpb.BulkOpSummary{}, nil, err
 	}
 
 	var summary roachpb.BulkOpSummary
 	if err := protoutil.Unmarshal(cStringToGoBytes(bulkopSummary), &summary); err != nil {
-		return nil, roachpb.BulkOpSummary{}, errors.Wrap(err, "failed to decode BulkopSummary")
+		return nil, roachpb.BulkOpSummary{}, nil, errors.Wrap(err, "failed to decode BulkopSummary")
 	}
 
-	return cStringToGoBytes(data), summary, nil
+	return cStringToGoBytes(data), summary, roachpb.Key(cStringToGoBytes(resumeKey)), nil
 }
 
 // Attrs returns the list of attributes describing this engine. This
@@ -1003,9 +1005,10 @@ func (r *rocksDBReadOnly) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 }
 
 func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -1323,9 +1326,10 @@ func (r *rocksDBSnapshot) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 }
 
 // Get returns the value for the given key, nil otherwise using
@@ -1732,8 +1736,9 @@ func (r *rocksDBBatch) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	panic("unimplemented")
 }
 
