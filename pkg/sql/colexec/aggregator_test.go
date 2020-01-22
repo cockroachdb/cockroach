@@ -369,6 +369,47 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			name:          "AvgSumSingleInputBatch",
 			convToDecimal: true,
 		},
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_BOOL_AND,
+				execinfrapb.AggregatorSpec_BOOL_OR,
+			},
+			aggCols: [][]uint32{
+				{1}, {1},
+			},
+			input: tuples{
+				{0, true},
+				{1, false},
+				{2, true},
+				{2, false},
+				{3, true},
+				{3, true},
+				{4, false},
+				{4, false},
+				{5, false},
+				{5, nil},
+				{6, nil},
+				{6, true},
+				{7, nil},
+				{7, false},
+				{7, true},
+				{8, nil},
+				{8, nil},
+			},
+			colTypes: []coltypes.T{coltypes.Int64, coltypes.Bool},
+			expected: tuples{
+				{true, true},
+				{false, false},
+				{false, true},
+				{true, true},
+				{false, false},
+				{false, false},
+				{true, true},
+				{false, true},
+				{nil, nil},
+			},
+			name: "BoolAndOrBatch",
+		},
 	}
 
 	for _, agg := range aggTypes {
@@ -398,23 +439,25 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_SUM,
 				execinfrapb.AggregatorSpec_MIN,
 				execinfrapb.AggregatorSpec_MAX,
+				execinfrapb.AggregatorSpec_BOOL_AND,
+				execinfrapb.AggregatorSpec_BOOL_OR,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {2}, {2}, {2}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {2}, {2}, {2}, {3}, {3}},
+			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64, coltypes.Bool},
 			input: tuples{
-				{0, 3.1, 2},
-				{0, 1.1, 3},
-				{1, 1.1, 1},
-				{1, 4.1, 0},
-				{2, 1.1, 1},
-				{3, 4.1, 0},
-				{3, 5.1, 0},
+				{0, 3.1, 2, true},
+				{0, 1.1, 3, false},
+				{1, 1.1, 1, false},
+				{1, 4.1, 0, false},
+				{2, 1.1, 1, true},
+				{3, 4.1, 0, false},
+				{3, 5.1, 0, true},
 			},
 			expected: tuples{
-				{0, 2.1, 2, 2, 5, 2, 3},
-				{1, 2.6, 2, 2, 1, 0, 1},
-				{2, 1.1, 1, 1, 1, 1, 1},
-				{3, 4.6, 2, 2, 0, 0, 0},
+				{0, 2.1, 2, 2, 5, 2, 3, false, true},
+				{1, 2.6, 2, 2, 1, 0, 1, false, false},
+				{2, 1.1, 1, 1, 1, 1, 1, true, true},
+				{3, 4.6, 2, 2, 0, 0, 0, false, true},
 			},
 			convToDecimal: true,
 		},
@@ -431,20 +474,22 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_MIN,
 				execinfrapb.AggregatorSpec_MAX,
 				execinfrapb.AggregatorSpec_AVG,
+				execinfrapb.AggregatorSpec_BOOL_AND,
+				execinfrapb.AggregatorSpec_BOOL_OR,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64},
+			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}},
+			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64, coltypes.Bool, coltypes.Bool},
 			input: tuples{
-				{nil, 1.1, 4},
-				{0, nil, nil},
-				{0, 3.1, 5},
-				{1, nil, nil},
-				{1, nil, nil},
+				{nil, 1.1, 4, true},
+				{0, nil, nil, nil},
+				{0, 3.1, 5, nil},
+				{1, nil, nil, nil},
+				{1, nil, nil, false},
 			},
 			expected: tuples{
-				{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1},
-				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1},
-				{1, nil, 2, 0, nil, nil, nil, nil, nil},
+				{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1, true, true},
+				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1, nil, nil},
+				{1, nil, 2, 0, nil, nil, nil, nil, nil, false, false},
 			},
 			convToDecimal: true,
 		},
@@ -639,6 +684,8 @@ func BenchmarkAggregator(b *testing.B) {
 		execinfrapb.AggregatorSpec_SUM,
 		execinfrapb.AggregatorSpec_MIN,
 		execinfrapb.AggregatorSpec_MAX,
+		execinfrapb.AggregatorSpec_BOOL_AND,
+		execinfrapb.AggregatorSpec_BOOL_OR,
 	} {
 		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
@@ -650,6 +697,9 @@ func BenchmarkAggregator(b *testing.B) {
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
+										if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
+											typ = coltypes.Bool
+										}
 										colTypes := []coltypes.T{coltypes.Int64, typ}
 										nTuples := numInputBatches * int(coldata.BatchSize())
 										cols := []coldata.Vec{
@@ -682,6 +732,11 @@ func BenchmarkAggregator(b *testing.B) {
 											vals := cols[1].Decimal()
 											for i := range vals {
 												vals[i].SetInt64(rng.Int63() % 1024)
+											}
+										case coltypes.Bool:
+											vals := cols[1].Bool()
+											for i := range vals {
+												vals[i] = rng.Float64() < 0.5
 											}
 										}
 										source := newChunkingBatchSource(colTypes, cols, uint64(nTuples))
