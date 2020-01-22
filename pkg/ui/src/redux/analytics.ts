@@ -14,7 +14,7 @@ import _ from "lodash";
 import { Store } from "redux";
 
 import * as protos from "src/js/protos";
-import { versionsSelector } from "src/redux/alerts";
+import { versionsSelector } from "src/redux/nodes";
 import { store, history, AdminUIState } from "src/redux/state";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 

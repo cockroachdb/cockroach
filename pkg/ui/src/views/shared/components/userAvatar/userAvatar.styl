@@ -8,21 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require '~src/components/core/index.styl'
+
 .user-avatar
-  height 40px
-  width 40px
+  height $line-height--large
+  width $line-height--large
   border-radius 50%
   background-color #e0eefb
   color: #0788ff
   font-size 14px
   font-weight bold
-  line-height 40px
+  line-height $line-height--large
   letter-spacing 0.1px
   margin auto
+  text-align center
 
 .user-avatar:hover
   border solid 2px #0788ff
-  line-height 36px
+  line-height "calc( %s - 4px )" % $line-height--large
 
 .user-avatar--disabled
   background-color #e7ecf3
@@ -30,4 +33,4 @@
 
 .user-avatar--disabled:hover
   border none
-  line-height 40px
+  line-height $line-height--large

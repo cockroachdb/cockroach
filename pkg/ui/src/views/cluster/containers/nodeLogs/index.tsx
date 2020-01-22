@@ -96,7 +96,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
             <title>{ title }</title>
           </Helmet>
           <div className="section section--heading">
-            <h2>Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
+            <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
           </div>
           <section className="section">
             { REMOTE_DEBUGGING_ERROR_TEXT }
@@ -111,7 +111,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
           <title>{ title }</title>
         </Helmet>
         <div className="section section--heading">
-          <h2>Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
+          <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>
         <section className="section">
           <Loading

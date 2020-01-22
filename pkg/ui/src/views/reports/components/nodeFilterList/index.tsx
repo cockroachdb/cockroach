@@ -69,7 +69,7 @@ export function NodeFilterList(props: NodeFilterListProps) {
 
   return (
     <div>
-      <h2>Filters</h2>
+      <h2 className="base-heading">Filters</h2>
       <ul className="node-filter-list">
         {
           _.map(filters, (filter, i) => (

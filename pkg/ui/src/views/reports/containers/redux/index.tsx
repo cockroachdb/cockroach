@@ -44,7 +44,7 @@ class ReduxDebug extends React.Component<ReduxDebugProps, ReduxDebugState> {
         <Helmet>
           <title>Redux State | Debug</title>
         </Helmet>
-        <section className="section"><h1>Redux State</h1></section>
+        <section className="section"><h1 className="base-heading">Redux State</h1></section>
         <section className="section">
           <CopyToClipboard text={ text } onCopy={() => this.setState({ copied: true})}>
             <span className={spanClass}>

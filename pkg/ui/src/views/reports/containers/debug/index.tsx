@@ -55,7 +55,7 @@ function DebugTableRow(props: { title: string, children?: React.ReactNode }) {
 function DebugTable(props: { heading: string, children?: React.ReactNode }) {
   return (
     <div>
-      <h2>{props.heading}</h2>
+      <h2 className="base-heading">{props.heading}</h2>
       <table className="debug-table">
         <tbody>
           {props.children}
@@ -85,7 +85,7 @@ export default function Debug() {
       <Helmet>
         <title>Debug</title>
       </Helmet>
-      <h1>Advanced Debugging</h1>
+      <h1 className="base-heading">Advanced Debugging</h1>
       <div className="debug-header">
         <InfoBox>
           <p>

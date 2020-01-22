@@ -45,8 +45,8 @@ const detailTimeFormat = "Y/MM/DD HH:mm:ss";
 
 const loading = (
   <div className="section">
-    <h1>Node Diagnostics</h1>
-    <h2>Loading cluster status...</h2>
+    <h1 className="base-heading">Node Diagnostics</h1>
+    <h2 className="base-heading">Loading cluster status...</h2>
   </div>
 );
 
@@ -334,9 +334,9 @@ class Nodes extends React.Component<NodesProps, {}> {
     if (_.isEmpty(orderedNodeIDs)) {
       return (
         <section className="section">
-          <h1>Node Diagnostics</h1>
+          <h1 className="base-heading">Node Diagnostics</h1>
           <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-          <h2>No nodes match the filters</h2>
+          <h2 className="base-heading">No nodes match the filters</h2>
         </section>
       );
     }
@@ -346,9 +346,9 @@ class Nodes extends React.Component<NodesProps, {}> {
         <Helmet>
           <title>Node Diagnostics | Debug</title>
         </Helmet>
-        <h1>Node Diagnostics</h1>
+        <h1 className="base-heading">Node Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-        <h2>Nodes</h2>
+        <h2 className="base-heading">Nodes</h2>
         <table className="nodes-table">
           <tbody>
             {

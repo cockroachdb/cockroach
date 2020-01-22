@@ -175,7 +175,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
             { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
           </title>
         </Helmet>
-        <section className="section"><h1>Statement Details</h1></section>
+        <section className="section"><h1 className="base-heading">Statement Details</h1></section>
         <section className="section section--container">
           <Loading
             loading={_.isNil(this.props.statement)}

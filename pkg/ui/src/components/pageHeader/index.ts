@@ -8,12 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-*
-  margin 0
-  padding 0
-  box-sizing border-box
-
-html
-body
-  background-color $background-color
-  min-width 700px
+export * from "./pageHeader";

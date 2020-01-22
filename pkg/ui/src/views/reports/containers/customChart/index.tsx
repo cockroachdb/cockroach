@@ -249,7 +249,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
         <Helmet>
           <title>Custom Chart | Debug</title>
         </Helmet>
-        <section className="section"><h1>Custom Chart</h1></section>
+        <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown />

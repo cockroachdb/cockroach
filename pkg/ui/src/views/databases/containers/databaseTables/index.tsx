@@ -94,7 +94,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
     return (
       <div className="database-summary">
         <div className="database-summary-title">
-          <h2>{dbID}</h2>
+          <h2 className="base-heading">{dbID}</h2>
         </div>
         <div className="l-columns">
           <div className="l-columns__left">

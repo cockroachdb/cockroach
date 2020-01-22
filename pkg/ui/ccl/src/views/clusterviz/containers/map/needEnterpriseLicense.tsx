@@ -38,7 +38,7 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
       <section className="need-license">
         <div className="need-license-blurb">
           <div>
-            <h1 className="need-license-blurb__header">View the Node Map</h1>
+            <h1 className="base-heading need-license-blurb__header">View the Node Map</h1>
             <p className="need-license-blurb__text">
               The Node Map shows the geographical layout of your cluster, along
               with metrics and health indicators. To enable the Node Map,

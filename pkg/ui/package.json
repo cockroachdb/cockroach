@@ -130,5 +130,8 @@
   "engines": {
     "node": ">=6",
     "yarn": ">=1.7.0"
-  }
+  },
+  "browserslist": [
+    "defaults"
+  ]
 }

@@ -226,7 +226,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         </Helmet>
 
         <section className="section">
-          <h1>Statements</h1>
+          <h1 className="base-heading">Statements</h1>
         </section>
 
         <Loading

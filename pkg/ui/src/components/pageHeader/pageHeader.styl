@@ -10,9 +10,14 @@
 
 @require '~src/components/core/index.styl'
 
-.tab-navigation
+.page-header
   height 100%
   display flex
   flex-direction row
-  justify-content space-between
+  flex-flow wrap
   align-items center
+  padding $spacing-x-small 0
+
+.page-header > *
+  margin-right $spacing-small
+  margin-bottom 0

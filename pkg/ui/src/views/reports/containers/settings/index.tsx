@@ -82,7 +82,7 @@ class Settings extends React.Component<SettingsProps, {}> {
         <Helmet>
           <title>Cluster Settings | Debug</title>
         </Helmet>
-        <h1>Cluster Settings</h1>
+        <h1 className="base-heading">Cluster Settings</h1>
         <Loading
           loading={!this.props.settings.data}
           error={this.props.settings.lastError}
