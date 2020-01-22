@@ -1044,6 +1044,11 @@ acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
 acceptance: ## Run acceptance tests.
 	+@pkg/acceptance/run.sh
 
+.PHONY: compose
+compose: export TESTTIMEOUT := $(TESTTIMEOUT)
+compose: ## Run compose tests.
+	+@pkg/compose/run.sh
+
 .PHONY: dupl
 dupl: bin/.bootstrap
 	$(FIND_RELEVANT) \

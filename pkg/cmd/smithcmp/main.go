@@ -25,29 +25,20 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/big"
 	"math/rand"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/cmd/smithcmp/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 func usage() {
@@ -104,11 +95,15 @@ func main() {
 	}
 
 	rng := rand.New(rand.NewSource(opts.Seed))
-	conns := map[string]*Conn{}
+	conns := map[string]*cmpconn.Conn{}
 	for name, db := range opts.Databases {
 		var err error
-		conns[name], err = NewConn(
-			db.Addr, rng, enableMutations(opts.Databases[name].AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
+		mutators := enableMutations(opts.Databases[name].AllowMutations, sqlMutators)
+		if opts.Postgres {
+			mutators = append(mutators, mutations.PostgresMutator)
+		}
+		conns[name], err = cmpconn.NewConn(
+			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
 		if err != nil {
 			log.Fatalf("%s (%s): %+v", name, db.Addr, err)
 		}
@@ -173,34 +168,26 @@ func main() {
 			name := fmt.Sprintf("s%d", i)
 			prep = fmt.Sprintf("PREPARE %s AS\n%s;", name, randStatement.stmt)
 			var sb strings.Builder
-			fmt.Fprintf(&sb, "EXECUTE %s (", name)
+			fmt.Fprintf(&sb, "EXECUTE %s", name)
 			for i, typ := range randStatement.placeholders {
 				if i > 0 {
 					sb.WriteString(", ")
+				} else {
+					sb.WriteString(" (")
 				}
 				d := sqlbase.RandDatum(rng, typ, true)
 				fmt.Println(i, typ, d, tree.Serialize(d))
 				sb.WriteString(tree.Serialize(d))
 			}
-			fmt.Fprintf(&sb, ");")
-			exec = sb.String()
-		}
-		if opts.Postgres {
-			// TODO(mjibson): move these into sqlsmith.
-			for from, to := range map[string]string{
-				":::":    "::",
-				"STRING": "TEXT",
-				"BYTES":  "BYTEA",
-				"FLOAT4": "FLOAT8",
-				"INT2":   "INT8",
-				"INT4":   "INT8",
-			} {
-				prep = strings.Replace(prep, from, to, -1)
-				exec = strings.Replace(exec, from, to, -1)
+			if len(randStatement.placeholders) > 0 {
+				fmt.Fprintf(&sb, ")")
 			}
+			fmt.Fprintf(&sb, ";")
+			exec = sb.String()
+			fmt.Println(exec)
 		}
 		if compare {
-			if err := compareConns(ctx, &opts, rng, sqlMutators, prep, exec, opts.Smither, conns, timeout); err != nil {
+			if err := cmpconn.CompareConns(ctx, timeout, conns, prep, exec); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
 			}
@@ -220,7 +207,7 @@ func main() {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n%s;\n", name, err, prep, exec)
 				// Try to reconnect.
 				db := opts.Databases[name]
-				newConn, err := NewConn(db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
+				newConn, err := cmpconn.NewConn(db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
 				if err != nil {
 					log.Fatalf("tried to reconnect: %v\n", err)
 				}
@@ -235,209 +222,3 @@ type statement struct {
 	stmt         string
 	placeholders []*types.T
 }
-
-func compareConns(
-	ctx context.Context,
-	opts *options,
-	rng *rand.Rand,
-	sqlMutations []sqlbase.Mutator,
-	prep, exec string,
-	smitherName string,
-	conns map[string]*Conn,
-	timeout time.Duration,
-) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	g, ctx := errgroup.WithContext(ctx)
-	vvs := map[string][][]interface{}{}
-	var lock syncutil.Mutex
-	fmt.Println("executing...")
-	for name := range conns {
-		name := name
-		g.Go(func() error {
-			defer func() {
-				if err := recover(); err != nil {
-					fmt.Printf("panic sql on %s:\n%s;\n%s;\n", name, prep, exec)
-					panic(err)
-				}
-			}()
-			conn := conns[name]
-			if opts.Databases[name].AllowMutations {
-				newExec, changed := mutations.ApplyString(rng, exec, sqlMutations...)
-				if changed {
-					fmt.Printf("rewrote %s -> %s\n", exec, newExec)
-				}
-				exec = newExec
-			}
-			executeStart := timeutil.Now()
-			vals, err := conn.Values(ctx, prep, exec)
-			fmt.Printf("executed %s in %s: %v\n", name, timeutil.Since(executeStart), err)
-			if err != nil {
-				return errors.Wrap(err, name)
-			}
-			lock.Lock()
-			vvs[name] = vals
-			lock.Unlock()
-			return nil
-		})
-	}
-	err := g.Wait()
-	if err != nil {
-		fmt.Println("ERR:", err)
-		// We don't care about SQL errors because sqlsmith sometimes
-		// produces bogus queries.
-		return nil
-	}
-	first := vvs[smitherName]
-	fmt.Println(len(first), "rows")
-	for name, vals := range vvs {
-		if name == smitherName {
-			continue
-		}
-		compareStart := timeutil.Now()
-		fmt.Printf("comparing %s to %s...", smitherName, name)
-		err := compareVals(first, vals)
-		fmt.Printf(" %s\n", timeutil.Since(compareStart))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func compareVals(a, b [][]interface{}) error {
-	if len(a) != len(b) {
-		return errors.Errorf("size difference: %d != %d", len(a), len(b))
-	}
-	if len(a) == 0 {
-		return nil
-	}
-	g, _ := errgroup.WithContext(context.Background())
-	// Split up the slices into subslices of equal length and compare those in parallel.
-	n := len(a) / runtime.NumCPU()
-	if n < 1 {
-		n = len(a)
-	}
-	for i := 0; i < len(a); i++ {
-		start, end := i, i+n
-		if end > len(a) {
-			end = len(a)
-		}
-		g.Go(func() error {
-			if diff := cmp.Diff(a[start:end], b[start:end], cmpOptions...); diff != "" {
-				return errors.New(diff)
-			}
-			return nil
-		})
-		i += n
-	}
-	return g.Wait()
-}
-
-var (
-	cmpOptions = []cmp.Option{
-		cmp.Transformer("", func(x []interface{}) []interface{} {
-			out := make([]interface{}, len(x))
-			for i, v := range x {
-				switch t := v.(type) {
-				case *pgtype.TextArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = ""
-					}
-				case *pgtype.BPCharArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = ""
-					}
-				case *pgtype.VarcharArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = ""
-					}
-				case *pgtype.Int8Array:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.Int8Array{}
-					}
-				case *pgtype.Float8Array:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.Float8Array{}
-					}
-				case *pgtype.UUIDArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.UUIDArray{}
-					}
-				case *pgtype.ByteaArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.ByteaArray{}
-					}
-				case *pgtype.InetArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.InetArray{}
-					}
-				case *pgtype.TimestampArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.TimestampArray{}
-					}
-				case *pgtype.BoolArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.BoolArray{}
-					}
-				case *pgtype.DateArray:
-					if t.Status == pgtype.Present && len(t.Elements) == 0 {
-						v = &pgtype.BoolArray{}
-					}
-				case *pgtype.Varbit:
-					if t.Status == pgtype.Present {
-						s, _ := t.EncodeText(nil, nil)
-						v = string(s)
-					}
-				case *pgtype.Bit:
-					vb := pgtype.Varbit(*t)
-					v = &vb
-				case *pgtype.Interval:
-					if t.Status == pgtype.Present {
-						v = duration.DecodeDuration(int64(t.Months), int64(t.Days), t.Microseconds*1000)
-					}
-				case string:
-					// Postgres sometimes adds spaces to the end of a string.
-					t = strings.TrimSpace(t)
-					v = strings.Replace(t, "T00:00:00+00:00", "T00:00:00Z", 1)
-				case *pgtype.Numeric:
-					if t.Status == pgtype.Present {
-						v = apd.NewWithBigInt(t.Int, t.Exp)
-					}
-				case int64:
-					v = apd.New(t, 0)
-				}
-				out[i] = v
-			}
-			return out
-		}),
-
-		cmpopts.EquateEmpty(),
-		cmpopts.EquateNaNs(),
-		cmpopts.EquateApprox(0.00001, 0),
-		cmp.Comparer(func(x, y *big.Int) bool {
-			return x.Cmp(y) == 0
-		}),
-		cmp.Comparer(func(x, y *apd.Decimal) bool {
-			x.Abs(x)
-			y.Abs(y)
-
-			min := &apd.Decimal{}
-			if x.Cmp(y) > 1 {
-				min.Set(y)
-			} else {
-				min.Set(x)
-			}
-			ctx := tree.DecimalCtx
-			_, _ = ctx.Mul(min, min, decimalCloseness)
-			sub := &apd.Decimal{}
-			_, _ = ctx.Sub(sub, x, y)
-			sub.Abs(sub)
-			return sub.Cmp(min) <= 0
-		}),
-		cmp.Comparer(func(x, y duration.Duration) bool {
-			return x.Compare(y) == 0
-		}),
-	}
-	decimalCloseness = apd.New(1, -6)
-)
