@@ -108,6 +108,16 @@ func _CHECK_COL_BODY(
 
 			/* {{if .AllowNullEquality}} */
 			if probeIsNull && buildIsNull {
+				// Both values are NULLs, and since we're allowing null equality, we
+				// proceed to the next value to check.
+				continue
+			} else if probeIsNull {
+				// Only probing value is NULL, so it is different from the build value
+				// (which is non-NULL). We mark it as "different" and proceed to the
+				// next value to check. This behavior is special in case of allowing
+				// null equality because we don't want to reset the groupID of the
+				// current probing tuple.
+				ht.differs[toCheck] = true
 				continue
 			}
 			/* {{end}} */
