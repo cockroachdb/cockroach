@@ -164,7 +164,11 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			}
 		}
 	case *ClosureTxnOperation:
-		v.checkAtomic(`txn`, t.Result, t.Ops...)
+		ops := t.Ops
+		if t.CommitInBatch != nil {
+			ops = append(ops, t.CommitInBatch.Ops...)
+		}
+		v.checkAtomic(`txn`, t.Result, ops...)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}

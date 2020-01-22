@@ -72,9 +72,26 @@ func TestApplier(t *testing.T) {
 `)
 
 	// Txn commit
-	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`))), `
+	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`)))), `
 db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
   txn.Put(ctx, "e", 5) // nil
+  {
+    b := &Batch{}
+    b.Put(ctx, "f", 6) // nil
+    txn.Run(ctx, b) // nil
+  }
+  return nil
+}) // nil
+		`)
+
+	// Txn commit in batch
+	check(t, step(closureTxnCommitInBatch(opSlice(get(`a`), put(`f`, `6`)), put(`e`, `5`))), `
+db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+  txn.Put(ctx, "e", 5) // nil
+  b := &Batch{}
+  b.Get(ctx, "a") // ("1", nil)
+  b.Put(ctx, "f", 6) // nil
+  txn.CommitInBatch(ctx, b) // nil
   return nil
 }) // nil
 		`)
