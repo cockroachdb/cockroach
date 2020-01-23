@@ -14,6 +14,7 @@ import { connect } from "react-redux";
 import { Link } from "react-router";
 import moment from "moment";
 import _ from "lodash";
+import { Action, bindActionCreators, Dispatch } from "redux";
 
 import { AdminUIState } from "src/redux/state";
 import {
@@ -127,10 +128,14 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
 });
 
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-  setSort: decommissionedNodesSortSetting.set,
-};
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
+  bindActionCreators(
+    {
+      refreshNodes,
+      refreshLiveness,
+      setSort: decommissionedNodesSortSetting.set,
+    },
+    dispatch,
+  );
 
 export default connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory);
