@@ -43,7 +43,7 @@ func TestCompare(t *testing.T) {
 		"cockroach2": "postgresql://root@cockroach2:26257/?sslmode=disable",
 	}
 	configs := map[string]testConfig{
-		"default": {
+		"postgres": {
 			opts: []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			conns: []testConn{
 				{
@@ -53,6 +53,25 @@ func TestCompare(t *testing.T) {
 				{
 					name:     "postgres",
 					mutators: []sqlbase.Mutator{mutations.PostgresMutator},
+				},
+			},
+		},
+		"mutators": {
+			opts: []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
+			conns: []testConn{
+				{
+					name:     "cockroach1",
+					mutators: []sqlbase.Mutator{},
+				},
+				{
+					name: "cockroach2",
+					mutators: []sqlbase.Mutator{
+						mutations.StatisticsMutator,
+						mutations.ForeignKeyMutator,
+						mutations.ColumnFamilyMutator,
+						mutations.StatisticsMutator,
+						mutations.IndexStoringMutator,
+					},
 				},
 			},
 		},

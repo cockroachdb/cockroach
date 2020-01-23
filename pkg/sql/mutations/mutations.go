@@ -35,6 +35,10 @@ var (
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = sqlbase.ColumnFamilyMutator
 
+	// IndexStoringMutator modifies the STORING clause of CREATE INDEX and
+	// indexes in CREATE TABLE.
+	IndexStoringMutator MultiStatementMutation = sqlbase.IndexStoringMutator
+
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach.
 	PostgresMutator StatementStringMutator = postgresMutator
