@@ -73,15 +73,15 @@ func makeFkExistenceCheckHelperForDelete(
 			OnDelete: ref.OnDelete,
 			OnUpdate: ref.OnUpdate,
 		}
-		searchIdx, err := originTable.Desc.TableDesc().FindIndexByID(ref.LegacyOriginIndex)
+		searchIdx, err := sqlbase.FindFKOriginIndex(originTable.Desc.TableDesc(), ref.OriginColumnIDs)
 		if err != nil {
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
-				err, "failed to find index %d (table %d) for deletion", ref.LegacyOriginIndex, ref.OriginTableID)
+				err, "failed to find a suitable index on table %d for deletion", ref.OriginTableID)
 		}
-		mutatedIdx, err := table.TableDesc().FindIndexByID(ref.LegacyReferencedIndex)
+		mutatedIdx, err := sqlbase.FindFKReferencedIndex(table.TableDesc(), ref.ReferencedColumnIDs)
 		if err != nil {
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
-				err, "failed to find available index %d (table %d) for deletion", ref.LegacyReferencedIndex, ref.ReferencedTableID)
+				err, "failed to find a suitable index on table %d for deletion", ref.ReferencedTableID)
 		}
 		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
 			CheckDeletes)
