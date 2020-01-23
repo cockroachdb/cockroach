@@ -336,10 +336,11 @@ func (b *Builder) buildScalar(
 		}
 
 	case *tree.RangeCond:
-		input := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
+		inputFrom := b.buildScalar(t.TypedLeftFrom(), inScope, nil, nil, colRefs)
 		from := b.buildScalar(t.TypedFrom(), inScope, nil, nil, colRefs)
+		inputTo := b.buildScalar(t.TypedLeftTo(), inScope, nil, nil, colRefs)
 		to := b.buildScalar(t.TypedTo(), inScope, nil, nil, colRefs)
-		out = b.buildRangeCond(t.Not, t.Symmetric, input, from, to)
+		out = b.buildRangeCond(t.Not, t.Symmetric, inputFrom, from, inputTo, to)
 
 	case *srf:
 		if len(t.cols) == 1 {
@@ -492,24 +493,28 @@ func (b *Builder) buildFunction(
 // x BETWEEN SYMMETRIC a AND b      ->  (x >= a AND x <= b) OR (x >= b AND x <= a)
 // x NOT BETWEEN SYMMETRIC a AND b  ->  NOT ((x >= a AND x <= b) OR (x >= b AND x <= a))
 //
+// Note that x can be typed differently in the expressions (x >= a) and (x <= b)
+// because a and b can have different types; the function takes both "variants"
+// of x.
+//
 // Note that these expressions are subject to normalization rules (which can
 // push down the negation).
 // TODO(radu): this doesn't work when the expressions have side-effects.
 func (b *Builder) buildRangeCond(
-	not bool, symmetric bool, input, from, to opt.ScalarExpr,
+	not bool, symmetric bool, inputFrom, from, inputTo, to opt.ScalarExpr,
 ) opt.ScalarExpr {
 	// Build "input >= from AND input <= to".
 	out := b.factory.ConstructAnd(
-		b.factory.ConstructGe(input, from),
-		b.factory.ConstructLe(input, to),
+		b.factory.ConstructGe(inputFrom, from),
+		b.factory.ConstructLe(inputTo, to),
 	)
 
 	if symmetric {
 		// Build "(input >= from AND input <= to) OR (input >= to AND input <= from)".
 		lhs := out
 		rhs := b.factory.ConstructAnd(
-			b.factory.ConstructGe(input, to),
-			b.factory.ConstructLe(input, from),
+			b.factory.ConstructGe(inputTo, to),
+			b.factory.ConstructLe(inputFrom, from),
 		)
 		out = b.factory.ConstructOr(lhs, rhs)
 	}
