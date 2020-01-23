@@ -4510,7 +4510,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 		t.Errorf("expected %s; got %v", expErr, pErr)
 	}
 
-	// Expect that keyB intent got written!
+	// Expect that the txn left behind an intent on keyB.
 	gArgs = getArgs(keyB)
 	_, pErr = tc.SendWrapped(&gArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
