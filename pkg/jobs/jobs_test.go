@@ -203,6 +203,12 @@ func TestRegistryLifecycle(t *testing.T) {
 	// can race with a PAUSE or CANCEL transaction.
 	resumeCheckCh := make(chan struct{})
 	termCh := make(chan struct{})
+	defer func() {
+		close(resumeCh)
+		close(progressCh)
+		close(resumeCheckCh)
+		close(termCh)
+	}()
 
 	// Instead of a ch for success and fail, use a variable because they can
 	// retry since they are in a transaction.
@@ -269,7 +275,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				lock.Lock()
 				a.terminal++
 				lock.Unlock()
-				termCh <- struct{}{}
+				<-termCh
 				if log.V(2) {
 					log.Infof(ctx, "Exiting terminal")
 				}
@@ -292,7 +298,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.success = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -309,7 +315,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.success = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -335,7 +341,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.success = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -357,7 +363,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.fail = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -463,7 +469,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.success = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -480,7 +486,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.resumeExit++
 		e.fail = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -501,7 +507,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		e.success = true
 		e.fail = true
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -532,7 +538,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		resumeCh <- nil
 		e.resumeExit++
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 
@@ -559,7 +565,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		resumeCh <- jobErr
 		e.resumeExit++
 		e.terminal++
-		<-termCh
+		termCh <- struct{}{}
 		check(t)
 	})
 

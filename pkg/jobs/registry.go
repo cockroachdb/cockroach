@@ -346,10 +346,10 @@ func (r *Registry) Start(
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
 			select {
-			case <-time.After(cancelInterval):
-				r.maybeCancelJobs(ctx, nl)
 			case <-stopper.ShouldStop():
 				return
+			case <-time.After(cancelInterval):
+				r.maybeCancelJobs(ctx, nl)
 			}
 		}
 	})
@@ -357,13 +357,13 @@ func (r *Registry) Start(
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
 			select {
+			case <-stopper.ShouldStop():
+				return
 			case <-time.After(gcInterval):
 				old := timeutil.Now().Add(-1 * gcSetting.Get(&r.settings.SV))
 				if err := r.cleanupOldJobs(ctx, old); err != nil {
 					log.Warningf(ctx, "error cleaning up old job records: %v", err)
 				}
-			case <-stopper.ShouldStop():
-				return
 			}
 		}
 	})
@@ -371,12 +371,12 @@ func (r *Registry) Start(
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
 			select {
+			case <-stopper.ShouldStop():
+				return
 			case <-time.After(adoptInterval):
 				if err := r.maybeAdoptJob(ctx, nl); err != nil {
 					log.Errorf(ctx, "error while adopting jobs: %s", err)
 				}
-			case <-stopper.ShouldStop():
-				return
 			}
 		}
 	})
@@ -504,7 +504,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 
 // Cancel marks the job with id as canceled using the specified txn (may be nil).
 func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error {
-	job, resumer, err := r.getJobFn(ctx, txn, id)
+	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		// Special case schema change jobs to mark the job as canceled.
 		if job != nil {
@@ -519,12 +519,12 @@ func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error 
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
 			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
-				return job.WithTxn(txn).canceled(ctx, NoopFn)
+				return job.WithTxn(txn).canceled(ctx, nil)
 			}
 		}
 		return err
 	}
-	return job.WithTxn(txn).canceled(ctx, resumer.OnFailOrCancel)
+	return job.WithTxn(txn).canceled(ctx, nil)
 }
 
 // Pause marks the job with id as paused using the specified txn (may be nil).
@@ -574,16 +574,12 @@ type Resumer interface {
 	// (for example, if a node died immediately after Success commits).
 	OnTerminal(ctx context.Context, status Status, resultsCh chan<- tree.Datums)
 
-	// OnFailOrCancel is called when a job fails or is canceled, and is called
-	// with the same txn that will mark the job as failed or canceled. The txn
-	// will only be committed if this doesn't return an error and the job state
-	// was successfully changed to failed or canceled. This is done so that
-	// transactional cleanup can be guaranteed to have happened.
+	// OnFailOrCancel is called when a job fails or is canceled.
 	//
-	// This method can be called during cancellation, which is not guaranteed to
-	// run on the node where the job is running. So it cannot assume that any
-	// other methods have been called on this Resumer object.
-	OnFailOrCancel(ctx context.Context, txn *client.Txn) error
+	// This method will be called when a registry notices the cancel request, which is not guaranteed
+	// to run on the node where the job is running. So it cannot assume that any other methods have
+	// been called on this Resumer object.
+	OnFailOrCancel(ctx context.Context, phs interface{}) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
@@ -656,17 +652,28 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: %s: restarting in background", *job.id, e)
 		}
 		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
+			if err.status != StatusPaused && err.status != StatusCancelRequested {
+				log.Fatalf(ctx, "ERORROR: %v", err.status)
+			}
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, err.status, err)
 		}
-		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, err)
+		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, err)
 	case StatusPaused:
 		return errors.Errorf("job %s", status)
 	case StatusCanceled:
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return errors.Errorf("job %s", status)
+	case StatusCancelRequested:
+		if err := job.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+			ju.UpdateStatus(StatusReverting)
+			return nil
+		}); err != nil {
+			return errors.Wrapf(err, "job %d: cannot update state to StatusReverting", job.ID())
+		}
+		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, nil)
 	case StatusSucceeded:
 		if jobErr != nil {
-			return errors.Wrap(jobErr, "unexpected error provied for a succeddful job")
+			return errors.Wrap(jobErr, "unexpected error provided for a succeddful job")
 		}
 		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
 			// If it didn't succeed, mark it failed.
@@ -674,11 +681,41 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return nil
+	case StatusReverting:
+		err := resumer.OnFailOrCancel(ctx, phs)
+		if err == nil {
+			nextStatus := StatusCanceled
+			if jobErr != nil {
+				nextStatus = StatusFailed
+			}
+			if err := job.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+				ju.UpdateStatus(nextStatus)
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "job %d: cannot update state to %s", job.ID(), nextStatus)
+			}
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
+		}
+		if ctx.Err() != nil {
+			// The context was canceled. Tell the user, but don't attempt to
+			// mark the job as failed because it can be resumed by another node.
+			return errors.Errorf("job %d: node liveness error: restarting in background", *job.id)
+		}
+		if e, ok := err.(retryJobError); ok {
+			return errors.Errorf("job %d: %s: restarting in background", *job.id, e)
+		}
+		if ierr, ok := errors.Cause(err).(*InvalidStatusError); ok {
+			if ierr.status != StatusCancelRequested {
+				log.Fatalf(ctx, "ERORROR: %v", ierr.status)
+			}
+			err = errors.Errorf("job %d: could not be reverted because it was canceled by the user", job.ID())
+		}
+		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, err)
 	case StatusFailed:
 		if jobErr == nil {
 			return errors.New("job has StatusFailed but nil error provided")
 		}
-		if err := job.Failed(ctx, jobErr, resumer.OnFailOrCancel); err != nil {
+		if err := job.Failed(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as failed then it will
 			// be restarted during the next adopt loop and retried.
 			return errors.Wrapf(err, "could not mark job %d as failed: %s", *job.id, jobErr)
@@ -690,10 +727,9 @@ func (r *Registry) stepThroughStateMachine(
 }
 
 // resume starts or resumes a job. If no error is returned then the job was
-// asynchronously executed. The job is executed with the ctx, so ctx must
-// only by canceled if the job should also be canceled. resultsCh is passed
-// to the resumable func and should be closed by the caller after errCh sends
-// a value.
+// asynchronously executed. The job is executed with the ctx, so ctx must only
+// by canceled if the job should also be canceled. resultsCh is passed to the
+// resumable func and should be closed by the caller after errCh sends a value.
 func (r *Registry) resume(
 	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
 ) (<-chan error, error) {
@@ -723,9 +759,12 @@ func (r *Registry) resume(
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
-	const stmt = `SELECT id, payload, progress IS NULL FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
+	const stmt = `
+SELECT id, payload, progress IS NULL
+FROM system.jobs
+WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
 	rows, err := r.ex.Query(
-		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
+		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning, StatusCancelRequested, StatusReverting,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
