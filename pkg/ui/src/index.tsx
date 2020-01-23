@@ -169,7 +169,7 @@ ReactDOM.render(
           <Route path="network" component={normalizeConnectedComponent(Network)} />
           <Route path="nodes">
             <IndexRoute component={normalizeConnectedComponent(Nodes)} />
-            <Route path="history" component={ DecommissionedNodeHistory } />
+            <Route path="history" component={ normalizeConnectedComponent(DecommissionedNodeHistory) } />
           </Route>
           <Route path="settings" component={normalizeConnectedComponent(Settings)} />
           <Route path={`certificates/:${nodeIDAttr}`} component={normalizeConnectedComponent(Certificates)} />
