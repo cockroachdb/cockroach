@@ -586,8 +586,14 @@ func (expr *AnnotateTypeExpr) normalize(v *NormalizeVisitor) TypedExpr {
 }
 
 func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
-	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
-	if left == DNull || (from == DNull && to == DNull) {
+	leftFrom, from := expr.TypedLeftFrom(), expr.TypedFrom()
+	leftTo, to := expr.TypedLeftTo(), expr.TypedTo()
+	// The visitor hasn't walked down into leftTo; do it now.
+	if leftTo, v.err = v.ctx.NormalizeExpr(leftTo); v.err != nil {
+		return expr
+	}
+
+	if (leftFrom == DNull || from == DNull) && (leftTo == DNull || to == DNull) {
 		return DNull
 	}
 
@@ -605,7 +611,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if from == DNull {
 			newLeft = DNull
 		} else {
-			newLeft = NewTypedComparisonExpr(leftCmp, left, from).normalize(v)
+			newLeft = NewTypedComparisonExpr(leftCmp, leftFrom, from).normalize(v)
 			if v.err != nil {
 				return expr
 			}
@@ -613,7 +619,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if to == DNull {
 			newRight = DNull
 		} else {
-			newRight = NewTypedComparisonExpr(rightCmp, left, to).normalize(v)
+			newRight = NewTypedComparisonExpr(rightCmp, leftTo, to).normalize(v)
 			if v.err != nil {
 				return expr
 			}

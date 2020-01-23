@@ -198,3 +198,10 @@ query TT
 SELECT * FROM t1, t2 WHERE a = b AND age(b, TIMESTAMPTZ '2017-01-01') > INTERVAL '1 day'
 ----
 2018-01-01 00:00:00 +0000 +0000  2018-01-01 00:00:00 +0000 UTC
+
+# Regression test for #44181: allow left side of BETWEEN to be typed
+# differently in the two comparisons.
+query B
+SELECT '' BETWEEN ''::BYTES AND '';
+----
+true
