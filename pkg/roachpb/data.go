@@ -951,17 +951,6 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
-// InclusiveTimeBounds returns start and end timestamps such that all intents written as
-// part of this transaction have a timestamp in the interval [start, end].
-func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
-	min := t.MinTimestamp
-	max := t.WriteTimestamp
-	if min.IsEmpty() {
-		log.Fatalf(context.TODO(), "missing MinTimestamp on txn: %s", t)
-	}
-	return min, max
-}
-
 // Update ratchets priority, timestamp and original timestamp values (among
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
