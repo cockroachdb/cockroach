@@ -330,6 +330,8 @@ var CompareMode = multiOption(
 	"compare mode",
 	DisableMutations(),
 	DisableImpureFns(),
+	DisableCRDBFns(),
+	IgnoreFNs("^version"),
 	DisableLimits(),
 	OutputSort(),
 )
@@ -340,10 +342,8 @@ var PostgresMode = multiOption(
 	"postgres mode",
 	CompareMode(),
 	DisableWith(),
-	DisableCRDBFns(),
 	SimpleDatums(),
 	IgnoreFNs("^current_"),
-	IgnoreFNs("^version"),
 	simpleOption("postgres", func(s *Smither) {
 		s.postgres = true
 	})(),
