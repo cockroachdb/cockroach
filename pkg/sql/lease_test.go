@@ -1210,7 +1210,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager := t.node(1)
 
 	// Acquire the lease so it is put into the tableNameCache.
-	_, _, err := leaseManager.AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, tableName)
+	_, _, err := leaseManager.AcquireByName(
+		context.TODO(),
+		t.server.Clock().Now(),
+		dbID,
+		tableDesc.GetParentSchemaID(),
+		tableName,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1223,6 +1229,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 				context.TODO(),
 				t.server.Clock().Now(),
 				dbID,
+				tableDesc.GetParentSchemaID(),
 				tableName,
 			)
 			if err != nil {
@@ -1281,11 +1288,18 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
+	test1Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test1")
 	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
 	dbID := test2Desc.ParentID
 
 	// Acquire a lease on test1 by name.
-	ts1, eo1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	ts1, eo1, err := t.node(1).AcquireByName(
+		ctx,
+		t.server.Clock().Now(),
+		dbID,
+		test1Desc.GetParentSchemaID(),
+		"test1",
+	)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts1); err != nil {
@@ -1313,7 +1327,13 @@ CREATE TABLE t.test2 ();
 		// Acquire another lease by name on test1. At first this will be the
 		// same lease, but eventually we will asynchronously renew a lease and
 		// our acquire will get a newer lease.
-		ts1, en1, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+		ts1, en1, err := t.node(1).AcquireByName(
+			ctx,
+			t.server.Clock().Now(),
+			dbID,
+			test1Desc.GetParentSchemaID(),
+			"test1",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1725,6 +1745,7 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
+	test1Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
 	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test2")
 	dbID := test2Desc.ParentID
 
@@ -1740,7 +1761,13 @@ CREATE TABLE t.test2 ();
 	}
 
 	// Acquire a lease on test1 by name.
-	ts1, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "test1")
+	ts1, _, err := t.node(1).AcquireByName(
+		ctx,
+		t.server.Clock().Now(),
+		dbID,
+		test1Desc.GetParentSchemaID(),
+		"test1",
+	)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, ts1); err != nil {
@@ -1920,7 +1947,13 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	dbID := beforeDesc.ParentID
 
 	// Acquire a lease on "before" by name.
-	beforeTable, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "before")
+	beforeTable, _, err := t.node(1).AcquireByName(
+		ctx,
+		t.server.Clock().Now(),
+		dbID,
+		beforeDesc.GetParentSchemaID(),
+		"before",
+	)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, beforeTable); err != nil {
@@ -1932,7 +1965,13 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	now := timeutil.Now().UnixNano()
 
 	// Acquire a lease on "after" by name after server startup.
-	afterTable, _, err := t.node(1).AcquireByName(ctx, t.server.Clock().Now(), dbID, "after")
+	afterTable, _, err := t.node(1).AcquireByName(
+		ctx,
+		t.server.Clock().Now(),
+		dbID,
+		afterDesc.GetParentSchemaID(),
+		"after",
+	)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := t.release(1, afterTable); err != nil {
