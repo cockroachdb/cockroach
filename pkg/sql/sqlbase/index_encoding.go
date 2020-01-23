@@ -270,28 +270,30 @@ func NeededColumnFamilyIDs(
 	return needed
 }
 
-// SplitSpanIntoSeparateFamilies can only be used to split a span representing
-// a single row point lookup into separate spans that request particular
-// families from neededFamilies instead of requesting all the families.
-// It is up to the client to verify whether the requested span
-// represents a single row lookup, and when the span splitting is appropriate.
-func SplitSpanIntoSeparateFamilies(span roachpb.Span, neededFamilies []FamilyID) roachpb.Spans {
-	var resultSpans roachpb.Spans
+// SplitSpanIntoSeparateFamilies splits a span representing a single row point
+// lookup into separate disjoint spans that request only the particular column
+// families from neededFamilies instead of requesting all the families. It is up
+// to the client to ensure the requested span represents a single row lookup and
+// that the span splitting is appropriate (see CanSplitSpanIntoSeparateFamilies).
+//
+// The function accepts a slice of spans to append to.
+func SplitSpanIntoSeparateFamilies(
+	appendTo roachpb.Spans, span roachpb.Span, neededFamilies []FamilyID,
+) roachpb.Spans {
+	span.Key = span.Key[:len(span.Key):len(span.Key)] // avoid mutation and aliasing
 	for i, familyID := range neededFamilies {
-		var tempSpan roachpb.Span
-		tempSpan.Key = make(roachpb.Key, len(span.Key))
-		copy(tempSpan.Key, span.Key)
-		tempSpan.Key = keys.MakeFamilyKey(tempSpan.Key, uint32(familyID))
-		tempSpan.EndKey = tempSpan.Key.PrefixEnd()
+		var famSpan roachpb.Span
+		famSpan.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
+		famSpan.EndKey = famSpan.Key.PrefixEnd()
 		if i > 0 && familyID == neededFamilies[i-1]+1 {
 			// This column family is adjacent to the previous one. We can merge
 			// the two spans into one.
-			resultSpans[len(resultSpans)-1].EndKey = tempSpan.EndKey
+			appendTo[len(appendTo)-1].EndKey = famSpan.EndKey
 		} else {
-			resultSpans = append(resultSpans, tempSpan)
+			appendTo = append(appendTo, famSpan)
 		}
 	}
-	return resultSpans
+	return appendTo
 }
 
 // makeKeyFromEncDatums creates an index key by concatenating keyPrefix with the

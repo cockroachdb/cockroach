@@ -211,7 +211,9 @@ func (ij *indexJoiner) generateSpans(row sqlbase.EncDatumRow) (roachpb.Spans, er
 	if err != nil {
 		return nil, err
 	}
-	return ij.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(span, numKeyCols, containsNull), nil
+	return ij.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+		nil /* appendTo */, span, numKeyCols, containsNull,
+	), nil
 }
 
 // outputStatsToTrace outputs the collected indexJoiner stats to the trace. Will
