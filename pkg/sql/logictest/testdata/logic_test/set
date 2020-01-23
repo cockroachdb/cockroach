@@ -302,6 +302,12 @@ SET tracing.blah = 123
 statement error invalid value for parameter "ssl_renegotiation_limit"
 SET ssl_renegotiation_limit = 123
 
+statement ok
+SET SESSION tracing=false
+
+statement error pgcode 42601 expected string or boolean for set tracing argument
+SET SESSION tracing=1
+
 subtest regression_35109_flowable
 
 statement ok
