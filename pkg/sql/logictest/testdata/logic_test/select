@@ -640,3 +640,18 @@ query IITITTITTTTIFFI
 SELECT * FROM wide
 ----
 0  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  10
+
+# Regression test for #44203 (filter that is not folded inside the optimizer,
+# but is statically evaluated to true when building the filterNode).
+statement ok
+CREATE TABLE t44203(c0 BOOL)
+
+statement ok
+INSERT INTO t44203(c0) VALUES (false)
+
+statement ok
+CREATE VIEW v44203(c0) AS SELECT c0 FROM t44203 WHERE t44203.c0 OFFSET NULL
+
+query B
+SELECT * FROM v44203 WHERE current_user() != ''
+----
