@@ -1181,8 +1181,7 @@ func (ex *connExecutor) runSetTracing(
 		v = unresolvedNameToStrVal(v)
 		strVal, ok := v.(*tree.StrVal)
 		if !ok {
-			res.SetError(errors.AssertionFailedf(
-				"expected string for set tracing argument, not %T", v))
+			res.SetError(errors.Newf("expected string for set tracing argument, not %T", v))
 			return
 		}
 		modes[i] = strVal.RawString()
