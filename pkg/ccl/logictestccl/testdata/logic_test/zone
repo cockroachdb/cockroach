@@ -478,6 +478,14 @@ SELECT zone_name, config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE zone_name = '
 test.parent_modify  ALTER TABLE test.public.parent_modify CONFIGURE ZONE USING
                     gc.ttlseconds = 700
 
+# Regression test for #44231.
+statement ok
+CREATE TABLE t44231 (x INT, INDEX i (x));
+ALTER INDEX t44231@i CONFIGURE ZONE USING num_replicas=COPY FROM PARENT;
+ALTER INDEX t44231@i CONFIGURE ZONE USING num_replicas=COPY FROM PARENT;
+ALTER INDEX t44231@i CONFIGURE ZONE USING num_replicas=COPY FROM PARENT
+
+
 # ------------------------------------------------------------------------------
 # Regression test for #36348; place this at the bottom of this file.
 # ------------------------------------------------------------------------------
