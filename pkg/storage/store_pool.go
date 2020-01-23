@@ -114,6 +114,9 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 // LivenessStatus returns a NodeLivenessStatus enumeration value for the
 // provided Liveness based on the provided timestamp and threshold.
 //
+// See the note on IsLive() for considerations on what should be passed in as
+// `now`.
+//
 // The timeline of the states that a liveness goes through as time passes after
 // the respective liveness record is written is the following:
 //
@@ -131,8 +134,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 func LivenessStatus(
 	l storagepb.Liveness, now time.Time, deadThreshold time.Duration,
 ) storagepb.NodeLivenessStatus {
-	nowHlc := hlc.Timestamp{WallTime: now.UnixNano()}
-	if l.IsDead(nowHlc, deadThreshold) {
+	if l.IsDead(now, deadThreshold) {
 		if l.Decommissioning {
 			return storagepb.NodeLivenessStatus_DECOMMISSIONED
 		}
@@ -144,7 +146,7 @@ func LivenessStatus(
 	if l.Draining {
 		return storagepb.NodeLivenessStatus_UNAVAILABLE
 	}
-	if l.IsLive(nowHlc) {
+	if l.IsLive(now) {
 		return storagepb.NodeLivenessStatus_LIVE
 	}
 	return storagepb.NodeLivenessStatus_UNAVAILABLE
@@ -310,7 +312,7 @@ func (sp *StorePool) String() string {
 	sort.Sort(ids)
 
 	var buf bytes.Buffer
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, id := range ids {
@@ -475,7 +477,9 @@ func (sp *StorePool) decommissioningReplicas(
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
 
-	now := sp.clock.PhysicalTime()
+	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
+	// take clock signals from remote nodes into consideration.
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -506,7 +510,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, repl := range repls {
@@ -682,7 +686,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	var throttled throttledStoreReasons
 	var storeDescriptors []roachpb.StoreDescriptor
 
-	now := sp.clock.PhysicalTime()
+	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {

@@ -28,7 +28,8 @@ message Liveness {
   // may be incremented if the liveness record expires (current time
   // is later than the expiration timestamp).
   int64 epoch = 2;
-  // The timestamp at which this liveness record expires.
+  // The timestamp at which this liveness record expires. The logical part of
+  // this timestamp is zero.
   //
   // Note that the clock max offset is not accounted for in any way when this
   // expiration is set. If a checker wants to be extra-optimistic about another
