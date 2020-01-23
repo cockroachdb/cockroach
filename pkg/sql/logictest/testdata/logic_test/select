@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-vec local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
 # SELECT with no table.
 
@@ -623,4 +623,19 @@ CREATE TABLE nocols(x INT); ALTER TABLE nocols DROP COLUMN x
 
 query I
 SELECT 1, * FROM nocols
+----
+
+# Regression test for #44203 (filter that is not folded inside the optimizer,
+# but is statically evaluated to true when building the filterNode).
+statement ok
+CREATE TABLE t44203(c0 BOOL)
+
+statement ok
+INSERT INTO t44203(c0) VALUES (false)
+
+statement ok
+CREATE VIEW v44203(c0) AS SELECT c0 FROM t44203 WHERE t44203.c0 OFFSET NULL
+
+query B
+SELECT * FROM v44203 WHERE current_user() != ''
 ----
