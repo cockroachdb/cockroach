@@ -442,6 +442,43 @@ const (
 	NonEmptyTable
 )
 
+// MaybeUpgradeDependentOldForeignKeyVersionTables upgrades the on-disk foreign key descriptor
+// version of all table descriptors that have foreign key relationships with desc. This is intended
+// to catch upgrade 19.1 version table descriptors that haven't been upgraded yet before an operation
+// like drop index which could cause them to lose FK information in the old representation.
+func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor,
+) error {
+	// In order to avoid having old version foreign key descriptors that depend on this
+	// index lose information when this index is dropped, ensure that they get updated.
+	maybeUpgradeFKRepresentation := func(id sqlbase.ID) error {
+		// Read the referenced table and see if the foreign key representation has changed. If it has, write
+		// the upgraded descriptor back to disk.
+		tbl, didUpgrade, err := sqlbase.GetTableDescFromIDWithFKsChanged(ctx, p.txn, id)
+		if err != nil {
+			return err
+		}
+		if didUpgrade {
+			err := p.writeSchemaChange(ctx, sqlbase.NewMutableExistingTableDescriptor(*tbl), sqlbase.InvalidMutationID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for i := range desc.OutboundFKs {
+		if err := maybeUpgradeFKRepresentation(desc.OutboundFKs[i].ReferencedTableID); err != nil {
+			return err
+		}
+	}
+	for i := range desc.InboundFKs {
+		if err := maybeUpgradeFKRepresentation(desc.InboundFKs[i].OriginTableID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ResolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
