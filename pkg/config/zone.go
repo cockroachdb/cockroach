@@ -504,7 +504,8 @@ func (z *ZoneConfig) Validate() error {
 
 // InheritFromParent hydrates a zones missing fields from its parent.
 func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
-	if z.NumReplicas == nil {
+	// Allow for subzonePlaceholders to inherit fields from parents if needed.
+	if z.NumReplicas == nil || (z.NumReplicas != nil && *z.NumReplicas == 0) {
 		if parent.NumReplicas != nil {
 			z.NumReplicas = proto.Int32(*parent.NumReplicas)
 		}
