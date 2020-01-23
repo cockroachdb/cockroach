@@ -159,6 +159,7 @@ func (ef *execFactory) ConstructFilter(
 	// limit (it would make the limit apply AFTER the filter).
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+		// Note: if the filter statically evaluates to true, s.filter stays nil.
 		s.reqOrdering = ReqOrdering(reqOrdering)
 		return s, nil
 	}
@@ -169,6 +170,10 @@ func (ef *execFactory) ConstructFilter(
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
 	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	if f.filter == nil {
+		// Filter statically evaluates to true. Just return the input plan.
+		return n, nil
+	}
 	f.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
