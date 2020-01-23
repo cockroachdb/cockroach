@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -440,12 +441,18 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	t.l.Printf("trying to decommission a second time\n")
-	if buf, err := decommission(ctx, 2, c.Node(1), "decommission"); err != nil {
-		t.Fatalf("decommission failed: %v", err)
-	} else {
-		if !strings.HasPrefix(buf, "warning: node 1 is already decommissioning or decommissioned") {
-			t.Fatalf("expected warning at start of duplicate decommission, got:\n%s", buf)
+	if err := testutils.SucceedsSoonError(func() error {
+		buf, err := decommission(ctx, 2, c.Node(1), "decommission")
+		if err != nil {
+			return fmt.Errorf("decommission failed: %v", err)
 		}
+		if !strings.HasPrefix(buf, "warning: node 1 is already decommissioning or decommissioned") {
+			return fmt.Errorf("expected warning at start of duplicate decommission, got:\n%s", buf)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s",
+			testutils.DefaultSucceedsSoonDuration, err)
 	}
 
 	t.l.Printf("recommissioning first node (from third node)\n")
@@ -454,12 +461,18 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	t.l.Printf("trying to recommission a second time\n")
-	if buf, err := decommission(ctx, 3, c.Node(1), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
-	} else {
+	if err := testutils.SucceedsSoonError(func() error {
+		buf, err := decommission(ctx, 3, c.Node(1), "recommission")
+		if err != nil {
+			t.Fatalf("recommission failed: %v", err)
+		}
 		if !strings.HasPrefix(buf, "warning: node 1 is not decommissioned") {
 			t.Fatalf("expected warning at start of duplicate recommission, got:\n%s", buf)
 		}
+		return nil
+	}); err != nil {
+		t.Fatalf("condition failed to evaluate within %s: %s",
+			testutils.DefaultSucceedsSoonDuration, err)
 	}
 
 	t.l.Printf("decommissioning second node from third, using --wait=all\n")
