@@ -2083,12 +2083,13 @@ SELECT oid(3), oid(0), oid(12023948723)
 3  0  12023948723
 
 query T
-SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2)) AS a(i)
+SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
 ----
 one
 one-three
 six-one-seven
 minus-two
+minus-nine-two-two-three-three-seven-two-zero-three-six-eight-five-four-seven-seven-five-eight-zero-eight
 
 # Do some basic sanity checking of the variadic hash functions.
 query BBBBBBBBB
