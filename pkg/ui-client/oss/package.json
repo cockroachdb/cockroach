@@ -1,0 +1,15 @@
+{
+  "name": "cockroachdb-protobuf-client-oss",
+  "version": "1.0.0",
+  "description": "Javascript client for use by CockroachDB UI (OSS)",
+  "files": [
+    "./src/*"
+  ],
+  "main": "./src/protos.js",
+  "types": "./src/protos.d.ts",
+  "license": "SEE LICENSE IN github.com/cockroachdb/cockroach/LICENSE",
+  "devDependencies": {
+    "protobufjs": "^6.8.8",
+    "typescript": "^3.7.5"
+  }
+}

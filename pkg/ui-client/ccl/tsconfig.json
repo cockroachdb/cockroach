@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "outFile": "./dist/index.d.ts"
+  },
+  "files": [
+    "./src/ccl/protos.js",
+    "./src/oss/protos.js"
+  ]
+}
