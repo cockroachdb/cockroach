@@ -430,3 +430,38 @@ select
                 └── le [type=bool]
                      ├── variable: y [type=int]
                      └── const: 10 [type=int]
+
+exec-ddl
+CREATE TABLE t0(c0 INT UNIQUE)
+----
+
+exec-ddl
+CREATE VIEW v0(c0) AS SELECT DISTINCT t0.c0 FROM t0
+----
+
+# Regression test for #44296. Ensure that no key is added for the Select.
+norm
+SELECT * FROM v0 WHERE v0.c0 IS NULL
+----
+limit
+ ├── columns: c0:1(int)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── interesting orderings: (+1)
+ ├── select
+ │    ├── columns: c0:1(int)
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── interesting orderings: (+1)
+ │    ├── scan t0
+ │    │    ├── columns: c0:1(int)
+ │    │    ├── lax-key: (1)
+ │    │    ├── limit hint: 100.00
+ │    │    ├── prune: (1)
+ │    │    └── interesting orderings: (+1)
+ │    └── filters
+ │         └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ │              ├── variable: c0 [type=int]
+ │              └── null [type=unknown]
+ └── const: 1 [type=int]

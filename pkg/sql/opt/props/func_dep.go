@@ -725,7 +725,7 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 
 	// Try to reduce the key based on any new strict FDs.
 	if f.hasKey != noKey {
-		f.key = f.ReduceCols(f.key)
+		f.setKey(f.ReduceCols(f.key), f.hasKey)
 		if f.hasKey == laxKey && f.key.SubsetOf(notNullCols) {
 			f.hasKey = strictKey
 		}
@@ -813,7 +813,7 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 
 	// Try to reduce the key based on the new constants.
 	if f.hasKey != noKey {
-		f.key = f.ReduceCols(f.key)
+		f.setKey(f.ReduceCols(f.key), f.hasKey)
 	}
 }
 
@@ -1576,12 +1576,16 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 
 	// Try to reduce the key based on the new equivalency.
 	if f.hasKey != noKey {
-		f.key = f.ReduceCols(f.key)
+		f.setKey(f.ReduceCols(f.key), f.hasKey)
 	}
 }
 
 // setKey updates the key that the set is currently maintaining.
 func (f *FuncDepSet) setKey(key opt.ColSet, typ keyType) {
+	if key.Empty() && typ == laxKey {
+		// There is no such thing as an empty lax key.
+		typ = noKey
+	}
 	f.hasKey = typ
 	f.key = key
 }

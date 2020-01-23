@@ -518,6 +518,14 @@ func TestFuncDeps_AddConstants(t *testing.T) {
 	eqConst.MakeNotNull(c(10))
 	verifyFD(t, &eqConst, "key(11); ()-->(1-5,10), (11)-->(12,13), (1)==(10), (10)==(1)")
 	testColsAreStrictKey(t, &eqConst, c(1, 2, 3, 10, 12), false)
+
+	// Ensure that converting a lax key to a constant does not create an empty
+	// lax key.
+	laxConst := &props.FuncDepSet{}
+	laxConst.AddLaxKey(c(2, 3), c(1, 2, 3))
+	verifyFD(t, laxConst, "lax-key(2,3); (2,3)~~>(1)")
+	laxConst.AddConstants(c(1, 2, 3))
+	verifyFD(t, laxConst, "()-->(1-3)")
 }
 
 // Figure, page references are from this paper:
