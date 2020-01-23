@@ -588,26 +588,6 @@ func (ds *DistSender) initAndVerifyBatch(
 		}
 	}
 
-	// If ScanOptions is set the batch is only allowed to contain scans.
-	if ba.ScanOptions != nil {
-		for _, req := range ba.Requests {
-			switch req.GetInner().(type) {
-			case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
-				// Scans are supported.
-			case *roachpb.EndTxnRequest:
-				// These requests are ignored.
-			default:
-				return roachpb.NewErrorf("batch with scan option has non-scans: %s", ba)
-			}
-		}
-		// If both MaxSpanRequestKeys and MinResults are set, then they can't be
-		// contradictory.
-		if ba.Header.MaxSpanRequestKeys != 0 &&
-			ba.Header.MaxSpanRequestKeys < ba.Header.ScanOptions.MinResults {
-			return roachpb.NewErrorf("MaxSpanRequestKeys (%d) < MinResults (%d): %s",
-				ba.Header.MaxSpanRequestKeys, ba.Header.ScanOptions.MinResults, ba)
-		}
-	}
 	return nil
 }
 
@@ -1182,11 +1162,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	// If min_results is set, num_results will count how many results scans have
-	// accumulated so far.
-	var numResults int64
-	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
-	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
+	canParallelize := ba.Header.MaxSpanRequestKeys == 0
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -1247,17 +1223,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || stopAtRangeBoundary
+			mightStopEarly := ba.MaxSpanRequestKeys > 0
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
 				var replyResults int64
 				for _, r := range resp.reply.Responses {
 					replyResults += r.GetInner().Header().NumKeys
 				}
-				// Do accounting for results. It's important that we update
-				// MaxSpanRequestKeys and ScanOptions.MinResults, as ba might be
+				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
 				// passed recursively to further divideAndSendBatchToRanges() calls.
-				numResults += replyResults
 				if ba.MaxSpanRequestKeys > 0 {
 					if replyResults > ba.MaxSpanRequestKeys {
 						log.Fatalf(ctx, "received %d results, limit was %d",
@@ -1270,29 +1244,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 						resumeReason = roachpb.RESUME_KEY_LIMIT
 						return
 					}
-				}
-				var minResultsSatisfied bool
-				if !stopAtRangeBoundary {
-					minResultsSatisfied = true
-				} else {
-					if ba.Header.ScanOptions.MinResults == 0 {
-						minResultsSatisfied = true
-					} else {
-						// We need to change ba.Header.ScanOptions, so we have to make a
-						// copy so as to not mutate the one that we have already passed to
-						// gRPC.
-						scanOptsCopy := *ba.Header.ScanOptions
-						scanOptsCopy.MinResults -= numResults
-						minResultsSatisfied = scanOptsCopy.MinResults <= 0
-						ba.Header.ScanOptions = &scanOptsCopy
-					}
-				}
-				// If stopAtRangeBoundary is set, we stop unless MinResults is not
-				// satisfied.
-				if stopAtRangeBoundary && minResultsSatisfied {
-					couldHaveSkippedResponses = true
-					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
-					return
 				}
 			}
 		}
