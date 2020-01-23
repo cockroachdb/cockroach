@@ -405,8 +405,7 @@ func allocateTableRewrites(
 					return err
 				}
 
-				// Check privileges. These will be checked again in the transaction
-				// that actually writes the new table descriptors.
+				// Check privileges.
 				{
 					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
 					if err != nil {
@@ -1042,10 +1041,8 @@ func WriteTableDescs(
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(tables[i].ParentID))
 				}
-				// TODO(mberhault): CheckPrivilege wants a planner.
-				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
-					return err
-				}
+				// We don't check priv's here since we checked them during job planning.
+
 				// Default is to copy privs from restoring parent db, like CREATE TABLE.
 				// TODO(dt): Make this more configurable.
 				tables[i].Privileges = parentDB.GetPrivileges()
