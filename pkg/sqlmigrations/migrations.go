@@ -239,14 +239,18 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
 		workFn: func(ctx context.Context, r runner) error {
 			// Note that these particular schema changes are idempotent.
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{
+					User: security.NodeUser,
+				},
 				`ALTER TABLE system.reports_meta ALTER generated TYPE TIMESTAMP WITH TIME ZONE`,
 			); err != nil {
 				return err
 			}
-			if _, err := r.sqlExecutor.ExecWithUser(ctx, "update-reports-meta-generated", nil, /* txn */
-				security.NodeUser,
+			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{
+					User: security.NodeUser,
+				},
 				"ALTER TABLE system.replication_constraint_stats ALTER violation_start "+
 					"TYPE TIMESTAMP WITH TIME ZONE",
 			); err != nil {
@@ -355,6 +359,33 @@ func init() {
 type runner struct {
 	db          db
 	sqlExecutor *sql.InternalExecutor
+	settings    *cluster.Settings
+}
+
+func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
+	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.RootUser,
+		},
+		stmt, qargs...)
+	return err
+}
+
+func (r runner) execAsRootWithRetry(
+	ctx context.Context, opName string, stmt string, qargs ...interface{},
+) error {
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		err := r.execAsRoot(ctx, opName, stmt, qargs...)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
+	}
+	return err
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -383,6 +414,7 @@ type Manager struct {
 	db           db
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
+	settings     *cluster.Settings
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -393,6 +425,7 @@ func NewManager(
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
+	settings *cluster.Settings,
 ) *Manager {
 	opts := client.LeaseManagerOptions{
 		ClientID:      clientID,
@@ -404,6 +437,7 @@ func NewManager(
 		db:           db,
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
+		settings:     settings,
 	}
 }
 
@@ -547,6 +581,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
+		settings:    m.settings,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		minVersion := migration.includedInBootstrap
@@ -608,7 +643,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
-		tKey := sqlbase.MakePublicTableNameKey(ctx, r.sqlExecutor.Settings(), desc.GetParentID(), desc.GetName())
+		tKey := sqlbase.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(), desc.GetID(), nil)
 		b.CPut(sqlbase.MakeDescMetadataKey(desc.GetID()), sqlbase.WrapDescriptor(&desc), nil)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -632,9 +667,10 @@ func createReplicationConstraintStatsTable(ctx context.Context, r runner) error 
 	if err := createSystemTable(ctx, r, sqlbase.ReplicationConstraintStatsTable); err != nil {
 		return err
 	}
-	_, err := r.sqlExecutor.Exec(ctx, "add-constraints-ttl", nil, /* txn */
-		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
-			sqlbase.ReplicationConstraintStatsTable.Name, int(sqlbase.ReplicationConstraintStatsTableTTL.Seconds())))
+	err := r.execAsRoot(ctx, "add-constraints-ttl",
+		fmt.Sprintf(
+			"ALTER TABLE system.replication_constraint_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
+			int(sqlbase.ReplicationConstraintStatsTableTTL.Seconds())))
 	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationConstraintStatsTable.Name)
 }
 
@@ -646,9 +682,9 @@ func createReplicationStatsTable(ctx context.Context, r runner) error {
 	if err := createSystemTable(ctx, r, sqlbase.ReplicationStatsTable); err != nil {
 		return err
 	}
-	_, err := r.sqlExecutor.Exec(ctx, "add-replication-status-ttl", nil, /* txn */
-		fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = %d",
-			sqlbase.ReplicationStatsTable.Name, int(sqlbase.ReplicationStatsTableTTL.Seconds())))
+	err := r.execAsRoot(ctx, "add-replication-status-ttl",
+		fmt.Sprintf("ALTER TABLE system.replication_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
+			int(sqlbase.ReplicationStatsTableTTL.Seconds())))
 	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationStatsTable.Name)
 }
 
@@ -715,8 +751,12 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 	q := fmt.Sprintf(
 		`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]`,
 		sqlbase.DeprecatedNamespaceTable.ID)
-	rows, _, err := r.sqlExecutor.QueryWithUser(
-		ctx, "read-deprecated-namespace-table", nil /* txn */, security.NodeUser, q)
+	rows, err := r.sqlExecutor.QueryEx(
+		ctx, "read-deprecated-namespace-table", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.NodeUser,
+		},
+		q)
 	if err != nil {
 		return err
 	}
@@ -757,23 +797,6 @@ func createReportsMetaTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
 }
 
-func runStmtAsRootWithRetry(
-	ctx context.Context, r runner, opName string, stmt string, qargs ...interface{},
-) error {
-	// Retry a limited number of times because returning an error and letting
-	// the node kill itself is better than holding the migration lease for an
-	// arbitrarily long time.
-	var err error
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		_, err := r.sqlExecutor.Exec(ctx, opName, nil /* txn */, stmt, qargs...)
-		if err == nil {
-			break
-		}
-		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
-	}
-	return err
-}
-
 // SettingsDefaultOverrides documents the effect of several migrations that add
 // an explicit value for a setting, effectively changing the "default value"
 // from what was defined in code.
@@ -787,13 +810,13 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	if cluster.TelemetryOptOut() {
 		return nil
 	}
-	return runStmtAsRootWithRetry(
-		ctx, r, "optInToDiagnosticsStatReporting", `SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
+	return r.execAsRootWithRetry(ctx, "optInToDiagnosticsStatReporting",
+		`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
 }
 
 func initializeClusterSecret(ctx context.Context, r runner) error {
-	return runStmtAsRootWithRetry(
-		ctx, r, "initializeClusterSecret",
+	return r.execAsRootWithRetry(
+		ctx, "initializeClusterSecret",
 		`SET CLUSTER SETTING cluster.secret = gen_random_uuid()::STRING`,
 	)
 }
@@ -821,17 +844,16 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	// (overwriting also seems reasonable, but what for).
 	// We don't allow users to perform version changes until we have run
 	// the insert below.
-	if _, err := r.sqlExecutor.Exec(
+	if err := r.execAsRoot(
 		ctx,
 		"insert-setting",
-		nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	); err != nil {
 		return err
 	}
 
-	if _, err := r.sqlExecutor.Exec(
-		ctx, "set-setting", nil /* txn */, "SET CLUSTER SETTING version = $1", v.String(),
+	if err := r.execAsRoot(
+		ctx, "set-setting", "SET CLUSTER SETTING version = $1", v.String(),
 	); err != nil {
 		return err
 	}
@@ -843,7 +865,7 @@ func addRootUser(ctx context.Context, r runner) error {
 	const upsertRootStmt = `
 	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
 	        `
-	return runStmtAsRootWithRetry(ctx, r, "addRootUser", upsertRootStmt, security.RootUser)
+	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
 }
 
 func addAdminRole(ctx context.Context, r runner) error {
@@ -851,7 +873,7 @@ func addAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
           `
-	return runStmtAsRootWithRetry(ctx, r, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
+	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
@@ -859,8 +881,8 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
-	return runStmtAsRootWithRetry(
-		ctx, r, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+	return r.execAsRootWithRetry(
+		ctx, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
@@ -870,8 +892,12 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
           `
 
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		row, err := r.sqlExecutor.QueryRow(
-			ctx, "disallowPublicUserOrRole", nil /* txn */, selectPublicStmt, sqlbase.PublicRole,
+		row, err := r.sqlExecutor.QueryRowEx(
+			ctx, "disallowPublicUserOrRole", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{
+				User: security.RootUser,
+			},
+			selectPublicStmt, sqlbase.PublicRole,
 		)
 		if err != nil {
 			continue
@@ -908,7 +934,7 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		for _, dbName := range []string{sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName} {
 			stmt := fmt.Sprintf(createDbStmt, dbName)
-			_, err = r.sqlExecutor.Exec(ctx, "create-default-db", nil /* txn */, stmt)
+			err = r.execAsRoot(ctx, "create-default-db", stmt)
 			if err != nil {
 				log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
 				break
@@ -969,7 +995,7 @@ func retireOldTsPurgeIntervalSettings(ctx context.Context, r runner) error {
 	// We rely on the SELECT returning no row if the original setting
 	// was not defined, and INSERT ON CONFLICT DO NOTHING to ignore the
 	// insert if the new name was already set.
-	if _, err := r.sqlExecutor.Exec(ctx, "copy-setting", nil /* txn */, `
+	if err := r.execAsRoot(ctx, "copy-setting", `
 INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
    SELECT 'timeseries.storage.resolution_10s.ttl', value, "lastUpdated", "valueType"
      FROM system.settings WHERE name = 'timeseries.storage.10s_resolution_ttl'
@@ -979,7 +1005,7 @@ ON CONFLICT (name) DO NOTHING`,
 	}
 
 	// Ditto 30m.
-	if _, err := r.sqlExecutor.Exec(ctx, "copy-setting", nil /* txn */, `
+	if err := r.execAsRoot(ctx, "copy-setting", `
 INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
    SELECT 'timeseries.storage.resolution_30m.ttl', value, "lastUpdated", "valueType"
      FROM system.settings WHERE name = 'timeseries.storage.30m_resolution_ttl'
@@ -994,8 +1020,10 @@ ON CONFLICT (name) DO NOTHING`,
 func updateSystemLocationData(ctx context.Context, r runner) error {
 	// See if the system.locations table already has data in it.
 	// If so, we don't want to do anything.
-	row, err := r.sqlExecutor.QueryRow(ctx, "update-system-locations",
-		nil, `SELECT count(*) FROM system.locations`)
+	row, err := r.sqlExecutor.QueryRowEx(ctx, "update-system-locations",
+		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		`SELECT count(*) FROM system.locations`)
 	if err != nil {
 		return err
 	}
@@ -1007,8 +1035,9 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	for _, loc := range roachpb.DefaultLocationInformation {
 		stmt := `UPSERT INTO system.locations VALUES ($1, $2, $3, $4)`
 		tier := loc.Locality.Tiers[0]
-		if _, err := r.sqlExecutor.Exec(ctx, "update-system-locations", nil,
-			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude); err != nil {
+		if err := r.execAsRoot(ctx, "update-system-locations",
+			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude,
+		); err != nil {
 			return err
 		}
 	}

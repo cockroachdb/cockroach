@@ -48,7 +48,7 @@ func TestCacheBasic(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutorWithUser)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very short.
 	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Microsecond)
@@ -117,7 +117,7 @@ func TestRefresh(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutorWithUser)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
@@ -199,7 +199,7 @@ func TestStart(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		s := tc.Server(0)
 		p := ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutorWithUser))
+			s.InternalExecutor().(sqlutil.InternalExecutor))
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
@@ -232,7 +232,7 @@ func TestQueryRecord(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutorWithUser)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
@@ -289,7 +289,7 @@ func TestIterate(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutorWithUser)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
@@ -354,7 +354,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutorWithUser)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)

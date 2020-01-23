@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,9 +49,10 @@ func (p *planner) showStateMachineSetting(
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
 				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
 						ctx, "read-setting",
 						txn,
+						sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
 					if err != nil {

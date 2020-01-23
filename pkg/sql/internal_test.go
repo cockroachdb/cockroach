@@ -39,7 +39,9 @@ func TestInternalExecutor(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT 1")
+	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"SELECT 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,8 +58,9 @@ func TestInternalExecutor(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The following statement will succeed on the 2nd try.
-	row, err = ie.QueryRow(
+	row, err = ie.QueryRowEx(
 		ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
 	if err != nil {
@@ -78,8 +81,9 @@ func TestInternalExecutor(t *testing.T) {
 	cnt := 0
 	err = s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		cnt++
-		row, err = ie.QueryRow(
+		row, err = ie.QueryRowEx(
 			ctx, "test", txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"select case nextval('test.seq') when 2 then crdb_internal.force_retry('1h') else 99 end",
 		)
 		if err != nil {
@@ -124,7 +128,9 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 
 	for _, tc := range testData {
 		t.Run(tc.user, func(t *testing.T) {
-			rows, cols, err := ie.QueryWithUser(ctx, "test", nil /* txn */, tc.user, "SELECT crdb_internal.is_admin()")
+			rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
+				sqlbase.InternalExecutorSessionDataOverride{User: tc.user},
+				"SELECT crdb_internal.is_admin()")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -152,18 +158,22 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	}
 
 	expDB := "foo"
-	ie := sql.NewSessionBoundInternalExecutor(
+	ie := sql.MakeInternalExecutor(
 		ctx,
-		&sessiondata.SessionData{
-			Database:      expDB,
-			SequenceState: &sessiondata.SequenceState{},
-		},
 		s.(*server.TestServer).Server.PGServer().SQLServer,
 		sql.MemoryMetrics{},
 		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
 	)
+	ie.SetSessionData(
+		&sessiondata.SessionData{
+			Database:      expDB,
+			SequenceState: &sessiondata.SequenceState{},
+			User:          security.RootUser,
+		})
 
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "show database")
+	row, err := ie.QueryRowEx(ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{},
+		"show database")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,23 +223,24 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.TODO())
 
-		ie := sql.NewSessionBoundInternalExecutor(
+		ie := sql.MakeInternalExecutor(
 			context.TODO(),
+			s.(*server.TestServer).Server.PGServer().SQLServer,
+			sql.MemoryMetrics{},
+			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+		)
+		ie.SetSessionData(
 			&sessiondata.SessionData{
 				User:            security.RootUser,
 				Database:        "defaultdb",
 				ApplicationName: "appname_findme",
 				SequenceState:   &sessiondata.SequenceState{},
-			},
-			s.(*server.TestServer).Server.PGServer().SQLServer,
-			sql.MemoryMetrics{},
-			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-		)
+			})
 		testInternalExecutorAppNameInitialization(
 			t, sem,
 			"appname_findme", // app name in SHOW
 			sqlbase.DelegatedAppNamePrefix+"appname_findme", // app name in stats
-			ie,
+			&ie,
 		)
 	})
 }

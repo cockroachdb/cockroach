@@ -467,6 +467,7 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 		return nil
 	}
 	return m.workFn(ctx, runner{
+		settings:    mt.server.ClusterSettings(),
 		db:          mt.kvDB,
 		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})

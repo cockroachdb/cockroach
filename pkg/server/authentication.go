@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -158,10 +159,11 @@ func (s *authenticationServer) UserLogout(
 	}
 
 	// Revoke the session.
-	if n, err := s.server.internalExecutor.Exec(
+	if n, err := s.server.internalExecutor.ExecEx(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionID,
 	); err != nil {
@@ -205,10 +207,12 @@ WHERE id = $1`
 		isRevoked    bool
 	)
 
-	row, err := s.server.internalExecutor.QueryRow(
+	row, err := s.server.internalExecutor.QueryRowEx(
 		ctx,
 		"lookup-auth-session",
-		nil /* txn */, sessionQuery, cookie.ID)
+		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
 		return false, "", err
 	}
@@ -299,10 +303,11 @@ RETURNING id
 `
 	var id int64
 
-	row, err := s.server.internalExecutor.QueryRow(
+	row, err := s.server.internalExecutor.QueryRowEx(
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		insertSessionStmt,
 		hashedSecret,
 		username,

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // MembershipCache is a shared cache for role membership information.
@@ -140,6 +141,9 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 // HasAdminRole implements the AuthorizationAccessor interface.
 func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	user := p.SessionData().User
+	if user == "" {
+		return false, errors.AssertionFailedf("empty user")
+	}
 
 	// Check if user is 'root' or 'node'.
 	if user == security.RootUser || user == security.NodeUser {

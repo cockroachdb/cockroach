@@ -382,8 +382,10 @@ func (s *Server) SetupConn(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
-	sd, sdMut := s.newSessionDataAndMutator(args)
-	ex, err := s.newConnExecutor(ctx, sd, sdMut, stmtBuf, clientComm, memMetrics, &s.Metrics)
+	sd := s.newSessionData(args)
+	sdMut := s.makeSessionDataMutator(sd, args.SessionDefaults)
+	ex, err := s.newConnExecutor(
+		ctx, sd, &sdMut, stmtBuf, clientComm, memMetrics, &s.Metrics, resetSessionDataToDefaults)
 	return ConnectionHandler{ex}, err
 }
 
@@ -450,34 +452,57 @@ func (s *Server) ServeConn(
 	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
-// newSessionDataAndMutator creates a SessionData and sessionDataMutator that
-// can be passed to newConnExecutor.
-func (s *Server) newSessionDataAndMutator(
-	args SessionArgs,
-) (*sessiondata.SessionData, *sessionDataMutator) {
+// newSessionData a SessionData that can be passed to newConnExecutor.
+func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
-		User:          args.User,
-		RemoteAddr:    args.RemoteAddr,
-		SequenceState: sessiondata.NewSequenceState(),
-		DataConversion: sessiondata.DataConversionConfig{
-			Location: time.UTC,
-		},
+		User:              args.User,
+		RemoteAddr:        args.RemoteAddr,
 		ResultsBufferSize: args.ConnResultsBufferSize,
 	}
+	s.populateMinimalSessionData(sd)
+	return sd
+}
 
-	m := &sessionDataMutator{
+func (s *Server) makeSessionDataMutator(
+	sd *sessiondata.SessionData, defaults SessionDefaults,
+) sessionDataMutator {
+	return sessionDataMutator{
 		data:     sd,
-		defaults: args.SessionDefaults,
+		defaults: defaults,
 		settings: s.cfg.Settings,
 	}
-
-	return sd, m
 }
+
+// populateMinimalSessionData populates sd with some minimal values needed for
+// not crashing. Fields of sd that are already set are not overwritten.
+func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
+	if sd.SequenceState == nil {
+		sd.SequenceState = sessiondata.NewSequenceState()
+	}
+	if sd.DataConversion == (sessiondata.DataConversionConfig{}) {
+		sd.DataConversion = sessiondata.DataConversionConfig{
+			Location: time.UTC,
+		}
+	}
+	if len(sd.SearchPath.GetPathArray()) == 0 {
+		sd.SearchPath = sqlbase.DefaultSearchPath
+	}
+}
+
+type sdResetOption bool
+
+const (
+	resetSessionDataToDefaults     sdResetOption = true
+	dontResetSessionDataToDefaults               = false
+)
 
 // newConnExecutor creates a new connExecutor.
 //
-// sdMutator can be nil if SET statements are not going to be executed; this is
-// appropriate for session-bound internal executors.
+// resetOpt controls whether sd is to be reset to the default values.
+// TODO(andrei): resetOpt is a hack needed by the InternalExecutor, which
+// doesn't want this resetting. Figure out a better API where the responsibility
+// of assigning default values is either entirely inside or outside of this
+// ctor.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
@@ -486,6 +511,7 @@ func (s *Server) newConnExecutor(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
+	resetOpt sdResetOption,
 ) (*connExecutor, error) {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -546,19 +572,19 @@ func (s *Server) newConnExecutor(
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
-	if sdMutator != nil {
-		sdMutator.setCurTxnReadOnly = func(val bool) {
-			ex.state.readOnly = val
-		}
-		sdMutator.onTempSchemaCreation = func() {
-			ex.hasCreatedTemporarySchema = true
-		}
-		sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
-			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
-			ex.applicationName.Store(newName)
-		})
-		// Initialize the session data from provided defaults. We need to do this early
-		// because other initializations below use the configured values.
+	sdMutator.setCurTxnReadOnly = func(val bool) {
+		ex.state.readOnly = val
+	}
+	sdMutator.onTempSchemaCreation = func() {
+		ex.hasCreatedTemporarySchema = true
+	}
+	sdMutator.RegisterOnSessionDataChange("application_name", func(newName string) {
+		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
+		ex.applicationName.Store(newName)
+	})
+	// Initialize the session data from provided defaults. We need to do this early
+	// because other initializations below use the configured values.
+	if resetOpt == resetSessionDataToDefaults {
 		if err := resetSessionVars(ctx, sdMutator); err != nil {
 			log.Errorf(ctx, "error setting up client session: %v", err)
 			return nil, err
@@ -577,7 +603,13 @@ func (s *Server) newConnExecutor(
 		// we can measure their respective "pressure" on internal queries.
 		// Hence the choice here to add the delegate prefix
 		// to the current app name.
-		appStatsBucketName := sqlbase.DelegatedAppNamePrefix + ex.sessionData.ApplicationName
+		var appStatsBucketName string
+		if !strings.HasPrefix(ex.sessionData.ApplicationName, sqlbase.InternalAppNamePrefix) {
+			appStatsBucketName = sqlbase.DelegatedAppNamePrefix + ex.sessionData.ApplicationName
+		} else {
+			// If this is already an "internal app", don't put more prefix.
+			appStatsBucketName = ex.sessionData.ApplicationName
+		}
 		ex.appStats = s.sqlStats.getStatsForApplication(appStatsBucketName)
 	}
 
@@ -629,8 +661,10 @@ func (s *Server) newConnExecutorWithTxn(
 	srvMetrics *Metrics,
 	txn *client.Txn,
 	tcModifier tableCollectionModifier,
+	resetOpt sdResetOption,
 ) (*connExecutor, error) {
-	ex, err := s.newConnExecutor(ctx, sd, sdMutator, stmtBuf, clientComm, memMetrics, srvMetrics)
+	ex, err := s.newConnExecutor(
+		ctx, sd, sdMutator, stmtBuf, clientComm, memMetrics, srvMetrics, resetOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -1864,13 +1898,13 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	scInterface := newSchemaInterface(&ex.extraTxnState.tables, ex.server.cfg.VirtualSchemas)
 
-	ie := NewSessionBoundInternalExecutor(
+	ie := MakeInternalExecutor(
 		ctx,
-		ex.sessionData,
 		ex.server,
 		ex.memMetrics,
 		ex.server.cfg.Settings,
 	)
+	ie.SetSessionData(ex.sessionData)
 
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -1886,7 +1920,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			NodeID:             ex.server.cfg.NodeID.Get(),
 			Locality:           ex.server.cfg.Locality,
 			ReCache:            ex.server.reCache,
-			InternalExecutor:   ie,
+			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 		},
 		SessionMutator:    ex.dataMutator,
@@ -2077,14 +2111,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		scc := &ex.extraTxnState.schemaChangers
 		if len(scc.schemaChangers) != 0 {
 			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				ie := NewSessionBoundInternalExecutor(
+				ie := MakeInternalExecutor(
 					ctx,
-					sd,
 					ex.server,
 					ex.memMetrics,
 					ex.server.cfg.Settings,
 				)
-				return ie
+				ie.SetSessionData(sd)
+				return &ie
 			}
 			if schemaChangeErr := scc.execSchemaChanges(
 				ex.Ctx(), ex.server.cfg, &ex.sessionTracing, ieFactory,

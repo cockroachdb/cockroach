@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -140,9 +141,10 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
-	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(
+	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx, "hash-fingerprint",
 		params.p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		sql,
 	)
 	if err != nil {

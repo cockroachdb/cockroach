@@ -31,7 +31,7 @@ func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
 	tableDesc *sqlbase.TableDescriptor,
-	ie tree.SessionBoundInternalExecutor,
+	ie *InternalExecutor,
 	txn *client.Txn,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
@@ -50,7 +50,9 @@ func validateCheckExpr(
 	queryStr := tree.AsStringWithFlags(stmt, tree.FmtParsable)
 	log.Infof(ctx, "Validating check constraint %q with query %q", expr.String(), queryStr)
 
-	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
+	rows, err := ie.QueryRowEx(ctx, "validate check constraint", txn,
+		sqlbase.InternalExecutorSessionDataOverride{},
+		queryStr)
 	if err != nil {
 		return err
 	}
@@ -223,7 +225,7 @@ func validateForeignKey(
 	ctx context.Context,
 	srcTable *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
-	ie tree.SessionBoundInternalExecutor,
+	ie *InternalExecutor,
 	txn *client.Txn,
 ) error {
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, txn, fk.ReferencedTableID)
@@ -256,7 +258,9 @@ func validateForeignKey(
 			query,
 		)
 
-		values, err := ie.QueryRow(ctx, "validate foreign key constraint", txn, query)
+		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint", txn,
+			sqlbase.InternalExecutorSessionDataOverride{},
+			query)
 		if err != nil {
 			return err
 		}
@@ -281,7 +285,9 @@ func validateForeignKey(
 		query,
 	)
 
-	values, err := ie.QueryRow(ctx, "validate fk constraint", txn, query)
+	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
+		sqlbase.InternalExecutorSessionDataOverride{},
+		query)
 	if err != nil {
 		return err
 	}

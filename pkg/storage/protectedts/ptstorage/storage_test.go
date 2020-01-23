@@ -439,10 +439,11 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			return pts.Protect(ctx, txn, &rec)
 		}))
-		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutorWithUser)
-		affected, err := ie.ExecWithUser(
+		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
+		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			security.NodeUser, "UPDATE system.protected_ts_records SET spans = $1 WHERE id = $2",
+			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			"UPDATE system.protected_ts_records SET spans = $1 WHERE id = $2",
 			[]byte("junk"), rec.ID.String())
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
@@ -487,10 +488,11 @@ func TestCorruptData(t *testing.T) {
 		// This timestamp has too many logical digits and thus will fail parsing.
 		var d tree.DDecimal
 		d.SetFinite(math.MaxInt32, -12)
-		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutorWithUser)
-		affected, err := ie.ExecWithUser(
+		ie := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor)
+		affected, err := ie.ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
-			security.NodeUser, "UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
+			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
 			d.String(), rec.ID.String())
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
@@ -531,8 +533,8 @@ func TestErrorsFromSQL(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutorWithUser)
-	wrappedIE := &wrappedInternalExecutor{InternalExecutorWithUser: ie}
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	wrappedIE := &wrappedInternalExecutor{wrapped: ie}
 	pts := ptstorage.New(s.ClusterSettings(), wrappedIE)
 
 	wrappedIE.setErrFunc(func(string) error {
@@ -577,8 +579,9 @@ func TestErrorsFromSQL(t *testing.T) {
 	}), "failed to read records: boom")
 }
 
+// wrappedInternalExecutor allows errors to be injected in SQL execution.
 type wrappedInternalExecutor struct {
-	sqlutil.InternalExecutorWithUser
+	wrapped sqlutil.InternalExecutor
 
 	mu struct {
 		syncutil.RWMutex
@@ -586,58 +589,78 @@ type wrappedInternalExecutor struct {
 	}
 }
 
+var _ sqlutil.InternalExecutor = &wrappedInternalExecutor{}
+
+func (ie *wrappedInternalExecutor) Exec(
+	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+) (int, error) {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) ExecEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	o sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	if f := ie.getErrFunc(); f != nil {
+		if err := f(stmt); err != nil {
+			return nil, err
+		}
+	}
+	return ie.wrapped.QueryEx(ctx, opName, txn, session, stmt, qargs...)
+}
+
+func (ie *wrappedInternalExecutor) QueryWithCols(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	o sqlbase.InternalExecutorSessionDataOverride,
+	statement string,
+	qargs ...interface{},
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryRowEx(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	session sqlbase.InternalExecutorSessionDataOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	if f := ie.getErrFunc(); f != nil {
+		if err := f(stmt); err != nil {
+			return nil, err
+		}
+	}
+	return ie.wrapped.QueryRowEx(ctx, opName, txn, session, stmt, qargs...)
+}
+
 func (ie *wrappedInternalExecutor) Query(
 	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 ) ([]tree.Datums, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return nil, err
-		}
-	}
-	return ie.InternalExecutorWithUser.Query(ctx, opName, txn, statement, params...)
+	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) QueryRow(
-	ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
+	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return nil, err
-		}
-	}
-	return ie.InternalExecutorWithUser.QueryRow(ctx, opName, txn, statement, params...)
-}
-
-func (ie *wrappedInternalExecutor) QueryWithUser(
-	ctx context.Context,
-	opName string,
-	txn *client.Txn,
-	user string,
-	statement string,
-	params ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return nil, nil, err
-		}
-	}
-	return ie.InternalExecutorWithUser.QueryWithUser(ctx, opName, txn, user, statement, params...)
-}
-
-func (ie *wrappedInternalExecutor) ExecWithUser(
-	ctx context.Context,
-	opName string,
-	txn *client.Txn,
-	user string,
-	statement string,
-	params ...interface{},
-) (int, error) {
-	if f := ie.getErrFunc(); f != nil {
-		if err := f(statement); err != nil {
-			return 0, err
-		}
-	}
-	return ie.InternalExecutorWithUser.ExecWithUser(ctx, opName, txn, user, statement, params...)
+	panic("not implemented")
 }
 
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
