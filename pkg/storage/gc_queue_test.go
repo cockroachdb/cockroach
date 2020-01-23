@@ -858,10 +858,10 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	}
 
 	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
-	txns[0].ReadTimestamp = intentResolveTS
-	txns[0].WriteTimestamp = intentResolveTS
-	txns[1].ReadTimestamp = intentResolveTS
-	txns[1].WriteTimestamp = intentResolveTS
+	txns[0].OrigTimestamp = intentResolveTS
+	txns[0].Timestamp = intentResolveTS
+	txns[1].OrigTimestamp = intentResolveTS
+	txns[1].Timestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {
