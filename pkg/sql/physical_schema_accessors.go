@@ -15,7 +15,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,19 +77,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 func (a UncachedPhysicalAccessor) IsValidSchema(
 	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
 ) (bool, sqlbase.ID, error) {
-	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
-	// checking for public schema.
-	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
-	}
-
-	sKey := sqlbase.NewSchemaKey(dbID, scName)
-	schemaID, err := getDescriptorID(ctx, txn, sKey)
-	if err != nil || schemaID == sqlbase.InvalidID {
-		return false, sqlbase.InvalidID, err
-	}
-
-	return true, schemaID, nil
+	return resolveSchemaID(ctx, txn, dbID, scName)
 }
 
 // GetObjectNames implements the SchemaAccessor interface.
@@ -304,21 +291,6 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	name *ObjectName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
-	// TODO(arul): Actually fix this to return the cached descriptor, by adding a
-	//  schema cache to table collection. Until this is fixed, public tables with
-	//  the same name as temporary tables might return the wrong data, as the wrong descriptor
-	//  might be cached.
-	if name.Schema() != tree.PublicSchema {
-		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, settings, name, flags)
-		if obj == nil {
-			return nil, err
-		}
-		if flags.RequireMutable {
-			return obj.(*sqlbase.MutableTableDescriptor), err
-		}
-		return obj.(*sqlbase.ImmutableTableDescriptor), err
-	}
 	if flags.RequireMutable {
 		table, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
 		if table == nil {
