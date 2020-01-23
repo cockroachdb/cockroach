@@ -95,6 +95,7 @@ var _ operatorExpr = &UnaryExpr{}
 var _ operatorExpr = &ComparisonExpr{}
 var _ operatorExpr = &RangeCond{}
 var _ operatorExpr = &IsOfTypeExpr{}
+var _ operatorExpr = &CastExpr{}
 
 // Operator is used to identify Operators; used in sql.y.
 type Operator interface {
@@ -1430,6 +1431,8 @@ type CastExpr struct {
 	typeAnnotation
 	SyntaxMode castSyntaxMode
 }
+
+func (*CastExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(ctx *FmtCtx) {
