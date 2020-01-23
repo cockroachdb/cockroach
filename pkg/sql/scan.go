@@ -105,9 +105,6 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	// Set when the scanNode is created via the exec factory.
-	createdByOpt bool
-
 	// maxResults, if greater than 0, is the maximum number of results that a
 	// scan is guaranteed to return.
 	maxResults uint64
