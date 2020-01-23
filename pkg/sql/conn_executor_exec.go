@@ -1179,13 +1179,23 @@ func (ex *connExecutor) runSetTracing(
 	modes := make([]string, len(n.Values))
 	for i, v := range n.Values {
 		v = unresolvedNameToStrVal(v)
-		strVal, ok := v.(*tree.StrVal)
-		if !ok {
-			res.SetError(errors.AssertionFailedf(
-				"expected string for set tracing argument, not %T", v))
+		var strMode string
+		switch v.(type) {
+		case *tree.StrVal:
+			strVal := v.(*tree.StrVal)
+			strMode = strVal.RawString()
+		case *tree.DBool:
+			if *v.(*tree.DBool) {
+				strMode = "on"
+			} else {
+				strMode = "off"
+			}
+		default:
+			res.SetError(pgerror.New(pgcode.Syntax,
+				"expected string or boolean for set tracing argument"))
 			return
 		}
-		modes[i] = strVal.RawString()
+		modes[i] = strMode
 	}
 
 	if err := ex.enableTracing(modes); err != nil {

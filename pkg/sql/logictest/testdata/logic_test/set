@@ -302,6 +302,9 @@ SET tracing.blah = 123
 statement error invalid value for parameter "ssl_renegotiation_limit"
 SET ssl_renegotiation_limit = 123
 
+statement ok
+SET SESSION tracing=false
+
 subtest regression_35109_flowable
 
 statement ok
