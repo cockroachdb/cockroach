@@ -312,6 +312,9 @@ func foreignKeyMutator(
 			}
 		}
 	}
+	if len(tables) == 0 {
+		return stmts, false
+	}
 
 	toNames := func(cols []*tree.ColumnTableDef) tree.NameList {
 		names := make(tree.NameList, len(cols))
