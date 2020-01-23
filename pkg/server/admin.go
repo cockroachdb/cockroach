@@ -1268,7 +1268,7 @@ func (s *adminServer) Liveness(
 ) (*serverpb.LivenessResponse, error) {
 	clock := s.server.clock
 	statusMap := getLivenessStatusMap(
-		s.server.nodeLiveness, clock.PhysicalTime(), s.server.st)
+		s.server.nodeLiveness, clock.Now().GoTime(), s.server.st)
 	livenesses := s.server.nodeLiveness.GetLivenesses()
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
@@ -1575,7 +1575,7 @@ func (s *adminServer) DecommissionStatus(
 			Decommissioning: l.Decommissioning,
 			Draining:        l.Draining,
 		}
-		if l.IsLive(s.server.clock.Now()) {
+		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
 		}
 

@@ -13,18 +13,29 @@ package storagepb
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// IsLive returns whether the node is considered live at the given time with the
-// given clock offset.
-func (l *Liveness) IsLive(now hlc.Timestamp) bool {
-	expiration := hlc.Timestamp(l.Expiration)
-	return now.Less(expiration)
+// IsLive returns whether the node is considered live at the given time.
+//
+// NOTE: If one is interested whether the Liveness is valid currently, then the
+// timestamp passed in should be the known high-water mark of all the clocks of
+// the nodes in the cluster. For example, if the liveness expires at ts 100, our
+// physical clock is at 90, but we know that another node's clock is at 110,
+// then it's preferable (more consistent across nodes) for the liveness to be
+// considered expired. For that purpose, it's better to pass in
+// clock.Now().GoTime() rather than clock.PhysicalNow() - the former takes into
+// consideration clock signals from other nodes, the latter doesn't.
+func (l *Liveness) IsLive(now time.Time) bool {
+	expiration := timeutil.Unix(0, l.Expiration.WallTime)
+	return now.Before(expiration)
 }
 
 // IsDead returns true if the liveness expired more than threshold ago.
-func (l *Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
-	deadAsOf := hlc.Timestamp(l.Expiration).GoTime().Add(threshold)
-	return !now.GoTime().Before(deadAsOf)
+//
+// Note that, because of threshold, IsDead() is not the inverse of IsLive().
+func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
+	expiration := timeutil.Unix(0, l.Expiration.WallTime)
+	deadAsOf := expiration.Add(threshold)
+	return !now.Before(deadAsOf)
 }

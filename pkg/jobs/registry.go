@@ -172,7 +172,7 @@ func (r *Registry) MetricsStruct() *Metrics {
 // lenientNow returns the timestamp after which we should attempt
 // to steal a job from a node whose liveness is failing.  This allows
 // jobs coordinated by a node which is temporarily saturated to continue.
-func (r *Registry) lenientNow() hlc.Timestamp {
+func (r *Registry) lenientNow() time.Time {
 	// We see this in tests.
 	var offset time.Duration
 	if r.settings == cluster.NoSettings {
@@ -181,7 +181,7 @@ func (r *Registry) lenientNow() hlc.Timestamp {
 		offset = LeniencySetting.Get(&r.settings.SV)
 	}
 
-	return r.clock.Now().Add(-offset.Nanoseconds(), 0)
+	return r.clock.Now().GoTime().Add(-offset)
 }
 
 // makeCtx returns a new context from r's ambient context and an associated
@@ -741,7 +741,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 			// Don't try to start any more jobs unless we're really live,
 			// otherwise we'd just immediately cancel them.
 			if liveness.NodeID == r.nodeID.Get() {
-				if !liveness.IsLive(r.clock.Now()) {
+				if !liveness.IsLive(r.clock.Now().GoTime()) {
 					return errors.Errorf(
 						"trying to adopt jobs on node %d which is not live", liveness.NodeID)
 				}
