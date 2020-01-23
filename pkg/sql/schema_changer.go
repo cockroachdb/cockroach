@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -585,94 +586,130 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 	ctx context.Context, table *sqlbase.TableDescriptor, evalCtx *extendedEvalContext,
 ) error {
 	if table.Adding() && table.IsAs() {
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			txn.SetFixedTimestamp(ctx, table.CreateAsOfTime)
-
-			// Create an internal planner as the planner used to serve the user query
-			// would have committed by this point.
-			p, cleanup := NewInternalPlanner("ctasBackfill", txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
-			defer cleanup()
-			localPlanner := p.(*planner)
-			stmt, err := parser.ParseOne(table.CreateQuery)
-			if err != nil {
-				return err
-			}
-
-			// Construct an optimized logical plan of the AS source stmt.
-			localPlanner.stmt = &Statement{Statement: stmt}
-			localPlanner.optPlanningCtx.init(localPlanner)
-
-			localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
-				err = localPlanner.makeOptimizerPlan(ctx)
-			})
-
-			if err != nil {
-				return err
-			}
-			defer localPlanner.curPlan.close(ctx)
-
-			res := roachpb.BulkOpSummary{}
-			rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-				// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
-				// return to user.
-				var counts roachpb.BulkOpSummary
-				if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
-					return err
-				}
-				res.Add(counts)
-				return nil
-			})
-			recv := MakeDistSQLReceiver(
-				ctx,
-				rw,
-				tree.Rows,
-				sc.execCfg.RangeDescriptorCache,
-				sc.execCfg.LeaseHolderCache,
-				txn,
-				func(ts hlc.Timestamp) {
-					_ = sc.clock.Update(ts)
-				},
-				evalCtx.Tracing,
-			)
-			defer recv.Release()
-
-			rec, err := sc.distSQLPlanner.checkSupportForNode(localPlanner.curPlan.plan)
-			var planAndRunErr error
-			localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
-				// Resolve subqueries before running the queries' physical plan.
-				if len(localPlanner.curPlan.subqueryPlans) != 0 {
-					if !sc.distSQLPlanner.PlanAndRunSubqueries(
-						ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
-						localPlanner.curPlan.subqueryPlans, recv, rec == canDistribute,
-					) {
-						if planAndRunErr = rw.Err(); planAndRunErr != nil {
-							return
-						}
-						if planAndRunErr = recv.commErr; planAndRunErr != nil {
-							return
-						}
-					}
-				}
-
-				isLocal := err != nil || rec == cannotDistribute
-				out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
-					Table: *table,
-				}}
-
-				PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
-					txn, isLocal, localPlanner.curPlan.plan, out, recv)
-				if planAndRunErr = rw.Err(); planAndRunErr != nil {
-					return
-				}
-				if planAndRunErr = recv.commErr; planAndRunErr != nil {
-					return
-				}
-			})
-
-			return planAndRunErr
-		}); err != nil {
+		// Acquire lease.
+		lease, err := sc.AcquireLease(ctx)
+		if err != nil {
 			return err
 		}
+		// Always try to release lease.
+		defer func() {
+			if err := sc.ReleaseLease(ctx, lease); err != nil {
+				log.Warning(ctx, err)
+			}
+		}()
+
+		// We need to maintain our lease *while* our backfill runs.
+		maintainLease := make(chan struct{})
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			done := ctx.Done()
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-done:
+					return nil
+				case <-maintainLease:
+					return nil
+				case <-ticker.C:
+					if err := sc.ExtendLease(ctx, &lease); err != nil {
+						return err
+					}
+				}
+			}
+		})
+
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(maintainLease)
+			return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				txn.SetFixedTimestamp(ctx, table.CreateAsOfTime)
+
+				// Create an internal planner as the planner used to serve the user query
+				// would have committed by this point.
+				p, cleanup := NewInternalPlanner("ctasBackfill", txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
+				defer cleanup()
+				localPlanner := p.(*planner)
+				stmt, err := parser.ParseOne(table.CreateQuery)
+				if err != nil {
+					return err
+				}
+
+				// Construct an optimized logical plan of the AS source stmt.
+				localPlanner.stmt = &Statement{Statement: stmt}
+				localPlanner.optPlanningCtx.init(localPlanner)
+
+				localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
+					err = localPlanner.makeOptimizerPlan(ctx)
+				})
+
+				if err != nil {
+					return err
+				}
+				defer localPlanner.curPlan.close(ctx)
+
+				res := roachpb.BulkOpSummary{}
+				rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+					// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
+					// return to user.
+					var counts roachpb.BulkOpSummary
+					if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
+						return err
+					}
+					res.Add(counts)
+					return nil
+				})
+				recv := MakeDistSQLReceiver(
+					ctx,
+					rw,
+					tree.Rows,
+					sc.execCfg.RangeDescriptorCache,
+					sc.execCfg.LeaseHolderCache,
+					txn,
+					func(ts hlc.Timestamp) {
+						_ = sc.clock.Update(ts)
+					},
+					evalCtx.Tracing,
+				)
+				defer recv.Release()
+
+				rec, err := sc.distSQLPlanner.checkSupportForNode(localPlanner.curPlan.plan)
+				var planAndRunErr error
+				localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
+					// Resolve subqueries before running the queries' physical plan.
+					if len(localPlanner.curPlan.subqueryPlans) != 0 {
+						if !sc.distSQLPlanner.PlanAndRunSubqueries(
+							ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
+							localPlanner.curPlan.subqueryPlans, recv, rec == canDistribute,
+						) {
+							if planAndRunErr = rw.Err(); planAndRunErr != nil {
+								return
+							}
+							if planAndRunErr = recv.commErr; planAndRunErr != nil {
+								return
+							}
+						}
+					}
+
+					isLocal := err != nil || rec == cannotDistribute
+					out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
+						Table: *table,
+					}}
+
+					PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
+						txn, isLocal, localPlanner.curPlan.plan, out, recv)
+					if planAndRunErr = rw.Err(); planAndRunErr != nil {
+						return
+					}
+					if planAndRunErr = recv.commErr; planAndRunErr != nil {
+						return
+					}
+				})
+
+				return planAndRunErr
+			})
+		})
+		return g.Wait()
 	}
 	return nil
 }
@@ -908,16 +945,16 @@ func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
 	ctx = logtags.AddTag(ctx, "scExec", nil)
-	if log.V(2) {
-		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
-			sc.tableID, sc.mutationID)
-	}
 
 	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
 	if err != nil {
 		return err
 	}
 	if notFirst {
+		log.Infof(ctx,
+			"schema change on %s (%d v%d) mutation %d: another change is still in progress",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+		)
 		return errSchemaChangeNotFirstInLine
 	}
 
@@ -926,6 +963,11 @@ func (sc *SchemaChanger) exec(
 			return err
 		}
 	}
+
+	log.Infof(ctx,
+		"schema change on %s (%d v%d) mutation %d starting execution...",
+		tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+	)
 
 	// Delete dropped table data if possible.
 	if err := sc.maybeDropTable(ctx, inSession, tableDesc, evalCtx); err != nil {
@@ -974,12 +1016,16 @@ func (sc *SchemaChanger) exec(
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
+		log.Infof(ctx,
+			"schema change on %s (%d v%d) mutation %d: another node is currently operating on this table",
+			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+		)
 		return err
 	}
 	// Always try to release lease.
 	defer func() {
 		if err := sc.ReleaseLease(ctx, lease); err != nil {
-			log.Warningf(ctx, "while reasing schema change lease: %+v", err)
+			log.Warningf(ctx, "while releasing schema change lease: %+v", err)
 			// Go through the recording motions. See comment above.
 			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
 		}
@@ -1211,13 +1257,9 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
-	if log.V(2) {
-		log.Infof(ctx, "waiting for a single version of table %d...", tableID)
-	}
-	_, err := sc.leaseMgr.WaitForOneVersion(ctx, tableID, retryOpts)
-	if log.V(2) {
-		log.Infof(ctx, "waiting for a single version of table %d... done", tableID)
-	}
+	log.Infof(ctx, "waiting for a single version of table %d...", tableID)
+	version, err := sc.leaseMgr.WaitForOneVersion(ctx, tableID, retryOpts)
+	log.Infof(ctx, "waiting for a single version of table %d... done (at v %d)", tableID, version)
 	return err
 }
 
