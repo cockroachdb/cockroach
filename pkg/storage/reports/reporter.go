@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -844,10 +845,11 @@ type reportID int
 func getReportGenerationTime(
 	ctx context.Context, rid reportID, ex sqlutil.InternalExecutor, txn *client.Txn,
 ) (time.Time, error) {
-	row, err := ex.QueryRow(
+	row, err := ex.QueryRowEx(
 		ctx,
 		"get-previous-timestamp",
 		txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		"select generated from system.reports_meta where id = $1",
 		rid,
 	)

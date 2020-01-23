@@ -2625,14 +2625,23 @@ type EvalSessionAccessor interface {
 	HasAdminRole(ctx context.Context) (bool, error)
 }
 
-// SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
-// this sem/tree package which can't even import sqlutil. Executor used through
-// this interface are always "session-bound" - they inherit session variables
-// from a parent session.
-type SessionBoundInternalExecutor interface {
+// InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
+// implemented by sql.InternalExecutor) used by this sem/tree package which
+// can't even import sqlutil.
+//
+// Note that the functions offered here should be avoided when possible. They
+// execute the query as root if an user hadn't been previously set on the
+// executor through SetSessionData(). These functions are deprecated in
+// sql.InternalExecutor in favor of a safer interface. Unfortunately, those
+// safer functions cannot be exposed through this interface because they depend
+// on sqlbase, and this package cannot import sqlbase. When possible, downcast
+// this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
+// alternatives.
+type InternalExecutor interface {
 	// Query is part of the sqlutil.InternalExecutor interface.
 	Query(
-		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName string, txn *client.Txn,
+		stmt string, qargs ...interface{},
 	) ([]Datums, error)
 
 	// QueryRow is part of the sqlutil.InternalExecutor interface.
@@ -2783,7 +2792,7 @@ type EvalContext struct {
 	// need to run a statement, and yet many builtin functions do it.
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
-	InternalExecutor SessionBoundInternalExecutor
+	InternalExecutor InternalExecutor
 
 	Planner EvalPlanner
 

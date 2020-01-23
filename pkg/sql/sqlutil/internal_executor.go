@@ -23,70 +23,87 @@ import (
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sql/util" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
-//
-// Note that implementations might be "session bound" - meaning they inherit
-// session variables from a parent session - or not.
 type InternalExecutor interface {
-	// Exec executes the supplied SQL statement. Statements are currently executed
-	// as the root user with the system database as current database.
+	// Exec executes the supplied SQL statement and returns the number of rows
+	// affected (not like the results; see Query()). If no user has been previously
+	// set through SetSessionData, the statement is executed as the root user.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
 	//
-	// Returns the number of rows affected.
+	// Exec is deprecated because it may transparently execute a query as root. Use
+	// ExecEx instead.
 	Exec(
 		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 	) (int, error)
 
+	// ExecEx is like Exec, but allows the caller to override some session data
+	// fields.
+	//
+	// The fields set in session that are set override the respective fields if they
+	// have previously been set through SetSessionData().
+	ExecEx(
+		ctx context.Context,
+		opName string,
+		txn *client.Txn,
+		o sqlbase.InternalExecutorSessionDataOverride,
+		stmt string,
+		qargs ...interface{},
+	) (int, error)
+
 	// Query executes the supplied SQL statement and returns the resulting rows.
-	// The statement is executed as the root user.
+	// If no user has been previously set through SetSessionData, the statement is
+	// executed as the root user.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
+	//
+	// Query is deprecated because it may transparently execute a query as root. Use
+	// QueryEx instead.
 	Query(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) ([]tree.Datums, error)
 
-	// QueryWithCols executes the supplied SQL statement and returns the resulting
-	// rows and their column types.
-	// The statement is executed as the root user.
+	// QueryEx is like Query, but allows the caller to override some session data
+	// fields.
 	//
-	// If txn is not nil, the statement will be executed in the respective txn.
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
+	QueryEx(
+		ctx context.Context,
+		opName string,
+		txn *client.Txn,
+		session sqlbase.InternalExecutorSessionDataOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, error)
+
+	// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
+	// of the input query.
 	QueryWithCols(
-		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+		ctx context.Context, opName string, txn *client.Txn,
+		o sqlbase.InternalExecutorSessionDataOverride, statement string, qargs ...interface{},
 	) ([]tree.Datums, sqlbase.ResultColumns, error)
 
 	// QueryRow is like Query, except it returns a single row, or nil if not row is
 	// found, or an error if more that one row is returned.
+	//
+	// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
 	QueryRow(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
-}
 
-// InternalExecutorWithUser is like an InternalExecutor but allows the client to
-// specify the user for use during execution.
-type InternalExecutorWithUser interface {
-	InternalExecutor
-
-	// QueryWithUser is like Query, except it changes the username to that
-	// specified.
-	QueryWithUser(
+	// QueryRowEx is like QueryRow, but allows the caller to override some session data
+	// fields.
+	//
+	// The fields set in session that are set override the respective fields if they
+	// have previously been set through SetSessionData().
+	QueryRowEx(
 		ctx context.Context,
 		opName string,
 		txn *client.Txn,
-		userName string,
+		session sqlbase.InternalExecutorSessionDataOverride,
 		stmt string,
 		qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
-
-	// ExecWithUser is like Exec, except it changes the username to that
-	// specified.
-	ExecWithUser(
-		ctx context.Context,
-		opName string,
-		txn *client.Txn,
-		userName string,
-		stmt string,
-		qargs ...interface{},
-	) (int, error)
+	) (tree.Datums, error)
 }
 
 // SessionBoundInternalExecutorFactory is a function that produces a "session

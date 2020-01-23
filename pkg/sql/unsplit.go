@@ -123,8 +123,9 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if n.index.ID != n.tableDesc.PrimaryIndex.ID {
 		indexName = n.index.Name
 	}
-	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.Query(
-		params.ctx, "split points query", params.p.txn, statement,
+	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryEx(
+		params.ctx, "split points query", params.p.txn, sqlbase.InternalExecutorSessionDataOverride{},
+		statement,
 		dbDesc.Name,
 		n.tableDesc.Name,
 		indexName,

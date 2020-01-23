@@ -15,7 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -65,8 +67,10 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			// `cluster.preserve_downgrade_option` statement in a transaction until
 			// success.
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
-				if _, err := s.internalExecutor.Exec(
-					ctx, "set-version", nil /* txn */, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
+				if _, err := s.internalExecutor.ExecEx(
+					ctx, "set-version", nil, /* txn */
+					sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
 					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
 				} else {
@@ -124,8 +128,9 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	// Check if auto upgrade is enabled at current version.
-	datums, err := s.internalExecutor.Query(
+	datums, err := s.internalExecutor.QueryEx(
 		ctx, "read-downgrade", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
@@ -148,8 +153,9 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
-	datums, err := s.internalExecutor.Query(
+	datums, err := s.internalExecutor.QueryEx(
 		ctx, "show-version", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SHOW CLUSTER SETTING version;",
 	)
 	if err != nil {

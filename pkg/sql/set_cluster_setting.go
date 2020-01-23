@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -113,8 +115,9 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		if n.value == nil {
 			reportedValue = "DEFAULT"
 			expectedEncodedValue = n.setting.EncodedDefault()
-			if _, err := execCfg.InternalExecutor.Exec(
+			if _, err := execCfg.InternalExecutor.ExecEx(
 				ctx, "reset-setting", txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				"DELETE FROM system.settings WHERE name = $1", n.name,
 			); err != nil {
 				return err
@@ -127,8 +130,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
 			var prev tree.Datum
 			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
-				datums, err := execCfg.InternalExecutor.QueryRow(
-					ctx, "retrieve-prev-setting", txn, "SELECT value FROM system.settings WHERE name = $1", n.name,
+				datums, err := execCfg.InternalExecutor.QueryRowEx(
+					ctx, "retrieve-prev-setting", txn,
+					sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+					"SELECT value FROM system.settings WHERE name = $1", n.name,
 				)
 				if err != nil {
 					return err
@@ -147,8 +152,9 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if _, err = execCfg.InternalExecutor.Exec(
+			if _, err = execCfg.InternalExecutor.ExecEx(
 				ctx, "update-setting", txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 				n.name, encoded, n.setting.Typ(),
 			); err != nil {

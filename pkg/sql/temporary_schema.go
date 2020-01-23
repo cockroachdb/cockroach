@@ -109,9 +109,8 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 					User:          security.RootUser,
 					SequenceState: &sessiondata.SequenceState{},
 				}
-				ie := NewSessionBoundInternalExecutor(
-					ctx, sd, server, MemoryMetrics{}, server.cfg.Settings,
-				)
+				ie := MakeInternalExecutor(ctx, server, MemoryMetrics{}, server.cfg.Settings)
+				ie.SetSessionData(sd)
 				_, err = ie.Exec(ctx, "delete-temp-tables", txn, query.String())
 				if err != nil {
 					return err

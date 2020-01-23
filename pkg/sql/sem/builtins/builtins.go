@@ -831,11 +831,17 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				val := int(*args[0].(*tree.DInt))
 				var buf bytes.Buffer
+				var digits []string
 				if val < 0 {
 					buf.WriteString("minus-")
+					if val == math.MinInt64 {
+						// Converting MinInt64 to positive overflows the value.
+						// Take the first digit pre-emptively.
+						digits = append(digits, digitNames[8])
+						val /= 10
+					}
 					val = -val
 				}
-				var digits []string
 				digits = append(digits, digitNames[val%10])
 				for val > 9 {
 					val /= 10

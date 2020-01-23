@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
@@ -43,13 +44,13 @@ import (
 // storage interacts with the durable state of the protectedts subsystem.
 type storage struct {
 	settings *cluster.Settings
-	ex       sqlutil.InternalExecutorWithUser
+	ex       sqlutil.InternalExecutor
 }
 
 var _ protectedts.Storage = (*storage)(nil)
 
 // New creates a new Storage.
-func New(settings *cluster.Settings, ex sqlutil.InternalExecutorWithUser) protectedts.Storage {
+func New(settings *cluster.Settings, ex sqlutil.InternalExecutor) protectedts.Storage {
 	return &storage{settings: settings, ex: ex}
 }
 
@@ -67,8 +68,9 @@ func (p *storage) Protect(ctx context.Context, txn *client.Txn, r *ptpb.Record) 
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 	s := makeSettings(p.settings)
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-protect", txn,
-		security.NodeUser, protectQuery,
+	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
 		r.ID.GetBytesMut(), r.Timestamp.AsOfSystemTime(),
 		r.MetaType, r.Meta,
@@ -100,7 +102,9 @@ func (p *storage) GetRecord(
 	if txn == nil {
 		return nil, errNoTxn
 	}
-	row, err := p.ex.QueryRow(ctx, "protectedts-GetRecord", txn, getRecordQuery, id.GetBytesMut())
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getRecordQuery, id.GetBytesMut())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
 	}
@@ -118,8 +122,9 @@ func (p *storage) MarkVerified(ctx context.Context, txn *client.Txn, id uuid.UUI
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-MarkVerified", txn,
-		security.NodeUser, markVerifiedQuery, id.GetBytesMut())
+	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
@@ -133,8 +138,9 @@ func (p *storage) Release(ctx context.Context, txn *client.Txn, id uuid.UUID) er
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, _, err := p.ex.QueryWithUser(ctx, "protectedts-Release", txn,
-		security.NodeUser, releaseQuery, id.GetBytesMut())
+	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
@@ -148,7 +154,9 @@ func (p *storage) GetMetadata(ctx context.Context, txn *client.Txn) (ptpb.Metada
 	if txn == nil {
 		return ptpb.Metadata{}, errNoTxn
 	}
-	row, err := p.ex.QueryRow(ctx, "protectedts-GetMetadata", txn, getMetadataQuery)
+	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getMetadataQuery)
 	if err != nil {
 		return ptpb.Metadata{}, errors.Wrap(err, "failed to read metadata")
 	}
@@ -179,7 +187,9 @@ func (p *storage) GetState(ctx context.Context, txn *client.Txn) (ptpb.State, er
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *client.Txn) ([]ptpb.Record, error) {
-	rows, err := p.ex.Query(ctx, "protectedts-GetRecords", txn, getRecordsQuery)
+	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}

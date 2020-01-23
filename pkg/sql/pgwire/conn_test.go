@@ -226,7 +226,9 @@ func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
 	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
-		ctx, "test", nil /* txn */, query,
+		ctx, "test", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser, Database: "system"},
+		query,
 	)
 	if err != nil {
 		return err
