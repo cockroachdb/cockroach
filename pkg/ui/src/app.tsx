@@ -17,7 +17,6 @@ import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr, implicitTxnAttr,
 } from "src/util/constants";
 
-import "src/redux/analytics";
 import { AdminUIState, History } from "src/redux/state";
 
 import loginRoutes from "src/routes/login";
@@ -51,6 +50,7 @@ import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { normalizeConnectedComponent } from "src/util/normalizeConnectedComponent";
+import { DecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -82,7 +82,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
         { /* login */}
         {loginRoutes(store)}
 
-        <Route path="/" component={Layout}>
+        <Route path="/" component={normalizeConnectedComponent(Layout)}>
           <IndexRedirect to="overview"/>
 
           { /* overview page */}
@@ -173,6 +173,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
             <Route path="localities" component={normalizeConnectedComponent(Localities)}/>
             <Route path="network" component={normalizeConnectedComponent(Network)}/>
             <Route path="nodes" component={normalizeConnectedComponent(Nodes)}/>
+            <Route path="nodes">
+              <IndexRoute component={ normalizeConnectedComponent(Nodes) } />
+              <Route path="history" component={ normalizeConnectedComponent(DecommissionedNodeHistory) } />
+            </Route>
             <Route path="settings" component={normalizeConnectedComponent(Settings)}/>
             <Route path={`certificates/:${nodeIDAttr}`} component={normalizeConnectedComponent(Certificates)}/>
             <Route path={`range/:${rangeIDAttr}`} component={normalizeConnectedComponent(Range)}/>
