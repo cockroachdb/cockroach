@@ -168,7 +168,7 @@ ReactDOM.render(
           <Route path="localities" component={normalizeConnectedComponent(Localities)} />
           <Route path="nodes">
             <IndexRoute component={normalizeConnectedComponent(Nodes)} />
-            <Route path="history" component={ DecommissionedNodeHistory } />
+            <Route path="history" component={ normalizeConnectedComponent(DecommissionedNodeHistory) } />
           </Route>
           <Route path="network" component={ normalizeConnectedComponent(Network) }>
             <Route path={`:${nodeIDAttr}`} component={ normalizeConnectedComponent(Network) } />
