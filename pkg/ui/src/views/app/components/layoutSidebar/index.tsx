@@ -50,4 +50,4 @@ class Sidebar extends React.Component<{} & WithRouterProps> {
   }
 }
 
-export default connect(null, null)(withRouter(Sidebar));
+export default withRouter(connect(null, null)(Sidebar));
