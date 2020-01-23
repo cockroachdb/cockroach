@@ -3406,3 +3406,27 @@ INSERT INTO nonunique_idx_parent VALUES (1, 10)
 
 statement ok
 INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
+
+# Stepping regression test. There was a bug where having cascades disables txn
+# stepping which caused issues when executing postqueries, so a query which
+# involved a mixed situation would error out.
+
+statement ok
+CREATE TABLE x (
+    k INT PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE y (
+    y INT PRIMARY KEY,
+    b INT NULL REFERENCES x(k),
+    c INT NULL REFERENCES x(k) ON DELETE CASCADE
+)
+
+statement ok
+WITH
+    a AS (INSERT INTO y VALUES (1) RETURNING 1), b AS (DELETE FROM x WHERE true RETURNING 1)
+SELECT
+    *
+FROM
+    a

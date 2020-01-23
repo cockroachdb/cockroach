@@ -987,6 +987,8 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) bool {
+	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, client.SteppingEnabled)
+	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
 	for _, postqueryPlan := range postqueryPlans {
 		// We place a sequence point before every postquery, so
 		// that each subsequent postquery can observe the writes
