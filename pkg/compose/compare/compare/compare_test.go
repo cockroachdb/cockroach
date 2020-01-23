@@ -19,6 +19,7 @@ import (
 	"context"
 	"flag"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-var flagEach = flag.Duration("each", 10*time.Minute, "individual test timeout")
+var (
+	flagEach      = flag.Duration("each", 10*time.Minute, "individual test timeout")
+	flagArtifacts = flag.String("artifacts", "", "artifact directory")
+)
 
 func TestCompare(t *testing.T) {
 	uris := map[string]string{
@@ -93,8 +97,10 @@ func TestCompare(t *testing.T) {
 				}
 				query, _ = mutations.ApplyString(rng, query, mutations.PostgresMutator)
 				if err := cmpconn.CompareConns(ctx, time.Second*30, conns, "" /* prep */, query); err != nil {
-					_ = ioutil.WriteFile("/test/query.sql", []byte(query+";"), 0666)
-					t.Log(query)
+					path := filepath.Join(*flagArtifacts, confName+".log")
+					if err := ioutil.WriteFile(path, []byte(err.Error()), 0666); err != nil {
+						t.Log(err)
+					}
 					t.Fatal(err)
 				}
 				// Make sure we can still ping on a connection. If we can't we may have
