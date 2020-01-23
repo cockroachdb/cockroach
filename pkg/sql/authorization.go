@@ -62,19 +62,6 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
-// CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
-// This is not part of the planner as the only caller (ccl/sqlccl/restore.go) does not have one.
-func CheckPrivilegeForUser(
-	_ context.Context, user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
-) error {
-	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
-		return nil
-	}
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s privilege on %s %s",
-		user, privilege, descriptor.TypeName(), descriptor.GetName())
-}
-
 // CheckPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
