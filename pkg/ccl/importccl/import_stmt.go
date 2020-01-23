@@ -238,7 +238,15 @@ func importPlanHook(
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
-			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
+			dbDesc := descI.(*sqlbase.DatabaseDescriptor)
+			// If this is a non-INTO import that will thus be making a new table, we
+			// need the CREATE priv in the target DB.
+			if !importStmt.Into {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+					return err
+				}
+			}
+			parentID = dbDesc.ID
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
@@ -246,6 +254,13 @@ func importPlanHook(
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedObject,
 					"could not resolve current database")
+			}
+			// If this is a non-INTO import that will thus be making a new table, we
+			// need the CREATE priv in the target DB.
+			if !importStmt.Into {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+					return err
+				}
 			}
 			parentID = dbDesc.ID
 		}
@@ -470,6 +485,11 @@ func importPlanHook(
 			// - Write _a lot_ of tests.
 			found, err := p.ResolveMutableTableDescriptor(ctx, table, true, sql.ResolveRequireTableDesc)
 			if err != nil {
+				return err
+			}
+
+			// TODO(dt): checking *CREATE* on an *existing table* is weird.
+			if err := p.CheckPrivilege(ctx, found, privilege.CREATE); err != nil {
 				return err
 			}
 
@@ -786,10 +806,6 @@ func prepareExistingTableDescForIngestion(
 		return nil, errors.Errorf("cannot IMPORT INTO a table with schema changes in progress -- try again later (pending mutation %s)", desc.Mutations[0].String())
 	}
 
-	if err := p.CheckPrivilege(ctx, desc, privilege.CREATE); err != nil {
-		return nil, err
-	}
-
 	// TODO(dt): Ensure no other schema changes can start during ingest.
 	importing := *desc
 	importing.Version++
@@ -835,6 +851,7 @@ func (r *importResumer) prepareTableDescsForIngestion(
 	ctx context.Context, p sql.PlanHookState, details jobspb.ImportDetails,
 ) error {
 	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+
 		importDetails := details
 		importDetails.Tables = make([]jobspb.ImportDetails_Table, len(details.Tables))
 

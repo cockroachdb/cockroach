@@ -1784,7 +1784,7 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	"timeofday": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.FunctionProperties{Category: categoryDateAndTime, Impure: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),

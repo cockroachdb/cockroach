@@ -636,8 +636,8 @@ type CommandResult interface {
 // query execution error.
 type CommandResultErrBase interface {
 	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other than SetError(), Close()/CloseWithError()
-	// and Discard() are allowed.
+	// client. No further calls other than SetError(), Close() and Discard() are
+	// allowed.
 	//
 	// Calling SetError() a second time overwrites the previously set error.
 	SetError(error)
@@ -658,24 +658,14 @@ type ResultBase interface {
 type CommandResultClose interface {
 	// Close marks a result as complete. No further uses of the CommandResult are
 	// allowed after this call. All results must be eventually closed through
-	// Close()/CloseWithErr()/Discard(), except in case query processing has
-	// encountered an irrecoverable error and the client connection will be
-	// closed; in such cases it is not mandated that these functions are called on
-	// the result that may have been open at the time the error occurred.
+	// Close()/Discard(), except in case query processing has encountered an
+	// irrecoverable error and the client connection will be closed; in such
+	// cases it is not mandated that these functions are called on the result
+	// that may have been open at the time the error occurred.
 	// NOTE(andrei): We might want to tighten the contract if the results get any
 	// state that needs to be closed even when the whole connection is about to be
 	// terminated.
-	Close(TransactionStatusIndicator)
-
-	// CloseWithErr is like Close, except it tells the client that an execution
-	// error has happened. All rows previously accumulated on the result might be
-	// discarded; only this error might be delivered to the client as a result of
-	// the command.
-	//
-	// After calling CloseWithErr it is illegal to create CommandResults for any
-	// command in the same batch as the one being closed. The contract is that the
-	// next result created corresponds to the first command in the next batch.
-	CloseWithErr(err error)
+	Close(context.Context, TransactionStatusIndicator)
 
 	// Discard is called to mark the fact that the result is being disposed off.
 	// No completion message will be sent to the client. The expectation is that
@@ -858,12 +848,12 @@ type bufferedCommandResult struct {
 	// of the query is not expected to produce any results.
 	errOnly bool
 
-	// closeCallback, if set, is called when Close()/CloseWithErr()/Discard() is
-	// called.
+	// closeCallback, if set, is called when Close()/Discard() is called.
 	closeCallback func(*bufferedCommandResult, resCloseType, error)
 }
 
 var _ RestrictedCommandResult = &bufferedCommandResult{}
+var _ CommandResultClose = &bufferedCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *bufferedCommandResult) SetColumns(_ context.Context, cols sqlbase.ResultColumns) {
@@ -913,18 +903,10 @@ func (r *bufferedCommandResult) RowsAffected() int {
 	return r.rowsAffected
 }
 
-// Close is part of the CommandResult interface.
-func (r *bufferedCommandResult) Close(TransactionStatusIndicator) {
+// Close is part of the CommandResultClose interface.
+func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, nil /* err */)
-	}
-}
-
-// CloseWithErr is part of the CommandResult interface.
-func (r *bufferedCommandResult) CloseWithErr(err error) {
-	r.err = err
-	if r.closeCallback != nil {
-		r.closeCallback(r, closed, err)
 	}
 }
 

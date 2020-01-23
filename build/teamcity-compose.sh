@@ -13,7 +13,7 @@ tc_end_block "Prepare environment for compose tests"
 tc_start_block "Compile CockroachDB"
 # Buffer noisy output and only print it on failure.
 run pkg/compose/prepare.sh &> artifacts/compose-compile.log || (cat artifacts/compose-compile.log && false)
-rm artifacts/acceptance-compile.log
+rm artifacts/compose-compile.log
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile compose tests"
