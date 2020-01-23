@@ -28,10 +28,10 @@ func ResetConstructors() func() {
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
-	OnResume func() error
-	Fail     func() error
-	Success  func() error
-	Terminal func()
+	OnResume       func() error
+	FailOrCancel func() error
+	Success        func() error
+	Terminal       func()
 }
 
 func (d FakeResumer) Resume(_ context.Context, _ interface{}, _ chan<- tree.Datums) error {
@@ -42,8 +42,8 @@ func (d FakeResumer) Resume(_ context.Context, _ interface{}, _ chan<- tree.Datu
 }
 
 func (d FakeResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
-	if d.Fail != nil {
-		return d.Fail()
+	if d.FailOrCancel != nil {
+		return d.FailOrCancel()
 	}
 	return nil
 }

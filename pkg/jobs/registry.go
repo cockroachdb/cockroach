@@ -416,7 +416,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 
 // isOrphaned tries to detect if there are no mutations left to be done for the
 // job which will make it a candidate for garbage collection. Jobs can be left
-// in such inconsistent state if they fail before being removed from the jobs table.
+// in such inconsistent state if they OnFailOrCancelStart before being removed from the jobs table.
 func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (bool, error) {
 	if payload.Type() != jobspb.TypeSchemaChange {
 		return false, nil
@@ -515,7 +515,7 @@ func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error 
 			// prefix. These rollback jobs cannot be canceled. We could add a field to
 			// the payload proto to indicate if this job is cancelable or not, but in
 			// a split version cluster an older node could pick up the schema change
-			// and fail to clear/set that field appropriately. Thus it seems that the
+			// and OnFailOrCancelStart to clear/set that field appropriately. Thus it seems that the
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
 			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
@@ -569,7 +569,7 @@ type Resumer interface {
 	OnSuccess(ctx context.Context, txn *client.Txn) error
 
 	// OnTerminal is called after a job has successfully been marked as
-	// terminal. It should be used to perform optional cleanup and return final
+	// Terminal. It should be used to perform optional cleanup and return final
 	// results to the user. There is no guarantee that this function is ever run
 	// (for example, if a node died immediately after Success commits).
 	OnTerminal(ctx context.Context, status Status, resultsCh chan<- tree.Datums)
@@ -624,7 +624,7 @@ func (r retryJobError) Error() string {
 // The job is executed with the ctx, so ctx must only by canceled if the job
 // should also be canceled. resultsCh is passed to the resumable func and should
 // be closed by the caller after errCh sends a value. errCh returns an error if
-// the job was not completed with success. status is the current job status.
+// the job was not completed with Success. status is the current job status.
 func (r *Registry) stepThroughStateMachine(
 	ctx context.Context,
 	phs interface{},
@@ -680,11 +680,12 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: successful bu unexpected error provided", *job.ID())
 		}
 		if err := job.Succeeded(ctx, resumer.OnSuccess); err != nil {
-			// If it didn't succeed, mark it failed.
+			// If it didn't succeed, we consider the job failing and need to go
+			// through reverting state first.
 			// TODO(spaskob): this is silly, we should remove the OnSuccess
-			// hooks and execute them in resume so that the client can handle
+			// hooks and execute them in ResumeStart so that the client can handle
 			// these errors better.
-			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "could not mark job %d as succeeded", *job.id))
+			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.id))
 		}
 		resumer.OnTerminal(ctx, status, resultsCh)
 		return nil
@@ -736,7 +737,7 @@ func (r *Registry) stepThroughStateMachine(
 	return nil
 }
 
-// resume starts or resumes a job. If no error is returned then the job was
+// ResumeStart starts or resumes a job. If no error is returned then the job was
 // asynchronously executed. The job is executed with the ctx, so ctx must
 // only by canceled if the job should also be canceled. resultsCh is passed
 // to the resumable func and should be closed by the caller after errCh sends
@@ -749,7 +750,7 @@ func (r *Registry) resume(
 	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		// Bookkeeping.
 		payload := job.Payload()
-		phs, cleanup := r.planFn("resume-"+taskName, payload.Username)
+		phs, cleanup := r.planFn("ResumeStart-"+taskName, payload.Username)
 		defer cleanup()
 		spanName := fmt.Sprintf(`%s-%d`, payload.Type(), *job.ID())
 		var span opentracing.Span
@@ -899,7 +900,7 @@ WHERE status IN ($1, $2, $3, $4) ORDER BY created DESC`
 			}
 			continue
 		}
-		// Adopt job and resume it.
+		// Adopt job and ResumeStart it.
 		if err := job.adopt(ctx, payload.Lease); err != nil {
 			r.unregister(*id)
 			return errors.Wrap(err, "unable to acquire lease")
@@ -955,12 +956,12 @@ func (r *Registry) cancelAll(ctx context.Context) {
 }
 
 // register registers an about to be resumed job in memory so that it can be
-// killed and that no one else tries to resume it. This essentially works as a
-// barrier that only one function can cross and try to resume the job.
+// killed and that no one else tries to ResumeStart it. This essentially works as a
+// barrier that only one function can cross and try to ResumeStart the job.
 func (r *Registry) register(jobID int64, cancel func()) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// We need to prevent different routines trying to adopt and resume the job.
+	// We need to prevent different routines trying to adopt and ResumeStart the job.
 	if _, alreadyRegistered := r.mu.jobs[jobID]; alreadyRegistered {
 		return errors.Errorf("job %d: already registered", jobID)
 	}
@@ -973,7 +974,7 @@ func (r *Registry) unregister(jobID int64) {
 	defer r.mu.Unlock()
 	cancel, ok := r.mu.jobs[jobID]
 	// It is possible for a job to be double unregistered. unregister is always
-	// called at the end of resume. But it can also be called during cancelAll
+	// called at the end of ResumeStart. But it can also be called during cancelAll
 	// and in the adopt loop under certain circumstances.
 	if ok {
 		cancel()

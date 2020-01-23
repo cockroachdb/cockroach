@@ -84,7 +84,7 @@ const (
 	StatusCancelRequested Status = "cancel-requested"
 )
 
-// Terminal returns whether this status represents a "terminal" state: a state
+// Terminal returns whether this status represents a "Terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
 	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled
@@ -155,11 +155,11 @@ func (j *Job) CheckStatus(ctx context.Context) error {
 	})
 }
 
-// CheckTerminalStatus returns true if the job is in a terminal status.
+// CheckTerminalStatus returns true if the job is in a Terminal status.
 func (j *Job) CheckTerminalStatus(ctx context.Context) bool {
 	err := j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
 		if !md.Status.Terminal() {
-			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
+			return &InvalidStatusError{md.ID, md.Status, "checking that job status is Success", md.Payload.Error}
 		}
 		return nil
 	})
@@ -298,7 +298,7 @@ func (j *Job) paused(ctx context.Context) error {
 }
 
 // Resumed sets the status of the tracked job to running iff the job is
-// currently paused. It does not directly resume the job; rather, it expires the
+// currently paused. It does not directly ResumeStart the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
 func (j *Job) resumed(ctx context.Context) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
@@ -361,7 +361,7 @@ func (j *Job) Failed(
 				return err
 			}
 		}
-		ju.UpdateStatus(StatusReverting)
+		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
 		ju.UpdatePayload(md.Payload)
