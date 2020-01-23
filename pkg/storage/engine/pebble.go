@@ -1164,14 +1164,14 @@ func pebbleExportToSst(
 		}
 	}
 
-	if err := sstWriter.Finish(); err != nil {
-		return nil, roachpb.BulkOpSummary{}, err
+	if rows.BulkOpSummary.DataSize == 0 {
+		// If no records were added to the sstable, skip completing it and return a
+		// nil slice – the export code will discard it anyway (based on 0 DataSize).
+		return nil, roachpb.BulkOpSummary{}, nil
 	}
 
-	if rows.BulkOpSummary.DataSize == 0 {
-		// If no records were added to the sstable, return an empty sstable. This
-		// is used by export code to avoid ingestion of empty sstables.
-		return nil, roachpb.BulkOpSummary{}, nil
+	if err := sstWriter.Finish(); err != nil {
+		return nil, roachpb.BulkOpSummary{}, err
 	}
 
 	return sstFile.Data(), rows.BulkOpSummary, nil
