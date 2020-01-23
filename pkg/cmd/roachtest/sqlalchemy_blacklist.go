@@ -71,6 +71,9 @@ var sqlAlchemyBlacklist20_1 = blacklist{
 	"test/dialect/test_suite.py::ExpandingBoundInTest_cockroachdb+psycopg2_9_5_0::test_null_in_empty_set_is_false":            "41596",
 	"test/dialect/test_suite.py::HasTableTest_cockroachdb+psycopg2_9_5_0::test_has_table":                                     "26443",
 	"test/dialect/test_suite.py::HasTableTest_cockroachdb+psycopg2_9_5_0::test_has_table_schema":                              "26443",
+	"test/dialect/test_suite.py::JSONTest::test_single_element_round_trip[a":                                                  "unknown",
+	"test/dialect/test_suite.py::JSONTest::test_single_element_round_trip[r\xe9ve":                                            "unknown",
+	"test/dialect/test_suite.py::JSONTest::test_single_element_round_trip[r\xe9ve\U0001f40d":                                  "unknown",
 	"test/dialect/test_suite.py::LastrowidTest_cockroachdb+psycopg2_9_5_0::test_autoincrement_on_insert":                      "41690",
 	"test/dialect/test_suite.py::ReturningTest_cockroachdb+psycopg2_9_5_0::test_autoincrement_on_insert_implicit_returning":   "41690",
 	"test/dialect/test_suite.py::ServerSideCursorsTest_cockroachdb+psycopg2_9_5_0::test_aliases_and_ss":                       "41412",
@@ -84,7 +87,7 @@ var sqlAlchemyBlacklist20_1 = blacklist{
 	"test/dialect/test_suite.py::ServerSideCursorsTest_cockroachdb+psycopg2_9_5_0::test_stmt_option":                          "41412",
 	"test/dialect/test_suite.py::ServerSideCursorsTest_cockroachdb+psycopg2_9_5_0::test_stmt_option_disabled":                 "41412",
 	"test/dialect/test_suite.py::ServerSideCursorsTest_cockroachdb+psycopg2_9_5_0::test_text_ss_option":                       "41412",
-	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table_schema":                           "26443",
+	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table_schema":                           "unknown",
 }
 
 var sqlAlchemyBlacklist = blacklist{
