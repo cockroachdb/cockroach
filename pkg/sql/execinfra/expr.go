@@ -74,8 +74,7 @@ func processExpression(
 	// Convert to a fully typed expression.
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
-		// Type checking must succeed by now.
-		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
+		return nil, errors.Wrap(err, expr.String())
 	}
 
 	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly
