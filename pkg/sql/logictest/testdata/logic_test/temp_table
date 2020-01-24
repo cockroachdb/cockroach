@@ -41,6 +41,7 @@ temp_table_test
 statement ok
 DROP TABLE temp_table_ref CASCADE; DROP TABLE temp_table_test CASCADE
 
+# Tests foreign key errors with tables resolve to the correct name.
 subtest foreign_key_errors
 
 statement ok
@@ -54,3 +55,26 @@ CREATE TEMP TABLE b (c int DEFAULT NULL PRIMARY KEY, FOREIGN KEY (c) REFERENCES 
 
 statement ok
 DROP TABLE a
+
+# Test uncommitted temp tables do not clash with existing tables
+subtest test_uncommitted_tables
+
+statement ok
+BEGIN;
+CREATE TABLE table_a (a int); CREATE TEMP TABLE table_a (a int);
+INSERT INTO table_a VALUES (1); INSERT INTO pg_temp.table_a VALUES (2); INSERT INTO public.table_a VALUES (3);
+COMMIT
+
+query I
+SELECT * FROM pg_temp.table_a ORDER BY a
+----
+1
+2
+
+query I
+SELECT * FROM public.table_a ORDER BY a
+----
+3
+
+statement ok
+DROP TABLE pg_temp.table_a; DROP TABLE public.table_a
