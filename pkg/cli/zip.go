@@ -305,7 +305,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, table := range debugZipTablesPerCluster {
-		if err := dumpTableDataForZip(z, sqlConn, base, table); err != nil {
+		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table); err != nil {
 			return errors.Wrap(err, table)
 		}
 	}
@@ -343,7 +343,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
 
 				for _, table := range debugZipTablesPerNode {
-					if err := dumpTableDataForZip(z, curSQLConn, prefix, table); err != nil {
+					if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table); err != nil {
 						return errors.Wrap(err, table)
 					}
 				}
@@ -592,8 +592,10 @@ func (fne *fileNameEscaper) escape(f string) string {
 	return result
 }
 
-func dumpTableDataForZip(z *zipper, conn *sqlConn, base, table string) error {
-	query := fmt.Sprintf(`SELECT * FROM %s`, table)
+func dumpTableDataForZip(
+	z *zipper, conn *sqlConn, timeout time.Duration, base, table string,
+) error {
+	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT * FROM %s`, timeout, table)
 	name := base + "/" + table + ".txt"
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
