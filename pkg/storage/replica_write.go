@@ -240,6 +240,47 @@ and the following Raft status: %+v`,
 	}
 }
 
+// canAttempt1PCEvaluation looks at the batch and decides whether it can be
+// executed as 1PC.
+func (r *Replica) canAttempt1PCEvaluation(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (bool, *roachpb.Error) {
+	if !isOnePhaseCommit(ba) {
+		return false, nil
+	}
+
+	if ba.Timestamp != ba.Txn.WriteTimestamp {
+		log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
+			ba.Timestamp, ba.Txn.WriteTimestamp)
+	}
+
+	// The EndTxn checks whether the txn record can be created, but we're
+	// eliding the EndTxn. So, we'll do the check instead.
+	ok, minCommitTS, reason := r.CanCreateTxnRecord(ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	if !ok {
+		newTxn := ba.Txn.Clone()
+		newTxn.Status = roachpb.ABORTED
+		return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(reason), newTxn)
+	}
+	if ba.Timestamp.Less(minCommitTS) {
+		// This transaction has been pushed. 1PC execution can't deal with that.
+		// NOTE(Andrei): I don't think this can actually happen given that we've
+		// passed the isOnePhaseCommit() other than through some sort of "replay".
+
+		arg, _ := ba.GetArg(roachpb.EndTxn)
+		etArg := arg.(*roachpb.EndTxnRequest)
+		if etArg.Require1PC {
+			newTxn := ba.Txn.Clone()
+			newTxn.WriteTimestamp.Forward(minCommitTS)
+			return false, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "Require1PC batch pushed"),
+				newTxn)
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
 // evaluateWriteBatch evaluates the supplied batch.
 //
 // If the batch is transactional and has all the hallmarks of a 1PC commit (i.e.
@@ -261,16 +302,12 @@ func (r *Replica) evaluateWriteBatch(
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	if isOnePhaseCommit(ba) {
+	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba)
+	if pErr != nil {
+		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
+	}
+	if ok {
 		log.VEventf(ctx, 2, "attempting 1PC execution")
-		arg, _ := ba.GetArg(roachpb.EndTxn)
-		etArg := arg.(*roachpb.EndTxnRequest)
-
-		if ba.Timestamp != ba.Txn.WriteTimestamp {
-			log.Fatalf(ctx, "unexpected 1PC execution with diverged timestamp. %s != %s",
-				ba.Timestamp, ba.Txn.WriteTimestamp)
-		}
-
 		// Try executing with transaction stripped.
 		strippedBa := *ba
 		strippedBa.Txn = nil
@@ -282,8 +319,9 @@ func (r *Replica) evaluateWriteBatch(
 		var batch engine.Batch
 		var br *roachpb.BatchResponse
 		var res result.Result
-		var pErr *roachpb.Error
 
+		arg, _ := ba.GetArg(roachpb.EndTxn)
+		etArg := arg.(*roachpb.EndTxnRequest)
 		canFwdTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
 
 		// Evaluate strippedBa. If the transaction allows, permit refreshes.
@@ -383,15 +421,11 @@ func (r *Replica) evaluateWriteBatch(
 
 		// Handle the case of a required one phase commit transaction.
 		if etArg.Require1PC {
-			// Make sure that there's a pErr returned.
 			if pErr != nil {
-				return batch, enginepb.MVCCStats{}, nil, result.Result{}, pErr
-			}
-			if ba.Timestamp != br.Timestamp {
-				pErr = roachpb.NewError(
-					roachpb.NewTransactionRetryError(
-						roachpb.RETRY_SERIALIZABLE, "Require1PC batch pushed"))
-				return batch, enginepb.MVCCStats{}, nil, result.Result{}, pErr
+				return batch, ms, nil, result.Result{}, pErr
+			} else if ba.Timestamp != br.Timestamp {
+				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "Require1PC batch pushed")
+				return batch, ms, nil, result.Result{}, roachpb.NewError(err)
 			}
 			log.Fatal(ctx, "unreachable")
 		}
