@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -522,8 +523,9 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			}
 		} else {
 			fmt.Printf("%d found\n", len(databases.Databases))
+			var dbEscaper fileNameEscaper
 			for _, dbName := range databases.Databases {
-				prefix := schemaPrefix + "/" + dbName
+				prefix := schemaPrefix + "/" + dbEscaper.escape(dbName)
 				var database *serverpb.DatabaseDetailsResponse
 				requestErr := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting database details for %s", dbName), timeout,
 					func(ctx context.Context) error {
@@ -538,8 +540,9 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				fmt.Printf("%d tables found\n", len(database.TableNames))
+				var tbEscaper fileNameEscaper
 				for _, tableName := range database.TableNames {
-					name := prefix + "/" + tableName
+					name := prefix + "/" + tbEscaper.escape(tableName)
 					var table *serverpb.TableDetailsResponse
 					err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting table details for %s.%s", dbName, tableName), timeout,
 						func(ctx context.Context) error {
@@ -555,6 +558,37 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+type fileNameEscaper struct {
+	counters map[string]int
+}
+
+// escape ensures that f is stripped of characters that
+// may be invalid in file names. The characters are also lowercased
+// to ensure proper normalization in case-insensitive filesystems.
+func (fne *fileNameEscaper) escape(f string) string {
+	var out strings.Builder
+	for _, c := range f {
+		if c < 127 && (unicode.IsLetter(c) || unicode.IsDigit(c)) {
+			out.WriteRune(c)
+		} else {
+			out.WriteByte('_')
+		}
+	}
+	objName := strings.ToLower(out.String())
+	result := objName
+
+	if fne.counters == nil {
+		fne.counters = make(map[string]int)
+	}
+	cnt := fne.counters[objName]
+	if cnt > 0 {
+		result += fmt.Sprintf("-%d", cnt)
+	}
+	cnt++
+	fne.counters[objName] = cnt
+	return result
 }
 
 func dumpTableDataForZip(z *zipper, conn *sqlConn, base, table string) error {
