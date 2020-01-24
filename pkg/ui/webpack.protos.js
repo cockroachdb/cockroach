@@ -19,6 +19,8 @@ module.exports = (env) => ({
     protos: [env.dist === "ccl" ? "./ccl/src/js/protos" : "./src/js/protos"],
   },
 
+  mode: "none",
+
   output: {
     filename: `protos.${env.dist}.dll.js`,
     path: path.resolve(__dirname, "dist"),
@@ -40,4 +42,11 @@ module.exports = (env) => ({
       path: path.resolve(__dirname, `protos.${env.dist}.manifest.json`),
     }),
   ],
+
+  // Max size of is set to 4Mb to disable warning message and control
+  // the growing size of bundle over time.
+  performance: {
+    maxEntrypointSize: 4000000,
+    maxAssetSize: 4000000,
+  },
 });
