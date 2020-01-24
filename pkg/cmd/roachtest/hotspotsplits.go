@@ -98,6 +98,7 @@ func registerHotSpotSplits(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {

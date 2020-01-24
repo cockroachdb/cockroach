@@ -177,6 +177,7 @@ func registerPgjdbc(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "pgjdbc",
+		Owner:   OwnerAppDev,
 		Cluster: makeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {

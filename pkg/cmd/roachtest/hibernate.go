@@ -178,6 +178,7 @@ func registerHibernate(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "hibernate",
+		Owner:   OwnerAppDev,
 		Cluster: makeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {

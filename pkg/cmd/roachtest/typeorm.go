@@ -153,6 +153,7 @@ func registerTypeORM(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "typeorm",
+		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.1.0",
 		Tags:       []string{`default`, `orm`},

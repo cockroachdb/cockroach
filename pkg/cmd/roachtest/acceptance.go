@@ -65,6 +65,7 @@ func registerAcceptance(r *testRegistry) {
 		// this naming scheme ever change (or issues such as #33519)
 		// will be posted.
 		Name:    "acceptance",
+		Owner:   OwnerKV,
 		Timeout: 10 * time.Minute,
 		Tags:    tags,
 		Cluster: makeClusterSpec(numNodes),

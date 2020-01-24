@@ -81,6 +81,7 @@ func registerKVBenchSpec(r *testRegistry, b kvBenchSpec) {
 	nodes := makeClusterSpec(b.Nodes+1, opts...)
 	r.Add(testSpec{
 		Name:    name,
+		Owner:   OwnerKV,
 		Cluster: nodes,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runKVBench(ctx, t, c, b)

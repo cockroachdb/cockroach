@@ -217,6 +217,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 
 	r.Add(testSpec{
 		Name:       "tpchvec",
+		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(nodeCount),
 		MinVersion: "v19.2.0",
 		Run:        runTPCHVec,

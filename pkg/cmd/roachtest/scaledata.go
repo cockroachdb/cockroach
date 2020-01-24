@@ -42,6 +42,7 @@ func registerScaleData(r *testRegistry) {
 		for _, n := range []int{3, 6} {
 			r.Add(testSpec{
 				Name:    fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
+				Owner:   OwnerKV,
 				Timeout: 2 * duration,
 				Cluster: makeClusterSpec(n + 1),
 				Run: func(ctx context.Context, t *test, c *cluster) {

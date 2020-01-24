@@ -127,7 +127,7 @@ func registerDjango(r *testRegistry) {
 
 		if err := repeatRunE(
 			ctx, c, node, "install cockroach-django", `
-					cd /mnt/data1/django/tests/cockroach-django/ && 
+					cd /mnt/data1/django/tests/cockroach-django/ &&
 					pip3 install psycopg2-binary --user && pip3 install . --user`,
 		); err != nil {
 			t.Fatal(err)
@@ -137,7 +137,7 @@ func registerDjango(r *testRegistry) {
 			ctx, c, node, "install django's dependencies", `
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. --user &&
-				pip3 install -r requirements/py3.txt --user && 
+				pip3 install -r requirements/py3.txt --user &&
 				pip3 install -r requirements/postgres.txt --user`,
 		); err != nil {
 			t.Fatal(err)
@@ -189,6 +189,7 @@ func registerDjango(r *testRegistry) {
 		Skip:       "django tests are still too flaky to run",
 		MinVersion: "v19.2.0",
 		Name:       "django",
+		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {

@@ -24,6 +24,7 @@ func registerBackup(r *testRegistry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),
+		Owner:      OwnerBulkIO,
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -64,6 +65,7 @@ func registerBackup(r *testRegistry) {
 	// verifies them with a fingerprint.
 	r.Add(testSpec{
 		Name:    `backupTPCC`,
+		Owner:   OwnerBulkIO,
 		Cluster: makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {

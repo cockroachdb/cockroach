@@ -311,7 +311,8 @@ func registerJepsen(r *testRegistry) {
 		for _, nemesis := range jepsenNemeses {
 			nemesis := nemesis // copy for closure
 			spec := testSpec{
-				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
+				Name:  fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
+				Owner: OwnerKV,
 				// The Jepsen tests do funky things to machines, like muck with the
 				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when

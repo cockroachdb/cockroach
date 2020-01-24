@@ -29,6 +29,7 @@ fi
 
 	r.Add(testSpec{
 		Name:       "synctest",
+		Owner:      OwnerStorage,
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: makeClusterSpec(1, reuseNone()),

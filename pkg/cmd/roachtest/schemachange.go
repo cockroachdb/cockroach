@@ -23,6 +23,7 @@ import (
 func registerSchemaChangeKV(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    `schemachange/mixed/kv`,
+		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
@@ -294,6 +295,7 @@ func registerSchemaChangeIndexTPCC100(r *testRegistry) {
 func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
+		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -323,6 +325,7 @@ func registerSchemaChangeBulkIngest(r *testRegistry) {
 func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    "schemachange/bulkingest",
+		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
@@ -406,6 +409,7 @@ func registerMixedSchemaChangesTPCC1000(r *testRegistry) {
 func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    "schemachange/mixed/tpcc",
+		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {

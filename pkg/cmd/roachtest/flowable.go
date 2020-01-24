@@ -96,6 +96,7 @@ func registerFlowable(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "flowable",
+		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
