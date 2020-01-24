@@ -53,7 +53,7 @@ export interface EventRowProps {
 
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
   return {
-    fromNowString: TimestampToMoment(e.timestamp).fromNow()
+    fromNowString: TimestampToMoment(e.timestamp).format("MMM DD, YYYY [at] h:mm A")
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{ getEventDescription(e) }</span>,

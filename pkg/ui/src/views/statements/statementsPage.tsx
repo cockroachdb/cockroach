@@ -159,7 +159,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   renderLastCleared = () => {
     const { lastReset } = this.props;
-    return `Last cleared ${moment.utc(lastReset).fromNow()}`;
+    return `Last cleared ${moment.utc(lastReset).format("MMM DD, YYYY [at] h:mm A")}`;
   }
 
   renderStatements = () => {
