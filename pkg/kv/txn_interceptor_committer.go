@@ -217,7 +217,7 @@ func (tc *txnCommitter) SendLocked(
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
 	mergedIntentSpans, _ := mergeIntoSpans(et.IntentSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans, et.CanCommitAtHigherTimestamp)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedIntentSpans, et.NoRefreshSpans)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -402,7 +402,7 @@ func makeTxnCommitExplicitLocked(
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.IntentSpans = intentSpans
-	et.CanCommitAtHigherTimestamp = noRefreshSpans
+	et.NoRefreshSpans = noRefreshSpans
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)
