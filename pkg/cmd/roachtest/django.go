@@ -186,7 +186,7 @@ func registerDjango(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Skip:       "django tests are still too flaky to run",
+		//Skip:       "django tests are still too flaky to run",
 		MinVersion: "v19.2.0",
 		Name:       "django",
 		Cluster:    makeClusterSpec(1),
