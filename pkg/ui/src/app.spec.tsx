@@ -353,7 +353,7 @@ describe("Routing to", () => {
   });
 
   // TODO (koorosh): Disabled due to strange failure on internal
-  // behaviour of ReduxDebug component under test env.
+  // behavior of ReduxDebug component under test env.
   xdescribe("'/debug/redux' path", () => {
     it("routes to <ReduxDebug> component", () => {
       navigateToPath("/debug/redux");
