@@ -185,7 +185,19 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		}
 	}
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.Required); refuseFurtherLookup || err != nil {
+	// Resolve the schema to the ID of the schema.
+	// TODO(sqlexec): consider caching this in TableCollection.
+	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
+	if err != nil || !foundSchema {
+		return nil, err
+	}
+
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
+		dbID,
+		schemaID,
+		tn,
+		flags.Required,
+	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if mut := table.MutableTableDescriptor; mut != nil {
 		log.VEventf(ctx, 2, "found uncommitted table %d", mut.ID)
@@ -233,6 +245,13 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
+	// Resolve the schema to the ID of the schema.
+	// TODO(sqlexec): consider caching this in TableCollection.
+	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
+	if err != nil || !foundSchema {
+		return nil, err
+	}
+
 	// TODO(vivek): Ideally we'd avoid caching for only the
 	// system.descriptor and system.lease tables, because they are
 	// used for acquiring leases, creating a chicken&egg problem.
@@ -243,7 +262,12 @@ func (tc *TableCollection) getTableVersion(
 	avoidCache := flags.AvoidCached || testDisableTableLeases ||
 		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.Required); refuseFurtherLookup || err != nil {
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
+		dbID,
+		schemaID,
+		tn,
+		flags.Required,
+	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {
 		// If not forcing to resolve using KV, tables being added aren't visible.
@@ -272,20 +296,12 @@ func (tc *TableCollection) getTableVersion(
 		return readTableFromStore()
 	}
 
-	// Resolve the schema to the ID of the schema.
-	// TODO(sqlexec): consider caching this in TableCollection.
-	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
-	if err != nil || !foundSchema {
-		return nil, err
-	}
-
 	// First, look to see if we already have the table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.leasedTables {
-		if table.Name == string(tn.TableName) &&
-			table.ParentID == dbID && table.GetParentSchemaID() == schemaID {
+		if nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
 			return table, nil
 		}
@@ -568,7 +584,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 // cache and go to KV (where the descriptor prior to the DROP may
 // still exist).
 func (tc *TableCollection) getUncommittedTable(
-	dbID sqlbase.ID, tn *tree.TableName, required bool,
+	dbID sqlbase.ID, schemaID sqlbase.ID, tn *tree.TableName, required bool,
 ) (refuseFurtherLookup bool, table uncommittedTable, err error) {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
@@ -582,7 +598,8 @@ func (tc *TableCollection) getUncommittedTable(
 		// effect of it.
 		for _, drain := range mutTbl.DrainingNames {
 			if drain.Name == string(tn.TableName) &&
-				drain.ParentID == dbID {
+				drain.ParentID == dbID &&
+				drain.ParentSchemaID == schemaID {
 				// Table name has gone away.
 				if required {
 					// If it's required here, say it doesn't exist.
@@ -595,8 +612,12 @@ func (tc *TableCollection) getUncommittedTable(
 		}
 
 		// Do we know about a table with this name?
-		if mutTbl.Name == string(tn.TableName) &&
-			mutTbl.ParentID == dbID {
+		if nameMatchesTable(
+			&mutTbl.TableDescriptor,
+			dbID,
+			schemaID,
+			tn.Table(),
+		) {
 			// Right state?
 			if err = FilterTableState(mutTbl.TableDesc()); err != nil && err != errTableAdding {
 				if !required {
