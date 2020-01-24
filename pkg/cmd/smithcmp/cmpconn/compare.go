@@ -128,24 +128,19 @@ var (
 			return x.Cmp(y) == 0
 		}),
 		cmp.Comparer(func(x, y *apd.Decimal) bool {
-			if x.Negative != y.Negative {
-				return false
-			}
-			x.Abs(x)
-			y.Abs(y)
-
-			min := &apd.Decimal{}
-			if x.Cmp(y) > 1 {
-				min.Set(y)
+			var a, b, min, sub apd.Decimal
+			a.Abs(x)
+			b.Abs(y)
+			if a.Cmp(&b) > 1 {
+				min.Set(&b)
 			} else {
-				min.Set(x)
+				min.Set(&a)
 			}
 			ctx := tree.DecimalCtx
-			_, _ = ctx.Mul(min, min, decimalCloseness)
-			sub := &apd.Decimal{}
-			_, _ = ctx.Sub(sub, x, y)
-			sub.Abs(sub)
-			return sub.Cmp(min) <= 0
+			_, _ = ctx.Mul(&min, &min, decimalCloseness)
+			_, _ = ctx.Sub(&sub, x, y)
+			sub.Abs(&sub)
+			return sub.Cmp(&min) <= 0
 		}),
 		cmp.Comparer(func(x, y duration.Duration) bool {
 			return x.Compare(y) == 0
