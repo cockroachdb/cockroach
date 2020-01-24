@@ -321,48 +321,6 @@ message RevertRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// ScanOptions is a collection of options for a batch of scans. The options
-// apply to all the scans in the batch.
-//
-// If ScanOptions is present on a batch, the batch can only be made up of scan
-// requests (i.e. {Reverse,}ScanReques), except for EndTxnRequest which are
-// still allowed. Moreover, the batch cannot mix forward and reverse scans.
-//
-// TODO(andrei): add option to stop scan(s) when an intent is encountered.
-message ScanOptions {
-  option (gogoproto.equal) = true;
-
-  // stop_at_range_boundary, if set, means that the scans will stop at the first
-  // range boundary after min_results is specified (if it is
-  // specified). If the end of a range stops the scans, the resume_span returned
-  // (for all the scans whose spans weren't fully scanned) represents the
-  // beginning of the next range (as ranges were at the time of the read).
-  //
-  // This flag can be combined with header.max_span_request_keys but that means
-  // that the desired number of keys may not be scanned.
-  //
-  // stop_at_range_boundary implies that DistSender will no longer parallelize
-  // the execution of requests between ranges; instead, either we're only
-  // speaking about scanning one range (if min_results is not set) or
-  // it executes the scan serially over different ranges. Note that this is
-  // also the case when max_span_request_keys is set (as the scan needs to
-  // return results in order), and SQL always sets max_span_request_keys.
-  bool stop_at_range_boundary = 1;
-
-  // min_results, if != 0, prevents the stop_at_range_boundary option from
-  // terminating the scans before this many keys have been touched. The
-  // counting is done across all the scans in the batch.
-  //
-  // A common value is 1, used if either the client knows that one key will be
-  // sufficient for its purposes or if the client wants to skip a prefix of
-  // empty ranges and seek to the point where some data is present.
-  //
-  // This can only be set if stop_at_range_boundary is set. If
-  // header.max_span_request_keys is set, min_results needs to be <=
-  // header.max_span_request_keys.
-  int64 min_results = 2;
-}
-
 // ScanFormat is an enumeration of the available response formats for MVCCScan
 // operations.
 enum ScanFormat {
@@ -1762,7 +1720,6 @@ message ResponseUnion {
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
 // information required for executing it.
 message Header {
-  reserved 7;
   // timestamp specifies time at which reads or writes should be performed. If
   // the timestamp is set to zero value, its value is initialized to the wall
   // time of the server node.
@@ -1819,7 +1776,6 @@ message Header {
   bool return_range_info = 10;
   // gateway_node_id is the ID of the gateway node where the request originated.
   int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
-  ScanOptions scan_options = 12;
   // If set, the request will return to the client before proposing the
   // request into Raft. All consensus processing will be performed
   // asynchronously. Because consensus may fail, this means that the
@@ -1843,6 +1799,7 @@ message Header {
   // batch that contains the EndTxn, and it will have an effect for any
   // sub-batches that are split off by the DistSender.
   bool defer_write_too_old_error = 14;
+  reserved 7,12;
 }
 
 
