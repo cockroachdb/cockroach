@@ -60,6 +60,18 @@ const (
 	// hypothetically ping pong back and forth between two nodes, making one full
 	// and then the other.
 	rebalanceToMaxFractionUsedThreshold = 0.925
+
+	// minRangeRebalanceThreshold is the number of replicas by which a store
+	// must deviate from the mean number of replicas to be considered overfull
+	// or underfull. This absolute bound exists to account for deployments
+	// with a small number of replicas to avoid premature replica movement.
+	// With few enough replicas per node (<<30), a rangeRebalanceThreshold
+	// of 5% (the default at time of writing, see below) would otherwise
+	// result in rebalancing at one replica above/below the mean, which
+	// could lead to a condition that would always fire. Instead, we only
+	// consider a store full/empty if it's at least minRebalanceThreshold
+	// away from the mean.
+	minRangeRebalanceThreshold = 2
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -1208,11 +1220,11 @@ func underfullRangeThreshold(options scorerOptions, mean float64) float64 {
 }
 
 func overfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean * (1 + thresholdFraction)
+	return mean + math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
 func underfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean * (1 - thresholdFraction)
+	return mean - math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
 func rebalanceFromConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
