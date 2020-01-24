@@ -21,6 +21,7 @@ import (
 func registerSchemaChangeInvertedIndex(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "schemachange/invertedindex",
+		Owner:   "WIP",
 		Cluster: makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)

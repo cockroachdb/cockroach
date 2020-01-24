@@ -23,6 +23,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+// roachtestOwners is the set of valid entries for the Owners field of a
+// roachtest. They should be teams, not individuals.
+//
+// TODO(dan): Make the value something useful for posting the github issues
+// created for failures.
+var roachtestOwners = map[string]struct{}{
+	`appdev`:   struct{}{},
+	`bulkio`:   struct{}{},
+	`cdc`:      struct{}{},
+	`kv`:       struct{}{},
+	`sql-exec`: struct{}{},
+	`storage`:  struct{}{},
+	`WIP`:      struct{}{},
+}
+
 type testRegistry struct {
 	m map[string]*testSpec
 	// buildVersion is the version of the Cockroach binary that tests will run against.
@@ -86,6 +101,16 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 		// greater than "v2.1.0-alpha.x".
 		spec.minVersion = version.MustParse(spec.MinVersion + "-0")
 	}
+
+	// All tests must have an owner so the release team knows who signs off on
+	// failures and so the github issue poster knows who to assign it to.
+	if spec.Owner == `` {
+		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
+	}
+	if _, ok := roachtestOwners[spec.Owner]; !ok {
+		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
+	}
+
 	return nil
 }
 
@@ -113,20 +138,11 @@ func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []testSp
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistry) List(ctx context.Context, filters []string) []string {
+func (r testRegistry) List(ctx context.Context, filters []string) []testSpec {
 	filter := newFilter(filters)
 	tests := r.GetTests(ctx, filter)
-	var names []string
-	for _, t := range tests {
-		name := t.Name
-		if t.Skip != "" {
-			name += " (skipped: " + t.Skip + ")"
-		}
-
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
+	return tests
 }
 
 func (r *testRegistry) setBuildVersion(buildTag string) error {
