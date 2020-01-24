@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.kv.kvnemeses;
-option go_package = "kvnemeses";
+package cockroach.kv.kvnemesis;
+option go_package = "kvnemesis";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
@@ -62,7 +62,7 @@ message Operation {
 
   BatchOperation batch = 1;
 
-  // TODO(dan): The original prototype of kvnemeses had separate operations for
+  // TODO(dan): The original prototype of kvnemesis had separate operations for
   // {Begin,Use,Commit,Rollback}Txn, which helped generate more interesting
   // concurrency traffic. This had some issues with deadlock in the txn wait
   // queue, but it seems like it should be possible to bring it back somehow.
