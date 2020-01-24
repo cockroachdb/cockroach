@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -211,6 +212,88 @@ requesting table details for system.users... writing: debug/schema/system/users.
 requesting table details for system.web_sessions... writing: debug/schema/system/web_sessions.json
 requesting table details for system.zones... writing: debug/schema/system/zones.json
 `
+
+	assert.Equal(t, expected, out)
+}
+
+func TestZipSpecialNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := newCLITest(cliTestParams{
+		storeSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", `
+create database "a:b";
+create database "a-b";
+create database "a-b-1";
+create database "SYSTEM";
+create table "SYSTEM.JOBS"(x int);
+create database "../system";
+create table defaultdb."a:b"(x int);
+create table defaultdb."a-b"(x int);
+create table defaultdb."pg_catalog.pg_class"(x int);
+create table defaultdb."../system"(x int);
+`})
+
+	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	re := regexp.MustCompile(`(?m)^.*(table|database).*$`)
+	out = strings.Join(re.FindAllString(out, -1), "\n")
+
+	const expected = `requesting list of SQL databases... 8 found
+requesting database details for ../system... writing: debug/schema/___system@details.json
+0 tables found
+requesting database details for SYSTEM... writing: debug/schema/system@details.json
+0 tables found
+requesting database details for a-b... writing: debug/schema/a_b@details.json
+0 tables found
+requesting database details for a-b-1... writing: debug/schema/a_b_1@details.json
+0 tables found
+requesting database details for a:b... writing: debug/schema/a_b-1@details.json
+0 tables found
+requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
+5 tables found
+requesting table details for defaultdb.../system... writing: debug/schema/defaultdb/___system.json
+requesting table details for defaultdb.SYSTEM.JOBS... writing: debug/schema/defaultdb/system_jobs.json
+requesting table details for defaultdb.a-b... writing: debug/schema/defaultdb/a_b.json
+requesting table details for defaultdb.a:b... writing: debug/schema/defaultdb/a_b-1.json
+requesting table details for defaultdb.pg_catalog.pg_class... writing: debug/schema/defaultdb/pg_catalog_pg_class.json
+requesting database details for postgres... writing: debug/schema/postgres@details.json
+0 tables found
+requesting database details for system... writing: debug/schema/system-1@details.json
+22 tables found
+requesting table details for system.comments... writing: debug/schema/system-1/comments.json
+requesting table details for system.descriptor... writing: debug/schema/system-1/descriptor.json
+requesting table details for system.eventlog... writing: debug/schema/system-1/eventlog.json
+requesting table details for system.jobs... writing: debug/schema/system-1/jobs.json
+requesting table details for system.lease... writing: debug/schema/system-1/lease.json
+requesting table details for system.locations... writing: debug/schema/system-1/locations.json
+requesting table details for system.namespace... writing: debug/schema/system-1/namespace.json
+requesting table details for system.namespace_deprecated... writing: debug/schema/system-1/namespace_deprecated.json
+requesting table details for system.protected_ts_meta... writing: debug/schema/system-1/protected_ts_meta.json
+requesting table details for system.protected_ts_records... writing: debug/schema/system-1/protected_ts_records.json
+requesting table details for system.rangelog... writing: debug/schema/system-1/rangelog.json
+requesting table details for system.replication_constraint_stats... writing: debug/schema/system-1/replication_constraint_stats.json
+requesting table details for system.replication_critical_localities... writing: debug/schema/system-1/replication_critical_localities.json
+requesting table details for system.replication_stats... writing: debug/schema/system-1/replication_stats.json
+requesting table details for system.reports_meta... writing: debug/schema/system-1/reports_meta.json
+requesting table details for system.role_members... writing: debug/schema/system-1/role_members.json
+requesting table details for system.settings... writing: debug/schema/system-1/settings.json
+requesting table details for system.table_statistics... writing: debug/schema/system-1/table_statistics.json
+requesting table details for system.ui... writing: debug/schema/system-1/ui.json
+requesting table details for system.users... writing: debug/schema/system-1/users.json
+requesting table details for system.web_sessions... writing: debug/schema/system-1/web_sessions.json
+requesting table details for system.zones... writing: debug/schema/system-1/zones.json`
 
 	assert.Equal(t, expected, out)
 }
