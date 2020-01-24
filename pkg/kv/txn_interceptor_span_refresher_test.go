@@ -100,6 +100,11 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	cases := []struct {
+		// If name is not set, the test will use pErr.String().
+		name string
+		// OnFirstSend, if set, is invoked to evaluate the batch. If not set, pErr()
+		// will be used to provide an error.
+		onFirstSend  func(request roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 		pErr         func() *roachpb.Error
 		expRefresh   bool
 		expRefreshTS hlc.Timestamp
@@ -155,9 +160,28 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh: false,
 		},
+		{
+			name: "write_too_old flag",
+			onFirstSend: func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.WriteTooOld = true
+				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
+				return br, nil
+			},
+			expRefresh:   true,
+			expRefreshTS: txn.WriteTimestamp.Add(20, 1), // Same as br.Txn.WriteTimestamp.
+		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.pErr().String(), func(t *testing.T) {
+		name := tc.name
+		if name == "" {
+			name = tc.pErr().String()
+		}
+		if (tc.onFirstSend != nil) == (tc.pErr != nil) {
+			panic("exactly one tc.onFirstSend and tc.pErr must be set")
+		}
+		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			tsr, mockSender := makeMockTxnSpanRefresher()
 
@@ -183,6 +207,9 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
 				// Return a transaction retry error.
+				if tc.onFirstSend != nil {
+					return tc.onFirstSend(ba)
+				}
 				pErr = tc.pErr()
 				pErr.SetTxn(ba.Txn)
 				return nil, pErr

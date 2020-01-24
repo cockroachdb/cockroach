@@ -35182,7 +35182,6 @@ const int Header::kDistinctSpansFieldNumber;
 const int Header::kReturnRangeInfoFieldNumber;
 const int Header::kGatewayNodeIdFieldNumber;
 const int Header::kAsyncConsensusFieldNumber;
-const int Header::kDeferWriteTooOldErrorFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Header::Header()
@@ -35427,20 +35426,6 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
-      // bool defer_write_too_old_error = 14;
-      case 14: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(112u /* 112 & 0xFF */)) {
-
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &defer_write_too_old_error_)));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       // int64 target_bytes = 15;
       case 15: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
@@ -35535,11 +35520,6 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->async_consensus(), output);
   }
 
-  // bool defer_write_too_old_error = 14;
-  if (this->defer_write_too_old_error() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->defer_write_too_old_error(), output);
-  }
-
   // int64 target_bytes = 15;
   if (this->target_bytes() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(15, this->target_bytes(), output);
@@ -35598,12 +35578,6 @@ size_t Header::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->read_consistency());
   }
 
-  if (this->gateway_node_id() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->gateway_node_id());
-  }
-
   // bool distinct_spans = 9;
   if (this->distinct_spans() != 0) {
     total_size += 1 + 1;
@@ -35619,9 +35593,10 @@ size_t Header::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  // bool defer_write_too_old_error = 14;
-  if (this->defer_write_too_old_error() != 0) {
-    total_size += 1 + 1;
+  if (this->gateway_node_id() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->gateway_node_id());
   }
 
   // int64 target_bytes = 15;
@@ -35669,9 +35644,6 @@ void Header::MergeFrom(const Header& from) {
   if (from.read_consistency() != 0) {
     set_read_consistency(from.read_consistency());
   }
-  if (from.gateway_node_id() != 0) {
-    set_gateway_node_id(from.gateway_node_id());
-  }
   if (from.distinct_spans() != 0) {
     set_distinct_spans(from.distinct_spans());
   }
@@ -35681,8 +35653,8 @@ void Header::MergeFrom(const Header& from) {
   if (from.async_consensus() != 0) {
     set_async_consensus(from.async_consensus());
   }
-  if (from.defer_write_too_old_error() != 0) {
-    set_defer_write_too_old_error(from.defer_write_too_old_error());
+  if (from.gateway_node_id() != 0) {
+    set_gateway_node_id(from.gateway_node_id());
   }
   if (from.target_bytes() != 0) {
     set_target_bytes(from.target_bytes());
@@ -35713,11 +35685,10 @@ void Header::InternalSwap(Header* other) {
   swap(user_priority_, other->user_priority_);
   swap(max_span_request_keys_, other->max_span_request_keys_);
   swap(read_consistency_, other->read_consistency_);
-  swap(gateway_node_id_, other->gateway_node_id_);
   swap(distinct_spans_, other->distinct_spans_);
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
-  swap(defer_write_too_old_error_, other->defer_write_too_old_error_);
+  swap(gateway_node_id_, other->gateway_node_id_);
   swap(target_bytes_, other->target_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }

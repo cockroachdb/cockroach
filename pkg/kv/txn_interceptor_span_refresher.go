@@ -225,7 +225,45 @@ func (sr *txnSpanRefresher) SendLocked(
 func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	if ba.Txn.WriteTooOld && sr.canAutoRetry {
+		// The WriteTooOld flag is not supposed to be set on requests. It's only set
+		// by the server and it's terminated by this interceptor on the client.
+		log.Fatalf(ctx, "unexpected WriteTooOld request. ba: %s (txn: %s)",
+			ba.String(), ba.Txn.String())
+	}
 	br, pErr := sr.sendHelper(ctx, ba)
+	if pErr == nil && br.Txn.WriteTooOld {
+		// If we got a response with the WriteTooOld flag set, then we pretend that
+		// we got a WriteTooOldError, which will cause us to attempt to refresh and
+		// propagate the error if we failed. When it can, the server prefers to
+		// return the WriteTooOld flag, rather than a WriteTooOldError because, in
+		// the former case, it can leave intents behind. We like refreshing eagerly
+		// when the WriteTooOld flag is set because it's likely that the refresh
+		// will fail (if we previously read the key that's now causing a WTO, then
+		// the refresh will surely fail).
+		// TODO(andrei): Implement a more discerning policy based on whether we've
+		// read that key before.
+		//
+		// If the refresh fails, we could continue running the transaction even
+		// though it will not be able to commit, in order for it to lay down more
+		// intents. Not doing so, though, gives the SQL a chance to auto-retry.
+		// TODO(andrei): Implement a more discerning policy based on whether
+		// auto-retries are still possible.
+		//
+		// For the refresh, we have two options: either refresh everything read
+		// *before* this batch, and then retry this batch, or refresh the current
+		// batch's reads too and then, if successful, there'd be nothing to refresh.
+		// We take the former option by setting br = nil below to minimized the
+		// chances that the refresh fails.
+		bumpedTxn := br.Txn.Clone()
+		bumpedTxn.WriteTooOld = false
+		bumpedTxn.ReadTimestamp = bumpedTxn.WriteTimestamp
+		pErr = roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD,
+				"WriteTooOld flag converted to WriteTooOldError"),
+			bumpedTxn)
+		br = nil
+	}
 	if pErr != nil && maxRefreshAttempts > 0 {
 		br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
 	}
@@ -245,6 +283,11 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr
 	}
 
+	// If a prefix of the batch was executed, collect refresh spans for
+	// that executed portion, and retry the remainder. The canonical
+	// case is a batch split between everything up to but not including
+	// the EndTxn. Requests up to the EndTxn succeed, but the EndTxn
+	// fails with a retryable error. We want to retry only the EndTxn.
 	ba.UpdateTxn(retryTxn)
 	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
 		ba, retryTxn.ReadTimestamp, pErr)
