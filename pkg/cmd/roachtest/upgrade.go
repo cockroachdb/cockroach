@@ -252,6 +252,7 @@ func registerUpgrade(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("upgrade"),
+		Owner:      OwnerKV,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {

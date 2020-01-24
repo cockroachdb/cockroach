@@ -76,6 +76,7 @@ func registerEncryption(r *testRegistry) {
 	for _, n := range []int{1} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
+			Owner:      OwnerStorage,
 			MinVersion: "v2.1.0",
 			Cluster:    makeClusterSpec(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {

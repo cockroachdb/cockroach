@@ -238,6 +238,7 @@ func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 
 	r.Add(testSpec{
 		Name:       strings.Join(nameParts, "/"),
+		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(numNodes),
 		MinVersion: minVersion,
 		Run: func(ctx context.Context, t *test, c *cluster) {

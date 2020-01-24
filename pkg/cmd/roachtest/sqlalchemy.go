@@ -204,6 +204,7 @@ func registerSQLAlchemy(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "sqlalchemy",
+		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v2.1.0",
 		Tags:       []string{`default`, `orm`},

@@ -36,6 +36,10 @@ type testSpec struct {
 	SkipDetails string
 
 	Name string
+	// Owner is the name of the team responsible for signing off on failures of
+	// this test that happen in the release process. This must be one of a limited
+	// set of values (the keys in the roachtestTeams map).
+	Owner Owner
 	// The maximum duration the test is allowed to run before it is considered
 	// failed. If not specified, the default timeout is 10m before the test's
 	// associated cluster expires. The timeout is always truncated to 10m before
