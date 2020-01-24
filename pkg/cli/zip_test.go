@@ -436,10 +436,18 @@ requesting list of SQL databases... writing: debug/schema
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+
 	ctx := context.Background()
 
-	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
-	tc := testcluster.StartTestCluster(t, 3,
+	// Four nodes. We move all the data to nodes 3 and 4 then we stop
+	// node 2. This makes the node 2 unavailable but does not risk
+	// causing under-replication reports in
+	// system.replication_constraint_stats.
+	tc := testcluster.StartTestClusterWithoutReplication(t,
+		4 /*nodes*/, 3 /* dataNodeID */, 4, /*systemNodeID*/
 		base.TestClusterArgs{ServerArgs: base.TestServerArgs{Insecure: true}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -454,7 +462,8 @@ func TestPartialZip(t *testing.T) {
 	stderr = os.Stdout
 	defer func() { stderr = log.OrigStderr }()
 
-	out, err := c.RunWithCapture("debug zip " + os.DevNull)
+	// Keep the timeout short so that the test doesn't take forever.
+	out, err := c.RunWithCapture("debug zip " + os.DevNull + ` --timeout=2s`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,7 +480,21 @@ func TestPartialZip(t *testing.T) {
 	re = regexp.MustCompile(`(?m)\^- resulted in.*$`)
 	out = re.ReplaceAllString(out, `^- resulted in ...`)
 
-	const expected = `debug zip ` + os.DevNull + `
+	// Even though we're pinning the ranges to particular nodes above
+	// and StartTestClusterWithoutReplication is guaranteed to wait
+	// until the pinning is completes, it appears that there are stray
+	// range descriptors on the wrong node.
+	//
+	// In order to avoid non-determinism here, we erase the output of
+	// the range retrieval.
+	//
+	// TODO(knz,tbg): Avoid this by extending
+	// StartTestClusterWithoutReplication to wait until all the stray
+	// range descriptors are gone.
+	re = regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
+	out = re.ReplaceAllString(out, ``)
+
+	const expected = `debug zip ` + os.DevNull + ` --timeout=2s
 establishing RPC connection to ...
 retrieving the node status to get the SQL address...
 using SQL address: ...
@@ -517,35 +540,6 @@ requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
 requesting heap files for node 1... 0 found
 requesting goroutine files for node 1... 0 found
 requesting log file ...
-requesting ranges... 28 found
-writing: debug/nodes/1/ranges/1.json
-writing: debug/nodes/1/ranges/2.json
-writing: debug/nodes/1/ranges/3.json
-writing: debug/nodes/1/ranges/4.json
-writing: debug/nodes/1/ranges/5.json
-writing: debug/nodes/1/ranges/6.json
-writing: debug/nodes/1/ranges/7.json
-writing: debug/nodes/1/ranges/8.json
-writing: debug/nodes/1/ranges/9.json
-writing: debug/nodes/1/ranges/10.json
-writing: debug/nodes/1/ranges/11.json
-writing: debug/nodes/1/ranges/12.json
-writing: debug/nodes/1/ranges/13.json
-writing: debug/nodes/1/ranges/14.json
-writing: debug/nodes/1/ranges/15.json
-writing: debug/nodes/1/ranges/16.json
-writing: debug/nodes/1/ranges/17.json
-writing: debug/nodes/1/ranges/18.json
-writing: debug/nodes/1/ranges/19.json
-writing: debug/nodes/1/ranges/20.json
-writing: debug/nodes/1/ranges/21.json
-writing: debug/nodes/1/ranges/22.json
-writing: debug/nodes/1/ranges/23.json
-writing: debug/nodes/1/ranges/24.json
-writing: debug/nodes/1/ranges/25.json
-writing: debug/nodes/1/ranges/26.json
-writing: debug/nodes/1/ranges/27.json
-writing: debug/nodes/1/ranges/28.json
 writing: debug/nodes/2/status.json
 using SQL connection URL for node 2: postgresql://...
 retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/2/crdb_internal.feature_usage.txt
@@ -615,35 +609,29 @@ requesting heap profile for node 3... writing: debug/nodes/3/heap.pprof
 requesting heap files for node 3... 0 found
 requesting goroutine files for node 3... 0 found
 requesting log file ...
-requesting ranges... 28 found
-writing: debug/nodes/3/ranges/1.json
-writing: debug/nodes/3/ranges/2.json
-writing: debug/nodes/3/ranges/3.json
-writing: debug/nodes/3/ranges/4.json
-writing: debug/nodes/3/ranges/5.json
-writing: debug/nodes/3/ranges/6.json
-writing: debug/nodes/3/ranges/7.json
-writing: debug/nodes/3/ranges/8.json
-writing: debug/nodes/3/ranges/9.json
-writing: debug/nodes/3/ranges/10.json
-writing: debug/nodes/3/ranges/11.json
-writing: debug/nodes/3/ranges/12.json
-writing: debug/nodes/3/ranges/13.json
-writing: debug/nodes/3/ranges/14.json
-writing: debug/nodes/3/ranges/15.json
-writing: debug/nodes/3/ranges/16.json
-writing: debug/nodes/3/ranges/17.json
-writing: debug/nodes/3/ranges/18.json
-writing: debug/nodes/3/ranges/19.json
-writing: debug/nodes/3/ranges/20.json
-writing: debug/nodes/3/ranges/21.json
-writing: debug/nodes/3/ranges/22.json
-writing: debug/nodes/3/ranges/23.json
-writing: debug/nodes/3/ranges/24.json
-writing: debug/nodes/3/ranges/25.json
-writing: debug/nodes/3/ranges/26.json
-writing: debug/nodes/3/ranges/27.json
-writing: debug/nodes/3/ranges/28.json
+writing: debug/nodes/4/status.json
+using SQL connection URL for node 4: postgresql://...
+retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/4/crdb_internal.feature_usage.txt
+retrieving SQL data for crdb_internal.gossip_alerts... writing: debug/nodes/4/crdb_internal.gossip_alerts.txt
+retrieving SQL data for crdb_internal.gossip_liveness... writing: debug/nodes/4/crdb_internal.gossip_liveness.txt
+retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/4/crdb_internal.gossip_network.txt
+retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/4/crdb_internal.gossip_nodes.txt
+retrieving SQL data for crdb_internal.leases... writing: debug/nodes/4/crdb_internal.leases.txt
+retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/4/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/4/crdb_internal.node_metrics.txt
+retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/4/crdb_internal.node_queries.txt
+retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/4/crdb_internal.node_runtime_info.txt
+retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/4/crdb_internal.node_sessions.txt
+retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/4/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/4/crdb_internal.node_txn_stats.txt
+requesting data for debug/nodes/4/details... writing: debug/nodes/4/details.json
+requesting data for debug/nodes/4/gossip... writing: debug/nodes/4/gossip.json
+requesting data for debug/nodes/4/enginestats... writing: debug/nodes/4/enginestats.json
+requesting stacks for node 4... writing: debug/nodes/4/stacks.txt
+requesting heap profile for node 4... writing: debug/nodes/4/heap.pprof
+requesting heap files for node 4... 0 found
+requesting goroutine files for node 4... 0 found
+requesting log file ...
 requesting list of SQL databases... 3 found
 requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
 0 tables found
