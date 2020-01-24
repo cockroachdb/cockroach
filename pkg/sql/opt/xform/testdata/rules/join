@@ -1502,12 +1502,11 @@ project
       │         └── col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       ├── select
       │    ├── columns: col0:7(int!null) col2:9(int)
-      │    ├── cardinality: [0 - 1]
-      │    ├── key: ()
+      │    ├── lax-key: (9)
       │    ├── fd: ()-->(7,9)
       │    ├── index-join t
       │    │    ├── columns: col0:7(int) col2:9(int)
-      │    │    ├── lax-key: (7)
+      │    │    ├── lax-key: (7,9)
       │    │    ├── fd: ()-->(9), (9)~~>(7)
       │    │    └── scan t@secondary
       │    │         ├── columns: pk:6(int!null) col2:9(int)
