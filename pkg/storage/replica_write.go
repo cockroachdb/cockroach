@@ -366,8 +366,6 @@ func (r *Replica) evaluate1PC(
 	// Try executing with transaction stripped.
 	strippedBa := *ba
 	strippedBa.Txn = nil
-	// strippedBa is non-transactional, so DeferWriteTooOldError cannot be set.
-	strippedBa.DeferWriteTooOldError = false
 	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
 	rec := NewReplicaEvalContext(r, spans)
@@ -474,10 +472,19 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, spans)
 
+		pErrOrWTO := pErr
+		if pErr == nil && br.Txn != nil && br.Txn.WriteTooOld {
+			bumpedTxn := br.Txn.Clone()
+			bumpedTxn.WriteTooOld = false
+			bumpedTxn.ReadTimestamp = bumpedTxn.WriteTimestamp
+			pErrOrWTO = roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD, ""),
+				bumpedTxn)
+		}
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, deadline) {
+		if pErrOrWTO == nil || retries > 0 || !canDoServersideRetry(ctx, pErrOrWTO, ba, deadline) {
 			break
 		}
 	}

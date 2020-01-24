@@ -228,8 +228,56 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	ctx context.Context, ba roachpb.BatchRequest, maxRefreshAttempts int,
 ) (_ *roachpb.BatchResponse, _ *roachpb.Error, largestRefreshTS hlc.Timestamp) {
 	br, pErr := sr.sendHelper(ctx, ba)
+	if pErr == nil && br.Txn.WriteTooOld {
+		// If we got a response with the WriteTooOld flag set, then we pretend that
+		// we got a WriteTooOldError, which will cause us to attempt to refresh and
+		// propagate the error if we failed. When it can, the server prefers to
+		// return the WriteTooOld flag, rather than a WriteTooOldError because, in
+		// the former case, it can leave intents behind. We like refreshing eagerly
+		// when the WriteTooOld flag is set because it's likely that the refresh
+		// will fail (if we previously read the key that's now causing a WTO, then
+		// the refresh will surely fail).
+		// TODO(andrei): Implement a more discerning policy based on whether we've
+		// read that key before.
+		//
+		// If the refresh fails, we could continue running the transaction even
+		// though it will not be able to commit, in order for it to lay down more
+		// intents. Not doing so, though, gives the SQL a chance to auto-retry.
+		// TODO(andrei): Implement a more discerning policy based on whether
+		// auto-retries are still possible.
+		//
+		// For the refresh, we have two options: either refresh everything read
+		// *before* this batch, and then retry to batch, or refresh the current
+		// batch's reads too and then, if successful, there'd be nothing to refresh.
+		// We take the former option by setting br = nil below to minimized the
+		// chances that the refresh fails.
+		bumpedTxn := br.Txn.Clone()
+		bumpedTxn.WriteTooOld = false
+		bumpedTxn.ReadTimestamp = bumpedTxn.WriteTimestamp
+		pErr = roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD, ""),
+			bumpedTxn)
+		br = nil
+	}
 	if pErr != nil && maxRefreshAttempts > 0 {
 		br, pErr, largestRefreshTS = sr.maybeRetrySend(ctx, ba, br, pErr, maxRefreshAttempts)
+	}
+	if pErr != nil {
+		// Don't confuse layers above with both a result and an error. This layer is
+		// the last one that benefits from looking at partial results.
+		br = nil
+	} else {
+		// Terminate the txn.WriteTooOld flag here. We failed to refresh it away, so
+		// turn it into a retriable error.
+		if br.Txn.WriteTooOld {
+			newTxn := br.Txn.Clone()
+			newTxn.WriteTooOld = false
+			newTxn.ReadTimestamp = newTxn.WriteTimestamp
+			pErr = roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD, ""),
+				newTxn)
+			br = nil
+		}
 	}
 	return br, pErr, largestRefreshTS
 }
@@ -256,9 +304,17 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	// case is a batch split between everything up to but not including
 	// the EndTxn. Requests up to the EndTxn succeed, but the EndTxn
 	// fails with a retryable error. We want to retry only the EndTxn.
+	// TODO(andrei): This attempt to only retry part of the request is probably a bad idea.
+	// We try to refresh more (including the successful part of the current
+	// request) and retry less, but it'd probably be a better idea to refresh less
+	// and retry more - thereby trading the cost of some evaluation for a higher
+	// chance that the refresh succeeds.
 	ba.UpdateTxn(retryTxn)
 	retryBa := ba
-	if br != nil {
+	// If br came back with the WriteTooOld flag set, then we need to refresh the
+	// whole request; we don't know which part of the request encountered the
+	// write too old condition.
+	if br != nil && !br.Txn.WriteTooOld {
 		doneBa := ba
 		doneBa.Requests = ba.Requests[:len(br.Responses)]
 		log.VEventf(ctx, 2, "collecting refresh spans after partial batch execution of %s", doneBa)
@@ -273,7 +329,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 	// Try updating the txn spans so we can retry.
 	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn); !ok {
-		return nil, pErr, hlc.Timestamp{}
+		return br, pErr, hlc.Timestamp{}
 	}
 
 	// We've refreshed all of the read spans successfully and set

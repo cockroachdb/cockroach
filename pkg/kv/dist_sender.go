@@ -648,6 +648,10 @@ func splitBatchAndCheckForRefreshSpans(
 // succeeded. Where possible, the caller may be able to update spans
 // encountered in the transaction and retry just the EndTxn request to
 // avoid client-side serializable txn retries.
+// TODO(andrei,nvanbenschoten): Get rid of this returning both error and result,
+// and change the span txnSpanRefresher to not look for partial results. It's
+// probably better for the span refresher to refresh less (i.e. don't refresh
+// the partial successes) and retry the whole batch.
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
