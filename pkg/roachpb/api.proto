@@ -1814,21 +1814,7 @@ message Header {
   // be much more straightforward if all transactional requests were
   // idempotent. We could just re-issue requests. See #26915.
   bool async_consensus = 13;
-  // WriteTooOldErrors can either be returned immediately or deferred
-  // to the end of the transaction. By default they are returned
-  // immediately to maximize the SQL-level first-statement retry
-  // ability. Set this flag to request deferred errors, which can
-  // improve performance under heavy contention when client-side
-  // retries are already inevitable.
-  //
-  // Non-transactional requests are not allowed to set this flag (since there's
-  // nowhere to defer the error to). At the replica level, this flag is ignored
-  // when the batch contains an EndTxn (similarly to before, there's nowhere to
-  // defer the error to). However, the client is allowed to set the flag in a
-  // batch that contains the EndTxn, and it will have an effect for any
-  // sub-batches that are split off by the DistSender.
-  bool defer_write_too_old_error = 14;
-  reserved 7,12;
+  reserved 7, 12, 14;
 }
 
 

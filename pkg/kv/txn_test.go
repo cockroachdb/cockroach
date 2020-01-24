@@ -141,6 +141,7 @@ func TestLostUpdate(t *testing.T) {
 		})
 	}()
 
+	firstAttempt := true
 	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Issue a read to get initial value.
 		gr, err := txn.Get(ctx, key)
@@ -164,16 +165,14 @@ func TestLostUpdate(t *testing.T) {
 			newVal = "oops!"
 		}
 		b := txn.NewBatch()
-		b.Header.DeferWriteTooOldError = true
 		b.Put(key, newVal)
-		if err := txn.Run(ctx, b); err != nil {
-			t.Fatal(err)
+		err = txn.Run(ctx, b)
+		if firstAttempt {
+			require.Error(t, err, "RETRY_WRITE_TOO_OLD")
+			firstAttempt = false
+			return err
 		}
-		// Verify that the WriteTooOld boolean is set on the txn.
-		proto := txn.TestingCloneTxn()
-		if (txn.Epoch() == 0) != proto.WriteTooOld {
-			t.Fatalf("expected write too old set (%t): got %t", (txn.Epoch() == 0), proto.WriteTooOld)
-		}
+		require.NoError(t, err)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -647,4 +646,46 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// Test that in some write too old situations (i.e. when the server returns the
+// WriteTooOld flag set and then the client fails to refresh), intents are
+// properly left behind.
+func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	key := []byte("b")
+
+	txn := s.DB.NewTxn(ctx, "test txn")
+	// Perform a Get so that the transaction can't refresh.
+	_, err := txn.Get(ctx, key)
+	require.NoError(t, err)
+
+	// Another guy writes at a higher timestamp.
+	require.NoError(t, s.DB.Put(ctx, key, "newer value"))
+
+	// Now we write and expect a WriteTooOld.
+	intentVal := []byte("test")
+	err = txn.Put(ctx, key, intentVal)
+	require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+	require.Error(t, err, "WriteTooOld")
+
+	// Check that the intent was left behind.
+	b := client.Batch{}
+	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	b.Get(key)
+	require.NoError(t, s.DB.Run(ctx, &b))
+	getResp := b.RawResponse().Responses[0].GetGet()
+	require.NotNil(t, getResp)
+	intent := getResp.IntentValue
+	require.NotNil(t, intent)
+	intentBytes, err := intent.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, intentVal, intentBytes)
+
+	// Cleanup.
+	require.NoError(t, txn.Rollback(ctx))
 }

@@ -607,10 +607,6 @@ func (ba BatchRequest) ValidateForEvaluation() error {
 	} else if ba.Replica.StoreID == 0 {
 		return errors.AssertionFailedf("batch request missing store ID")
 	}
-	if ba.Header.DeferWriteTooOldError && ba.Txn == nil {
-		return errors.AssertionFailedf(
-			"DeferWriteTooOldError can't be set on non-transactional requests")
-	}
 	if _, ok := ba.GetArg(EndTxn); ok && ba.Txn == nil {
 		return errors.AssertionFailedf("EndTxn request without transaction")
 	}
