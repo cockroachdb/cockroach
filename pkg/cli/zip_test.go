@@ -16,13 +16,17 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -305,6 +309,156 @@ requesting table details for system.zones... writing: debug/schema/system-1/zone
 	assert.Equal(t, expected, out)
 }
 
+// This tests the operation of zip over unavailable clusters.
+//
+// We cannot combine this test with TestZip above because TestPartialZip
+// needs a TestCluster, the TestCluster hides its SSL certs, and we
+// need the SSL certs dir to run a CLI test securely.
+func TestUnavailableZip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+	if util.RaceEnabled {
+		// Race builds make the servers so slow that they report spurious
+		// unavailability.
+		t.Skip("not running under race")
+	}
+
+	// unavailableCh is used by the replica command filter
+	// to conditionally block requests and simulate unavailability.
+	var unavailableCh atomic.Value
+	closedCh := make(chan struct{})
+	close(closedCh)
+	unavailableCh.Store(closedCh)
+	knobs := &storage.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+			select {
+			case <-unavailableCh.Load().(chan struct{}):
+			case <-ctx.Done():
+			}
+			return nil
+		},
+	}
+
+	// Make a 2-node cluster, with an option to make the first node unavailable.
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Insecure: true, Knobs: base.TestingKnobs{Store: knobs}},
+			1: {Insecure: true},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	// Sanity test: check that a simple operation works.
+	if _, err := tc.ServerConn(0).Exec("SELECT * FROM system.users"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make the first two nodes unavailable.
+	ch := make(chan struct{})
+	unavailableCh.Store(ch)
+	defer close(ch)
+
+	// Zip it. We fake a CLI test context for this.
+	c := cliTest{
+		t:          t,
+		TestServer: tc.Server(0).(*server.TestServer),
+	}
+	stderr = os.Stdout
+	defer func() { stderr = log.OrigStderr }()
+
+	// Keep the timeout short so that the test doesn't take forever.
+	out, err := c.RunWithCapture("debug zip " + os.DevNull + " --timeout=.5s")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Strip any non-deterministic messages:
+	re := regexp.MustCompile(`(?m)postgresql://.*$`)
+	out = re.ReplaceAllString(out, `postgresql://...`)
+	re = regexp.MustCompile(`(?m)SQL address: .*$`)
+	out = re.ReplaceAllString(out, `SQL address: ...`)
+	re = regexp.MustCompile(`(?m)log file.*$`)
+	out = re.ReplaceAllString(out, `log file ...`)
+	re = regexp.MustCompile(`(?m)RPC connection to .*$`)
+	out = re.ReplaceAllString(out, `RPC connection to ...`)
+	re = regexp.MustCompile(`(?m)\^- resulted in.*$`)
+	out = re.ReplaceAllString(out, `^- resulted in ...`)
+
+	// In order to avoid non-determinism here, we erase the output of
+	// the range retrieval.
+	re = regexp.MustCompile(`(?m)^(requesting ranges.*found|writing: debug/nodes/\d+/ranges).*\n`)
+	out = re.ReplaceAllString(out, ``)
+
+	const expected = `debug zip ` + os.DevNull + ` --timeout=.5s
+establishing RPC connection to ...
+retrieving the node status to get the SQL address...
+using SQL address: ...
+using SQL connection URL: postgresql://...
+writing /dev/null
+requesting data for debug/events... writing: debug/events.json
+  ^- resulted in ...
+requesting data for debug/rangelog... writing: debug/rangelog.json
+  ^- resulted in ...
+requesting data for debug/liveness... writing: debug/liveness.json
+requesting data for debug/settings... writing: debug/settings.json
+requesting data for debug/reports/problemranges... writing: debug/reports/problemranges.json
+retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
+retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
+retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
+retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
+  ^- resulted in ...
+retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
+  ^- resulted in ...
+retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
+  ^- resulted in ...
+retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
+  ^- resulted in ...
+retrieving SQL data for system.namespace_deprecated... writing: debug/system.namespace_deprecated.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
+  ^- resulted in ...
+retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
+  ^- resulted in ...
+requesting nodes... writing: debug/nodes
+  ^- resulted in ...
+writing: debug/nodes/1/status.json
+using SQL connection URL for node 1: postgresql://...
+retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/1/crdb_internal.feature_usage.txt
+retrieving SQL data for crdb_internal.gossip_alerts... writing: debug/nodes/1/crdb_internal.gossip_alerts.txt
+retrieving SQL data for crdb_internal.gossip_liveness... writing: debug/nodes/1/crdb_internal.gossip_liveness.txt
+retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/1/crdb_internal.gossip_network.txt
+retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/1/crdb_internal.gossip_nodes.txt
+retrieving SQL data for crdb_internal.leases... writing: debug/nodes/1/crdb_internal.leases.txt
+retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/1/crdb_internal.node_build_info.txt
+retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/1/crdb_internal.node_metrics.txt
+retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crdb_internal.node_queries.txt
+retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
+retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
+retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
+requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
+requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
+requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginestats.json
+requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
+requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
+requesting heap files for node 1... 0 found
+requesting goroutine files for node 1... 0 found
+requesting log file ...
+requesting list of SQL databases... writing: debug/schema
+  ^- resulted in ...
+`
+	assert.Equal(t, expected, out)
+}
+
 // This tests the operation of zip over partial clusters.
 //
 // We cannot combine this test with TestZip above because TestPartialZip
@@ -313,7 +467,14 @@ requesting table details for system.zones... writing: debug/schema/system-1/zone
 func TestPartialZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/44215")
+	if testing.Short() {
+		t.Skip("short flag")
+	}
+	if util.RaceEnabled {
+		// We want a low timeout so that the test doesn't take forever;
+		// however low timeouts make race runs flaky with false positives.
+		t.Skip("not running under race")
+	}
 
 	ctx := context.Background()
 
@@ -368,6 +529,7 @@ retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
 retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
+retrieving SQL data for system.namespace_deprecated... writing: debug/system.namespace_deprecated.txt
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
 retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
 retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
