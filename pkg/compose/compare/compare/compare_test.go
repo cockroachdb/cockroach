@@ -37,18 +37,41 @@ var (
 )
 
 func TestCompare(t *testing.T) {
-	uris := map[string]string{
-		"postgres":   "postgresql://postgres@postgres:5432/",
-		"cockroach1": "postgresql://root@cockroach1:26257/?sslmode=disable",
-		"cockroach2": "postgresql://root@cockroach2:26257/?sslmode=disable",
+	uris := map[string]struct {
+		addr string
+		init []string
+	}{
+		"postgres": {
+			addr: "postgresql://postgres@postgres:5432/",
+			init: []string{
+				"drop schema if exists public cascade",
+				"create schema public",
+			},
+		},
+		"cockroach1": {
+			addr: "postgresql://root@cockroach1:26257/?sslmode=disable",
+			init: []string{
+				"drop database if exists defaultdb",
+				"create database defaultdb",
+			},
+		},
+		"cockroach2": {
+			addr: "postgresql://root@cockroach2:26257/?sslmode=disable",
+			init: []string{
+				"drop database if exists defaultdb",
+				"create database defaultdb",
+			},
+		},
 	}
 	configs := map[string]testConfig{
 		"postgres": {
-			opts: []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
+			setup:         sqlsmith.Setups["rand-tables"],
+			setupMutators: []sqlbase.Mutator{mutations.PostgresCreateTableMutator},
+			opts:          []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []sqlbase.Mutator{mutations.PostgresMutator},
+					mutators: []sqlbase.Mutator{},
 				},
 				{
 					name:     "postgres",
@@ -57,7 +80,8 @@ func TestCompare(t *testing.T) {
 			},
 		},
 		"mutators": {
-			opts: []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
+			setup: sqlsmith.Setups["rand-tables"],
+			opts:  []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
 			conns: []testConn{
 				{
 					name:     "cockroach1",
@@ -81,23 +105,37 @@ func TestCompare(t *testing.T) {
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
 			rng, _ := randutil.NewPseudoRand()
+			setup := config.setup(rng)
+			setup, _ = mutations.ApplyString(rng, setup, config.setupMutators...)
+
 			conns := map[string]*cmpconn.Conn{}
 			for _, testCn := range config.conns {
 				uri, ok := uris[testCn.name]
 				if !ok {
 					t.Fatalf("bad connection name: %s", testCn.name)
 				}
-				conn, err := cmpconn.NewConn(uri, rng, testCn.mutators)
+				conn, err := cmpconn.NewConn(uri.addr, rng, testCn.mutators)
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer conn.Close()
+				for _, init := range uri.init {
+					if err := conn.Exec(ctx, init); err != nil {
+						t.Fatalf("%s: %v", testCn.name, err)
+					}
+				}
+				connSetup, _ := mutations.ApplyString(rng, setup, testCn.mutators...)
+				if err := conn.Exec(ctx, connSetup); err != nil {
+					t.Log(connSetup)
+					t.Fatalf("%s: %v", testCn.name, err)
+				}
 				conns[testCn.name] = conn
 			}
 			smither, err := sqlsmith.NewSmither(conns[config.conns[0].name].DB, rng, config.opts...)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			until := time.After(*flagEach)
 			for {
 				select {
@@ -136,8 +174,10 @@ func TestCompare(t *testing.T) {
 }
 
 type testConfig struct {
-	opts  []sqlsmith.SmitherOption
-	conns []testConn
+	opts          []sqlsmith.SmitherOption
+	conns         []testConn
+	setup         sqlsmith.Setup
+	setupMutators []sqlbase.Mutator
 }
 
 type testConn struct {
