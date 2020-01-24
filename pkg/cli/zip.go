@@ -26,7 +26,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -216,15 +218,15 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	admin := serverpb.NewAdminClient(conn)
 
 	fmt.Println("retrieving the node status to get the SQL address...")
-	nodeS, err := status.Node(baseCtx, &serverpb.NodeRequest{NodeId: "local"})
+	nodeD, err := status.Details(baseCtx, &serverpb.DetailsRequest{NodeId: "local"})
 	if err != nil {
 		return err
 	}
-	sqlAddr := nodeS.Desc.SQLAddress
+	sqlAddr := nodeD.SQLAddress
 	if sqlAddr.IsEmpty() {
 		// No SQL address: either a pre-19.2 node, or same address for both
 		// SQL and RPC.
-		sqlAddr = nodeS.Desc.Address
+		sqlAddr = nodeD.Address
 	}
 	fmt.Printf("using SQL address: %s\n", sqlAddr.AddressField)
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
@@ -319,193 +321,207 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			if err := z.createError(nodesPrefix, err); err != nil {
 				return err
 			}
-		} else {
-			for _, node := range nodes.Nodes {
-				id := fmt.Sprintf("%d", node.Desc.NodeID)
-				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
-				// Don't use sqlConn because that's only for is the node `debug
-				// zip` was pointed at, but here we want to connect to nodes
-				// individually to grab node- local SQL tables. Try to guess by
-				// replacing the host in the connection string; this may or may
-				// not work and if it doesn't, we let the invalid curSQLConn get
-				// used anyway so that anything that does *not* need it will
-				// still happen.
-				sqlAddr := node.Desc.SQLAddress
-				if sqlAddr.IsEmpty() {
-					// No SQL address: either a pre-19.2 node, or same address for both
-					// SQL and RPC.
-					sqlAddr = node.Desc.Address
+		}
+
+		// In case nodes came up back empty (the Nodes() RPC failed), we
+		// still want to inspect the per-node endpoints on the head
+		// node. As per the above, we were able to connect at least to
+		// that.
+		nodeList := []statuspb.NodeStatus{{Desc: roachpb.NodeDescriptor{
+			NodeID:     nodeD.NodeID,
+			Address:    nodeD.Address,
+			SQLAddress: nodeD.SQLAddress,
+		}}}
+		if nodes != nil {
+			// If the nodes were found, use that instead.
+			nodeList = nodes.Nodes
+		}
+
+		for _, node := range nodeList {
+			id := fmt.Sprintf("%d", node.Desc.NodeID)
+			prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+			// Don't use sqlConn because that's only for is the node `debug
+			// zip` was pointed at, but here we want to connect to nodes
+			// individually to grab node- local SQL tables. Try to guess by
+			// replacing the host in the connection string; this may or may
+			// not work and if it doesn't, we let the invalid curSQLConn get
+			// used anyway so that anything that does *not* need it will
+			// still happen.
+			sqlAddr := node.Desc.SQLAddress
+			if sqlAddr.IsEmpty() {
+				// No SQL address: either a pre-19.2 node, or same address for both
+				// SQL and RPC.
+				sqlAddr = node.Desc.Address
+			}
+			curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
+			if err := z.createJSON(prefix+"/status.json", node); err != nil {
+				return err
+			}
+			fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
+
+			for _, table := range debugZipTablesPerNode {
+				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table); err != nil {
+					return errors.Wrap(err, table)
 				}
-				curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
-				if err := z.createJSON(prefix+"/status.json", node); err != nil {
+			}
+
+			for _, r := range []zipRequest{
+				{
+					fn: func(ctx context.Context) (interface{}, error) {
+						return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
+					},
+					pathName: prefix + "/details",
+				},
+				{
+					fn: func(ctx context.Context) (interface{}, error) {
+						return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
+					},
+					pathName: prefix + "/gossip",
+				},
+				{
+					fn: func(ctx context.Context) (interface{}, error) {
+						return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
+					},
+					pathName: prefix + "/enginestats",
+				},
+			} {
+				if err := runZipRequest(r); err != nil {
 					return err
 				}
-				fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
+			}
 
-				for _, table := range debugZipTablesPerNode {
-					if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table); err != nil {
-						return errors.Wrap(err, table)
+			var stacksData []byte
+			err = runZipRequestWithTimeout(baseCtx, "requesting stacks for node "+id, timeout,
+				func(ctx context.Context) error {
+					stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
+					if err == nil {
+						stacksData = stacks.Data
 					}
-				}
+					return err
+				})
+			if err := z.createRawOrError(prefix+"/stacks.txt", stacksData, err); err != nil {
+				return err
+			}
 
-				for _, r := range []zipRequest{
-					{
-						fn: func(ctx context.Context) (interface{}, error) {
-							return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Ready: false})
-						},
-						pathName: prefix + "/details",
-					},
-					{
-						fn: func(ctx context.Context) (interface{}, error) {
-							return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
-						},
-						pathName: prefix + "/gossip",
-					},
-					{
-						fn: func(ctx context.Context) (interface{}, error) {
-							return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
-						},
-						pathName: prefix + "/enginestats",
-					},
-				} {
-					if err := runZipRequest(r); err != nil {
-						return err
-					}
-				}
-
-				var stacksData []byte
-				err = runZipRequestWithTimeout(baseCtx, "requesting stacks for node "+id, timeout,
-					func(ctx context.Context) error {
-						stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
-						if err == nil {
-							stacksData = stacks.Data
-						}
-						return err
+			var heapData []byte
+			err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
+				func(ctx context.Context) error {
+					heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
+						NodeId: id,
+						Type:   serverpb.ProfileRequest_HEAP,
 					})
-				if err := z.createRawOrError(prefix+"/stacks.txt", stacksData, err); err != nil {
+					if err == nil {
+						heapData = heap.Data
+					}
 					return err
-				}
+				})
+			if err := z.createRawOrError(prefix+"/heap.pprof", heapData, err); err != nil {
+				return err
+			}
 
-				var heapData []byte
-				err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
-					func(ctx context.Context) error {
-						heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
-							NodeId: id,
-							Type:   serverpb.ProfileRequest_HEAP,
-						})
-						if err == nil {
-							heapData = heap.Data
-						}
-						return err
+			var profiles *serverpb.GetFilesResponse
+			if err := runZipRequestWithTimeout(baseCtx, "requesting heap files for node "+id, timeout,
+				func(ctx context.Context) error {
+					profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
+						NodeId:   id,
+						Type:     serverpb.FileType_HEAP,
+						Patterns: []string{"*"},
 					})
-				if err := z.createRawOrError(prefix+"/heap.pprof", heapData, err); err != nil {
-					return err
-				}
-
-				var profiles *serverpb.GetFilesResponse
-				if err := runZipRequestWithTimeout(baseCtx, "requesting heap files for node "+id, timeout,
-					func(ctx context.Context) error {
-						profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
-							NodeId:   id,
-							Type:     serverpb.FileType_HEAP,
-							Patterns: []string{"*"},
-						})
-						return err
-					}); err != nil {
-					if err := z.createError(prefix+"/heapprof", err); err != nil {
-						return err
-					}
-				} else {
-					fmt.Printf("%d found\n", len(profiles.Files))
-					for _, file := range profiles.Files {
-						name := prefix + "/heapprof/" + file.Name + ".pprof"
-						if err := z.createRaw(name, file.Contents); err != nil {
-							return err
-						}
-					}
-				}
-
-				var goroutinesResp *serverpb.GetFilesResponse
-				if err := runZipRequestWithTimeout(baseCtx, "requesting goroutine files for node "+id, timeout,
-					func(ctx context.Context) error {
-						goroutinesResp, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
-							NodeId:   id,
-							Type:     serverpb.FileType_GOROUTINES,
-							Patterns: []string{"*"},
-						})
-						return err
-					}); err != nil {
-					if err := z.createError(prefix+"/goroutines", err); err != nil {
-						return err
-					}
-				} else {
-					fmt.Printf("%d found\n", len(goroutinesResp.Files))
-					for _, file := range goroutinesResp.Files {
-						// NB: the files have a .txt.gz suffix already.
-						name := prefix + "/goroutines/" + file.Name
-						if err := z.createRawOrError(name, file.Contents, err); err != nil {
-							return err
-						}
-					}
-				}
-
-				var logs *serverpb.LogFilesListResponse
-				if err := runZipRequestWithTimeout(baseCtx, "requesting log files list", timeout,
-					func(ctx context.Context) error {
-						logs, err = status.LogFilesList(
-							ctx, &serverpb.LogFilesListRequest{NodeId: id})
-						return err
-					}); err != nil {
-					if err := z.createError(prefix+"/logs", err); err != nil {
-						return err
-					}
-				} else {
-					fmt.Printf("%d found\n", len(logs.Files))
-					for _, file := range logs.Files {
-						name := prefix + "/logs/" + file.Name
-						var entries *serverpb.LogEntriesResponse
-						if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
-							func(ctx context.Context) error {
-								entries, err = status.LogFile(
-									ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
-								return err
-							}); err != nil {
-							if err := z.createError(name, err); err != nil {
-								return err
-							}
-							continue
-						}
-						logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
-						if err != nil {
-							return err
-						}
-						for _, e := range entries.Entries {
-							if err := e.Format(logOut); err != nil {
-								return err
-							}
-						}
-					}
-				}
-
-				var ranges *serverpb.RangesResponse
-				if err := runZipRequestWithTimeout(baseCtx, "requesting ranges", timeout, func(ctx context.Context) error {
-					ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
 					return err
 				}); err != nil {
-					if err := z.createError(prefix+"/ranges", err); err != nil {
+				if err := z.createError(prefix+"/heapprof", err); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%d found\n", len(profiles.Files))
+				for _, file := range profiles.Files {
+					name := prefix + "/heapprof/" + file.Name + ".pprof"
+					if err := z.createRaw(name, file.Contents); err != nil {
 						return err
 					}
-				} else {
-					fmt.Printf("%d found\n", len(ranges.Ranges))
-					sort.Slice(ranges.Ranges, func(i, j int) bool {
-						return ranges.Ranges[i].State.Desc.RangeID <
-							ranges.Ranges[j].State.Desc.RangeID
+				}
+			}
+
+			var goroutinesResp *serverpb.GetFilesResponse
+			if err := runZipRequestWithTimeout(baseCtx, "requesting goroutine files for node "+id, timeout,
+				func(ctx context.Context) error {
+					goroutinesResp, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
+						NodeId:   id,
+						Type:     serverpb.FileType_GOROUTINES,
+						Patterns: []string{"*"},
 					})
-					for _, r := range ranges.Ranges {
-						name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-						if err := z.createJSON(name+".json", r); err != nil {
+					return err
+				}); err != nil {
+				if err := z.createError(prefix+"/goroutines", err); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%d found\n", len(goroutinesResp.Files))
+				for _, file := range goroutinesResp.Files {
+					// NB: the files have a .txt.gz suffix already.
+					name := prefix + "/goroutines/" + file.Name
+					if err := z.createRawOrError(name, file.Contents, err); err != nil {
+						return err
+					}
+				}
+			}
+
+			var logs *serverpb.LogFilesListResponse
+			if err := runZipRequestWithTimeout(baseCtx, "requesting log files list", timeout,
+				func(ctx context.Context) error {
+					logs, err = status.LogFilesList(
+						ctx, &serverpb.LogFilesListRequest{NodeId: id})
+					return err
+				}); err != nil {
+				if err := z.createError(prefix+"/logs", err); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%d found\n", len(logs.Files))
+				for _, file := range logs.Files {
+					name := prefix + "/logs/" + file.Name
+					var entries *serverpb.LogEntriesResponse
+					if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
+						func(ctx context.Context) error {
+							entries, err = status.LogFile(
+								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+							return err
+						}); err != nil {
+						if err := z.createError(name, err); err != nil {
 							return err
 						}
+						continue
+					}
+					logOut, err := z.create(name, timeutil.Unix(0, file.ModTimeNanos))
+					if err != nil {
+						return err
+					}
+					for _, e := range entries.Entries {
+						if err := e.Format(logOut); err != nil {
+							return err
+						}
+					}
+				}
+			}
+
+			var ranges *serverpb.RangesResponse
+			if err := runZipRequestWithTimeout(baseCtx, "requesting ranges", timeout, func(ctx context.Context) error {
+				ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
+				return err
+			}); err != nil {
+				if err := z.createError(prefix+"/ranges", err); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("%d found\n", len(ranges.Ranges))
+				sort.Slice(ranges.Ranges, func(i, j int) bool {
+					return ranges.Ranges[i].State.Desc.RangeID <
+						ranges.Ranges[j].State.Desc.RangeID
+				})
+				for _, r := range ranges.Ranges {
+					name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
+					if err := z.createJSON(name+".json", r); err != nil {
+						return err
 					}
 				}
 			}
