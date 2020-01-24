@@ -33,6 +33,7 @@ const (
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
 	count int64
+	bytes int64
 	repr  []byte
 	bufs  [][]byte
 }
@@ -76,6 +77,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	encodeKeyToBuf(p.repr[startIdx+kvLenSize:startIdx+kvLenSize+lenKey], key, lenKey)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
+	p.bytes += int64(lenToAdd)
 }
 
 func (p *pebbleResults) finish() [][]byte {
@@ -98,6 +100,9 @@ type pebbleMVCCScanner struct {
 	ts hlc.Timestamp
 	// Max number of keys to return.
 	maxKeys int64
+	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
+	// if nonzero.
+	maxBytes int64
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -524,6 +529,13 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
 		p.results.put(p.curMVCCKey(), val)
+		if p.maxBytes > 0 && p.results.bytes >= p.maxBytes {
+			// Hacky way to implement maxBytes: once we're above threshold,
+			// pretend we reached maxKeys. (The resume key computation requires
+			// fetching an additional key after that, so trying to exit the
+			// iterations based on size alone is not trivial).
+			p.maxKeys = p.results.count
+		}
 		if p.results.count == p.maxKeys {
 			return false
 		}
