@@ -514,6 +514,7 @@ func registerCDC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/tpcc-1000/rangefeed=%t", useRangeFeed),
+		Owner:      `cdc`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -529,6 +530,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/initial-scan/rangefeed=%t", useRangeFeed),
+		Owner:      `cdc`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -544,7 +546,8 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name: "cdc/poller/rangefeed=false",
+		Name:  "cdc/poller/rangefeed=false",
+		Owner: `cdc`,
 		// When testing a 2.1 binary, we use the poller for all the other tests
 		// and this is close enough to cdc/tpcc-1000 test to be redundant, so
 		// skip it.
@@ -562,7 +565,8 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name: fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
+		Name:  fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
+		Owner: `cdc`,
 		// TODO(dan): Re-enable this test on 2.1 if we decide to backport #36852.
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
@@ -579,8 +583,9 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name: fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
-		Skip: "#37716",
+		Name:  fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
+		Owner: `cdc`,
+		Skip:  "#37716",
 		// TODO(dan): Re-enable this test on 2.1 if we decide to backport #36852.
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
@@ -602,6 +607,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/ledger/rangefeed=%t", useRangeFeed),
+		Owner:      `cdc`,
 		MinVersion: "v2.1.0",
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
@@ -621,6 +627,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:      `cdc`,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -643,6 +650,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/bank",
+		Owner:      `cdc`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -651,6 +659,7 @@ func registerCDC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "cdc/schemareg",
+		Owner:      `cdc`,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c *cluster) {

@@ -115,6 +115,7 @@ func registerPgx(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "pgx",
+		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
 		MinVersion: "v19.2.0",
 		Tags:       []string{`default`, `driver`},
