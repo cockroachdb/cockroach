@@ -143,12 +143,6 @@ ignored = [
   name = "google.golang.org/grpc"
   version = "=v1.21.2"
 
-# Pin until 48c3df3f8bccdfa2bed83f6e4936cdf9e4c68d15 is in a release.
-# Also investigate switching to v4 branch.
-[[constraint]]
-  name = "github.com/jackc/pgx"
-  revision = "23388fecf653ddfce2a4149acf71313b87d64e3d"
-
 [prune]
   go-tests = true
   unused-packages = true
