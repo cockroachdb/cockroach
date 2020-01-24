@@ -177,17 +177,17 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		t.Status("comparing the runtimes (only median values for each query are compared).\n" +
 			"NOTE: the comparison might not be fair because vec ON doesn't spill to disk")
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			findMedian := func(times []float64) float64 {
+			findMedianAndBest := func(times []float64) (float64, float64) {
 				sort.Float64s(times)
-				return times[len(times)/2]
+				return times[len(times)/2], times[0]
 			}
 			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
 			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
 			// It is possible that the query errored out on one of the configs. We
 			// want to compare the runtimes only if both have not errored out.
 			if len(vecOnTimes) > 0 && len(vecOffTimes) > 0 {
-				vecOnTime := findMedian(vecOnTimes)
-				vecOffTime := findMedian(vecOffTimes)
+				vecOnTime, vecOnBestTime := findMedianAndBest(vecOnTimes)
+				vecOffTime, vecOffBestTime := findMedianAndBest(vecOffTimes)
 				if vecOffTime < vecOnTime {
 					t.l.Printf(
 						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
@@ -205,11 +205,17 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				// successful runs (some queries might have 4 because of the memory
 				// limit errors - those do not count towards --max-ops flag of tpch
 				// workload).
+				// In order to further reduce noise, we also require that the best vec
+				// ON time is worse than the best vec OFF time.
 				// TODO(yuzefovich): remove the first condition once we have disk
 				// spilling in all components.
-				if len(vecOnTimes) >= numRunsPerQuery && vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
-					t.Fatal(fmt.Sprintf("[q%d] vec ON is slower by %.2f%% that vec OFF",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime))
+				if len(vecOnTimes) >= numRunsPerQuery &&
+					vecOnTime >= vecOnSlowerFailFactor*vecOffTime &&
+					vecOnBestTime > vecOffBestTime {
+					t.Fatal(fmt.Sprintf(
+						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+							"vec ON times: %v\nvec OFF times: %v",
+						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
 				}
 			}
 		}
