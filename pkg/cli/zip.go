@@ -108,7 +108,7 @@ func (z *zipper) close() {
 }
 
 func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
-	fmt.Printf("  %s\n", name)
+	fmt.Printf("writing: %s\n", name)
 	if mtime.IsZero() {
 		mtime = timeutil.Now()
 	}
@@ -180,6 +180,16 @@ func guessNodeURL(workingURL string, hostport string) *sqlConn {
 	return makeSQLConn(u.String())
 }
 
+func runZipRequestWithTimeout(
+	ctx context.Context,
+	requestName string,
+	timeout time.Duration,
+	fn func(ctx context.Context) error,
+) error {
+	fmt.Printf("%s... ", requestName)
+	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
+}
+
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
 		base          = "debug"
@@ -195,6 +205,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	fmt.Printf("establishing RPC connection to %s...\n", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(baseCtx, serverCfg)
 	if err != nil {
 		return err
@@ -204,7 +215,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
 
-	// Retrieve the node status to get the SQL address.
+	fmt.Println("retrieving the node status to get the SQL address...")
 	nodeS, err := status.Node(baseCtx, &serverpb.NodeRequest{NodeId: "local"})
 	if err != nil {
 		return err
@@ -215,6 +226,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		// SQL and RPC.
 		sqlAddr = nodeS.Desc.Address
 	}
+	fmt.Printf("using SQL address: %s\n", sqlAddr.AddressField)
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
 	if err != nil {
 		return err
@@ -225,6 +237,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
 	}
 	defer sqlConn.Close()
+	// Note: we're not printing "connection established" because the driver we're using
+	// does late binding.
+	if sqlConn != nil {
+		fmt.Printf("using SQL connection URL: %s\n", sqlConn.url)
+	}
 
 	name := args[0]
 	out, err := os.Create(name)
@@ -243,7 +260,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 	var runZipRequest = func(r zipRequest) error {
 		var data interface{}
-		err = contextutil.RunWithTimeout(baseCtx, "request "+r.pathName, timeout, func(ctx context.Context) error {
+		err = runZipRequestWithTimeout(baseCtx, "requesting data for "+r.pathName, timeout, func(ctx context.Context) error {
 			data, err = r.fn(ctx)
 			return err
 		})
@@ -288,15 +305,14 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, table := range debugZipTablesPerCluster {
-		query := fmt.Sprintf(`SELECT * FROM %s`, table)
-		if err := dumpTableDataForZip(z, sqlConn, query, base+"/"+table+".txt"); err != nil {
+		if err := dumpTableDataForZip(z, sqlConn, base, table); err != nil {
 			return errors.Wrap(err, table)
 		}
 	}
 
 	{
 		var nodes *serverpb.NodesResponse
-		if err := contextutil.RunWithTimeout(baseCtx, "request nodes", timeout, func(ctx context.Context) error {
+		if err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
 			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
 			return err
 		}); err != nil {
@@ -324,10 +340,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				if err := z.createJSON(prefix+"/status.json", node); err != nil {
 					return err
 				}
+				fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
 
 				for _, table := range debugZipTablesPerNode {
-					query := fmt.Sprintf(`SELECT * FROM %s`, table)
-					if err := dumpTableDataForZip(z, curSQLConn, query, prefix+"/"+table+".txt"); err != nil {
+					if err := dumpTableDataForZip(z, curSQLConn, prefix, table); err != nil {
 						return errors.Wrap(err, table)
 					}
 				}
@@ -358,7 +374,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var stacksData []byte
-				err = contextutil.RunWithTimeout(baseCtx, "request stacks", timeout,
+				err = runZipRequestWithTimeout(baseCtx, "requesting stacks for node "+id, timeout,
 					func(ctx context.Context) error {
 						stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id})
 						if err == nil {
@@ -371,7 +387,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var heapData []byte
-				err = contextutil.RunWithTimeout(baseCtx, "request heap profile", timeout,
+				err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
 					func(ctx context.Context) error {
 						heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
 							NodeId: id,
@@ -387,7 +403,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var profiles *serverpb.GetFilesResponse
-				if err := contextutil.RunWithTimeout(baseCtx, "request heap files", timeout,
+				if err := runZipRequestWithTimeout(baseCtx, "requesting heap files for node "+id, timeout,
 					func(ctx context.Context) error {
 						profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
 							NodeId:   id,
@@ -400,6 +416,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						return err
 					}
 				} else {
+					fmt.Printf("%d found\n", len(profiles.Files))
 					for _, file := range profiles.Files {
 						name := prefix + "/heapprof/" + file.Name + ".pprof"
 						if err := z.createRaw(name, file.Contents); err != nil {
@@ -409,7 +426,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var goroutinesResp *serverpb.GetFilesResponse
-				if err := contextutil.RunWithTimeout(baseCtx, "request goroutine files", timeout,
+				if err := runZipRequestWithTimeout(baseCtx, "requesting goroutine files for node "+id, timeout,
 					func(ctx context.Context) error {
 						goroutinesResp, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
 							NodeId:   id,
@@ -422,6 +439,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						return err
 					}
 				} else {
+					fmt.Printf("%d found\n", len(goroutinesResp.Files))
 					for _, file := range goroutinesResp.Files {
 						// NB: the files have a .txt.gz suffix already.
 						name := prefix + "/goroutines/" + file.Name
@@ -432,7 +450,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var logs *serverpb.LogFilesListResponse
-				if err := contextutil.RunWithTimeout(baseCtx, "request logs", timeout,
+				if err := runZipRequestWithTimeout(baseCtx, "requesting log files list", timeout,
 					func(ctx context.Context) error {
 						logs, err = status.LogFilesList(
 							ctx, &serverpb.LogFilesListRequest{NodeId: id})
@@ -442,10 +460,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						return err
 					}
 				} else {
+					fmt.Printf("%d found\n", len(logs.Files))
 					for _, file := range logs.Files {
 						name := prefix + "/logs/" + file.Name
 						var entries *serverpb.LogEntriesResponse
-						if err := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request log %s", file.Name), timeout,
+						if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
 							func(ctx context.Context) error {
 								entries, err = status.LogFile(
 									ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
@@ -469,7 +488,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var ranges *serverpb.RangesResponse
-				if err := contextutil.RunWithTimeout(baseCtx, "request ranges", timeout, func(ctx context.Context) error {
+				if err := runZipRequestWithTimeout(baseCtx, "requesting ranges", timeout, func(ctx context.Context) error {
 					ranges, err = status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
 					return err
 				}); err != nil {
@@ -477,6 +496,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						return err
 					}
 				} else {
+					fmt.Printf("%d found\n", len(ranges.Ranges))
 					sort.Slice(ranges.Ranges, func(i, j int) bool {
 						return ranges.Ranges[i].State.Desc.RangeID <
 							ranges.Ranges[j].State.Desc.RangeID
@@ -494,7 +514,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 	{
 		var databases *serverpb.DatabasesResponse
-		if err := contextutil.RunWithTimeout(baseCtx, "request databases", timeout, func(ctx context.Context) error {
+		if err := runZipRequestWithTimeout(baseCtx, "requesting list of SQL databases", timeout, func(ctx context.Context) error {
 			databases, err = admin.Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}); err != nil {
@@ -502,10 +522,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				return err
 			}
 		} else {
+			fmt.Printf("%d found\n", len(databases.Databases))
 			for _, dbName := range databases.Databases {
 				prefix := schemaPrefix + "/" + dbName
 				var database *serverpb.DatabaseDetailsResponse
-				requestErr := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request database %s", dbName), timeout,
+				requestErr := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting database details for %s", dbName), timeout,
 					func(ctx context.Context) error {
 						database, err = admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
 						return err
@@ -517,10 +538,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					continue
 				}
 
+				fmt.Printf("%d tables found\n", len(database.TableNames))
 				for _, tableName := range database.TableNames {
 					name := prefix + "/" + tableName
 					var table *serverpb.TableDetailsResponse
-					err := contextutil.RunWithTimeout(baseCtx, fmt.Sprintf("request table %s", tableName), timeout,
+					err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting table details for %s.%s", dbName, tableName), timeout,
 						func(ctx context.Context) error {
 							table, err = admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
 							return err
@@ -536,12 +558,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) error {
-	if !strings.HasSuffix(name, ".txt") {
-		return errors.Errorf("%s does not have .txt suffix", name)
-	}
-	var buf bytes.Buffer
+func dumpTableDataForZip(z *zipper, conn *sqlConn, base, table string) error {
+	query := fmt.Sprintf(`SELECT * FROM %s`, table)
+	name := base + "/" + table + ".txt"
 
+	fmt.Printf("retrieving SQL data for %s... ", table)
+	var buf bytes.Buffer
 	err := runQueryAndFormatResults(conn, &buf, makeQuery(query))
 	if err != nil {
 		return z.createError(name, err)
