@@ -159,12 +159,12 @@ func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op SplitOperation) format(w *strings.Builder) {
-	fmt.Fprintf(w, `db.Split(ctx, %s)`, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `db.AdminSplit(ctx, %s)`, roachpb.Key(op.Key))
 	op.Result.format(w)
 }
 
 func (op MergeOperation) format(w *strings.Builder) {
-	fmt.Fprintf(w, `db.Merge(ctx, %s)`, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `db.AdminMerge(ctx, %s)`, roachpb.Key(op.Key))
 	op.Result.format(w)
 }
 
