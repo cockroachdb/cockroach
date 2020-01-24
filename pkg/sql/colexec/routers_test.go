@@ -238,19 +238,20 @@ func TestRouterOutputNext(t *testing.T) {
 	})
 
 	t.Run("AddBatchDoesntBlockWhenOutputIsBlocked", func(t *testing.T) {
-		const (
+		var (
 			smallBatchSize = 8
 			blockThreshold = smallBatchSize / 2
 		)
 
-		// It is possible that coldata.BatchSize is smaller than our smallBatchSize
-		// which breaks the assumptions of this test. Also, interestingly, if we
-		// do something like 'if smallBatchSize < coldata.BatchSize()', apparently
-		// the compiler will produce such code that the 'if' condition will be only
-		// checked on the first run whereas the condition might not longer hold on
-		// consequent runs. That's why we have this "data dependency" on the slice.
-		if len(fullSelection) < blockThreshold {
-			return
+		if len(fullSelection) <= smallBatchSize {
+			// If a full batch is smaller than our small batch size, reduce it, since
+			// this test relies on multiple batches returned from the input.
+			smallBatchSize = 2
+			if smallBatchSize >= coldata.MinBatchSize {
+				// Sanity check.
+				t.Fatalf("smallBatchSize=%d still too large (must be less than MinBatchSize=%d)", smallBatchSize, coldata.MinBatchSize)
+			}
+			blockThreshold = 1
 		}
 
 		// Use a smaller selection than the batch size; it increases test coverage.
@@ -267,7 +268,7 @@ func TestRouterOutputNext(t *testing.T) {
 		o := newRouterOutputOpWithBlockedThresholdAndBatchSize(
 			testAllocator, []coltypes.T{coltypes.Int64}, ch, blockThreshold, int(coldata.BatchSize()),
 		)
-		in := newOpTestInput(smallBatchSize, data, nil /* typs */)
+		in := newOpTestInput(uint16(smallBatchSize), data, nil /* typs */)
 		out := newOpTestOutput(o, expected)
 		in.Init()
 
