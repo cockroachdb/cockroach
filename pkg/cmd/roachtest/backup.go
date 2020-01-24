@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pkg/errors"
 )
 
@@ -77,7 +78,12 @@ func registerBackup(r *testRegistry) {
 				duration = 5 * time.Second
 			}
 			warehouses := 10
-			backupDir := "nodelocal://1/" + c.name
+
+			backupDir := "gs://cockroachdb-backup-testing/" + c.name
+			// Use inter-node file sharing on 20.1+.
+			if r.buildVersion.AtLeast(version.MustParse(`v20.1.0-0`)) {
+				backupDir = "nodelocal://1/" + c.name
+			}
 			fullDir := backupDir + "/full"
 			incDir := backupDir + "/inc"
 
