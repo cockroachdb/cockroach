@@ -1250,14 +1250,16 @@ func TestAdminAPIJobs(t *testing.T) {
 		status   jobs.Status
 		details  jobspb.Details
 		progress jobspb.ProgressDetails
+		username string
 	}{
-		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
-		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
-		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
-		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, security.RootUser},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUser},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, security.RootUser},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, security.RootUser},
+		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, authenticatedUserNameNoAdmin},
 	}
 	for _, job := range testJobs {
-		payload := jobspb.Payload{Details: jobspb.WrapPayloadDetails(job.details)}
+		payload := jobspb.Payload{Username: job.username, Details: jobspb.WrapPayloadDetails(job.details)}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)
@@ -1289,33 +1291,43 @@ func TestAdminAPIJobs(t *testing.T) {
 	const invalidJobType = math.MaxInt32
 
 	testCases := []struct {
-		uri         string
-		expectedIDs []int64
+		uri                    string
+		expectedIDsViaAdmin    []int64
+		expectedIDsViaNonAdmin []int64
 	}{
-		{"jobs", append([]int64{4, 3, 2, 1}, existingIDs...)},
-		{"jobs?limit=1", []int64{4}},
-		{"jobs?status=running", []int64{4, 2, 1}},
-		{"jobs?status=succeeded", append([]int64{3}, existingIDs...)},
-		{"jobs?status=pending", []int64{}},
-		{"jobs?status=garbage", []int64{}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{3, 2}},
-		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}},
-		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}},
-		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}},
+		{"jobs", append([]int64{5, 4, 3, 2, 1}, existingIDs...), []int64{5}},
+		{"jobs?limit=1", []int64{5}, []int64{5}},
+		{"jobs?status=running", []int64{4, 2, 1}, []int64{}},
+		{"jobs?status=succeeded", append([]int64{5, 3}, existingIDs...), []int64{5}},
+		{"jobs?status=pending", []int64{}, []int64{}},
+		{"jobs?status=garbage", []int64{}, []int64{}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{5, 3, 2}, []int64{5}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}, []int64{}},
+		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}, []int64{}},
+		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}, []int64{}},
 	}
-	for i, testCase := range testCases {
-		var res serverpb.JobsResponse
-		if err := getAdminJSONProto(s, testCase.uri, &res); err != nil {
-			t.Fatal(err)
+
+	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
+		for i, testCase := range testCases {
+			var res serverpb.JobsResponse
+			if err := getAdminJSONProtoWithAdminOption(s, testCase.uri, &res, isAdmin); err != nil {
+				t.Fatal(err)
+			}
+			resIDs := []int64{}
+			for _, job := range res.Jobs {
+				resIDs = append(resIDs, job.ID)
+			}
+
+			expected := testCase.expectedIDsViaAdmin
+			if !isAdmin {
+				expected = testCase.expectedIDsViaNonAdmin
+			}
+
+			if e, a := expected, resIDs; !reflect.DeepEqual(e, a) {
+				t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
+			}
 		}
-		resIDs := []int64{}
-		for _, job := range res.Jobs {
-			resIDs = append(resIDs, job.ID)
-		}
-		if e, a := testCase.expectedIDs, resIDs; !reflect.DeepEqual(e, a) {
-			t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
-		}
-	}
+	})
 }
 
 func TestAdminAPILocations(t *testing.T) {

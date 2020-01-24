@@ -1,0 +1,64 @@
+# These test verify that a user's job are visible via
+# crdb_internal.jobs and SHOW JOBS.
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser
+
+statement ok
+CREATE TABLE t(x INT); INSERT INTO t(x) VALUES (1); CREATE INDEX ON t(x)
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
+
+user testuser
+
+# a non-admin user cannot see the admin jobs
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+
+# However they can see their own jobs.
+
+statement ok
+CREATE TABLE u(x INT); INSERT INTO u(x) VALUES (1); CREATE INDEX ON u(x);
+
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+
+# And root can see both.
+
+user root
+
+query TTT
+SELECT job_type, description, user_name FROM [SHOW JOBS]
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs
+----
+SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)  root
+SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)  testuser
