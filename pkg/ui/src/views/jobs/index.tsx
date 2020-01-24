@@ -170,7 +170,7 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     }
     return (
       <ToolTipWrapper text={`System Time: ${tooltip}`}>
-        High-water Timestamp: {highwaterMoment.fromNow()}
+        High-water Timestamp: {highwaterMoment.format("MMM DD, YYYY [at] h:mm A")}
       </ToolTipWrapper>
     );
   }
@@ -209,7 +209,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Creation Time",
-    cell: job => TimestampToMoment(job.created).fromNow(),
+    cell: job => TimestampToMoment(job.created).format("MMM DD, YYYY [at] h:mm A"),
     sort: job => TimestampToMoment(job.created).valueOf(),
   },
   {

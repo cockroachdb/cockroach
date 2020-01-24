@@ -166,7 +166,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 value={livenessString}
                 classModifier={livenessString}
               />
-              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).fromNow()} />
+              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).format("MMM DD, YYYY [at] h:mm A")} />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
                 title="Logs"
