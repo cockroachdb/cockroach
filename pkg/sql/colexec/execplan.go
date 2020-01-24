@@ -1452,6 +1452,10 @@ func planProjectionOperators(
 		buffer := NewBufferOp(input)
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
+		if caseOutputType == coltypes.Unhandled {
+			return nil, resultIdx, ct, internalMemUsed, errors.Newf(
+				"unsupported type %s", t.ResolvedType().String())
+		}
 		caseOutputIdx := len(columnTypes)
 		ct = append(columnTypes, *t.ResolvedType())
 		thenIdxs := make([]int, len(t.Whens)+1)
