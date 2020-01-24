@@ -53,17 +53,12 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		// nontransactional batch are disjoint and upgrading to a transactional
 		// batch (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can
 		// be used to efficiently check this.
-		OpPBatch:      0,
-		OpPClosureTxn: 10,
-		OpPSplitNew:   1,
-		OpPSplitAgain: 1,
-		// TODO(dan): Merge seems to occasionally be hanging, presumably because the
-		// merge txn is restarting. Investigate.
-		//
-		// TODO(dan): "merge failed: unexpected value". Nemeses's first bug find?
-		//
-		// OpPMergeNotSplit: 1,
-		// OpPMergeIsSplit:  1,
+		OpPBatch:         0,
+		OpPClosureTxn:    10,
+		OpPSplitNew:      1,
+		OpPSplitAgain:    1,
+		OpPMergeNotSplit: 1,
+		OpPMergeIsSplit:  1,
 	}
 
 	rng, _ := randutil.NewPseudoRand()
