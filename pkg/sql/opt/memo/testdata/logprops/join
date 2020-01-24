@@ -1488,3 +1488,77 @@ full-join (cross)
  │    └── tuple [type=tuple]
  └── filters
       └── false [type=bool]
+
+exec-ddl
+CREATE TABLE t1 (x INT, y INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (x INT, y INT)
+----
+
+# Outer join when both sides have a key. Because x can still have NULL values,
+# we cannot say that the outer join has a strict key. For example, this is a
+# possible valid result for this query:
+#   t1.x | t1.y | t2.x | t2.y
+#   -----+------+------+------
+#      1 |    1 |    1 |    2
+#   NULL |    1 | NULL | NULL
+#   NULL | NULL | NULL |    2
+# Here (t1.x, t2.x) is a lax key but not a strict key.
+opt
+SELECT * FROM
+  (SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM t1) WHERE y IS NOT NULL) AS t1
+FULL JOIN
+  (SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM t2) WHERE y IS NOT NULL) AS t2
+ON t1.x = t2.x
+----
+full-join (hash)
+ ├── columns: x:1(int) y:2(int) x:4(int) y:5(int)
+ ├── lax-key: (1,4)
+ ├── fd: (1)~~>(2), (4)~~>(5), (1,4)~~>(2,5)
+ ├── reject-nulls: (1,2,4,5)
+ ├── select
+ │    ├── columns: t1.x:1(int) t1.y:2(int!null)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── distinct-on
+ │    │    ├── columns: t1.x:1(int) t1.y:2(int)
+ │    │    ├── grouping columns: t1.x:1(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (2)
+ │    │    ├── scan t1
+ │    │    │    ├── columns: t1.x:1(int) t1.y:2(int)
+ │    │    │    └── prune: (1,2)
+ │    │    └── aggregations
+ │    │         └── first-agg [type=int, outer=(2)]
+ │    │              └── variable: t1.y [type=int]
+ │    └── filters
+ │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │              ├── variable: t1.y [type=int]
+ │              └── null [type=unknown]
+ ├── select
+ │    ├── columns: t2.x:4(int) t2.y:5(int!null)
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5)
+ │    ├── distinct-on
+ │    │    ├── columns: t2.x:4(int) t2.y:5(int)
+ │    │    ├── grouping columns: t2.x:4(int)
+ │    │    ├── key: (4)
+ │    │    ├── fd: (4)-->(5)
+ │    │    ├── prune: (5)
+ │    │    ├── scan t2
+ │    │    │    ├── columns: t2.x:4(int) t2.y:5(int)
+ │    │    │    └── prune: (4,5)
+ │    │    └── aggregations
+ │    │         └── first-agg [type=int, outer=(5)]
+ │    │              └── variable: t2.y [type=int]
+ │    └── filters
+ │         └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ │              ├── variable: t2.y [type=int]
+ │              └── null [type=unknown]
+ └── filters
+      └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+           ├── variable: t1.x [type=int]
+           └── variable: t2.x [type=int]
