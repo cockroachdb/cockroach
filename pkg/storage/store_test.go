@@ -2511,6 +2511,8 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 // TestStoreBadRequests verifies that Send returns errors for
 // bad requests that do not pass key verification.
+//
+// TODO(kkaneda): Add more test cases.
 func TestStoreBadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -2530,7 +2532,8 @@ func TestStoreBadRequests(t *testing.T) {
 	args5 := scanArgs(roachpb.RKeyMin, roachpb.Key("a"))
 	args6 := scanArgs(keys.RangeDescriptorKey(roachpb.RKey(keys.MinKey)), roachpb.Key("a"))
 
-	tArgs0, _ := heartbeatArgs(txn, hlc.Timestamp{})
+	tArgs0, _ := endTxnArgs(txn, false /* commit */)
+	tArgs1, _ := heartbeatArgs(txn, hlc.Timestamp{})
 
 	tArgs2, tHeader2 := endTxnArgs(txn, false /* commit */)
 	tHeader2.Txn.Key = roachpb.Key(tHeader2.Txn.Key).Next()
@@ -2558,23 +2561,22 @@ func TestStoreBadRequests(t *testing.T) {
 		{&args6, nil, "is range-local, but"},
 		// Txn must be specified in Header.
 		{&tArgs0, nil, "no transaction specified"},
+		{&tArgs1, nil, "no transaction specified"},
 		// Txn key must be same as the request key.
 		{&tArgs2, &tHeader2, "request key .* should match txn key .*"},
 		{&tArgs3, &tHeader3, "request key .* should match txn key .*"},
 		{&tArgs4, nil, "request key .* should match pushee"},
 	}
 	for i, test := range testCases {
-		t.Run("", func(t *testing.T) {
-			if test.header == nil {
-				test.header = &roachpb.Header{}
-			}
-			if test.header.Txn != nil {
-				assignSeqNumsForReqs(test.header.Txn, test.args)
-			}
-			if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), *test.header, test.args); !testutils.IsPError(pErr, test.err) {
-				t.Errorf("%d expected error %q, got error %v", i, test.err, pErr)
-			}
-		})
+		if test.header == nil {
+			test.header = &roachpb.Header{}
+		}
+		if test.header.Txn != nil {
+			assignSeqNumsForReqs(test.header.Txn, test.args)
+		}
+		if _, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), *test.header, test.args); !testutils.IsPError(pErr, test.err) {
+			t.Errorf("%d expected error %q, got error %v", i, test.err, pErr)
+		}
 	}
 }
 
