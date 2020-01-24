@@ -241,7 +241,7 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 			return errors.Errorf(
 				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				fractionCompleted, j.id,
+				fractionCompleted, *j.ID(),
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -264,7 +264,7 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 		if highWater.Less(hlc.Timestamp{}) {
 			return errors.Errorf(
 				"Job: high-water %s is outside allowable range > 0.0 (job %d)",
-				highWater, j.id,
+				highWater, *j.ID(),
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_HighWater{
@@ -285,7 +285,7 @@ func (j *Job) paused(ctx context.Context) error {
 			return nil
 		}
 		if md.Status.Terminal() {
-			return &InvalidStatusError{*j.id, md.Status, "pause", md.Payload.Error}
+			return &InvalidStatusError{*j.ID(), md.Status, "pause", md.Payload.Error}
 		}
 		ju.UpdateStatus(StatusPaused)
 		return nil
@@ -459,12 +459,12 @@ func (j *Job) load(ctx context.Context) error {
 		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			stmt, *j.id)
+			stmt, *j.ID())
 		if err != nil {
 			return err
 		}
 		if row == nil {
-			return fmt.Errorf("job with ID %d does not exist", *j.id)
+			return fmt.Errorf("job with ID %d does not exist", *j.ID())
 		}
 		payload, err = UnmarshalPayload(row[0])
 		if err != nil {
@@ -518,7 +518,7 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusRunning && md.Status != StatusPending {
-			return errors.Errorf("job %d has status %v which is not elligible for adopting", *j.id, md.Status)
+			return errors.Errorf("job %d has status %v which is not elligible for adopting", *j.ID(), md.Status)
 		}
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
@@ -559,4 +559,28 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 		return nil, err
 	}
 	return progress, nil
+}
+
+// CurrentStatus returns the current job status from the jobs table or error.
+func (j *Job) CurrentStatus(ctx context.Context) (Status, error) {
+	if j.id == nil {
+		return "", errors.New("job has not been created")
+	}
+	var statusString tree.DString
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, *j.ID())
+		if err != nil {
+			return errors.Wrapf(err, "job %d: can't query system.jobs", *j.ID())
+		}
+		if row == nil {
+			return errors.Errorf("job %d: not found in system.jobs", *j.ID())
+		}
+
+		statusString = tree.MustBeDString(row[0])
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return Status(statusString), nil
 }

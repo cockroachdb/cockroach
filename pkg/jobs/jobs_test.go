@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -140,9 +141,9 @@ func TestRegistryLifecycle(t *testing.T) {
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	jobs.DefaultAdoptInterval = time.Millisecond
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s, outerDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -166,7 +167,15 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	check := func(t *testing.T) {
 		t.Helper()
-		if err := retry.ForDuration(time.Second*5, func() error {
+		if log.V(2) {
+			log.Infof(ctx, "checking invariants")
+		}
+		opts := retry.Options{
+			InitialBackoff: 5 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
 			lock.Lock()
 			defer lock.Unlock()
 			if e != a {
@@ -175,6 +184,9 @@ func TestRegistryLifecycle(t *testing.T) {
 			return nil
 		}); err != nil {
 			t.Fatal(err)
+		}
+		if log.V(2) {
+			log.Infof(ctx, "successful invariants")
 		}
 	}
 	clear := func() {
@@ -199,6 +211,9 @@ func TestRegistryLifecycle(t *testing.T) {
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func() error {
+				if log.V(2) {
+					log.Infof(ctx, "Starting resume")
+				}
 				lock.Lock()
 				a.resume++
 				lock.Unlock()
@@ -206,6 +221,9 @@ func TestRegistryLifecycle(t *testing.T) {
 					lock.Lock()
 					a.resumeExit++
 					lock.Unlock()
+					if log.V(2) {
+						log.Infof(ctx, "Exiting resume")
+					}
 				}()
 				for {
 					<-resumeCheckCh
@@ -230,17 +248,31 @@ func TestRegistryLifecycle(t *testing.T) {
 			},
 
 			Success: func() error {
+				if log.V(2) {
+					log.Infof(ctx, "Starting success")
+				}
 				lock.Lock()
-				defer lock.Unlock()
+				defer func() {
+					lock.Unlock()
+					if log.V(2) {
+						log.Infof(ctx, "Exiting success")
+					}
+				}()
 				a.success = true
 				return successErr
 			},
 
 			Terminal: func() {
+				if log.V(2) {
+					log.Infof(ctx, "Starting terminal")
+				}
 				lock.Lock()
 				a.terminal++
 				lock.Unlock()
 				termCh <- struct{}{}
+				if log.V(2) {
+					log.Infof(ctx, "Exiting terminal")
+				}
 			},
 		}
 	})
@@ -266,11 +298,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("create separately success", func(t *testing.T) {
 		clear()
-		j, err := registry.CreateJobWithTxn(ctx, mockJob, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = registry.StartJob(ctx, nil, j)
+		_, err := registry.CreateJobWithTxn(ctx, mockJob, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
