@@ -1162,7 +1162,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0
+	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.MaxSpanResponseBytes == 0
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -1223,26 +1223,45 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.MaxSpanResponseBytes > 0
 			// Check whether we've received enough responses to exit query loop.
 			if mightStopEarly {
-				var replyResults int64
+				var addedNumKeys int64
+				var addedNumBytes int64
 				for _, r := range resp.reply.Responses {
-					replyResults += r.GetInner().Header().NumKeys
+					addedNumKeys += r.GetInner().Header().NumKeys
+					if scan, ok := r.GetInner().(*roachpb.ScanResponse); ok {
+						// TODO(tbg): deal with general requests.
+						for _, repr := range scan.BatchResponses {
+							addedNumBytes += int64(len(repr))
+						}
+					}
 				}
 				// Update MaxSpanRequestKeys, if applicable. Note that ba might be
 				// passed recursively to further divideAndSendBatchToRanges() calls.
 				if ba.MaxSpanRequestKeys > 0 {
-					if replyResults > ba.MaxSpanRequestKeys {
+					if addedNumKeys > ba.MaxSpanRequestKeys {
 						log.Fatalf(ctx, "received %d results, limit was %d",
-							replyResults, ba.MaxSpanRequestKeys)
+							addedNumKeys, ba.MaxSpanRequestKeys)
 					}
-					ba.MaxSpanRequestKeys -= replyResults
+					ba.MaxSpanRequestKeys -= addedNumKeys
 					// Exiting; any missing responses will be filled in via defer().
 					if ba.MaxSpanRequestKeys == 0 {
 						couldHaveSkippedResponses = true
 						resumeReason = roachpb.RESUME_KEY_LIMIT
 						return
+					}
+				}
+				if ba.MaxSpanResponseBytes > 0 {
+					if addedNumBytes > ba.MaxSpanResponseBytes {
+						ba.MaxSpanResponseBytes = 0
+					} else {
+						ba.MaxSpanResponseBytes -= addedNumBytes
+					}
+					if ba.MaxSpanResponseBytes == 0 {
+						couldHaveSkippedResponses = true
+						// TODO(tbg): make a real reason.
+						resumeReason = roachpb.RESUME_KEY_LIMIT
 					}
 				}
 			}

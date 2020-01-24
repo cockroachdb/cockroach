@@ -2316,6 +2316,7 @@ func mvccScanToBytes(
 		end:          endKey,
 		ts:           timestamp,
 		maxKeys:      max,
+		maxBytes:     opts.MaxBytes,
 		inconsistent: opts.Inconsistent,
 		tombstones:   opts.Tombstones,
 	}
@@ -2415,6 +2416,7 @@ type MVCCScanOptions struct {
 	Tombstones   bool
 	Reverse      bool
 	Txn          *roachpb.Transaction
+	MaxBytes     int64
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some

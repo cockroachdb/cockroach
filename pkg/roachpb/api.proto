@@ -1766,6 +1766,12 @@ message Header {
   // If a batch limit is used with ReverseScan requests, the spans for the
   // requests must be non-overlapping and in decreasing order.
   int64 max_span_request_keys = 8;
+  // If set to a non-zero value, provides a size hint (in bytes) of the result
+  // set for by commands that may return multiple rows (such as scans). This is
+  // not a hard limit: the kv pair that breaks the threshold is included in the
+  // result, and in particular the size hint never results in an empty result
+  // set.
+  int64 max_span_response_bytes = 15;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be

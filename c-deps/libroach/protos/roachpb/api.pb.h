@@ -15575,6 +15575,12 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool defer_write_too_old_error() const;
   void set_defer_write_too_old_error(bool value);
 
+  // int64 max_span_response_bytes = 15;
+  void clear_max_span_response_bytes();
+  static const int kMaxSpanResponseBytesFieldNumber = 15;
+  ::google::protobuf::int64 max_span_response_bytes() const;
+  void set_max_span_response_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Header)
  private:
 
@@ -15591,6 +15597,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool return_range_info_;
   bool async_consensus_;
   bool defer_write_too_old_error_;
+  ::google::protobuf::int64 max_span_response_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -32958,6 +32965,20 @@ inline void Header::set_max_span_request_keys(::google::protobuf::int64 value) {
   
   max_span_request_keys_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.max_span_request_keys)
+}
+
+// int64 max_span_response_bytes = 15;
+inline void Header::clear_max_span_response_bytes() {
+  max_span_response_bytes_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 Header::max_span_response_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.max_span_response_bytes)
+  return max_span_response_bytes_;
+}
+inline void Header::set_max_span_response_bytes(::google::protobuf::int64 value) {
+  
+  max_span_response_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.max_span_response_bytes)
 }
 
 // bool distinct_spans = 9;

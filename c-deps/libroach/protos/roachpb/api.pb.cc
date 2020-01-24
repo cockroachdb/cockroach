@@ -34824,6 +34824,7 @@ const int Header::kUserPriorityFieldNumber;
 const int Header::kTxnFieldNumber;
 const int Header::kReadConsistencyFieldNumber;
 const int Header::kMaxSpanRequestKeysFieldNumber;
+const int Header::kMaxSpanResponseBytesFieldNumber;
 const int Header::kDistinctSpansFieldNumber;
 const int Header::kReturnRangeInfoFieldNumber;
 const int Header::kGatewayNodeIdFieldNumber;
@@ -34858,15 +34859,15 @@ Header::Header(const Header& from)
     txn_ = NULL;
   }
   ::memcpy(&range_id_, &from.range_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&defer_write_too_old_error_) -
-    reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
+    static_cast<size_t>(reinterpret_cast<char*>(&max_span_response_bytes_) -
+    reinterpret_cast<char*>(&range_id_)) + sizeof(max_span_response_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Header)
 }
 
 void Header::SharedCtor() {
   ::memset(&timestamp_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&defer_write_too_old_error_) -
-      reinterpret_cast<char*>(&timestamp_)) + sizeof(defer_write_too_old_error_));
+      reinterpret_cast<char*>(&max_span_response_bytes_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(max_span_response_bytes_));
 }
 
 Header::~Header() {
@@ -34908,8 +34909,8 @@ void Header::Clear() {
   }
   txn_ = NULL;
   ::memset(&range_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&defer_write_too_old_error_) -
-      reinterpret_cast<char*>(&range_id_)) + sizeof(defer_write_too_old_error_));
+      reinterpret_cast<char*>(&max_span_response_bytes_) -
+      reinterpret_cast<char*>(&range_id_)) + sizeof(max_span_response_bytes_));
   _internal_metadata_.Clear();
 }
 
@@ -35087,6 +35088,20 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
+      // int64 max_span_response_bytes = 15;
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(120u /* 120 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &max_span_response_bytes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -35172,6 +35187,11 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(14, this->defer_write_too_old_error(), output);
   }
 
+  // int64 max_span_response_bytes = 15;
+  if (this->max_span_response_bytes() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(15, this->max_span_response_bytes(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Header)
@@ -35251,6 +35271,13 @@ size_t Header::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // int64 max_span_response_bytes = 15;
+  if (this->max_span_response_bytes() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->max_span_response_bytes());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -35304,6 +35331,9 @@ void Header::MergeFrom(const Header& from) {
   if (from.defer_write_too_old_error() != 0) {
     set_defer_write_too_old_error(from.defer_write_too_old_error());
   }
+  if (from.max_span_response_bytes() != 0) {
+    set_max_span_response_bytes(from.max_span_response_bytes());
+  }
 }
 
 void Header::CopyFrom(const Header& from) {
@@ -35335,6 +35365,7 @@ void Header::InternalSwap(Header* other) {
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
   swap(defer_write_too_old_error_, other->defer_write_too_old_error_);
+  swap(max_span_response_bytes_, other->max_span_response_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

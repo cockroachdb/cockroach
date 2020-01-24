@@ -226,6 +226,7 @@ func makeKVBatchFetcherWithSendFunc(
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var ba roachpb.BatchRequest
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
+	ba.Header.MaxSpanResponseBytes = 1 << 20 // 1MB
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	if f.reverse {

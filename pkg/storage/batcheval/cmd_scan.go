@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -42,17 +44,26 @@ func Scan(
 	case roachpb.BATCH_RESPONSE:
 		var kvData [][]byte
 		var numKvs int64
+		opts := engine.MVCCScanOptions{
+			Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
+			Txn:          h.Txn,
+			MaxBytes:     h.MaxSpanResponseBytes,
+		}
 		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
 			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
-			engine.MVCCScanOptions{
-				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
-				Txn:          h.Txn,
-			})
+			opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.NumKeys = numKvs
 		reply.BatchResponses = kvData
+		var bytes int
+		for _, repr := range kvData {
+			bytes += len(repr)
+		}
+		if h.MaxSpanResponseBytes > 0 {
+			log.Infof(ctx, "size-limited: returning %d KVs totaling %s (limit %s)", reply.NumKeys, humanizeutil.IBytes(int64(bytes)), humanizeutil.IBytes(h.MaxSpanResponseBytes))
+		}
 	case roachpb.KEY_VALUES:
 		var rows []roachpb.KeyValue
 		rows, resumeSpan, intents, err = engine.MVCCScan(
