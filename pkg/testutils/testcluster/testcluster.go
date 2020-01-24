@@ -886,3 +886,101 @@ func (testClusterFactoryImpl) StartTestCluster(
 ) serverutils.TestClusterInterface {
 	return StartTestCluster(t, numNodes, args)
 }
+
+// StartTestClusterWithoutReplication starts up a TestCluster made up
+// of `nodes` in-memory testing servers. The system ranges are
+// positioned on node systemNodeID and the data ranges in dataNodeID.
+// systemNodeID and dataNodeID must be different from each other.
+//
+// The cluster should be stopped using TestCluster.Stopper().Stop().
+func StartTestClusterWithoutReplication(
+	t testing.TB, numNodes, dataNodeID, systemNodeID int, args base.TestClusterArgs,
+) *TestCluster {
+	// We want to populate the Tiers field in each node according
+	// to whether they hold data or system ranges.
+	// However we also want to reuse any existing provided arguments
+	// so we can't blindly overwrite the args structs.
+	if args.ServerArgsPerNode == nil {
+		args.ServerArgsPerNode = map[int]base.TestServerArgs{}
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs, ok := args.ServerArgsPerNode[i]
+		if !ok {
+			serverArgs = args.ServerArgs
+		}
+		region := "rest"
+		if i == systemNodeID-1 {
+			region = "rsys"
+		} else if i == dataNodeID-1 {
+			region = "rdata"
+		}
+		serverArgs.Locality.Tiers = []roachpb.Tier{{Key: "region", Value: region}}
+		args.ServerArgsPerNode[i] = serverArgs
+	}
+	tc := StartTestCluster(t, numNodes, args)
+
+	// Disable replication (num replicas = 1) and move all system ranges to rsys.
+	rows, err := tc.ServerConn(0).Query("SELECT target FROM crdb_internal.zones")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	var zones []string
+	for rows.Next() {
+		var zone string
+		if err := rows.Scan(&zone); err != nil {
+			t.Fatal(err)
+		}
+		zones = append(zones, zone)
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	for _, zone := range zones {
+		region := "rdata"
+		if zone != "RANGE default" {
+			region = "rsys"
+		}
+		if _, err := tc.ServerConn(0).Exec(
+			fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1, constraints = '[+region=%s]'", zone, region)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait for ranges to move to the desired node.
+	testutils.SucceedsSoon(t, func() error {
+		// Kick the replication queues, to speed up the rebalancing process.
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+				return s.ForceReplicationScanAndProcess()
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := tc.ServerConn(0).Query(`
+SELECT unnest(replicas)
+  FROM crdb_internal.ranges
+ WHERE replica_localities[1] LIKE '%rsys%'
+    OR replica_localities[1] LIKE '%rdata%'`)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var nodeID int
+			if err := rows.Scan(&nodeID); err != nil {
+				return err
+			}
+			if nodeID != systemNodeID && nodeID != dataNodeID {
+				return errors.New("not rebalanced, still waiting")
+			}
+		}
+		return rows.Err()
+	})
+
+	return tc
+}
