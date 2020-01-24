@@ -1869,23 +1869,22 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			rel.FuncDeps.MakeOuter(h.rightProps.OutputCols, notNullInputCols)
 
 		case opt.FullJoinOp:
-			// Clear the relation's key if all columns are nullable, because
-			// duplicate all-null rows are possible:
-			//
-			//   -- t1 and t2 each have one row containing NULL for column x.
-			//   SELECT * FROM t1 FULL JOIN t2 ON t1.x=t2.x
-			//
-			//   t1.x  t2.x
-			//   ----------
-			//   NULL  NULL
-			//   NULL  NULL
-			//
-			inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
-			if !inputCols.Intersects(notNullInputCols) {
-				rel.FuncDeps.DowngradeKey()
-			} else if key, ok := rel.FuncDeps.StrictKey(); ok && key.Empty() {
+			if key, ok := rel.FuncDeps.StrictKey(); ok && key.Empty() {
 				// The cross-product has an empty key when both sides have an empty key;
 				// but the outer join can have two rows so the empty key doesn't hold.
+				rel.FuncDeps.RemoveKey()
+			} else if notNullInputCols.Empty() {
+				// Downgrade the relation's key if all columns are nullable, because
+				// duplicate all-null rows are possible:
+				//
+				//   -- t1 and t2 each have one row containing NULL for column x.
+				//   SELECT * FROM t1 FULL JOIN t2 ON t1.x=t2.x
+				//
+				//   t1.x  t2.x
+				//   ----------
+				//   NULL  NULL
+				//   NULL  NULL
+				//
 				rel.FuncDeps.DowngradeKey()
 			}
 			rel.FuncDeps.MakeOuter(h.leftProps.OutputCols, notNullInputCols)

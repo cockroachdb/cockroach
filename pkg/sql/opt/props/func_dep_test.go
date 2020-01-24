@@ -25,11 +25,15 @@ func TestFuncDeps_DowngradeKey(t *testing.T) {
 	fd1.Verify()
 	verifyFD(t, fd1, "lax-key(1); (1)-->(2,3)")
 
-	// Downgrading an empty strict key should not result in an empty lax key,
-	// which is invalid.
+	// Downgrading an empty strict key should be a no-op.
 	fd2 := &props.FuncDepSet{}
 	fd2.AddStrictKey(opt.ColSet{}, c(1, 2, 3))
 	fd2.DowngradeKey()
+	fd2.Verify()
+	verifyFD(t, fd2, "key(); ()-->(1-3)")
+
+	// RemoveKey must be used to remove an empty strict key.
+	fd2.RemoveKey()
 	fd2.Verify()
 	verifyFD(t, fd2, "()-->(1-3)")
 }
@@ -689,39 +693,17 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	verifyFD(t, abcde, "key(1); (1)-->(2-5), (2)~~>(1,3-5), (3,4)~~>(1,2,5)")
 	abcde.ProjectCols(c(2, 3, 4, 5))
 	verifyFD(t, abcde, "lax-key(2-5); (2)~~>(3-5), (3,4)~~>(2,5)")
-	testColsAreLaxKey(t, abcde, c(2), true)
-	testColsAreLaxKey(t, abcde, c(3, 4), true)
+	// 2 on its own is not necessarily a lax key: even if it determines the other
+	// columns, any of them can still be NULL.
+	testColsAreLaxKey(t, abcde, c(2), false)
+	testColsAreLaxKey(t, abcde, c(3, 4), false)
 
 	copy := &props.FuncDepSet{}
 	copy.CopyFrom(abcde)
 
 	// Verify that lax keys convert to strong keys.
-	abcde.MakeNotNull(c(2))
-	verifyFD(t, abcde, "key(2); (2)-->(3-5), (3,4)~~>(2,5)")
-
-	abcde.CopyFrom(copy)
-	abcde.MakeNotNull(c(3, 4))
-	verifyFD(t, abcde, "key(3,4); (2)~~>(3-5), (3,4)-->(2,5)")
-
-	abcde.CopyFrom(copy)
-	abcde.MakeNotNull(c(3))
-	verifyFD(t, abcde, "lax-key(2-5); (2)~~>(3-5), (3,4)~~>(2,5)")
-
-	// Verify that lax keys are retained after we project more columns away.
-	abcde.CopyFrom(copy)
-	abcde.ProjectCols(c(2, 3))
-	verifyFD(t, abcde, "lax-key(2,3); (2)~~>(3)")
-	testColsAreLaxKey(t, abcde, c(2), true)
-	abcde.MakeNotNull(c(2))
-	verifyFD(t, abcde, "key(2); (2)-->(3)")
-
-	abcde.CopyFrom(copy)
-	abcde.ProjectCols(c(3, 4, 5))
-	verifyFD(t, abcde, "lax-key(3-5); (3,4)~~>(5)")
-	testColsAreLaxKey(t, abcde, c(3, 4), true)
-	abcde.MakeNotNull(c(3, 4))
-	verifyFD(t, abcde, "key(3,4); (3,4)-->(5)")
-	testColsAreStrictKey(t, abcde, c(3, 4), true)
+	abcde.MakeNotNull(c(2, 3, 4, 5))
+	verifyFD(t, abcde, "key(3,4); (2)-->(3-5), (3,4)-->(2,5)")
 }
 
 func TestFuncDeps_AddFrom(t *testing.T) {
@@ -820,7 +802,7 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "lax-key(1,12,13); (1)-->(2-5), (2,3)~~>(1,4,5), (12)~~>(13)")
 	testColsAreStrictKey(t, product, c(1, 2, 3, 4, 5, 12, 13), false)
-	testColsAreLaxKey(t, product, c(1, 12), true)
+	testColsAreLaxKey(t, product, c(1, 12, 13), true)
 
 	// Lax key on left side, strict key on right side:
 	//   SELECT * FROM (SELECT b, c, d, e FROM abcde), mnpq
@@ -830,7 +812,7 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "lax-key(2-5,10,11); (2,3)~~>(4,5), (10,11)-->(12,13)")
 	testColsAreStrictKey(t, product, c(1, 2, 3, 4, 5, 10, 11, 12, 13), false)
-	testColsAreLaxKey(t, product, c(2, 3, 10, 11), true)
+	testColsAreLaxKey(t, product, c(2, 3, 4, 5, 10, 11), true)
 
 	// Lax key on left side, lax key on right side:
 	//   CREATE UNIQUE INDEX ON mnpq (p)
@@ -843,7 +825,6 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "lax-key(2-5,12,13); (2,3)~~>(4,5), (12)~~>(13)")
 	testColsAreStrictKey(t, product, c(2, 3, 4, 5, 12, 13), false)
-	testColsAreLaxKey(t, product, c(2, 3, 12), true)
 
 	// Lax key on left side, no key on right side:
 	//   SELECT * FROM (SELECT b, c, d, e FROM abcde), (SELECT p, q FROM mnpq)
