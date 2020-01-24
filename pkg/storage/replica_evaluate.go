@@ -193,51 +193,23 @@ func evaluateBatch(
 
 	var mergedResult result.Result
 
-	// WriteTooOldErrors are unique: When one is returned, we also lay
-	// down an intent at our new proposed timestamp. We have the option
-	// of continuing past a WriteTooOldError to the end of the
-	// transaction (at which point the txn.WriteTooOld flag will trigger
-	// a RefreshSpan and possibly a client-side retry).
+	// WriteTooOldErrors have particular handling. When a request encounters the
+	// error, we'd like to lay down an intent in order to avoid writers being
+	// starved. So, for blind writes, we swallow the error and instead we set the
+	// WriteTooOld flag on the response. For non-blind writes (e.g. CPut), we
+	// can't do that and so we just return the WriteTooOldError - see note on
+	// IsReadAndWrite() stanza below. Upon receiving either a WriteTooOldError or
+	// a response with the WriteTooOld flag set, the client will attempt to bump
+	// the txn's read timestamp through a refresh. If successful, the client will
+	// retry this batch (in both cases).
 	//
-	// Within a batch, there's no downside to continuing past the
-	// WriteTooOldError, so we at least defer returning the error to the end of
-	// the batch so that we lay down more intents and we find out the final
-	// timestamp for the batch.
-	//
-	// Across batches, it's more complicated. We want to avoid
-	// client-side retries whenever possible. However, if a client-side
-	// retry is inevitable, it's probably best to continue and lay down
-	// as many intents as possible before that retry (this can avoid n^2
-	// behavior in some scenarios with high contention on multiple keys,
-	// although we haven't verified this in practice).
-	//
-	// The SQL layer will transparently retry on the server side if
-	// we're in the first statement in a transaction. If we're in a
-	// first statement, we want to return WriteTooOldErrors immediately
-	// to take advantage of this. We don't have this information
-	// available at this level currently, so we err on the side of
-	// returning the WriteTooOldError immediately to get the server-side
-	// retry when it is available.
-	//
-	// TODO(bdarnell): Plumb the SQL CanAutoRetry field through to
-	// !baHeader.DeferWriteTooOldError.
-	//
-	// A more subtle heuristic is also possible: If we get a
-	// WriteTooOldError while writing to a key that we have already read
-	// (either earlier in the transaction, or as a part of the same
-	// operation for a ConditionalPut, Increment, or InitPut), a
-	// WriteTooOldError that is deferred to the end of the transaction
-	// is guarantee to result in a failed RefreshSpans and therefore a
-	// client-side retry. In some cases it may be possible to
-	// successfully retry at the TxnCoordSender, avoiding the
-	// client-side retry (this is likely for Increment, but unlikely for
-	// the others). In such cases, we may want to return the
-	// WriteTooOldError even if the SQL CanAutoRetry is false. As of
-	// this writing, nearly all writes issued by SQL are preceded by
-	// reads of the same key.
+	// In any case, evaluation of the current batch always continue after a
+	// WriteTooOldError in order to find out if there's more conflicts and chose a
+	// final write timestamp.
 	var writeTooOldState struct {
 		err *roachpb.WriteTooOldError
-		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred.
+		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred past the
+		// end of the current batch.
 		cantDeferWTOE bool
 	}
 
@@ -268,8 +240,8 @@ func evaluateBatch(
 		if ok && retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
 			args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
 			pErr.SetDetail(writeTooOldState.err)
-			// Remember not to defer this error. Since it came from an EndTransaction,
-			// there's nowhere to defer it to.
+			// Don't defer this error. We could perhaps rely on the client observing
+			// the WriteTooOld flag and retry the batch, but we choose not too.
 			writeTooOldState.cantDeferWTOE = true
 		}
 
@@ -303,11 +275,21 @@ func evaluateBatch(
 					writeTooOldState.err = tErr
 				}
 
-				// Requests which are both read and write are not currently
-				// accounted for in RefreshSpans, so they rely on eager
-				// returning of WriteTooOldErrors.
-				// TODO(bdarnell): add read+write requests to the read refresh spans
-				// in TxnCoordSender, and then I think this can go away.
+				// For requests that are both read and write, we don't have the option
+				// of leaving an intent behind when they encounter a WriteTooOldError,
+				// so we have to return an error instead of a response with the
+				// WriteTooOld flag set (which would also leave intents behind). These
+				// requests need to be re-evaluated at the bumped timestamp in order for
+				// their write to be valid. The current evaluation resulted in an intent
+				// that could well be different from what the request would write if it
+				// were evaluated at the bumped timestamp, which would cause the request
+				// to be rejected if it were sent again with the same sequence number
+				// after a refresh.
+				// TODO(andrei): What we really want to do here is either speculatively
+				// evaluate the request at the bumped timestamp and return that
+				// speculative result, or leave behind a type of lock that wouldn't
+				// prevent the request for evaluating again at the same sequence number
+				// but at a bumped timestamp.
 				if roachpb.IsReadAndWrite(args) {
 					writeTooOldState.cantDeferWTOE = true
 				}
@@ -315,14 +297,15 @@ func evaluateBatch(
 				if baHeader.Txn != nil {
 					baHeader.Txn.WriteTimestamp.Forward(tErr.ActualTimestamp)
 					baHeader.Txn.WriteTooOld = true
+				} else {
+					// For non-transactional requests, there's nowhere to defer the error
+					// to. And the request has to fail because non-transactional batches
+					// should read and write at the same timestamp.
+					writeTooOldState.cantDeferWTOE = true
 				}
 
-				// Clear pErr; we're done processing it by having moved the
-				// batch or txn timestamps forward and set WriteTooOld if this
-				// is a transactional write. If we don't return the
-				// WriteTooOldError from this method, we will detect the
-				// pushed timestamp at commit time and refresh or retry the
-				// transaction.
+				// Clear pErr; we're done processing the WTOE for now and we'll return
+				// to considering it below after we've evaluated all requests.
 				pErr = nil
 			default:
 				return nil, mergedResult, pErr
@@ -357,9 +340,8 @@ func evaluateBatch(
 		}
 	}
 
-	// If there's a write too old error that we don't want to defer, return.
-	if writeTooOldState.err != nil &&
-		(!baHeader.DeferWriteTooOldError || writeTooOldState.cantDeferWTOE) {
+	// If there's a write too old error that we can't defer, return it.
+	if writeTooOldState.cantDeferWTOE {
 		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
