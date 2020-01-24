@@ -765,12 +765,6 @@ func (ts TransactionStatus) IsFinalized() bool {
 	return ts == COMMITTED || ts == ABORTED
 }
 
-// IsCommittedOrStaging determines if the transaction is morally committed (i.e.
-// in the COMMITTED or STAGING state).
-func (ts TransactionStatus) IsCommittedOrStaging() bool {
-	return ts == COMMITTED || ts == STAGING
-}
-
 var _ log.SafeMessager = Transaction{}
 
 // MakeTransaction creates a new transaction. The transaction key is

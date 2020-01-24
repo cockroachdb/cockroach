@@ -11,12 +11,7 @@
 package storage
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -163,51 +158,4 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		et.IntentSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.IntentSpans)
 	}
 	return ba, nil
-}
-
-// maybeBumpReadTimestampToWriteTimestamp bumps the batch's read timestamp to
-// the write timestamp for transactional batches where these timestamp have
-// diverged and where bumping is possible. When possible, this allows the
-// transaction to commit without having to retry.
-//
-// Note that this, like all the server-side bumping of the read timestamp, only
-// works for batches that exclusively contain writes; reads cannot be bumped
-// like this because they've already acquired timestamp-aware latches.
-func maybeBumpReadTimestampToWriteTimestamp(ctx context.Context, ba *roachpb.BatchRequest) {
-	if ba.Txn == nil {
-		return
-	}
-	if ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp) {
-		return
-	}
-	arg, ok := ba.GetArg(roachpb.EndTxn)
-	if !ok {
-		return
-	}
-	etArg := arg.(*roachpb.EndTxnRequest)
-	if batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg) &&
-		!batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
-		bumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp)
-	}
-}
-
-// bumpBatchTimestamp bumps ba's read and write timestamps to ts.
-func bumpBatchTimestamp(ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp) {
-	if ts.Less(ba.Timestamp) {
-		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
-	}
-	ba.Timestamp = ts
-	if txn := ba.Txn; txn == nil {
-		return
-	}
-	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
-		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
-			"ba.Txn.WriteTimestamp: %s", ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
-	}
-	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s)",
-		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
-	ba.Txn = ba.Txn.Clone()
-	ba.Txn.ReadTimestamp = ts
-	ba.Txn.WriteTimestamp = ba.Timestamp
-	ba.Txn.WriteTooOld = false
 }
