@@ -100,6 +100,11 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	cases := []struct {
+		// If name is not set, the test will use pErr.String().
+		name string
+		// OnFirstSend, if set, is invoked to evaluate the batch. If not set, pErr()
+		// will be used to provide an error.
+		onFirstSend  func(request roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 		pErr         func() *roachpb.Error
 		expRefresh   bool
 		expRefreshTS hlc.Timestamp
@@ -155,15 +160,32 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			},
 			expRefresh: false,
 		},
+		{
+			name: "write_too_old flag",
+			onFirstSend: func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.WriteTooOld = true
+				br.Txn.WriteTimestamp = txn.WriteTimestamp.Add(20, 1)
+				return br, nil
+			},
+			expRefresh:   true,
+			expRefreshTS: txn.WriteTimestamp.Add(20, 1), // Same as br.Txn.WriteTimestamp.
+		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.pErr().String(), func(t *testing.T) {
+		name := tc.name
+		if name == "" {
+			name = tc.pErr().String()
+		}
+		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			tsr, mockSender := makeMockTxnSpanRefresher()
 
 			// Collect some refresh spans.
 			var ba roachpb.BatchRequest
-			ba.Header = roachpb.Header{Txn: &txn}
+			clonedTxn := txn.Clone()
+			ba.Header = roachpb.Header{Txn: clonedTxn}
 			getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 			delRangeArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
 			ba.Add(&getArgs, &delRangeArgs)
@@ -178,14 +200,17 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			require.Equal(t, ba.Txn.ReadTimestamp, tsr.refreshedTimestamp)
 
 			// Hook up a chain of mocking functions.
-			onFirstSend := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+			onFirstSend := tc.onFirstSend
+			if onFirstSend == nil {
+				onFirstSend = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+					require.Len(t, ba.Requests, 1)
+					require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
-				// Return a transaction retry error.
-				pErr = tc.pErr()
-				pErr.SetTxn(ba.Txn)
-				return nil, pErr
+					// Return a transaction retry error.
+					pErr = tc.pErr()
+					pErr.SetTxn(ba.Txn)
+					return nil, pErr
+				}
 			}
 			onSecondSend := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 				// Should not be called if !expRefresh.
