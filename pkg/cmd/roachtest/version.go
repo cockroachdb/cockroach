@@ -219,6 +219,7 @@ func registerVersion(r *testRegistry) {
 	for _, n := range []int{3, 5} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("version/mixed/nodes=%d", n),
+			Owner:      OwnerKV,
 			MinVersion: "v2.1.0",
 			Cluster:    makeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t *test, c *cluster) {

@@ -121,9 +121,13 @@ Examples:
 				registerBenchmarks(&r)
 			}
 
-			names := r.List(context.Background(), args)
-			for _, name := range names {
-				fmt.Println(name)
+			matchedTests := r.List(context.Background(), args)
+			for _, test := range matchedTests {
+				var skip string
+				if test.Skip != "" {
+					skip = " (skipped: " + test.Skip + ")"
+				}
+				fmt.Printf("%s [%s]%s\n", test.Name, test.Owner, skip)
 			}
 			return nil
 		},

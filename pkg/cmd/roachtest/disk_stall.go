@@ -32,6 +32,7 @@ func registerDiskStalledDetection(r *testRegistry) {
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
 				),
+				Owner:      OwnerKV,
 				MinVersion: "v19.1.0",
 				Cluster:    makeClusterSpec(1),
 				Run: func(ctx context.Context, t *test, c *cluster) {

@@ -131,6 +131,7 @@ func registerSysbench(r *testRegistry) {
 
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+			Owner:   OwnerKV,
 			Cluster: makeClusterSpec(n+1, cpu(cpus)),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSysbench(ctx, t, c, opts)

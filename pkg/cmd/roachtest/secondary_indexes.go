@@ -38,8 +38,8 @@ func registerSecondaryIndexesMultiVersionCluster(r *testRegistry) {
 		conn := c.Conn(ctx, 1)
 		if _, err := conn.Exec(`
 CREATE TABLE t (
-	x INT PRIMARY KEY, y INT, z INT, w INT, 
-	INDEX i (y) STORING (z, w), 
+	x INT PRIMARY KEY, y INT, z INT, w INT,
+	INDEX i (y) STORING (z, w),
 	FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (w)
 );
 INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
@@ -103,6 +103,7 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 	}
 	r.Add(testSpec{
 		Name:       "secondary-index-multi-version",
+		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run:        runTest,

@@ -20,6 +20,7 @@ import (
 func registerElectionAfterRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "election-after-restart",
+		Owner:   OwnerKV,
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/35047",
 		Cluster: makeClusterSpec(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {

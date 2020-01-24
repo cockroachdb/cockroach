@@ -21,6 +21,7 @@ func registerReplicaGC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "replicagc-changed-peers/withRestart",
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(6),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runReplicaGCChangedPeers(ctx, t, c, true /* withRestart */)
@@ -28,6 +29,7 @@ func registerReplicaGC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:    "replicagc-changed-peers/noRestart",
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(6),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runReplicaGCChangedPeers(ctx, t, c, false /* withRestart */)

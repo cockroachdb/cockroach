@@ -219,7 +219,8 @@ func registerTPCC(r *testRegistry) {
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name: "tpcc/headroom/" + headroomSpec.String(),
+		Name:  "tpcc/headroom/" + headroomSpec.String(),
+		Owner: OwnerKV,
 		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
 		// minimum on gce.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
@@ -240,7 +241,8 @@ func registerTPCC(r *testRegistry) {
 		// mixed-headroom is similar to w=headroom, but with an additional node
 		// and on a mixed version cluster. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
-		Name: "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		Owner: OwnerKV,
 		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
 		// minimum on gce.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
@@ -270,6 +272,7 @@ func registerTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "tpcc-nowait/nodes=3/w=1",
+		Owner:      OwnerKV,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -282,6 +285,7 @@ func registerTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "weekly/tpcc-max",
+		Owner:      OwnerKV,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Tags:       []string{`weekly`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
@@ -297,6 +301,7 @@ func registerTPCC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpcc/w=100/nodes=3/chaos=true",
+		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4),
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -554,6 +559,7 @@ func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 
 	r.Add(testSpec{
 		Name:       name,
+		Owner:      OwnerKV,
 		Cluster:    nodes,
 		MinVersion: minVersion,
 		Tags:       b.Tags,

@@ -132,6 +132,7 @@ func registerRebalanceLoad(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       `rebalance-leases-by-load`,
+		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(4), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -144,6 +145,7 @@ func registerRebalanceLoad(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       `rebalance-replicas-by-load`,
+		Owner:      OwnerKV,
 		Cluster:    makeClusterSpec(7), // the last node is just used to generate load
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
