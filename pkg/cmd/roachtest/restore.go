@@ -219,6 +219,7 @@ func registerRestore(r *testRegistry) {
 	} {
 		r.Add(testSpec{
 			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
+			Owner:   OwnerBulkIO,
 			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {

@@ -23,6 +23,43 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Owner is a valid entry for the Owners field of a roachtest. They should be
+// teams, not individuals.
+type Owner string
+
+// The allowable values of Owner.
+const (
+	OwnerAppDev       Owner = `appdev`
+	OwnerBulkIO       Owner = `bulkio`
+	OwnerCDC          Owner = `cdc`
+	OwnerKV           Owner = `kv`
+	OwnerPartitioning Owner = `partitioning`
+	OwnerSQLExec      Owner = `sql-exec`
+	OwnerSQLSchema    Owner = `sql-schema`
+	OwnerStorage      Owner = `storage`
+)
+
+// OwnerMetadata contains information about a roachtest owning team, such as
+// team slack room, and github project.
+type OwnerMetadata struct {
+	SlackRoom string
+}
+
+// roachtestOwners maps an owner in code (as specified on a roachtest spec) to
+// metadata used for github issue posting/slack rooms, etc.
+var roachtestOwners = map[Owner]OwnerMetadata{
+	OwnerAppDev:       {SlackRoom: `app-dev`},
+	OwnerBulkIO:       {SlackRoom: `bulk-io`},
+	OwnerCDC:          {SlackRoom: `cdc`},
+	OwnerKV:           {SlackRoom: `kv`},
+	OwnerPartitioning: {SlackRoom: `partitioning`},
+	OwnerSQLExec:      {SlackRoom: `sql-execution-team`},
+	OwnerSQLSchema:    {SlackRoom: `sql-schema`},
+	OwnerStorage:      {SlackRoom: `storage`},
+	// Only for use in roachtest package unittests.
+	`unittest`: {},
+}
+
 type testRegistry struct {
 	m map[string]*testSpec
 	// buildVersion is the version of the Cockroach binary that tests will run against.
@@ -86,6 +123,16 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 		// greater than "v2.1.0-alpha.x".
 		spec.minVersion = version.MustParse(spec.MinVersion + "-0")
 	}
+
+	// All tests must have an owner so the release team knows who signs off on
+	// failures and so the github issue poster knows who to assign it to.
+	if spec.Owner == `` {
+		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
+	}
+	if _, ok := roachtestOwners[spec.Owner]; !ok {
+		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
+	}
+
 	return nil
 }
 
@@ -113,20 +160,11 @@ func (r testRegistry) GetTests(ctx context.Context, filter *testFilter) []testSp
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistry) List(ctx context.Context, filters []string) []string {
+func (r testRegistry) List(ctx context.Context, filters []string) []testSpec {
 	filter := newFilter(filters)
 	tests := r.GetTests(ctx, filter)
-	var names []string
-	for _, t := range tests {
-		name := t.Name
-		if t.Skip != "" {
-			name += " (skipped: " + t.Skip + ")"
-		}
-
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
+	return tests
 }
 
 func (r *testRegistry) setBuildVersion(buildTag string) error {

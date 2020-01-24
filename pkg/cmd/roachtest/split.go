@@ -41,6 +41,7 @@ func registerLoadSplits(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/uniform/nodes=%d", numNodes),
+		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -84,6 +85,7 @@ func registerLoadSplits(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/sequential/nodes=%d", numNodes),
+		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -104,6 +106,7 @@ func registerLoadSplits(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("splits/load/spanning/nodes=%d", numNodes),
+		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -217,6 +220,7 @@ func registerLargeRange(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {

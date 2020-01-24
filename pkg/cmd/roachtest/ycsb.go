@@ -50,6 +50,7 @@ func registerYCSB(r *testRegistry) {
 			wl, cpus := wl, cpus
 			r.Add(testSpec{
 				Name:    name,
+				Owner:   OwnerKV,
 				Cluster: makeClusterSpec(4, cpu(cpus)),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runYCSB(ctx, t, c, wl, cpus)

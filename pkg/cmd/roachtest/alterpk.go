@@ -84,7 +84,8 @@ func registerAlterPK(r *testRegistry) {
 	}
 	r.Add(testSpec{
 		// TODO (rohany): update this setup if we want to add more workloads to this roachtest.
-		Name: "alterpk",
+		Name:  "alterpk",
+		Owner: OwnerSQLExec,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",

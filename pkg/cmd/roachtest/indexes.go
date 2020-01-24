@@ -23,6 +23,7 @@ func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		MinVersion: `v19.1.0`,

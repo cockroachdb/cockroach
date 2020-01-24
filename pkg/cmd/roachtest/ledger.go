@@ -20,6 +20,7 @@ func registerLedger(r *testRegistry) {
 	const azs = "us-central1-a,us-central1-b,us-central1-c"
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
+		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(nodes+1, cpu(16), geo(), zones(azs)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			roachNodes := c.Range(1, nodes)

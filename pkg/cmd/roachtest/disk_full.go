@@ -22,6 +22,7 @@ import (
 func registerDiskFull(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
+		Owner:      OwnerKV,
 		MinVersion: `v2.1.0`,
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/35328#issuecomment-478540195",
 		Cluster:    makeClusterSpec(5),

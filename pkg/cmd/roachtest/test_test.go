@@ -26,6 +26,8 @@ import (
 	"github.com/kr/pretty"
 )
 
+const OwnerUnitTest Owner = `unittest`
+
 const defaultParallelism = 10
 
 func TestMatchOrSkip(t *testing.T) {
@@ -50,7 +52,7 @@ func TestMatchOrSkip(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			f := newFilter(c.filter)
-			spec := &testSpec{Name: c.name, Tags: c.tags}
+			spec := &testSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
 			if value := spec.matchOrSkip(f); c.expected != value {
 				t.Fatalf("expected %t, but found %t", c.expected, value)
 			} else if value && c.expectedSkip != spec.Skip {
@@ -80,11 +82,13 @@ func TestRunnerRun(t *testing.T) {
 	}
 	r.Add(testSpec{
 		Name:    "pass",
+		Owner:   OwnerUnitTest,
 		Run:     func(ctx context.Context, t *test, c *cluster) {},
 		Cluster: makeClusterSpec(0),
 	})
 	r.Add(testSpec{
-		Name: "fail",
+		Name:  "fail",
+		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
@@ -170,6 +174,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 	test := testSpec{
 		Name:    `timeout`,
+		Owner:   OwnerUnitTest,
 		Timeout: 10 * time.Millisecond,
 		Cluster: makeClusterSpec(0),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -204,6 +209,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:    "a",
+				Owner:   OwnerUnitTest,
 				Run:     dummyRun,
 				Cluster: makeClusterSpec(0),
 			},
@@ -213,6 +219,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:       "a",
+				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Run:        dummyRun,
 				Cluster:    makeClusterSpec(0),
@@ -223,6 +230,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:       "a",
+				Owner:      OwnerUnitTest,
 				MinVersion: "foo",
 				Run:        dummyRun,
 				Cluster:    makeClusterSpec(0),
@@ -273,6 +281,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 			r.Add(testSpec{
 				Name:       "a",
+				Owner:      OwnerUnitTest,
 				MinVersion: "v2.0.0",
 				Cluster:    makeClusterSpec(0),
 				Run: func(ctx context.Context, t *test, c *cluster) {
@@ -281,6 +290,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			})
 			r.Add(testSpec{
 				Name:       "b",
+				Owner:      OwnerUnitTest,
 				MinVersion: "v2.1.0",
 				Cluster:    makeClusterSpec(0),
 				Run: func(ctx context.Context, t *test, c *cluster) {
