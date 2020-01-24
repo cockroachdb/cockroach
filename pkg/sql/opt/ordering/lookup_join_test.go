@@ -103,10 +103,11 @@ func TestLookupJoinProvided(t *testing.T) {
 				input,
 				nil, /* FiltersExpr */
 				&memo.LookupJoinPrivate{
-					Table:   tab,
-					Index:   cat.PrimaryIndex,
-					KeyCols: tc.keyCols,
-					Cols:    tc.outCols,
+					JoinType: opt.InnerJoinOp,
+					Table:    tab,
+					Index:    cat.PrimaryIndex,
+					KeyCols:  tc.keyCols,
+					Cols:     tc.outCols,
 				},
 			)
 			req := physical.ParseOrderingChoice(tc.required)
