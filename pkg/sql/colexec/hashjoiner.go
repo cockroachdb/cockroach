@@ -39,10 +39,11 @@ const (
 	hjEmittingUnmatched
 )
 
-// hashJoinerSpec is the specification for a hash joiner processor. The hash
+// hashJoinerSpec is the specification for a hash joiner operator. The hash
 // joiner performs a join on the left and right's equal columns and returns
 // combined left and right output columns.
 type hashJoinerSpec struct {
+	joinType sqlbase.JoinType
 	// left and right are the specifications of the two input table sources to
 	// the hash joiner.
 	left  hashJoinerSourceSpec
@@ -404,10 +405,39 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 
 			sel := batch.Selection()
 
-			// Initialize groupID with the initial hash buckets and toCheck with all
-			// applicable indices.
-			prober.ht.lookupInitial(ctx, batchSize, sel)
-			nToCheck := batchSize
+			var nToCheck uint16
+			switch prober.spec.joinType {
+			case sqlbase.JoinType_LEFT_ANTI:
+				// The setup of probing for LEFT ANTI join needs a special treatment in
+				// order to reuse the same "check" functions below.
+				//
+				// First, we compute the hash values for all tuples in the batch.
+				prober.ht.computeBuckets(ctx, prober.ht.buckets, prober.ht.keys, uint64(batchSize), sel)
+				// Then, we iterate over all tuples to see whether there is at least
+				// one tuple in the hash table that has the same hash value.
+				for i := uint16(0); i < batchSize; i++ {
+					if prober.ht.first[prober.ht.buckets[i]] != 0 {
+						// Non-zero "first" key indicates that there is a match of hashes
+						// and we need to include the current tuple to check whether it is
+						// an actual match.
+						prober.ht.groupID[i] = prober.ht.first[prober.ht.buckets[i]]
+						prober.ht.toCheck[nToCheck] = i
+						nToCheck++
+					}
+				}
+				// We need to reset headID for all tuples in the batch to remove any
+				// leftover garbage from the previous iteration. For tuples that need
+				// to be checked, headID will be updated accordingly; for tuples that
+				// definitely don't have a match, the zero value will remain until the
+				// "collecting" and "congregation" step in which such tuple will be
+				// included into the output.
+				copy(prober.ht.headID[:batchSize], zeroUint64Column)
+			default:
+				// Initialize groupID with the initial hash buckets and toCheck with all
+				// applicable indices.
+				prober.ht.lookupInitial(ctx, batchSize, sel)
+				nToCheck = batchSize
+			}
 
 			var nResults uint16
 
@@ -562,6 +592,10 @@ func NewEqHashJoinerOp(
 		if len(rightOutCols) != 0 {
 			return nil, errors.Errorf("semi-join can't have right-side output columns")
 		}
+	case sqlbase.JoinType_LEFT_ANTI:
+		if len(rightOutCols) != 0 {
+			return nil, errors.Errorf("left anti join can't have right-side output columns")
+		}
 	default:
 		return nil, errors.Errorf("hash join of type %s not supported", joinType)
 	}
@@ -582,6 +616,7 @@ func NewEqHashJoinerOp(
 	}
 
 	spec := hashJoinerSpec{
+		joinType:      joinType,
 		left:          left,
 		right:         right,
 		rightDistinct: rightDistinct,
