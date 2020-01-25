@@ -1153,3 +1153,17 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 func (c *chunkingBatchSource) reset() {
 	c.curIdx = 0
 }
+
+// interfaceToSlice is a helper function that converts an interface{} into a
+// slice of interface{}. It will panic if the argument is not a slice.
+func interfaceToSlice(slice interface{}) []interface{} {
+	s := reflect.ValueOf(slice)
+	if s.Kind() != reflect.Slice {
+		execerror.VectorizedInternalPanic("interfaceToSlice() given a non-slice type")
+	}
+	ret := make([]interface{}, s.Len())
+	for i := 0; i < s.Len(); i++ {
+		ret[i] = s.Index(i).Interface()
+	}
+	return ret
+}

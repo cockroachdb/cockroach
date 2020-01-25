@@ -51,15 +51,15 @@ type hjTestCase struct {
 	leftEqColsAreKey  bool
 	rightEqColsAreKey bool
 
-	expectedTuples tuples
-
-	onExpr execinfrapb.Expression
+	expectedTuples        tuples
+	skipAllNullsInjection bool
+	onExpr                execinfrapb.Expression
 }
 
 var (
-	floats = []float64{0.314, 3.14, 31.4, 314}
-	decs   []apd.Decimal
-	tcs    []hjTestCase
+	floats      = []float64{0.314, 3.14, 31.4, 314}
+	decs        []apd.Decimal
+	hjTestCases []hjTestCase
 )
 
 func init() {
@@ -72,7 +72,7 @@ func init() {
 		}
 	}
 
-	tcs = []hjTestCase{
+	hjTestCases = []hjTestCase{
 		{
 			leftTypes:  []coltypes.T{coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64},
@@ -948,33 +948,75 @@ func TestHashJoiner(t *testing.T) {
 			// it.
 			continue
 		}
-		for _, tc := range tcs {
-			inputs := []tuples{tc.leftTuples, tc.rightTuples}
-			typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
-			runTestsWithTyps(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
-				spec := createSpecForHashJoiner(tc)
-				args := NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              sources,
-					StreamingMemAccount: testMemAcc,
+		for _, tcs := range []interface{}{hjTestCases, mjTestCases} {
+			for _, testCase := range interfaceToSlice(tcs) {
+				var tc hjTestCase
+				switch testCase := testCase.(type) {
+				case hjTestCase:
+					tc = testCase
+				case mjTestCase:
+					testCase.Init()
+					tc.joinType = testCase.joinType
+					tc.leftTuples = testCase.leftTuples
+					tc.leftTypes = testCase.leftTypes
+					tc.leftOutCols = testCase.leftOutCols
+					tc.leftEqCols = testCase.leftEqCols
+					tc.rightTuples = testCase.rightTuples
+					tc.rightTypes = testCase.rightTypes
+					tc.rightOutCols = testCase.rightOutCols
+					tc.rightEqCols = testCase.rightEqCols
+					tc.expectedTuples = testCase.expected
+					tc.skipAllNullsInjection = testCase.skipAllNullsInjection
+					tc.onExpr = testCase.onExpr
+					if tc.joinType == sqlbase.JoinType_RIGHT_OUTER ||
+						tc.joinType == sqlbase.JoinType_FULL_OUTER {
+						// Currently, there is a "stall" when running some of the merge
+						// joiner tests with RIGHT OUTER or FULL OUTER joins via the hash
+						// joiner, so we skip it.
+						// TODO(yuzefovich): figure out the problem.
+						continue
+					}
+				default:
+					t.Fatal("unexpectedly a test case for hash join is neither hjTestCase nor mjTestCase")
 				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := NewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					return nil, err
+				if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
+					continue
 				}
-				if hj, ok := result.Op.(*hashJoinEqOp); ok {
-					hj.outputBatchSize = outputBatchSize
+				inputs := []tuples{tc.leftTuples, tc.rightTuples}
+				typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
+				var runner testRunner
+				if tc.skipAllNullsInjection {
+					// We're omitting all nulls injection test. See comments for each such
+					// test case.
+					runner = runTestsWithoutAllNullsInjection
+				} else {
+					runner = runTestsWithTyps
 				}
-				return result.Op, nil
-			})
+				runner(t, inputs, typs, tc.expectedTuples, unorderedVerifier, func(sources []Operator) (Operator, error) {
+					spec := createSpecForHashJoiner(tc)
+					args := NewColOperatorArgs{
+						Spec:                spec,
+						Inputs:              sources,
+						StreamingMemAccount: testMemAcc,
+					}
+					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+					result, err := NewColOperator(ctx, flowCtx, args)
+					if err != nil {
+						return nil, err
+					}
+					if hj, ok := result.Op.(*hashJoinEqOp); ok {
+						hj.outputBatchSize = outputBatchSize
+					}
+					return result.Op, nil
+				})
+			}
 		}
 	}
 }
 
 func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, tc := range tcs {
+	for _, tc := range hjTestCases {
 		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
 		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
 		hjOp, err := NewEqHashJoinerOp(
