@@ -36,6 +36,9 @@ func genHashJoiner(wr io.Writer) error {
 	collectNoOuter := makeFunctionRegex("_COLLECT_PROBE_NO_OUTER", 5)
 	s = collectNoOuter.ReplaceAllString(s, `{{template "collectProbeNoOuter" buildDict "Global" . "UseSel" $5}}`)
 
+	collectLeftAnti := makeFunctionRegex("_COLLECT_LEFT_ANTI", 5)
+	s = collectLeftAnti.ReplaceAllString(s, `{{template "collectLeftAnti" buildDict "Global" . "UseSel" $5}}`)
+
 	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err

@@ -803,6 +803,36 @@ func init() {
 			},
 		},
 		{
+			leftTypes:  []coltypes.T{coltypes.Int64},
+			rightTypes: []coltypes.T{coltypes.Int64},
+
+			joinType: sqlbase.JoinType_LEFT_ANTI,
+
+			leftTuples: tuples{
+				{0},
+				{0},
+				{1},
+				{2},
+			},
+			rightTuples: tuples{
+				{0},
+				{0},
+				{1},
+			},
+
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{},
+
+			leftEqColsAreKey:  false,
+			rightEqColsAreKey: false,
+
+			expectedTuples: tuples{
+				{2},
+			},
+		},
+		{
 			leftTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
 			rightTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
 

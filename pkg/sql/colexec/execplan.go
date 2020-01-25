@@ -310,9 +310,6 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			core.HashJoiner.Type != sqlbase.JoinType_INNER {
 			return false, errors.Newf("can't plan non-inner hash join with on expressions")
 		}
-		if core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
-			return false, errors.Newf("LEFT ANTI hash join is unsupported")
-		}
 		return true, nil
 
 	case core.MergeJoiner != nil:
