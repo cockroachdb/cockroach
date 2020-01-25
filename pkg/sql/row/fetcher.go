@@ -742,6 +742,7 @@ func (rf *Fetcher) ReadIndexKey(
 ) (remaining []byte, ok bool, foundNull bool, err error) {
 	// If there is only one table to check keys for, there is no need
 	// to go through the equivalence signature checks.
+
 	if len(rf.tables) == 1 {
 		return sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 			rf.currentTable.desc.TableDesc(),

@@ -1629,7 +1629,7 @@ func (ef *execFactory) ConstructDelete(
 
 	fastPathInterleaved := canDeleteFastInterleaved(tabDesc, fkTables)
 	if fastPathNode, ok := maybeCreateDeleteFastNode(
-		context.TODO(), input.(planNode), tabDesc, fastPathInterleaved, rowsNeeded); ok {
+		context.TODO(), input.(planNode), tabDesc, fkTables, fastPathInterleaved, rowsNeeded); ok {
 		return fastPathNode, nil
 	}
 

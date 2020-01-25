@@ -40,6 +40,9 @@ type deleteRangeNode struct {
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
 	desc *sqlbase.ImmutableTableDescriptor
+	// interleavedDesc are the table descriptors of any child interleaved tables
+	// the delete is operating on.
+	interleavedDesc []*sqlbase.ImmutableTableDescriptor
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
@@ -68,6 +71,7 @@ func maybeCreateDeleteFastNode(
 	ctx context.Context,
 	source planNode,
 	desc *ImmutableTableDescriptor,
+	fkTables row.FkTableMetadata,
 	fastPathInterleaved bool,
 	rowsNeeded bool,
 ) (*deleteRangeNode, bool) {
@@ -119,10 +123,18 @@ func maybeCreateDeleteFastNode(
 		return nil, false
 	}
 
+	i := 0
+	interleavedDesc := make([]*sqlbase.ImmutableTableDescriptor, len(fkTables))
+	for _, tableEntry := range fkTables {
+		interleavedDesc[i] = tableEntry.Desc
+		i++
+	}
+
 	return &deleteRangeNode{
 		interleavedFastPath: fastPathInterleaved,
 		spans:               scan.spans,
 		desc:                desc,
+		interleavedDesc:     interleavedDesc,
 	}, true
 }
 
@@ -154,23 +166,33 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.maybeSetSystemConfig(d.desc.GetID()); err != nil {
 		return err
 	}
-	if err := d.fetcher.Init(
-		false, false, false, &params.p.alloc,
-		row.FetcherTableArgs{
-			Desc:  d.desc,
-			Index: &d.desc.PrimaryIndex,
-		}); err != nil {
-		return err
-	}
+
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
 		}
 	}
+
+	allTables := make([]row.FetcherTableArgs, len(d.interleavedDesc)+1)
+	allTables[0] = row.FetcherTableArgs{
+		Desc:  d.desc,
+		Index: &d.desc.PrimaryIndex,
+		Spans: d.spans,
+	}
+	for i, interleaved := range d.interleavedDesc {
+		allTables[i+1] = row.FetcherTableArgs{
+			Desc:  interleaved,
+			Index: &interleaved.PrimaryIndex,
+			Spans: d.spans,
+		}
+	}
+	if err := d.fetcher.Init(
+		false, false, false, &params.p.alloc, allTables...); err != nil {
+		return err
+	}
 	ctx := params.ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	spans := make([]roachpb.Span, len(d.spans))
-	var prev []byte
 	copy(spans, d.spans)
 	if !d.autoCommitEnabled {
 		// Without autocommit, we're going to run each batch one by one, respecting
@@ -187,7 +209,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 			spans = spans[:0]
 			var err error
-			if spans, prev, err = d.processResults(b.Results, spans, prev); err != nil {
+			if spans, err = d.processResults(b.Results, spans); err != nil {
 				return err
 			}
 		}
@@ -204,7 +226,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return err
 		}
-		if resumeSpans, _, err := d.processResults(b.Results, nil /* resumeSpans */, prev); err != nil {
+		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err
 		} else if len(resumeSpans) != 0 {
 			// This shouldn't ever happen - we didn't pass a limit into the batch.
@@ -235,9 +257,10 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *client.Batch, spans r
 // encountered during result processing, they're appended to the resumeSpans
 // input parameter.
 func (d *deleteRangeNode) processResults(
-	results []client.Result, resumeSpans []roachpb.Span, prev []byte,
-) (roachpb.Spans, []byte, error) {
+	results []client.Result, resumeSpans []roachpb.Span,
+) (roachpb.Spans, error) {
 	for _, r := range results {
+		var prev []byte
 		for _, keyBytes := range r.Keys {
 			// If prefix is same, don't bother decoding key.
 			if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
@@ -246,10 +269,10 @@ func (d *deleteRangeNode) processResults(
 
 			after, ok, _, err := d.fetcher.ReadIndexKey(keyBytes)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			if !ok {
-				return nil, nil, errors.AssertionFailedf("key did not match descriptor")
+				return nil, errors.AssertionFailedf("key did not match descriptor")
 			}
 			k := keyBytes[:len(keyBytes)-len(after)]
 			if !bytes.Equal(k, prev) {
@@ -261,7 +284,7 @@ func (d *deleteRangeNode) processResults(
 			resumeSpans = append(resumeSpans, *r.ResumeSpan)
 		}
 	}
-	return resumeSpans, prev, nil
+	return resumeSpans, nil
 }
 
 // Next implements the planNode interface.

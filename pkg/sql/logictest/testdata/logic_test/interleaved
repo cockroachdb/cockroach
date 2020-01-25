@@ -404,3 +404,43 @@ query I
 SELECT count(*) FROM users JOIN documents ON users.id=documents.user_id WHERE documents.id=0
 ----
 1
+
+# Regression test for #44158: ensure we can delete many thousands of rows from
+# interleaved child tables.
+
+subtest interleaved_delete_many_rows_child_tables
+statement ok
+CREATE TABLE big_interleave_grandparent (x INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE big_interleave_parent (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT big_interleave_grandparent(x);
+
+statement ok
+ALTER TABLE big_interleave_parent ADD CONSTRAINT fk FOREIGN KEY (x) REFERENCES big_interleave_grandparent(x) ON DELETE CASCADE;
+
+statement ok
+CREATE TABLE big_interleave_child (x INT, y INT, z INT, PRIMARY KEY (x, y, z)) INTERLEAVE IN PARENT big_interleave_parent(x, y);
+
+statement ok
+ALTER TABLE big_interleave_child ADD CONSTRAINT fk FOREIGN KEY (x, y) REFERENCES big_interleave_parent(x, y) ON DELETE CASCADE;
+
+statement ok
+INSERT INTO big_interleave_grandparent VALUES (1);
+
+statement ok
+INSERT INTO big_interleave_parent (SELECT 1, id FROM generate_series(1, 20) AS id);
+
+statement ok
+INSERT INTO big_interleave_child (x,y,z) SELECT 1, p.id, q.id FROM (SELECT generate_series(1,17) as id) p, (SELECT generate_series (1,897) as id) q;
+
+statement ok
+DELETE FROM big_interleave_grandparent WHERE x = 1;
+
+query III
+SELECT
+  (SELECT count(*) FROM big_interleave_grandparent)
+ ,(SELECT count(*) FROM big_interleave_parent)
+ ,(SELECT count(*) FROM big_interleave_child)
+;
+----
+0 0 0
