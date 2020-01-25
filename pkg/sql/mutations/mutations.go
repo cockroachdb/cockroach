@@ -35,9 +35,28 @@ var (
 	// definitions to have random FAMILY definitions.
 	ColumnFamilyMutator StatementMutator = sqlbase.ColumnFamilyMutator
 
+	// IndexStoringMutator modifies the STORING clause of CREATE INDEX and
+	// indexes in CREATE TABLE.
+	IndexStoringMutator MultiStatementMutation = sqlbase.IndexStoringMutator
+
 	// PostgresMutator modifies strings such that they execute identically
-	// in both Postgres and Cockroach.
+	// in both Postgres and Cockroach (however this mutator does not remove
+	// features not supported by Postgres; use PostgresCreateTableMutator
+	// for those).
 	PostgresMutator StatementStringMutator = postgresMutator
+
+	// PostgresCreateTableMutator modifies CREATE TABLE statements to
+	// remove any features not supported by Postgres that would change
+	// results (like descending primary keys). This should be used on the
+	// output of sqlbase.RandCreateTable.
+	PostgresCreateTableMutator MultiStatementMutation = postgresCreateTableMutator
+)
+
+var (
+	// These are used in pkg/compose/compare/compare/compare_test.go, but
+	// it has a build tag so it's not detected by the linter.
+	_ = IndexStoringMutator
+	_ = PostgresCreateTableMutator
 )
 
 // StatementMutator defines a func that can change a statement.
@@ -312,6 +331,9 @@ func foreignKeyMutator(
 			}
 		}
 	}
+	if len(tables) == 0 {
+		return stmts, false
+	}
 
 	toNames := func(cols []*tree.ColumnTableDef) tree.NameList {
 		names := make(tree.NameList, len(cols))
@@ -485,7 +507,9 @@ Loop:
 	}
 }
 
-func postgresMutator(_ *rand.Rand, q string) string {
+func postgresMutator(rng *rand.Rand, q string) string {
+	q, _ = ApplyString(rng, q, postgresStatementMutator)
+
 	for from, to := range map[string]string{
 		":::":    "::",
 		"STRING": "TEXT",
@@ -497,4 +521,126 @@ func postgresMutator(_ *rand.Rand, q string) string {
 		q = strings.Replace(q, from, to, -1)
 	}
 	return q
+}
+
+// postgresStatementMutator removes cockroach-only things from CREATE TABLE and
+// ALTER TABLE.
+var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool) {
+	for _, stmt := range stmts {
+		switch stmt := stmt.(type) {
+		case *tree.SetClusterSetting:
+			continue
+		case *tree.CreateTable:
+			if stmt.Interleave != nil {
+				stmt.Interleave = nil
+				changed = true
+			}
+			if stmt.PartitionBy != nil {
+				stmt.PartitionBy = nil
+				changed = true
+			}
+			for i := 0; i < len(stmt.Defs); i++ {
+				switch def := stmt.Defs[i].(type) {
+				case *tree.FamilyTableDef:
+					// Remove.
+					stmt.Defs = append(stmt.Defs[:i], stmt.Defs[i+1:]...)
+					i--
+					changed = true
+				case *tree.ColumnTableDef:
+					if def.HasColumnFamily() {
+						def.Family.Name = ""
+						def.Family.Create = false
+						changed = true
+					}
+				case *tree.UniqueConstraintTableDef:
+					if def.Interleave != nil {
+						def.Interleave = nil
+						changed = true
+					}
+					if def.PartitionBy != nil {
+						def.PartitionBy = nil
+						changed = true
+					}
+				}
+			}
+		case *tree.AlterTable:
+			for i := 0; i < len(stmt.Cmds); i++ {
+				// Postgres doesn't have alter stats.
+				if _, ok := stmt.Cmds[i].(*tree.AlterTableInjectStats); ok {
+					stmt.Cmds = append(stmt.Cmds[:i], stmt.Cmds[i+1:]...)
+					i--
+					changed = true
+				}
+			}
+			// If there are no commands, don't add this statement.
+			if len(stmt.Cmds) == 0 {
+				continue
+			}
+		}
+		mutated = append(mutated, stmt)
+	}
+	return mutated, changed
+}
+
+func postgresCreateTableMutator(
+	rng *rand.Rand, stmts []tree.Statement,
+) (mutated []tree.Statement, changed bool) {
+	for _, stmt := range stmts {
+		mutated = append(mutated, stmt)
+		switch stmt := stmt.(type) {
+		case *tree.CreateTable:
+			var newdefs tree.TableDefs
+			for _, def := range stmt.Defs {
+				switch def := def.(type) {
+				case *tree.IndexTableDef:
+					// Postgres doesn't support
+					// indexes in CREATE TABLE,
+					// so split them out to their
+					// own statement.
+					mutated = append(mutated, &tree.CreateIndex{
+						Name:     def.Name,
+						Table:    stmt.Table,
+						Inverted: def.Inverted,
+						Columns:  def.Columns,
+						Storing:  def.Storing,
+					})
+					changed = true
+				case *tree.UniqueConstraintTableDef:
+					if def.PrimaryKey {
+						// Postgres doesn't support descending PKs.
+						for i, col := range def.Columns {
+							if col.Direction != tree.DefaultDirection {
+								def.Columns[i].Direction = tree.DefaultDirection
+								changed = true
+							}
+						}
+						if def.Name != "" {
+							// Unset Name here because
+							// constaint names cannot
+							// be shared among tables,
+							// so multiple PK constraints
+							// named "primary" is an error.
+							def.Name = ""
+							changed = true
+						}
+						newdefs = append(newdefs, def)
+						break
+					}
+					mutated = append(mutated, &tree.CreateIndex{
+						Name:     def.Name,
+						Table:    stmt.Table,
+						Unique:   true,
+						Inverted: def.Inverted,
+						Columns:  def.Columns,
+						Storing:  def.Storing,
+					})
+					changed = true
+				default:
+					newdefs = append(newdefs, def)
+				}
+			}
+			stmt.Defs = newdefs
+		}
+	}
+	return mutated, changed
 }

@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -98,17 +99,21 @@ func (c *Conn) Exec(ctx context.Context, s string) error {
 }
 
 // Values executes prep and exec and returns the results of exec. Mutators
-// passed in during NewConn are applied only to exec.
-func (c *Conn) Values(ctx context.Context, prep, exec string) (*pgx.Rows, error) {
+// passed in during NewConn are applied only to exec. The mutated exec string
+// is returned.
+func (c *Conn) Values(
+	ctx context.Context, prep, exec string,
+) (rows *pgx.Rows, mutated string, err error) {
 	if prep != "" {
-		rows, err := c.PGX.QueryEx(ctx, prep, simpleProtocol)
+		rows, err = c.PGX.QueryEx(ctx, prep, simpleProtocol)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		rows.Close()
 	}
-	exec, _ = mutations.ApplyString(c.rng, exec, c.sqlMutators...)
-	return c.PGX.QueryEx(ctx, exec, simpleProtocol)
+	mutated, _ = mutations.ApplyString(c.rng, exec, c.sqlMutators...)
+	rows, err = c.PGX.QueryEx(ctx, mutated, simpleProtocol)
+	return rows, mutated, err
 }
 
 var simpleProtocol = &pgx.QueryExOptions{SimpleProtocol: true}
@@ -117,18 +122,41 @@ var simpleProtocol = &pgx.QueryExOptions{SimpleProtocol: true}
 // differ, an error is returned. SQL errors are ignored.
 func CompareConns(
 	ctx context.Context, timeout time.Duration, conns map[string]*Conn, prep, exec string,
-) error {
+) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	connRows := make(map[string]*pgx.Rows)
+	connExecs := make(map[string]string)
 	for name, conn := range conns {
-		rows, err := conn.Values(ctx, prep, exec)
+		rows, mutated, err := conn.Values(ctx, prep, exec)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
 		defer rows.Close()
 		connRows[name] = rows
+		connExecs[name] = mutated
 	}
+
+	// Annotate our error message with the exec queries since they can be
+	// mutated and differ per connection.
+	defer func() {
+		if err == nil {
+			return
+		}
+		var sb strings.Builder
+		prev := ""
+		for name, mutated := range connExecs {
+			fmt.Fprintf(&sb, "\n%s:", name)
+			if prev == mutated {
+				sb.WriteString(" [same as previous]\n")
+			} else {
+				fmt.Fprintf(&sb, "\n%s;\n", mutated)
+			}
+			prev = mutated
+		}
+		err = fmt.Errorf("%w%s", err, sb.String())
+	}()
+
 	var first []interface{}
 	var firstName string
 	var minCount int
