@@ -20,7 +20,10 @@ import (
 	"time"
 )
 
-var flagEach = flag.Duration("each", 10*time.Minute, "individual test timeout")
+var (
+	flagEach  = flag.Duration("each", 10*time.Minute, "individual test timeout")
+	flagTests = flag.String("tests", ".", "tests within docker compose to run")
+)
 
 func TestComposeCompare(t *testing.T) {
 	const file = "docker-compose"
@@ -34,7 +37,10 @@ func TestComposeCompare(t *testing.T) {
 		"--force-recreate",
 		"--exit-code-from", "test",
 	)
-	cmd.Env = []string{fmt.Sprintf("EACH=%s", *flagEach)}
+	cmd.Env = []string{
+		fmt.Sprintf("EACH=%s", *flagEach),
+		fmt.Sprintf("TESTS=%s", *flagTests),
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Log(string(out))
