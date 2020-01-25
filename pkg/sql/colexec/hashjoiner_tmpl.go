@@ -23,10 +23,10 @@ import "github.com/cockroachdb/cockroach/pkg/col/coldata"
 
 // {{/*
 
-func _COLLECT_RIGHT_OUTER(
+func _COLLECT_PROBE_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
-	// {{define "collectRightOuter"}}
+	// {{define "collectProbeOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
@@ -71,10 +71,10 @@ func _COLLECT_RIGHT_OUTER(
 	return 0
 }
 
-func _COLLECT_NO_OUTER(
+func _COLLECT_PROBE_NO_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
 ) uint16 { // */}}
-	// {{define "collectNoOuter"}}
+	// {{define "collectProbeNoOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.headID[batchSize-1]
 	// {{if .UseSel}}
@@ -105,8 +105,8 @@ func _COLLECT_NO_OUTER(
 	return 0
 }
 
-func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
-	// {{define "distinctCollectRightOuter"}}
+func _DISTINCT_COLLECT_PROBE_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
+	// {{define "distinctCollectProbeOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.groupID[batchSize-1]
 	_ = prober.probeRowUnmatched[batchSize-1]
@@ -133,10 +133,10 @@ func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _US
 	// {{/*
 }
 
-func _DISTINCT_COLLECT_NO_OUTER(
+func _DISTINCT_COLLECT_PROBE_NO_OUTER(
 	prober *hashJoinProber, batchSize uint16, nResults uint16, _USE_SEL bool,
 ) { // */}}
-	// {{define "distinctCollectNoOuter"}}
+	// {{define "distinctCollectProbeNoOuter"}}
 	// Early bounds checks.
 	_ = prober.ht.groupID[batchSize-1]
 	_ = prober.buildIdx[batchSize-1]
@@ -168,17 +168,17 @@ func _DISTINCT_COLLECT_NO_OUTER(
 func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
 	nResults := uint16(0)
 
-	if prober.spec.outer {
+	if prober.spec.probe.outer {
 		if sel != nil {
-			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, true)
+			_COLLECT_PROBE_OUTER(prober, batchSize, nResults, batch, true)
 		} else {
-			_COLLECT_RIGHT_OUTER(prober, batchSize, nResults, batch, false)
+			_COLLECT_PROBE_OUTER(prober, batchSize, nResults, batch, false)
 		}
 	} else {
 		if sel != nil {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, true)
+			_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, true)
 		} else {
-			_COLLECT_NO_OUTER(prober, batchSize, nResults, batch, false)
+			_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, false)
 		}
 	}
 
@@ -193,19 +193,19 @@ func (prober *hashJoinProber) distinctCollect(
 ) uint16 {
 	nResults := uint16(0)
 
-	if prober.spec.outer {
+	if prober.spec.probe.outer {
 		nResults = batchSize
 
 		if sel != nil {
-			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, true)
+			_DISTINCT_COLLECT_PROBE_OUTER(prober, batchSize, true)
 		} else {
-			_DISTINCT_COLLECT_RIGHT_OUTER(prober, batchSize, false)
+			_DISTINCT_COLLECT_PROBE_OUTER(prober, batchSize, false)
 		}
 	} else {
 		if sel != nil {
-			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, true)
+			_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, true)
 		} else {
-			_DISTINCT_COLLECT_NO_OUTER(prober, batchSize, nResults, false)
+			_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, false)
 		}
 	}
 

@@ -1017,7 +1017,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										rightSource := NewRepeatableBatchSource(batch)
 
 										spec := hashJoinerSpec{
-											left: hashJoinerSourceSpec{
+											build: hashJoinerSourceSpec{
 												eqCols:      []uint32{0, 2},
 												outCols:     []uint32{0, 1},
 												sourceTypes: sourceTypes,
@@ -1025,7 +1025,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 												outer:       fullOuter,
 											},
 
-											right: hashJoinerSourceSpec{
+											probe: hashJoinerSourceSpec{
 												eqCols:      []uint32{1, 3},
 												outCols:     []uint32{2, 3},
 												sourceTypes: sourceTypes,
