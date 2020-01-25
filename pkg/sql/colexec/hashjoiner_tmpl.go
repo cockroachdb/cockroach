@@ -19,7 +19,10 @@
 
 package colexec
 
-import "github.com/cockroachdb/cockroach/pkg/col/coldata"
+import (
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+)
 
 // {{/*
 
@@ -105,6 +108,34 @@ func _COLLECT_PROBE_NO_OUTER(
 	return 0
 }
 
+func _COLLECT_LEFT_ANTI(
+	prober *hashJoinProber, batchSize uint16, nResults uint16, batch coldata.Batch, _USE_SEL bool,
+) uint16 { // */}}
+	// {{define "collectLeftAnti" -}}
+	// Early bounds checks.
+	_ = prober.ht.headID[batchSize-1]
+	// {{if .UseSel}}
+	_ = sel[batchSize-1]
+	// {{end}}
+	for i := uint16(0); i < batchSize; i++ {
+		currentID := prober.ht.headID[i]
+		if currentID == 0 {
+			// currentID of 0 indicates that ith probing row didn't have a match, so
+			// we include it into the output.
+			// {{if .UseSel}}
+			prober.probeIdx[nResults] = sel[i]
+			// {{else}}
+			prober.probeIdx[nResults] = i
+			// {{end}}
+			nResults++
+		}
+	}
+	// {{end}}
+	// {{/*
+	// Dummy return value that is never used.
+	return 0
+}
+
 func _DISTINCT_COLLECT_PROBE_OUTER(prober *hashJoinProber, batchSize uint16, _USE_SEL bool) { // */}}
 	// {{define "distinctCollectProbeOuter"}}
 	// Early bounds checks.
@@ -176,9 +207,19 @@ func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel
 		}
 	} else {
 		if sel != nil {
-			_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, true)
+			switch prober.spec.joinType {
+			case sqlbase.JoinType_LEFT_ANTI:
+				_COLLECT_LEFT_ANTI(prober, batchSize, nResults, batch, true)
+			default:
+				_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, true)
+			}
 		} else {
-			_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, false)
+			switch prober.spec.joinType {
+			case sqlbase.JoinType_LEFT_ANTI:
+				_COLLECT_LEFT_ANTI(prober, batchSize, nResults, batch, false)
+			default:
+				_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, batch, false)
+			}
 		}
 	}
 
@@ -203,9 +244,23 @@ func (prober *hashJoinProber) distinctCollect(
 		}
 	} else {
 		if sel != nil {
-			_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, true)
+			switch prober.spec.joinType {
+			case sqlbase.JoinType_LEFT_ANTI:
+				// {{/* For LEFT ANTI join we don't care whether the build (right) side
+				// was distinct, so we only have single variation of COLLECT method. */}}
+				_COLLECT_LEFT_ANTI(prober, batchSize, nResults, batch, true)
+			default:
+				_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, true)
+			}
 		} else {
-			_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, false)
+			switch prober.spec.joinType {
+			case sqlbase.JoinType_LEFT_ANTI:
+				// {{/* For LEFT ANTI join we don't care whether the build (right) side
+				// was distinct, so we only have single variation of COLLECT method. */}}
+				_COLLECT_LEFT_ANTI(prober, batchSize, nResults, batch, false)
+			default:
+				_DISTINCT_COLLECT_PROBE_NO_OUTER(prober, batchSize, nResults, false)
+			}
 		}
 	}
 

@@ -272,6 +272,9 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		{
 			joinType: sqlbase.JoinType_LEFT_SEMI,
 		},
+		{
+			joinType: sqlbase.JoinType_LEFT_ANTI,
+		},
 	}
 
 	seed := rand.Int()
@@ -285,7 +288,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 1; run < nRuns; run++ {
+	for run := 0; run < nRuns; run++ {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
@@ -319,7 +322,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 							}
 
 							outputTypes := append(inputTypes, inputTypes...)
-							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI {
+							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
 								outputTypes = inputTypes
 							}
 							outputColumns := make([]uint32, len(outputTypes))
@@ -446,7 +450,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 1; run < nRuns; run++ {
+	for run := 0; run < nRuns; run++ {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
