@@ -100,7 +100,7 @@ func NewHashAggregator(
 		}
 	}
 
-	ht := makeHashTable(
+	ht := newHashTable(
 		allocator,
 		hashTableBucketSize,
 		colTypes,
@@ -109,7 +109,7 @@ func NewHashAggregator(
 		true, /* allowNullEquality */
 	)
 
-	builder := makeHashJoinBuilder(
+	builder := newHashJoinBuilder(
 		ht,
 		hashJoinerSourceSpec{
 			source:      input,
