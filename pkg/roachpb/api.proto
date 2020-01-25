@@ -578,13 +578,10 @@ message EndTxnRequest {
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
-  // CanCommitAtHigherTimestamp indicates that the batch this EndTxn is part of
-  // can be evaluated at a higher timestamp than the transaction's read
-  // timestamp. This is set by the client if the transaction has not performed
-  // any reads that must be refreshed prior to sending this current batch. When
-  // set, it allows the server to handle pushes and write too old conditions
-  // locally.
-  bool can_commit_at_higher_timestamp = 8;
+  // Set to true if this transaction is serializable isolation but has
+  // accummulated no refresh spans. This allows the executing server
+  // to retry it locally on the fast path.
+  bool no_refresh_spans = 8;
   // True to indicate that intent spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
@@ -1828,8 +1825,9 @@ message BatchResponse {
     // error and returns it separately). In effect, nearly no usage of
     // BatchResponse needs to care about this field.
     Error error = 1;
-    // timestamp denotes the timestamp at which the batch's reads executed. The
-    // timestamp cache is updated at this timestamp.
+    // timestamp is set only for non-transactional responses and denotes the
+    // timestamp at which the batch executed. The timestamp cache is updated
+    // at this timestamp.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have

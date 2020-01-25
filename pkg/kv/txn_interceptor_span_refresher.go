@@ -154,7 +154,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 		et := rArgs.(*roachpb.EndTxnRequest)
 		if !sr.refreshInvalid && len(sr.refreshSpans) == 0 {
-			et.CanCommitAtHigherTimestamp = true
+			et.NoRefreshSpans = true
 		}
 	}
 

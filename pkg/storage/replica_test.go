@@ -436,6 +436,101 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 	return result
 }
 
+// TestMaybeStripInFlightWrites verifies that in-flight writes declared on an
+// EndTxn request are stripped if the corresponding write or query intent is in
+// the same batch as the EndTxn.
+func TestMaybeStripInFlightWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	qi1 := &roachpb.QueryIntentRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	qi1.Txn.Sequence = 1
+	put2 := &roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	put2.Sequence = 2
+	put3 := &roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
+	put3.Sequence = 3
+	delRng3 := &roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
+	delRng3.Sequence = 3
+	scan3 := &roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
+	scan3.Sequence = 3
+	et := &roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}, Commit: true}
+	et.Sequence = 4
+	et.IntentSpans = []roachpb.Span{{Key: keyC}}
+	et.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}}
+	testCases := []struct {
+		reqs           []roachpb.Request
+		expIFW         []roachpb.SequencedWrite
+		expIntentSpans []roachpb.Span
+		expErr         string
+	}{
+		{
+			reqs:           []roachpb.Request{et},
+			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
+			expIntentSpans: []roachpb.Span{{Key: keyC}},
+		},
+		// QueryIntents aren't stripped from the in-flight writes set on the
+		// slow-path of maybeStripInFlightWrites. This is intentional.
+		{
+			reqs:           []roachpb.Request{qi1, et},
+			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}, {Key: keyB, Sequence: 2}},
+			expIntentSpans: []roachpb.Span{{Key: keyC}},
+		},
+		{
+			reqs:           []roachpb.Request{put2, et},
+			expIFW:         []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}},
+			expIntentSpans: []roachpb.Span{{Key: keyB}, {Key: keyC}},
+		},
+		{
+			reqs:   []roachpb.Request{put3, et},
+			expErr: "write in batch with EndTxn missing from in-flight writes",
+		},
+		{
+			reqs:           []roachpb.Request{qi1, put2, et},
+			expIFW:         nil,
+			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+		},
+		{
+			reqs:           []roachpb.Request{qi1, put2, delRng3, et},
+			expIFW:         nil,
+			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+		},
+		{
+			reqs:           []roachpb.Request{qi1, put2, scan3, et},
+			expIFW:         nil,
+			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+		},
+		{
+			reqs:           []roachpb.Request{qi1, put2, delRng3, scan3, et},
+			expIFW:         nil,
+			expIntentSpans: []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}},
+		},
+	}
+	for _, c := range testCases {
+		var ba roachpb.BatchRequest
+		ba.Add(c.reqs...)
+		t.Run(fmt.Sprint(ba), func(t *testing.T) {
+			resBa, err := maybeStripInFlightWrites(&ba)
+			if c.expErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got %v", err)
+				}
+				resArgs, _ := resBa.GetArg(roachpb.EndTxn)
+				resEt := resArgs.(*roachpb.EndTxnRequest)
+				if !reflect.DeepEqual(resEt.InFlightWrites, c.expIFW) {
+					t.Errorf("expected in-flight writes %v, got %v", c.expIFW, resEt.InFlightWrites)
+				}
+				if !reflect.DeepEqual(resEt.IntentSpans, c.expIntentSpans) {
+					t.Errorf("expected intent spans %v, got %v", c.expIntentSpans, resEt.IntentSpans)
+				}
+			} else {
+				if !testutils.IsError(err, c.expErr) {
+					t.Errorf("expected error %q, got %v", c.expErr, err)
+				}
+			}
+		})
+	}
+}
+
 // TestIsOnePhaseCommit verifies the circumstances where a
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
@@ -464,7 +559,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 	)
 	txnReqsNoRefresh := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTxnRequest{Commit: true, CanCommitAtHigherTimestamp: true}, 2),
+		withSeq(&roachpb.EndTxnRequest{Commit: true, NoRefreshSpans: true}, 2),
 	)
 	txnReqsRequire1PC := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
@@ -475,10 +570,9 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		ru          []roachpb.RequestUnion
 		isTxn       bool
 		isRestarted bool
-		// isWTO implies isTSOff.
-		isWTO   bool
-		isTSOff bool
-		exp1PC  bool
+		isWTO       bool
+		isTSOff     bool
+		exp1PC      bool
 	}{
 		{ru: noReqs, isTxn: false, exp1PC: false},
 		{ru: noReqs, isTxn: true, exp1PC: false},
@@ -487,33 +581,41 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: etReq, isTxn: true, exp1PC: true},
 		{ru: etReq, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqs[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, exp1PC: true},
 		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsNoRefresh[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqsNoRefresh[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
+		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, isTSOff: true, exp1PC: true},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[:1], isTxn: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[1:], isTxn: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -526,7 +628,6 @@ func TestIsOnePhaseCommit(t *testing.T) {
 			}
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
-				c.isTSOff = true
 			}
 			if c.isTSOff {
 				ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
@@ -9718,7 +9819,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 			expErr: "write at timestamp .* too old",
 		},
 		// 1PC serializable transaction will fail instead of retrying if
-		// EndTxnRequest.CanCommitAtHigherTimestamp is not true.
+		// EndTxnRequest.NoRefreshSpans is not true.
 		{
 			name: "no local retry of write too old on 1PC txn and refresh spans",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -9747,7 +9848,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				expTS = ts.Next()
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9796,7 +9897,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 					assignSeqNumsForReqs(ba.Txn, &cput)
 				}
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
@@ -9828,7 +9929,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				ba.Add(&cput)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9846,8 +9947,8 @@ func TestReplicaLocalRetries(t *testing.T) {
 				expTS = ts.Next()
 				cput := putArgs(ba.Txn.Key, []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.Require1PC = true                 // don't allow this to bypass the 1PC optimization
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
+				et.Require1PC = true     // don't allow this to bypass the 1PC optimization
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -9876,7 +9977,7 @@ func TestReplicaLocalRetries(t *testing.T) {
 				put2 := putArgs(ba.Txn.Key, []byte("newput"))
 				ba.Add(&put2)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate local retry is possible
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &put2, &et)
 				return
