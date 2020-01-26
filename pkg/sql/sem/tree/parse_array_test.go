@@ -159,9 +159,9 @@ func TestParseArrayError(t *testing.T) {
 		typ           *types.T
 		expectedError string
 	}{
-		{``, types.Int, `could not parse "" as type int[]: array must be enclosed in { and }`},
-		{`1`, types.Int, `could not parse "1" as type int[]: array must be enclosed in { and }`},
-		{`1,2`, types.Int, `could not parse "1,2" as type int[]: array must be enclosed in { and }`},
+		{``, types.Int, `could not parse "" as type int[]: array must be enclosed in { and } or ARRAY[ and ]`},
+		{`1`, types.Int, `could not parse "1" as type int[]: array must be enclosed in { and } or ARRAY[ and ]`},
+		{`1,2`, types.Int, `could not parse "1,2" as type int[]: array must be enclosed in { and } or ARRAY[ and ]`},
 		{`{1,2`, types.Int, `could not parse "{1,2" as type int[]: malformed array`},
 		{`{1,2,`, types.Int, `could not parse "{1,2," as type int[]: malformed array`},
 		{`{`, types.Int, `could not parse "{" as type int[]: malformed array`},
@@ -175,10 +175,10 @@ func TestParseArrayError(t *testing.T) {
 		// It might be unnecessary to disallow this, but Postgres does.
 		{`{he"lo}`, types.String, `could not parse "{he\"lo}" as type string[]: malformed array`},
 
-		{string([]byte{200}), types.String, `could not parse "\xc8" as type string[]: array must be enclosed in { and }`},
+		{string([]byte{200}), types.String, `could not parse "\xc8" as type string[]: array must be enclosed in { and } or ARRAY[ and ]`},
 		{string([]byte{'{', 'a', 200}), types.String, `could not parse "{a\xc8" as type string[]: malformed array`},
 	}
-	for _, td := range testData {
+	for i, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
 			_, err := ParseDArrayFromString(
 				NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
@@ -186,7 +186,7 @@ func TestParseArrayError(t *testing.T) {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)
 			}
 			if err.Error() != td.expectedError {
-				t.Fatalf("ARRAY %s: got error %s, expected error %s", td.str, err.Error(), td.expectedError)
+				t.Fatalf("ARRAY %s: got error %s, expected error %s, run %d", td.str, err.Error(), td.expectedError, i)
 			}
 		})
 	}

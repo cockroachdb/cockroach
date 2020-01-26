@@ -1553,6 +1553,42 @@ func TestImportCSVStmt(t *testing.T) {
 	})
 }
 
+func TestExportImportRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	tests := []struct {
+		stmts    string
+		tbl      string
+		expected string
+	}{
+		{
+			stmts: `EXPORT INTO CSV 'nodelocal:///foo.csv' FROM SELECT ARRAY['a', 'b', 'c'];
+							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal:///foo.csv/*')`,
+			tbl:      "t",
+			expected: `SELECT ARRAY['a', 'b', 'c']`,
+		},
+		{
+			stmts: `EXPORT INTO CSV 'nodelocal:///foo.csv' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
+							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal:///foo.csv/*')`,
+			tbl:      "t",
+			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
+		},
+	}
+
+	for _, test := range tests {
+		sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, test.tbl))
+		sqlDB.Exec(t, test.stmts)
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, test.tbl), sqlDB.QueryStr(t, test.expected))
+	}
+}
+
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// TestParseDatumStringAs tests that datums are roundtrippable between
+// TestParseDatumStringAs tests that datums are round-trippable between
 // printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -29,6 +29,20 @@ func TestParseDatumStringAs(t *testing.T) {
 		types.Bool: {
 			"true",
 			"false",
+		},
+		types.IntArray: {
+			"ARRAY[1]",
+			"ARRAY[1,2,3]",
+		},
+		types.StringArray: {
+			`ARRAY['hello','world']`,
+			`ARRAY['cockroach','database']`,
+		},
+		types.MakeArray(types.Bytes): {
+			"ARRAY[b'abc']",
+		},
+		types.MakeArray(types.Decimal): {
+			`ARRAY[1.021,5.20503]`,
 		},
 		types.Bytes: {
 			`\x`,
@@ -197,8 +211,13 @@ func TestParseDatumStringAs(t *testing.T) {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtExport)
-					if s != ds {
-						t.Fatalf("unexpected string: %q, expected: %q", ds, s)
+					// Re-parse ds and ensure that the result is equal to d.
+					dp, err := ParseDatumStringAs(typ, ds, evalCtx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if d.Compare(evalCtx, dp) != 0 {
+						t.Fatal("expected", d, "found", dp)
 					}
 				})
 			}
