@@ -968,18 +968,12 @@ func TestHashJoiner(t *testing.T) {
 					tc.expectedTuples = testCase.expected
 					tc.skipAllNullsInjection = testCase.skipAllNullsInjection
 					tc.onExpr = testCase.onExpr
-					if tc.joinType == sqlbase.JoinType_RIGHT_OUTER ||
-						tc.joinType == sqlbase.JoinType_FULL_OUTER {
-						// Currently, there is a "stall" when running some of the merge
-						// joiner tests with RIGHT OUTER or FULL OUTER joins via the hash
-						// joiner, so we skip it.
-						// TODO(yuzefovich): figure out the problem.
-						continue
-					}
 				default:
 					t.Fatal("unexpectedly a test case for hash join is neither hjTestCase nor mjTestCase")
 				}
 				if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
+					// Currently, onExpr is supported only for INNER join, so we skip all
+					// other cases.
 					continue
 				}
 				inputs := []tuples{tc.leftTuples, tc.rightTuples}
