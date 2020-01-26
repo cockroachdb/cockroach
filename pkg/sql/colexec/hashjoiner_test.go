@@ -927,14 +927,6 @@ func TestHashJoiner(t *testing.T) {
 		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				tc.init()
-				if tc.joinType == sqlbase.JoinType_LEFT_OUTER ||
-					tc.joinType == sqlbase.JoinType_FULL_OUTER {
-					// Currently, there is a "stall" when running some of the merge
-					// joiner tests with LEFT OUTER or FULL OUTER joins via the hash
-					// joiner, so we skip it.
-					// TODO(yuzefovich): figure out the problem.
-					continue
-				}
 				if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
 					// Currently, onExpr is supported only for INNER join, so we skip all
 					// other cases.

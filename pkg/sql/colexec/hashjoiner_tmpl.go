@@ -35,12 +35,13 @@ func _COLLECT_PROBE_OUTER(
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := prober.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 
 		for {
 			if nResults >= prober.outputBatchSize {
 				prober.prevBatch = batch
+				prober.prevBatchResumeIdx = i
 				return nResults
 			}
 
@@ -83,11 +84,12 @@ func _COLLECT_PROBE_NO_OUTER(
 	// {{if .UseSel}}
 	_ = sel[batchSize-1]
 	// {{end}}
-	for i := uint16(0); i < batchSize; i++ {
+	for i := prober.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := prober.ht.headID[i]
 		for currentID != 0 {
 			if nResults >= prober.outputBatchSize {
 				prober.prevBatch = batch
+				prober.prevBatchResumeIdx = i
 				return nResults
 			}
 
