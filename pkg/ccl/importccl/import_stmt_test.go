@@ -1553,6 +1553,19 @@ func TestImportCSVStmt(t *testing.T) {
 	})
 }
 
+func TestExportImportRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///foo.csv' FROM SELECT ARRAY['a', 'b', 'c']`)
+	sqlDB.Exec(t, `IMPORT TABLE zc(x TEXT[]) CSV DATA ('nodelocal:///foo.csv/n1.0.csv')`)
+}
+
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation

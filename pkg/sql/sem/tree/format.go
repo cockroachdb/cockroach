@@ -159,7 +159,7 @@ const (
 	// FmtExport, if set, formats datums in a raw form suitable for
 	// EXPORT, e.g. suitable for output into a CSV file. The intended
 	// goal for this flag is to ensure values can be read back using the
-	// ParseDatumStringAs() / ParseStringas() functions (IMPORT).
+	// ParseDatumStringAs() / ParseStringAs() functions (IMPORT).
 	//
 	// We do not use FmtParsable for this purpose because FmtParsable
 	// intends to preserve all the information useful to CockroachDB

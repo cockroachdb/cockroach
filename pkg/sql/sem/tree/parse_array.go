@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var enclosingError = pgerror.Newf(pgcode.InvalidTextRepresentation, "array must be enclosed in { and }")
-var extraTextError = pgerror.Newf(pgcode.InvalidTextRepresentation, "extra text after closing right brace")
+var enclosingError = pgerror.Newf(pgcode.InvalidTextRepresentation, "array must be enclosed in ARRAY[ and ]")
+var extraTextError = pgerror.Newf(pgcode.InvalidTextRepresentation, "extra text after closing right bracket")
 var nestedArraysNotSupportedError = unimplemented.NewWithIssueDetail(32552, "strcast", "nested arrays not supported")
 var malformedError = pgerror.Newf(pgcode.InvalidTextRepresentation, "malformed array")
 
@@ -33,11 +33,11 @@ var isQuoteChar = func(ch byte) bool {
 }
 
 var isControlChar = func(ch byte) bool {
-	return ch == '{' || ch == '}' || ch == ',' || ch == '"'
+	return ch == '[' || ch == ']' || ch == ',' || ch == '"'
 }
 
 var isElementChar = func(r rune) bool {
-	return r != '{' && r != '}' && r != ','
+	return r != '[' && r != ']' && r != ','
 }
 
 // gobbleString advances the parser for the remainder of the current string
@@ -148,7 +148,7 @@ func (p *parseState) parseElement() error {
 }
 
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
-// cases such as `'{1,2,3}'::INT[]`. The input type t is the type of the
+// cases such as `ARRAY[1, 2, 3]`. The input type t is the type of the
 // parameter of the array to parse.
 func ParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
 	ret, err := doParseDArrayFromString(ctx, s, t)
@@ -158,7 +158,7 @@ func ParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray,
 	return ret, nil
 }
 
-// doParseDArraryFromString does most of the work of ParseDArrayFromString,
+// doParseDArrayFromString does most of the work of ParseDArrayFromString,
 // except the error it returns isn't prettified as a parsing error.
 func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
 	parser := parseState{
@@ -169,12 +169,19 @@ func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArra
 	}
 
 	parser.eatWhitespace()
-	if parser.peek() != '{' {
+	out, err := parser.gobbleString(isControlChar)
+	if err != nil {
+		return nil, err
+	}
+	if out != "ARRAY" {
+		return nil, enclosingError
+	}
+	if parser.peek() != '[' {
 		return nil, enclosingError
 	}
 	parser.advance()
 	parser.eatWhitespace()
-	if parser.peek() != '}' {
+	if parser.peek() != ']' {
 		if err := parser.parseElement(); err != nil {
 			return nil, err
 		}
@@ -191,7 +198,7 @@ func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArra
 	if parser.eof() {
 		return nil, enclosingError
 	}
-	if parser.peek() != '}' {
+	if parser.peek() != ']' {
 		return nil, malformedError
 	}
 	parser.advance()
@@ -199,6 +206,5 @@ func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArra
 	if !parser.eof() {
 		return nil, extraTextError
 	}
-
 	return parser.result, nil
 }

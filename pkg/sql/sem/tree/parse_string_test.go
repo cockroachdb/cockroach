@@ -30,6 +30,17 @@ func TestParseDatumStringAs(t *testing.T) {
 			"true",
 			"false",
 		},
+		types.IntArray: {
+			"ARRAY[1]",
+			"ARRAY[1,2,3]",
+		},
+		types.StringArray: {
+			`ARRAY['hello','world']`,
+			`ARRAY['cockroach','database']`,
+		},
+		types.MakeArray(types.Decimal): {
+			`ARRAY[1.021,5.20503]`,
+		},
 		types.Bytes: {
 			`\x`,
 			`\x00`,
