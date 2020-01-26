@@ -333,6 +333,10 @@ type hashJoinProber struct {
 	// prevBatch, if not nil, indicates that the previous probe input batch has
 	// not been fully processed.
 	prevBatch coldata.Batch
+	// prevBatchResumeIdx indicates the index of the probe row to resume the
+	// collection from. It is used only in case of non-distinct build source
+	// (every probe row can have multiple matching build rows).
+	prevBatchResumeIdx uint16
 }
 
 func newHashJoinProber(
@@ -459,6 +463,9 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 					prober.ht.findNext(nToCheck)
 				}
 
+				// We're processing a new batch, so we'll reset the index to start
+				// collecting from.
+				prober.prevBatchResumeIdx = 0
 				nResults = prober.collect(batch, batchSize, sel)
 			}
 
