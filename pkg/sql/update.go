@@ -140,7 +140,7 @@ func (u *updateNode) startExec(params runParams) error {
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
 	}
-	return u.run.tu.init(params.p.txn, params.EvalContext())
+	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
