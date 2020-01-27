@@ -122,7 +122,6 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(rowCount)
-	scan.createdByOpt = true
 	return scan, nil
 }
 

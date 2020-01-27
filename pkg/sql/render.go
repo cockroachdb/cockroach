@@ -26,6 +26,13 @@ import (
 // renderNode encapsulates the render logic of a select statement:
 // expressing new values using expressions over source values.
 type renderNode struct {
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	_ util.NoCopy
+
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
@@ -50,13 +57,6 @@ type renderNode struct {
 	columns sqlbase.ResultColumns
 
 	reqOrdering ReqOrdering
-
-	// This struct must be allocated on the heap and its location stay
-	// stable after construction because it implements
-	// IndexedVarContainer and the IndexedVar objects in sub-expressions
-	// will link to it by reference after checkRenderStar / analyzeExpr.
-	// Enforce this using NoCopy.
-	_ util.NoCopy
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.

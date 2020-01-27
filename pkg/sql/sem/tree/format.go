@@ -183,6 +183,8 @@ const flagsRequiringAnnotations FmtFlags = FmtAlwaysQualifyTableNames
 //
 // FmtCtx cannot be copied by value.
 type FmtCtx struct {
+	_ util.NoCopy
+
 	bytes.Buffer
 
 	// NOTE: if you add more flags to this structure, make sure to add
@@ -202,8 +204,6 @@ type FmtCtx struct {
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
-
-	_ util.NoCopy
 }
 
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations

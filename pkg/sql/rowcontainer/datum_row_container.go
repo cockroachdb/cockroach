@@ -36,6 +36,10 @@ const (
 // TODO(knz): this does not currently track the amount of memory used
 // for the outer array of Datums references.
 type RowContainer struct {
+	// We should not copy this structure around; each copy would have a
+	// different memAcc (among other things like aliasing chunks).
+	_ util.NoCopy
+
 	numCols int
 
 	// rowsPerChunk is the number of rows in a chunk; we pack multiple rows in a
@@ -67,10 +71,6 @@ type RowContainer struct {
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
 	memAcc mon.BoundAccount
-
-	// We should not copy this structure around; each copy would have a different
-	// memAcc (among other things like aliasing chunks).
-	_ util.NoCopy
 }
 
 // NewRowContainer allocates a new row container.

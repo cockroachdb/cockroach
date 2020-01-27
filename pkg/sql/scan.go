@@ -35,6 +35,13 @@ var scanNodePool = sync.Pool{
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	_ util.NoCopy
+
 	desc  *sqlbase.ImmutableTableDescriptor
 	index *sqlbase.IndexDescriptor
 
@@ -97,16 +104,6 @@ type scanNode struct {
 	// Indicates if this scanNode will do a physical data check. This is
 	// only true when running SCRUB commands.
 	isCheck bool
-
-	// This struct must be allocated on the heap and its location stay
-	// stable after construction because it implements
-	// IndexedVarContainer and the IndexedVar objects in sub-expressions
-	// will link to it by reference after checkRenderStar / analyzeExpr.
-	// Enforce this using NoCopy.
-	_ util.NoCopy
-
-	// Set when the scanNode is created via the exec factory.
-	createdByOpt bool
 
 	// maxResults, if greater than 0, is the maximum number of results that a
 	// scan is guaranteed to return.
