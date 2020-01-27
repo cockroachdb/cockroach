@@ -28,8 +28,10 @@ func registerYCSB(r *testRegistry) {
 		m.Go(func(ctx context.Context) error {
 			ramp := " --ramp=" + ifLocal("0s", "1m")
 			duration := " --duration=" + ifLocal("10s", "10m")
+			c.Run(ctx, c.Node(nodes+1),
+				"./workload init ycsb --insert-count=1000000 --splits=100 {pgurl:1}")
 			cmd := fmt.Sprintf(
-				"./workload run ycsb --init --insert-count=1000000 --splits=100"+
+				"./workload run ycsb --insert-count=1000000 "+
 					" --workload=%s --concurrency=64 --histograms="+perfArtifactsDir+"/stats.json"+
 					ramp+duration+" {pgurl:1-%d}",
 				wl, nodes)

@@ -55,24 +55,34 @@ func registerVersion(r *testRegistry) {
 
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
-		workloads := []string{
-			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
-			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
+		workloads := []struct {
+			init, run string
+		}{
+			{
+				init: "./workload init tpcc --warehouses=1 {pgurl:1}",
+				run:  "./workload run tpcc --tolerate-errors --wait=false --drop --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
+			},
+			{
+				init: "./workload init kv {pgurl:1}",
+				run:  "./workload run kv --tolerate-errors" + loadDuration + " {pgurl:1-%d}",
+			},
 		}
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
-		for i, cmd := range workloads {
-			cmd := cmd // loop-local copy
-			i := i     // ditto
+		for i, workload := range workloads {
+			workload := workload // loop-local copy
+			i := i               // ditto
 			m.Go(func(ctx context.Context) error {
-				cmd = fmt.Sprintf(cmd, nodes)
 				// Direct stderr only to disk. We expect errors from the workload as
 				// nodes are stopped and started.
 				childL, err := t.l.ChildLogger("workload"+strconv.Itoa(i), quietStderr)
 				if err != nil {
 					return err
 				}
-				return c.RunL(ctx, childL, c.Node(nodes+1), cmd)
+				if err := c.RunL(ctx, childL, c.Node(nodes+1), workload.init); err != nil {
+					return err
+				}
+				return c.RunL(ctx, childL, c.Node(nodes+1), fmt.Sprintf(workload.run, nodes))
 			})
 		}
 
