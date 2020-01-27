@@ -43,9 +43,6 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// Note that writes will be performed at the provisional commit timestamp,
 		// txn.Timestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.ReadTimestamp
-		// For compatibility with 19.2 nodes which might not have set ReadTimestamp,
-		// fallback to DeprecatedOrigTimestamp.
-		ba.Timestamp.Forward(txn.DeprecatedOrigTimestamp)
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
 		if ba.Timestamp == (hlc.Timestamp{}) {
