@@ -101,9 +101,7 @@ class Localities extends React.Component<LocalitiesProps, {}> {
   render() {
     return (
       <div>
-        <Helmet>
-          <title>Localities | Debug</title>
-        </Helmet>
+        <Helmet title="Localities | Debug" />
         <section className="section"><h1 className="base-heading">Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }

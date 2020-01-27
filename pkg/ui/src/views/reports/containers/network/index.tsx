@@ -443,9 +443,7 @@ class Network extends React.Component<NetworkProps, {}> {
     const filters = getFilters(this.props.location);
     return (
       <div className="section">
-        <Helmet>
-          <title>Network Diagnostics | Debug</title>
-        </Helmet>
+        <Helmet title="Network Diagnostics | Debug" />
         <h1 className="base-heading">Network Diagnostics</h1>
         <Loading
           loading={!contentAvailable(nodesSummary)}

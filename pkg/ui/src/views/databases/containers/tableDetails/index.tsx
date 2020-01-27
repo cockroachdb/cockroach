@@ -80,9 +80,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
 
     if (tableInfo) {
       return <div>
-        <Helmet>
-          <title>{`${title} Table | Databases`}</title>
-        </Helmet>
+        <Helmet title={`${title} Table | Databases`} />
         <section className="section">
           <section className="section parent-link">
             <Link to="/databases/tables">&lt; Back to Databases</Link>

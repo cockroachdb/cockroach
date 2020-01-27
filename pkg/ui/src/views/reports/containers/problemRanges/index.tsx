@@ -193,9 +193,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Problem Ranges | Debug</title>
-        </Helmet>
+        <Helmet title="Problem Ranges | Debug" />
         <h1 className="base-heading">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
