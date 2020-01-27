@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -320,4 +321,19 @@ func TestLoadGroups(t *testing.T) {
 			makeLoadGroups(nil, numZones, numRoachNodes, numLoadNodes)
 		}, "Failed to panic when number of zones is not divisible by number of load nodes")
 	})
+}
+
+func TestCmdLogFileName(t *testing.T) {
+	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
+
+	const exp = `run_150412.000_n1,3-4,9_cockroach_bla`
+	nodes := nodeListOption{1, 3, 4, 9}
+	assert.Equal(t,
+		exp,
+		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),
+	)
+	assert.Equal(t,
+		exp,
+		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
+	)
 }

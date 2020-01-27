@@ -39,12 +39,7 @@ func registerRoachmart(r *testRegistry) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			l, err := t.l.ChildLogger(fmt.Sprint(nodes[i].i))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer l.close()
-			if err := c.RunL(ctx, l, c.Node(nodes[i].i), args...); err != nil {
+			if err := c.RunE(ctx, c.Node(nodes[i].i), args...); err != nil {
 				t.Fatal(err)
 			}
 		}

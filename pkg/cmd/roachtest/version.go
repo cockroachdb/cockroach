@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -61,18 +60,11 @@ func registerVersion(r *testRegistry) {
 		}
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
-		for i, cmd := range workloads {
+		for _, cmd := range workloads {
 			cmd := cmd // loop-local copy
-			i := i     // ditto
 			m.Go(func(ctx context.Context) error {
 				cmd = fmt.Sprintf(cmd, nodes)
-				// Direct stderr only to disk. We expect errors from the workload as
-				// nodes are stopped and started.
-				childL, err := t.l.ChildLogger("workload"+strconv.Itoa(i), quietStderr)
-				if err != nil {
-					return err
-				}
-				return c.RunL(ctx, childL, c.Node(nodes+1), cmd)
+				return c.RunE(ctx, c.Node(nodes+1), cmd)
 			})
 		}
 
