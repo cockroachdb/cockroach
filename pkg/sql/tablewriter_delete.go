@@ -34,6 +34,8 @@ type tableDeleter struct {
 	alloc *sqlbase.DatumAlloc
 }
 
+var _ tableWriter = &tableDeleter{}
+
 // desc is part of the tableWriter interface.
 func (*tableDeleter) desc() string { return "deleter" }
 
@@ -41,12 +43,12 @@ func (*tableDeleter) desc() string { return "deleter" }
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (td *tableDeleter) init(txn *client.Txn, _ *tree.EvalContext) error {
+func (td *tableDeleter) init(_ context.Context, txn *client.Txn, _ *tree.EvalContext) error {
 	td.tableWriterBase.init(txn)
 	return nil
 }
 
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
+// flushAndStartNewBatch is part of the tableWriter interface.
 func (td *tableDeleter) flushAndStartNewBatch(ctx context.Context) error {
 	return td.tableWriterBase.flushAndStartNewBatch(ctx, td.rd.Helper.TableDesc)
 }
@@ -56,7 +58,7 @@ func (td *tableDeleter) finalize(ctx context.Context, _ bool) (*rowcontainer.Row
 	return nil, td.tableWriterBase.finalize(ctx, td.rd.Helper.TableDesc)
 }
 
-// atBatchEnd is part of the extendedTableWriter interface.
+// atBatchEnd is part of the tableWriter interface.
 func (td *tableDeleter) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
 func (td *tableDeleter) row(ctx context.Context, values tree.Datums, traceKV bool) error {

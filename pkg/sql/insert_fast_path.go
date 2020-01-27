@@ -254,7 +254,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		}
 	}
 
-	return n.run.ti.init(params.p.txn, params.EvalContext())
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but

@@ -83,7 +83,7 @@ func (d *deleteNode) startExec(params runParams) error {
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
 	}
-	return d.run.td.init(params.p.txn, params.EvalContext())
+	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but

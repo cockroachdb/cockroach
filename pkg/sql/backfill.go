@@ -621,7 +621,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
 				if !sc.canClearRangeForDrop(&desc) {
@@ -1671,7 +1671,7 @@ func indexTruncateInTxn(
 			return err
 		}
 		td := tableDeleter{rd: rd, alloc: alloc}
-		if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
+		if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 			return err
 		}
 		sp, err = td.deleteIndex(

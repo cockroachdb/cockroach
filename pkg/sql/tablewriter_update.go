@@ -26,11 +26,13 @@ type tableUpdater struct {
 	ru row.Updater
 }
 
+var _ tableWriter = &tableUpdater{}
+
 // desc is part of the tableWriter interface.
 func (*tableUpdater) desc() string { return "updater" }
 
 // init is part of the tableWriter interface.
-func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
+func (tu *tableUpdater) init(_ context.Context, txn *client.Txn, _ *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
 	return nil
 }
@@ -51,10 +53,10 @@ func (tu *tableUpdater) rowForUpdate(
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, row.CheckFKs, traceKV)
 }
 
-// atBatchEnd is part of the extendedTableWriter interface.
+// atBatchEnd is part of the tableWriter interface.
 func (tu *tableUpdater) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
+// flushAndStartNewBatch is part of the tableWriter interface.
 func (tu *tableUpdater) flushAndStartNewBatch(ctx context.Context) error {
 	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
