@@ -11,7 +11,7 @@
 import * as React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link, withRouter } from "react-router-dom";
 import moment from "moment";
 import _ from "lodash";
 import { Action, bindActionCreators, Dispatch } from "redux";
@@ -140,4 +140,4 @@ const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
     dispatch,
   );
 
-export default connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory));

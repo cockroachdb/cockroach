@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React, { Fragment } from "react";
+import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -107,10 +107,13 @@ class CustomChart extends React.Component<CustomChartProps & RouteComponentProps
 
   currentCharts(): CustomChartState[] {
     const { location } = this.props;
-    if ("metrics" in this.props.location.query) {
+    const metrics = queryByName(location, "metrics");
+    const charts = queryByName(location, "charts");
+
+    if (metrics !== null) {
       try {
         return [{
-          metrics: JSON.parse(location.query.metrics as any),
+          metrics: JSON.parse(metrics),
           axisUnits: AxisUnits.Count,
         }];
       } catch (e) {
@@ -118,18 +121,30 @@ class CustomChart extends React.Component<CustomChartProps & RouteComponentProps
       }
     }
 
-    try {
-      return JSON.parse(location.query.charts as any);
-    } catch (e) {
-      return [new CustomChartState()];
+    if (charts !== null) {
+      try {
+        return JSON.parse(charts);
+      } catch (e) {
+        return [new CustomChartState()];
+      }
     }
+
+    return [new CustomChartState()];
   }
 
   updateUrl(newState: Partial<UrlState>) {
-    const pathname = this.props.location.pathname;
-    this.props.router.push({
+    const { location, history } = this.props;
+    const { pathname, search } = location;
+    const urlParams = new URLSearchParams(search);
+
+    Object.entries(newState).forEach(([key, value]) => {
+      urlParams.set(key, value);
+    });
+
+    history.push({
       pathname,
-      query: _.assign({}, this.props.location.query, newState),
+      search: urlParams.toString(),
+      state: newState,
     });
   }
 
@@ -226,7 +241,7 @@ class CustomChart extends React.Component<CustomChartProps & RouteComponentProps
     const charts = this.currentCharts();
 
     return (
-      <Fragment>
+      <>
         {
           charts.map((chart, i) => (
             <CustomChartTable
@@ -239,13 +254,13 @@ class CustomChart extends React.Component<CustomChartProps & RouteComponentProps
             />
           ))
         }
-      </Fragment>
+      </>
     );
   }
 
   render() {
     return (
-      <Fragment>
+      <>
         <Helmet title="Custom Chart | Debug" />
         <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
@@ -266,7 +281,7 @@ class CustomChart extends React.Component<CustomChartProps & RouteComponentProps
         <section className="section">
           { this.renderChartTables() }
         </section>
-      </Fragment>
+      </>
     );
   }
 }
