@@ -153,8 +153,6 @@ var psycopgBlackList20_1 = blacklist{
 	"tests.test_cursor.CursorTests.test_withhold_no_begin":                                                   "30352",
 	"tests.test_dates.DatetimeTests.test_adapt_datetime":                                                     "36115",
 	"tests.test_dates.DatetimeTests.test_adapt_infinity_tz":                                                  "36116",
-	"tests.test_dates.DatetimeTests.test_adapt_negative_timedelta":                                           "35807",
-	"tests.test_dates.DatetimeTests.test_adapt_timedelta":                                                    "35807",
 	"tests.test_dates.DatetimeTests.test_interval_iso_8601_not_supported":                                    "32562",
 	"tests.test_extras_dictcursor.ExtrasDictCursorRealTests.testDictCursorRealWithNamedCursorFetchAll":       "5807",
 	"tests.test_extras_dictcursor.ExtrasDictCursorRealTests.testDictCursorRealWithNamedCursorFetchMany":      "5807",
