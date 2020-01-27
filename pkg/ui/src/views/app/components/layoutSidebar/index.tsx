@@ -11,9 +11,7 @@
 import React from "react";
 import { connect } from "react-redux";
 import { Link, withRouter, WithRouterProps } from "react-router";
-
 import { SideNavigation } from "src/components";
-
 import "./navigation-bar.styl";
 
 /**
@@ -27,6 +25,7 @@ class Sidebar extends React.Component<{} & WithRouterProps> {
     { path: "/metrics", text: "Metrics", activeFor: [] },
     { path: "/databases", text: "Databases", activeFor: ["/database"] },
     { path: "/statements", text: "Statements", activeFor: ["/statement"] },
+    { path: "/reports/network", text: "Network Latency", activeFor: ["/reports/network"] },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     { path: "/debug", text: "Advanced Debug", activeFor: ["/reports", "/data-distribution", "/raft"] },
   ];

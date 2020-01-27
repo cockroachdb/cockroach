@@ -42,74 +42,217 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 
 	seed := rand.Int()
 	rng := rand.New(rand.NewSource(int64(seed)))
-	nRuns := 100
+	nRuns := 20
 	nRows := 100
-	const nextGroupProb = 0.3
-
-	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(colexec.SupportedAggFns))
-	for i, aggFn := range colexec.SupportedAggFns {
-		aggregations[i].Func = aggFn
-		aggregations[i].ColIdx = []uint32{uint32(i + 1)}
+	const (
+		maxNumGroupingCols = 3
+		nextGroupProb      = 0.2
+	)
+	groupingCols := make([]uint32, maxNumGroupingCols)
+	orderingCols := make([]execinfrapb.Ordering_Column, maxNumGroupingCols)
+	for i := uint32(0); i < maxNumGroupingCols; i++ {
+		groupingCols[i] = i
+		orderingCols[i].ColIdx = i
 	}
-	inputTypes := make([]types.T, len(aggregations)+1)
-	inputTypes[0] = *types.Int
-	outputTypes := make([]types.T, len(aggregations))
+	var da sqlbase.DatumAlloc
 
-	for run := 0; run < nRuns; run++ {
-		var rows sqlbase.EncDatumRows
-		// We will be grouping based on the zeroth column (which we already set to
-		// be of INT type) with the values for the column set manually below.
-		for i := range aggregations {
-			aggFn := aggregations[i].Func
-			var aggTyp *types.T
-			for {
-				aggTyp = sqlbase.RandType(rng)
-				aggInputTypes := []types.T{*aggTyp}
-				if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
-					// Count rows takes no arguments.
-					aggregations[i].ColIdx = []uint32{}
-					aggInputTypes = aggInputTypes[:0]
+	deterministicAggFns := make([]execinfrapb.AggregatorSpec_Func, 0, len(colexec.SupportedAggFns)-1)
+	for _, aggFn := range colexec.SupportedAggFns {
+		if aggFn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
+			// We skip ANY_NOT_NULL aggregate function because it returns
+			// non-deterministic results.
+			continue
+		}
+		deterministicAggFns = append(deterministicAggFns, aggFn)
+	}
+	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(deterministicAggFns))
+	for _, hashAgg := range []bool{false, true} {
+		for numGroupingCols := 1; numGroupingCols <= maxNumGroupingCols; numGroupingCols++ {
+			for i, aggFn := range deterministicAggFns {
+				aggregations[i].Func = aggFn
+				aggregations[i].ColIdx = []uint32{uint32(i + numGroupingCols)}
+			}
+			inputTypes := make([]types.T, len(aggregations)+numGroupingCols)
+			for i := 0; i < numGroupingCols; i++ {
+				inputTypes[i] = *types.Int
+			}
+			outputTypes := make([]types.T, len(aggregations))
+
+			for run := 0; run < nRuns; run++ {
+				var rows sqlbase.EncDatumRows
+				// We will be grouping based on the first numGroupingCols columns (which
+				// we already set to be of INT types) with the values for the column set
+				// manually below.
+				for i := range aggregations {
+					aggFn := aggregations[i].Func
+					var aggTyp *types.T
+					for {
+						aggTyp = sqlbase.RandType(rng)
+						aggInputTypes := []types.T{*aggTyp}
+						if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
+							// Count rows takes no arguments.
+							aggregations[i].ColIdx = []uint32{}
+							aggInputTypes = aggInputTypes[:0]
+						}
+						if isSupportedType(aggTyp) {
+							if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
+								outputTypes[i] = *outputType
+								break
+							}
+						}
+					}
+					inputTypes[i+numGroupingCols] = *aggTyp
 				}
-				if isSupportedType(aggTyp) {
-					if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
-						outputTypes[i] = *outputType
-						break
+				rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+				groupIdx := 0
+				for _, row := range rows {
+					for i := 0; i < numGroupingCols; i++ {
+						if rng.Float64() < nullProbability {
+							row[i] = sqlbase.EncDatum{Datum: tree.DNull}
+						} else {
+							row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(groupIdx))}
+							if rng.Float64() < nextGroupProb {
+								groupIdx++
+							}
+						}
 					}
 				}
-			}
-			inputTypes[i+1] = *aggTyp
-		}
-		rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-		groupIdx := 0
-		for _, row := range rows {
-			row[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(groupIdx))}
-			if rng.Float64() < nextGroupProb {
-				groupIdx++
-			}
-		}
 
-		aggregatorSpec := &execinfrapb.AggregatorSpec{
-			Type:         execinfrapb.AggregatorSpec_NON_SCALAR,
-			GroupCols:    []uint32{0},
-			Aggregations: aggregations,
+				aggregatorSpec := &execinfrapb.AggregatorSpec{
+					Type:         execinfrapb.AggregatorSpec_NON_SCALAR,
+					GroupCols:    groupingCols[:numGroupingCols],
+					Aggregations: aggregations,
+				}
+				if !hashAgg {
+					aggregatorSpec.OrderedGroupCols = groupingCols[:numGroupingCols]
+					orderedCols := execinfrapb.ConvertToColumnOrdering(
+						execinfrapb.Ordering{Columns: orderingCols[:numGroupingCols]},
+					)
+					// Although we build the input rows in "non-decreasing" order, it is
+					// possible that some NULL values are present here and there, so we
+					// need to sort the rows to satisfy the ordering conditions.
+					sort.Slice(rows, func(i, j int) bool {
+						cmp, err := rows[i].Compare(inputTypes, &da, orderedCols, &evalCtx, rows[j])
+						if err != nil {
+							t.Fatal(err)
+						}
+						return cmp < 0
+					})
+				}
+				pspec := &execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+					Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
+				}
+				args := verifyColOperatorArgs{
+					anyOrder:    hashAgg,
+					inputTypes:  [][]types.T{inputTypes},
+					inputs:      []sqlbase.EncDatumRows{rows},
+					outputTypes: outputTypes,
+					pspec:       pspec,
+				}
+				if err := verifyColOperator(args); err != nil {
+					// Columnar aggregators check whether an overflow occurs whereas
+					// processors don't, so we simply swallow the integer out of range
+					// error if such occurs and move on.
+					if strings.Contains(err.Error(), tree.ErrIntOutOfRange.Error()) {
+						continue
+					}
+					fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
+						seed, run, hashAgg)
+					prettyPrintTypes(inputTypes, "t" /* tableName */)
+					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+					t.Fatal(err)
+				}
+			}
 		}
-		for _, hashAgg := range []bool{false, true} {
-			if !hashAgg {
-				aggregatorSpec.OrderedGroupCols = []uint32{0}
-			}
-			pspec := &execinfrapb.ProcessorSpec{
-				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-				Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
-			}
-			if err := verifyColOperator(
-				hashAgg, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows},
-				outputTypes, pspec, 0, /* memoryLimit */
-			); err != nil {
-				fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
-					seed, run, hashAgg)
-				prettyPrintTypes(inputTypes, "t" /* tableName */)
-				prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-				t.Fatal(err)
+	}
+}
+
+func TestDistinctAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var da sqlbase.DatumAlloc
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	seed := rand.Int()
+	rng := rand.New(rand.NewSource(int64(seed)))
+	nRuns := 10
+	nRows := 10
+	maxCols := 3
+	maxNum := 3
+	intTyps := make([]types.T, maxCols)
+	for i := range intTyps {
+		intTyps[i] = *types.Int
+	}
+
+	for run := 0; run < nRuns; run++ {
+		for nCols := 1; nCols <= maxCols; nCols++ {
+			for nDistinctCols := 1; nDistinctCols <= nCols; nDistinctCols++ {
+				for nOrderedCols := 0; nOrderedCols <= nDistinctCols; nOrderedCols++ {
+					var (
+						rows       sqlbase.EncDatumRows
+						inputTypes []types.T
+						ordCols    []execinfrapb.Ordering_Column
+					)
+					if rng.Float64() < randTypesProbability {
+						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					} else {
+						inputTypes = intTyps[:nCols]
+						rows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					}
+					distinctCols := make([]uint32, nDistinctCols)
+					for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
+						distinctCols[i] = uint32(distinctCol)
+					}
+					orderedCols := make([]uint32, nOrderedCols)
+					for i, orderedColIdx := range rng.Perm(nDistinctCols)[:nOrderedCols] {
+						// From the set of distinct columns we need to choose nOrderedCols
+						// to be in the ordered columns set.
+						orderedCols[i] = distinctCols[orderedColIdx]
+					}
+					ordCols = make([]execinfrapb.Ordering_Column, nOrderedCols)
+					for i, col := range orderedCols {
+						ordCols[i] = execinfrapb.Ordering_Column{
+							ColIdx: col,
+						}
+					}
+					sort.Slice(rows, func(i, j int) bool {
+						cmp, err := rows[i].Compare(
+							inputTypes, &da,
+							execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}),
+							&evalCtx, rows[j],
+						)
+						if err != nil {
+							t.Fatal(err)
+						}
+						return cmp < 0
+					})
+
+					spec := &execinfrapb.DistinctSpec{
+						DistinctColumns: distinctCols,
+						OrderedColumns:  orderedCols,
+					}
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Distinct: spec},
+					}
+					args := verifyColOperatorArgs{
+						anyOrder:       true,
+						colsForEqCheck: distinctCols,
+						inputTypes:     [][]types.T{inputTypes},
+						inputs:         []sqlbase.EncDatumRows{rows},
+						outputTypes:    inputTypes,
+						pspec:          pspec,
+					}
+					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
+							seed, run, nCols, distinctCols, orderedCols)
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+						t.Fatal(err)
+					}
+				}
 			}
 		}
 	}
@@ -163,10 +306,14 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
-				if err := verifyColOperator(
-					false /* anyOrder */, [][]types.T{inputTypes},
-					[]sqlbase.EncDatumRows{rows}, inputTypes, pspec, memoryLimit,
-				); err != nil {
+				args := verifyColOperatorArgs{
+					inputTypes:  [][]types.T{inputTypes},
+					inputs:      []sqlbase.EncDatumRows{rows},
+					outputTypes: inputTypes,
+					pspec:       pspec,
+					memoryLimit: memoryLimit,
+				}
+				if err := verifyColOperator(args); err != nil {
 					fmt.Printf("--- seed = %d memoryLimit = %d nCols = %d ---\n", seed, memoryLimit, nCols)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
 					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
@@ -232,10 +379,13 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 					Core:  execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
 				}
-				if err := verifyColOperator(
-					false /* anyOrder */, [][]types.T{inputTypes},
-					[]sqlbase.EncDatumRows{rows}, inputTypes, pspec, 0, /* memoryLimit */
-				); err != nil {
+				args := verifyColOperatorArgs{
+					inputTypes:  [][]types.T{inputTypes},
+					inputs:      []sqlbase.EncDatumRows{rows},
+					outputTypes: inputTypes,
+					pspec:       pspec,
+				}
+				if err := verifyColOperator(args); err != nil {
 					fmt.Printf("--- seed = %d nCols = %d ---\n", seed, nCols)
 					prettyPrintTypes(inputTypes, "t" /* tableName */)
 					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
@@ -353,14 +503,14 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								Core:  execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
 								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
 							}
-							if err := verifyColOperator(
-								true, /* anyOrder */
-								[][]types.T{inputTypes, inputTypes},
-								[]sqlbase.EncDatumRows{lRows, rRows},
-								outputTypes,
-								pspec,
-								0, /* memoryLimit */
-							); err != nil {
+							args := verifyColOperatorArgs{
+								anyOrder:    true,
+								inputTypes:  [][]types.T{inputTypes, inputTypes},
+								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
+								outputTypes: outputTypes,
+								pspec:       pspec,
+							}
+							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 								fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
@@ -535,14 +685,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								Core:  execinfrapb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
 							}
-							if err := verifyColOperator(
-								testSpec.anyOrder,
-								[][]types.T{inputTypes, inputTypes},
-								[]sqlbase.EncDatumRows{lRows, rRows},
-								outputTypes,
-								pspec,
-								0, /* memoryLimit */
-							); err != nil {
+							args := verifyColOperatorArgs{
+								anyOrder:    testSpec.anyOrder,
+								inputTypes:  [][]types.T{inputTypes, inputTypes},
+								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
+								outputTypes: outputTypes,
+								pspec:       pspec,
+							}
+							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
 									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
 								prettyPrintTypes(inputTypes, "left" /* tableName */)
@@ -696,11 +846,14 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:  execinfrapb.ProcessorCoreUnion{Windower: windowerSpec},
 					}
-					if err := verifyColOperator(
-						true /* anyOrder */, [][]types.T{inputTypes},
-						[]sqlbase.EncDatumRows{rows}, append(inputTypes, *types.Int),
-						pspec, 0, /* memoryLimit */
-					); err != nil {
+					args := verifyColOperatorArgs{
+						anyOrder:    true,
+						inputTypes:  [][]types.T{inputTypes},
+						inputs:      []sqlbase.EncDatumRows{rows},
+						outputTypes: append(inputTypes, *types.Int),
+						pspec:       pspec,
+					}
+					if err := verifyColOperator(args); err != nil {
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)

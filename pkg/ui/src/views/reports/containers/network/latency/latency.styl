@@ -1,0 +1,83 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+@require "~styl/base/palette.styl"
+
+.latency-table
+  width 100%
+  table-layout fixed
+  margin-top 17px
+  border-radius 3px
+  box-shadow: 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  background-color #ffffff
+  thead
+    border-bottom 2px solid #e7ecf3
+  tbody
+    .latency-table__cell
+      &:not(:nth-child(1))
+        border-right 1px solid #e7ecf3
+        border-bottom 1px solid #e7ecf3
+    .latency-table__cell--end
+      &:not(:nth-child(1))
+        border-right 2px solid #e7ecf3
+   .latency-table__row
+      &:last-child
+        .latency-table__cell
+          border-bottom none
+  &__cell
+    text-transform uppercase
+    text-align center
+    width 95px
+    padding 9px 0
+    a
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.67
+      letter-spacing 0.3px
+      color $adminui-grey-2
+      &:hover
+        color #0788ff
+        text-decoration underline
+    &:first-child
+      border-right 2px solid #e7ecf3
+    .Chip
+      text-transform lowercase
+
+.latency-table__multiple
+  .latency-table__cell--start
+    border-left 2px solid #e7ecf3
+  th
+    font-family SourceSansPro-SemiBold
+    font-size 12px
+    font-weight 600
+    line-height 1.67
+    letter-spacing 0.3px
+    color $adminui-grey-2
+  thead
+    .region-name
+      border-left 2px solid #e7ecf3
+      text-align center
+      padding-top 30px
+  tbody
+    th
+      width 115px
+      border-bottom 2px solid #e7ecf3
+      padding-left 22px
+    .latency-table__cell
+      &--header
+        &:nth-child(1), &:nth-child(2)
+          width 45px
+          border-bottom none
+          border-right 2px solid #e7ecf3
+    .latency-table__row--end
+        border-bottom 2px solid #e7ecf3
+
+.latency-table__empty
+  padding: 30px;
