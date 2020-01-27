@@ -531,14 +531,16 @@ select
       └── s COLLATE en = 'hello' COLLATE en [type=bool, outer=(1)]
 
 # Realistic example where using constraints as filters help.
+# An even more realistic exmple would have a creation timestamp instead of a
+# seq_num integer, but that makes the plans much more cluttered.
 exec-ddl
 CREATE TABLE "orders" (
   region STRING NOT NULL,
   id INT NOT NULL,
   total DECIMAL NOT NULL,
-  created_at TIMESTAMP NOT NULL,
+  seq_num INT NOT NULL,
   PRIMARY KEY (region, id),
-  UNIQUE INDEX orders_by_created_at (region, created_at, id) STORING (total),
+  UNIQUE INDEX orders_by_seq_num (region, seq_num, id) STORING (total),
   CHECK (region IN ('us-east1', 'us-west1', 'europe-west2'))
 )
 ----
@@ -567,7 +569,7 @@ ALTER TABLE "orders" INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["created_at"],
+    "columns": ["seq_num"],
     "distinct_count": 50,
     "null_count": 0,
     "row_count": 100,
@@ -577,16 +579,16 @@ ALTER TABLE "orders" INJECT STATISTICS '[
 ----
 
 opt
-SELECT sum(total) FROM "orders" WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200
 ----
 scalar-group-by
  ├── columns: sum:5(decimal)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── scan orders@orders_by_created_at
- │    ├── columns: total:3(decimal!null) created_at:4(timestamp!null)
- │    └── constraint: /1/4/2: [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+ ├── scan orders@orders_by_seq_num
+ │    ├── columns: total:3(decimal!null) seq_num:4(int!null)
+ │    └── constraint: /1/4/2: [/'europe-west2'/100 - /'europe-west2'/199] [/'us-east1'/100 - /'us-east1'/199] [/'us-west1'/100 - /'us-west1'/199]
  └── aggregations
       └── sum [type=decimal, outer=(3)]
            └── variable: total [type=decimal]
