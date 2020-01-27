@@ -128,6 +128,10 @@ $input
 [FoldNotFalse, Normalize]
 (Not (False)) => (True)
 
+# FoldNotNull replaces NOT(Null) with Null.
+[FoldNotNull, Normalize]
+(Not (Null)) => (Null (BoolType))
+
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
 # comparisons can be negated except for the JSON comparisons.

@@ -2992,7 +2992,7 @@ WITH
             SELECT
                 *
             FROM
-                (VALUES (NOT NULL, ARRAY[0, 0, 0, 0:::OID]))
+                (VALUES ((SELECT true FROM table41772), ARRAY[0, 0, 0, 0:::OID]))
                     AS l (u, v)
             UNION ALL
                 SELECT
@@ -3009,40 +3009,52 @@ WHERE
     b.u
 ----
 project
- ├── columns: "?column?":12(unknown)
- ├── fd: ()-->(12)
+ ├── columns: "?column?":14(unknown)
+ ├── fd: ()-->(14)
  ├── inner-join (cross)
- │    ├── columns: u:7(bool!null)
+ │    ├── columns: u:9(bool!null)
  │    ├── scan table41772
  │    ├── union-all
- │    │    ├── columns: u:7(bool!null)
- │    │    ├── left columns: column1:3(bool)
- │    │    ├── right columns: column1:5(bool)
+ │    │    ├── columns: u:9(bool!null)
+ │    │    ├── left columns: column1:5(bool)
+ │    │    ├── right columns: column1:7(bool)
  │    │    ├── cardinality: [0 - 3]
  │    │    ├── select
- │    │    │    ├── columns: column1:3(bool!null)
+ │    │    │    ├── columns: column1:5(bool!null)
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(3)
+ │    │    │    ├── fd: ()-->(5)
  │    │    │    ├── values
- │    │    │    │    ├── columns: column1:3(bool)
+ │    │    │    │    ├── columns: column1:5(bool)
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(3)
- │    │    │    │    └── (NOT NULL,) [type=tuple{bool}]
+ │    │    │    │    ├── fd: ()-->(5)
+ │    │    │    │    └── tuple [type=tuple{bool}]
+ │    │    │    │         └── subquery [type=bool]
+ │    │    │    │              └── max1-row
+ │    │    │    │                   ├── columns: bool:4(bool!null)
+ │    │    │    │                   ├── cardinality: [0 - 1]
+ │    │    │    │                   ├── key: ()
+ │    │    │    │                   ├── fd: ()-->(4)
+ │    │    │    │                   └── project
+ │    │    │    │                        ├── columns: bool:4(bool!null)
+ │    │    │    │                        ├── fd: ()-->(4)
+ │    │    │    │                        ├── scan table41772
+ │    │    │    │                        └── projections
+ │    │    │    │                             └── true [type=bool]
  │    │    │    └── filters
- │    │    │         └── variable: column1 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ │    │    │         └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  │    │    └── select
- │    │         ├── columns: column1:5(bool!null)
+ │    │         ├── columns: column1:7(bool!null)
  │    │         ├── cardinality: [0 - 2]
- │    │         ├── fd: ()-->(5)
+ │    │         ├── fd: ()-->(7)
  │    │         ├── values
- │    │         │    ├── columns: column1:5(bool)
+ │    │         │    ├── columns: column1:7(bool)
  │    │         │    ├── cardinality: [2 - 2]
  │    │         │    ├── (NULL,) [type=tuple{bool}]
  │    │         │    └── (false,) [type=tuple{bool}]
  │    │         └── filters
- │    │              └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ │    │              └── variable: column1 [type=bool, outer=(7), constraints=(/7: [/true - /true]; tight), fd=()-->(7)]
  │    └── filters (true)
  └── projections
       └── null [type=unknown]
