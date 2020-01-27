@@ -127,13 +127,14 @@ func setupTPCC(
 	c.Put(ctx, cockroach, "./cockroach", workloadNode)
 	c.Put(ctx, workload, "./workload", workloadNode)
 
-	t.Status("loading fixture")
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
+		t.Status("loading fixture")
 		c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
+		t.Status("")
 	}()
 	return crdbNodes, workloadNode
 }

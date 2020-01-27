@@ -279,9 +279,10 @@ func (r *Replica) evaluateWriteBatch(
 			(canForwardTimestamp && !batcheval.IsEndTxnExceedingDeadline(br.Timestamp, etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
-			// Make sure the returned txn has the actual commit
-			// timestamp. This can be different if the stripped batch was
-			// executed at the server's hlc now timestamp.
+			// Make sure the returned txn has the actual commit timestamp. This can be
+			// different from ba.Txn's if the stripped batch was evaluated at a bumped
+			// timestamp.
+			clonedTxn.ReadTimestamp = br.Timestamp
 			clonedTxn.WriteTimestamp = br.Timestamp
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
