@@ -392,9 +392,6 @@ func IsEndTxnTriggeringRetryError(
 		retry, reason = true, roachpb.RETRY_WRITE_TOO_OLD
 	} else {
 		readTimestamp := txn.ReadTimestamp
-		// For compatibility with 19.2 nodes which might not have set
-		// ReadTimestamp, fallback to DeprecatedOrigTimestamp.
-		readTimestamp.Forward(txn.DeprecatedOrigTimestamp)
 		isTxnPushed := txn.WriteTimestamp != readTimestamp
 
 		// Return a transaction retry error if the commit timestamp isn't equal to
