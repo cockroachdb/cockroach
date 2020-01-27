@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/knz/go-ilog10"
 )
 
 // Timestamp constant values.
@@ -59,11 +58,31 @@ func (t Timestamp) String() string {
 
 		s, ns := uint64(w/1e9), uint64(w%1e9)
 		buf = strconv.AppendUint(buf, s, 10)
-		buf = append(buf, '.')
 
-		const zeroes = "000000000"
-		buf = append(buf, zeroes[:9-ilog10.NumUint32DecimalDigits(uint32(ns))]...)
-		buf = strconv.AppendUint(buf, ns, 10)
+		buf = append(buf, '.', '0', '0', '0', '0', '0', '0', '0', '0', '0')
+		// The following lines expand to:
+		// 		for i := 0; i < 9; i++ {
+		// 			buf[len(buf)-1-i] = byte('0' + ns%10)
+		// 			ns = ns / 10
+		// 		}
+		d := len(buf) - 1
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
+		d, ns = d-1, ns/10
+		buf[d] = byte('0' + ns%10)
 	}
 	buf = append(buf, ',')
 	buf = strconv.AppendInt(buf, int64(t.Logical), 10)

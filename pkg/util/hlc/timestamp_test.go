@@ -134,3 +134,13 @@ func TestTimestampString(t *testing.T) {
 		assert.Equal(t, c.exp, c.ts.String())
 	}
 }
+
+func BenchmarkTimestampString(b *testing.B) {
+	ts := makeTS(-6661234567890, 0)
+
+	for i := 0; i < b.N; i++ {
+		unusedStr = ts.String()
+	}
+}
+
+var unusedStr string
