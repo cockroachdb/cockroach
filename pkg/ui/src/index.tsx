@@ -79,7 +79,7 @@ ReactDOM.render(
       { /* login */}
       { loginRoutes(store) }
 
-      <Route path="/" component={Layout}>
+      <Route path="/" component={normalizeConnectedComponent(Layout)}>
         <IndexRedirect to="overview" />
 
         { /* overview page */ }
