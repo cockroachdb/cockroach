@@ -82,9 +82,7 @@ function DebugPanelLink(props: { name: string, url: string,  note: string }) {
 export default function Debug() {
   return (
     <div className="section">
-      <Helmet>
-        <title>Debug</title>
-      </Helmet>
+      <Helmet title="Debug" />
       <h1 className="base-heading">Advanced Debugging</h1>
       <div className="debug-header">
         <InfoBox>

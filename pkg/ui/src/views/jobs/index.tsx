@@ -315,9 +315,7 @@ class JobsTable extends React.Component<JobsTableProps> {
   render() {
     return (
       <div className="jobs-page">
-        <Helmet>
-          <title>Jobs</title>
-        </Helmet>
+        <Helmet title="Jobs" />
         <section className="section">
           <h1 className="base-heading">
             Jobs

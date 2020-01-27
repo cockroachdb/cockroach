@@ -171,11 +171,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   render() {
     return (
       <div>
-        <Helmet>
-          <title>
-            { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
-          </title>
-        </Helmet>
+        <Helmet title={ "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" } />
         <section className="section"><h1 className="base-heading">Statement Details</h1></section>
         <section className="section section--container">
           <Loading

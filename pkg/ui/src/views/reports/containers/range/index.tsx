@@ -176,9 +176,7 @@ class Range extends React.Component<RangeProps, {}> {
 
     return (
       <div className="section">
-        <Helmet>
-          <title>{ `r${responseRangeID.toString()} Range | Debug` }</title>
-        </Helmet>
+        <Helmet title={ `r${responseRangeID.toString()} Range | Debug` } />
         <h1 className="base-heading">Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />

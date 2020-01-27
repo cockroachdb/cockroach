@@ -343,9 +343,7 @@ class Nodes extends React.Component<NodesProps, {}> {
 
     return (
       <section className="section">
-        <Helmet>
-          <title>Node Diagnostics | Debug</title>
-        </Helmet>
+        <Helmet title="Node Diagnostics | Debug" />
         <h1 className="base-heading">Node Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         <h2 className="base-heading">Nodes</h2>

@@ -93,9 +93,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
 
     return (
       <div className="login-page">
-        <Helmet>
-          <title>Login</title>
-        </Helmet>
+        <Helmet title="Login" />
         <div className="content">
           <section className="section login-page__info">
             <img className="logo" alt="CockroachDB" src={logo} />

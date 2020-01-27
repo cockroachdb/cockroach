@@ -163,9 +163,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
   render() {
     return (
       <Fragment>
-        <Helmet>
-          <title>Enqueue Range</title>
-        </Helmet>
+        <Helmet title="Enqueue Range" />
         <div className="content">
           <section className="section">
             <div className="form-container">
