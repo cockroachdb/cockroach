@@ -48,7 +48,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
 ·                         distributed  false      ·       ·
-·                         vectorized   true       ·       ·
+·                         vectorized   false      ·       ·
 render                    ·            ·          (c, b)  ·
  │                        render 0     c          ·       ·
  │                        render 1     b          ·       ·

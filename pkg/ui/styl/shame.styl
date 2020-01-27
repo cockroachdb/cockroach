@@ -261,3 +261,79 @@
 
 .ant-btn-background-ghost
   box-shadow: none
+  
+.color
+  &--link
+    color $link
+    &:hover
+      text-decoration underline
+
+.ant-checkbox-wrapper
+  &:hover
+    .ant-checkbox-inner
+      border solid 1px $checkbox-border-hover
+      background $popover-border-color
+  .ant-checkbox-inner
+    border solid 1px $checkbox-border
+    border-radius 3px
+  .ant-checkbox-checked
+    &:hover
+      .ant-checkbox-inner
+        border solid 1px $link
+        background $link
+    .ant-checkbox-inner
+      background-color $link
+  span
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $popover-color
+
+.Chip--tooltip
+  width 250px
+  .ant-tooltip-inner
+    background-color black
+    padding 12px 18px
+  span, p
+    font-family Lato-Bold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $table-border-color
+  .Chip--tooltip__nodes
+    margin-bottom 25px
+    display flex
+    justify-content space-between
+    &--item
+      width 95px
+      &:first-child
+        margin-right 8px
+      &:last-child
+        margin-left 8px
+    .ant-divider
+      background #3b4a60
+      margin 0
+    &--item-title, &--item-description
+      font-family Lato-Regular
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $table-border-color
+      margin 0
+    &--item-title
+      font-family Lato-Bold
+      line-height 1.71
+  .color
+    &--green
+      color $green
+    &--lightgreen
+      color $lightgreen
+    &--grey
+      color $grey
+    &--lightblue
+      color $lightblue
+    &--blue
+      color $blue
+    &--yellow
+      color $yellow

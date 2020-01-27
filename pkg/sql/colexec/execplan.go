@@ -300,15 +300,6 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		return true, nil
 
 	case core.Distinct != nil:
-		var orderedCols util.FastIntSet
-		for _, col := range core.Distinct.OrderedColumns {
-			orderedCols.Add(int(col))
-		}
-		for _, col := range core.Distinct.DistinctColumns {
-			if !orderedCols.Contains(int(col)) {
-				return false, errors.Newf("unsorted distinct not supported")
-			}
-		}
 		return true, nil
 
 	case core.Ordinality != nil:
@@ -586,12 +577,16 @@ func NewColOperator(
 			}
 
 			var distinctCols, orderedCols util.FastIntSet
+			allSorted := true
 
 			for _, col := range core.Distinct.OrderedColumns {
 				orderedCols.Add(int(col))
 			}
 			for _, col := range core.Distinct.DistinctColumns {
 				distinctCols.Add(int(col))
+				if !orderedCols.Contains(int(col)) {
+					allSorted = false
+				}
 			}
 			if !orderedCols.SubsetOf(distinctCols) {
 				return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
@@ -603,9 +598,16 @@ func NewColOperator(
 			if err != nil {
 				return result, err
 			}
-			result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
-			result.IsStreaming = true
-
+			// TODO(yuzefovich): implement the distinct on partially ordered columns.
+			if allSorted {
+				result.Op, err = NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
+				result.IsStreaming = true
+			} else {
+				result.Op = NewUnorderedDistinct(
+					NewAllocator(ctx, streamingMemAccount), inputs[0],
+					core.Distinct.DistinctColumns, typs,
+				)
+			}
 		case core.Ordinality != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err

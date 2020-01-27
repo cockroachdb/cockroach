@@ -210,8 +210,6 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 		// vector. This vector would be an ordered list of indices indicating the
 		// ordering of the bucket-grouped rows of input. The same linked list is
 		// traversed from each head to form this ordered list.
-		headID := uint64(0)
-		curID := uint64(0)
 
 		// Since next is no longer useful and pre-allocated to the appropriate size,
 		// we can use it as the selection vector. This way we don't have to
@@ -221,15 +219,25 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 		// size, we can use it for the distinct vector.
 		op.distinct = op.ht.visited
 
-		for i := uint64(0); i < op.ht.vals.length; i++ {
-			op.distinct[i] = false
-			for !op.ht.head[headID] || curID == 0 {
-				op.distinct[i] = true
-				headID++
-				curID = headID
+		var selIdx uint64
+		// We calculate keyID for tuple at index i as "i+1," so we start from
+		// position 1.
+		for i, isHead := range op.ht.head[1:] {
+			if isHead {
+				// The tuple at index i is the "head" of the linked list of tuples that
+				// are the same on the grouping columns, so we will include the "head"
+				// as the first tuple of the group and then will include all other
+				// tuples that are the "same."
+				op.sel[selIdx] = uint64(i)
+				op.distinct[selIdx] = true
+				selIdx++
+				// curID value of 0 indicates the end of the linked list.
+				for curID := op.ht.same[i+1]; curID != 0; curID = op.ht.same[curID] {
+					op.sel[selIdx] = curID - 1
+					op.distinct[selIdx] = false
+					selIdx++
+				}
 			}
-			op.sel[i] = curID - 1
-			curID = op.ht.same[curID]
 		}
 	}
 

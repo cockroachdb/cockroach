@@ -1,0 +1,80 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+.Legend
+  display flex
+  max-width 713px
+  background-color #ffffff
+  border-radius 3px
+  box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  padding 20px 24px 12px
+  &--container
+    &:first-child
+      flex .72
+    &:last-child
+      flex .28
+    &__head
+      margin 0 0 16px
+      display flex
+      align-items center
+      &--title
+        text-transform uppercase
+        font-family SourceSansPro-SemiBold
+        font-size 12px
+        color #5f6c87
+        line-height 1.17
+        letter-spacing 1.5px
+        margin 0
+      .info-icon
+        color #7e89a9
+        font-size 16px
+        margin-left 7px
+    &__body
+      display flex
+      &--element
+        display flex
+        flex-direction column
+        align-items center
+        margin-right 6px
+        p
+          margin-top 9px
+          text-transform uppercase
+          font-family SourceSansPro-SemiBold
+          font-size 12px
+          color #5f6c87
+          line-height 1.17
+          letter-spacing 1.5px
+
+.noConnections__table
+  width 100%
+  td, th
+    padding 11px 20px
+    font-family Lato-Bold
+    font-size 12px
+    line-height 2
+    letter-spacing 0.1px
+    color #5f6c87
+    &:nth-child(3)
+      border-left 1px solid #e7ecf3
+  &--item
+    td
+      padding 16px 20px
+      line-height 1.57
+      font-size 14px
+      width 30%
+      &:nth-child(2n)
+        width 20%
+    &__bold
+      font-family SourceSansPro-SemiBold
+    &__normal
+      font-family SourceSansPro-Regular
+  &--item:nth-child(2n)
+    background #f6f6f6
+ 
