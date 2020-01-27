@@ -176,84 +176,7 @@ func _CHECK_COL_WITH_NULLS(
 	// {{/*
 }
 
-func _REHASH_BODY(
-	ctx context.Context,
-	ht *hashTable,
-	buckets []uint64,
-	keys _GOTYPESLICE,
-	nulls *coldata.Nulls,
-	nKeys uint64,
-	sel []uint16,
-	_HAS_SEL bool,
-	_HAS_NULLS bool,
-) { // */}}
-	// {{define "rehashBody" -}}
-	// Early bounds checks.
-	_ = buckets[nKeys-1]
-	// {{ if .HasSel }}
-	_ = sel[nKeys-1]
-	// {{ else }}
-	_ = execgen.UNSAFEGET(keys, int(nKeys-1))
-	// {{ end }}
-	for i := uint64(0); i < nKeys; i++ {
-		ht.cancelChecker.check(ctx)
-		// {{ if .HasSel }}
-		selIdx := sel[i]
-		// {{ else }}
-		selIdx := i
-		// {{ end }}
-		// {{ if .HasNulls }}
-		if nulls.NullAt(uint16(selIdx)) {
-			continue
-		}
-		// {{ end }}
-		v := execgen.UNSAFEGET(keys, int(selIdx))
-		p := uintptr(buckets[i])
-		_ASSIGN_HASH(p, v)
-		buckets[i] = uint64(p)
-	}
-	// {{end}}
-
-	// {{/*
-}
-
 // */}}
-
-// rehash takes an element of a key (tuple representing a row of equality
-// column values) at a given column and computes a new hash by applying a
-// transformation to the existing hash.
-func (ht *hashTable) rehash(
-	ctx context.Context,
-	buckets []uint64,
-	keyIdx int,
-	t coltypes.T,
-	col coldata.Vec,
-	nKeys uint64,
-	sel []uint16,
-) {
-	switch t {
-	// {{range $hashType := .HashTemplate}}
-	case _TYPES_T:
-		keys, nulls := col._TemplateType(), col.Nulls()
-		if col.MaybeHasNulls() {
-			if sel != nil {
-				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, true)
-			} else {
-				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, true)
-			}
-		} else {
-			if sel != nil {
-				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, false)
-			} else {
-				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, false)
-			}
-		}
-
-	// {{end}}
-	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
-	}
-}
 
 // checkCol determines if the current key column in the groupID buckets matches
 // the specified equality column key. If there is a match, then the key is added
@@ -285,6 +208,87 @@ func (ht *hashTable) checkCol(t coltypes.T, keyColIdx int, nToCheck uint16, sel 
 				nToCheck,
 				false)
 		}
+	// {{end}}
+	default:
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
+	}
+}
+
+// {{/*
+func _REHASH_BODY(
+	ctx context.Context,
+	ht *hashTable,
+	buckets []uint64,
+	keys _GOTYPESLICE,
+	nulls *coldata.Nulls,
+	nKeys uint64,
+	sel []uint16,
+	_HAS_SEL bool,
+	_HAS_NULLS bool,
+) { // */}}
+	// {{define "rehashBody" -}}
+	// Early bounds checks.
+	_ = buckets[nKeys-1]
+	// {{ if .HasSel }}
+	_ = sel[nKeys-1]
+	// {{ else }}
+	_ = execgen.UNSAFEGET(keys, int(nKeys-1))
+	// {{ end }}
+	for i := uint64(0); i < nKeys; i++ {
+		cancelChecker.check(ctx)
+		// {{ if .HasSel }}
+		selIdx := sel[i]
+		// {{ else }}
+		selIdx := i
+		// {{ end }}
+		// {{ if .HasNulls }}
+		if nulls.NullAt(uint16(selIdx)) {
+			continue
+		}
+		// {{ end }}
+		v := execgen.UNSAFEGET(keys, int(selIdx))
+		p := uintptr(buckets[i])
+		_ASSIGN_HASH(p, v)
+		buckets[i] = uint64(p)
+	}
+	// {{end}}
+
+	// {{/*
+}
+
+// */}}
+
+// rehash takes an element of a key (tuple representing a row of equality
+// column values) at a given column and computes a new hash by applying a
+// transformation to the existing hash.
+func rehash(
+	ctx context.Context,
+	buckets []uint64,
+	keyIdx int,
+	t coltypes.T,
+	col coldata.Vec,
+	nKeys uint64,
+	sel []uint16,
+	cancelChecker CancelChecker,
+) {
+	switch t {
+	// {{range $hashType := .HashTemplate}}
+	case _TYPES_T:
+		keys, nulls := col._TemplateType(), col.Nulls()
+		if col.MaybeHasNulls() {
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, true)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, true)
+			}
+		} else {
+			if sel != nil {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, true, false)
+			} else {
+				_REHASH_BODY(ctx, ht, buckets, keys, nulls, nKeys, sel, false, false)
+			}
+		}
+
 	// {{end}}
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
