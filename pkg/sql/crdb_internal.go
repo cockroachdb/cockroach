@@ -453,10 +453,18 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     		INT
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		isAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Beware: we're querying system.jobs as root; we need to be careful to filter
+		// out results that the current user is not able to see.
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: p.SessionData().User},
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			query)
 		if err != nil {
 			return err
@@ -472,6 +480,16 @@ CREATE TABLE crdb_internal.jobs (
 
 			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
+
+			// We filter out masked rows before we allocate all the
+			// datums. Needless allocate when not necessary.
+			sameUser := payload != nil && payload.Username == currentUser
+			if canAccess := isAdmin || sameUser; !canAccess {
+				// This user is neither an admin nor the user who created the
+				// job. They cannot see this row.
+				continue
+			}
+
 			if err != nil {
 				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
 			} else {
