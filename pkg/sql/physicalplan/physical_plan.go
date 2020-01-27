@@ -602,6 +602,9 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 func (p *PhysicalPlan) AddFilter(
 	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
 ) error {
+	if expr == nil {
+		return errors.Errorf("nil filter")
+	}
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
 		// The last stage contains render expressions or a limit. The filter refers
@@ -629,6 +632,7 @@ func (p *PhysicalPlan) AddFilter(
 		return err
 	}
 	if !post.Filter.Empty() {
+		// Either Expr or LocalExpr will be set (not both).
 		if filter.Expr != "" {
 			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
 		} else if filter.LocalExpr != nil {
