@@ -802,7 +802,12 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		// can be safely failed.
 		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
 			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", id)
-			payload.Error = "job predates cluster upgrade and must be re-run"
+			versionErr := errors.New("job predates cluster upgrade and must be re-run")
+			payload.Error = versionErr.Error()
+			encodedErr := errors.EncodeError(ctx, versionErr)
+			// Technically this error isn't an error from the resumer, but this is the
+			// only place to put it.
+			payload.ResumeErrors = append(payload.ResumeErrors, &encodedErr)
 			payloadBytes, err := protoutil.Marshal(payload)
 			if err != nil {
 				return err

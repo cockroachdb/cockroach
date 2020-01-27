@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.sql.jobs.jobspb;
 option go_package = "jobspb";
 
+import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
@@ -266,7 +267,11 @@ message Payload {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
   reserved 7;
+  // TODO (lucy): Deprecate the string error field and move to using the encoded
+  // errors everywhere.
   string error = 8;
+  repeated errorspb.EncodedError resume_errors = 17;
+  repeated errorspb.EncodedError cleanup_errors = 18;
   Lease lease = 9;
   oneof details {
     BackupDetails backup = 10;
