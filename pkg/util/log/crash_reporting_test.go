@@ -15,15 +15,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"reflect"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -219,34 +216,4 @@ func makeTypeAssertionErr() (result runtime.Error) {
 	var x interface{}
 	_ = x.(int)
 	return nil
-}
-
-func genStack2() *StackTrace {
-	return NewStackTrace(0)
-}
-
-func genStack1() *StackTrace {
-	return genStack2()
-}
-
-func TestStackTrace(t *testing.T) {
-	st := genStack1()
-
-	t.Logf("Stack trace:\n%s", PrintStackTrace(st))
-
-	encoded := EncodeStackTrace(st)
-	t.Logf("encoded:\n%s", encoded)
-	if !strings.Contains(encoded, `"function":"genStack1"`) ||
-		!strings.Contains(encoded, `"function":"genStack2"`) {
-		t.Fatalf("function genStack not in call stack:\n%s", encoded)
-	}
-
-	st2, b := DecodeStackTrace(encoded)
-	if !b {
-		t.Fatalf("decode failed")
-	}
-
-	if !reflect.DeepEqual(st, st2) {
-		t.Fatalf("stack traces not identical: %v", pretty.Diff(st, st2))
-	}
 }
