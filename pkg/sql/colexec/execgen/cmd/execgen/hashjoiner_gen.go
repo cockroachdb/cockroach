@@ -24,17 +24,17 @@ func genHashJoiner(wr io.Writer) error {
 
 	s := string(t)
 
-	distinctCollectRightOuter := makeFunctionRegex("_DISTINCT_COLLECT_RIGHT_OUTER", 3)
-	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectRightOuter" buildDict "Global" . "UseSel" $3}}`)
+	distinctCollectRightOuter := makeFunctionRegex("_DISTINCT_COLLECT_PROBE_OUTER", 3)
+	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectProbeOuter" buildDict "Global" . "UseSel" $3}}`)
 
-	distinctCollectNoOuter := makeFunctionRegex("_DISTINCT_COLLECT_NO_OUTER", 4)
-	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectNoOuter" buildDict "Global" . "UseSel" $4}}`)
+	distinctCollectNoOuter := makeFunctionRegex("_DISTINCT_COLLECT_PROBE_NO_OUTER", 4)
+	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectProbeNoOuter" buildDict "Global" . "UseSel" $4}}`)
 
-	collectRightOuter := makeFunctionRegex("_COLLECT_RIGHT_OUTER", 5)
-	s = collectRightOuter.ReplaceAllString(s, `{{template "collectRightOuter" buildDict "Global" . "UseSel" $5}}`)
+	collectRightOuter := makeFunctionRegex("_COLLECT_PROBE_OUTER", 5)
+	s = collectRightOuter.ReplaceAllString(s, `{{template "collectProbeOuter" buildDict "Global" . "UseSel" $5}}`)
 
-	collectNoOuter := makeFunctionRegex("_COLLECT_NO_OUTER", 5)
-	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "UseSel" $5}}`)
+	collectNoOuter := makeFunctionRegex("_COLLECT_PROBE_NO_OUTER", 5)
+	s = collectNoOuter.ReplaceAllString(s, `{{template "collectProbeNoOuter" buildDict "Global" . "UseSel" $5}}`)
 
 	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
