@@ -557,9 +557,15 @@ func (p *planner) removeInterleaveBackReference(
 	if err != nil {
 		return err
 	}
+	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
 		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
+			if foundAncestor {
+				return errors.AssertionFailedf(
+					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.Name)
+			}
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
+			foundAncestor = true
 		}
 	}
 	if t != tableDesc {

@@ -435,6 +435,8 @@ message ConstraintToUpdate {
 // updated versions, and the table's new primary key is written into the descriptor.
 message PrimaryKeySwap {
   option (gogoproto.equal) = true;
+  // old_primary_index_id is the ID of the old primary index for the table.
+  optional uint32 old_primary_index_id = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   // new_primary_index_id is the ID of the new primary index for the table.
   optional uint32 new_primary_index_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
