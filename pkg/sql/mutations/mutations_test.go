@@ -19,7 +19,7 @@ import (
 
 func TestPostgresMutator(t *testing.T) {
 	q := `
-		CREATE TABLE t (s STRING FAMILY fam1, b BYTES, FAMILY fam2 (b), PRIMARY KEY (s ASC, b DESC))
+		CREATE TABLE t (s STRING FAMILY fam1, b BYTES, FAMILY fam2 (b), PRIMARY KEY (s ASC, b DESC), INDEX (s) STORING (b))
 		    PARTITION BY LIST (s)
 		        (
 		            PARTITION europe_west VALUES IN ('a', 'b')
@@ -35,7 +35,7 @@ func TestPostgresMutator(t *testing.T) {
 			t.Fatal("expected changed")
 		}
 		mutated = strings.TrimSpace(mutated)
-		expect := `CREATE TABLE t (s TEXT, b BYTEA, PRIMARY KEY (s ASC, b DESC));`
+		expect := `CREATE TABLE t (s TEXT, b BYTEA, PRIMARY KEY (s ASC, b DESC), INDEX (s) INCLUDE (b));`
 		if mutated != expect {
 			t.Fatalf("unexpected: %s", mutated)
 		}
@@ -46,7 +46,7 @@ func TestPostgresMutator(t *testing.T) {
 			t.Fatal("expected changed")
 		}
 		mutated = strings.TrimSpace(mutated)
-		expect := `CREATE TABLE t (s TEXT, b BYTEA, PRIMARY KEY (s, b));`
+		expect := "CREATE TABLE t (s TEXT, b BYTEA, PRIMARY KEY (s, b));\nCREATE INDEX ON t (s) INCLUDE (b);"
 		if mutated != expect {
 			t.Fatalf("unexpected: %s", mutated)
 		}
