@@ -13,6 +13,7 @@ import React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import Helmet from "react-helmet";
+import { Action, bindActionCreators, Dispatch } from "redux";
 
 import Loading from "src/views/shared/components/loading";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -213,11 +214,15 @@ const DataDistributionPageConnected = connect(
     localityTree: selectLocalityTree(state),
     localityTreeErrors: localityTreeErrors(state),
   }),
-  () => ({
-    refreshDataDistribution,
-    refreshNodes,
-    refreshLiveness,
-  }),
+  (dispatch: Dispatch<Action, AdminUIState>) =>
+    bindActionCreators(
+      {
+        refreshDataDistribution,
+        refreshNodes,
+        refreshLiveness,
+      },
+      dispatch,
+    ),
 )(DataDistributionPage);
 
 export default DataDistributionPageConnected;

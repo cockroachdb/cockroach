@@ -12,7 +12,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import cn from "classnames";
 import { Icon } from "antd";
-import { Action, bindActionCreators, Dispatch } from "redux";
+import { Action, Dispatch } from "redux";
 
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -132,15 +132,11 @@ const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>, props: TableSectionProps) =>
-  bindActionCreators(
-    {
-      saveExpandedState: (isCollapsed: boolean) => {
-        const tableSectionKey = getTableSectionKey(props.id);
-        dispatch(setLocalSetting(tableSectionKey, isCollapsed));
-      },
-    },
-    dispatch,
-  );
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>, props: TableSectionProps) => ({
+  saveExpandedState: (isCollapsed: boolean) => {
+    const tableSectionKey = getTableSectionKey(props.id);
+    dispatch(setLocalSetting(tableSectionKey, isCollapsed));
+  },
+});
 
 export default connect(mapStateToProps, mapDispatchToProps)(TableSection);
