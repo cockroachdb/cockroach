@@ -257,8 +257,17 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		if err != nil {
 			return errors.Wrapf(err, "Job %d could not be loaded. The job may not have succeeded", jobs[i])
 		}
-		if j.Payload().Error != "" {
-			return errors.New(fmt.Sprintf("Job %d failed with error %s", jobs[i], j.Payload().Error))
+		// All new queued jobs should have the resumer_errors field populated.
+		// Return this error directly.
+		// TODO (lucy): This returns the first job failure, which is fine for now
+		// because we expect at most one (schema change) job to be queued.
+		// user in some way.
+		if Status(j.Progress().RunningStatus) == StatusFailed {
+			// Get the last error.
+			decodedErr := errors.DecodeError(ctx, *j.Payload().ResumeErrors[len(j.Payload().ResumeErrors)-1])
+			if decodedErr != nil {
+				return decodedErr
+			}
 		}
 	}
 	return nil
@@ -325,7 +334,8 @@ var DefaultCancelInterval = base.DefaultTxnHeartbeatInterval
 //
 // DefaultAdoptInterval is mutable for testing. NB: Updates to this value after
 // Registry.Start has been called will not have any effect.
-var DefaultAdoptInterval = 30 * time.Second
+// TODO (lucy): change this back
+var DefaultAdoptInterval = 100 * time.Millisecond
 
 // gcInterval is how often we check for and delete job records older than the
 // retention limit.

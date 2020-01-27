@@ -460,9 +460,9 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 	// get completely dropped.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -919,9 +919,9 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Block schema changes so the data is not cleaned up until we're ready.
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: func() error {
 				<-blockSchemaChanges
 				return nil
@@ -1072,9 +1072,9 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -1159,9 +1159,9 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	// actually dropped; it will be left in the "deleted" state.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -1213,9 +1213,9 @@ func TestDropNameReuse(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Block schema changes through synchronous path.
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecQuickly: true,
 		},
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{

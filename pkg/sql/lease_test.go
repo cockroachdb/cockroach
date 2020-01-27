@@ -515,18 +515,18 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
 	var mu syncutil.Mutex
-	clearSchemaChangers := false
+	// clearSchemaChangers := false
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				mu.Lock()
-				defer mu.Unlock()
-				if clearSchemaChangers {
-					tscc.ClearSchemaChangers()
-				}
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	mu.Lock()
+			// 	defer mu.Unlock()
+			// 	if clearSchemaChangers {
+			// 		tscc.ClearSchemaChangers()
+			// 	}
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -546,7 +546,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Block schema changers so that the table we're about to DROP is not actually
 	// dropped; it will be left in a "deleted" state.
 	mu.Lock()
-	clearSchemaChangers = true
+	// clearSchemaChangers = true
 	mu.Unlock()
 
 	// DROP the table
@@ -592,7 +592,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var mu syncutil.Mutex
-	clearSchemaChangers := false
+	// clearSchemaChangers := false
 
 	var waitTableID sqlbase.ID
 	deleted := make(chan bool)
@@ -612,13 +612,13 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			},
 		},
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				mu.Lock()
-				defer mu.Unlock()
-				if clearSchemaChangers {
-					tscc.ClearSchemaChangers()
-				}
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	mu.Lock()
+			// 	defer mu.Unlock()
+			// 	if clearSchemaChangers {
+			// 		tscc.ClearSchemaChangers()
+			// 	}
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -650,7 +650,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// dropped; it will be left in a "deleted" state.
 	// Also install a way to wait for the config update to be processed.
 	mu.Lock()
-	clearSchemaChangers = true
+	// clearSchemaChangers = true
 	waitTableID = tableDesc.ID
 	mu.Unlock()
 
@@ -1384,9 +1384,9 @@ func TestIncrementTableVersion(t *testing.T) {
 		// transaction until the new version has been published to the
 		// entire cluster.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			TwoVersionLeaseViolation: func() {
 				atomic.AddInt64(&violations, 1)
 			},
@@ -1486,9 +1486,9 @@ func TestTwoVersionInvariantRetryError(t *testing.T) {
 		// transaction until the new version has been published to the
 		// entire cluster.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			TwoVersionLeaseViolation: func() {
 				atomic.AddInt64(&violations, 1)
 			},

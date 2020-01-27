@@ -708,22 +708,13 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
 	mutationID := tableDesc.ClusterVersion.NextMutationID
-
-	// If the table being schema changed was created in the same txn, we do not
-	// want to update/create a job as we expect the schema change to be executed
-	// immediately (not via the schema changer). For tables created in the same
-	// txn the next mutation ID will not have been allocated and the mutationID
-	// will be an invalid ID. This is fine because the mutation will be processed
-	// immediately.
-	if tableDesc.IsNewTable() {
-		return mutationID, nil
-	}
-
 	var job *jobs.Job
 	var spanList []jobspb.ResumeSpanList
-	if len(tableDesc.MutationJobs) > len(tableDesc.ClusterVersion.MutationJobs) {
-		// Already created a job and appended the job ID to MutationJobs.
-		jobID := tableDesc.MutationJobs[len(tableDesc.MutationJobs)-1].JobID
+	if len(*p.extendedEvalCtx.Jobs) > 0 {
+		// Already created a schema change job in this transaction.
+		// TODO (lucy): This assumes that we're only queuing at most one job per
+		// transaction and that it's a schema change, but this won't always be true.
+		jobID := []int64(*p.extendedEvalCtx.Jobs)[0]
 		var err error
 		job, err = p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
@@ -742,20 +733,28 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	}
 
 	if job == nil {
+		// Queue a new job.
 		jobRecord := jobs.Record{
 			Description:   stmt,
 			Username:      p.User(),
 			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-			Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
-			Progress:      jobspb.SchemaChangeProgress{},
+			Details: jobspb.SchemaChangeDetails{
+				TableID:        tableDesc.ID,
+				MutationID:     mutationID,
+				ResumeSpanList: spanList,
+			},
+			Progress: jobspb.SchemaChangeProgress{},
 		}
-		job = p.ExecCfg().JobRegistry.NewJob(jobRecord)
-		if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-			return sqlbase.InvalidMutationID, err
+		job, err := p.extendedEvalCtx.QueueJob(jobRecord)
+		if err != nil {
+			return sqlbase.InvalidMutationID, nil
 		}
 		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 			MutationID: mutationID, JobID: *job.ID()})
+		log.Infof(ctx, "queued schema change job %+v for table %d, mutation %d",
+			job, tableDesc.ID, mutationID)
 	} else {
+		// Update the existing job.
 		if err := job.WithTxn(p.txn).SetDetails(
 			ctx,
 			jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
@@ -770,8 +769,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		); err != nil {
 			return sqlbase.InvalidMutationID, err
 		}
+		log.Infof(ctx, "updated schema change job %+v for table %d, mutation %d",
+			job, tableDesc.ID, mutationID)
 	}
-
 	return mutationID, nil
 }
 
@@ -837,22 +837,12 @@ func (p *planner) createDropTablesJob(
 
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
+// TODO (lucy): There may be places where queueSchemaChange is called but where
+// we don't create a job (e.g., creating tables in the Adding state). Figure
+// out where all those places are and queue a job.
 func (p *planner) queueSchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
-	sc := SchemaChanger{
-		tableID:              tableDesc.GetID(),
-		mutationID:           mutationID,
-		nodeID:               p.extendedEvalCtx.NodeID,
-		leaseMgr:             p.LeaseMgr(),
-		jobRegistry:          p.ExecCfg().JobRegistry,
-		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
-		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
-		clock:                p.ExecCfg().Clock,
-		settings:             p.ExecCfg().Settings,
-		execCfg:              p.ExecCfg(),
-	}
-	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
 // writeSchemaChange effectively writes a table descriptor to the
@@ -920,7 +910,7 @@ func (p *planner) writeTableDescToBatch(
 		}
 
 		// Schedule a schema changer for later.
-		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
+		// p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(); err != nil {

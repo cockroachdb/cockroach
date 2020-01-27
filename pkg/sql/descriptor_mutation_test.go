@@ -815,7 +815,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
+			// SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
@@ -1021,9 +1021,9 @@ func TestTableMutationQueue(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}

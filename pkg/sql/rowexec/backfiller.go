@@ -268,6 +268,10 @@ func GetResumeSpans(
 	// Find the job.
 	var jobID int64
 	if len(tableDesc.MutationJobs) > 0 {
+		// TODO (lucy): We need to get rid of MutationJobs. AFAIK this is the only
+		// place where we need to get the job where it's not completely
+		// straightforward to remove the use of MutationJobs, since the backfiller
+		// doesn't know which job it's associated with.
 		for _, job := range tableDesc.MutationJobs {
 			if job.MutationID == mutationID {
 				jobID = job.JobID

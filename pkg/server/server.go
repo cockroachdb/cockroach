@@ -1536,6 +1536,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
+	// TODO (lucy): The SchemaChangeManager doesn't do anything right now. It's
+	// kept here in case we need to re-implement it to pick up async schema
+	// changes to be compatible with 19.2.
 	var testingKnobs *sql.SchemaChangerTestingKnobs
 	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)

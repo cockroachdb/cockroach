@@ -142,7 +142,10 @@ func (p *planner) createDescriptorWithID(
 		return err
 	}
 	if isTable && mutDesc.Adding() {
-		p.queueSchemaChange(mutDesc.TableDesc(), sqlbase.InvalidMutationID)
+		// Queue a schema change job to eventually make the table public.
+		if _, err := p.createOrUpdateSchemaChangeJob(ctx, mutDesc, "TODO: get create table statement"); err != nil {
+			return err
+		}
 	}
 	return nil
 }

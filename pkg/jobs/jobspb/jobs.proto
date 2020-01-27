@@ -156,6 +156,8 @@ message DroppedTableDetails {
 }
 
 message SchemaChangeDetails {
+  uint32 table_id = 5 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  uint32 mutation_id = 6 [(gogoproto.customname) = "MutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.MutationID"];
   reserved 1;
   // A schema change can involve running multiple processors backfilling
   // or deleting data. They occasionally checkpoint Spans so that the

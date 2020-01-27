@@ -38,9 +38,9 @@ func TestWriteResumeSpan(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-					tscc.ClearSchemaChangers()
-				},
+				// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				// 	tscc.ClearSchemaChangers()
+				// },
 				AsyncExecNotification: func() error {
 					return errors.New("async schema changer disabled")
 				},

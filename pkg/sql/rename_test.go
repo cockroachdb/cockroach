@@ -368,14 +368,14 @@ func TestRenameDuringDrainingName(t *testing.T) {
 						<-finishRename
 					}
 				},
-				SyncFilter: func(tscc TestingSchemaChangerCollection) {
-					// Clear the schema changer for the second RENAME so
-					// that we can be sure that the first schema changer
-					// runs both schema changes.
-					if startRename == nil {
-						tscc.ClearSchemaChangers()
-					}
-				},
+				// SyncFilter: func(tscc TestingSchemaChangerCollection) {
+				// 	// Clear the schema changer for the second RENAME so
+				// 	// that we can be sure that the first schema changer
+				// 	// runs both schema changes.
+				// 	if startRename == nil {
+				// 		tscc.ClearSchemaChangers()
+				// 	}
+				// },
 			},
 		}}
 

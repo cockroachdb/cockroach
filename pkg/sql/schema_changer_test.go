@@ -309,9 +309,9 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecQuickly: true,
 		},
 	}
@@ -1738,9 +1738,9 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
@@ -3215,14 +3215,14 @@ func TestSchemaChangeCompletion(t *testing.T) {
 	var restartSchemaChange chan struct{}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				notify := notifySchemaChange
-				restart := restartSchemaChange
-				if notify != nil {
-					close(notify)
-					<-restart
-				}
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	notify := notifySchemaChange
+			// 	restart := restartSchemaChange
+			// 	if notify != nil {
+			// 		close(notify)
+			// 		<-restart
+			// 	}
+			// },
 			// Turn off asynchronous schema change manager.
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
@@ -3309,9 +3309,9 @@ func TestTruncateInternals(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			AsyncExecNotification: asyncSchemaChangerDisabled,
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 		},
 	}
 
@@ -3559,9 +3559,9 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		// Runs schema changes asynchronously.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
-				tscc.ClearSchemaChangers()
-			},
+			// SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+			// 	tscc.ClearSchemaChangers()
+			// },
 			AsyncExecQuickly: true,
 		},
 		DistSQL: &execinfra.TestingKnobs{
@@ -4933,15 +4933,15 @@ func TestSchemaChangeJobRunningStatus(t *testing.T) {
 	var runBeforeIndexValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SyncFilter: func(_ sql.TestingSchemaChangerCollection) {
-				if scNotification != nil {
-					notify := scNotification
-					scNotification = nil
-					// Notify that the schema change is about to run and
-					// so the job has been created in the jobs table.
-					close(notify)
-				}
-			},
+			// SyncFilter: func(_ sql.TestingSchemaChangerCollection) {
+			// 	if scNotification != nil {
+			// 		notify := scNotification
+			// 		scNotification = nil
+			// 		// Notify that the schema change is about to run and
+			// 		// so the job has been created in the jobs table.
+			// 		close(notify)
+			// 	}
+			// },
 			RunBeforeBackfill: func() error {
 				return runBeforeBackfill()
 			},

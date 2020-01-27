@@ -502,7 +502,7 @@ func (sc *SchemaChanger) validateConstraints(
 				}
 				// Create a new eval context only because the eval context cannot be shared across many
 				// goroutines.
-				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
+				newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.execCfg.InternalExecutor)
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
 					if err := validateCheckInTxn(ctx, sc.leaseMgr, &newEvalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
@@ -660,6 +660,9 @@ const (
 
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
+// TODO (lucy): This is not a good way to look up all schema change jobs
+// associated with a table. We should get rid of MutationJobs and start looking
+// up the jobs in the jobs table instead.
 func getJobIDForMutationWithDescriptor(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) (int64, error) {
@@ -1145,9 +1148,9 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					idx.Name, idx.ColumnNames))
 			}
 			col := idx.ColumnNames[0]
-			ie := evalCtx.InternalExecutor.(*InternalExecutor)
-			row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
-				sqlbase.InternalExecutorSessionDataOverride{},
+			// TODO (lucy): Replace these usages with QueryRowEx again once I figure
+			// out what's going on with the internal executor user.
+			row, err := sc.execCfg.InternalExecutor.QueryRow(ctx, "verify-inverted-idx-count", txn,
 				fmt.Sprintf(
 					`SELECT coalesce(sum_int(crdb_internal.json_num_index_entries(%s)), 0) FROM [%d AS t]`,
 					col, tableDesc.ID,
@@ -1174,6 +1177,39 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	readAsOf hlc.Timestamp,
 	indexes []*sqlbase.IndexDescriptor,
 ) error {
+	// TODO (lucy): Now that we're reusing the internal executor that ultimately
+	// comes from the PlanHookState instead of getting a new one for every
+	// goroutine from the SchemaChanger's internal executor factory, I don't know
+	// whether the hack below to update the TableCollection still works, or if
+	// there's a race condition now.
+	//
+	// Make the mutations public in a private copy of the descriptor
+	// and add it to the TableCollection, so that we can use SQL below to perform
+	// the validation. We wouldn't have needed to do this if we could have
+	// updated the descriptor and run validation in the same transaction. However,
+	// our current system is incapable of running long running schema changes
+	// (the validation can take many minutes). So we pretend that the schema
+	// has been updated and actually update it in a separate transaction that
+	// follows this one.
+	desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
+	if err != nil {
+		return err
+	}
+	tc := &TableCollection{
+		leaseMgr: sc.leaseMgr,
+		settings: sc.settings,
+	}
+	// pretend that the schema has been modified.
+	if err := tc.addUncommittedTable(*desc); err != nil {
+		return err
+	}
+
+	// TODO(lucy): This is not a great API. Leaving #34304 open.
+	sc.execCfg.InternalExecutor.tcModifier = tc
+	defer func() {
+		sc.execCfg.InternalExecutor.tcModifier = nil
+	}()
+
 	grp := ctxgroup.WithContext(ctx)
 
 	var tableRowCount int64
@@ -1184,39 +1220,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		idx := idx
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			// Make the mutations public in a private copy of the descriptor
-			// and add it to the TableCollection, so that we can use SQL below to perform
-			// the validation. We wouldn't have needed to do this if we could have
-			// updated the descriptor and run validation in the same transaction. However,
-			// our current system is incapable of running long running schema changes
-			// (the validation can take many minutes). So we pretend that the schema
-			// has been updated and actually update it in a separate transaction that
-			// follows this one.
-			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
-			if err != nil {
-				return err
-			}
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
-			// pretend that the schema has been modified.
-			if err := tc.addUncommittedTable(*desc); err != nil {
-				return err
-			}
-
-			// Create a new eval context only because the eval context cannot be shared across many
-			// goroutines.
-			newEvalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, evalCtx.Tracing, sc.ieFactory)
-			// TODO(vivek): This is not a great API. Leaving #34304 open.
-			ie := newEvalCtx.InternalExecutor.(*InternalExecutor)
-			ie.tcModifier = tc
-			defer func() {
-				ie.tcModifier = nil
-			}()
-
-			row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn,
-				sqlbase.InternalExecutorSessionDataOverride{},
+			row, err := sc.execCfg.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
 				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d] AS OF SYSTEM TIME %s`,
 					tableDesc.ID, idx.ID, readAsOf.AsOfSystemTime()))
 			if err != nil {
@@ -1250,12 +1254,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		defer close(tableCountReady)
 		var tableRowCountTime time.Duration
 		start := timeutil.Now()
-		// Count the number of rows in the table.
-		ie := evalCtx.InternalExecutor.(*InternalExecutor)
-		cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn,
-			sqlbase.InternalExecutorSessionDataOverride{},
-			fmt.Sprintf(`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
-				tableDesc.ID, readAsOf.AsOfSystemTime()))
+		// Count the number of rows in the table using the primary key.
+		cnt, err := sc.execCfg.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
+			fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d] AS OF SYSTEM TIME %s`,
+				tableDesc.ID, 0, readAsOf.AsOfSystemTime()))
 		if err != nil {
 			return err
 		}
