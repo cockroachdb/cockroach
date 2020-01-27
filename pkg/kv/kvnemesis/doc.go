@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package kvnemeses exercises the KV api with random traffic and then validates
+// Package kvnemesis exercises the KV api with random traffic and then validates
 // that the observed behaviors are consistent with our guarantees.
 //
 // A set of Operations are generated which represent usage of the public KV api.
@@ -33,4 +33,4 @@
 // - Root and leaf transactions
 // - GCRequest
 // - Protected timestamps
-package kvnemeses
+package kvnemesis
