@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvnemeses
+package kvnemesis
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKVNemesesSingleNode(t *testing.T) {
+func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	scope := log.Scope(t)
 	defer scope.Close(t)
@@ -68,7 +68,7 @@ func TestKVNemesesSingleNode(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{tc.ServerConn(0)}
-	failures, err := RunNemeses(ctx, rng, db, ct, config)
+	failures, err := RunNemesis(ctx, rng, db, ct, config)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {

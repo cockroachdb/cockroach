@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvnemeses
+package kvnemesis
 
 import (
 	"context"
@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// RunNemeses generates and applies a series of Operations to exercise the KV
+// RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
-func RunNemeses(
+func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,
 	db *client.DB,
