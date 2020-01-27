@@ -369,22 +369,22 @@ func init() {
 
 			leftTuples: tuples{
 				{0},
-				{hashTableBucketSize},
-				{hashTableBucketSize},
-				{hashTableBucketSize},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets},
 				{0},
-				{hashTableBucketSize * 2},
+				{hashTableNumBuckets * 2},
 				{1},
 				{1},
-				{hashTableBucketSize + 1},
+				{hashTableNumBuckets + 1},
 			},
 			rightTuples: tuples{
-				{hashTableBucketSize},
-				{hashTableBucketSize * 2},
-				{hashTableBucketSize * 3},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets * 2},
+				{hashTableNumBuckets * 3},
 				{0},
 				{1},
-				{hashTableBucketSize + 1},
+				{hashTableNumBuckets + 1},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -397,15 +397,15 @@ func init() {
 			rightEqColsAreKey: false,
 
 			expected: tuples{
-				{hashTableBucketSize, hashTableBucketSize},
-				{hashTableBucketSize, hashTableBucketSize},
-				{hashTableBucketSize, hashTableBucketSize},
-				{hashTableBucketSize * 2, hashTableBucketSize * 2},
+				{hashTableNumBuckets, hashTableNumBuckets},
+				{hashTableNumBuckets, hashTableNumBuckets},
+				{hashTableNumBuckets, hashTableNumBuckets},
+				{hashTableNumBuckets * 2, hashTableNumBuckets * 2},
 				{0, 0},
 				{0, 0},
 				{1, 1},
 				{1, 1},
-				{hashTableBucketSize + 1, hashTableBucketSize + 1},
+				{hashTableNumBuckets + 1, hashTableNumBuckets + 1},
 			},
 		},
 		{
@@ -487,14 +487,14 @@ func init() {
 			// hash to the same bucket.
 			leftTuples: tuples{
 				{0},
-				{hashTableBucketSize},
-				{hashTableBucketSize * 2},
-				{hashTableBucketSize * 3},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets * 2},
+				{hashTableNumBuckets * 3},
 			},
 			rightTuples: tuples{
 				{0},
-				{hashTableBucketSize},
-				{hashTableBucketSize * 3},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets * 3},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -507,8 +507,8 @@ func init() {
 
 			expected: tuples{
 				{0},
-				{hashTableBucketSize},
-				{hashTableBucketSize * 3},
+				{hashTableNumBuckets},
+				{hashTableNumBuckets * 3},
 			},
 		},
 		{
@@ -590,17 +590,17 @@ func init() {
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
 				{10, 0, 0},
-				{20, 0, hashTableBucketSize},
-				{40, hashTableBucketSize, 0},
-				{50, hashTableBucketSize, hashTableBucketSize},
-				{60, hashTableBucketSize * 2, 0},
-				{70, hashTableBucketSize * 2, hashTableBucketSize},
+				{20, 0, hashTableNumBuckets},
+				{40, hashTableNumBuckets, 0},
+				{50, hashTableNumBuckets, hashTableNumBuckets},
+				{60, hashTableNumBuckets * 2, 0},
+				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
 			},
 			rightTuples: tuples{
-				{0, hashTableBucketSize},
-				{hashTableBucketSize * 2, hashTableBucketSize},
+				{0, hashTableNumBuckets},
+				{hashTableNumBuckets * 2, hashTableNumBuckets},
 				{0, 0},
-				{0, hashTableBucketSize * 2},
+				{0, hashTableNumBuckets * 2},
 			},
 
 			leftEqCols:   []uint32{1, 2},
@@ -612,8 +612,8 @@ func init() {
 			rightEqColsAreKey: true,
 
 			expected: tuples{
-				{20, 0, hashTableBucketSize},
-				{70, hashTableBucketSize * 2, hashTableBucketSize},
+				{20, 0, hashTableNumBuckets},
+				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
 				{10, 0, 0},
 			},
 		},

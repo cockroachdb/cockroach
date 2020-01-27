@@ -278,11 +278,11 @@ type HashRouter struct {
 	OneInputNode
 	// types are the input coltypes.
 	types []coltypes.T
-	// ht is not fully initialized to a hashTable, only the utility methods are
-	// used.
-	ht hashTable
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []int
+	// cancelChecker is used during the hashing of the rows to route to check for
+	// query cancellation.
+	cancelChecker CancelChecker
 
 	// One output for each stream.
 	outputs []routerOutput
@@ -424,9 +424,10 @@ func (r *HashRouter) Run(ctx context.Context) {
 // each column to its corresponding output, returning whether the input is
 // done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
-	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
+	initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
 	b := r.input.Next(ctx)
-	if b.Length() == 0 {
+	n := b.Length()
+	if n == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.
 		for _, o := range r.outputs {
@@ -436,27 +437,26 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 	}
 
 	for _, i := range r.hashCols {
-		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
+		rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(n), b.Selection(), r.cancelChecker)
 	}
+
+	finalizeHash(r.scratch.buckets, uint64(n), uint64(len(r.outputs)))
 
 	// Reset selections.
 	for i := 0; i < len(r.outputs); i++ {
 		r.scratch.selections[i] = r.scratch.selections[i][:0]
 	}
 
-	// finalizeHash has an assumption that bucketSize is a power of 2, so
-	// finalize the hash in our own way. While doing this, we will build a
-	// selection vector for each output.
+	// Build a selection vector for each output.
 	selection := b.Selection()
 	if selection != nil {
-		selection = selection[:b.Length()]
-		for i, selIdx := range selection {
-			outputIdx := r.scratch.buckets[i] % uint64(len(r.outputs))
+		for i, selIdx := range selection[:n] {
+			outputIdx := r.scratch.buckets[i]
 			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], selIdx)
 		}
 	} else {
-		for i, hash := range r.scratch.buckets[:b.Length()] {
-			outputIdx := hash % uint64(len(r.outputs))
+		for i := range r.scratch.buckets[:n] {
+			outputIdx := r.scratch.buckets[i]
 			r.scratch.selections[outputIdx] = append(r.scratch.selections[outputIdx], uint16(i))
 		}
 	}

@@ -89,7 +89,7 @@ type hashJoinerSourceSpec struct {
 // 1. The bucket number (hash value) of each key tuple is computed and stored
 //    into a buckets array.
 // 2. The values in the buckets array is normalized to fit within the hash table
-//    bucketSize.
+//    numBuckets.
 // 3. The bucket-chaining hash table organization is prepared with the computed
 //    buckets.
 //
@@ -195,7 +195,7 @@ func (hj *hashJoinEqOp) Init() {
 
 	hj.ht = newHashTable(
 		hj.allocator,
-		hashTableBucketSize,
+		hashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		hj.spec.right.outCols,
