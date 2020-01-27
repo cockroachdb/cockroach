@@ -10,7 +10,8 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { Link, withRouter, WithRouterProps } from "react-router";
+import { Link, withRouter, RouteComponentProps } from "react-router-dom";
+
 import { SideNavigation } from "src/components";
 import "./navigation-bar.styl";
 
@@ -19,7 +20,7 @@ import "./navigation-bar.styl";
  * displays a number of graphic icons representing available pages; the icon of
  * the page which is currently active will be highlighted.
  */
-class Sidebar extends React.Component<{} & WithRouterProps> {
+class Sidebar extends React.Component<RouteComponentProps> {
   readonly routes = [
     { path: "/overview", text: "Overview", activeFor: ["/node"] },
     { path: "/metrics", text: "Metrics", activeFor: [] },
@@ -31,8 +32,9 @@ class Sidebar extends React.Component<{} & WithRouterProps> {
   ];
 
   isActiveNavigationItem = (path: string): boolean => {
+    const { pathname } = this.props.location;
     const { activeFor } = this.routes.find(route => route.path === path);
-    return [...activeFor, path].some(p => this.props.router.isActive(p));
+    return [...activeFor, path].some(p => pathname.startsWith(p));
   }
 
   render() {

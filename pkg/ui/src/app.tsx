@@ -24,7 +24,7 @@ import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 
 import NotFound from "src/views/app/components/NotFound";
-import { Layout } from "src/views/app/containers/layout";
+import Layout from "src/views/app/containers/layout";
 import { DatabaseGrantsList, DatabaseTablesList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
@@ -50,6 +50,7 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
+import { DecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -154,6 +155,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route path="/reports/localities" component={ Localities } />
                   <Route path="/reports/network" component={ Network } />
                   <Route path="/reports/nodes" component={ Nodes } />
+                  <Route path="/reports/nodes/history" component={ DecommissionedNodeHistory } />
                   <Route path="/reports/settings" component={ Settings } />
                   <Route path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
                   <Route path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
