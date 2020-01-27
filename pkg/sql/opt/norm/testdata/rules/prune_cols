@@ -3012,37 +3012,20 @@ project
  ├── columns: "?column?":12(unknown)
  ├── fd: ()-->(12)
  ├── inner-join (cross)
- │    ├── columns: u:7(bool!null)
+ │    ├── columns: column1:5(bool!null)
+ │    ├── fd: ()-->(5)
  │    ├── scan table41772
- │    ├── union-all
- │    │    ├── columns: u:7(bool!null)
- │    │    ├── left columns: column1:3(bool)
- │    │    ├── right columns: column1:5(bool)
- │    │    ├── cardinality: [0 - 3]
- │    │    ├── select
- │    │    │    ├── columns: column1:3(bool!null)
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(3)
- │    │    │    ├── values
- │    │    │    │    ├── columns: column1:3(bool)
- │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(3)
- │    │    │    │    └── (NOT NULL,) [type=tuple{bool}]
- │    │    │    └── filters
- │    │    │         └── variable: column1 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- │    │    └── select
- │    │         ├── columns: column1:5(bool!null)
- │    │         ├── cardinality: [0 - 2]
- │    │         ├── fd: ()-->(5)
- │    │         ├── values
- │    │         │    ├── columns: column1:5(bool)
- │    │         │    ├── cardinality: [2 - 2]
- │    │         │    ├── (NULL,) [type=tuple{bool}]
- │    │         │    └── (false,) [type=tuple{bool}]
- │    │         └── filters
- │    │              └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+ │    ├── select
+ │    │    ├── columns: column1:5(bool!null)
+ │    │    ├── cardinality: [0 - 2]
+ │    │    ├── fd: ()-->(5)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:5(bool)
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (NULL,) [type=tuple{bool}]
+ │    │    │    └── (false,) [type=tuple{bool}]
+ │    │    └── filters
+ │    │         └── variable: column1 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  │    └── filters (true)
  └── projections
       └── null [type=unknown]
