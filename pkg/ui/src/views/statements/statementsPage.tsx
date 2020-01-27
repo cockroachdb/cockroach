@@ -221,11 +221,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   render() {
     return (
       <React.Fragment>
-        <Helmet>
-          <title>
-            { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
-          </title>
-        </Helmet>
+        <Helmet title={ this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"} />
 
         <section className="section">
           <h1 className="base-heading">Statements</h1>

@@ -93,9 +93,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
     if (this.props.logs.lastError && this.props.logs.lastError.message === "Forbidden") {
       return (
         <div>
-          <Helmet>
-            <title>{ title }</title>
-          </Helmet>
+          <Helmet title={ title } />
           <div className="section section--heading">
             <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
           </div>
@@ -108,9 +106,7 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
 
     return (
       <div>
-        <Helmet>
-          <title>{ title }</title>
-        </Helmet>
+        <Helmet title={ title } />
         <div className="section section--heading">
           <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>

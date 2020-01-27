@@ -216,9 +216,7 @@ export default class ClusterOverview extends React.Component {
   render() {
     return (
       <div className="cluster-page">
-        <Helmet>
-          <title>Cluster Overview</title>
-        </Helmet>
+        <Helmet title="Cluster Overview" />
         <section className="section"><h1 className="base-heading">Cluster Overview</h1></section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />

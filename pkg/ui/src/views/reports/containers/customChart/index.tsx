@@ -246,9 +246,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   render() {
     return (
       <Fragment>
-        <Helmet>
-          <title>Custom Chart | Debug</title>
-        </Helmet>
+        <Helmet title="Custom Chart | Debug" />
         <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>
