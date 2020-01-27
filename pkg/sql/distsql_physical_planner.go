@@ -289,6 +289,11 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 	return &queryNotSupportedError{msg: fmt.Sprintf(format, args...)}
 }
 
+// planNodeNotSupportedErr is the catch-all error value returned from
+// checkSupportForNode when a planNode type does not support distributed
+// execution.
+var planNodeNotSupportedErr = newQueryNotSupportedError("unsupported node")
+
 var cannotDistributeRowLevelLockingErr = newQueryNotSupportedError(
 	"scans with row-level locking are not supported by distsql",
 )
@@ -350,14 +355,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return dsp.checkSupportForNode(n.source.plan)
 
-	case *indexJoinNode:
-		// n.table doesn't have meaningful spans, but we need to check support (e.g.
-		// for any filtering expression).
-		if _, err := dsp.checkSupportForNode(n.table); err != nil {
-			return cannotDistribute, err
-		}
-		return dsp.checkSupportForNode(n.input)
-
 	case *groupNode:
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
@@ -365,6 +362,14 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		// Distribute aggregations if possible.
 		return rec.compose(shouldDistribute), nil
+
+	case *indexJoinNode:
+		// n.table doesn't have meaningful spans, but we need to check support (e.g.
+		// for any filtering expression).
+		if _, err := dsp.checkSupportForNode(n.table); err != nil {
+			return cannotDistribute, err
+		}
+		return dsp.checkSupportForNode(n.input)
 
 	case *joinNode:
 		if err := dsp.checkExpr(n.pred.onCond); err != nil {
@@ -499,7 +504,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return shouldDistribute, nil
 
 	default:
-		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node %T", node)
+		return cannotDistribute, planNodeNotSupportedErr
 	}
 }
 
