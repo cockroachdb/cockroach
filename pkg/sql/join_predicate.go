@@ -19,6 +19,13 @@ import (
 
 // joinPredicate implements the predicate logic for joins.
 type joinPredicate struct {
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	_ util.NoCopy
+
 	joinType sqlbase.JoinType
 
 	// numLeft/RightCols are the number of columns in the left and right
@@ -58,13 +65,6 @@ type joinPredicate struct {
 	// If set, the right equality columns form a key in the right input. Used as a
 	// hint for optimizing execution.
 	rightEqKey bool
-
-	// This struct must be allocated on the heap and its location stay
-	// stable after construction because it implements
-	// IndexedVarContainer and the IndexedVar objects in sub-expressions
-	// will link to it by reference after checkRenderStar / analyzeExpr.
-	// Enforce this using NoCopy.
-	_ util.NoCopy
 }
 
 // makePredicate constructs a joinPredicate object for joins. The join condition
