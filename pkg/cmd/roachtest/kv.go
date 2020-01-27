@@ -514,13 +514,7 @@ func registerKVScalability(r *testRegistry) {
 					" {pgurl:1-%d}",
 					percent, nodes)
 
-				l, err := t.l.ChildLogger(fmt.Sprint(i))
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer l.close()
-
-				return c.RunL(ctx, l, c.Node(nodes+1), cmd)
+				return c.RunE(ctx, c.Node(nodes+1), cmd)
 			})
 			m.Wait()
 		}

@@ -69,13 +69,7 @@ func registerRebalanceLoad(r *testRegistry) {
 		m.Go(func() error {
 			t.l.Printf("starting load generator\n")
 
-			quietL, err := t.l.ChildLogger("kv-0", quietStdout)
-			if err != nil {
-				return err
-			}
-			defer quietL.close()
-
-			err = c.RunL(ctx, quietL, appNode, fmt.Sprintf(
+			err := c.RunE(ctx, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 					"--duration=%v {pgurl:1-%d}",
 				concurrency, maxDuration, len(roachNodes)))

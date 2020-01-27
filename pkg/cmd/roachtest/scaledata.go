@@ -96,18 +96,8 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 		m.Go(ch.Runner(c, m))
 	}
 	m.Go(func(ctx context.Context) error {
-		// Sqlapp logs are very noisy - so noisy that if not directed to /dev/null
-		// they often have the effect of slowing down the test so much that it
-		// fails. To get around this we create a new logger that writes to an
-		// artifacts file but does not output to stdout or stderr.
-		sqlappL, err := t.l.ChildLogger("sqlapp", logPrefix(""), quietStdout, quietStderr)
-		if err != nil {
-			return err
-		}
-		defer sqlappL.close()
-
 		t.Status("installing schema")
-		err = c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s --install_schema "+
+		err = c.RunE(ctx, appNode, fmt.Sprintf("./%s --install_schema "+
 			"--cockroach_ip_addresses_csv='%s' %s", app, addrStr, flags))
 		if err != nil {
 			return err
@@ -115,7 +105,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 
 		t.Status("running consistency checker")
 		const workers = 16
-		return c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s  --duration_secs=%d "+
+		return c.RunE(ctx, appNode, fmt.Sprintf("./%s  --duration_secs=%d "+
 			"--num_workers=%d --cockroach_ip_addresses_csv='%s' %s",
 			app, int(dur.Seconds()), workers, addrStr, flags))
 	})
