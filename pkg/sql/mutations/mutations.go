@@ -511,12 +511,13 @@ func postgresMutator(rng *rand.Rand, q string) string {
 	q, _ = ApplyString(rng, q, postgresStatementMutator)
 
 	for from, to := range map[string]string{
-		":::":    "::",
-		"STRING": "TEXT",
-		"BYTES":  "BYTEA",
-		"FLOAT4": "FLOAT8",
-		"INT2":   "INT8",
-		"INT4":   "INT8",
+		":::":     "::",
+		"STRING":  "TEXT",
+		"BYTES":   "BYTEA",
+		"FLOAT4":  "FLOAT8",
+		"INT2":    "INT8",
+		"INT4":    "INT8",
+		"STORING": "INCLUDE",
 	} {
 		q = strings.Replace(q, from, to, -1)
 	}
