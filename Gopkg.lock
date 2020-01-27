@@ -1094,14 +1094,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:82479a39eed008373e82850057152a72265db974a1f091b991bb792b90f43cce"
-  name = "github.com/knz/go-ilog10"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "0a8343dc930a01c7a31dd1a1c4e74d1ecdeb09ce"
-
-[[projects]]
   digest = "1:71425d83ffb201ca42fd0046860b2cae872c85e4c087c40271c04dea8c755434"
   name = "github.com/knz/go-libedit"
   packages = [
@@ -2092,7 +2084,6 @@
     "github.com/kevinburke/go-bindata/go-bindata",
     "github.com/kisielk/errcheck",
     "github.com/kisielk/gotool",
-    "github.com/knz/go-ilog10",
     "github.com/knz/go-libedit",
     "github.com/knz/strtime",
     "github.com/kr/pretty",
