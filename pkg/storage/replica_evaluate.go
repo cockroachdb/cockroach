@@ -345,21 +345,22 @@ func evaluateBatch(
 		return nil, result, writeTooOldErr
 	}
 
+	// Update the batch response timestamp field to the timestamp at which the
+	// batch's reads were evaluated.
 	if baHeader.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = baHeader.Txn
-		// If the transaction committed, forward the response
-		// timestamp to the commit timestamp in case we were able to
-		// optimize and commit at a higher timestamp without higher-level
-		// retry (i.e. there were no refresh spans and the commit timestamp
-		// wasn't leaked).
-		if baHeader.Txn.Status == roachpb.COMMITTED {
-			br.Timestamp.Forward(baHeader.Txn.WriteTimestamp)
+		// Note that br.Txn.ReadTimestamp might be higher than baHeader.Timestamp if
+		// we had an EndTxn that decided that it can refresh to something higher
+		// than baHeader.Timestamp because there were no refresh spans.
+		if br.Txn.ReadTimestamp.Less(baHeader.Timestamp) {
+			log.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
+				br.Txn.ReadTimestamp, baHeader.Timestamp, ba)
 		}
+		br.Timestamp = br.Txn.ReadTimestamp
+	} else {
+		br.Timestamp = baHeader.Timestamp
 	}
-	// Always update the batch response timestamp field to the timestamp at
-	// which the batch executed.
-	br.Timestamp.Forward(baHeader.Timestamp)
 
 	return br, result, nil
 }
