@@ -953,7 +953,7 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 			tc.leftEqCols, tc.rightEqCols,
 			tc.leftOutCols, tc.rightOutCols,
 			tc.leftTypes, tc.rightTypes,
-			tc.rightEqColsAreKey, tc.leftEqColsAreKey || tc.rightEqColsAreKey,
+			tc.rightEqColsAreKey,
 			tc.joinType)
 		require.NoError(t, err)
 		hjOp.Init()
@@ -1004,8 +1004,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 			for _, fullOuter := range []bool{false, true} {
 				b.Run(fmt.Sprintf("fullOuter=%v", fullOuter), func(b *testing.B) {
-					for _, buildDistinct := range []bool{true, false} {
-						b.Run(fmt.Sprintf("distinct=%v", buildDistinct), func(b *testing.B) {
+					for _, rightDistinct := range []bool{true, false} {
+						b.Run(fmt.Sprintf("distinct=%v", rightDistinct), func(b *testing.B) {
 							for _, nBatches := range []int{1 << 1, 1 << 8, 1 << 12} {
 								b.Run(fmt.Sprintf("rows=%d", nBatches*int(coldata.BatchSize())), func(b *testing.B) {
 									// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
@@ -1013,8 +1013,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := newFiniteBatchSource(batch, nBatches)
-										rightSource := NewRepeatableBatchSource(batch)
+										leftSource := NewRepeatableBatchSource(batch)
+										rightSource := newFiniteBatchSource(batch, nBatches)
 
 										spec := hashJoinerSpec{
 											left: hashJoinerSourceSpec{
@@ -1033,7 +1033,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 												outer:       fullOuter,
 											},
 
-											buildDistinct: buildDistinct,
+											rightDistinct: rightDistinct,
 										}
 
 										hj := &hashJoinEqOp{

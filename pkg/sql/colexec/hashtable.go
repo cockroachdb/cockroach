@@ -193,6 +193,74 @@ func newHashTable(
 	}
 }
 
+// build executes the entirety of the hash table build phase using the input
+// as the build source. The input is entirely consumed in the process.
+func (ht *hashTable) build(ctx context.Context, input Operator) {
+	for {
+		batch := input.Next(ctx)
+		if batch.Length() == 0 {
+			break
+		}
+
+		ht.loadBatch(batch)
+	}
+
+	nKeyCols := len(ht.keyCols)
+	keyCols := make([]coldata.Vec, nKeyCols)
+	for i := 0; i < nKeyCols; i++ {
+		keyCols[i] = ht.vals.colVecs[ht.keyCols[i]]
+	}
+
+	// ht.next is used to store the computed hash value of each key.
+	ht.next = make([]uint64, ht.vals.length+1)
+	ht.computeBuckets(ctx, ht.next[1:], keyCols, ht.vals.length, nil)
+	ht.buildNextChains(ctx)
+}
+
+// findSameTuples populates the hashTable's same array by probing the
+// hashTable with every single input key.
+// NOTE: the hashTable *must* have been already built.
+func (ht *hashTable) findSameTuples(ctx context.Context) {
+	ht.same = make([]uint64, ht.vals.length+1)
+	ht.head = make([]bool, ht.vals.length+1)
+	ht.allocateVisited()
+
+	nKeyCols := len(ht.keyCols)
+	batchStart := uint64(0)
+	for batchStart < ht.vals.length {
+		batchEnd := batchStart + uint64(coldata.BatchSize())
+		if batchEnd > ht.vals.length {
+			batchEnd = ht.vals.length
+		}
+
+		batchSize := uint16(batchEnd - batchStart)
+
+		for i := 0; i < nKeyCols; i++ {
+			ht.keys[i] = ht.vals.colVecs[ht.keyCols[i]].Window(ht.valTypes[ht.keyCols[i]], batchStart, batchEnd)
+		}
+
+		ht.lookupInitial(ctx, batchSize, nil)
+		nToCheck := batchSize
+
+		for nToCheck > 0 {
+			// Continue searching for the build table matching keys while the toCheck
+			// array is non-empty.
+			nToCheck = ht.check(nToCheck, nil)
+			ht.findNext(nToCheck)
+		}
+
+		// Reset each element of headID to 0 to indicate that the probe key has not
+		// been found in the build table. Also mark the corresponding indices as
+		// head of the linked list.
+		for i := uint16(0); i < batchSize; i++ {
+			ht.head[ht.headID[i]] = true
+			ht.headID[i] = 0
+		}
+
+		batchStart = batchEnd
+	}
+}
+
 // loadBatch appends a new batch of keys and outputs to the existing keys and
 // output columns.
 func (ht *hashTable) loadBatch(batch coldata.Batch) {
