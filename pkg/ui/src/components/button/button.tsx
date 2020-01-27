@@ -44,7 +44,7 @@ export function Button(props: ButtonProps) {
         { icon() }
       </div>
     );
-  }
+  };
 
   return (
     <button
