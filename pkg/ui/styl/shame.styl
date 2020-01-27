@@ -291,7 +291,7 @@
     color $popover-color
 
 .Chip--tooltip
-  min-width 250px
+  width 250px
   .ant-tooltip-inner
     background-color black
     padding 12px 18px
@@ -305,9 +305,15 @@
     margin-bottom 25px
     display flex
     justify-content space-between
+    &--item
+      width 95px
+      &:first-child
+        margin-right 8px
+      &:last-child
+        margin-left 8px
     .ant-divider
-      margin 0 18px 0 15px
       background #3b4a60
+      margin 0
     &--item-title, &--item-description
       font-family Lato-Regular
       font-size 14px
