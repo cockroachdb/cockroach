@@ -4,7 +4,7 @@ listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", P
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestGossipHandlesReplacedNode failed" label:branch-release-0.1: []
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestGossipHandlesReplacedNode failed" -label:branch-release-0.1: [github.Issue{Number:31, Title:"boom related", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]}]
 createIssue owner=cockroachdb repo=cockroach:
-github.IssueRequest{Labels:["O-robot" "C-test-failure" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
+github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
 
 storage: TestGossipHandlesReplacedNode failed
 

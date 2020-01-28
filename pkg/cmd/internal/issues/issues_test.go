@@ -258,7 +258,7 @@ goroutine 13:
 						exp, act := string(b), buf.String()
 						failed = failed || !assert.Equal(t, exp, act)
 					}
-					const rewrite = true
+					const rewrite = false
 					if failed && rewrite {
 						_ = os.MkdirAll(filepath.Dir(path), 0755)
 						require.NoError(t, ioutil.WriteFile(path, []byte(buf.String()), 0644))
