@@ -350,7 +350,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
               columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
               sortSetting={this.state.sortSetting}
               onChangeSortSetting={this.changeSortSetting}
-              firstCellHeader
+              firstCellBordered
             />
           </SummaryCard>
         </TabPane>
