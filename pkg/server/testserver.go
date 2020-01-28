@@ -548,11 +548,13 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 	return authClient.httpClient, authClient.cookie, authClient.err
 }
 
+const testServerUserPassword = "abc"
+
 func (ts *TestServer) createAuthUser(userName string, isAdmin bool) error {
 	if _, err := ts.Server.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		"CREATE USER $1", userName,
+		"CREATE USER $1 WITH PASSWORD $2", userName, testServerUserPassword,
 	); err != nil {
 		return err
 	}
