@@ -12,7 +12,6 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch, Action } from "redux";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
@@ -135,13 +134,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   locationStatus: selectLocationsRequestStatus(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshLocations,
-      refreshNodes,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshLocations,
+  refreshNodes,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Localities);

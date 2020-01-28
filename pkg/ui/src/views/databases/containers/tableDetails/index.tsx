@@ -12,7 +12,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
-import { bindActionCreators, Dispatch, Action } from "redux";
 import * as protos from "src/js/protos";
 import { generateTableID, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -148,15 +147,11 @@ const mapStateToProps = (state: AdminUIState, ownProps: RouterState) => ({
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      setSort: databaseTableGrantsSortSetting.set,
-      refreshTableDetails,
-      refreshTableStats,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  setSort: databaseTableGrantsSortSetting.set,
+  refreshTableDetails,
+  refreshTableStats,
+};
 
 // Connect the TableMain class with our redux store.
 const tableMainConnected = connect(

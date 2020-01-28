@@ -120,7 +120,7 @@ describe("basic cachedDataReducer", function () {
 
         const testString = "refresh test string";
 
-        return testReducerObj.refresh(new Request(testString))(mockDispatch, () => state).then(() => {
+        return testReducerObj.refresh(new Request(testString))(mockDispatch, () => state, undefined).then(() => {
           expected = new CachedDataReducerState<Response>();
           expected.valid = true;
           expected.data = new Response(testString);

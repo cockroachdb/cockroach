@@ -16,7 +16,6 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch, Action } from "redux";
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -380,16 +379,12 @@ const mapStateToProps = (state: AdminUIState) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      setSort: sortSetting.set,
-      setStatus: statusSetting.set,
-      setShow: showSetting.set,
-      setType: typeSetting.set,
-      refreshJobs,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  setSort: sortSetting.set,
+  setStatus: statusSetting.set,
+  setShow: showSetting.set,
+  setType: typeSetting.set,
+  refreshJobs,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(JobsTable as any);

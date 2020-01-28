@@ -20,6 +20,7 @@ import assert from "assert";
 import moment from "moment";
 import { hashHistory } from "react-router";
 import { push } from "react-router-redux";
+import { ThunkAction } from "redux-thunk";
 
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
@@ -179,7 +180,10 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
    * stateAccessor (optional) - a helper function that accesses this reducer's
    *   state given the global state object
    */
-  refresh = <S>(req?: TRequest, stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace]) => {
+  refresh = <S>(
+    req?: TRequest,
+    stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace],
+  ): ThunkAction<any, S, any> => {
     return (dispatch: Dispatch<Action, TResponseMessage>, getState: () => S) => {
       const state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
