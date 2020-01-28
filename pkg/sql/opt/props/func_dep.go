@@ -25,12 +25,14 @@ import (
 // of columns A and B, a functional dependency A-->B holds if A fully determines
 // B. In other words, if two different rows have equal values for columns in A,
 // then those two rows will also have equal values for columns in B. For
-// example:
+// example, where columns (a1, a2) are in set A, and column (b1) is in set B:
 //
 //   a1 a2 b1
 //   --------
 //   1  2  5
 //   1  2  5
+//   3  4  6
+//   3  4  6
 //
 // The left side of a functional dependency is called the "determinant", and
 // the right side is called the "dependant". Each side can contain zero or more
@@ -47,6 +49,18 @@ import (
 //
 //   (a)-->(b)
 //   (a)-->(c)
+//
+// When a determinant contains zero columns, as in ()-->A, then A is fully
+// determined without reference to any other columns. An equivalent statement is
+// that any arbitrary combination of determinant columns trivially determines A.
+// And both of these statements are just another way of saying that columns in A
+// are constant:
+//
+//   a1 a2    b1 c1
+//   ----------------
+//   1  NULL  3  3
+//   1  NULL  3  NULL
+//   1  NULL  4  NULL
 //
 // When a determinant contains multiple columns, then the functional dependency
 // holds for the *composite* value of those columns. For example:
@@ -186,8 +200,9 @@ import (
 //
 //   A~~>B
 //
-// In contrast to strict dependencies, lax dependencies treat NULLs as distinct
-// from one another, with equality semantics identical to this SQL expression:
+// In contrast to strict dependencies, lax dependencies treat NULLs on
+// determinant columns as distinct from one another, with equality semantics
+// identical to this SQL expression:
 //
 //   (c1 = c2) IS True
 //
@@ -237,11 +252,24 @@ import (
 // Now, either the "a" or "b" column determines the values of all other columns,
 // and both are keys for the relation.
 //
+// Another thing to note is that a lax dependency with an empty determinant is
+// the same as the corresponding strict dependency:
+//
+//   ()~~>(a,b)
+//   ()-->(a,b)
+//
+// As described above, a strict dependency differs from a lax dependency only in
+// terms of what values are allowed in determinant columns. Since the
+// determinant has no columns in these cases, the semantics will be identical.
+// For that reason, this library automatically maps lax constant dependencies to
+// strict constant dependencies.
+//
 // Keys
 //
 // A key is a set of columns that have a unique composite value for every row in
-// the relation. When this library uses the term "key", it always refers to a
-// strict key, in which case NULL values are treated as equal to one another:
+// the relation. There are two kinds of keys, strict and lax, that parallel the
+// two kinds of functional dependencies. Strict keys treat NULL values in key
+// columns as equal to one another:
 //
 //   b     c
 //   --------
@@ -250,15 +278,47 @@ import (
 //   NULL  30
 //
 // Here, "b" is a key for the relation, even though it contains a NULL value,
-// because there is only one such value. The SQL GROUP BY operator uses the same
-// semantics for grouping (it's no coincidence that the definition for strict
-// keys follows that lead).
+// because there is only one such value. Multiple NULL values would violate the
+// strict key, because they would compare as equal, and therefore would be
+// considered duplicates. The SQL GROUP BY operator uses the same semantics for
+// grouping (it's no coincidence that the definition for strict keys follows
+// that lead).
 //
-// FuncDepSet tracks whether at least one key exists for the relation. If this
-// is true, then all possible keys for the relation can be enumerated using the
-// FD set. This is because any subset of columns forms a key if its FD closure
-// contains every column in the relation. Therefore, all keys can be brute force
-// enumerated by checking the closure of each combination in the power set.
+// By contrast, lax keys treat NULL values in key columns as distinct from one
+// another, and so considers column "b" as unique in the following example:
+//
+//   b     c
+//   --------
+//   1     10
+//   2     20
+//   NULL  30
+//   NULL  40
+//
+// Note that both strict and lax keys treat non-NULL values identically; values
+// from two different rows must never compare equal to one another. In addition,
+// the presence of a strict or lax key always implies a functional dependency
+// with the key as determinant and all other columns in the relation as
+// dependants. Here is an example assuming a table with columns (a,b,c,d):
+//
+//   lax-key(a,b)    => (a,b)~~>(c,d)
+//   strict-key(a,b) => (a,b)-->(c,d)
+//
+// The "empty key" is a special key that has zero columns. It is used when the
+// relation is guaranteed to have at most one row. In this special case, every
+// column is constant. Every combination of columns is a trivial key for the
+// relation and determines every other column. Because the lax and strict key
+// designations are equivalent when there is a single row, empty keys are always
+// normalized to be strict for convenience.
+//
+// FuncDepSet tracks whether at least one key (whether it be strict or lax)
+// exists for the relation. If this is true, then all possible keys for the
+// relation can be enumerated using the FD set. This is because any subset of
+// columns forms a key if its FD closure contains every column in the relation.
+// Therefore, all keys can be brute force enumerated by checking the closure of
+// each combination in the power set. Again, this is only possible when the
+// relation is known to have a key; otherwise, knowing the closure contains all
+// columns is not a sufficient condition to identify a key, because of the
+// possibility of duplicate rows.
 //
 // In practice, it is never necessary to enumerate all possible keys (fortunate,
 // since there can be O(2**N) of them), since the vast majority of them turn out
