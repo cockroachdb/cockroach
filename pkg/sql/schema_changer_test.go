@@ -3927,6 +3927,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 // TestCancelSchemaChange tests that a CANCEL JOB run midway through column
 // and index backfills is canceled.
 func TestCancelSchemaChange(t *testing.T) {
+	t.Skip("")
 	defer leaktest.AfterTest(t)()
 
 	const (
