@@ -176,9 +176,9 @@ const eventBoxConnected = connect(
       eventsValid: eventsValidSelector(state),
     };
   },
-  () => ({
+  {
     refreshEvents,
-  }),
+  },
 )(EventBoxUnconnected);
 
 // Connect the EventsList class with our redux store.
@@ -190,10 +190,10 @@ const eventPageConnected = connect(
       sortSetting: eventsSortSetting.selector(state),
     };
   },
-  () => ({
+  {
     refreshEvents,
     setSort: eventsSortSetting.set,
-  }),
+  },
 )(EventPageUnconnected);
 
 export { eventBoxConnected as EventBox };
