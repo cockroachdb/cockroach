@@ -728,6 +728,18 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	return err
 }
 
+// FixedTimestampTxn is like Txn but it operates at a fixed timestamp.
+// This is equivalent to Txn() followed by txn.SetFixedTimestamp and
+// is provided for convenience.
+func (db *DB) FixedTimestampTxn(
+	ctx context.Context, fixedTimestamp hlc.Timestamp, retryable func(context.Context, *Txn) error,
+) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
+		txn.SetFixedTimestamp(ctx, fixedTimestamp)
+		return retryable(ctx, txn)
+	})
+}
+
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(
