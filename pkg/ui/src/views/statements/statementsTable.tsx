@@ -27,7 +27,7 @@ export interface AggregateStatistics {
   implicitTxn: boolean;
   stats: StatementStatistics;
   drawer?: boolean;
-  firstCellHeader?: boolean;
+  firstCellBordered?: boolean;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
