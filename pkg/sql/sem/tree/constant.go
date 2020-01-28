@@ -540,10 +540,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		return ParseDByte(expr.s)
 	}
 
-	datum, err := parseStringAs(typ, expr.s, ctx)
-	if datum == nil && err == nil {
-		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
-	}
+	datum, err := ParseAndRequireString(typ, expr.s, ctx)
 	return datum, err
 }
 
