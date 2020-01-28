@@ -4,7 +4,7 @@ listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", P
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" label:branch-release-0.1: []
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" -label:branch-release-0.1: []
 createIssue owner=cockroachdb repo=cockroach:
-github.IssueRequest{Labels:["O-robot" "C-test-failure" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
+github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "release-blocker"], Assignee:"hodor", Milestone:2}
 
 storage: TestReplicateQueueRebalance failed
 
