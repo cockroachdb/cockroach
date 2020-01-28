@@ -89,18 +89,22 @@ func (t *TeeEngine) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	eng1Sst, bulkOpSummary, err := t.eng1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
-	rocksSst, _, err2 := t.eng2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	eng1Sst, bulkOpSummary, resume1, err := t.eng1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	rocksSst, _, resume2, err2 := t.eng2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
-		return nil, bulkOpSummary, err
+		return nil, bulkOpSummary, nil, err
 	}
 
 	if !bytes.Equal(eng1Sst, rocksSst) {
 		log.Fatalf(t.ctx, "mismatching SSTs returned by engines: %v != %v", eng1Sst, rocksSst)
 	}
-	return eng1Sst, bulkOpSummary, err
+	if !resume1.Equal(resume2) {
+		log.Fatalf(t.ctx, "mismatching resume key returned by engines: %v != %v", resume1, resume2)
+	}
+	return eng1Sst, bulkOpSummary, resume1, err
 }
 
 // Get implements the Engine interface.
@@ -668,18 +672,22 @@ func (t *TeeEngineReader) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	sst1, bulkOpSummary, err := t.reader1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
-	sst2, _, err2 := t.reader2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	sst1, bulkOpSummary, resume1, err := t.reader1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	sst2, _, resume2, err2 := t.reader2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
-		return nil, bulkOpSummary, err
+		return nil, bulkOpSummary, nil, err
 	}
 
 	if !bytes.Equal(sst1, sst2) {
 		log.Fatalf(t.ctx, "mismatching SSTs returned by engines: %v != %v", sst1, sst2)
 	}
-	return sst1, bulkOpSummary, err
+	if !resume1.Equal(resume2) {
+		log.Fatalf(t.ctx, "mismatching resume key returned by engines: %v != %v", resume1, resume2)
+	}
+	return sst1, bulkOpSummary, resume1, err
 }
 
 // Get implements the Reader interface.
@@ -768,18 +776,22 @@ func (t *TeeEngineBatch) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
+	targetSize uint64,
 	io IterOptions,
-) ([]byte, roachpb.BulkOpSummary, error) {
-	sst1, bulkOpSummary, err := t.batch1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
-	sst2, _, err2 := t.batch2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, io)
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	sst1, bulkOpSummary, resume1, err := t.batch1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	sst2, _, resume2, err2 := t.batch2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
-		return nil, bulkOpSummary, err
+		return nil, bulkOpSummary, nil, err
 	}
 
 	if !bytes.Equal(sst1, sst2) {
 		log.Fatalf(t.ctx, "mismatching SSTs returned by engines: %v != %v", sst1, sst2)
 	}
-	return sst1, bulkOpSummary, err
+	if !resume1.Equal(resume2) {
+		log.Fatalf(t.ctx, "mismatching resume key returned by engines: %v != %v", resume1, resume2)
+	}
+	return sst1, bulkOpSummary, resume1, err
 }
 
 // Get implements the Batch interface.
