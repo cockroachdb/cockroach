@@ -271,16 +271,15 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// If the txn is no longer pending, there's nothing for us to heartbeat.
-	// This h.heartbeat() call could have raced with a response that updated the
-	// status. That response is supposed to have closed the txnHeartbeater.
-	if h.mu.txn.Status != roachpb.PENDING {
-		if ctx.Err() == nil {
-			log.Fatalf(ctx,
-				"txn committed or aborted but heartbeat loop hasn't been signaled to stop. txn: %s",
-				h.mu.txn)
-		}
+	// The heartbeat loop might have raced with the cancelation of the heartbeat.
+	if ctx.Err() != nil {
 		return false
+	}
+
+	if h.mu.txn.Status != roachpb.PENDING {
+		log.Fatalf(ctx,
+			"txn committed or aborted but heartbeat loop hasn't been signaled to stop. txn: %s",
+			h.mu.txn)
 	}
 
 	// Clone the txn in order to put it in the heartbeat request.
