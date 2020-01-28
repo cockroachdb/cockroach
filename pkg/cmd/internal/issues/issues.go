@@ -406,7 +406,7 @@ func (p *poster) post(ctx context.Context, req PostRequest) error {
 		return err
 	}
 
-	createLabels := append(issueLabels, searchLabel, releaseLabel)
+	createLabels := append(issueLabels, releaseLabel)
 	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
 		issueRequest := github.IssueRequest{
