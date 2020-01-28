@@ -16,7 +16,6 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
@@ -360,13 +359,9 @@ const StatementsPageConnected = connect(
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
   }),
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshStatements,
-      },
-      dispatch,
-    ),
+  {
+    refreshStatements,
+  },
 )(StatementsPage);
 
 export default StatementsPageConnected;

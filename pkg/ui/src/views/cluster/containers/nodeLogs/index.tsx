@@ -13,7 +13,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
 import { connect } from "react-redux";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
@@ -130,14 +129,10 @@ const logsConnected = connect(
       currentNode: currentNode(state, ownProps),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshLogs,
-        refreshNodes,
-      },
-      dispatch,
-    ),
+  {
+    refreshLogs,
+    refreshNodes,
+  },
 )(Logs);
 
 export default logsConnected;

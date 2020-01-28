@@ -12,7 +12,6 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch, Action } from "redux";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -103,13 +102,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   settings: state.cachedData.settings,
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      // actionCreators returns objects with type and payload
-      refreshSettings,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  // actionCreators returns objects with type and payload
+  refreshSettings,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Settings);

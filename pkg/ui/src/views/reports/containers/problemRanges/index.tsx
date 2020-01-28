@@ -14,7 +14,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
-import { bindActionCreators, Dispatch, Action } from "redux";
 import * as protos from "src/js/protos";
 import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -217,14 +216,10 @@ const mapStateToProps = (state: AdminUIState, props: ProblemRangesProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      // actionCreators returns objects with type and payload
-      refreshProblemRanges,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  // actionCreators returns objects with type and payload
+  refreshProblemRanges,
+};
 
 export default connect(
   mapStateToProps,

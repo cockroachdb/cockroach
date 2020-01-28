@@ -34,7 +34,6 @@ import LogTable from "src/views/reports/containers/range/logTable";
 import AllocatorOutput from "src/views/reports/containers/range/allocator";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
-import { bindActionCreators, Dispatch, Action } from "redux";
 
 interface RangeOwnProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
@@ -193,14 +192,10 @@ const mapStateToProps = (state: AdminUIState, props: RangeProps) => ({
   rangeLog: state.cachedData.rangeLog[rangeLogRequestKey(rangeLogRequestFromProps(props))],
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshRange,
-      refreshAllocatorRange,
-      refreshRangeLog,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshRange,
+  refreshAllocatorRange,
+  refreshRangeLog,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Range);

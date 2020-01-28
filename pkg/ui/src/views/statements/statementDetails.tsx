@@ -12,11 +12,9 @@ import d3 from "d3";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
-import { Action } from "redux";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 import { Params } from "react-router/lib/Router";
-import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
@@ -490,13 +488,9 @@ const mapStateToProps = (state: AdminUIState, props: RouterState) => ({
   nodeNames: nodeDisplayNameByIDSelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshStatements,
-    },
-    dispatch,
-);
+const mapDispatchToProps = {
+  refreshStatements,
+};
 
 // tslint:disable-next-line:variable-name
 const StatementDetailsConnected = connect(
