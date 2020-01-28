@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -2545,6 +2546,35 @@ func TestBackupRestorePermissions(t *testing.T) {
 			t, "user root does not have CREATE privilege",
 			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, localFoo,
 		)
+	})
+
+	// Ensure that non-root users with the admin role can backup and restore.
+	t.Run("non-root-admin", func(t *testing.T) {
+		sqlDB.Exec(t, "GRANT admin TO testuser")
+
+		t.Run("backup-table", func(t *testing.T) {
+			testLocalFoo := fmt.Sprintf("nodelocal:///%s", t.Name())
+			testLocalBackupStmt := fmt.Sprintf(`BACKUP data.bank TO '%s'`, testLocalFoo)
+			if _, err := testuser.Exec(testLocalBackupStmt); err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t, `CREATE DATABASE data2`)
+			if _, err := testuser.Exec(`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='data2')`, testLocalFoo); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("backup-database", func(t *testing.T) {
+			testLocalFoo := fmt.Sprintf("nodelocal:///%s", t.Name())
+			testLocalBackupStmt := fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, testLocalFoo)
+			if _, err := testuser.Exec(testLocalBackupStmt); err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t, "DROP DATABASE data")
+			if _, err := testuser.Exec(`RESTORE DATABASE data FROM $1`, testLocalFoo); err != nil {
+				t.Fatal(err)
+			}
+		})
 	})
 }
 
