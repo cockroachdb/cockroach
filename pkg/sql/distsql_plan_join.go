@@ -199,10 +199,12 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 			Tables: processorTables,
 			// We previously checked that both scans are in the
 			// same direction (useInterleavedJoin).
-			Reverse:   ancestor.reverse,
-			LimitHint: totalLimitHint,
-			OnExpr:    onExpr,
-			Type:      joinType,
+			Reverse:           ancestor.reverse,
+			LimitHint:         totalLimitHint,
+			LockingStrength:   ancestor.lockingStrength,
+			LockingWaitPolicy: ancestor.lockingWaitPolicy,
+			OnExpr:            onExpr,
+			Type:              joinType,
 		}
 
 		proc := physicalplan.Processor{

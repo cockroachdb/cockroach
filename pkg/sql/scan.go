@@ -116,6 +116,11 @@ type scanNode struct {
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.
 	estimatedRowCount uint64
+
+	// lockingStrength and lockingWaitPolicy represent the row-level locking
+	// mode of the Scan.
+	lockingStrength   sqlbase.ScanLockingStrength
+	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
 }
 
 // scanVisibility represents which table columns should be included in a scan.

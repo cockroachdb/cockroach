@@ -451,6 +451,9 @@ func (z *zigzagJoiner) setupInfo(
 		false, /* check */
 		info.alloc,
 		execinfrapb.ScanVisibility_PUBLIC,
+		// NB: zigzag joins are disabled when a row-level locking clause is
+		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
+		sqlbase.ScanLockingStrength_FOR_NONE,
 	)
 	if err != nil {
 		return err

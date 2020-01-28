@@ -168,7 +168,6 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.maybeSetSystemConfig(d.desc.GetID()); err != nil {
 		return err
 	}
-
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
@@ -189,7 +188,16 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 	if err := d.fetcher.Init(
-		false, false, false, &params.p.alloc, allTables...); err != nil {
+		false, /* reverse */
+		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
+		// strength here. Consider hooking this in to the same knob that will
+		// control whether we perform locking implicitly during DELETEs.
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		&params.p.alloc,
+		allTables...,
+	); err != nil {
 		return err
 	}
 	ctx := params.ctx

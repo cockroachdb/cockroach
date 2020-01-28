@@ -289,6 +289,10 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 	return &queryNotSupportedError{msg: fmt.Sprintf(format, args...)}
 }
 
+var cannotDistributeRowLevelLockingErr = newQueryNotSupportedError(
+	"scans with row-level locking are not supported by distsql",
+)
+
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
 // This must be kept in sync with createPlanForNode.
 // TODO(jordan): refactor these to use the observer pattern to avoid duplication.
@@ -413,6 +417,14 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.source.plan)
 
 	case *scanNode:
+		if n.lockingStrength != sqlbase.ScanLockingStrength_FOR_NONE {
+			// Scans that are performing row-level locking cannot currently be
+			// distributed because their locks would not be propagated back to
+			// the root transaction coordinator.
+			// TODO(nvanbenschoten): lift this restriction.
+			return cannotDistribute, cannotDistributeRowLevelLockingErr
+		}
+
 		rec := canDistribute
 		if n.softLimit != 0 {
 			// We don't yet recommend distributing plans where soft limits propagate
@@ -862,10 +874,12 @@ func initTableReaderSpec(
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
-		Table:      *n.desc.TableDesc(),
-		Reverse:    n.reverse,
-		IsCheck:    n.isCheck,
-		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.desc.TableDesc(),
+		Reverse:           n.reverse,
+		IsCheck:           n.isCheck,
+		Visibility:        n.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.lockingStrength,
+		LockingWaitPolicy: n.lockingWaitPolicy,
 
 		// Retain the capacity of the spans slice.
 		Spans: s.Spans[:0],
@@ -1806,9 +1820,11 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols)
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.table.desc.TableDesc(),
-		IndexIdx:   0,
-		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.table.desc.TableDesc(),
+		IndexIdx:          0,
+		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.table.lockingStrength,
+		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
 
 	filter, err := physicalplan.MakeExpression(
@@ -1871,9 +1887,11 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.table.desc.TableDesc(),
-		Type:       n.joinType,
-		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.table.desc.TableDesc(),
+		Type:              n.joinType,
+		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.table.lockingStrength,
+		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
 	if err != nil {

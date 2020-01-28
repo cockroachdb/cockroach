@@ -620,23 +620,16 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 ) *roachpb.Error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	txnID := tc.mu.txn.ID
-	err := tc.handleRetryableErrLocked(ctx, pErr)
-	// We'll update our txn, unless this was an abort error. If it was an abort
-	// error, the transaction has been rolled back and the state was updated in
-	// handleRetryableErrLocked().
-	if err.Transaction.ID == txnID {
-		// This is where we get a new epoch.
-		tc.mu.txn.Update(&err.Transaction)
-	}
-	return roachpb.NewError(err)
+	return roachpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
 }
 
 // handleRetryableErrLocked takes a retriable error and creates a
-// TransactionRetryWithProtoRefreshError containing the transaction that needs to be used by the
-// next attempt. It also handles various aspects of updating the
-// TxnCoordSender's state, but notably it does not update its proto: the caller
-// needs to call tc.mu.txn.Update(pErr.GetTxn()).
+// TransactionRetryWithProtoRefreshError containing the transaction that needs
+// to be used by the next attempt. It also handles various aspects of updating
+// the TxnCoordSender's state. Depending on the error, the TxnCoordSender might
+// not be usable afterwards (in case of TransactionAbortedError). The caller is
+// expected to check the ID of the resulting transaction. If the TxnCoordSender
+// can still be used, it will have been prepared for a new epoch.
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
 ) *roachpb.TransactionRetryWithProtoRefreshError {
@@ -694,6 +687,9 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		tc.cleanupTxnLocked(ctx)
 		return retErr
 	}
+
+	// This is where we get a new epoch.
+	tc.mu.txn.Update(&newTxn)
 
 	// Reset state as this is a retryable txn error that is incrementing
 	// the transaction's epoch.
@@ -760,15 +756,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
 				ba.Txn, pErr)
 		}
-		err := tc.handleRetryableErrLocked(ctx, pErr)
-		// We'll update our txn, unless this was an abort error. If it was an abort
-		// error, the transaction has been rolled back and the state was updated in
-		// handleRetryableErrLocked().
-		if err.Transaction.ID == ba.Txn.ID {
-			// This is where we get a new epoch.
-			tc.mu.txn.Update(&err.Transaction)
-		}
-		return roachpb.NewError(err)
+		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
 	}
 
 	// This is the non-retriable error case. The client is expected to send a

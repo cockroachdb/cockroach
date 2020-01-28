@@ -164,7 +164,15 @@ func (td *tableDeleter) deleteAllRowsScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, td.alloc, tableArgs,
+		false, /* reverse */
+		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
+		// strength here. Consider hooking this in to the same knob that will
+		// control whether we perform locking implicitly during DELETEs.
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		td.alloc,
+		tableArgs,
 	); err != nil {
 		return resume, err
 	}
@@ -276,7 +284,15 @@ func (td *tableDeleter) deleteIndexScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, td.alloc, tableArgs,
+		false, /* reverse */
+		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
+		// strength here. Consider hooking this in to the same knob that will
+		// control whether we perform locking implicitly during DELETEs.
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		td.alloc,
+		tableArgs,
 	); err != nil {
 		return resume, err
 	}

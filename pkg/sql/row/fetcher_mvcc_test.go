@@ -106,7 +106,11 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, true /* isCheck */, &sqlbase.DatumAlloc{},
+		false, /* reverse */
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		true,  /* isCheck */
+		&sqlbase.DatumAlloc{},
 		args...,
 	); err != nil {
 		t.Fatal(err)
