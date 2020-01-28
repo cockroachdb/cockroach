@@ -45,7 +45,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(*client.Txn, *tree.EvalContext) error
+	init(context.Context, *client.Txn, *tree.EvalContext) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -77,20 +77,6 @@ type tableWriter interface {
 
 	// enable auto commit in call to finalize().
 	enableAutoCommit()
-}
-
-type autoCommitOpt int
-
-const (
-	autoCommitDisabled autoCommitOpt = 0
-	autoCommitEnabled  autoCommitOpt = 1
-)
-
-// extendedTableWriter is a temporary interface introduced
-// until all the tableWriters implement it. When that is achieved, it will be merged into
-// the main tableWriter interface.
-type extendedTableWriter interface {
-	tableWriter
 
 	// atBatchEnd is called at the end of each batch, just before
 	// finalize/flush. It can utilize the current KV batch which is
@@ -110,9 +96,12 @@ type extendedTableWriter interface {
 	curBatchSize() int
 }
 
-var _ extendedTableWriter = (*tableUpdater)(nil)
-var _ extendedTableWriter = (*tableDeleter)(nil)
-var _ extendedTableWriter = (*tableInserter)(nil)
+type autoCommitOpt int
+
+const (
+	autoCommitDisabled autoCommitOpt = 0
+	autoCommitEnabled  autoCommitOpt = 1
+)
 
 // tableWriterBase is meant to be used to factor common code between
 // the other tableWriters.
@@ -132,8 +121,8 @@ func (tb *tableWriterBase) init(txn *client.Txn) {
 	tb.b = txn.NewBatch()
 }
 
-// flushAndStartNewBatch shares the common flushAndStartNewBatch()
-// code between extendedTableWriters.
+// flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
+// tableWriters.
 func (tb *tableWriterBase) flushAndStartNewBatch(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
 ) error {
@@ -145,10 +134,10 @@ func (tb *tableWriterBase) flushAndStartNewBatch(
 	return nil
 }
 
-// curBatchSize shares the common curBatchSize() code between extendedTableWriters().
+// curBatchSize shares the common curBatchSize() code between tableWriters.
 func (tb *tableWriterBase) curBatchSize() int { return tb.batchSize }
 
-// finalize shares the common finalize code between extendedTableWriters.
+// finalize shares the common finalize() code between tableWriters.
 func (tb *tableWriterBase) finalize(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor,
 ) (err error) {
