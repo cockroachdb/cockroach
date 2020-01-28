@@ -389,11 +389,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			// TODO (rohany,solongordon): Until it is clear how to handle foreign keys, disallow primary key changes
-			//  that are referenced by other tables through foreign key relationships.
-			if len(n.tableDesc.InboundFKs) > 0 || len(n.tableDesc.OutboundFKs) > 0 {
-				return errors.New(
-					"unable to perform primary key change on tables that are referenced by FK relationships")
+			// Since we are potentially dropping indexes here, make sure to upgrade any potentially out of
+			// date foreign key representations on old tables.
+			if err := params.p.MaybeUpgradeDependentOldForeignKeyVersionTables(params.ctx, n.tableDesc); err != nil {
+				return err
 			}
 
 			// TODO (rohany): gate this behind a flag so it doesn't happen all the time.
