@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -134,18 +135,18 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC.
 // If the Replica can run GC, this method returns the latest timestamp which
-// can be used to determine a valid new GCThreshold.
+// can be used to determine a valid new GCThreshold. The zone is passed in
+// rather than read from the replica state to ensure that the same value used
+// for this calculation is used later.
 func (r *Replica) checkProtectedTimestampsForGC(
-	ctx context.Context,
+	ctx context.Context, policy zonepb.GCPolicy,
 ) (canGC bool, gcTimestamp hlc.Timestamp) {
 	r.mu.RLock()
 	desc := r.descRLocked()
 	gcThreshold := *r.mu.state.GCThreshold
 	lease := *r.mu.state.Lease
 	r.mu.RUnlock()
-	// TODO(ajwerner): store a slice on the Replica to avoid allocations in the
-	// common case.
-	var overlapping []*ptpb.Record
+	var earliestRecord *ptpb.Record
 	gcTimestamp = r.store.protectedtsCache.Iterate(ctx,
 		roachpb.Key(desc.StartKey),
 		roachpb.Key(desc.EndKey),
@@ -155,16 +156,29 @@ func (r *Replica) checkProtectedTimestampsForGC(
 			// Note that when we implement PROTECT_AT, we'll need to consult some
 			// replica state here to determine whether the record indeed has been
 			// applied.
-			if gcThreshold.LessEq(rec.Timestamp) {
-				overlapping = append(overlapping, rec)
+			if gcThreshold.LessEq(rec.Timestamp) &&
+				(earliestRecord == nil || rec.Timestamp.Less(earliestRecord.Timestamp)) {
+				earliestRecord = rec
 			}
 			return true
 		})
 
-	if len(overlapping) > 0 {
-		log.VEventf(ctx, 1, "not gc'ing replica %v due to protected timestamps %v as of %v",
-			r, overlapping, gcTimestamp)
-		return false, hlc.Timestamp{}
+	if earliestRecord != nil {
+		// If we've already GC'd right up to this record, there's no reason to
+		// gc again.
+		if earliestRecord.Timestamp.Equal(gcThreshold) {
+			return false, hlc.Timestamp{}
+		}
+		// NB: we add the gcTTL to the timestamp here so because it will be
+		// subtracted later. Probably it should be this method selecting the new
+		// rather than returning the timestamp from which we'll derive the threshold
+		// but oh well.
+		// XXX(ajwerner): Is it good to have a GC threshold with a maximum logical
+		// component? Would it be cleaner to substract a single nanosecond?
+		impliedGCTimestamp := earliestRecord.Timestamp.Add(policy.TTL().Nanoseconds(), 0).Prev()
+		if impliedGCTimestamp.Less(gcTimestamp) {
+			gcTimestamp = impliedGCTimestamp
+		}
 	}
 
 	if gcTimestamp.Less(lease.Start) {
