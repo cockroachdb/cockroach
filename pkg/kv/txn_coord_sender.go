@@ -779,6 +779,9 @@ func (tc *TxnCoordSender) updateStateLocked(
 			PrevError: pErr.String(),
 		})
 		tc.mu.txn.Update(errTxn)
+		if tc.mu.txn.Status != roachpb.PENDING {
+			tc.cleanupTxnLocked(ctx)
+		}
 	}
 	return pErr
 }

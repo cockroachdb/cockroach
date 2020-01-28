@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -383,6 +385,52 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			assertTransactionAbortedError(t, err)
 		})
 	}
+}
+
+// Test that the heartbeat loop is stopped when a request receives an error with
+// an ABORTED txn, even if the error is not a TransactionAbortedError. Usually,
+// we'd expect a TransactionAbortedError with an ABORTED status, but the
+// DistSender can merge multiple errors thereby hiding the
+// TransactionAbortedError.
+func TestHeartbeatStopsOnNonRetryErrorWithAbortedTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var storeKnobs storage.StoreTestingKnobs
+	keyErr := roachpb.Key("a")
+	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, req := range ba.Requests {
+			switch r := req.GetInner().(type) {
+			case *roachpb.GetRequest:
+				if r.Key.Equal(keyErr) {
+					txn := ba.Txn.Clone()
+					txn.Status = roachpb.ABORTED
+					return roachpb.NewErrorWithTxn(fmt.Errorf("injected"), txn)
+				}
+			}
+		}
+		return nil
+	}
+
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	txn := db.NewTxn(ctx, "test")
+
+	// Perform a write to start the heartbeat loop.
+	err := txn.Put(ctx, "write", "foo")
+	require.NoError(t, err)
+	tc := txn.Sender().(*TxnCoordSender)
+	require.True(t, tc.IsTracking())
+
+	// Now do a Get which is gonna get the error and check that the heartbeat loop
+	// is stopped.
+	_, err = txn.Get(ctx, keyErr)
+	require.Error(t, err, "injected")
+	require.False(t, tc.IsTracking())
+
+	require.NoError(t, txn.Rollback(ctx))
 }
 
 // getTxn fetches the requested key and returns the transaction info.
