@@ -58,6 +58,8 @@ type Factory interface {
 	//     be 0.
 	//   - If maxResults > 0, the scan is guaranteed to return at most maxResults
 	//     rows.
+	//   - If locking is provided, the scan should use the specified row-level
+	//     locking mode.
 	ConstructScan(
 		table cat.Table,
 		index cat.Index,
@@ -69,6 +71,7 @@ type Factory interface {
 		maxResults uint64,
 		reqOrdering OutputOrdering,
 		rowCount float64,
+		locking *tree.LockingItem,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual

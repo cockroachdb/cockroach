@@ -121,7 +121,12 @@ func (cb *ColumnBackfiller) Init(
 		ValNeededForCol: valNeededForCol,
 	}
 	return cb.fetcher.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &cb.alloc, tableArgs,
+		false, /* reverse */
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		&cb.alloc,
+		tableArgs,
 	)
 }
 
@@ -358,7 +363,12 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 		ValNeededForCol: valNeededForCol,
 	}
 	return ib.fetcher.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &ib.alloc, tableArgs,
+		false, /* reverse */
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		&ib.alloc,
+		tableArgs,
 	)
 }
 
