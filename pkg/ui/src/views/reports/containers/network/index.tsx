@@ -363,7 +363,9 @@ class Network extends React.Component<NetworkProps, INetworkState> {
     return (
       <Fragment>
         <Helmet title="Network Diagnostics | Debug" />
-        <h1 className="base-heading">Network Diagnostics</h1>
+        <div className="section">
+          <h1 className="base-heading">Network Diagnostics</h1>
+        </div>
         <Loading
           loading={!contentAvailable(nodesSummary)}
           error={this.props.nodeSummaryErrors}
