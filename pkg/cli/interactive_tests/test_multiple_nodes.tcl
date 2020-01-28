@@ -22,10 +22,10 @@ end_test
 
 
 start_test "Check that a double decommission prints out a warning"
-spawn $argv node decommission 2
+spawn $argv node decommission 2 --wait none
 eexpect eof
 
-spawn $argv node decommission 2
+spawn $argv node decommission 2 --wait none
 eexpect "warning: node 2 is already decommissioning or decommissioned"
 eexpect eof
 end_test
