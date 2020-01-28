@@ -12,12 +12,9 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -100,23 +97,13 @@ func NewHashAggregator(
 		}
 	}
 
-	ht := makeHashTable(
+	ht := newHashTable(
 		allocator,
 		hashTableBucketSize,
 		colTypes,
 		groupCols,
 		outCols,
 		true, /* allowNullEquality */
-	)
-
-	builder := makeHashJoinBuilder(
-		ht,
-		hashJoinerSourceSpec{
-			source:      input,
-			eqCols:      groupCols,
-			outCols:     outCols,
-			sourceTypes: colTypes,
-		},
 	)
 
 	funcs, outTyps, err := makeAggregateFuncs(allocator, aggTyps, aggFns)
@@ -129,10 +116,10 @@ func NewHashAggregator(
 	distinctCol := make([]bool, coldata.BatchSize())
 
 	grouper := &hashGrouper{
-		builder:     builder,
-		ht:          ht,
-		distinctCol: distinctCol,
-		batch:       allocator.NewMemBatch(ht.outTypes),
+		OneInputNode: NewOneInputNode(input),
+		ht:           ht,
+		distinctCol:  distinctCol,
+		batch:        allocator.NewMemBatch(ht.outTypes),
 	}
 
 	orderedAgg := &orderedAggregator{
@@ -155,8 +142,9 @@ func NewHashAggregator(
 // to the orderedAggregator based on the results of the pre-built hashTable.
 // See the description at the top of this file for more information.
 type hashGrouper struct {
-	builder *hashJoinBuilder
-	ht      *hashTable
+	OneInputNode
+
+	ht *hashTable
 
 	// sel is an ordered list of indices to select representing the input rows.
 	// This selection vector is much bigger than coldata.BatchSize() and should be
@@ -176,23 +164,10 @@ type hashGrouper struct {
 	buildFinished bool
 }
 
-var _ execinfra.OpNode = &hashGrouper{}
-
-func (op *hashGrouper) ChildCount(verbose bool) int {
-	return 1
-}
-
-func (op *hashGrouper) Child(nth int, verbose bool) execinfra.OpNode {
-	if nth == 0 {
-		return op.builder.spec.source
-	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
-}
+var _ Operator = &hashGrouper{}
 
 func (op *hashGrouper) Init() {
-	op.builder.spec.source.Init()
+	op.input.Init()
 }
 
 func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
@@ -200,7 +175,8 @@ func (op *hashGrouper) Next(ctx context.Context) coldata.Batch {
 	// First, build the hash table.
 	if !op.buildFinished {
 		op.buildFinished = true
-		op.builder.exec(ctx)
+		op.ht.build(ctx, op.input)
+		op.ht.findSameTuples(ctx)
 	}
 
 	// The selection vector needs to be populated before any batching can be

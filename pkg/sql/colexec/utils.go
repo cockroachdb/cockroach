@@ -26,3 +26,5 @@ var zeroInt32Column = make([]int32, coldata.MaxBatchSize)
 var zeroInt64Column = make([]int64, coldata.MaxBatchSize)
 
 var zeroFloat64Column = make([]float64, coldata.MaxBatchSize)
+
+var zeroUint64Column = make([]uint64, coldata.MaxBatchSize)

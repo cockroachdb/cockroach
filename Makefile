@@ -805,6 +805,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/count_agg.eg.go \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
+  pkg/sql/colexec/hashtable.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \
   pkg/sql/colexec/mergejoiner_fullouter.eg.go \
@@ -1496,6 +1497,7 @@ pkg/sql/colexec/const.eg.go: pkg/sql/colexec/const_tmpl.go
 pkg/sql/colexec/count_agg.eg.go: pkg/sql/colexec/count_agg_tmpl.go
 pkg/sql/colexec/distinct.eg.go: pkg/sql/colexec/distinct_tmpl.go
 pkg/sql/colexec/hashjoiner.eg.go: pkg/sql/colexec/hashjoiner_tmpl.go
+pkg/sql/colexec/hashtable.eg.go: pkg/sql/colexec/hashtable_tmpl.go
 pkg/sql/colexec/mergejoinbase.eg.go: pkg/sql/colexec/mergejoinbase_tmpl.go
 pkg/sql/colexec/mergejoiner_fullouter.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go
 pkg/sql/colexec/mergejoiner_inner.eg.go: pkg/sql/colexec/mergejoiner_tmpl.go

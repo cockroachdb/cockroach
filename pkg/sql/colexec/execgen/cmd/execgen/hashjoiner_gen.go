@@ -13,10 +13,7 @@ package main
 import (
 	"io"
 	"io/ioutil"
-	"strings"
 	"text/template"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func genHashJoiner(wr io.Writer) error {
@@ -27,57 +24,27 @@ func genHashJoiner(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_SEL_IND", "{{.SelInd}}", -1)
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
+	distinctCollectRightOuter := makeFunctionRegex("_DISTINCT_COLLECT_PROBE_OUTER", 3)
+	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectProbeOuter" buildDict "Global" . "UseSel" $3}}`)
 
-	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 3)
-	s = assignNeRe.ReplaceAllString(s, `{{.Global.Assign "$1" "$2" "$3"}}`)
+	distinctCollectNoOuter := makeFunctionRegex("_DISTINCT_COLLECT_PROBE_NO_OUTER", 4)
+	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectProbeNoOuter" buildDict "Global" . "UseSel" $4}}`)
 
-	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
-	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
+	collectRightOuter := makeFunctionRegex("_COLLECT_PROBE_OUTER", 5)
+	s = collectRightOuter.ReplaceAllString(s, `{{template "collectProbeOuter" buildDict "Global" . "UseSel" $5}}`)
 
-	rehash := makeFunctionRegex("_REHASH_BODY", 9)
-	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $8 "HasNulls" $9}}`)
+	collectNoOuter := makeFunctionRegex("_COLLECT_PROBE_NO_OUTER", 5)
+	s = collectNoOuter.ReplaceAllString(s, `{{template "collectProbeNoOuter" buildDict "Global" . "UseSel" $5}}`)
 
-	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)
-	s = checkCol.ReplaceAllString(s, `{{template "checkColWithNulls" buildDict "Global" . "UseSel" $7}}`)
-
-	distinctCollectRightOuter := makeFunctionRegex("_DISTINCT_COLLECT_RIGHT_OUTER", 3)
-	s = distinctCollectRightOuter.ReplaceAllString(s, `{{template "distinctCollectRightOuter" buildDict "Global" . "UseSel" $3}}`)
-
-	distinctCollectNoOuter := makeFunctionRegex("_DISTINCT_COLLECT_NO_OUTER", 4)
-	s = distinctCollectNoOuter.ReplaceAllString(s, `{{template "distinctCollectNoOuter" buildDict "Global" . "UseSel" $4}}`)
-
-	collectRightOuter := makeFunctionRegex("_COLLECT_RIGHT_OUTER", 5)
-	s = collectRightOuter.ReplaceAllString(s, `{{template "collectRightOuter" buildDict "Global" . "UseSel" $5}}`)
-
-	collectNoOuter := makeFunctionRegex("_COLLECT_NO_OUTER", 5)
-	s = collectNoOuter.ReplaceAllString(s, `{{template "collectNoOuter" buildDict "Global" . "UseSel" $5}}`)
-
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 9)
-	s = checkColBody.ReplaceAllString(
-		s,
-		`{{template "checkColBody" buildDict "Global" .Global "UseSel" .UseSel "ProbeHasNulls" $7 "BuildHasNulls" $8 "AllowNullEquality" $9}}`)
-
-	s = replaceManipulationFuncs(".Global.LTyp", s)
+	collectLeftAnti := makeFunctionRegex("_COLLECT_LEFT_ANTI", 5)
+	s = collectLeftAnti.ReplaceAllString(s, `{{template "collectLeftAnti" buildDict "Global" . "UseSel" $5}}`)
 
 	tmpl, err := template.New("hashjoiner_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.NE], hashOverloads)
-
-	return tmpl.Execute(wr, struct {
-		NETemplate   interface{}
-		HashTemplate interface{}
-	}{
-		NETemplate:   allOverloads[0],
-		HashTemplate: allOverloads[1],
-	})
+	return tmpl.Execute(wr, struct{}{})
 }
 
 func init() {
