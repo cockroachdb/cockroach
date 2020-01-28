@@ -20,6 +20,7 @@ import (
 	"testing/quick"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -104,7 +105,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, ttlSec)
+		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec})
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -125,7 +126,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, 60)
+		}, zonepb.GCPolicy{TTLSeconds: 60})
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
@@ -245,7 +246,9 @@ func (cws *cachedWriteSimulator) shouldQueue(
 ) {
 	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
-	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, int32(ttl.Seconds()))
+	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, zonepb.GCPolicy{
+		TTLSeconds: int32(ttl.Seconds()),
+	})
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
@@ -507,7 +510,8 @@ func TestGCQueueProcess(t *testing.T) {
 		}
 
 		now := tc.Clock().Now()
-		return gc.Run(ctx, desc, snap, now, *zone.GC,
+		newThreshold := gc.CalculateThreshold(now, *zone.GC)
+		return gc.Run(ctx, desc, snap, now, newThreshold, *zone.GC,
 			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil

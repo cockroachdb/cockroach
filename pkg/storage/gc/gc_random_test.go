@@ -92,8 +92,10 @@ func TestRunNewVsOld(t *testing.T) {
 			snap := eng.NewSnapshot()
 
 			oldGCer := makeFakeGCer()
+			policy := zonepb.GCPolicy{TTLSeconds: tc.ttl}
+			newThreshold := CalculateThreshold(tc.now, policy)
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
-				zonepb.GCPolicy{TTLSeconds: tc.ttl},
+				newThreshold, policy,
 				&oldGCer,
 				oldGCer.resolveIntents,
 				oldGCer.resolveIntentsAsync)
@@ -101,7 +103,7 @@ func TestRunNewVsOld(t *testing.T) {
 
 			newGCer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
-				zonepb.GCPolicy{TTLSeconds: tc.ttl},
+				newThreshold, policy,
 				&newGCer,
 				newGCer.resolveIntents,
 				newGCer.resolveIntentsAsync)
@@ -126,8 +128,10 @@ func BenchmarkRun(b *testing.B) {
 			runGCFunc = runGCOld
 		}
 		snap := eng.NewSnapshot()
+		policy := zonepb.GCPolicy{TTLSeconds: spec.ttl}
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
-			zonepb.GCPolicy{TTLSeconds: spec.ttl},
+			CalculateThreshold(spec.now, policy),
+			policy,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil

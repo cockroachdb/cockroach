@@ -43,6 +43,7 @@ func runGCOld(
 	desc *roachpb.RangeDescriptor,
 	snap engine.Reader,
 	now hlc.Timestamp,
+	_ hlc.Timestamp, // exists to make signature match RunGC
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
