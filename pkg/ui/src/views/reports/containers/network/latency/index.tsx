@@ -14,7 +14,7 @@ import _ from "lodash";
 import { NanoToMilli } from "oss/src/util/convert";
 import { FixLong } from "oss/src/util/fixLong";
 import { Chip } from "oss/src/views/app/components/chip";
-import { Empty } from "oss/src/views/app/components/empty";
+import Empty from "oss/src/views/app/components/empty";
 import React from "react";
 import { Link } from "react-router";
 import { getValueFromString, Identity } from "..";
