@@ -62,7 +62,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		case jobs.StatusRunning:
 			err = reg.Resume(params.ctx, params.p.txn, int64(jobID))
 		case jobs.StatusCanceled:
-			err = reg.Cancel(params.ctx, params.p.txn, int64(jobID))
+			err = reg.CancelRequested(params.ctx, params.p.txn, int64(jobID))
 		default:
 			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}

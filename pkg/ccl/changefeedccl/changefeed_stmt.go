@@ -554,7 +554,7 @@ func (b *changefeedResumer) Resume(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn) error { return nil }
+func (b *changefeedResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
