@@ -14,7 +14,7 @@ import heroBannerLp from "assets/heroBannerLp.png";
 import "./styles.styl";
 
 export interface IEmptyProps {
-  title: string;
+  title?: string;
   description?: string;
   button?: React.ReactNode;
   buttonHref?: string;
@@ -23,11 +23,11 @@ export interface IEmptyProps {
 
 export default function Empty (props: IEmptyProps) {
   const {
-    title,
+    title = "No results",
     description,
     button = "Learn more",
     backgroundImage = heroBannerLp,
-    buttonHref,
+    buttonHref = "https://www.cockroachlabs.com/docs/stable/",
   } = props;
   return (
     <div className="empty-container">
