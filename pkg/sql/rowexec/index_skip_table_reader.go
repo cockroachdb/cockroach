@@ -124,8 +124,14 @@ func newIndexSkipTableReader(
 		ValNeededForCol:  neededColumns,
 	}
 
-	if err := t.fetcher.Init(t.reverse, true, /* returnRangeInfo */
-		false /* isCheck */, &t.alloc, tableArgs); err != nil {
+	if err := t.fetcher.Init(
+		t.reverse,
+		spec.LockingStrength,
+		true,  /* returnRangeInfo */
+		false, /* isCheck */
+		&t.alloc,
+		tableArgs,
+	); err != nil {
 		return nil, err
 	}
 

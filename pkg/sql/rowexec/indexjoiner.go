@@ -108,6 +108,7 @@ func newIndexJoiner(
 		false, /* isCheck */
 		&ij.alloc,
 		spec.Visibility,
+		spec.LockingStrength,
 	); err != nil {
 		return nil, err
 	}

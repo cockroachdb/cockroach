@@ -71,8 +71,14 @@ func initFetcher(
 
 	fetcherArgs := makeFetcherArgs(entries)
 
-	if err := fetcher.Init(reverseScan, false /*reverse*/, false, /* isCheck */
-		alloc, fetcherArgs...); err != nil {
+	if err := fetcher.Init(
+		reverseScan,
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		alloc,
+		fetcherArgs...,
+	); err != nil {
 		return nil, err
 	}
 
@@ -1051,8 +1057,9 @@ func TestRowFetcherReset(t *testing.T) {
 	// didn't reset.
 
 	fetcherArgs := makeFetcherArgs(args)
-	if err := resetFetcher.Init(false, false /*reverse*/, false, /* isCheck */
-		&da, fetcherArgs...); err != nil {
+	if err := resetFetcher.Init(
+		false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, fetcherArgs...,
+	); err != nil {
 		t.Fatal(err)
 	}
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
@@ -38,9 +39,12 @@ func NewKVFetcher(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
+	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
 ) (*KVFetcher, error) {
-	kvBatchFetcher, err := makeKVBatchFetcher(txn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo)
+	kvBatchFetcher, err := makeKVBatchFetcher(
+		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr, returnRangeInfo,
+	)
 	return newKVFetcher(&kvBatchFetcher), err
 }
 

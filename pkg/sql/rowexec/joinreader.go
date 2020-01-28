@@ -206,7 +206,7 @@ func newJoinReader(
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
 		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility,
+		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
 	)
 	if err != nil {
 		return nil, err
