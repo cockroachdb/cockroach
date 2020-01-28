@@ -2361,7 +2361,10 @@ func (m *monitor) Wait() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if err := m.WaitE(); err != nil && !m.t.Failed() {
+	if err := m.WaitE(); err != nil {
+		// Note that we used to avoid fataling again if we had already fatal'ed.
+		// However, this error here might be the one to actually report, see:
+		// https://github.com/cockroachdb/cockroach/issues/44436
 		m.t.Fatal(err)
 	}
 }
