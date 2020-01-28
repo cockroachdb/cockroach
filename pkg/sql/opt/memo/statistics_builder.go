@@ -531,6 +531,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				// Make sure the distinct count is at least 1, for the same reason as
 				// the row count above.
 				colStat.DistinctCount = max(colStat.DistinctCount, 1)
+
+				// Make sure the values are consistent in case some of the column stats
+				// were added at different times (and therefore have a different row
+				// count).
+				sb.finalizeFromRowCount(colStat, stats.RowCount)
 			}
 		}
 	}

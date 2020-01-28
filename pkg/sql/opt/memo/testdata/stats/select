@@ -1669,3 +1669,66 @@ select
  │                     <--- false --- true
  └── filters
       └── b = false [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
+
+exec-ddl
+CREATE TABLE t0(c0 INT)
+----
+
+exec-ddl
+CREATE VIEW v0(c0) AS SELECT CASE WHEN t0.c0 > 0 THEN 1 ELSE t0.rowid END FROM t0
+----
+
+exec-ddl
+ALTER TABLE t0 INJECT STATISTICS '[
+  {
+    "columns": ["c0"],
+    "created_at": "2020-01-28 03:02:57.841772+00:00",
+    "row_count": 3,
+    "distinct_count": 1,
+    "null_count": 3
+  },
+  {
+    "columns": ["rowid"],
+    "created_at": "2020-01-28 03:03:03.012072+00:00",
+    "row_count": 2,
+    "distinct_count": 2,
+    "null_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8"
+  }
+]'
+----
+
+# Regression test for #44418. Make sure inconsistent stats don't cause an
+# error.
+norm
+SELECT * FROM v0 WHERE v0.c0 > 0
+----
+select
+ ├── columns: c0:3(int!null)
+ ├── stats: [rows=2e-10, distinct(3)=2e-10, null(3)=0]
+ ├── project
+ │    ├── columns: rowid:3(int)
+ │    ├── stats: [rows=2, distinct(3)=1, null(3)=2]
+ │    ├── scan t0
+ │    │    ├── columns: c0:1(int) t0.rowid:2(int!null)
+ │    │    ├── stats: [rows=2, distinct(1,2)=1, null(1,2)=2]
+ │    │    ├── key: (2)
+ │    │    └── fd: (2)-->(1)
+ │    └── projections
+ │         └── CASE WHEN c0 > 0 THEN 1 ELSE t0.rowid END [type=int, outer=(1,2)]
+ └── filters
+      └── rowid > 0 [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
