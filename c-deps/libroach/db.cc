@@ -1075,9 +1075,9 @@ DBStatus DBUnlockFile(DBFileLock lock) {
   return ToDBStatus(rocksdb::Env::Default()->UnlockFile((rocksdb::FileLock*)lock));
 }
 
-DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIterOptions iter_opts,
-                       DBEngine* engine, DBString* data, DBString* write_intent,
-                       DBString* summary) {
+DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64_t target_size,
+                       DBIterOptions iter_opts, DBEngine* engine, DBString* data,
+                       DBString* write_intent, DBString* summary, DBString* resume) {
   DBSstFileWriter* writer = DBSstFileWriterNew();
   DBStatus status = DBSstFileWriterOpen(writer);
   if (status.data != NULL) {
@@ -1092,14 +1092,23 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
   bool skip_current_key_versions = !export_all_revisions;
   DBIterState state;
   const std::string end_key = EncodeKey(end);
-  for (state = iter.seek(start);; state = iter.next(skip_current_key_versions)) {
+  // cur_key is used when paginated is true and export_all_revisions is
+  // true. If we're exporting all revisions and we're returning a paginated
+  // SST then we need to keep track of when we've finished adding all of the
+  // versions of a key to the writer.
+  const bool paginated = target_size > 0;
+  std::string cur_key;
+  std::string resume_key;
+  // Seek to the MVCC metadata key for the provided start key and let the
+  // incremental iterator find the appropriate version.
+  const DBKey seek_key = { .key = start.key };
+  for (state = iter.seek(seek_key);; state = iter.next(skip_current_key_versions)) {
     if (state.status.data != NULL) {
       DBSstFileWriterClose(writer);
       return state.status;
     } else if (!state.valid || kComparator.Compare(iter.key(), end_key) >= 0) {
       break;
     }
-
     rocksdb::Slice decoded_key;
     int64_t wall_time = 0;
     int32_t logical_time = 0;
@@ -1109,11 +1118,30 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
       return ToDBString("Unable to decode key");
     }
 
+    const bool is_new_key = !export_all_revisions || decoded_key.compare(cur_key) != 0;
+    if (paginated && export_all_revisions && is_new_key) {
+      // Reuse the underlying buffer in cur_key.
+      cur_key.clear();
+      cur_key.reserve(decoded_key.size());
+      cur_key.assign(decoded_key.data(), decoded_key.size());
+    }
+
     // Skip tombstone (len=0) records when start time is zero (non-incremental)
     // and we are not exporting all versions.
-    bool is_skipping_deletes = start.wall_time == 0 && start.logical == 0 && !export_all_revisions;
+    const bool is_skipping_deletes = start.wall_time == 0 && start.logical == 0 && !export_all_revisions;
     if (is_skipping_deletes && iter.value().size() == 0) {
       continue;
+    }
+
+    // Check to see if this is the first version of key and adding it would
+    // put us over the limit (we might already be over the limit).
+    const int64_t cur_size = bulkop_summary.data_size();
+    const int64_t new_size = cur_size + decoded_key.size() + iter.value().size();
+    const bool is_over_target = cur_size > 0 && new_size > target_size;
+    if (paginated && is_new_key && is_over_target) {
+      resume_key.reserve(decoded_key.size());
+      resume_key.assign(decoded_key.data(), decoded_key.size());
+      break;
     }
 
     // Insert key into sst and update statistics.
@@ -1126,8 +1154,7 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
     if (!row_counter.Count((iter.key()), &bulkop_summary)) {
       return ToDBString("Error in row counter");
     }
-    bulkop_summary.set_data_size(bulkop_summary.data_size() + decoded_key.size() +
-                                 iter.value().size());
+    bulkop_summary.set_data_size(new_size);
   }
   *summary = ToDBString(bulkop_summary.SerializeAsString());
 
@@ -1138,6 +1165,11 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, DBIter
 
   auto res = DBSstFileWriterFinish(writer, data);
   DBSstFileWriterClose(writer);
+
+  // If we're not returning an error, check to see if we need to return the resume key.
+  if (res.data == NULL && resume_key.length() > 0) {
+    *resume = ToDBString(resume_key);
+  }
 
   return res;
 }

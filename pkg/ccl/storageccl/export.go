@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
 )
 
@@ -130,9 +131,14 @@ func evalExport(
 	}
 
 	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
-
-	data, summary, err := e.ExportToSst(args.Key, args.EndKey, args.StartTime, h.Timestamp, exportAllRevisions, io)
-
+	// TODO(ajwerner): Add a constant or internal cluster setting to control the
+	// target size for files and then paginate the actual export. The external
+	// API may need to be modified to deal with the case where ReturnSST is true.
+	const targetSize = 0 // unlimited
+	data, summary, resume, err := e.ExportToSst(args.Key, args.EndKey, args.StartTime, h.Timestamp, exportAllRevisions, targetSize, io)
+	if resume != nil {
+		return result.Result{}, crdberrors.AssertionFailedf("expected nil resume key with unlimited target size")
+	}
 	if err != nil {
 		return result.Result{}, err
 	}
