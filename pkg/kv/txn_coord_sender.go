@@ -779,6 +779,11 @@ func (tc *TxnCoordSender) updateStateLocked(
 			PrevError: pErr.String(),
 		})
 		tc.mu.txn.Update(errTxn)
+		if errTxn.Status != roachpb.PENDING {
+			// We only expect TransactionAbortedError to carry an aborted txn.
+			log.Errorf(ctx, "programming error: ABORTED txn in error: %s. txn: %s", pErr, errTxn)
+			tc.cleanupTxnLocked(ctx)
+		}
 	}
 	return pErr
 }
