@@ -310,9 +310,6 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 			core.HashJoiner.Type != sqlbase.JoinType_INNER {
 			return false, errors.Newf("can't plan non-inner hash join with on expressions")
 		}
-		if core.HashJoiner.Type == sqlbase.JoinType_LEFT_ANTI {
-			return false, errors.Newf("LEFT ANTI hash join is unsupported")
-		}
 		return true, nil
 
 	case core.MergeJoiner != nil:
@@ -645,7 +642,6 @@ func NewColOperator(
 				// "key" (for example, the input has at most 1 row). However, hash
 				// joiner, in order to handle NULL values correctly, needs to think
 				// that an empty set of equality columns doesn't form a key.
-				leftEqColsAreKey := core.HashJoiner.LeftEqColumnsAreKey && len(core.HashJoiner.LeftEqColumns) > 0
 				rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
 				result.Op, err = NewEqHashJoinerOp(
 					NewAllocator(ctx, hashJoinerMemAccount),
@@ -658,7 +654,6 @@ func NewColOperator(
 					leftTypes,
 					rightTypes,
 					rightEqColsAreKey,
-					leftEqColsAreKey || rightEqColsAreKey,
 					core.HashJoiner.Type,
 				)
 				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err

@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
@@ -1152,4 +1154,48 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 
 func (c *chunkingBatchSource) reset() {
 	c.curIdx = 0
+}
+
+// joinTestCase is a helper struct shared by the hash and merge join unit
+// tests. Not all fields have to be filled in, but init() method *must* be
+// called.
+type joinTestCase struct {
+	description           string
+	joinType              sqlbase.JoinType
+	leftTuples            []tuple
+	leftTypes             []coltypes.T
+	leftOutCols           []uint32
+	leftEqCols            []uint32
+	leftDirections        []execinfrapb.Ordering_Column_Direction
+	rightTuples           []tuple
+	rightTypes            []coltypes.T
+	rightOutCols          []uint32
+	rightEqCols           []uint32
+	rightDirections       []execinfrapb.Ordering_Column_Direction
+	leftEqColsAreKey      bool
+	rightEqColsAreKey     bool
+	expected              []tuple
+	outputBatchSize       uint16
+	skipAllNullsInjection bool
+	onExpr                execinfrapb.Expression
+}
+
+func (tc *joinTestCase) init() {
+	if tc.outputBatchSize == 0 {
+		tc.outputBatchSize = coldata.BatchSize()
+	}
+
+	if len(tc.leftDirections) == 0 {
+		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftTypes))
+		for i := range tc.leftDirections {
+			tc.leftDirections[i] = execinfrapb.Ordering_Column_ASC
+		}
+	}
+
+	if len(tc.rightDirections) == 0 {
+		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightTypes))
+		for i := range tc.rightDirections {
+			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
+		}
+	}
 }

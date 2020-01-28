@@ -12,12 +12,9 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
@@ -29,7 +26,7 @@ func NewUnorderedDistinct(
 	for i := range outCols {
 		outCols[i] = uint32(i)
 	}
-	ht := makeHashTable(
+	ht := newHashTable(
 		allocator,
 		hashTableBucketSize,
 		colTypes,
@@ -38,21 +35,11 @@ func NewUnorderedDistinct(
 		true, /* allowNullEquality */
 	)
 
-	builder := makeHashJoinBuilder(
-		ht,
-		hashJoinerSourceSpec{
-			source:      input,
-			eqCols:      distinctCols,
-			outCols:     outCols,
-			sourceTypes: colTypes,
-		},
-	)
-
 	return &unorderedDistinct{
-		allocator: allocator,
-		builder:   builder,
-		ht:        ht,
-		output:    allocator.NewMemBatch(ht.outTypes),
+		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
+		ht:           ht,
+		output:       allocator.NewMemBatch(ht.outTypes),
 	}
 }
 
@@ -64,8 +51,9 @@ func NewUnorderedDistinct(
 // vector is populated, the operator proceeds to returning the batches
 // according to a chunk of the selection vector.
 type unorderedDistinct struct {
+	OneInputNode
+
 	allocator     *Allocator
-	builder       *hashJoinBuilder
 	ht            *hashTable
 	buildFinished bool
 
@@ -79,21 +67,8 @@ type unorderedDistinct struct {
 
 var _ Operator = &unorderedDistinct{}
 
-func (op *unorderedDistinct) ChildCount(bool) int {
-	return 1
-}
-
-func (op *unorderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
-	if nth == 0 {
-		return op.builder.spec.source
-	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
-}
-
 func (op *unorderedDistinct) Init() {
-	op.builder.spec.source.Init()
+	op.input.Init()
 }
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
@@ -101,7 +76,8 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	// First, build the hash table.
 	if !op.buildFinished {
 		op.buildFinished = true
-		op.builder.exec(ctx)
+		op.ht.build(ctx, op.input)
+		op.ht.findSameTuples(ctx)
 	}
 
 	// The selection vector needs to be populated before any batching can be
