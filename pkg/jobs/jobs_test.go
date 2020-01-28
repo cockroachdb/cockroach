@@ -892,7 +892,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "cannot pause succeeded job") {
+		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "cannot be requested to be paused") {
 			t.Fatalf("expected 'cannot pause succeeded job', but got '%s'", err)
 		}
 	})

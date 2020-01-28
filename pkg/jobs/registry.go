@@ -715,11 +715,14 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
 		}
 		if ierr, ok := errors.Cause(err).(*InvalidStatusError); ok {
-			// TODO: hadle paused as well!!!
-			if ierr.status != StatusCancelRequested {
-				log.Fatalf(ctx, "TODO ERORROR: %v", ierr.status)
-			}
-			err = errors.Errorf("job %d: could not be reverted because it was canceled by the user", job.ID())
+			// TODO(spaskob): enable pausing of reverting jobs.
+			//if ierr.status != StatusPaused {
+			//	return errors.NewAssertionErrorWithWrappedErrf(err,
+			//		"job %d: unexpected status %s provided for a reverting job", job.ID(), err.status)
+			//}
+			//return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusPaused, err)
+			return errors.NewAssertionErrorWithWrappedErrf(ierr,
+				"unexpected error provided for a reverting job")
 		}
 		return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, StatusFailed, errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:
