@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func createSpecForMergeJoiner(tc joinTestCase) *execinfrapb.ProcessorSpec {
@@ -2046,27 +2047,18 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
-				s := mergeJoinInnerOp{
-					mergeJoinBase{
-						allocator: testAllocator,
-						left: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{0, 1},
-							sourceTypes: sourceTypes,
-							source:      leftSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-
-						right: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{2, 3},
-							sourceTypes: sourceTypes,
-							source:      rightSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-					},
-				}
-
+				base, err := newMergeJoinBase(
+					testAllocator,
+					leftSource, rightSource,
+					[]uint32{0, 1}, []uint32{2, 3},
+					sourceTypes, sourceTypes,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					nil,   /* filterConstructor */
+					false, /* filterOnlyOnLeft */
+				)
+				require.NoError(b, err)
+				s := mergeJoinInnerOp{mergeJoinBase: base}
 				s.Init()
 
 				b.StartTimer()
@@ -2088,26 +2080,18 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
 
-				s := mergeJoinInnerOp{
-					mergeJoinBase{
-						allocator: testAllocator,
-						left: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{0, 1},
-							sourceTypes: sourceTypes,
-							source:      leftSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-
-						right: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{2, 3},
-							sourceTypes: sourceTypes,
-							source:      rightSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-					},
-				}
+				base, err := newMergeJoinBase(
+					testAllocator,
+					leftSource, rightSource,
+					[]uint32{0, 1}, []uint32{2, 3},
+					sourceTypes, sourceTypes,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					nil,   /* filterConstructor */
+					false, /* filterOnlyOnLeft */
+				)
+				require.NoError(b, err)
+				s := mergeJoinInnerOp{mergeJoinBase: base}
 				s.Init()
 
 				b.StartTimer()
@@ -2131,27 +2115,18 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 
-				s := mergeJoinInnerOp{
-					mergeJoinBase{
-						allocator: testAllocator,
-						left: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{0, 1},
-							sourceTypes: sourceTypes,
-							source:      leftSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-
-						right: mergeJoinInput{
-							eqCols:      []uint32{0},
-							outCols:     []uint32{2, 3},
-							sourceTypes: sourceTypes,
-							source:      rightSource,
-							directions:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_ASC},
-						},
-					},
-				}
-
+				base, err := newMergeJoinBase(
+					testAllocator,
+					leftSource, rightSource,
+					[]uint32{0, 1}, []uint32{2, 3},
+					sourceTypes, sourceTypes,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					nil,   /* filterConstructor */
+					false, /* filterOnlyOnLeft */
+				)
+				require.NoError(b, err)
+				s := mergeJoinInnerOp{mergeJoinBase: base}
 				s.Init()
 
 				b.StartTimer()
