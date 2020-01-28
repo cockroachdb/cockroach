@@ -63,14 +63,22 @@ const (
 	// ErrorScoreTxnRestart indicates that the transaction should be restarted
 	// with an incremented epoch.
 	ErrorScoreTxnRestart
-	// ErrorScoreTxnAbort indicates that the transaction is aborted. The
-	// operation can only try again under the purview of a new transaction.
-	ErrorScoreTxnAbort
 	// ErrorScoreNonRetriable indicates that the transaction performed an
 	// operation that does not warrant a retry. Often this indicates that the
 	// operation ran into a logic error. The error should be propagated to the
 	// client and the transaction should terminate immediately.
 	ErrorScoreNonRetriable
+	// ErrorScoreTxnAbort indicates that the transaction is aborted. The
+	// operation can only try again under the purview of a new transaction.
+	//
+	// This error has the highest priority because, as far as KV is concerned, a
+	// TransactionAbortedError is impossible to recover from (whereas
+	// non-retriable errors could conceivably be recovered if the client wanted to
+	// ignore them). Also, the TxnCoordSender likes to assume that a
+	// TransactionAbortedError is the only way it finds about an aborted
+	// transaction, and so it benefits from all other errors being merged into a
+	// TransactionAbortedError instead of the other way around.
+	ErrorScoreTxnAbort
 )
 
 // ErrPriority computes the priority of the given error.

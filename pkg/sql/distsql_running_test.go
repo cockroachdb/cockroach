@@ -228,17 +228,6 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionRetryError",
 		},
 		{
-			// A TransactionAbortedError overwrites another retriable one.
-			err:    abortErr,
-			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
-		},
-		{
-			// A non-aborted retriable error does not overried the
-			// TransactionAbortedError.
-			err:    retryErr,
-			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
-		},
-		{
 			// A non-retriable error overwrites a retriable one.
 			err:    fmt.Errorf("err1"),
 			expErr: "err1",
@@ -247,6 +236,17 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 			// Another non-retriable error doesn't overwrite the previous one.
 			err:    fmt.Errorf("err2"),
 			expErr: "err1",
+		},
+		{
+			// A TransactionAbortedError overwrites anything.
+			err:    abortErr,
+			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
+		},
+		{
+			// A non-aborted retriable error does not overried the
+			// TransactionAbortedError.
+			err:    retryErr,
+			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
 		},
 	}
 
