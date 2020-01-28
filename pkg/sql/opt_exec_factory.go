@@ -78,6 +78,7 @@ func (ef *execFactory) ConstructScan(
 	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
+	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -122,6 +123,10 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(rowCount)
+	if locking != nil {
+		scan.lockingStrength = sqlbase.ToScanLockingStrength(locking.Strength)
+		scan.lockingWaitPolicy = sqlbase.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	}
 	return scan, nil
 }
 
