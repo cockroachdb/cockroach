@@ -324,8 +324,28 @@ SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a);
 ----
 {"a": 1, "column2": 2}
 
-query error found duplicate tuple label: \"column2\"
+# TODO(#44465): Implement the test cases below to be compatible with Postgres
+# and delete this one
+query T
 SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(column2);
+----
+{"column2": 2}
+
+# Odd, but postgres-compatible
+# query T
+# SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(a,a);
+# ----
+# {"a": 1, "a": 2}
+
+# query T
+# SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(column1);
+# ----
+# {"column1": 1, "column2": 2}
+
+# query T
+# SELECT to_json(x.*) FROM (VALUES (1,2)) AS x(column2);
+# ----
+# {"column2": 1, "column2": 2}
 
 # Regression test for #39502.
 statement ok

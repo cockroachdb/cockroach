@@ -606,8 +606,11 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	expr.ColIndex = -1
 	for i, label := range resolvedType.TupleLabels() {
 		if label == expr.ColName {
+			if expr.ColIndex != -1 {
+				// Found a duplicate label.
+				return nil, pgerror.Newf(pgcode.AmbiguousColumn, "column reference %q is ambiguous", label)
+			}
 			expr.ColIndex = i
-			break
 		}
 	}
 	if expr.ColIndex < 0 {
@@ -1217,17 +1220,6 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 	}
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
-		// Ensure that there are no repeat labels.
-		for i := range expr.Labels {
-			for j := 0; j < i; j++ {
-				if expr.Labels[i] == expr.Labels[j] {
-					return nil, pgerror.Newf(pgcode.Syntax,
-						"found duplicate tuple label: %q", ErrNameStringP(&expr.Labels[i]),
-					)
-				}
-			}
-		}
-
 		labels = make([]string, len(expr.Labels))
 		for i := range expr.Labels {
 			labels[i] = lex.NormalizeName(expr.Labels[i])
