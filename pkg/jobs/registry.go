@@ -215,16 +215,17 @@ func (r *Registry) CreateAndStartJob(
 		return nil, nil, err
 	}
 	if err := j.insert(ctx, id, r.newLease()); err != nil {
-		r.unregister(*j.ID())
+		// Use id instead of job.ID because the new id is not recorded in the job.
+		r.unregister(id)
 		return nil, nil, err
 	}
 	if err := j.Started(ctx); err != nil {
-		r.unregister(*j.ID())
+		r.unregister(id)
 		return nil, nil, err
 	}
 	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
 	if err != nil {
-		r.unregister(*j.ID())
+		r.unregister(id)
 		return nil, nil, err
 	}
 	return j, errCh, err
