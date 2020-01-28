@@ -26,7 +26,17 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The total number of active SQL connections ${tooltipSelection}.`}
     >
       <Axis label="connections">
-        <Metric name="cr.node.sql.conns" title="Client Connections" />
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.sql.conns"
+              title={nodeDisplayName(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
       </Axis>
     </LineGraph>,
 
