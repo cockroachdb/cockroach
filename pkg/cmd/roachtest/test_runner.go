@@ -425,21 +425,31 @@ func (r *testRunner) runWorker(
 		// Prepare the test's logger.
 		logPath := ""
 		var artifactsDir string
+		var artifactsSpec string
 		if artifactsRootDir != "" {
-			artifactsSuffix := "run_" + strconv.Itoa(testToRun.runNum)
-			artifactsDir = filepath.Join(
-				artifactsRootDir, teamCityNameEscape(testToRun.spec.Name), artifactsSuffix)
+			escapedTestName := teamCityNameEscape(testToRun.spec.Name)
+			runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
+
+			base := filepath.Join(artifactsRootDir, escapedTestName)
+
+			artifactsDir = filepath.Join(base, runSuffix)
 			logPath = filepath.Join(artifactsDir, "test.log")
+
+			// Map artifacts/TestFoo/** => TestFoo/**, i.e. collect the artifacts
+			// for this test exactly as they are laid out on disk (when the time
+			// comes).
+			artifactsSpec = fmt.Sprintf("%s/** => %s", base, escapedTestName)
 		}
 		testL, err := rootLogger(logPath, teeOpt)
 		if err != nil {
 			return err
 		}
 		t := &test{
-			spec:         &testToRun.spec,
-			buildVersion: r.buildVersion,
-			artifactsDir: artifactsDir,
-			l:            testL,
+			spec:          &testToRun.spec,
+			buildVersion:  r.buildVersion,
+			artifactsDir:  artifactsDir,
+			artifactsSpec: artifactsSpec,
+			l:             testL,
 		}
 		// Tell the cluster that, from now on, it will be run "on behalf of this
 		// test".
@@ -651,10 +661,15 @@ func (r *testRunner) runTest(
 		if teamCity {
 			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']", t.Name(), t.Name())
 
-			artifactsGlobPath := filepath.Join(t.ArtifactsDir(), "**")
-			escapedTestName := teamCityNameEscape(t.Name())
-			artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-			shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", artifactsSpec)
+			if t.artifactsSpec != "" {
+				// Tell TeamCity to collect this test's artifacts now. The TC job
+				// also collects the artifacts directory wholesale at the end, but
+				// here we make sure that the artifacts for any test that has already
+				// finished are available in the UI even before the job as a whole
+				// has completed. We're using the exact same destination to avoid
+				// duplication of any of the artifacts.
+				shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']", t.artifactsSpec)
+			}
 		}
 
 		r.recordTestFinish(completedTestInfo{
