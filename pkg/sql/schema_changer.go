@@ -827,7 +827,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 			if err != nil {
 				return err
 			}
-			return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
+			return job.WithTxn(txn).Succeeded(ctx, nil)
 		},
 	)
 
@@ -1466,7 +1466,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		// already be successful. These jobs don't need their status to be updated.
 		if !sc.job.WithTxn(txn).CheckTerminalStatus(ctx) {
 			if jobSucceeded {
-				if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+				if err := sc.job.WithTxn(txn).Succeeded(ctx, nil); err != nil {
 					return errors.Wrapf(err,
 						"failed to mark job %d as successful", errors.Safe(*sc.job.ID()))
 				}
@@ -1751,7 +1751,7 @@ func markJobFailed(
 	if err != nil {
 		return nil, err
 	}
-	err = job.WithTxn(txn).Failed(ctx, causingError, jobs.NoopFn)
+	err = job.WithTxn(txn).Failed(ctx, causingError, nil)
 	return job, err
 }
 
