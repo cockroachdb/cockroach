@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -662,4 +663,9 @@ func (c *Constraint) GetKey() string {
 // GetValue is part of the cat.Constraint interface.
 func (c *Constraint) GetValue() string {
 	return c.Value
+}
+
+// TTL returns the implies TTL as a time.Duration.
+func (m *GCPolicy) TTL() time.Duration {
+	return time.Duration(m.TTLSeconds) * time.Second
 }
