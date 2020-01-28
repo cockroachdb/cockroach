@@ -291,6 +291,9 @@ func (j *Job) paused(ctx context.Context) error {
 			// Already paused - do nothing.
 			return nil
 		}
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
+		}
 		if md.Status.Terminal() {
 			return &InvalidStatusError{*j.ID(), md.Status, "pause", md.Payload.Error}
 		}
@@ -336,7 +339,7 @@ func (j *Job) cancelRequested(
 		if md.Status == StatusCancelRequested {
 			return nil
 		}
-		if md.Status.Terminal() {
+		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
 			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
 		}
 		if fn != nil {
@@ -374,8 +377,8 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 		if md.Status == StatusCanceled {
 			return nil
 		}
-		if md.Status.Terminal() {
-			return fmt.Errorf("job with status %s cannot be marked canceled", md.Status)
+		if md.Status != StatusReverting {
+			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
