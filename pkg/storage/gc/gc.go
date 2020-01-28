@@ -50,7 +50,14 @@ const (
 // current view of time.
 func CalculateThreshold(now hlc.Timestamp, policy zonepb.GCPolicy) (threshold hlc.Timestamp) {
 	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
-	return hlc.Timestamp{WallTime: now.WallTime - ttlNanos}
+	return now.Add(-ttlNanos, 0)
+}
+
+// TimestampForThreshold inverts CalculateThreshold. It returns the timestamp
+// which should be used for now to arrive at the passed threshold.
+func TimestampForThreshold(threshold hlc.Timestamp, policy zonepb.GCPolicy) (ts hlc.Timestamp) {
+	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
+	return threshold.Add(ttlNanos, 0)
 }
 
 // A GCer is an abstraction used by the GC queue to carry out chunked deletions.
@@ -139,7 +146,7 @@ func Run(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap engine.Reader,
-	now hlc.Timestamp,
+	now, newThreshold hlc.Timestamp,
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
@@ -147,10 +154,8 @@ func Run(
 ) (Info, error) {
 
 	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
-	threshold := CalculateThreshold(now, policy)
-
 	if err := gcer.SetGCThreshold(ctx, Threshold{
-		Key: threshold,
+		Key: newThreshold,
 		Txn: txnExp,
 	}); err != nil {
 		return Info{}, errors.Wrap(err, "failed to set GC thresholds")
@@ -159,13 +164,13 @@ func Run(
 	info := Info{
 		Policy:    policy,
 		Now:       now,
-		Threshold: threshold,
+		Threshold: newThreshold,
 	}
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
 	intentSpanMap := map[uuid.UUID][]roachpb.Span{}
-	err := processReplicatedKeyRange(ctx, desc, snap, now, threshold, gcer, txnMap, intentSpanMap, &info)
+	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, gcer, txnMap, intentSpanMap, &info)
 	if err != nil {
 		return Info{}, err
 	}
