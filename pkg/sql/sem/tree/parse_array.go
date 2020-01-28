@@ -137,7 +137,7 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := parseStringAs(p.t, next, p.ctx)
+	d, err := ParseStringMustBe(p.t, next, p.ctx)
 	if d == nil && err == nil {
 		return errors.AssertionFailedf("unknown type %s (%T)", p.t, p.t)
 	}

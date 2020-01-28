@@ -3379,6 +3379,14 @@ func (d *DArray) Format(ctx *FmtCtx) {
 		return
 	}
 
+	// If we want to export arrays, we need to ensure that
+	// the datums within the arrays are formatted with enclosing quotes etc.
+	if ctx.HasFlags(FmtExport) {
+		oldFlags := ctx.flags
+		ctx.flags = oldFlags & ^FmtExport | FmtParsable
+		defer func() { ctx.flags = oldFlags }()
+	}
+
 	ctx.WriteString("ARRAY[")
 	comma := ""
 	for _, v := range d.Array {
