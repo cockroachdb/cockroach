@@ -334,16 +334,14 @@ func runTestsWithoutAllNullsInjection(
 // - test is a function that takes a list of input Operators and performs
 //   testing with t.
 func runTestsWithFn(
-	t *testing.T, tups []tuples, typs [][]coltypes.T, test func(t *testing.T, inputs []Operator),
+	t *testing.T,
+	tups []tuples,
+	typs [][]coltypes.T,
+	test func(t *testing.T, inputs []Operator),
 ) {
 	rng, _ := randutil.NewPseudoRand()
 
-	for _, batchSize := range []uint16{1, uint16(math.Trunc(.002 * float64(coldata.BatchSize()))), uint16(math.Trunc(.003 * float64(coldata.BatchSize()))), uint16(math.Trunc(.016 * float64(coldata.BatchSize()))), coldata.BatchSize()} {
-		if batchSize == 0 {
-			// It is possible for batchSize to be 0 here when varying
-			// coldata.BatchSize(), so we want to skip such configuration.
-			continue
-		}
+	for _, batchSize := range []uint16{1, coldata.BatchSize()} {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
 				inputSources := make([]Operator, len(tups))
