@@ -147,8 +147,8 @@ func (w *diskQueueWriter) numBytesBuffered() int {
 //  ensure that we only use DiskQueues for the write-everything, read-everything
 //  pattern.
 type diskQueue struct {
+	typs  []coltypes.T
 	cfg   DiskQueueCfg
-	fs    vfs.FS
 	files []file
 	seqNo int
 
@@ -204,7 +204,8 @@ const (
 
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
-	Typs []coltypes.T
+	// FS is the filesystem interface to use.
+	FS vfs.FS
 	// Path is where the temporary files should be created.
 	Path string
 	// Dir is the directory that will be created to store all of a Queue's files.
@@ -227,11 +228,7 @@ type DiskQueueCfg struct {
 }
 
 // EnsureDefaults ensures that optional fields are set to reasonable defaults.
-// If any necessary options have been elided, an error is returned.
-func (cfg *DiskQueueCfg) EnsureDefaults() error {
-	if cfg.Typs == nil {
-		return errors.New("typs unset on DiskQueueCfg")
-	}
+func (cfg *DiskQueueCfg) EnsureDefaults() {
 	// An unset Path is allowed. A random directory name will be generated if
 	// unset.
 	if cfg.Dir == "" {
@@ -243,20 +240,17 @@ func (cfg *DiskQueueCfg) EnsureDefaults() error {
 	if cfg.MaxFileSizeBytes == 0 {
 		cfg.MaxFileSizeBytes = defaultMaxFileSizeBytes
 	}
-	return nil
 }
 
 // NewDiskQueue creates a Queue that spills to disk.
-func NewDiskQueue(cfg DiskQueueCfg, fs vfs.FS) (Queue, error) {
-	if err := cfg.EnsureDefaults(); err != nil {
-		return nil, err
-	}
+func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
+	cfg.EnsureDefaults()
 	d := &diskQueue{
+		typs:  typs,
 		cfg:   cfg,
-		fs:    fs,
 		files: make([]file, 0, 4),
 	}
-	if err := fs.MkdirAll(filepath.Join(cfg.Path, cfg.Dir), 0755); err != nil {
+	if err := cfg.FS.MkdirAll(filepath.Join(cfg.Path, cfg.Dir), 0755); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -289,7 +283,7 @@ func (d *diskQueue) Close() error {
 		d.readFile = nil
 		// The readFile will be removed below in RemoveAll.
 	}
-	if err := d.fs.RemoveAll(filepath.Join(d.cfg.Path, d.cfg.Dir)); err != nil {
+	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.Path, d.cfg.Dir)); err != nil {
 		return err
 	}
 	return nil
@@ -303,7 +297,7 @@ func (d *diskQueue) Close() error {
 // to write to.
 func (d *diskQueue) rotateFile() error {
 	fName := filepath.Join(d.cfg.Path, d.cfg.Dir, strconv.Itoa(d.seqNo))
-	f, err := d.fs.Create(fName)
+	f, err := d.cfg.FS.Create(fName)
 	if err != nil {
 		return err
 	}
@@ -314,7 +308,7 @@ func (d *diskQueue) rotateFile() error {
 
 	if d.serializer == nil {
 		writer := &diskQueueWriter{testingKnobAlwaysCompress: d.cfg.TestingKnobs.AlwaysCompress, wrapped: f}
-		d.serializer, err = NewFileSerializer(writer, d.cfg.Typs)
+		d.serializer, err = NewFileSerializer(writer, d.typs)
 		if err != nil {
 			return err
 		}
@@ -422,7 +416,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 			if err := d.readFile.Close(); err != nil {
 				return false, err
 			}
-			if err := d.fs.Remove(d.files[d.readFileIdx].name); err != nil {
+			if err := d.cfg.FS.Remove(d.files[d.readFileIdx].name); err != nil {
 				return false, err
 			}
 			d.readFile = nil
@@ -435,7 +429,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 	}
 	if d.readFile == nil {
 		// File is not open.
-		f, err := d.fs.Open(fileToRead.name)
+		f, err := d.cfg.FS.Open(fileToRead.name)
 		if err != nil {
 			return false, err
 		}
@@ -549,7 +543,7 @@ func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 				// TODO(asubiotto): This is a stop-gap solution. The issue is that
 				//  ownership semantics are a bit murky. Can we do better? Refer to the
 				//  issue.
-				vecs[i] = coldata.NewMemColumn(d.cfg.Typs[i], int(coldata.BatchSize()))
+				vecs[i] = coldata.NewMemColumn(d.typs[i], int(coldata.BatchSize()))
 			}
 		}
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {

@@ -56,14 +56,14 @@ func TestQueue(t *testing.T) {
 				// Create queue.
 				directoryName := uuid.FastMakeV4().String()
 				queueCfg := colserde.DiskQueueCfg{
-					Typs:             typs,
+					FS:               fs,
 					Path:             testingFilePath,
 					Dir:              directoryName,
 					BufferSizeBytes:  bufferSizeBytes,
 					MaxFileSizeBytes: maxFileSizeBytes,
 				}
 				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
-				q, err := colserde.NewDiskQueue(queueCfg, fs)
+				q, err := colserde.NewDiskQueue(typs, queueCfg)
 				require.NoError(t, err)
 
 				// Run verification.
@@ -144,11 +144,12 @@ func BenchmarkQueues(b *testing.B) {
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)
-		q, err := colserde.NewDiskQueue(colserde.DiskQueueCfg{
+		q, err := colserde.NewDiskQueue(typs, colserde.DiskQueueCfg{
+			FS:               vfs.Default,
 			Path:             testingFilePath,
 			BufferSizeBytes:  bufSize,
 			MaxFileSizeBytes: maxFileSize,
-		}, vfs.Default)
+		})
 		require.NoError(b, err)
 		for {
 			batchToEnqueue := op.Next(ctx)
