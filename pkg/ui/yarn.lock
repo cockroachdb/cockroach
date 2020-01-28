@@ -2253,6 +2253,14 @@ clone@^1.0.2:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/clone/-/clone-1.0.2.tgz#260b7a99ebb1edfe247538175f783243cb19d149"
 
+"cockroachdb-protobuf-client-ccl@link:../ui-client/ccl":
+  version "0.0.0"
+  uid ""
+
+"cockroachdb-protobuf-client-oss@link:../ui-client/oss":
+  version "0.0.0"
+  uid ""
+
 code-point-at@^1.0.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/code-point-at/-/code-point-at-1.1.0.tgz#0d070b4d043a5bea33a2f1a40e2edb3d9a4ccf77"

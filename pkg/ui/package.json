@@ -9,6 +9,8 @@
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
+    "cockroachdb-protobuf-client-ccl": "link:../ui-client/ccl",
+    "cockroachdb-protobuf-client-oss": "link:../ui-client/oss",
     "combokeys": "^2.4.6",
     "connected-react-router": "^6.6.1",
     "create-react-context": "^0.3.0",
