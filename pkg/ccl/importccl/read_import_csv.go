@@ -257,7 +257,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context, workerID int) 
 					conv.Datums[datumIdx] = tree.DNull
 				} else {
 					var err error
-					conv.Datums[datumIdx], err = tree.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
+					conv.Datums[datumIdx], err = sqlbase.ParseDatumStringAs(conv.VisibleColTypes[i], field, conv.EvalCtx)
 					if err != nil {
 						err = wrapRowErr(err, batch.file, rowNum, pgcode.Syntax,
 							"parse %q as %s", col.Name, col.Type.SQLString())

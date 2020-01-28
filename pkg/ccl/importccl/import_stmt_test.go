@@ -1553,6 +1553,52 @@ func TestImportCSVStmt(t *testing.T) {
 	})
 }
 
+func TestExportImportRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	tests := []struct {
+		stmts    string
+		tbl      string
+		expected string
+	}{
+		// Note that the directory names that are being imported from and exported into
+		// need to differ across runs, so we let the test runner format the stmts field
+		// with a unique directory name per run.
+		{
+			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT ARRAY['a', 'b', 'c'];
+							IMPORT TABLE t (x TEXT[]) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			tbl:      "t",
+			expected: `SELECT ARRAY['a', 'b', 'c']`,
+		},
+		{
+			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63'];
+							IMPORT TABLE t (x BYTES[]) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			tbl:      "t",
+			expected: `SELECT ARRAY[b'abc', b'\141\142\143', b'\x61\x62\x63']`,
+		},
+		{
+			stmts: `EXPORT INTO CSV 'nodelocal:///%[1]s' FROM SELECT 'dog' COLLATE en;
+							IMPORT TABLE t (x STRING COLLATE en) CSV DATA ('nodelocal:///%[1]s/n1.0.csv')`,
+			tbl:      "t",
+			expected: `SELECT 'dog' COLLATE en`,
+		},
+	}
+
+	for i, test := range tests {
+		sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, test.tbl))
+		sqlDB.Exec(t, fmt.Sprintf(test.stmts, fmt.Sprintf("run%d", i)))
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, test.tbl), sqlDB.QueryStr(t, test.expected))
+	}
+}
+
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation
