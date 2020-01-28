@@ -234,10 +234,8 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
 // tslint:disable-next-line:variable-name
 const EnqueueRangeConnected = connect(
-  () => {
-    return {};
-  },
-  () => ({
+  null,
+  {
     handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
       const req = new EnqueueRangeRequest({
         queue: queue,
@@ -247,7 +245,7 @@ const EnqueueRangeConnected = connect(
       });
       return enqueueRange(req);
     },
-  }),
+  },
 )(withRouter(EnqueueRange));
 
 export default EnqueueRangeConnected;
