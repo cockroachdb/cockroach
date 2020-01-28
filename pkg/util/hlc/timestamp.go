@@ -13,11 +13,13 @@ package hlc
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // Timestamp constant values.
@@ -88,6 +90,52 @@ func (t Timestamp) String() string {
 	buf = strconv.AppendInt(buf, int64(t.Logical), 10)
 
 	return *(*string)(unsafe.Pointer(&buf))
+}
+
+var (
+	timestampRegexp = regexp.MustCompile(
+		`^(?P<sign>-)?(?P<secs>\d{1,19})(\.(?P<nanos>\d{1,20}))?,(?P<logical>-?\d{1,10})$`)
+	signSubexp    = 1
+	secsSubexp    = 2
+	nanosSubexp   = 4
+	logicalSubexp = 5
+)
+
+// ParseTimestamp attempts to parse the string generated from
+// Timestamp.String().
+func ParseTimestamp(str string) (_ Timestamp, err error) {
+	matches := timestampRegexp.FindStringSubmatch(str)
+	if matches == nil {
+		return Timestamp{}, errors.Errorf("failed to parse %q as Timestamp", str)
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "failed to parse %q as Timestamp", str)
+		}
+	}()
+	seconds, err := strconv.ParseInt(matches[secsSubexp], 10, 64)
+	if err != nil {
+		return Timestamp{}, err
+	}
+	var nanos int64
+	if nanosMatch := matches[nanosSubexp]; nanosMatch != "" {
+		nanos, err = strconv.ParseInt(nanosMatch, 10, 64)
+		if err != nil {
+			return Timestamp{}, err
+		}
+	}
+	logical, err := strconv.ParseInt(matches[logicalSubexp], 10, 32)
+	if err != nil {
+		return Timestamp{}, err
+	}
+	wallTime := seconds*time.Second.Nanoseconds() + nanos
+	if matches[signSubexp] == "-" {
+		wallTime *= -1
+	}
+	return Timestamp{
+		WallTime: wallTime,
+		Logical:  int32(logical),
+	}, nil
 }
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.
