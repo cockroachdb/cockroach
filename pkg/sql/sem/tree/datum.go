@@ -1474,26 +1474,29 @@ func (d *DUuid) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DUuid) IsMax(_ *EvalContext) bool {
-	return d.equal(dMaxUUID)
+	return d.equal(DMaxUUID)
 }
 
 // IsMin implements the Datum interface.
 func (d *DUuid) IsMin(_ *EvalContext) bool {
-	return d.equal(dMinUUID)
+	return d.equal(DMinUUID)
 }
 
-var dMinUUID = NewDUuid(DUuid{uuid.UUID{}})
-var dMaxUUID = NewDUuid(DUuid{uuid.UUID{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+// DMinUUID is the min UUID.
+var DMinUUID = NewDUuid(DUuid{uuid.UUID{}})
+
+// DMaxUUID is the max UUID.
+var DMaxUUID = NewDUuid(DUuid{uuid.UUID{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}})
 
 // Min implements the Datum interface.
 func (*DUuid) Min(_ *EvalContext) (Datum, bool) {
-	return dMinUUID, true
+	return DMinUUID, true
 }
 
 // Max implements the Datum interface.
 func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxUUID, true
+	return DMaxUUID, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1619,12 +1622,12 @@ func (d *DIPAddr) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DIPAddr) IsMax(_ *EvalContext) bool {
-	return d.equal(dMaxIPAddr)
+	return d.equal(DMaxIPAddr)
 }
 
 // IsMin implements the Datum interface.
 func (d *DIPAddr) IsMin(_ *EvalContext) bool {
-	return d.equal(dMinIPAddr)
+	return d.equal(DMinIPAddr)
 }
 
 // dIPv4 and dIPv6 min and maxes use ParseIP because the actual byte constant is
@@ -1640,18 +1643,20 @@ var dIPv6max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:
 var dMaxIPv4Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: 32}})
 var dMinIPv6Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: 0}})
 
-// dMinIPAddr and dMaxIPAddr are used as the DIPAddr global min and max.
-var dMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}})
-var dMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
+// DMinIPAddr is the min DIPAddr.
+var DMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}})
+
+// DMaxIPAddr is the max DIPaddr.
+var DMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
 
 // Min implements the Datum interface.
 func (*DIPAddr) Min(_ *EvalContext) (Datum, bool) {
-	return dMinIPAddr, true
+	return DMinIPAddr, true
 }
 
 // Max implements the Datum interface.
 func (*DIPAddr) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxIPAddr, true
+	return DMaxIPAddr, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1973,8 +1978,10 @@ type DTimeTZ struct {
 }
 
 var (
-	dMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
-	dMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
+	// DMinTimeTZ is the min TimeTZ.
+	DMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
+	// DMaxTimeTZ is the max TimeTZ.
+	DMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
 )
 
 // NewDTimeTZ creates a DTimeTZ from a timetz.TimeTZ.
@@ -2040,17 +2047,17 @@ func (d *DTimeTZ) Next(ctx *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DTimeTZ) IsMax(_ *EvalContext) bool {
-	return d.TimeOfDay == dMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
+	return d.TimeOfDay == DMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
 }
 
 // IsMin implements the Datum interface.
 func (d *DTimeTZ) IsMin(_ *EvalContext) bool {
-	return d.TimeOfDay == dMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
+	return d.TimeOfDay == DMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
 }
 
 // Max implements the Datum interface.
 func (d *DTimeTZ) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxTimeTZ, true
+	return DMaxTimeTZ, true
 }
 
 // Round returns a new DTimeTZ to the specified precision.
@@ -2060,7 +2067,7 @@ func (d *DTimeTZ) Round(precision time.Duration) *DTimeTZ {
 
 // Min implements the Datum interface.
 func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
-	return dMinTimeTZ, true
+	return DMinTimeTZ, true
 }
 
 // AmbiguousFormat implements the Datum interface.
