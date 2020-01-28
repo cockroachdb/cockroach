@@ -745,7 +745,7 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 		}
 		for rows.Next() {
 			var columnName, dataType string
-			if err = rows.Scan(&columnName, dataType); err != nil {
+			if err = rows.Scan(&columnName, &dataType); err != nil {
 				return err
 			}
 			columnTypeByColumnName[columnName] = dataType
