@@ -2344,12 +2344,14 @@ SELECT pg_get_function_result((select oid from pg_proc where proname='variance' 
 ----
 numeric
 
-
-# Slight incompatibility: in Postgres, the latter returns SETOF anyelement.
-query TT
-SELECT pg_get_function_result('pg_sleep'::regproc), pg_get_function_result('unnest'::regproc)
+query T
+SELECT pg_get_function_result('pg_sleep'::regproc)
 ----
-bool  anyelement
+bool
+
+# Note in Postgres <= 9.5, returns SETOF anyelement.
+query error pq: more than one function named 'unnest'
+SELECT pg_get_function_result('unnest'::regproc);
 
 # Regression test for #40297.
 statement ok
