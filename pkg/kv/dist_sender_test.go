@@ -2737,7 +2737,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		{
 			err1:   abortErr,
 			err2:   conditionFailedErr,
-			expErr: "unexpected value",
+			expErr: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 		},
 		{
 			err1:   conditionFailedErr,
