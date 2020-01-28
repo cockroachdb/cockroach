@@ -212,16 +212,15 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
             </div>
           )}
         </section>
-        {data.length > 0 && (
-          <Pagination
-            size="small"
-            itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-            pageSize={pagination.pageSize}
-            current={pagination.current}
-            total={this.filteredStatementsData().length}
-            onChange={this.onChangePage}
-          />
-        )}
+        <Pagination
+          size="small"
+          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          pageSize={pagination.pageSize}
+          current={pagination.current}
+          total={this.filteredStatementsData().length}
+          onChange={this.onChangePage}
+          hideOnSinglePage={data.length === 0}
+        />
       </React.Fragment>
     );
   }
