@@ -387,7 +387,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := tree.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, err := tree.ParseStringAsWithRawBytes(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}

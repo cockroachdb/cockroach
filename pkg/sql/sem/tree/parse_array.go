@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 var enclosingError = pgerror.Newf(pgcode.InvalidTextRepresentation, "array must be enclosed in { and }")
@@ -137,10 +136,7 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := parseStringAs(p.t, next, p.ctx)
-	if d == nil && err == nil {
-		return errors.AssertionFailedf("unknown type %s (%T)", p.t, p.t)
-	}
+	d, err := ParseAndRequireString(p.t, next, p.ctx)
 	if err != nil {
 		return err
 	}

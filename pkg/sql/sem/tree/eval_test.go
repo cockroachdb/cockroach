@@ -131,7 +131,7 @@ func TestEval(t *testing.T) {
 
 			switch typedExpr.ResolvedType().Family() {
 			case types.TupleFamily:
-				// ParseDatumStringAs doesn't handle tuples, so we have to convert them ourselves.
+				// ParseAndRequireString doesn't handle tuples, so we have to convert them ourselves.
 				var datums tree.Datums
 				// Fetch the original expression's tuple values.
 				tuple := typedExpr.(*tree.Tuple)
@@ -145,7 +145,7 @@ func TestEval(t *testing.T) {
 						t.Fatal(err)
 					}
 					// Now parse the new string as the expected type.
-					datum, err := tree.ParseDatumStringAs(expr.ResolvedType(), s, evalCtx)
+					datum, err := tree.ParseAndRequireString(expr.ResolvedType(), s, evalCtx)
 					if err != nil {
 						t.Errorf("%s: %s", err, s)
 						return err.Error()
@@ -154,7 +154,7 @@ func TestEval(t *testing.T) {
 				}
 				return tree.NewDTuple(typedExpr.ResolvedType(), datums...).String()
 			}
-			datum, err := tree.ParseDatumStringAs(typedExpr.ResolvedType(), res.String, evalCtx)
+			datum, err := tree.ParseAndRequireString(typedExpr.ResolvedType(), res.String, evalCtx)
 			if err != nil {
 				t.Errorf("%s: %s", err, res.String)
 				return err.Error()
