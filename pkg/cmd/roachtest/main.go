@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -347,7 +348,11 @@ func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
 		<-sig
 		shout(ctx, l, os.Stderr,
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
-		// Signal runner.Run() to stop.
+		// Signal runner.Run() to stop. Emit a stack trace before because we've seen
+		// cases of unexplainable stalls before.
+		b := make([]byte, 5*(1<<20))
+		stack := b[:runtime.Stack(b, true /* all */)]
+		l.Printf("%s", string(stack))
 		cancel()
 		<-time.After(5 * time.Second)
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
