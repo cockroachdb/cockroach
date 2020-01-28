@@ -665,7 +665,7 @@ func TestHashRouterRandom(t *testing.T) {
 
 	var (
 		maxValues        = int(coldata.BatchSize()) * 4
-		maxOutputs       = int(coldata.BatchSize())
+		maxOutputs       = 128
 		blockedThreshold = 1 + rng.Intn(maxValues-1)
 		outputSize       = 1 + rng.Intn(maxValues-1)
 		numOutputs       = 1 + rng.Intn(maxOutputs-1)
