@@ -125,6 +125,10 @@ type test struct {
 	// artifactsDir is the path to the directory holding all the artifacts for
 	// this test. It will contain a test.log file and cluster logs.
 	artifactsDir string
+	// artifactsSpec is a TeamCity artifacts spec used to publish this test's
+	// artifacts. See:
+	// https://www.jetbrains.com/help/teamcity/2019.1/configuring-general-settings.html#Artifact-Paths
+	artifactsSpec string
 
 	mu struct {
 		syncutil.RWMutex
