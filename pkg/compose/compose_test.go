@@ -33,6 +33,7 @@ func TestComposeCompare(t *testing.T) {
 	cmd := exec.Command(
 		file,
 		"-f", filepath.Join("compare", "docker-compose.yml"),
+		"--no-ansi",
 		"up",
 		"--force-recreate",
 		"--exit-code-from", "test",
