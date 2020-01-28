@@ -377,6 +377,8 @@ func registerTPCC(r *testRegistry) {
 
 		LoadWarehouses: 2000,
 		EstimatedMax:   900,
+
+		MinVersion: "v19.1.0",
 	})
 }
 
