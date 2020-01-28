@@ -556,12 +556,13 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
+		policy := zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)}
+		now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		thresh := gc.CalculateThreshold(now, policy)
 		info, err := gc.Run(
 			context.Background(),
-			&desc,
-			snap,
-			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			zonepb.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
+			&desc, snap,
+			now, thresh, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },

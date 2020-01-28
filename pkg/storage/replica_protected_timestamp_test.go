@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
@@ -270,6 +272,9 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	makePolicy := func(ttlSec int32) zonepb.GCPolicy {
+		return zonepb.GCPolicy{TTLSeconds: ttlSec}
+	}
 	for _, testCase := range []struct {
 		name string
 		// Note that the store underneath the passed in Replica has been stopped.
@@ -280,13 +285,13 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			name: "lease is too new",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				r.mu.state.Lease.Start = r.store.Clock().Now()
-				canGC, gcTimestamp := r.checkProtectedTimestampsForGC(ctx)
+				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.False(t, canGC)
-				require.Equal(t, hlc.Timestamp{}, gcTimestamp)
+				require.Zero(t, gcTimestamp)
 			},
 		},
 		{
-			name: "have overlapping",
+			name: "have overlapping but new enough that it's okay",
 			test: func(t *testing.T, r *Replica, mt *manualCache) {
 				ts := r.store.Clock().Now()
 				mt.asOf = r.store.Clock().Now().Next()
@@ -300,9 +305,62 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				canGC, gcTimestamp := r.checkProtectedTimestampsForGC(ctx)
+				// We should allow gc to proceed with the normal new threshold if that
+				// threshold is earlier than all of the records.
+				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				require.True(t, canGC)
+				require.Equal(t, mt.asOf, gcTimestamp)
+			},
+		},
+		{
+			// In this case we have a record which protects some data but we can
+			// set the threshold to a later point.
+			name: "have overlapping but can still GC some",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				ts := r.store.Clock().Now().Add(-11*time.Second.Nanoseconds(), 0)
+				mt.asOf = r.store.Clock().Now().Next()
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        uuid.MakeV4(),
+					Timestamp: ts,
+					Spans: []roachpb.Span{
+						{
+							Key:    keys.MinKey,
+							EndKey: keys.MaxKey,
+						},
+					},
+				})
+				// We should allow gc to proceed up to the timestamp which precedes the
+				// protected timestamp. This means we expect a GC timestamp 10 seconds
+				// after ts.Prev() given the policy.
+				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
+				require.True(t, canGC)
+				require.Equal(t, ts.Prev().Add(10*time.Second.Nanoseconds(), 0), gcTimestamp)
+			},
+		},
+		{
+			// In this case we have a record which is right up against the GC
+			// threshold.
+			name: "have overlapping but have already GC'd right up to the threshold",
+			test: func(t *testing.T, r *Replica, mt *manualCache) {
+				r.mu.Lock()
+				th := *r.mu.state.GCThreshold
+				r.mu.Unlock()
+				mt.asOf = r.store.Clock().Now().Next()
+				mt.records = append(mt.records, &ptpb.Record{
+					ID:        uuid.MakeV4(),
+					Timestamp: th.Next(),
+					Spans: []roachpb.Span{
+						{
+							Key:    keys.MinKey,
+							EndKey: keys.MaxKey,
+						},
+					},
+				})
+				// We should not allow GC if the threshold is already the predecessor
+				// of the earliest valid record.
+				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.False(t, canGC)
-				require.Equal(t, hlc.Timestamp{}, gcTimestamp)
+				require.Zero(t, gcTimestamp)
 			},
 		},
 		{
@@ -323,7 +381,7 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 						},
 					},
 				})
-				canGC, gcTimestamp := r.checkProtectedTimestampsForGC(ctx)
+				canGC, _, gcTimestamp, _ := r.checkProtectedTimestampsForGC(ctx, makePolicy(10))
 				require.True(t, canGC)
 				require.Equal(t, mt.asOf, gcTimestamp)
 			},

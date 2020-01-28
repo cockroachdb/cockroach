@@ -13,7 +13,9 @@ package storage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/gc"
 	"github.com/cockroachdb/cockroach/pkg/storage/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -134,19 +136,27 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC.
 // If the Replica can run GC, this method returns the latest timestamp which
-// can be used to determine a valid new GCThreshold.
+// can be used to determine a valid new GCThreshold. The policy is passed in
+// rather than read from the replica state to ensure that the same value used
+// for this calculation is used later.
+//
+// In the case that GC can proceed, three timestamps are returned: The timestamp
+// corresponding to the state of the cache used to make the determination (used
+// for markPendingGC when actually performing GC), the timestamp used as the
+// basis to calculate the new gc threshold (used for scoring and reporting), and
+// the new gc threshold itself.
 func (r *Replica) checkProtectedTimestampsForGC(
-	ctx context.Context,
-) (canGC bool, gcTimestamp hlc.Timestamp) {
+	ctx context.Context, policy zonepb.GCPolicy,
+) (canGC bool, cacheTimestamp, gcTimestamp, newThreshold hlc.Timestamp) {
 	r.mu.RLock()
 	desc := r.descRLocked()
 	gcThreshold := *r.mu.state.GCThreshold
 	lease := *r.mu.state.Lease
 	r.mu.RUnlock()
-	// TODO(ajwerner): store a slice on the Replica to avoid allocations in the
-	// common case.
-	var overlapping []*ptpb.Record
-	gcTimestamp = r.store.protectedtsCache.Iterate(ctx,
+	// earliestValidRecord is the record with the earliest timestamp which is
+	// greater than the existing gcThreshold.
+	var earliestValidRecord *ptpb.Record
+	cacheTimestamp = r.store.protectedtsCache.Iterate(ctx,
 		roachpb.Key(desc.StartKey),
 		roachpb.Key(desc.EndKey),
 		func(rec *ptpb.Record) (wantMore bool) {
@@ -155,24 +165,37 @@ func (r *Replica) checkProtectedTimestampsForGC(
 			// Note that when we implement PROTECT_AT, we'll need to consult some
 			// replica state here to determine whether the record indeed has been
 			// applied.
-			if gcThreshold.LessEq(rec.Timestamp) {
-				overlapping = append(overlapping, rec)
+			if gcThreshold.LessEq(rec.Timestamp) &&
+				(earliestValidRecord == nil || rec.Timestamp.Less(earliestValidRecord.Timestamp)) {
+				earliestValidRecord = rec
 			}
 			return true
 		})
-
-	if len(overlapping) > 0 {
-		log.VEventf(ctx, 1, "not gc'ing replica %v due to protected timestamps %v as of %v",
-			r, overlapping, gcTimestamp)
-		return false, hlc.Timestamp{}
+	gcTimestamp = cacheTimestamp
+	if earliestValidRecord != nil {
+		// NB: we want to allow GC up to the timestamp preceding the earliest valid
+		// record.
+		impliedGCTimestamp := gc.TimestampForThreshold(earliestValidRecord.Timestamp.Prev(), policy)
+		if impliedGCTimestamp.Less(gcTimestamp) {
+			gcTimestamp = impliedGCTimestamp
+		}
 	}
 
 	if gcTimestamp.Less(lease.Start) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
 			r, lease, gcTimestamp)
-		return false, hlc.Timestamp{}
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
 	}
-	return true, gcTimestamp
+
+	newThreshold = gc.CalculateThreshold(gcTimestamp, policy)
+
+	// If we've already GC'd right up to this record, there's no reason to
+	// gc again.
+	if newThreshold.Equal(gcThreshold) {
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
+	}
+
+	return true, cacheTimestamp, gcTimestamp, newThreshold
 }
 
 // markPendingGC is called just prior to sending the GC request to increase the
