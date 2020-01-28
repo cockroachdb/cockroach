@@ -179,6 +179,9 @@ type cFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
+	// lockStr represents the row-level locking mode to use when fetching rows.
+	lockStr sqlbase.ScanLockingStrength
+
 	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
@@ -241,7 +244,12 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	allocator *Allocator, reverse, returnRangeInfo bool, isCheck bool, tables ...row.FetcherTableArgs,
+	allocator *Allocator,
+	reverse bool,
+	lockStr sqlbase.ScanLockingStrength,
+	returnRangeInfo bool,
+	isCheck bool,
+	tables ...row.FetcherTableArgs,
 ) error {
 	rf.adapter.allocator = allocator
 	if len(tables) == 0 {
@@ -249,6 +257,7 @@ func (rf *cFetcher) Init(
 	}
 
 	rf.reverse = reverse
+	rf.lockStr = lockStr
 	rf.returnRangeInfo = returnRangeInfo
 
 	if len(tables) > 1 {
@@ -464,7 +473,7 @@ func (rf *cFetcher) StartScan(
 	}
 
 	f, err := row.NewKVFetcher(
-		txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo,
+		txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.lockStr, rf.returnRangeInfo,
 	)
 	if err != nil {
 		return err

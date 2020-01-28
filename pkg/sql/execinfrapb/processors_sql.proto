@@ -21,6 +21,7 @@ option go_package = "execinfrapb";
 
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/join_type.proto";
+import "sql/sqlbase/locking.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "gogoproto/gogo.proto";
@@ -116,6 +117,18 @@ message TableReaderSpec {
   // older than this value.
   //
   optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the scan. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 10 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan when dealing with rows being
+  // locked. Always set to BLOCK when locking_stength is FOR_NONE.
+  //
+  // NOTE: this is currently set but unused because only the BLOCK wait policy
+  // makes it out of the SQL optimizer without throwing an error. If/when other
+  // wait policies are supported, this field will be plumbed further.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that
@@ -138,6 +151,18 @@ message IndexSkipTableReaderSpec {
   optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
 
   optional bool reverse = 5 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the scan. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan when dealing with rows being
+  // locked. Always set to BLOCK when locking_stength is FOR_NONE.
+  //
+  // NOTE: this is currently set but unused because only the BLOCK wait policy
+  // makes it out of the SQL optimizer without throwing an error. If/when other
+  // wait policies are supported, this field will be plumbed further.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 7 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
@@ -207,6 +232,18 @@ message JoinReaderSpec {
   // default PUBLIC state. Causes the index join to return these schema change
   // columns.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking strength to be used by the join. If set to
+  // FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 9 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the join when dealing with rows being
+  // locked. Always set to BLOCK when locking_stength is FOR_NONE.
+  //
+  // NOTE: this is currently set but unused because only the BLOCK wait policy
+  // makes it out of the SQL optimizer without throwing an error. If/when other
+  // wait policies are supported, this field will be plumbed further.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -545,6 +582,19 @@ message InterleavedReaderJoinerSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 3 [(gogoproto.nullable) = false];
+  
+  // Indicates the row-level locking strength to be used by the scan over the
+  // tables. If set to FOR_NONE, no row-level locking should be performed.
+  optional sqlbase.ScanLockingStrength locking_strength = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the policy to be used by the scan over the tables when dealing
+  // with rows being locked. Always set to BLOCK when locking_stength is
+  // FOR_NONE.
+  //
+  // NOTE: this is currently set but unused because only the BLOCK wait policy
+  // makes it out of the SQL optimizer without throwing an error. If/when other
+  // wait policies are supported, this field will be plumbed further.
+  optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 7 [(gogoproto.nullable) = false];
 
   // Joiner component
 

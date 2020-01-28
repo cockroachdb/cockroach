@@ -862,10 +862,12 @@ func initTableReaderSpec(
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
-		Table:      *n.desc.TableDesc(),
-		Reverse:    n.reverse,
-		IsCheck:    n.isCheck,
-		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.desc.TableDesc(),
+		Reverse:           n.reverse,
+		IsCheck:           n.isCheck,
+		Visibility:        n.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.lockingStrength,
+		LockingWaitPolicy: n.lockingWaitPolicy,
 
 		// Retain the capacity of the spans slice.
 		Spans: s.Spans[:0],
@@ -1806,9 +1808,11 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols)
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.table.desc.TableDesc(),
-		IndexIdx:   0,
-		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.table.desc.TableDesc(),
+		IndexIdx:          0,
+		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.table.lockingStrength,
+		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
 
 	filter, err := physicalplan.MakeExpression(
@@ -1871,9 +1875,11 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:      *n.table.desc.TableDesc(),
-		Type:       n.joinType,
-		Visibility: n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		Table:             *n.table.desc.TableDesc(),
+		Type:              n.joinType,
+		Visibility:        n.table.colCfg.visibility.toDistSQLScanVisibility(),
+		LockingStrength:   n.table.lockingStrength,
+		LockingWaitPolicy: n.table.lockingWaitPolicy,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
 	if err != nil {

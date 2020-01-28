@@ -190,6 +190,9 @@ type Fetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
+	// lockStr represents the row-level locking mode to use when fetching rows.
+	lockStr sqlbase.ScanLockingStrength
+
 	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
@@ -242,7 +245,9 @@ func (rf *Fetcher) Reset() {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *Fetcher) Init(
-	reverse, returnRangeInfo bool,
+	reverse bool,
+	lockStr sqlbase.ScanLockingStrength,
+	returnRangeInfo bool,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	tables ...FetcherTableArgs,
@@ -252,6 +257,7 @@ func (rf *Fetcher) Init(
 	}
 
 	rf.reverse = reverse
+	rf.lockStr = lockStr
 	rf.returnRangeInfo = returnRangeInfo
 	rf.alloc = alloc
 	rf.isCheck = isCheck
@@ -464,7 +470,13 @@ func (rf *Fetcher) StartScan(
 
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
-		txn, spans, rf.reverse, limitBatches, rf.firstBatchLimit(limitHint), rf.returnRangeInfo,
+		txn,
+		spans,
+		rf.reverse,
+		limitBatches,
+		rf.firstBatchLimit(limitHint),
+		rf.lockStr,
+		rf.returnRangeInfo,
 	)
 	if err != nil {
 		return err
@@ -543,6 +555,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.reverse,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
+		rf.lockStr,
 		rf.returnRangeInfo,
 	)
 	if err != nil {

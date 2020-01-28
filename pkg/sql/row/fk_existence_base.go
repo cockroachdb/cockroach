@@ -147,7 +147,13 @@ func makeFkExistenceCheckBaseHelper(
 	}
 	rf := &Fetcher{}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs); err != nil {
+		false, /* reverse */
+		sqlbase.ScanLockingStrength_FOR_NONE,
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		alloc,
+		tableArgs,
+	); err != nil {
 		return ret, err
 	}
 

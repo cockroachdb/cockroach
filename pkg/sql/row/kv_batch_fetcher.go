@@ -53,6 +53,8 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
+	// lockStr represents the locking mode to use when fetching KVs.
+	lockStr sqlbase.ScanLockingStrength
 	// returnRangeInfo, if set, causes the kvBatchFetcher to populate rangeInfos.
 	// See also rowFetcher.returnRangeInfo.
 	returnRangeInfo bool
@@ -145,6 +147,7 @@ func makeKVBatchFetcher(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
+	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
@@ -155,7 +158,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr, returnRangeInfo,
 	)
 }
 
@@ -167,6 +170,7 @@ func makeKVBatchFetcherWithSendFunc(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
+	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
@@ -218,6 +222,7 @@ func makeKVBatchFetcherWithSendFunc(
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
+		lockStr:         lockStr,
 		returnRangeInfo: returnRangeInfo,
 	}, nil
 }
@@ -233,6 +238,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		for i := range f.spans {
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
+			// TODO(nvanbenschoten): use f.lockStr here.
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
@@ -240,6 +246,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		for i := range f.spans {
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
+			// TODO(nvanbenschoten): use f.lockStr here.
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}
