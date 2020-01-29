@@ -85,18 +85,18 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.raftMu.Lock() // not unlocked on success
 		repl.mu.Lock()
 
-		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOld(repl, creatingReplica) {
-			repl.mu.Unlock()
-			repl.raftMu.Unlock()
-			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
-		}
-
 		// The current replica is removed, go back around.
 		if repl.mu.destroyStatus.Removed() {
 			repl.mu.Unlock()
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
+		}
+
+		// Drop messages from replicas we know to be too old.
+		if fromReplicaIsTooOld(repl, creatingReplica) {
+			repl.mu.Unlock()
+			repl.raftMu.Unlock()
+			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 		}
 
 		toTooOld := toReplicaIsTooOld(repl, replicaID)
@@ -233,7 +233,7 @@ func (s *Store) tryGetOrCreateReplica(
 		return repl.initRaftMuLockedReplicaMuLocked(desc, replicaID)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
-		// ensure nobody tries to use it
+		// ensure nobody tries to use it.
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
