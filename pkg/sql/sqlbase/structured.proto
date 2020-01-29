@@ -479,6 +479,13 @@ message PrimaryKeySwap {
   repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
 }
 
+// DropPrimaryKey is a sentinel mutation used to inform the `ALTER PRIMARY KEY` command
+// that the old primary key of the target table does not need to be rewritten during
+// the primary key change process.
+message DropPrimaryKey {
+  option (gogoproto.equal) = true;
+}
+
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -494,6 +501,7 @@ message DescriptorMutation {
     IndexDescriptor index = 2;
     ConstraintToUpdate constraint = 8;
     PrimaryKeySwap primaryKeySwap = 9;
+    DropPrimaryKey dropPrimaryKey = 10;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to

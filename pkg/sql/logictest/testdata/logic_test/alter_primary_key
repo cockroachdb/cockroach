@@ -421,6 +421,7 @@ SELECT * FROM t@i5
 1 2 3 4 {}
 
 # Regression test for #44782
+
 statement ok
 BEGIN
 
@@ -432,3 +433,109 @@ ALTER TABLE t44782 ALTER PRIMARY KEY USING COLUMNS (y)
 
 statement ok
 ROLLBACK
+
+subtest add_drop_pk
+
+# Test adding and dropping primary keys.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+
+statement error pq: primary key of table t dropped without subsequent addition of new primary key
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: multiple primary keys for table t are not allowed
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y), DROP CONSTRAINT "primary"
+
+statement error pq: multiple primary keys for table t are not allowed
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   FAMILY fam_0_x (x),
+   FAMILY fam_1_y (y)
+)
+
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+statement error pq: cannot drop the primary key of a table multiple times in a transaction
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement ok
+INSERT INTO t VALUES (1, 2)
+
+statement error pq: primary key of table t dropped without subsequent addition of new primary key
+COMMIT
+
+query II
+SELECT * FROM t
+----
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   FAMILY fam_0_x (x),
+   FAMILY fam_1_y (y)
+)
+
+statement ok
+DROP TABLE IF EXISTS t, t2 CASCADE;
+CREATE TABLE t (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y));
+ALTER TABLE t2 DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (x, y) INTERLEAVE IN PARENT t(x)
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE t2 (
+    x INT8 NOT NULL,
+    y INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+    FAMILY fam_0_x (x),
+    FAMILY fam_1_y (y)
+) INTERLEAVE IN PARENT t (x)

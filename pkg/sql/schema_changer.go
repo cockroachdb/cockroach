@@ -1948,6 +1948,35 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
+// validateTablePrimaryKeys ensures that if this schema changer points to a
+// DROP PRIMARY KEY mutation then the DROP PRIMARY KEY mutation is enclosed
+// by an ADD PRIMARY KEY mutation. This is validated before txn commit to
+// ensure that there are no tables in a state  without a primary key.
+func (sc *SchemaChanger) validateTablePrimaryKeys(ctx context.Context, txn *client.Txn) error {
+	table, err := sqlbase.GetMutableTableDescFromID(ctx, txn, sc.tableID)
+	if err != nil {
+		return err
+	}
+
+	// If we find a drop mutation with our mutation ID, then we need to ensure that
+	// we find a PkSwapMutation. We assume that there is at most one DROP PRIMARY KEY
+	// and ADD PRIMARY KEY for a particular mutation.
+	foundDropPk, foundAlterPk := false, false
+	for _, mutation := range table.Mutations {
+		if mutation.MutationID == sc.mutationID && mutation.GetDropPrimaryKey() != nil {
+			foundDropPk = true
+		}
+		if foundDropPk && mutation.MutationID == sc.mutationID && mutation.GetPrimaryKeySwap() != nil {
+			foundAlterPk = true
+		}
+	}
+	if foundDropPk && !foundAlterPk {
+		return errors.Errorf(
+			"primary key of table %s dropped without subsequent addition of new primary key", table.Name)
+	}
+	return nil
+}
+
 // TestingSchemaChangerCollection is an exported (for testing) version of
 // schemaChangerCollection.
 // TODO(andrei): get rid of this type once we can have tests internal to the sql
