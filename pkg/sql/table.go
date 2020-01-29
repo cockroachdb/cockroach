@@ -145,7 +145,7 @@ type TableCollection struct {
 	// These are purged at the same time as allDescriptors.
 	cachedDatabaseToSchemas map[sqlbase.ID]map[sqlbase.ID]string
 
-	// settings are required to correctly resolve system.namespace accesses in
+	// settings are required to correctly resolveUsername system.namespace accesses in
 	// mixed version (19.2/20.1) clusters.
 	// TODO(solon): This field could maybe be removed in 20.2.
 	settings *cluster.Settings
@@ -270,7 +270,7 @@ func (tc *TableCollection) getTableVersion(
 	); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {
-		// If not forcing to resolve using KV, tables being added aren't visible.
+		// If not forcing to resolveUsername using KV, tables being added aren't visible.
 		if immut.Adding() && !avoidCache {
 			err := errTableAdding
 			if !flags.Required {

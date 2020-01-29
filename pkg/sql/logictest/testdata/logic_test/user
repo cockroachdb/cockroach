@@ -128,3 +128,23 @@ query T
 SHOW session_user
 ----
 root
+
+# CREATE ROLE should work too
+statement error empty passwords are not permitted
+CREATE ROLE test WITH PASSWORD ''
+
+statement ok
+CREATE ROLE test
+
+query T colnames
+SHOW USERS
+----
+user_name
+foo
+foo-bar
+root
+testuser
+user1
+user2
+user3
+ομηρος
