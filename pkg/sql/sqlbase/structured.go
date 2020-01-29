@@ -2695,7 +2695,8 @@ func (desc *MutableTableDescriptor) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
-		return unimplemented.NewWithIssueDetailf(19141, "drop-constraint-pk", "cannot drop primary key")
+		desc.PrimaryIndex.Disabled = true
+		return nil
 
 	case ConstraintTypeUnique:
 		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
@@ -3300,6 +3301,11 @@ func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
 		return false
 	}
 	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
+}
+
+// HasPrimaryKey returns true if the table has a primary key.
+func (desc *TableDescriptor) HasPrimaryKey() bool {
+	return !desc.PrimaryIndex.Disabled
 }
 
 // HasColumnBackfillMutation returns whether the table has any queued column
