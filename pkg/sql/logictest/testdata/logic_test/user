@@ -18,19 +18,19 @@ root
 testuser
 user1
 
-statement error pgcode 42710 a role named admin already exists
+statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
 
-statement error pgcode 42710 a role named admin already exists
+statement ok
 CREATE USER IF NOT EXISTS admin
 
-statement error pgcode 42710 a user named user1 already exists
+statement error pgcode 42710 a role/user named user1 already exists
 CREATE USER user1
 
 statement ok
 CREATE USER IF NOT EXISTS user1
 
-statement error pgcode 42710 a user named user1 already exists
+statement error pgcode 42710 a role/user named user1 already exists
 CREATE USER UsEr1
 
 statement ok

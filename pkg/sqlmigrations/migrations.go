@@ -291,8 +291,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 	{
-		// Introduced in v20.1.,
-		name:                "create system.role_options table with an entry for (admin, CREATEROLE)",
+		// Introduced in v20.1.
+		name:                "create system.role_options table",
 		workFn:              createRoleOptionsTable,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionCreateRolePrivilege),
 		newDescriptorIDs:    staticIDs(keys.RoleOptionsTableID),
@@ -306,6 +306,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionStatementDiagnosticsSystemTables),
 		newDescriptorIDs: staticIDs(keys.StatementBundleChunksTableID,
 			keys.StatementDiagnosticsRequestsTableID, keys.StatementDiagnosticsTableID),
+	},
+	{
+		// Introduced in v20.1.
+		name:   "add CREATEROLE privilege to admin/root",
+		workFn: addCreateRoleToAdminAndRoot,
 	},
 }
 
@@ -761,15 +766,28 @@ func createRoleOptionsTable(ctx context.Context, r runner) error {
 		return errors.Wrap(err, "failed to create system.role_options")
 	}
 
-	// Upsert the admin role with CreateRole privilege into the table.
+	return nil
+}
+
+func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
+	// Upsert the admin/root roles with CreateRole privilege into the table.
 	// We intentionally override any existing entry.
-	const upsertAdminStmt = `
+	const upsertCreateRoleStmt = `
           UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
           `
+	err := r.execAsRootWithRetry(ctx,
+		"add role options table and upsert admin with CREATEROLE",
+		upsertCreateRoleStmt,
+		sqlbase.AdminRole)
+
+	if err != nil {
+		return err
+	}
+
 	return r.execAsRootWithRetry(ctx,
 		"add role options table and upsert admin with CREATEROLE",
-		upsertAdminStmt,
-		sqlbase.AdminRole)
+		upsertCreateRoleStmt,
+		security.RootUser)
 }
 
 // migrateSystemNamespace migrates entries from the deprecated system.namespace

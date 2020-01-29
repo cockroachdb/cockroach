@@ -141,6 +141,10 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
 
+		{`DROP USER ??`, `DROP USER`},
+		{`DROP USER IF ??`, `DROP USER`},
+		{`DROP USER IF EXISTS bluh ??`, `DROP USER`},
+
 		{`DROP ROLE ??`, `DROP ROLE`},
 		{`DROP ROLE IF ??`, `DROP ROLE`},
 		{`DROP ROLE IF EXISTS bluh ??`, `DROP ROLE`},
@@ -156,10 +160,6 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP VIEW blah ??`, `DROP VIEW`},
 		{`DROP VIEW IF ??`, `DROP VIEW`},
 		{`DROP VIEW IF EXISTS blih, bloh ??`, `DROP VIEW`},
-
-		{`DROP USER ??`, `DROP USER`},
-		{`DROP USER IF ??`, `DROP USER`},
-		{`DROP USER IF EXISTS bloh ??`, `DROP USER`},
 
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},

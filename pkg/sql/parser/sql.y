@@ -31,7 +31,7 @@ import (
 
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
-    "github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+    "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -233,7 +233,7 @@ func (u *sqlSymUnion) storageParams() []tree.StorageParam {
     return nil
 }
 func (u *sqlSymUnion) persistenceType() bool {
-  return u.val.(bool)
+ return u.val.(bool)
 }
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
@@ -339,12 +339,6 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 }
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
-}
-func (u *sqlSymUnion) rolePrivilegeType() roleprivilege.Kind {
-    return u.val.(roleprivilege.Kind)
-}
-func (u *sqlSymUnion) rolePrivilegeList() roleprivilege.List {
-    return u.val.(roleprivilege.List)
 }
 func (u *sqlSymUnion) onConflict() *tree.OnConflict {
     return u.val.(*tree.OnConflict)
@@ -666,9 +660,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_rename_database_stmt
 %type <tree.Statement> alter_zone_database_stmt
 
-// ALTER USER
-%type <tree.Statement> alter_user_password_stmt
-
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
 %type <tree.Statement> alter_scatter_index_stmt
@@ -837,14 +828,14 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-%type <tree.Expr> opt_password password_clause
 
 %type <tree.IsolationLevel> transaction_iso_level
 %type <tree.UserPriority> transaction_user_priority
 %type <tree.ReadWriteMode> transaction_read_mode
 
 %type <str> name opt_name opt_name_parens opt_to_savepoint
-%type <str> privilege role_privilege savepoint_name
+%type <str> privilege savepoint_name
+%type <tree.KVOption> role_option password_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
@@ -880,7 +871,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params create_as_params
-%type <tree.NameList> name_list privilege_list role_privilege_list
+%type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
@@ -1040,7 +1031,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.TargetList> opt_on_targets_roles
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
-%type <roleprivilege.List> role_privileges
+%type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
 
 %type <str> relocate_kw
@@ -1150,8 +1141,8 @@ stmt:
 // %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
+| alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
 | alter_user_stmt     // EXTEND WITH HELP: ALTER USER
-| alter_role_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -1278,15 +1269,6 @@ alter_sequence_options_stmt:
   {
     $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
-
-// %Help: ALTER USER - change user properties
-// %Category: Priv
-// %Text:
-// ALTER USER [IF EXISTS] <name> WITH PASSWORD <password>
-// %SeeAlso: CREATE USER
-alter_user_stmt:
-  alter_user_password_stmt
-| ALTER USER error // SHOW HELP: ALTER USER
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -2255,8 +2237,8 @@ comment_text:
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
 // CREATE ROLE
 create_stmt:
-  create_user_stmt     // EXTEND WITH HELP: CREATE USER
-| create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
+  create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
+| create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_unsupported   {}
@@ -2641,20 +2623,20 @@ drop_user_stmt:
   }
 | DROP USER error // SHOW HELP: DROP USER
 
-// %Help: DROP ROLE - remove a role
+// %Help: DROP ROLE - remove a user
 // %Category: Priv
-// %Text: DROP ROLE [IF EXISTS] <role> [, ...]
-// %SeeAlso: CREATE ROLE, ALTER ROLE, SHOW ROLES
+// %Text: DROP ROLE [IF EXISTS] <user> [, ...]
+// %SeeAlso: CREATE ROLE, SHOW ROLE
 drop_role_stmt:
-  DROP ROLE string_or_placeholder_list
+  DROP role_or_group string_or_placeholder_list
   {
-    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false}
+    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: true}
   }
-| DROP ROLE IF EXISTS string_or_placeholder_list
+| DROP role_or_group IF EXISTS string_or_placeholder_list
   {
-    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true}
+    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: true}
   }
-| DROP ROLE error // SHOW HELP: DROP ROLE
+| DROP role_or_group error // SHOW HELP: DROP ROLE
 
 table_name_list:
   table_name
@@ -4306,12 +4288,12 @@ opt_table_with:
   {
     /* SKIP DOC */
     /* this is also the default in CockroachDB */
-		$$.val = nil
+    $$.val = nil
   }
 | WITH '(' storage_parameter_list ')'
   {
     /* SKIP DOC */
-		$$.val = $3.storageParams()
+    $$.val = $3.storageParams()
   }
 | WITH OIDS error
   {
@@ -5097,82 +5079,74 @@ truncate_stmt:
   }
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
+password_clause:
+  PASSWORD string_or_placeholder
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: $2.expr()}
+  }
+| PASSWORD NULL
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: tree.DNull}
+  }
+
 // %Help: CREATE USER - define a new user
 // %Category: Priv
-// %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] PASSWORD <passwd> ]
+// %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
 // %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
 create_user_stmt:
-  CREATE USER string_or_placeholder opt_password
+  CREATE USER string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateUser{Name: $3.expr(), Password: $4.expr()}
+    $$.val = &tree.CreateUser{Name: $3.expr(), KVOptions: $4.kvOptions()}
   }
-| CREATE USER IF NOT EXISTS string_or_placeholder opt_password
+| CREATE USER IF NOT EXISTS string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateUser{Name: $6.expr(), Password: $7.expr(), IfNotExists: true}
+    $$.val = &tree.CreateUser{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions()}
   }
 | CREATE USER error // SHOW HELP: CREATE USER
 
-opt_password:
-  password_clause
-| /* EMPTY */
-  {
-    $$.val = nil
-  }
-
-password_clause:
-  opt_with PASSWORD string_or_placeholder
-  {
-    $$.val = $3.expr()
-  }
-| opt_with PASSWORD NULL
-  {
-    $$.val = tree.DNull
-  }
-
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
-// %Text: CREATE ROLE [IF NOT EXISTS] <name> [WITH] <OPTIONS...>
+// %Text: CREATE ROLE [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
 // %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
-  CREATE role_or_group string_or_placeholder
+  CREATE role_or_group string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $3.expr()}
+    $$.val = &tree.CreateRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: true}
   }
-| CREATE role_or_group IF NOT EXISTS string_or_placeholder
+| CREATE role_or_group IF NOT EXISTS string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
-  }
-| CREATE role_or_group string_or_placeholder role_privileges
-  {
-    $$.val = &tree.CreateRole{Name: $3.expr(), RolePrivileges: $4.rolePrivilegeList()}
-  }
-| CREATE role_or_group string_or_placeholder WITH role_privileges
-  {
-    $$.val = &tree.CreateRole{Name: $3.expr(), HasWith: true, RolePrivileges: $5.rolePrivilegeList()}
-  }
-| CREATE role_or_group IF NOT EXISTS string_or_placeholder role_privileges
-  {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, RolePrivileges: $7.rolePrivilegeList()}
-  }
-| CREATE role_or_group IF NOT EXISTS string_or_placeholder WITH role_privileges
-  {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, HasWith: true, RolePrivileges: $8.rolePrivilegeList()}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: true}
   }
 | CREATE role_or_group error // SHOW HELP: CREATE ROLE
+
+// %Help: ALTER USER - alter a user
+// %Category: Priv
+// %Text: ALTER USER <name> [WITH] <options...>
+// %SeeAlso: CREATE USER, DROP USER, SHOW USERS
+alter_user_stmt:
+  ALTER USER string_or_placeholder opt_role_options
+{
+  $$.val = &tree.AlterUser{Name: $3.expr(), KVOptions: $4.kvOptions()}
+}
+| ALTER USER IF EXISTS string_or_placeholder opt_role_options
+{
+  $$.val = &tree.AlterUser{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions()}
+}
+| ALTER USER error // SHOW HELP: ALTER USER
 
 // %Help: ALTER ROLE - alter a role
 // %Category: Priv
 // %Text: ALTER ROLE <name> [WITH] <options...>
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
-  ALTER role_or_group string_or_placeholder role_privileges
-  {
-  $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), RolePrivileges: $4.rolePrivilegeList()}
-  }
-| ALTER role_or_group string_or_placeholder WITH role_privileges
-  {
-    $$.val = &tree.AlterRolePrivileges{Name: $3.expr(), HasWith: true, RolePrivileges: $5.rolePrivilegeList()}
-  }
+  ALTER role_or_group string_or_placeholder opt_role_options
+{
+  $$.val = &tree.AlterRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: true}
+}
+| ALTER role_or_group IF EXISTS string_or_placeholder opt_role_options
+{
+  $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: true}
+}
 | ALTER role_or_group error // SHOW HELP: ALTER ROLE
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
@@ -5211,29 +5185,36 @@ create_view_stmt:
 | CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
 
-role_privilege:
+role_option:
   CREATEROLE
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
   | NOCREATEROLE
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+  | password_clause
 
-role_privileges:
-  role_privilege_list
+role_options:
+  role_option
   {
-    rolePrivList, err := roleprivilege.ListFromStrings($1.nameList().ToStrings())
-    if err != nil {
-      return setErr(sqllex, err)
-    }
-    $$.val = rolePrivList
+    $$.val = []tree.KVOption{$1.kvOption()}
+  }
+|  role_options role_option
+  {
+    $$.val = append($1.kvOptions(), $2.kvOption())
   }
 
-role_privilege_list:
-  role_privilege
-  {
-    $$.val = tree.NameList{tree.Name($1)}
-  }
-  | role_privilege role_privilege_list
-  {
-    $$.val = append($2.nameList(), tree.Name($1))
-  }
+opt_role_options:
+	opt_with role_options
+	{
+		$$.val = $2.kvOptions()
+	}
+| /* EMPTY */
+	{
+		$$.val = nil
+	}
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
@@ -5264,7 +5245,7 @@ create_type_stmt:
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
-// 
+//
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
@@ -5423,17 +5404,6 @@ alter_rename_database_stmt:
   ALTER DATABASE database_name RENAME TO database_name
   {
     $$.val = &tree.RenameDatabase{Name: tree.Name($3), NewName: tree.Name($6)}
-  }
-
-// https://www.postgresql.org/docs/10/static/sql-alteruser.html
-alter_user_password_stmt:
-  ALTER USER string_or_placeholder password_clause
-  {
-    $$.val = &tree.AlterUserSetPassword{Name: $3.expr(), Password: $4.expr()}
-  }
-| ALTER USER IF EXISTS string_or_placeholder password_clause
-  {
-    $$.val = &tree.AlterUserSetPassword{Name: $5.expr(), Password: $6.expr(), IfExists: true}
   }
 
 alter_rename_table_stmt:
