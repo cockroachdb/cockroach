@@ -13,7 +13,6 @@ import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
 import { Link } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -286,13 +285,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   state: selectRaftState(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshRaft,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshRaft,
+};
 
 // Connect the RangesMain class with our redux store.
 const rangesMainConnected = connect(

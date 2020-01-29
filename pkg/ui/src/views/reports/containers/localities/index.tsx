@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
+
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
 import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
 import { LocationTree, selectLocationsRequestStatus, selectLocationTree } from "src/redux/locations";
@@ -100,9 +100,7 @@ class Localities extends React.Component<LocalitiesProps, {}> {
   render() {
     return (
       <div>
-        <Helmet>
-          <title>Localities | Debug</title>
-        </Helmet>
+        <Helmet title="Localities | Debug" />
         <section className="section"><h1 className="base-heading">Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
@@ -136,13 +134,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   locationStatus: selectLocationsRequestStatus(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshLocations,
-      refreshNodes,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshLocations,
+  refreshNodes,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Localities);

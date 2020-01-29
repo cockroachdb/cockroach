@@ -10,7 +10,6 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
@@ -89,16 +88,12 @@ const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitD
   grants: selectGrants(state, ownProps.name),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      setSort: grantsSortSetting.set,
-      refreshDatabaseDetails,
-      refreshTableDetails,
-      refreshTableStats,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  setSort: grantsSortSetting.set,
+  refreshDatabaseDetails,
+  refreshTableDetails,
+  refreshTableStats,
+};
 
 // Connect the DatabaseSummaryGrants class with our redux store.
 export default connect(

@@ -70,9 +70,7 @@ class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistor
 
     return (
       <section className="section">
-        <Helmet>
-          <title>Decommissioned Node History | Debug</title>
-        </Helmet>
+        <Helmet title="Decommissioned Node History | Debug" />
         <h1 className="title">Decommissioned Node History</h1>
         <div>
           <NodeSortedTable

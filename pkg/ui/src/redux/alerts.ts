@@ -16,7 +16,7 @@
 import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
-import { Store, Dispatch } from "redux";
+import { Store, Dispatch, Action } from "redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
@@ -92,7 +92,7 @@ export const instructionsBoxCollapsedSelector = createSelector(
 );
 
 export function setInstructionsBoxCollapsed(collapsed: boolean) {
-  return (dispatch: Dispatch<AdminUIState>) => {
+  return (dispatch: Dispatch<Action, AdminUIState>) => {
     dispatch(instructionsBoxCollapsedSetting.set(collapsed));
     dispatch(saveUIData({
       key: INSTRUCTIONS_BOX_COLLAPSED_KEY,
@@ -130,7 +130,7 @@ export const staggeredVersionWarningSelector = createSelector(
       text: `We have detected that multiple versions of CockroachDB are running
       in this cluster. This may be part of a normal rolling upgrade process, but
       should be investigated if this is unexpected.`,
-      dismiss: (dispatch: Dispatch<AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
         dispatch(staggeredVersionDismissedSetting.set(true));
         return Promise.resolve();
       },
@@ -232,7 +232,7 @@ export const disconnectedAlertSelector = createSelector(
     return {
       level: AlertLevel.CRITICAL,
       title: "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
-      dismiss: (dispatch: Dispatch<AdminUIState>) => {
+      dismiss: (dispatch: Dispatch<Action, AdminUIState>) => {
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         return Promise.resolve();
       },

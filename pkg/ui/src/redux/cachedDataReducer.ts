@@ -20,6 +20,7 @@ import assert from "assert";
 import moment from "moment";
 import { hashHistory } from "react-router";
 import { push } from "react-router-redux";
+import { ThunkAction } from "redux-thunk";
 
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
@@ -50,7 +51,7 @@ export class KeyedCachedDataReducerState<TResponseMessage> {
  * Each instance of this class is instantiated with an api endpoint with request
  * type TRequest and response type Promise<TResponseMessage>.
  */
-export class CachedDataReducer<TRequest, TResponseMessage> {
+export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace extends string = string> {
   // Track all the currently seen namespaces, to ensure there isn't a conflict
   private static namespaces: { [actionNamespace: string]: boolean } = {};
 
@@ -69,7 +70,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    */
   constructor(
     protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
-    public actionNamespace: string,
+    public actionNamespace: TActionNamespace,
     protected invalidationPeriod?: moment.Duration,
     protected requestTimeout?: moment.Duration,
   ) {
@@ -179,8 +180,11 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * stateAccessor (optional) - a helper function that accesses this reducer's
    *   state given the global state object
    */
-  refresh = <S>(req?: TRequest, stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace]) => {
-    return (dispatch: Dispatch<S>, getState: () => any) => {
+  refresh = <S>(
+    req?: TRequest,
+    stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace],
+  ): ThunkAction<any, S, any> => {
+    return (dispatch: Dispatch<Action, TResponseMessage>, getState: () => S) => {
       const state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
       if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
@@ -235,8 +239,8 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
  * Each instance of this class is instantiated with an api endpoint with request
  * type TRequest and response type Promise<TResponseMessage>.
  */
-export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
-  cachedDataReducer: CachedDataReducer<TRequest, TResponseMessage>;
+export class KeyedCachedDataReducer<TRequest, TResponseMessage, TActionNamespace extends string = string> {
+  cachedDataReducer: CachedDataReducer<TRequest, TResponseMessage, TActionNamespace>;
 
   /**
    * apiEndpoint - The API endpoint used to refresh data.
@@ -251,12 +255,12 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    */
   constructor(
     protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>,
-    public actionNamespace: string,
+    public actionNamespace: TActionNamespace,
     private requestToID: (req: TRequest) => string,
     protected invalidationPeriod?: moment.Duration,
     protected requestTimeout?: moment.Duration,
   ) {
-    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(
+    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage, TActionNamespace>(
       apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout,
     );
   }

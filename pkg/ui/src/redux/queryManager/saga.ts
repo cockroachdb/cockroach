@@ -10,9 +10,9 @@
 
 import moment from "moment";
 import { Action } from "redux";
-import { channel, delay, Task, Channel } from "redux-saga";
+import { channel, Task, Channel } from "redux-saga";
 import {
-    call, cancel, fork, join, put, race, take,
+    call, cancel, fork, join, put, race, take, delay,
 } from "redux-saga/effects";
 
 import { queryBegin, queryComplete, queryError } from "./reducer";
@@ -326,7 +326,7 @@ export function getMoment() {
 // but redux-saga-test-plan does not.
 // https://github.com/jfairbank/redux-saga-test-plan/issues/139
 function *delayGenerator(delayTime: number) {
-    yield call(delay, delayTime);
+  yield delay(delayTime);
 }
 
 /**

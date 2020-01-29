@@ -140,9 +140,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
     const simplifiedEvents = _.map(events, getEventInfo);
 
     return <div>
-      <Helmet>
-        <title>Events</title>
-      </Helmet>
+      <Helmet title="Events" />
       <section className="section section--heading">
         <h1 className="base-heading">Events</h1>
       </section>

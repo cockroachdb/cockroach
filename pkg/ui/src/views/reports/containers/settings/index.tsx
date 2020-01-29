@@ -12,7 +12,6 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -79,9 +78,7 @@ class Settings extends React.Component<SettingsProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Cluster Settings | Debug</title>
-        </Helmet>
+        <Helmet title="Cluster Settings | Debug" />
         <h1 className="base-heading">Cluster Settings</h1>
         <Loading
           loading={!this.props.settings.data}
@@ -105,13 +102,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   settings: state.cachedData.settings,
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      // actionCreators returns objects with type and payload
-      refreshSettings,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  // actionCreators returns objects with type and payload
+  refreshSettings,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Settings);

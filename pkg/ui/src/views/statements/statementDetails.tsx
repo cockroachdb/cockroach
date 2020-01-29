@@ -15,7 +15,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 import { Params } from "react-router/lib/Router";
-import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
@@ -170,11 +169,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
   render() {
     return (
       <div>
-        <Helmet>
-          <title>
-            { "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" }
-          </title>
-        </Helmet>
+        <Helmet title={ "Details | " + (this.props.params[appAttr] ? this.props.params[appAttr] + " App | " : "") + "Statements" } />
         <section className="section"><h1 className="base-heading">Statement Details</h1></section>
         <section className="section section--container">
           <Loading
@@ -493,13 +488,9 @@ const mapStateToProps = (state: AdminUIState, props: RouterState) => ({
   nodeNames: nodeDisplayNameByIDSelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshStatements,
-    },
-    dispatch,
-);
+const mapDispatchToProps = {
+  refreshStatements,
+};
 
 // tslint:disable-next-line:variable-name
 const StatementDetailsConnected = connect(

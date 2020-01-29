@@ -165,9 +165,7 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   render() {
     return (
       <div>
-        <Helmet>
-          <title>Data Distribution</title>
-        </Helmet>
+        <Helmet title="Data Distribution" />
         <section className="section">
           <h1 className="base-heading">Data Distribution</h1>
         </section>

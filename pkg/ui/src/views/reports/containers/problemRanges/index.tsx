@@ -14,7 +14,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -193,9 +192,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Problem Ranges | Debug</title>
-        </Helmet>
+        <Helmet title="Problem Ranges | Debug" />
         <h1 className="base-heading">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
@@ -219,14 +216,10 @@ const mapStateToProps = (state: AdminUIState, props: ProblemRangesProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      // actionCreators returns objects with type and payload
-      refreshProblemRanges,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  // actionCreators returns objects with type and payload
+  refreshProblemRanges,
+};
 
 export default connect(
   mapStateToProps,

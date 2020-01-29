@@ -16,6 +16,7 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
+
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -219,11 +220,7 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
   render() {
     return (
       <React.Fragment>
-        <Helmet>
-          <title>
-            { this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"}
-          </title>
-        </Helmet>
+        <Helmet title={ this.props.params[appAttr] ? this.props.params[appAttr] + " App | Statements" : "Statements"} />
 
         <section className="section">
           <h1 className="base-heading">Statements</h1>

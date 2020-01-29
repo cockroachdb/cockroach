@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import * as React from "react";
-import { connect, Dispatch } from "react-redux";
+import { connect } from "react-redux";
 import cn from "classnames";
 import { Icon } from "antd";
+import { Action, Dispatch } from "redux";
 
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -38,6 +39,7 @@ interface TableSectionProps {
   isCollapsible?: boolean;
   // Class which is applied on root element of the section.
   className?: string;
+  children?: React.ReactNode;
 }
 
 interface TableSectionState {
@@ -130,7 +132,7 @@ const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>, props: TableSectionProps) => ({
+const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>, props: TableSectionProps) => ({
   saveExpandedState: (isCollapsed: boolean) => {
     const tableSectionKey = getTableSectionKey(props.id);
     dispatch(setLocalSetting(tableSectionKey, isCollapsed));

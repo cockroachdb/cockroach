@@ -15,7 +15,6 @@ import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
@@ -363,10 +362,10 @@ class Network extends React.Component<NetworkProps, INetworkState> {
     const filters = getFilters(location);
     return (
       <Fragment>
-        <Helmet>
-          <title>Network Diagnostics | Debug</title>
-        </Helmet>
-        <h1 className="base-heading">Network Diagnostics</h1>
+        <Helmet title="Network Diagnostics | Debug" />
+        <div className="section">
+          <h1 className="base-heading">Network Diagnostics</h1>
+        </div>
         <Loading
           loading={!contentAvailable(nodesSummary)}
           error={this.props.nodeSummaryErrors}
@@ -398,13 +397,9 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodeSummaryErrors: nodeSummaryErrors(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNodes,
-      refreshLiveness,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNodes,
+  refreshLiveness,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Network);

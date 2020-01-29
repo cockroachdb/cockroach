@@ -42,6 +42,7 @@ import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
+import { normalizeConnectedComponent } from "src/util/normalizeConnectedComponent";
 import {
   Certificates,
   CustomChart,
@@ -78,7 +79,7 @@ ReactDOM.render(
       { /* login */}
       { loginRoutes(store) }
 
-      <Route path="/" component={Layout}>
+      <Route path="/" component={normalizeConnectedComponent(Layout)}>
         <IndexRedirect to="overview" />
 
         { /* overview page */ }
@@ -89,10 +90,10 @@ ReactDOM.render(
           <IndexRedirect to="overview/cluster" />
           <Route path={ `:${dashboardNameAttr}` }>
             <IndexRedirect to="cluster" />
-            <Route path="cluster" component={ NodeGraphs } />
+            <Route path="cluster" component={normalizeConnectedComponent(NodeGraphs)} />
             <Route path="node">
               <IndexRedirect to={ `/metrics/:${dashboardNameAttr}/cluster` } />
-              <Route path={ `:${nodeIDAttr}` } component={ NodeGraphs } />
+              <Route path={ `:${nodeIDAttr}` } component={normalizeConnectedComponent(NodeGraphs)} />
             </Route>
           </Route>
         </Route>
@@ -101,20 +102,20 @@ ReactDOM.render(
         <Route path="node">
           <IndexRedirect to="/overview/list" />
           <Route path={ `:${nodeIDAttr}` }>
-            <IndexRoute component={ NodeOverview } />
-            <Route path="logs" component={ NodeLogs } />
+            <IndexRoute component={normalizeConnectedComponent(NodeOverview)} />
+            <Route path="logs" component={normalizeConnectedComponent(NodeLogs)} />
           </Route>
         </Route>
 
         { /* events & jobs */ }
-        <Route path="events" component={ EventPage } />
-        <Route path="jobs" component={ JobsPage } />
+        <Route path="events" component={normalizeConnectedComponent(EventPage)} />
+        <Route path="jobs" component={normalizeConnectedComponent(JobsPage)} />
 
         { /* databases */ }
         <Route path="databases">
           <IndexRedirect to="tables" />
-          <Route path="tables" component={ DatabaseTablesList } />
-          <Route path="grants" component={ DatabaseGrantsList } />
+          <Route path="tables" component={normalizeConnectedComponent(DatabaseTablesList)} />
+          <Route path="grants" component={normalizeConnectedComponent(DatabaseGrantsList)} />
           <Redirect
             from={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` }
             to={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
@@ -126,56 +127,56 @@ ReactDOM.render(
             <IndexRedirect to="/databases" />
             <Route path="table">
               <IndexRedirect to="/databases" />
-              <Route path={ `:${tableNameAttr}` } component={ TableDetails } />
+              <Route path={ `:${tableNameAttr}` } component={normalizeConnectedComponent(TableDetails)} />
             </Route>
           </Route>
         </Route>
 
         { /* data distribution */ }
-        <Route path="data-distribution" component={ DataDistributionPage } />
+        <Route path="data-distribution" component={normalizeConnectedComponent(DataDistributionPage)} />
 
         { /* statement statistics */ }
         <Route path="statements">
-          <IndexRoute component={ StatementsPage } />
-          <Route path={ `:${appAttr}` } component={ StatementsPage } />
-          <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
-          <Route path={ `:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+          <IndexRoute component={normalizeConnectedComponent(StatementsPage)} />
+          <Route path={ `:${appAttr}` } component={normalizeConnectedComponent(StatementsPage)} />
+          <Route path={ `:${appAttr}/:${statementAttr}` } component={normalizeConnectedComponent(StatementDetails)} />
+          <Route path={ `:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={normalizeConnectedComponent(StatementDetails)} />
         </Route>
         <Route path="statement">
           <IndexRedirect to="/statements" />
-          <Route path={ `:${statementAttr}` } component={ StatementDetails } />
-          <Route path={ `:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+          <Route path={ `:${statementAttr}` } component={normalizeConnectedComponent(StatementDetails)} />
+          <Route path={ `:${implicitTxnAttr}/:${statementAttr}` } component={normalizeConnectedComponent(StatementDetails)} />
         </Route>
 
         { /* debug pages */ }
         <Route path="debug">
           <IndexRoute component={Debug} />
-          <Route path="redux" component={ ReduxDebug } />
-          <Route path="chart" component={ CustomChart } />
-          <Route path="enqueue_range" component={ EnqueueRange } />
+          <Route path="redux" component={normalizeConnectedComponent(ReduxDebug)} />
+          <Route path="chart" component={normalizeConnectedComponent(CustomChart)} />
+          <Route path="enqueue_range" component={normalizeConnectedComponent(EnqueueRange)} />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
-          <Route path="ranges" component={ RaftRanges } />
-          <Route path="messages/all" component={ RaftMessages } />
-          <Route path={`messages/node/:${nodeIDAttr}`} component={ RaftMessages } />
+          <Route path="ranges" component={normalizeConnectedComponent(RaftRanges)} />
+          <Route path="messages/all" component={normalizeConnectedComponent(RaftMessages)} />
+          <Route path={`messages/node/:${nodeIDAttr}`} component={normalizeConnectedComponent(RaftMessages)} />
         </Route>
         <Route path="reports">
-          <Route path="problemranges" component={ ProblemRanges }>
-            <Route path={`:${nodeIDAttr}`} component={ ProblemRanges } />
+          <Route path="problemranges" component={normalizeConnectedComponent(ProblemRanges)}>
+            <Route path={`:${nodeIDAttr}`} component={normalizeConnectedComponent(ProblemRanges)} />
           </Route>
-          <Route path="localities" component={ Localities } />
+          <Route path="localities" component={normalizeConnectedComponent(Localities)} />
           <Route path="nodes">
-            <IndexRoute component={ Nodes } />
-            <Route path="history" component={ DecommissionedNodeHistory } />
+            <IndexRoute component={normalizeConnectedComponent(Nodes)} />
+            <Route path="history" component={ normalizeConnectedComponent(DecommissionedNodeHistory) } />
           </Route>
-          <Route path="network" component={ Network }>
-            <Route path={`:${nodeIDAttr}`} component={ Network } />
+          <Route path="network" component={ normalizeConnectedComponent(Network) }>
+            <Route path={`:${nodeIDAttr}`} component={ normalizeConnectedComponent(Network) } />
           </Route>
-          <Route path="settings" component={ Settings } />
-          <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
-          <Route path={`range/:${rangeIDAttr}`} component={ Range } />
-          <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
+          <Route path="settings" component={normalizeConnectedComponent(Settings)} />
+          <Route path={`certificates/:${nodeIDAttr}`} component={normalizeConnectedComponent(Certificates)} />
+          <Route path={`range/:${rangeIDAttr}`} component={normalizeConnectedComponent(Range)} />
+          <Route path={`stores/:${nodeIDAttr}`} component={normalizeConnectedComponent(Stores)} />
         </Route>
 
         { /* old route redirects */ }

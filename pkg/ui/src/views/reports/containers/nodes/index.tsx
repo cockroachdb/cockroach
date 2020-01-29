@@ -16,7 +16,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -343,9 +342,7 @@ class Nodes extends React.Component<NodesProps, {}> {
 
     return (
       <section className="section">
-        <Helmet>
-          <title>Node Diagnostics | Debug</title>
-        </Helmet>
+        <Helmet title="Node Diagnostics | Debug" />
         <h1 className="base-heading">Node Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         <h2 className="base-heading">Nodes</h2>
@@ -374,13 +371,9 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNodes,
-      refreshLiveness,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNodes,
+  refreshLiveness,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Nodes);
