@@ -85,18 +85,18 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.raftMu.Lock() // not unlocked on success
 		repl.mu.Lock()
 
-		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOld(repl, creatingReplica) {
-			repl.mu.Unlock()
-			repl.raftMu.Unlock()
-			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
-		}
-
 		// The current replica is removed, go back around.
 		if repl.mu.destroyStatus.Removed() {
 			repl.mu.Unlock()
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
+		}
+
+		// Drop messages from replicas we know to be too old.
+		if fromReplicaIsTooOld(repl, creatingReplica) {
+			repl.mu.Unlock()
+			repl.raftMu.Unlock()
+			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 		}
 
 		toTooOld := toReplicaIsTooOld(repl, replicaID)
@@ -187,6 +187,22 @@ func (s *Store) tryGetOrCreateReplica(
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
 	repl.mu.tombstoneMinReplicaID = tombstone.NextReplicaID
+	uninitializedDesc := &roachpb.RangeDescriptor{
+		RangeID: rangeID,
+		// NB: other fields are unknown; need to populate them from
+		// snapshot.
+	}
+	// NB: A Replica should never be in the store's replicas map with a nil
+	// descriptor. Assign it directly here. In the case that the Replica should
+	// exist (which we confirm with another check of the Tombstone below), we'll
+	// re-initialize the replica with the same uninitializedDesc.
+	//
+	// During short window between here and call to s.unlinkReplicaByRangeIDLocked()
+	// in the failure branch below, the Replica used to have a nil descriptor and
+	// was present in the map. While it was the case that the destroy status had
+	// been set, not every code path which inspects the descriptor checks the
+	// destroy status.
+	repl.mu.state.Desc = uninitializedDesc
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
@@ -224,16 +240,10 @@ func (s *Store) tryGetOrCreateReplica(
 		} else if hs.Commit != 0 {
 			log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
 		}
-
-		desc := &roachpb.RangeDescriptor{
-			RangeID: rangeID,
-			// NB: other fields are unknown; need to populate them from
-			// snapshot.
-		}
-		return repl.initRaftMuLockedReplicaMuLocked(desc, replicaID)
+		return repl.initRaftMuLockedReplicaMuLocked(uninitializedDesc, replicaID)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
-		// ensure nobody tries to use it
+		// ensure nobody tries to use it.
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
