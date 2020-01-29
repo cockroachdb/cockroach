@@ -88,7 +88,7 @@ func (k *keyManager) count() int {
 func (k *keyManager) open() engine.MVCCKey {
 	var key engine.MVCCKey
 	key.Key = generateBytes(k.rng, 8, maxValueSize)
-	key.Timestamp = k.tsGenerator.generate()
+	key.Timestamp = k.tsGenerator.lastTS
 	k.liveKeys = append(k.liveKeys, key)
 
 	return key
@@ -119,7 +119,7 @@ func (k *keyManager) closeAll() {
 func (k *keyManager) parse(input string) operand {
 	var key engine.MVCCKey
 	key.Key = make([]byte, 0, maxValueSize)
-	_, err := fmt.Sscanf(input, "%s/%d", &key.Key, &key.Timestamp.WallTime)
+	_, err := fmt.Sscanf(input, "%q/%d", &key.Key, &key.Timestamp.WallTime)
 	if err != nil {
 		panic(err)
 	}
@@ -161,8 +161,8 @@ func (v *valueManager) toString(value operand) string {
 }
 
 func (v *valueManager) parse(input string) operand {
-	var value roachpb.Key = make([]byte, 0, maxValueSize)
-	_, err := fmt.Sscanf(input, "%s", &input)
+	var value = make([]byte, 0, maxValueSize)
+	_, err := fmt.Sscanf(input, "%s", &value)
 	if err != nil {
 		panic(err)
 	}
@@ -517,7 +517,7 @@ func (i *iteratorManager) toString(op operand) string {
 
 func (i *iteratorManager) parse(input string) operand {
 	var id uint64
-	_, err := fmt.Sscanf(input, "batch%d", &id)
+	_, err := fmt.Sscanf(input, "iter%d", &id)
 	if err != nil {
 		panic(err)
 	}

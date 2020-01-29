@@ -102,6 +102,7 @@ func runMetaTest(ctx context.Context, t *testing.T, seed int64, checkFile io.Rea
 			}
 
 			testRunner.init()
+			defer testRunner.closeAll()
 			if checkFile != nil {
 				testRunner.parseFileAndRun(checkFile)
 			} else {
