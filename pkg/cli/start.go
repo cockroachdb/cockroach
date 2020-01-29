@@ -1054,14 +1054,31 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		log.Warning(ctx, buf.String())
 	}
 
-	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
 		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
+
+		// Check that the total suggested "max" memory is well below the available memory.
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shout(ctx, log.Severity_WARNING, fmt.Sprintf(
 				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
 				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem)))
+		}
+
+		// If using demo mode, also check that we haven't reserved too little memory.
+		if demoCtx.nodes > 1 {
+			if requestedMem/int64(demoCtx.nodes) <= 32<<20 { // 32MB
+				fmt.Printf(
+					`## !!! WARNING !!!
+# The sum of --max-sql-memory (%s) and --cache (%s) divided by the number of
+# requested nodes (%d) may not be sufficient.
+# This server is running at increased risk of memory-related failures.
+`,
+					sqlSizeValue,
+					cacheSizeValue,
+					demoCtx.nodes,
+				)
+			}
 		}
 	}
 }

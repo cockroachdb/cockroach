@@ -6,8 +6,10 @@ source [file join [file dirname $argv0] common.tcl]
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "false"
 
 start_test "Expect partitioning succeeds"
-# test that partitioning works if a license could be acquired
-spawn $argv demo --geo-partitioned-replicas
+# Test that partitioning works if a license could be acquired.
+# Note the memory required is larger, as it tries to initialize 9 nodes
+# on just one machine.
+spawn $argv demo --geo-partitioned-replicas --max-sql-memory=70%
 
 # wait for the shell to start up
 expect {

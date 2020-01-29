@@ -268,23 +268,25 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
+	// Assign a path to the store spec, to be saved.
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
+
 	args := base.TestServerArgs{
 		PartOfCluster: true,
 		Insecure:      true,
 		Stopper: initBacktrace(
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
+		JoinAddr:          joinAddr,
+		StoreSpecs:        []base.StoreSpec{storeSpec},
+		SQLMemoryPoolSize: serverCfg.SQLMemoryPoolSize / int64(demoCtx.nodes),
+		CacheSize:         serverCfg.CacheSize / int64(demoCtx.nodes),
 	}
 
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
 	}
-
-	// Assign a path to the store spec, to be saved.
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
-	args.StoreSpecs = []base.StoreSpec{storeSpec}
-	args.JoinAddr = joinAddr
 
 	return args
 }
