@@ -501,7 +501,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []int{0}, nil /* ch */, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, nil /* ch */, outputs)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -539,7 +539,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := NewRepeatableBatchSource(batch)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []int{0}, unbufferedCh, outputs)
+	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -630,7 +630,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	typs := []coltypes.T{coltypes.Int64}
 
 	r, routerOutputs := NewHashRouter(
-		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []int{0}, 1, /* numOutputs */
+		testAllocator, newOpFixedSelTestInput(sel, uint16(len(sel)), data), typs, []uint32{0}, 1, /* numOutputs */
 	)
 
 	if len(routerOutputs) != 1 {
@@ -681,11 +681,11 @@ func TestHashRouterRandom(t *testing.T) {
 		}
 	}
 
-	hashCols := make([]int, 0, len(typs))
+	hashCols := make([]uint32, 0, len(typs))
 	hashCols = append(hashCols, 0)
 	for i := 1; i < cap(hashCols); i++ {
 		if rng.Float64() < 0.5 {
-			hashCols = append(hashCols, i)
+			hashCols = append(hashCols, uint32(i))
 		}
 	}
 
@@ -805,7 +805,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				r, outputs := NewHashRouter(testAllocator, input, types, []int{0}, numOutputs)
+				r, outputs := NewHashRouter(testAllocator, input, types, []uint32{0}, numOutputs)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
