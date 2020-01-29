@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -836,6 +837,7 @@ func backup(
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
 	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV)) * 10
+	targetFileSize := storageccl.ExportRequestTargetFileSize.Get(&settings.SV)
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	g := ctxgroup.WithContext(ctx)
@@ -875,6 +877,7 @@ func backup(
 					StartTime:                           span.start,
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
 					MVCCFilter:                          roachpb.MVCCFilter(backupDesc.MVCCFilter),
+					TargetFileSize:                      targetFileSize,
 				}
 				rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {

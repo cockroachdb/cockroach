@@ -54,8 +54,9 @@ func TestExportCmd(t *testing.T) {
 				Provider:  roachpb.ExternalStorageProvider_LocalFile,
 				LocalFile: roachpb.ExternalStorage_LocalFilePath{Path: "/foo"},
 			},
-			MVCCFilter: mvccFilter,
-			ReturnSST:  true,
+			MVCCFilter:     mvccFilter,
+			ReturnSST:      true,
+			TargetFileSize: ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
 		}
 		res, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 		if pErr != nil {
@@ -127,6 +128,12 @@ func TestExportCmd(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
+	setExportTargetSize := func(t *testing.T, val string) {
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_sst.target_size = "+val)
+	}
+	resetExportTargetSize := func(t *testing.T) {
+		setExportTargetSize(t, "DEFAULT")
+	}
 
 	var res1 ExportAndSlurpResult
 	t.Run("ts1", func(t *testing.T) {
@@ -137,6 +144,10 @@ func TestExportCmd(t *testing.T) {
 		sqlDB.Exec(t, `DELETE from mvcclatest.export WHERE id = 4`)
 		res1 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res1, 1, 2, 1, 4)
+		defer resetExportTargetSize(t)
+		setExportTargetSize(t, "'1b'")
+		res1 = exportAndSlurp(t, hlc.Timestamp{})
+		expect(t, res1, 2, 2, 3, 4)
 	})
 
 	var res2 ExportAndSlurpResult
@@ -175,6 +186,35 @@ func TestExportCmd(t *testing.T) {
 		sqlDB.Exec(t, `ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
 		res5 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res5, 2, 2, 2, 7)
+
+		// Re-run the test with a 1b target size which will lead to more files.
+		defer resetExportTargetSize(t)
+		setExportTargetSize(t, "'1b'")
+		res5 = exportAndSlurp(t, hlc.Timestamp{})
+		expect(t, res5, 2, 2, 4, 7)
+	})
+
+	var res6 ExportAndSlurpResult
+	t.Run("ts6", func(t *testing.T) {
+		// Add 100 rows to the table.
+		sqlDB.Exec(t, `WITH RECURSIVE
+    t (id, value)
+        AS (VALUES (1, 1) UNION ALL SELECT id + 1, value FROM t WHERE id < 100)
+UPSERT
+INTO
+    mvcclatest.export
+(SELECT id, value FROM t);`)
+
+		// Run the test with the default target size which will lead to 2 files due
+		// to the above split.
+		res6 = exportAndSlurp(t, res5.end)
+		expect(t, res6, 2, 100, 2, 100)
+
+		// Re-run the test with a 1b target size which will lead to 100 files.
+		defer resetExportTargetSize(t)
+		setExportTargetSize(t, "'1b'")
+		res6 = exportAndSlurp(t, res5.end)
+		expect(t, res6, 100, 100, 100, 100)
 	})
 }
 
