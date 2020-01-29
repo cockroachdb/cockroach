@@ -48,7 +48,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool inconsistent, bool tombstones)
+              DBTxn txn, bool inconsistent, bool tombstones, bool fail_on_more_recent)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -62,6 +62,7 @@ template <bool reverse> class mvccScanner {
         txn_ignored_seqnums_(txn.ignored_seqnums),
         inconsistent_(inconsistent),
         tombstones_(tombstones),
+        fail_on_more_recent_(fail_on_more_recent),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
@@ -254,6 +255,13 @@ template <bool reverse> class mvccScanner {
     return true;
   }
 
+  bool writeTooOldError(DBTimestamp ts) {
+    results_.write_too_old_timestamp = ts;
+    kvs_->Clear();
+    intents_->Clear();
+    return false;
+  }
+
   bool uncertaintyError(DBTimestamp ts) {
     results_.uncertainty_timestamp = ts;
     kvs_->Clear();
@@ -276,8 +284,15 @@ template <bool reverse> class mvccScanner {
         return addAndAdvance(cur_value_);
       }
 
+      if (fail_on_more_recent_) {
+        // 2. Our txn's read timestamp is less than the most recent
+        // version's timestamp and the scanner has been configured
+        // to throw a write too old error on more recent versions.
+        return writeTooOldError(cur_timestamp_);
+      }
+
       if (check_uncertainty_) {
-        // 2. Our txn's read timestamp is less than the max timestamp
+        // 3. Our txn's read timestamp is less than the max timestamp
         // seen by the txn. We need to check for clock uncertainty
         // errors.
         if (txn_max_timestamp_ >= cur_timestamp_) {
@@ -288,7 +303,7 @@ template <bool reverse> class mvccScanner {
         return seekVersion(txn_max_timestamp_, true);
       }
 
-      // 3. Our txn's read timestamp is greater than or equal to the
+      // 4. Our txn's read timestamp is greater than or equal to the
       // max timestamp seen by the txn so clock uncertainty checks are
       // unnecessary. We need to seek to the desired version of the
       // value (i.e. one with a timestamp earlier than our read
@@ -305,7 +320,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (meta_.has_raw_bytes()) {
-      // 4. Emit immediately if the value is inline.
+      // 5. Emit immediately if the value is inline.
       return addAndAdvance(meta_.raw_bytes());
     }
 
@@ -326,8 +341,12 @@ template <bool reverse> class mvccScanner {
     // Intents for other transactions are visible at or below:
     //   max(txn.max_timestamp, read_timestamp)
     const DBTimestamp max_visible_timestamp = check_uncertainty_ ? txn_max_timestamp_ : timestamp_;
-    if (max_visible_timestamp < meta_timestamp && !own_intent) {
-      // 5. The key contains an intent, but we're reading before the
+    // ... unless we're intending on failing on more recent writes,
+    // in which case other transaction's intents are always visible.
+    const bool other_intent_visible =
+        max_visible_timestamp >= meta_timestamp || fail_on_more_recent_;
+    if (!own_intent && !other_intent_visible) {
+      // 6. The key contains an intent, but we're reading before the
       // intent. Seek to the desired version. Note that if we own the
       // intent (i.e. we're reading transactionally) we want to read
       // the intent regardless of our read timestamp and fall into
@@ -336,7 +355,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (inconsistent_) {
-      // 6. The key contains an intent and we're doing an inconsistent
+      // 7. The key contains an intent and we're doing an inconsistent
       // read at a timestamp newer than the intent. We ignore the
       // intent by insisting that the timestamp we're reading at is a
       // historical timestamp < the intent timestamp. However, we
@@ -354,7 +373,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (!own_intent) {
-      // 7. The key contains an intent which was not written by our
+      // 8. The key contains an intent which was not written by our
       // transaction and our read timestamp is newer than that of the
       // intent. Note that this will trigger an error on the Go
       // side. We continue scanning so that we can return all of the
@@ -365,13 +384,13 @@ template <bool reverse> class mvccScanner {
 
     if (txn_epoch_ == meta_.txn().epoch()) {
       if (txn_sequence_ >= meta_.txn().sequence() && !seqNumIsIgnored(meta_.txn().sequence())) {
-        // 8. We're reading our own txn's intent at an equal or higher sequence.
+        // 9. We're reading our own txn's intent at an equal or higher sequence.
         // Note that we read at the intent timestamp, not at our read timestamp
         // as the intent timestamp may have been pushed forward by another
         // transaction. Txn's always need to read their own writes.
         return seekVersion(meta_timestamp, false);
       } else {
-        // 9. We're reading our own txn's intent at a lower sequence than is
+        // 10. We're reading our own txn's intent at a lower sequence than is
         // currently present in the intent. This means the intent we're seeing
         // was written at a higher sequence than the read and that there may or
         // may not be earlier versions of the intent (with lower sequence
@@ -382,7 +401,7 @@ template <bool reverse> class mvccScanner {
         if (found) {
           return advanceKey();
         }
-        // 10. If no value in the intent history has a sequence number equal to
+        // 11. If no value in the intent history has a sequence number equal to
         // or less than the read, we must ignore the intents laid down by the
         // transaction all together. We ignore the intent by insisting that the
         // timestamp we're reading at is a historical timestamp < the intent
@@ -392,7 +411,7 @@ template <bool reverse> class mvccScanner {
     }
 
     if (txn_epoch_ < meta_.txn().epoch()) {
-      // 11. We're reading our own txn's intent but the current txn has
+      // 12. We're reading our own txn's intent but the current txn has
       // an earlier epoch than the intent. Return an error so that the
       // earlier incarnation of our transaction aborts (presumably
       // this is some operation that was retried).
@@ -400,7 +419,7 @@ template <bool reverse> class mvccScanner {
                                  txn_epoch_, meta_.txn().epoch()));
     }
 
-    // 12. We're reading our own txn's intent but the current txn has a
+    // 13. We're reading our own txn's intent but the current txn has a
     // later epoch than the intent. This can happen if the txn was
     // restarted and an earlier iteration wrote the value we're now
     // reading. In this case, we ignore the intent and read the
@@ -729,6 +748,7 @@ template <bool reverse> class mvccScanner {
   const DBIgnoredSeqNums txn_ignored_seqnums_;
   const bool inconsistent_;
   const bool tombstones_;
+  const bool fail_on_more_recent_;
   const bool check_uncertainty_;
   DBScanResults results_;
   std::unique_ptr<chunkedBuffer> kvs_;
