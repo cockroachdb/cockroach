@@ -24,8 +24,12 @@ func SerialColumnNormalizationCounter(inputType, normType string) telemetry.Coun
 	return telemetry.GetCounter(fmt.Sprintf("sql.schema.serial.%s.%s", normType, inputType))
 }
 
-// SchemaNewTypeCounter is to be implemented every time a new data type
+// SchemaNewTypeCounter is to be incremented every time a new data type
 // is used in a schema, i.e. by CREATE TABLE or ALTER TABLE ADD COLUMN.
 func SchemaNewTypeCounter(t string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.new_column_type." + t)
 }
+
+// SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
+// a secondary index that is separated into different column families is created.
+var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
