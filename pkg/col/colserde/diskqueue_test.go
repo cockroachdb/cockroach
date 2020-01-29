@@ -11,6 +11,7 @@ package colserde_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"strings"
 	"testing"
@@ -121,18 +122,32 @@ func TestQueue(t *testing.T) {
 	}
 }
 
+// Flags for BenchmarkQueue.
+var (
+	bufferSizeBytes = flag.String("bufsize", "128KiB", "number of bytes to buffer in memory before flushing")
+	blockSizeBytes  = flag.String("blocksize", "32MiB", "block size for the number of bytes stored ina block. In pebble, this is the value size, with the flat implementation, this is the file size")
+	dataSizeBytes   = flag.String("datasize", "512MiB", "size of data in bytes to sort")
+)
+
 // BenchmarkQueues benchmarks a queue with parameters provided through flags.
 func BenchmarkQueues(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
 	}
 
-	const (
-		bufSize     = 64 << 10  /* 64 KiB */
-		maxFileSize = 32 << 20  /* 32 MiB */
-		dataSize    = 512 << 20 /* 512 MiB */
-	)
-	numBatches := dataSize / int(8*coldata.BatchSize())
+	bufSize, err := humanizeutil.ParseBytes(*bufferSizeBytes)
+	if err != nil {
+		b.Fatalf("could not parse -bufsize: %s", err)
+	}
+	blockSize, err := humanizeutil.ParseBytes(*blockSizeBytes)
+	if err != nil {
+		b.Fatalf("could not parse -blocksize: %s", err)
+	}
+	dataSize, err := humanizeutil.ParseBytes(*dataSizeBytes)
+	if err != nil {
+		b.Fatalf("could not pase -datasize: %s", err)
+	}
+	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
 	testingFilePath, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -147,8 +162,8 @@ func BenchmarkQueues(b *testing.B) {
 		q, err := colserde.NewDiskQueue(typs, colserde.DiskQueueCfg{
 			FS:               vfs.Default,
 			Path:             testingFilePath,
-			BufferSizeBytes:  bufSize,
-			MaxFileSizeBytes: maxFileSize,
+			BufferSizeBytes:  int(bufSize),
+			MaxFileSizeBytes: int(blockSize),
 		})
 		require.NoError(b, err)
 		for {
@@ -170,4 +185,11 @@ func BenchmarkQueues(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+	// When running this benchmark multiple times, disk throttling might kick in
+	// and result in unfair numbers. Uncomment this code to run the benchmark
+	// multiple times.
+	/*
+		b.StopTimer()
+		time.Sleep(10 * time.Second)
+	*/
 }
