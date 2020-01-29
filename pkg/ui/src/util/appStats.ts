@@ -13,7 +13,7 @@
 // to compute variance and add together NumericStats.
 
 import _ from "lodash";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { FixLong } from "src/util/fixLong";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 

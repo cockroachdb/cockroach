@@ -10,9 +10,8 @@
 
 import _ from "lodash";
 import React from "react";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { Location } from "history";
-
-import * as protos from "src/js/protos";
 
 export interface NodeFilterListProps {
   nodeIDs?: Set<number>;

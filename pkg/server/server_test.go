@@ -872,7 +872,6 @@ func TestServeIndexHTML(t *testing.T) {
 			window.dataFromServer = %s;
 		</script>
 
-		<script src="protos.dll.js" type="text/javascript"></script>
 		<script src="vendor.dll.js" type="text/javascript"></script>
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>

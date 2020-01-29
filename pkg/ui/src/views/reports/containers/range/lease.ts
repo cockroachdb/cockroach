@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { FixLong } from "src/util/fixLong";
 
 export function IsLeaseEpoch(lease: protos.cockroach.roachpb.ILease) {

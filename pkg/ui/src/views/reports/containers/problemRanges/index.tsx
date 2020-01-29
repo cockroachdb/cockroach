@@ -13,8 +13,9 @@ import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import * as protos from "src/js/protos";
+
 import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";

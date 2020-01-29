@@ -14,7 +14,7 @@ import moment from "moment";
 import React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
 import { MilliToNano } from "src/util/convert";

@@ -268,6 +268,7 @@ export class SortableTable extends React.Component<TableProps> {
                 );
               })}
             </tr>
+
           </thead>
           <tbody>
             {_.times(this.props.count, this.renderRow)}

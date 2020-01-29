@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import { FlatPlanNode, FlatPlanNodeAttribute, flattenTree, flattenAttributes } from "src/views/statements/planView";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;

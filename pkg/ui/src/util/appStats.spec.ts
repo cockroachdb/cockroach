@@ -11,7 +11,7 @@
 import { assert } from "chai";
 import Long from "long";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { addNumericStats, NumericStat, flattenStatementStats, StatementStatistics, combineStatementStats } from "./appStats";
 import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;

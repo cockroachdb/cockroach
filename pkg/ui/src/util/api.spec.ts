@@ -15,7 +15,7 @@ import Long from "long";
 
 import fetchMock from "./fetch-mock";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import * as api from "./api";
 
 describe("rest api", function() {

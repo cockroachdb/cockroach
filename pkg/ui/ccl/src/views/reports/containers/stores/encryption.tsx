@@ -11,7 +11,7 @@ import _ from "lodash";
 import Long from "long";
 import moment from "moment";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-ccl";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
 import { Bytes } from "src/util/format";
 import { FixLong } from "src/util/fixLong";

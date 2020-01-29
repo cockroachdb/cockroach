@@ -1192,12 +1192,12 @@ PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
 # JavaScript only needs the entrypoint protobufs to be listed. It automatically
 # compiles any protobufs the entrypoints depend upon.
 JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
-UI_JS_CCL := pkg/ui/ccl/src/js/protos.js
-UI_TS_CCL := pkg/ui/ccl/src/js/protos.d.ts
+UI_JS_CCL := pkg/ui-client/ccl/src/protos.js
+UI_TS_CCL := pkg/ui-client/ccl/src/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS_OSS := pkg/ui/src/js/protos.js
-UI_TS_OSS := pkg/ui/src/js/protos.d.ts
+UI_JS_OSS := pkg/ui-client/oss/src/protos.js
+UI_TS_OSS := pkg/ui-client/oss/src/protos.d.ts
 UI_PROTOS_OSS := $(UI_JS_OSS) $(UI_TS_OSS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/roachpb/errors.proto %/roachpb/api.proto %util/tracing/recorded_span.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/file_registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/log/log.proto %/unresolved_addr.proto,$(GO_PROTOS))
@@ -1308,8 +1308,8 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js pkg/ui/dist/vendor.oss.dll.js
-UI_CCL_MANIFESTS := pkg/ui/protos.ccl.manifest.json pkg/ui/vendor.oss.manifest.json
+UI_CCL_DLLS := pkg/ui/dist/vendor.oss.dll.js
+UI_CCL_MANIFESTS := pkg/ui/vendor.oss.manifest.json
 UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
 UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 

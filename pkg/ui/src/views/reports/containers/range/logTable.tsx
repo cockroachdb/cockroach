@@ -11,7 +11,7 @@
 import _ from "lodash";
 import React from "react";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";

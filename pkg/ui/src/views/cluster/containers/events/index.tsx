@@ -17,7 +17,7 @@ import moment from "moment";
 
 import "./events.styl";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshEvents } from "src/redux/apiReducers";

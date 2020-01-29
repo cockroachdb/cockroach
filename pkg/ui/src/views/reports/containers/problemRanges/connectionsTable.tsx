@@ -13,7 +13,7 @@ import classNames from "classnames";
 import React from "react";
 import { Link } from "react-router-dom";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionTableColumn {

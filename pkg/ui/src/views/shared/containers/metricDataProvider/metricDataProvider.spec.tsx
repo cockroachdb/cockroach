@@ -15,7 +15,7 @@ import Long from "long";
 import React, { Fragment } from "react";
 import * as sinon from "sinon";
 import "src/enzymeInit";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { MetricsQuery, requestMetrics } from "src/redux/metrics";
 import { Axis, Metric, MetricsDataComponentProps, QueryTimeInfo } from "src/views/shared/components/metricQuery";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";

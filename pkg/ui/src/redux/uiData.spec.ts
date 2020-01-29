@@ -14,7 +14,7 @@ import { Action } from "redux";
 import * as protobuf from "protobufjs/minimal";
 import fetchMock from "src/util/fetch-mock";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import * as api from "src/util/api";
 import * as uidata from "./uiData";
 

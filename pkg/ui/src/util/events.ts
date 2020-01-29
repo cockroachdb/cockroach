@@ -10,7 +10,7 @@
 
 import * as protobuf from "protobufjs/minimal";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import * as eventTypes from "src/util/eventTypes";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;

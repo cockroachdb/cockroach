@@ -19,7 +19,7 @@ import Loading from "src/views/shared/components/loading";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import { AdminUIState } from "src/redux/state";
 import {
   refreshDataDistribution,

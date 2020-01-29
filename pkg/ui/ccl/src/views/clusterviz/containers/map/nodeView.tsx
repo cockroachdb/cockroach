@@ -21,7 +21,7 @@ import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { LongToMoment } from "src/util/convert";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-ccl";
 
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 type ILiveness = cockroach.storage.ILiveness;

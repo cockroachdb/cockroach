@@ -10,7 +10,7 @@
 
 import moment from "moment";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 /**
  * NanoToMilli converts a nanoseconds value into milliseconds.

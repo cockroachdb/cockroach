@@ -12,7 +12,7 @@ import _ from "lodash";
 import Long from "long";
 import moment from "moment";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { LongToMoment, TimestampToMoment } from "src/util/convert";
 
 export const dateFormat = "Y-MM-DD HH:mm:ss";

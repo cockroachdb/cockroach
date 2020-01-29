@@ -12,11 +12,12 @@ import d3 from "d3";
 import _ from "lodash";
 import Long from "long";
 import React from "react";
-import * as protos from "src/js/protos";
 import { stdDevLong } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 

@@ -20,7 +20,7 @@ import { Action } from "redux";
 import { delay } from "redux-saga/effects";
 import { take, fork, call, all, put } from "redux-saga/effects";
 
-import * as protos from  "src/js/protos";
+import * as protos from  "cockroachdb-protobuf-client-oss";
 import { PayloadAction } from "src/interfaces/action";
 import { queryTimeSeries } from "src/util/api";
 

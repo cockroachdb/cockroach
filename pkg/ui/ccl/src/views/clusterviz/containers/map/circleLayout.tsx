@@ -14,7 +14,7 @@ import { getChildLocalities } from "src/util/localities";
 import { LocalityView } from "./localityView";
 import { NodeView } from "./nodeView";
 import { LivenessStatus } from "src/redux/nodes";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-ccl";
 
 type Liveness = cockroach.storage.ILiveness;
 

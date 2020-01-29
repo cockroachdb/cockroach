@@ -16,7 +16,7 @@ import * as matchers from "redux-saga-test-plan/matchers";
 
 import { call, put, delay } from "redux-saga/effects";
 import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 import * as metrics from "./metrics";
 

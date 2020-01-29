@@ -10,7 +10,7 @@
 
 import React from "react";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 export interface EncryptionStatusProps {
   store: protos.cockroach.server.serverpb.IStoreDetails;
