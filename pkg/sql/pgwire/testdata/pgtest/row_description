@@ -115,7 +115,47 @@ Query {"String": "SELECT b FROM tab3"}
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":58,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":58,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hello"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# tab4 is a regression test for #51360
+send
+Query {"String": "CREATE TABLE tab4 (a INT8 PRIMARY KEY, b VARCHAR(256)[] NOT NULL)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO tab4 VALUES(4, ARRAY['hello', 'goodbye'])"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s", "Query": "SELECT b FROM tab4"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
+Describe {"ObjectType": 80, "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{hello,goodbye}"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

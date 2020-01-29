@@ -219,7 +219,7 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 	}
 	r.oids = make([]oid.Oid, len(cols))
 	for i, col := range cols {
-		r.oids[i] = mapResultOid(col.Typ.Oid())
+		r.oids[i] = col.Typ.Oid()
 	}
 }
 
