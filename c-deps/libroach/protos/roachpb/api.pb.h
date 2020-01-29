@@ -11221,6 +11221,12 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool enable_time_bound_iterator_optimization() const;
   void set_enable_time_bound_iterator_optimization(bool value);
 
+  // int64 target_file_size = 10;
+  void clear_target_file_size();
+  static const int kTargetFileSizeFieldNumber = 10;
+  ::google::protobuf::int64 target_file_size() const;
+  void set_target_file_size(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExportRequest)
  private:
 
@@ -11239,6 +11245,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool return_sst_;
   bool omit_checksum_;
   bool enable_time_bound_iterator_optimization_;
+  ::google::protobuf::int64 target_file_size_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -26529,6 +26536,20 @@ inline void ExportRequest::set_allocated_encryption(::cockroach::roachpb::FileEn
   }
   encryption_ = encryption;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExportRequest.encryption)
+}
+
+// int64 target_file_size = 10;
+inline void ExportRequest::clear_target_file_size() {
+  target_file_size_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 ExportRequest::target_file_size() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExportRequest.target_file_size)
+  return target_file_size_;
+}
+inline void ExportRequest::set_target_file_size(::google::protobuf::int64 value) {
+  
+  target_file_size_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExportRequest.target_file_size)
 }
 
 // -------------------------------------------------------------------
