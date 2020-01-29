@@ -19,6 +19,7 @@ import (
 
 var (
 	zeroBoolColumn   = make([]bool, coldata.MaxBatchSize)
+	zeroUint16Column = make([]uint16, coldata.MaxBatchSize)
 	zeroUint64Column = make([]uint64, coldata.MaxBatchSize)
 
 	zeroDecimalValue  apd.Decimal
