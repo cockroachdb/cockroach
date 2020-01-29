@@ -39,7 +39,7 @@ SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  su
 statement error duplicate constraint name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
-statement error multiple primary keys for table "t" are not allowed
+statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
 query TTBITTBB colnames
