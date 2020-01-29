@@ -399,7 +399,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Create a new index that indexes everything the old primary index does, but doesn't store anything.
 			// TODO (rohany): is there an easier way of checking if the existing primary index was the
 			//  automatically created one?
-			if len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] != "rowid" {
+			if !(len(n.tableDesc.PrimaryIndex.ColumnNames) == 1 && n.tableDesc.PrimaryIndex.ColumnNames[0] == "rowid") {
 				oldPrimaryIndexCopy := protoutil.Clone(&n.tableDesc.PrimaryIndex).(*sqlbase.IndexDescriptor)
 				name := generateUniqueConstraintName(
 					"old_primary_key",
@@ -408,6 +408,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				oldPrimaryIndexCopy.Name = name
 				oldPrimaryIndexCopy.StoreColumnIDs = nil
 				oldPrimaryIndexCopy.StoreColumnNames = nil
+				// Make the copy of the old primary index not-interleaved. This decision
+				// can be revisited based on user experience.
+				oldPrimaryIndexCopy.Interleave = sqlbase.InterleaveDescriptor{}
 				if err := addIndexMutationWithSpecificPrimaryKey(n.tableDesc, oldPrimaryIndexCopy, newPrimaryIndexDesc); err != nil {
 					return err
 				}
