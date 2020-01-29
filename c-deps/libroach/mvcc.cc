@@ -213,8 +213,8 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 
 bool MVCCIsValidSplitKey(DBSlice key) { return IsValidSplitKey(ToSlice(key)); }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
-                          int64_t target_size, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split, int64_t target_size,
+                          DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -285,10 +285,12 @@ DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp
                        bool tombstones) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent,
+                               tombstones);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent,
+                               tombstones);
     return scanner.scan();
   }
 }

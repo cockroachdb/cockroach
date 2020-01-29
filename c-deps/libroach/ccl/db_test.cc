@@ -167,8 +167,7 @@ TEST_F(CCLTest, ReadOnly) {
     free(ro_value.data);
     // Try to write it again.
     auto ret = DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value"));
-    EXPECT_EQ(ToString(ret),
-              "Not implemented: Not supported operation in read only mode.");
+    EXPECT_EQ(ToString(ret), "Not implemented: Not supported operation in read only mode.");
     free(ret.data);
 
     DBClose(db);
@@ -192,8 +191,7 @@ TEST_F(CCLTest, ReadOnly) {
     free(ro_value.data);
     // Try to write it again.
     auto ret = DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value"));
-    EXPECT_EQ(ToString(ret),
-              "Not implemented: Not supported operation in read only mode.");
+    EXPECT_EQ(ToString(ret), "Not implemented: Not supported operation in read only mode.");
     free(ret.data);
 
     DBClose(db);
