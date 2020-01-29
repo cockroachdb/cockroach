@@ -1388,6 +1388,10 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PrimaryKey {
+				if d.Interleave != nil {
+					return desc, pgerror.New(
+						pgcode.FeatureNotSupported, "interleave not supported in primary key constraint definition")
+				}
 				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
