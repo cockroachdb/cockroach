@@ -1,0 +1,3 @@
+alter_role_stmt ::=
+	'ALTER' role_or_group name' opt_OPTIONS
+	| 'ALTER' role_or_group 'IF' 'EXISTS' name' opt_OPTIONS

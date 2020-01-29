@@ -1,0 +1,5 @@
+alter_user_or_role_stmt ::=
+	'ALTER' role_or_group_or_user name' OPTIONS
+	| 'ALTER' role_or_group_or_user name' 'WITH' OPTIONS
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' name' OPTIONS
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' name' 'WITH' OPTIONS

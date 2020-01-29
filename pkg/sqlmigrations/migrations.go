@@ -125,7 +125,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
-		// Replaced by addAdminRoleWithHasCreateRole migration.
 		name:   "add system.users isRole column and create admin role",
 		workFn: addAdminRole,
 	},
@@ -751,7 +750,7 @@ func createRoleOptionsTable(ctx context.Context, r runner) error {
 		return errors.Wrap(err, "failed to create system.role_options")
 	}
 
-	// Upsert the admin role with CreateRole privilege into the table.
+	// Upsert the admin role with CreateUser privilege into the table.
 	// We intentionally override any existing entry.
 	const upsertAdminStmt = `
           UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
