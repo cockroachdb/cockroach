@@ -139,30 +139,21 @@ func (node *DropSequence) Format(ctx *FmtCtx) {
 	}
 }
 
-// DropUser represents a DROP USER statement
-type DropUser struct {
+// DropRoleOrUser represents a DROP USER statement
+type DropRoleOrUser struct {
 	Names    Exprs
 	IfExists bool
+	IsRole   bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("DROP USER ")
-	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
+func (node *DropRoleOrUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP ")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
 	}
-	ctx.FormatNode(&node.Names)
-}
-
-// DropRole represents a DROP ROLE statement
-type DropRole struct {
-	Names    Exprs
-	IfExists bool
-}
-
-// Format implements the NodeFormatter interface.
-func (node *DropRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("DROP ROLE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}

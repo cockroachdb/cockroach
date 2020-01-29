@@ -21,11 +21,10 @@ package tree
 
 import (
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -1168,99 +1167,134 @@ const (
 	_ = SeqOptAs
 )
 
-// CreateUser represents a CREATE USER statement.
-type CreateUser struct {
-	Name        Expr
-	Password    Expr // nil if no password specified
-	IfNotExists bool
+type PasswordClause struct {
+	Password string
+	IsNull   bool
 }
 
-// HasPassword returns if the CreateUser has a password.
-func (node *CreateUser) HasPassword() bool {
-	return node.Password != nil
+type RoleOptionWithValue struct {
+	RoleOption roleoption.Option
+	Value      Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE USER ")
-	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	if node.HasPassword() {
-		ctx.WriteString(" WITH PASSWORD ")
-		if ctx.flags.HasFlags(FmtShowPasswords) {
-			ctx.FormatNode(node.Password)
-		} else {
-			ctx.WriteString("*****")
+type RoleOptionsWithValues []RoleOptionWithValue
+
+// Format prints out the list in a buffer.
+// This keeps the existing order and uses " " as separator.
+func (pl RoleOptionsWithValues) Format(ctx *FmtCtx) {
+	for _, p := range pl {
+		ctx.WriteString(" ")
+		ctx.WriteString(p.RoleOption.String())
+
+		// Password is a special case.
+		if p.RoleOption == roleoption.PASSWORD {
+			ctx.WriteString(" ")
+			if ctx.flags.HasFlags(FmtShowPasswords) {
+				ctx.FormatNode(p.Value)
+			} else {
+				ctx.WriteString("*****")
+			}
+		} else if p.Value != nil {
+			ctx.WriteString(" ")
+			ctx.FormatNode(p.Value)
 		}
 	}
 }
 
-// AlterUserSetPassword represents an ALTER USER ... WITH PASSWORD statement.
-type AlterUserSetPassword struct {
-	Name     Expr
-	Password Expr
-	IfExists bool
+func (rol RoleOptionsWithValues) Convert(
+	f func(e Expr, op string) (func() (string, error), error),
+	op string) (roleoption.RoleOptionList, error) {
+	roleOptions := make(roleoption.RoleOptionList, len(rol))
+
+	for i, ro := range rol {
+		var value roleoption.Value
+
+		if ro.Value != nil {
+			if ro.Value == DNull {
+				value = roleoption.Value{Value: "", IsNull: true}
+			} else {
+				strFn, err := f(ro.Value, op)
+				if err != nil {
+					return nil, err
+				}
+
+				str, err := strFn()
+				if err != nil {
+					return nil, err
+				}
+				value = roleoption.Value{Value: str, IsNull: false}
+			}
+			roleOptions[i] = roleoption.RoleOption{
+				Option: ro.RoleOption, Value: value, HasValue: true,
+			}
+		} else {
+			roleOptions[i] = roleoption.RoleOption{
+				Option: ro.RoleOption, Value: value, HasValue: false,
+			}
+		}
+	}
+
+	return roleOptions, nil
+}
+
+// CreateRoleOrUser represents a CREATE USER or CREATE ROLE statement.
+type CreateRoleOrUser struct {
+	Name        Expr
+	IsRole      bool
+	IfNotExists bool
+	RoleOptions RoleOptionsWithValues
+	HasWith     bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER USER ")
-	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	ctx.WriteString(" WITH PASSWORD ")
-	if ctx.flags.HasFlags(FmtShowPasswords) {
-		ctx.FormatNode(node.Password)
+func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
 	} else {
-		ctx.WriteString("*****")
+		ctx.WriteString(" USER ")
 	}
-}
-
-// CreateRole represents a CREATE ROLE statement.
-type CreateRole struct {
-	Name           Expr
-	RolePrivileges roleprivilege.List
-	HasWith        bool
-	IfNotExists    bool
-}
-
-// Format implements the NodeFormatter interface.
-func (node *CreateRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE ROLE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(node.Name)
 	if node.HasWith {
 		ctx.WriteString(" WITH ")
-	} else if len(node.RolePrivileges) > 0 {
-		ctx.WriteString(" ")
 	}
-	if len(node.RolePrivileges) > 0 {
-		node.RolePrivileges.Format(&ctx.Buffer)
+
+	if len(node.RoleOptions) > 0 {
+		node.RoleOptions.Format(ctx)
 	}
 }
 
-// AlterRolePrivileges represents an ALTER ROLE ... WITH <OPTION...> statement.
-type AlterRolePrivileges struct {
-	Name           Expr
-	HasWith        bool
-	RolePrivileges roleprivilege.List
+// AlterRoleOrUserOptions represents an ALTER ROLE or ALTER USER statement.
+type AlterRoleOrUserOptions struct {
+	Name        Expr
+	IsRole      bool
+	IfExists    bool
+	RoleOptions RoleOptionsWithValues
+	HasWith     bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ROLE ")
+func (node *AlterRoleOrUserOptions) Format(ctx *FmtCtx) {
+	// WIP: Need to fix this.
+	ctx.WriteString("ALTER")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
+	}
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
 	ctx.FormatNode(node.Name)
 	if node.HasWith {
 		ctx.WriteString(" WITH ")
-	} else {
-		ctx.WriteString(" ")
 	}
-	node.RolePrivileges.Format(&ctx.Buffer)
+	if len(node.RoleOptions) > 0 {
+		node.RoleOptions.Format(ctx)
+	}
 }
 
 // CreateView represents a CREATE VIEW statement.

@@ -53,10 +53,8 @@ func buildOpaque(
 		plan, err = p.AlterTable(ctx, n)
 	case *tree.AlterSequence:
 		plan, err = p.AlterSequence(ctx, n)
-	case *tree.AlterUserSetPassword:
-		plan, err = p.AlterUserSetPassword(ctx, n)
-	case *tree.AlterRolePrivileges:
-		plan, err = p.AlterRolePrivileges(ctx, n)
+	case *tree.AlterRoleOrUserOptions:
+		plan, err = p.AlterRoleOrUserOptions(ctx, n)
 	case *tree.CommentOnColumn:
 		plan, err = p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnDatabase:
@@ -69,8 +67,6 @@ func buildOpaque(
 		plan, err = p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		plan, err = p.CreateIndex(ctx, n)
-	case *tree.CreateUser:
-		plan, err = p.CreateUser(ctx, n)
 	case *tree.CreateSequence:
 		plan, err = p.CreateSequence(ctx, n)
 	case *tree.CreateStats:
@@ -89,7 +85,7 @@ func buildOpaque(
 		plan, err = p.DropView(ctx, n)
 	case *tree.DropSequence:
 		plan, err = p.DropSequence(ctx, n)
-	case *tree.DropUser:
+	case *tree.DropRoleOrUser:
 		plan, err = p.DropUser(ctx, n)
 	case *tree.Grant:
 		plan, err = p.Grant(ctx, n)
@@ -154,9 +150,8 @@ func buildOpaque(
 
 func init() {
 	for _, stmt := range []tree.Statement{
-		&tree.AlterUserSetPassword{},
+		&tree.AlterRoleOrUserOptions{},
 		&tree.AlterIndex{},
-		&tree.AlterRolePrivileges{},
 		&tree.AlterTable{},
 		&tree.AlterSequence{},
 		&tree.CommentOnColumn{},
@@ -165,7 +160,6 @@ func init() {
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateIndex{},
-		&tree.CreateUser{},
 		&tree.CreateSequence{},
 		&tree.CreateStats{},
 		&tree.Deallocate{},
@@ -175,7 +169,7 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropView{},
 		&tree.DropSequence{},
-		&tree.DropUser{},
+		&tree.DropRoleOrUser{},
 		&tree.Grant{},
 		&tree.RenameColumn{},
 		&tree.RenameDatabase{},
@@ -203,8 +197,7 @@ func init() {
 		&tree.ShowBackup{},
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
-		&tree.CreateRole{},
-		&tree.DropRole{},
+		&tree.CreateRoleOrUser{},
 		&tree.GrantRole{},
 		&tree.RevokeRole{},
 		&tree.Import{},

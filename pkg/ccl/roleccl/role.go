@@ -10,7 +10,6 @@ package roleccl
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,7 +23,7 @@ import (
 func createRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	createRole, ok := stmt.(*tree.CreateRole)
+	createRole, ok := stmt.(*tree.CreateRoleOrUser)
 	if !ok {
 		return nil, nil
 	}
@@ -36,15 +35,20 @@ func createRolePlanHook(
 		return nil, err
 	}
 
+	roleOptions, err := createRole.RoleOptions.Convert(p.TypeAsString, "CREATE ROLE")
+	if err != nil {
+		return nil, err
+	}
+
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true, /* isRole */
-		"CREATE ROLE", createRole.RolePrivileges)
+	return p.CreateUserNode(ctx, createRole.Name, createRole.IfNotExists, createRole.IsRole, /* isRole */
+		"CREATE ROLE", roleOptions)
 }
 
 func dropRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	dropRole, ok := stmt.(*tree.DropRole)
+	dropRole, ok := stmt.(*tree.DropRoleOrUser)
 	if !ok {
 		return nil, nil
 	}
@@ -122,8 +126,9 @@ func grantRolePlanHook(
 		// "role public does not exist". This matches postgres behavior.
 
 		// Check roles: these have to be roles.
+		// Updated to match pg, can be roles or users.
 		for _, r := range grant.Roles {
-			if isRole, ok := users[string(r)]; !ok || !isRole {
+			if _, ok := users[string(r)]; !ok {
 				return pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
 			}
 		}

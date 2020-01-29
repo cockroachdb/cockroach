@@ -16,51 +16,55 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
-type alterRoleNode struct {
-	name           func() (string, error)
-	rolePrivileges roleprivilege.List
+// alterRoleOrUserNode represents an ALTER ROLE ... [WITH] OPTION... statement.
+type alterRoleOrUserNode struct {
+	userAuthInfo
+	roleOptions roleoption.RoleOptionList
 
-	run alterRoleRun
+	run alterRoleOrUserRun
 }
 
-// AlterRolePrivileges alters a user's permissios
-func (p *planner) AlterRolePrivileges(
-	ctx context.Context, n *tree.AlterRolePrivileges,
-) (*alterRoleNode, error) {
+// AlterRoleOptions alters a user's permissios
+func (p *planner) AlterRoleOrUserOptions(
+	ctx context.Context, n *tree.AlterRoleOrUserOptions,
+) (*alterRoleOrUserNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := n.RolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	roleOptions, err := n.RoleOptions.Convert(p.TypeAsString, "ALTER ROLE OR USER")
+	if err != nil {
+		return nil, err
+	}
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
-	name, err := p.TypeAsString(n.Name, "ALTER ROLE")
+	ua, err := p.getUserAuthInfo(n.Name, nil, "ALTER ROLE OR USER")
 	if err != nil {
 		return nil, err
 	}
 
-	return &alterRoleNode{
-		name:           name,
-		rolePrivileges: n.RolePrivileges,
+	return &alterRoleOrUserNode{
+		userAuthInfo: ua,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
-// alterRoleRun is the run-time state of
-// alterRoleNode for local execution.
-type alterRoleRun struct {
+// alterRoleOrUserRun is the run-time state of
+// alterRoleOrUserNode for local execution.
+type alterRoleOrUserRun struct {
 	rowsAffected int
 }
 
-func (n *alterRoleNode) startExec(params runParams) error {
+func (n *alterRoleOrUserNode) startExec(params runParams) error {
 	name, err := n.name()
 	if err != nil {
 		return err
@@ -72,21 +76,24 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot edit admin role")
 	}
-	normalizedUsername, err := NormalizeAndValidateUsername(name)
+
+	normalizedUsername, _, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
 	}
 
-	setStmt, err := n.rolePrivileges.CreateSetStmtFromRolePrivileges()
+	setStmt, err := n.roleOptions.CreateSetStmt()
 	if err != nil {
 		return err
 	}
+
+	stmt := fmt.Sprintf(`UPDATE %s SET %s WHERE username = $1`, userTableName, setStmt)
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		"update-role",
 		params.p.txn,
-		fmt.Sprintf(`UPDATE %s %s WHERE username = $1`, userTableName, setStmt),
+		stmt,
 		normalizedUsername,
 	)
 
@@ -100,10 +107,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	return nil
 }
 
-func (*alterRoleNode) Next(runParams) (bool, error) { return false, nil }
-func (*alterRoleNode) Values() tree.Datums          { return tree.Datums{} }
-func (*alterRoleNode) Close(context.Context)        {}
+func (*alterRoleOrUserNode) Next(runParams) (bool, error) { return false, nil }
+func (*alterRoleOrUserNode) Values() tree.Datums          { return tree.Datums{} }
+func (*alterRoleOrUserNode) Close(context.Context)        {}
 
-func (n *alterRoleNode) FastPathResults() (int, bool) {
+func (n *alterRoleOrUserNode) FastPathResults() (int, bool) {
 	return n.run.rowsAffected, true
 }

@@ -220,8 +220,7 @@ var _ planNode = &zeroNode{}
 
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}
-var _ planNodeFastPath = &alterUserSetPasswordNode{}
-var _ planNodeFastPath = &alterRoleNode{}
+var _ planNodeFastPath = &alterRoleOrUserNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}

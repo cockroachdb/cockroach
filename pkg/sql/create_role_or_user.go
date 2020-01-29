@@ -13,12 +13,12 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -27,9 +27,9 @@ import (
 // CreateUserNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateUserNode struct {
-	ifNotExists    bool
-	isRole         bool
-	rolePrivileges roleprivilege.List
+	ifNotExists bool
+	isRole      bool
+	roleOptions roleoption.RoleOptionList
 	userAuthInfo
 
 	run createUserRun
@@ -41,45 +41,56 @@ var userTableName = tree.NewTableName("system", "users")
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
-	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists,
-		false /* isRole */, "CREATE USER", nil)
+func (p *planner) CreateUser(ctx context.Context, n *tree.CreateRoleOrUser) (planNode, error) {
+	roleOptions, err := n.RoleOptions.Convert(p.TypeAsString, "CREATE ROLE OR USER")
+	if err != nil {
+		return nil, err
+	}
+	return p.CreateUserNode(ctx, n.Name, n.IfNotExists, n.IsRole /* isRole */, "CREATE ROLE OR USER", roleOptions)
 }
 
 // CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
 func (p *planner) CreateUserNode(
 	ctx context.Context,
-	nameE, passwordE tree.Expr,
+	nameE tree.Expr,
 	ifNotExists bool,
 	isRole bool,
 	opName string,
-	rolePrivileges roleprivilege.List,
+	roleOptions roleoption.RoleOptionList,
 ) (*CreateUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := rolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, passwordE, opName)
+	ua, err := p.getUserAuthInfo(nameE, nil, opName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CreateUserNode{
-		userAuthInfo:   ua,
-		ifNotExists:    ifNotExists,
-		isRole:         isRole,
-		rolePrivileges: rolePrivileges,
+		userAuthInfo: ua,
+		ifNotExists:  ifNotExists,
+		isRole:       isRole,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
 func (n *CreateUserNode) startExec(params runParams) error {
-	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
+	normalizedUsername, _, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
+	}
+
+	var hashedPassword string
+
+	for _, ro := range n.roleOptions {
+		if ro.Option == roleoption.PASSWORD {
+			hashedPassword = ro.Value.Value
+		}
 	}
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
@@ -106,6 +117,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
+	// TODO(richardjcai): Handle role / user logic here?
 	// Check if the user/role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
@@ -134,7 +146,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
-	hasCreateRole := n.rolePrivileges.Contains(roleprivilege.CREATEROLE)
+	hasCreateRole := n.roleOptions.Contains(roleoption.CREATEROLE)
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
@@ -214,18 +226,29 @@ type userAuthInfo struct {
 	password func() (bool, string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
+func (p *planner) getUserAuthInfo(nameE tree.Expr, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
 	name, err := p.TypeAsString(nameE, ctx)
 	if err != nil {
 		return userAuthInfo{}, err
 	}
+
 	var password func() (bool, string, error)
-	if passwordE != nil {
-		password, err = p.typeAsStringOrNull(passwordE, ctx)
-		if err != nil {
-			return userAuthInfo{}, err
-		}
-	}
+
+	// TODO(richardjcai) cleanup password stuff, confirm this works.
+	//var password func() (bool, string, error)
+	//
+	//if passwordValue != nil {
+	//	if (*passwordValue).IsNull {
+	//		password = func() (bool, string, error) {
+	//			return true, "", nil
+	//		}
+	//	} else {
+	//		password = func() (bool, string, error) {
+	//			return false, (*passwordValue).Value, nil
+	//		}
+	//	}
+	//}
+
 	return userAuthInfo{name: name, password: password}, nil
 }
 
@@ -248,23 +271,26 @@ func (ua *userAuthInfo) resolve() (string, []byte, error) {
 	}
 
 	var hashedPassword []byte
-	if ua.password != nil {
-		isNull, resolvedPassword, err := ua.password()
-		if err != nil {
-			return "", nil, err
-		}
-		if isNull {
-			return normalizedUsername, hashedPassword, nil
-		}
-		if resolvedPassword == "" {
-			return "", nil, security.ErrEmptyPassword
-		}
+	//if ua.password != nil {
+	//	resolvedPassword, err := ua.password()
+	//	if err != nil {
+	//		return "", nil, err
+	//	}
+	//
+	//	// This isNull check logic is moved into checking Role Options.
+	//	//if isNull {
+	//	//	return normalizedUsername, hashedPassword, nil
+	//	//}
+	//
+	//	if resolvedPassword == "" {
+	//		return "", nil, security.ErrEmptyPassword
+	//	}
 
-		hashedPassword, err = security.HashPassword(resolvedPassword)
-		if err != nil {
-			return "", nil, err
-		}
-	}
+	//hashedPassword, err = security.HashPassword(resolvedPassword)
+	//if err != nil {
+	//	return "", nil, err
+	//}
+	//}
 
 	return normalizedUsername, hashedPassword, nil
 }

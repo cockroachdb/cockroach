@@ -12,11 +12,10 @@ package sql
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,17 +32,17 @@ type DropUserNode struct {
 	run dropUserRun
 }
 
-// DropUser drops a list of users.
+// DropRoleOrUser drops a list of users.
 // Privileges: DELETE on system.users.
-func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
-	return p.DropUserNode(ctx, n.Names, n.IfExists, false /* isRole */, "DROP USER")
+func (p *planner) DropUser(ctx context.Context, n *tree.DropRoleOrUser) (planNode, error) {
+	return p.DropUserNode(ctx, n.Names, n.IfExists, n.IsRole /* isRole */, "DROP USER")
 }
 
 // DropUserNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 

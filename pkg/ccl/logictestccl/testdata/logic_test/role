@@ -138,10 +138,6 @@ role_name
 admin
 root
 
-# Test that only roles are grantable.
-statement error pq: role testuser does not exist
-GRANT testuser TO testrole
-
 statement error pq: user or role unknownuser does not exist
 GRANT testrole TO unknownuser
 
@@ -783,28 +779,28 @@ REVOKE admin FROM public
 
 # Test "WITH CREATEROLE" option
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 CREATE ROLE rolewithcreate WITH NOCREATEROLE CREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 ALTER ROLE testrole CREATEROLE NOCREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 CREATE ROLE rolewithcreate WITH CREATEROLE CREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 CREATE ROLE rolewithcreate WITH NOCREATEROLE NOCREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 ALTER ROLE testrole WITH CREATEROLE CREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 ALTER ROLE testrole WITH NOCREATEROLE NOCREATEROLE
 
 statement ok
