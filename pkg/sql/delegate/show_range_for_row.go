@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +61,8 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 
 	idxSpanStart := hex.EncodeToString([]byte(span.Key))
 	idxSpanEnd := hex.EncodeToString([]byte(span.EndKey))
+
+	sqltelemetry.IncrementShowCounter(sqltelemetry.RangeForRow)
 
 	// Format the expressions into a string to be passed into the crdb_internal.encode_key function.
 	// We have to be sneaky here and special case when exprs has length 1 and place a comma after the

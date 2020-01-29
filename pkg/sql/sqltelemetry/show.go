@@ -30,13 +30,16 @@ const (
 	Locality
 	// Create represents the SHOW CREATE command.
 	Create
+	// RangeForRow represents the SHOW RANGE FOR ROW command.
+	RangeForRow
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
-	Ranges:     "ranges",
-	Partitions: "partitions",
-	Locality:   "locality",
-	Create:     "create",
+	Ranges:      "ranges",
+	Partitions:  "partitions",
+	Locality:    "locality",
+	Create:      "create",
+	RangeForRow: "rangeforrow",
 }
 
 func (s ShowTelemetryType) String() string {
