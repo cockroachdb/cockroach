@@ -150,6 +150,8 @@ func initCLIDefaults() {
 	networkBenchCtx.addresses = []string{"localhost:8081"}
 
 	demoCtx.nodes = 1
+	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.useEmptyDatabase = false
 	demoCtx.simulateLatency = false
 	demoCtx.runWorkload = false
@@ -364,6 +366,8 @@ var sqlfmtCtx struct {
 // Defaults set by InitCLIDefaults() above.
 var demoCtx struct {
 	nodes                     int
+	sqlPoolMemorySize         int64
+	cacheSize                 int64
 	disableTelemetry          bool
 	disableLicenseAcquisition bool
 	useEmptyDatabase          bool
