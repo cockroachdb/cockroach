@@ -6,25 +6,25 @@ SHOW ROLES
 role_name
 admin
 
-statement error a role named admin already exists
+statement error a role/user named admin already exists
 CREATE ROLE admin
 
-statement error a user named root already exists
+statement error a role/user named root already exists
 CREATE ROLE root
 
-statement error a user named root already exists
+statement ok
 CREATE ROLE IF NOT EXISTS root
 
 statement ok
 CREATE ROLE IF NOT EXISTS admin
 
-statement error pq: cannot drop user or role admin: grants still exist on .*
+statement error pq: cannot drop role/user admin: grants still exist on .*
 DROP ROLE admin
 
-statement error pq: cannot drop user or role root: grants still exist on .*
+statement error pq: cannot drop role/user root: grants still exist on .*
 DROP ROLE root
 
-statement error pq: cannot drop users or roles admin, root: grants still exist on .*
+statement error pq: cannot drop roles/users admin, root: grants still exist on .*
 DROP ROLE admin, root
 
 statement ok
@@ -37,25 +37,25 @@ role_name
 admin
 myrole
 
-statement error a role named myrole already exists
+statement error a role/user named myrole already exists
 CREATE ROLE myrole
 
 statement ok
 CREATE ROLE IF NOT EXISTS myrole
 
-statement error a role named myrole already exists
+statement error a role/user named myrole already exists
 CREATE USER myrole
 
-statement error a role named myrole already exists
-CREATE USER IF NOT EXISTS myrole
-
-statement error pq: user myrole does not exist
+statement ok
 DROP USER myrole
 
 statement ok
-DROP USER IF EXISTS myrole
+CREATE ROLE myrole
 
-statement error pq: cannot drop users or roles admin, myrole: grants still exist on .*
+statement ok
+CREATE USER IF NOT EXISTS myrole
+
+statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
 query T colnames
@@ -74,7 +74,7 @@ SHOW ROLES
 role_name
 admin
 
-statement error pq: role myrole does not exist
+statement error pq: role/user myrole does not exist
 DROP ROLE myrole
 
 statement ok
@@ -92,7 +92,7 @@ CREATE ROLE rolec
 statement ok
 CREATE ROLE roled
 
-statement error pq: role rolee does not exist
+statement error pq: role/user rolee does not exist
 DROP ROLE rolea, roleb, rolec, roled, rolee
 
 statement ok
@@ -138,14 +138,10 @@ role_name
 admin
 root
 
-# Test that only roles are grantable.
-statement error pq: role testuser does not exist
-GRANT testuser TO testrole
-
-statement error pq: user or role unknownuser does not exist
+statement error pq: role/user unknownuser does not exist
 GRANT testrole TO unknownuser
 
-statement error pq: role unknownrole does not exist
+statement error pq: role/user unknownrole does not exist
 GRANT unknownrole TO testuser
 
 # Test role "grant" and WITH ADMIN option.
@@ -465,16 +461,16 @@ DROP ROLE roled
 statement ok
 DROP ROLE rolee
 
-statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
+statement error pq: role/user root cannot be removed from role admin or lose the ADMIN OPTION
 REVOKE admin FROM root
 
-statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
+statement error pq: role/user root cannot be removed from role admin or lose the ADMIN OPTION
 REVOKE ADMIN OPTION FOR admin FROM root
 
-statement error pq: user or role unknownuser does not exist
+statement error pq: role/user unknownuser does not exist
 REVOKE ADMIN OPTION FOR admin FROM unknownuser
 
-statement error pq: role unknownrole does not exist
+statement error pq: role/user unknownrole does not exist
 REVOKE ADMIN OPTION FOR unknownrole FROM root
 
 statement ok
@@ -743,7 +739,7 @@ SELECT * FROM system.role_members
 role      member    isAdmin
 admin     root      true
 
-statement error cannot drop user or role newgroup: grants still exist on db2, db2.public.foo
+statement error cannot drop role/user newgroup: grants still exist on db2, db2.public.foo
 DROP ROLE newgroup
 
 statement ok
@@ -763,48 +759,48 @@ CREATE USER public
 statement error role name "public" is reserved
 CREATE ROLE public
 
-statement error cannot drop user or role public: grants still exist on system.public.comments
+statement error cannot drop role/user public: grants still exist on system.public.comments
 DROP USER public
 
-statement error cannot drop user or role public: grants still exist on system.public.comments
+statement error cannot drop role/user public: grants still exist on system.public.comments
 DROP ROLE public
 
-statement error role public does not exist
+statement error role/user public does not exist
 GRANT public TO testuser
 
-statement error user or role public does not exist
+statement error role/user public does not exist
 GRANT admin TO public
 
-statement error role public does not exist
+statement error role/user public does not exist
 REVOKE public FROM testuser
 
-statement error user or role public does not exist
+statement error role/user public does not exist
 REVOKE admin FROM public
 
 # Test "WITH CREATEROLE" option
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 CREATE ROLE rolewithcreate WITH NOCREATEROLE CREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
 
-statement error pq: conflicting role privilege options
+statement error pq: conflicting role options
 ALTER ROLE testrole CREATEROLE NOCREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 CREATE ROLE rolewithcreate WITH CREATEROLE CREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 CREATE ROLE rolewithcreate WITH NOCREATEROLE NOCREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 ALTER ROLE testrole WITH CREATEROLE CREATEROLE
 
-statement error pq: redundant role privilege options
+statement error pq: redundant role options
 ALTER ROLE testrole WITH NOCREATEROLE NOCREATEROLE
 
 statement ok
@@ -917,11 +913,17 @@ ALTER USER testuser3 WITH PASSWORD 'ilov3beefjerky'
 
 user root
 
-statement error pq: role rolek does not exist
+statement error pq: role/user rolek does not exist
 ALTER ROLE rolek CREATEROLE
 
 statement ok
-ALTER ROLE rolewithcreate WITH CREATEROLE
+ALTER ROLE IF EXISTS rolek CREATEROLE
+
+statement ok
+ALTER USER IF EXISTS rolek NOCREATEROLE
+
+statement ok
+ALTER USER rolewithcreate WITH NOCREATEROLE
 
 statement ok
 ALTER ROLE rolewithcreate CREATEROLE
@@ -944,7 +946,7 @@ CREATE ROLE IF NOT EXISTS roleh WITH CREATEROLE
 user root
 
 statement ok
-CREATE ROLE childrole WITH NOCREATEROLE
+CREATE USER childrole WITH NOCREATEROLE
 
 statement ok
 CREATE ROLE parentrole WITH CREATEROLE

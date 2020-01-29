@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -26,27 +26,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DropUserNode deletes entries from the system.users table.
+// DropRoleNode deletes entries from the system.users table.
 // This is called from DROP USER and DROP ROLE.
-type DropUserNode struct {
+type DropRoleNode struct {
 	ifExists bool
 	isRole   bool
 	names    func() ([]string, error)
 
-	run dropUserRun
+	run dropRoleRun
 }
 
-// DropUser drops a list of users.
-// Privileges: DELETE on system.users.
+// DropRole drops a list of users.
+// Privileges: CREATEROLE privilege.
 func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
-	return p.DropUserNode(ctx, n.Names, n.IfExists, false /* isRole */, "DROP USER")
+	return p.DropRoleNode(ctx, n.Names, n.IfExists, n.IsRole, "DROP USER")
 }
 
-// DropUserNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
-func (p *planner) DropUserNode(
+// DropRoleNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
+func (p *planner) DropRoleNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
-) (*DropUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+) (*DropRoleNode, error) {
+	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -55,27 +55,27 @@ func (p *planner) DropUserNode(
 		return nil, err
 	}
 
-	return &DropUserNode{
+	return &DropRoleNode{
 		ifExists: ifExists,
 		isRole:   isRole,
 		names:    names,
 	}, nil
 }
 
-// dropUserRun contains the run-time state of DropUserNode during local execution.
-type dropUserRun struct {
+// dropRoleRun contains the run-time state of DropRoleNode during local execution.
+type dropRoleRun struct {
 	// The number of users deleted.
 	numDeleted int
 }
 
-func (n *DropUserNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("user"))
-
-	var entryType string
+func (n *DropRoleNode) startExec(params runParams) error {
+	var opName string
 	if n.isRole {
-		entryType = "role"
+		telemetry.Inc(sqltelemetry.SchemaChangeDrop("role"))
+		opName = "drop-role"
 	} else {
-		entryType = "user"
+		telemetry.Inc(sqltelemetry.SchemaChangeDrop("user"))
+		opName = "drop-user"
 	}
 
 	names, err := n.names()
@@ -143,7 +143,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		}
 	}
 
-	// Was there any object dependin on that user?
+	// Was there any object depending on that user?
 	if f.Len() > 0 {
 		fnl := tree.NewFmtCtx(tree.FmtSimple)
 		defer fnl.Close()
@@ -154,14 +154,14 @@ func (n *DropUserNode) startExec(params runParams) error {
 			fnl.FormatName(name)
 		}
 		return pgerror.Newf(pgcode.Grouping,
-			"cannot drop user%s or role%s %s: grants still exist on %s",
+			"cannot drop role%s/user%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
 			fnl.String(), f.String(),
 		)
 	}
 
 	// All safe - do the work.
-	var numUsersDeleted, numRoleMembershipsDeleted int
+	var numUsersDeleted, numRoleMembershipsDeleted, numRoleOptionsDeleted int
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
@@ -176,27 +176,9 @@ func (n *DropUserNode) startExec(params runParams) error {
 
 		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
-			"drop-user",
+			opName,
 			params.p.txn,
-			fmt.Sprintf(
-				`DELETE FROM %s WHERE username=$1 AND "isRole" = $2`,
-				userTableName,
-			),
-			normalizedUsername,
-			n.isRole,
-		)
-		if err != nil {
-			return err
-		}
-
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-			params.ctx,
-			"drop-user",
-			params.p.txn,
-			fmt.Sprintf(
-				`DELETE FROM %s WHERE username=$1`,
-				roleOptionsTableName,
-			),
+			`DELETE FROM system.users WHERE username=$1`,
 			normalizedUsername,
 		)
 		if err != nil {
@@ -204,7 +186,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		}
 
 		if rowsAffected == 0 && !n.ifExists {
-			return errors.Errorf("%s %s does not exist", entryType, normalizedUsername)
+			return errors.Errorf("role/user %s does not exist", normalizedUsername)
 		}
 		numUsersDeleted += rowsAffected
 
@@ -214,6 +196,20 @@ func (n *DropUserNode) startExec(params runParams) error {
 			"drop-role-membership",
 			params.p.txn,
 			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
+		}
+
+		numRoleOptionsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			opName,
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE username=$1`,
+				RoleOptionsTableName,
+			),
 			normalizedUsername,
 		)
 		if err != nil {
@@ -231,19 +227,27 @@ func (n *DropUserNode) startExec(params runParams) error {
 		}
 	}
 
+	if numRoleOptionsDeleted > 0 {
+		// Some role options have been deleted, bump role_options table version to
+		// force a refresh of role membership.
+		if err := params.p.BumpRoleOptionsTableVersion(params.ctx); err != nil {
+			return err
+		}
+	}
+
 	n.run.numDeleted = numUsersDeleted
 
 	return nil
 }
 
 // Next implements the planNode interface.
-func (*DropUserNode) Next(runParams) (bool, error) { return false, nil }
+func (*DropRoleNode) Next(runParams) (bool, error) { return false, nil }
 
 // Values implements the planNode interface.
-func (*DropUserNode) Values() tree.Datums { return tree.Datums{} }
+func (*DropRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
-func (*DropUserNode) Close(context.Context) {}
+func (*DropRoleNode) Close(context.Context) {}
 
 // FastPathResults implements the planNodeFastPath interface.
-func (n *DropUserNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }
+func (n *DropRoleNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }

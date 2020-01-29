@@ -72,7 +72,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	// Check whether grantees exists
-	users, err := p.GetAllUsersAndRoles(ctx)
+	users, err := p.GetAllRoles(ctx)
 	if err != nil {
 		return err
 	}
