@@ -240,7 +240,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	}
 
 	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr())
+	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr(), demoCtx.nodes)
 	serv := server.TestServerFactory.New(args).(*server.TestServer)
 
 	// We want to only return after the server is ready.
@@ -267,24 +267,27 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
-func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
+func testServerArgsForTransientCluster(
+	nodeID roachpb.NodeID, joinAddr string, numNodes int,
+) base.TestServerArgs {
+	// Assign a path to the store spec, to be saved.
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
+
 	args := base.TestServerArgs{
 		PartOfCluster: true,
 		Insecure:      true,
 		Stopper: initBacktrace(
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
+		JoinAddr:   joinAddr,
+		StoreSpecs: []base.StoreSpec{storeSpec},
+		NumNodes:   numNodes,
 	}
 
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
 	}
-
-	// Assign a path to the store spec, to be saved.
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
-	args.StoreSpecs = []base.StoreSpec{storeSpec}
-	args.JoinAddr = joinAddr
 
 	return args
 }
@@ -347,7 +350,7 @@ func setupTransientCluster(
 		if c.s != nil {
 			joinAddr = c.s.ServingRPCAddr()
 		}
-		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
+		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr, demoCtx.nodes)
 
 		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.

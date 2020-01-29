@@ -232,6 +232,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
 	}
+	if params.NumNodes > 0 {
+		cfg.SQLMemoryPoolSize /= int64(params.NumNodes)
+		cfg.CacheSize /= int64(params.NumNodes)
+	}
 	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
 	return cfg
 }

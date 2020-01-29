@@ -86,6 +86,10 @@ type TestServerArgs struct {
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
 
+	// If set, this will divide resources such as memory and cache sizes to be
+	// equally shared between the number of nodes set.
+	NumNodes int
+
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
