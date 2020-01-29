@@ -11,10 +11,12 @@
 package metamorphic
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -79,6 +81,20 @@ func (m *metaTestRunner) init() {
 	m.ops = nil
 }
 
+// Run this function in a defer to ensure any Fatals on m.t do not cause panics
+// due to leaked iterators.
+func (m *metaTestRunner) closeAll() {
+	// Close all open objects. This should let the engine close cleanly.
+	closingOrder := []operandType{
+		OPERAND_ITERATOR,
+		OPERAND_READWRITER,
+		OPERAND_TRANSACTION,
+	}
+	for _, operandType := range closingOrder {
+		m.managers[operandType].closeAll()
+	}
+}
+
 // generateAndRun generates n operations using a TPCC-style deck shuffle with
 // weighted probabilities of each operation appearing.
 func (m *metaTestRunner) generateAndRun(n uint64) {
@@ -90,19 +106,72 @@ func (m *metaTestRunner) generateAndRun(n uint64) {
 
 		m.resolveAndRunOp(opToAdd)
 	}
-
-	// Close all open objects. This should let the engine close cleanly.
-	closingOrder := []operandType{
-		OPERAND_ITERATOR,
-		OPERAND_READWRITER,
-		OPERAND_TRANSACTION,
-	}
-	for _, operandType := range closingOrder {
-		m.managers[operandType].closeAll()
-	}
 }
+
 func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
-	// TODO(itsbilal): Implement this.
+	reader := bufio.NewReader(f)
+	lineCount := 0
+	for {
+		var argList []operand
+		var opName, argListString, expectedOutput string
+		var err error
+
+		lineCount++
+		// TODO(itsbilal): Implement the ability to skip comments.
+		if opName, err = reader.ReadString('('); err != nil {
+			if err == io.EOF {
+				return
+			}
+			m.t.Fatal(err)
+		}
+		opName = opName[:len(opName)-1]
+
+		if argListString, err = reader.ReadString(')'); err != nil {
+			m.t.Fatal(err)
+		}
+
+		// Parse argument list
+		argStrings := strings.Split(argListString, ", ")
+		// Special handling for last element: could end with ), or could just be )
+		lastElem := argStrings[len(argStrings) - 1]
+		if strings.HasSuffix(lastElem, ")") {
+			lastElem = lastElem[:len(lastElem) - 1]
+			if len(lastElem) > 0 {
+				argStrings[len(argStrings) - 1] = lastElem
+			} else {
+				argStrings = argStrings[:len(argStrings) - 1]
+			}
+		} else {
+			m.t.Fatalf("while parsing: last element %s did not have ) suffix", lastElem)
+		}
+
+		if _, err = reader.ReadString('>'); err != nil {
+			m.t.Fatal(err)
+		}
+		// Space after arrow.
+		if _, err = reader.Discard(1); err != nil {
+			m.t.Fatal(err)
+		}
+		if expectedOutput, err = reader.ReadString('\n'); err != nil {
+			m.t.Fatal(err)
+		}
+
+		// Resolve args
+		op := m.nameToOp[opName]
+		for i, operandType := range op.operands {
+			operand := m.managers[operandType].parse(argStrings[i])
+			argList = append(argList, operand)
+		}
+
+		actualOutput := m.runOp(opRun{
+			op:   m.nameToOp[opName],
+			args: argList,
+		})
+
+		if strings.Compare(strings.TrimSpace(expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
+			m.t.Fatalf("mismatching output at line %d: expected %s, got %s", lineCount, expectedOutput, actualOutput)
+		}
+	}
 }
 
 func (m *metaTestRunner) runOp(run opRun) string {
