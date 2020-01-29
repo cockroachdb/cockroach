@@ -275,29 +275,49 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "create new system.namespace table",
 		workFn:              createNewSystemNamespaceDescriptor,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "migrate system.namespace_deprecated entries into system.namespace",
 		workFn:              migrateSystemNamespace,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
 	},
 	{
-		// Introduced in v20.1
+		// Introduced in v20.1.
 		name:                "add hasCreateRole column to system.users table",
 		workFn:              addHasCreateRoleToSystemUsers,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
 	},
 	{
 		// Introduced in v20.1
-		// Replaces addAdminRole migration
+		// Replaces addAdminRole migration.
 		name:   "add isRole and hasCreateRole to admin role in system.users table",
 		workFn: addAdminRoleWithHasCreateRole,
+	},
+	{
+		// Introduced in v20.1.
+		name:                "add hasCreateRole column to system.users table",
+		workFn:              addHasCreateRoleToSystemUsers,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
+	},
+	{
+		// Introduced in v20.1.
+		name:                "rename isRole column login in system.users table",
+		workFn:              renameIsRoleColumnToLogin,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
+	},
+	{
+		// Introduced in v20.1.
+		// Need to invert values after isRole is renamed to login
+		// since bool in isRole is opposite to login by default.
+		name:                "invert values in login column in system.users table",
+		workFn:              invertLoginColumnValues,
+		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
 	},
 }
 
@@ -391,6 +411,32 @@ func (r runner) execAsRootWithRetry(
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		err := r.execAsRoot(ctx, opName, stmt, qargs...)
+		if err == nil {
+			break
+		}
+		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
+	}
+	return err
+}
+
+func (r runner) execAsNode(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
+	_, err := r.sqlExecutor.ExecEx(ctx, opName, nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.NodeUser,
+		},
+		stmt, qargs...)
+	return err
+}
+
+func (r runner) execAsNodeWithRetry(
+	ctx context.Context, opName string, stmt string, qargs ...interface{},
+) error {
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		err := r.execAsNode(ctx, opName, stmt, qargs...)
 		if err == nil {
 			break
 		}
@@ -901,22 +947,21 @@ func addHasCreateRoleToSystemUsers(ctx context.Context, r runner) error {
 	const addHasCreateRoleColumn = `
           ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "hasCreateRole" bool
           `
+	return r.execAsNodeWithRetry(ctx, "addHasCreateRoleColumn", addHasCreateRoleColumn)
+}
 
-	var err error
+func renameIsRoleColumnToLogin(ctx context.Context, r runner) error {
+	const renameIsRoleColumn = `
+          ALTER TABLE system.users RENAME COLUMN "hasCreateRole" login
+          `
+	return r.execAsNodeWithRetry(ctx, "convertIsRoleToLogin", renameIsRoleColumn)
+}
 
-	// Root user doesn't have CREATE privilege on system.users. Use node user.
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		_, err = r.sqlExecutor.ExecEx(ctx, "addHasCreateRoleColumn", nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{
-				User: security.NodeUser,
-			}, addHasCreateRoleColumn)
-		if err == nil {
-			break
-		}
-		log.Warningf(ctx, "failed to run %s: %v", addHasCreateRoleColumn, err)
-	}
-
-	return err
+func invertLoginColumnValues(ctx context.Context, r runner) error {
+	const invertLoginColumn = `
+					UPDATE system.users SET "login" = NOT "login"
+          `
+	return r.execAsNodeWithRetry(ctx, "invertLoginColumnValues", invertLoginColumn)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
