@@ -1769,6 +1769,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 				return errors.AssertionFailedf(
 					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
+		case *DescriptorMutation_DropPrimaryKey:
+			if m.Direction != DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"drop primary key mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2575,7 +2580,14 @@ func (desc *MutableTableDescriptor) DropConstraint(
 ) error {
 	switch detail.Kind {
 	case ConstraintTypePK:
-		return unimplemented.NewWithIssueDetailf(19141, "drop-constraint-pk", "cannot drop primary key")
+		currentMutationID := desc.ClusterVersion.NextMutationID
+		for _, mut := range desc.Mutations {
+			if mut.MutationID == currentMutationID && mut.GetDropPrimaryKey() != nil {
+				return errors.New("cannot drop the primary key of a table multiple times in a transaction")
+			}
+		}
+		desc.AddDropPrimaryKeyMutation()
+		return nil
 
 	case ConstraintTypeUnique:
 		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
@@ -3094,6 +3106,17 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_ADD}
+	desc.addMutation(m)
+}
+
+// AddDropPrimaryKeyMutation adds a DropPrimaryKey mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddDropPrimaryKeyMutation() {
+	m := DescriptorMutation{
+		Descriptor_: &DescriptorMutation_DropPrimaryKey{
+			DropPrimaryKey: &DropPrimaryKey{},
+		},
+		Direction: DescriptorMutation_NONE,
+	}
 	desc.addMutation(m)
 }
 

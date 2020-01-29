@@ -4704,11 +4704,12 @@ constraint_elem:
       },
     }
   }
-| PRIMARY KEY '(' index_params ')'
+| PRIMARY KEY '(' index_params ')' opt_interleave
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
+        Interleave: $6.interleave(),
       },
       PrimaryKey:    true,
     }

@@ -627,6 +627,12 @@ func (ex *connExecutor) commitSQLTransaction(
 		isRelease = true
 	}
 
+	for _, sc := range ex.extraTxnState.schemaChangers.schemaChangers {
+		if err := sc.validateTablePrimaryKeys(ctx, ex.state.mu.txn); err != nil {
+			return ex.makeErrEvent(err, stmt)
+		}
+	}
+
 	if err := ex.checkTableTwoVersionInvariant(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
