@@ -97,7 +97,7 @@ child  CREATE TABLE child (
            y INT8 NOT NULL,
            z INT8 NOT NULL,
            CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
-           UNIQUE INDEX old_primary_key (x ASC),
+           UNIQUE INDEX child_x_key (x ASC),
            FAMILY fam_0_x_y_z (x, y, z)
        ) INTERLEAVE IN PARENT parent (x, y)
 
@@ -151,6 +151,7 @@ child  CREATE TABLE child (
        y INT8 NOT NULL,
        z INT8 NOT NULL,
        CONSTRAINT "primary" PRIMARY KEY (y ASC, z ASC),
+       UNIQUE INDEX child_x_y_z_key (x ASC, y ASC, z ASC),
        FAMILY fam_0_x_y_z (x, y, z)
 )
 
@@ -194,6 +195,7 @@ child  CREATE TABLE child (
          z INT8 NOT NULL,
          w INT8 NULL,
          CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
+         UNIQUE INDEX child_x_y_key (x ASC, y ASC),
          INDEX i (x ASC, w ASC) INTERLEAVE IN PARENT parent (x),
          FAMILY fam_0_x_y_z_w (x, y, z, w)
        ) INTERLEAVE IN PARENT parent (x)
@@ -281,3 +283,20 @@ INSERT INTO t1 VALUES (100, 100, 100, 100)
 
 statement error insert on table "t4" violates foreign key constraint "fk3"
 INSERT INTO t4 VALUES (101)
+
+# Ensure that we still rewrite a primary index if the index column has name "rowid".
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (rowid INT PRIMARY KEY, y INT NOT NULL, FAMILY (rowid, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   rowid INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   UNIQUE INDEX t_rowid_key (rowid ASC),
+   FAMILY fam_0_rowid_y (rowid, y)
+)
