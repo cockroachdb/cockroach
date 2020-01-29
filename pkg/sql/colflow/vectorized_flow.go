@@ -391,11 +391,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
 	}
 
-	// TODO(asubiotto): Change hashRouter's hashCols to be uint32s.
-	hashCols := make([]int, len(output.HashColumns))
-	for i := range hashCols {
-		hashCols[i] = int(output.HashColumns[i])
-	}
 	hashRouterMemMonitor := execinfra.NewLimitedMonitor(
 		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "hash-router-limited",
 	)
@@ -404,7 +399,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	s.bufferingMemAccounts = append(s.bufferingMemAccounts, &hashRouterMemAccount)
 	router, outputs := colexec.NewHashRouter(
 		colexec.NewAllocator(ctx, &hashRouterMemAccount), input, outputTyps,
-		hashCols, len(output.Streams),
+		output.HashColumns, len(output.Streams),
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(ctx)
