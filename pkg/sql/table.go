@@ -164,13 +164,6 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		log.Infof(ctx, "reading mutable descriptor on table '%s'", tn)
 	}
 
-	if tn.SchemaName != tree.PublicSchemaName {
-		if flags.Required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
-		}
-		return nil, nil
-	}
-
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
@@ -217,13 +210,6 @@ func (tc *TableCollection) getTableVersion(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
-	}
-
-	if tn.SchemaName != tree.PublicSchemaName {
-		if flags.Required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
-		}
-		return nil, nil
 	}
 
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
@@ -280,20 +266,27 @@ func (tc *TableCollection) getTableVersion(
 		return readTableFromStore()
 	}
 
+	// Resolve the schema to the ID of the schema.
+	// TODO(sqlexec): consider caching this in TableCollection.
+	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
+	if err != nil || !foundSchema {
+		return nil, err
+	}
+
 	// First, look to see if we already have the table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.leasedTables {
 		if table.Name == string(tn.TableName) &&
-			table.ParentID == dbID {
+			table.ParentID == dbID && table.GetParentSchemaID() == schemaID {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
 			return table, nil
 		}
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, tn.Table())
+	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, schemaID, tn.Table())
 	if err != nil {
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
