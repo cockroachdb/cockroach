@@ -307,6 +307,11 @@ func newLeafTxnCoordSender(
 	tcf *TxnCoordSenderFactory, tis *roachpb.LeafTxnInputState,
 ) client.TxnSender {
 	tis.Txn.AssertInitialized(context.TODO())
+	// Deal with requests from 19.2 nodes which did not set ReadTimestamp.
+	txn := &tis.Txn
+	if txn.ReadTimestamp.Less(txn.DeprecatedOrigTimestamp) {
+		txn.ReadTimestamp = txn.DeprecatedOrigTimestamp
+	}
 
 	if tis.Txn.Status != roachpb.PENDING {
 		log.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
