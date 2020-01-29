@@ -42,7 +42,7 @@ import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
 import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
-import NotFound from "oss/src/views/app/components/NotFound";
+import NotFound from "src/views/app/components/NotFound";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
