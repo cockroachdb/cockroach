@@ -1283,7 +1283,7 @@ SELECT k FROM b WHERE k IS NULL
 ----
 scan b
  ├── columns: k:1(int!null)
- ├── constraint: /1: contradiction
+ ├── constraint: contradiction
  ├── cardinality: [0 - 1]
  ├── key: ()
  └── fd: ()-->(1)

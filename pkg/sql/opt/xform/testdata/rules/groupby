@@ -207,7 +207,10 @@ scalar-group-by
  ├── fd: ()-->(4)
  ├── scan xyz@xy
  │    ├── columns: x:1(int!null)
- │    ├── constraint: /1/2: [/0 - /0] [/4 - /4] [/7 - /7]
+ │    ├── constraint: /1/2
+ │    │    ├── [/0 - /0]
+ │    │    ├── [/4 - /4]
+ │    │    └── [/7 - /7]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
@@ -225,7 +228,10 @@ scalar-group-by
  ├── fd: ()-->(4)
  ├── scan xyz@xy,rev
  │    ├── columns: x:1(int!null)
- │    ├── constraint: /1/2: [/0 - /0] [/4 - /4] [/7 - /7]
+ │    ├── constraint: /1/2
+ │    │    ├── [/0 - /0]
+ │    │    ├── [/4 - /4]
+ │    │    └── [/7 - /7]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)

@@ -463,14 +463,18 @@ semi-join (merge)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/7 - /7] [/10 - /10]
+ │    ├── constraint: /1
+ │    │    ├── [/7 - /7]
+ │    │    └── [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    └── ordering: +1
  ├── scan b
  │    ├── columns: x:6(int!null)
- │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── constraint: /6
+ │    │    ├── [/7 - /7]
+ │    │    └── [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
  │    └── ordering: +6
@@ -522,7 +526,9 @@ left-join (merge)
  │    └── ordering: +1
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
- │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── constraint: /6
+ │    │    ├── [/7 - /7]
+ │    │    └── [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
@@ -570,7 +576,9 @@ right-join (merge)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
- │    ├── constraint: /1: [/7 - /7] [/10 - /10]
+ │    ├── constraint: /1
+ │    │    ├── [/7 - /7]
+ │    │    └── [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
@@ -679,7 +687,9 @@ anti-join (merge)
  │    └── ordering: +1
  ├── scan b
  │    ├── columns: x:6(int!null)
- │    ├── constraint: /6: [/7 - /7] [/10 - /10]
+ │    ├── constraint: /6
+ │    │    ├── [/7 - /7]
+ │    │    └── [/10 - /10]
  │    ├── cardinality: [0 - 2]
  │    ├── key: (6)
  │    └── ordering: +6

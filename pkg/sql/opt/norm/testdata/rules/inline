@@ -321,7 +321,9 @@ project
  ├── columns: expr:6(bool)
  ├── scan a
  │    ├── columns: k:1(int!null)
- │    ├── constraint: /1: [ - /1] [/6 - ]
+ │    ├── constraint: /1
+ │    │    ├── [ - /1]
+ │    │    └── [/6 - ]
  │    └── key: (1)
  └── projections
       └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
