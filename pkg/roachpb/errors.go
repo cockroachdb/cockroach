@@ -588,6 +588,17 @@ func (e *WriteIntentError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &WriteIntentError{}
 
+// NewWriteTooOldError creates a new write too old error. The function accepts
+// the timestamp of the operation that hit the error, along with the timestamp
+// immediately after the existing write which had a higher timestamp and which
+// caused the error.
+func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp) *WriteTooOldError {
+	return &WriteTooOldError{
+		Timestamp:       operationTS,
+		ActualTimestamp: actualTS,
+	}
+}
+
 func (e *WriteTooOldError) Error() string {
 	return e.message(nil)
 }
