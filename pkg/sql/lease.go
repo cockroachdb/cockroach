@@ -1259,6 +1259,7 @@ func (*LeaseManagerTestingKnobs) ModuleTestingKnobs() {}
 
 type tableNameCacheKey struct {
 	dbID                sqlbase.ID
+	schemaID            sqlbase.ID
 	normalizeTabledName string
 }
 
@@ -1279,10 +1280,10 @@ type tableNameCache struct {
 // The table's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
 func (c *tableNameCache) get(
-	dbID sqlbase.ID, tableName string, timestamp hlc.Timestamp,
+	dbID sqlbase.ID, schemaID sqlbase.ID, tableName string, timestamp hlc.Timestamp,
 ) *tableVersionState {
 	c.mu.Lock()
-	table, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
+	table, ok := c.tables[makeTableNameCacheKey(dbID, schemaID, tableName)]
 	c.mu.Unlock()
 	if !ok {
 		return nil
@@ -1298,7 +1299,7 @@ func (c *tableNameCache) get(
 
 	defer table.mu.Unlock()
 
-	if !nameMatchesTable(&table.ImmutableTableDescriptor, dbID, tableName) {
+	if !nameMatchesTable(&table.ImmutableTableDescriptor, dbID, schemaID, tableName) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
 			dbID, tableName, table.ID, table.ParentID, table.Name))
@@ -1317,7 +1318,7 @@ func (c *tableNameCache) insert(table *tableVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := makeTableNameCacheKey(table.ParentID, table.Name)
+	key := makeTableNameCacheKey(table.ParentID, table.GetParentSchemaID(), table.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		c.tables[key] = table
@@ -1337,7 +1338,7 @@ func (c *tableNameCache) remove(table *tableVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := makeTableNameCacheKey(table.ParentID, table.Name)
+	key := makeTableNameCacheKey(table.ParentID, table.GetParentSchemaID(), table.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		// Table for lease not found in table name cache. This can happen if we had
@@ -1353,8 +1354,10 @@ func (c *tableNameCache) remove(table *tableVersionState) {
 	}
 }
 
-func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
-	return tableNameCacheKey{dbID, tableName}
+func makeTableNameCacheKey(
+	dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
+) tableNameCacheKey {
+	return tableNameCacheKey{dbID, schemaID, tableName}
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
@@ -1438,9 +1441,10 @@ func (m *LeaseManager) SetInternalExecutor(executor sqlutil.InternalExecutor) {
 }
 
 func nameMatchesTable(
-	table *sqlbase.ImmutableTableDescriptor, dbID sqlbase.ID, tableName string,
+	table *sqlbase.ImmutableTableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
 ) bool {
-	return table.ParentID == dbID && table.Name == tableName
+	return table.ParentID == dbID && table.Name == tableName &&
+		table.GetParentSchemaID() == schemaID
 }
 
 // findNewest returns the newest table version state for the tableID.
@@ -1470,10 +1474,14 @@ func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 // timestamp, it uses Acquire() to get a descriptor with the corresponding
 // id and fails because the id has been dropped by the TRUNCATE.
 func (m *LeaseManager) AcquireByName(
-	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	dbID sqlbase.ID,
+	schemaID sqlbase.ID,
+	tableName string,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
-	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
+	tableVersion := m.tableNames.get(dbID, schemaID, tableName, timestamp)
 	if tableVersion != nil {
 		if tableVersion.ModificationTime.LessEq(timestamp) {
 			// If this lease is nearly expired, ensure a renewal is queued.
@@ -1504,7 +1512,7 @@ func (m *LeaseManager) AcquireByName(
 	// lease with at least a bit of lifetime left in it. So, we do it the hard
 	// way: look in the database to resolve the name, then acquire a new table.
 	var err error
-	tableID, err := m.resolveName(ctx, timestamp, dbID, tableName)
+	tableID, err := m.resolveName(ctx, timestamp, dbID, schemaID, tableName)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -1512,7 +1520,7 @@ func (m *LeaseManager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	if !nameMatchesTable(table, dbID, tableName) {
+	if !nameMatchesTable(table, dbID, schemaID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
 		// That can mean two things. Assume the table is being renamed from A to B.
 		// a) `tableName` is A. The transaction doing the RENAME committed (so the
@@ -1556,7 +1564,7 @@ func (m *LeaseManager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		if !nameMatchesTable(table, dbID, tableName) {
+		if !nameMatchesTable(table, dbID, schemaID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(table); err != nil {
@@ -1572,14 +1580,18 @@ func (m *LeaseManager) AcquireByName(
 // timestamp by looking in the database. If the mapping is not found,
 // sqlbase.ErrDescriptorNotFound is returned.
 func (m *LeaseManager) resolveName(
-	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	dbID sqlbase.ID,
+	schemaID sqlbase.ID,
+	tableName string,
 ) (sqlbase.ID, error) {
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)
 		var found bool
 		var err error
-		found, id, err = sqlbase.LookupPublicTableID(ctx, txn, dbID, tableName)
+		found, id, err = sqlbase.LookupObjectID(ctx, txn, dbID, schemaID, tableName)
 		if err != nil {
 			return err
 		}
