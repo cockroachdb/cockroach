@@ -48,10 +48,10 @@ import (
 //
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones]
+// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -598,6 +598,9 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
 	}
+	if e.hasArg("failOnMoreRecent") {
+		opts.FailOnMoreRecent = true
+	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
 	if err != nil {
 		return err
@@ -690,6 +693,9 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("reverse") {
 		opts.Reverse = true
+	}
+	if e.hasArg("failOnMoreRecent") {
+		opts.FailOnMoreRecent = true
 	}
 	max := int64(-1)
 	if e.hasArg("max") {
