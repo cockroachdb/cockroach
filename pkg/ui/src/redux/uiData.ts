@@ -12,7 +12,7 @@ import _ from "lodash";
 import { Action, Dispatch } from "redux";
 import * as protobuf from "protobufjs/minimal";
 
-import * as protos from  "src/js/protos";
+import * as protos from  "cockroachdb-protobuf-client-oss";
 import { PayloadAction } from "src/interfaces/action";
 import { getUIData, setUIData } from "src/util/api";
 import { AdminUIState } from "./state";

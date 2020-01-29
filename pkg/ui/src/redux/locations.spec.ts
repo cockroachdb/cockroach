@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { ILocation, selectLocations, selectLocationTree } from "./locations";
 
 const Location = protos.cockroach.server.serverpb.LocationsResponse.Location;

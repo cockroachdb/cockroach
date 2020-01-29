@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { selectDatabasesByType } from "./";
 
 describe("selectDatabasesByType", function() {

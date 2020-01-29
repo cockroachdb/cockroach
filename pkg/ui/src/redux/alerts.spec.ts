@@ -14,7 +14,7 @@ import moment from "moment";
 import sinon from "sinon";
 import { createHashHistory } from "history";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { API_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 

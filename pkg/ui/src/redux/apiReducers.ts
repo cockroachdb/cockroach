@@ -22,7 +22,7 @@ import * as api from "src/util/api";
 import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.

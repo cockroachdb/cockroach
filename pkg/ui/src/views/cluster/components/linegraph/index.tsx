@@ -14,7 +14,7 @@ import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
-import * as protos from  "src/js/protos";
+import * as protos from  "cockroachdb-protobuf-client-oss";
 import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {

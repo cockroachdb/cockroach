@@ -11,7 +11,7 @@
 import _ from "lodash";
 import { createSelector } from "reselect";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { AdminUIState } from "./state";
 import { Pick } from "src/util/pick";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";

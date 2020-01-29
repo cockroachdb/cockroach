@@ -20,7 +20,7 @@ import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 const sandbox = sinon.createSandbox();
 

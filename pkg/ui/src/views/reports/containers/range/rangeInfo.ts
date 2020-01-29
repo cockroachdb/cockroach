@@ -11,7 +11,7 @@
 import _ from "lodash";
 import Long from "long";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { FixLong } from "src/util/fixLong";
 
 export function GetLocalReplica(info: protos.cockroach.server.serverpb.IRangeInfo) {

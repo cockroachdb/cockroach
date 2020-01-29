@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 import { generateTableID, databaseRequestToID, tableRequestToID } from "./apiReducers";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {

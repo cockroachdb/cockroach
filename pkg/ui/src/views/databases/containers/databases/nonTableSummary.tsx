@@ -10,7 +10,8 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
+
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";

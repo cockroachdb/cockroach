@@ -14,7 +14,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { Link, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { refreshEvents } from "src/redux/apiReducers";
 import { eventsSelector, eventsValidSelector } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";

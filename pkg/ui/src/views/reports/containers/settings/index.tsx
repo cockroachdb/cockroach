@@ -12,9 +12,9 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { withRouter } from "react-router-dom";
 
-import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";

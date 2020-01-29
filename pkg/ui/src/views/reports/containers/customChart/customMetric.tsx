@@ -12,7 +12,7 @@ import _ from "lodash";
 import * as React from "react";
 import Select from "react-select";
 
-import * as protos from  "src/js/protos";
+import * as protos from  "cockroachdb-protobuf-client-oss";
 import { AxisUnits } from "src/views/shared/components/metricQuery";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 

@@ -15,7 +15,7 @@
 import _ from "lodash";
 import moment from "moment";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { FixLong } from "src/util/fixLong";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;

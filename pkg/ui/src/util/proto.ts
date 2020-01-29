@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
 const nodeStatus: INodeStatus = null;

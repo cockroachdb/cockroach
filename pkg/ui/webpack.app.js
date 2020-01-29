@@ -138,10 +138,6 @@ module.exports = (env, argv) => {
       // See "DLLs for speedy builds" in the README for details.
       new webpack.DllReferencePlugin({
         context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require(`./protos.${env.dist}.manifest.json`),
-      }),
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
         manifest: require("./vendor.oss.manifest.json"),
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),

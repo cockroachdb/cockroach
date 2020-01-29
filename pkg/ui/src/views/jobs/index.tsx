@@ -17,8 +17,8 @@ import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import { withRouter } from "react-router-dom";
-
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";

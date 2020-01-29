@@ -11,7 +11,7 @@
 import _ from "lodash";
 import React from "react";
 import classNames from "classnames";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 
 import "./summarybar.styl";
 

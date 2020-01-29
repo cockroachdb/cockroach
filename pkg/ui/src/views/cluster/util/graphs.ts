@@ -14,7 +14,7 @@ import * as nvd3 from "nvd3";
 import * as d3 from "d3";
 import moment from "moment";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { NanoToMilli } from "src/util/convert";
 import {  DurationFitScale, BytesFitScale, ComputeByteScale, ComputeDurationScale} from "src/util/format";
 

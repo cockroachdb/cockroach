@@ -12,9 +12,9 @@ import _ from "lodash";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import * as protos from "src/js/protos";
 import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";

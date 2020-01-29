@@ -14,7 +14,7 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { INodeStatus } from "src/util/proto";
 import { nodeIDAttr, REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import { LogEntriesResponseMessage } from "src/util/api";

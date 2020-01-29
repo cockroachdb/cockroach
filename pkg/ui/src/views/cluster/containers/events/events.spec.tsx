@@ -16,7 +16,7 @@ import Long from "long";
 import * as sinon from "sinon";
 
 import "src/enzymeInit";
-import * as protos from  "src/js/protos";
+import * as protos from  "cockroachdb-protobuf-client-oss";
 import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "src/views/cluster/containers/events";
 import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";

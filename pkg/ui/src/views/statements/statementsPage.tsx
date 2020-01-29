@@ -16,9 +16,9 @@ import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";

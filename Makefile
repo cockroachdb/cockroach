@@ -1194,12 +1194,12 @@ PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
 # JavaScript only needs the entrypoint protobufs to be listed. It automatically
 # compiles any protobufs the entrypoints depend upon.
 JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
-UI_JS_CCL := pkg/ui/ccl/src/js/protos.js
-UI_TS_CCL := pkg/ui/ccl/src/js/protos.d.ts
+UI_JS_CCL := pkg/ui-client/ccl/src/protos.js
+UI_TS_CCL := pkg/ui-client/ccl/src/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS_OSS := pkg/ui/src/js/protos.js
-UI_TS_OSS := pkg/ui/src/js/protos.d.ts
+UI_JS_OSS := pkg/ui-client/oss/src/protos.js
+UI_TS_OSS := pkg/ui-client/oss/src/protos.d.ts
 UI_PROTOS_OSS := $(UI_JS_OSS) $(UI_TS_OSS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/roachpb/errors.proto %/roachpb/api.proto %util/tracing/recorded_span.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/file_registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/log/log.proto %/unresolved_addr.proto,$(GO_PROTOS))
@@ -1310,10 +1310,8 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js pkg/ui/dist/vendor.oss.dll.js
-UI_CCL_MANIFESTS := pkg/ui/protos.ccl.manifest.json pkg/ui/vendor.oss.manifest.json
-UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
-UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
+UI_DLLS := pkg/ui/dist/vendor.oss.dll.js
+UI_MANIFESTS := pkg/ui/vendor.oss.manifest.json
 
 # (Ab)use pattern rules to teach Make that this one Webpack command produces two
 # files. Normally, Make would run the recipe twice if dist/FOO.js and
@@ -1329,28 +1327,25 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 #
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
-.SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
+.SECONDARY: $(UI_DLLS) $(UI_MANIFESTS)
 
-pkg/ui/dist/%.oss.dll.js pkg/ui/%.oss.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_OSS)
-	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
-
-pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/yarn.installed $(UI_PROTOS_CCL)
-	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
+pkg/ui/dist/vendor.oss.dll.js pkg/ui/vendor.oss.manifest.json: pkg/ui/webpack.vendor.js pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
+	$(NODE_RUN) -C pkg/ui $(WEBPACK) -p --config webpack.vendor.js --env.dist=oss
 
 .PHONY: ui-test
-ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
+ui-test: $(UI_DLLS) $(UI_MANIFESTS)
 	@echo "would run this but this is skipped pending #42365:" $(NODE_RUN) -C pkg/ui $(KARMA) start
 
 .PHONY: ui-test-watch
-ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
+ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
-pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
-pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+pkg/ui/distccl/bindata.go: $(UI_DLLS) $(UI_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
+pkg/ui/distoss/bindata.go: $(UI_DLLS) $(UI_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$* -mindepth 1 -not -name dist$*.go -delete
 	set -e; shopt -s extglob; for dll in $(notdir $(filter %.dll.js,$^)); do \
@@ -1373,7 +1368,7 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 .PHONY: ui-watch
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
-ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
+ui-watch ui-watch-secure: $(UI_DLLS) pkg/ui/yarn.opt.installed
 	cd pkg/ui && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean

@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import React, { Fragment } from "react";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;

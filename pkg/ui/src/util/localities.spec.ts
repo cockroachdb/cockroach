@@ -10,7 +10,7 @@
 
 import { assert } from "chai";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import {
   generateLocalityRoute,
@@ -22,7 +22,7 @@ import {
   getLocality,
   allNodesHaveLocality,
 } from "./localities";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
 
 describe("parseLocalityRoute", function() {

@@ -15,7 +15,7 @@ import {RouteComponentProps, withRouter} from "react-router-dom";
 import { connect } from "react-redux";
 
 import { enqueueRange } from "src/util/api";
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import Print from "src/views/reports/containers/range/print";
 import "./index.styl";
 

@@ -12,7 +12,7 @@ import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-ccl";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
 import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";

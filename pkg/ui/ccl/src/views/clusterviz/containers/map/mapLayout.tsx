@@ -10,7 +10,7 @@ import _ from "lodash";
 import * as d3 from "d3";
 import React from "react";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-ccl"
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { getChildLocalities } from "src/util/localities";

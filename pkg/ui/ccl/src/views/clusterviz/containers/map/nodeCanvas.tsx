@@ -21,7 +21,7 @@ import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
-import { cockroach } from "src/js/protos";
+import { cockroach }  from "cockroachdb-protobuf-client-ccl";
 import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.storage.ILiveness;

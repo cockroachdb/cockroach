@@ -15,7 +15,7 @@ import { RouteComponentProps } from "react-router-dom";
 import * as H from "history";
 
 import "src/protobufInit";
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { CollectedStatementStatistics } from "src/util/appStats";
 import { appAttr, statementAttr } from "src/util/constants";
 import { selectStatements, selectApps, selectTotalFingerprints, selectLastReset } from "./statementsPage";

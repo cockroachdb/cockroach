@@ -15,9 +15,9 @@ import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
-import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";

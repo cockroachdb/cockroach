@@ -13,7 +13,7 @@ import { Location } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
-import * as protos from "src/js/protos";
+import * as protos from "cockroachdb-protobuf-client-oss";
 import { versionsSelector } from "src/redux/nodes";
 import { store, history, AdminUIState } from "src/redux/state";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";

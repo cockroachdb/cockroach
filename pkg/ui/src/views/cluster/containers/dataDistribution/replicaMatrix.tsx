@@ -24,9 +24,9 @@ import {
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { TimestampToMoment } from "src/util/convert";
 
-import { cockroach } from "src/js/protos";
+import { cockroach } from "cockroachdb-protobuf-client-oss";
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
-import { google } from "src/js/protos";
+import { google } from "cockroachdb-protobuf-client-oss";
 import ITimestamp = google.protobuf.ITimestamp;
 
 import "./replicaMatrix.styl";
