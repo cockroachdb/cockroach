@@ -251,8 +251,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// also add the spans for the in between ranges. Consider the following index
 		// and its partition:
 		//
-		// CREATE INDEX orders_by_created_at
-		//     ON orders (region, created_at, id)
+		// CREATE INDEX orders_by_seq_num
+		//     ON orders (region, seq_num, id)
 		//     STORING (total)
 		//     PARTITION BY LIST (region)
 		//         (
@@ -262,10 +262,11 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		//         )
 		//
 		// The constraint generated for the query:
-		// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+		//   SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
 		// is:
-		//
-		// [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00']
+		//   [/'europe-west2'/100 - /'europe-west2'/199]
+		//   [/'us-east1'/100 - /'us-east1'/199]
+		//   [/'us-west1'/100 - /'us-west1'/199]
 		//
 		// You'll notice that the spans before europe-west2, after us-west1 and in between
 		// the defined partitions are missing. We must add these spans now, appropriately
@@ -277,15 +278,20 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// Using the partitioning example and the query above, if we added the in between
 		// spans at the same time as the partitioned ones, we would end up with a span that
 		// looked like:
+		//   [ - /'europe-west2'/99]
 		//
-		// [ - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
+		// Allowing the partition spans to be constrained further and then adding
+		// the spans give us a more constrained index scan as shown below:
+		//   [ - /'europe-west2')
+		//   [/'europe-west2'/100 - /'europe-west2'/199]
+		//   [/e'europe-west2\x00'/100 - /'us-east1')
+		//   [/'us-east1'/100 - /'us-east1'/199]
+		//   [/e'us-east1\x00'/100 - /'us-west1')
+		//   [/'us-west1'/100 - /'us-west1'/199]
+		//   [/e'us-west1\x00'/100 - ]
 		//
-		// However, allowing the partition spans to be constrained further and then adding the
-		// spans give us a more constrained index scan as shown below:
+		// Notice how we 'skip' all the europe-west2 rows with seq_num < 100.
 		//
-		// [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] ...
-		//
-		// Notice how we 'skip' all the europe-west2 values that satisfy (created_at < '2019-05-04')
 		if isIndexPartitioned {
 			inBetweenConstraint, inBetweenRemainingFilters, ok := c.tryConstrainIndex(
 				constrainedInBetweenFilters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
@@ -782,12 +788,12 @@ func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr
 // For example consider the following table and partitioned index:
 //
 // CREATE TABLE orders (
-//     region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, created_at TIMESTAMP NOT NULL,
+//     region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
 //     PRIMARY KEY (region, id)
 // )
 //
-// CREATE INDEX orders_by_created_at
-//     ON orders (region, created_at, id)
+// CREATE INDEX orders_by_seq_num
+//     ON orders (region, seq_num, id)
 //     STORING (total)
 //     PARTITION BY LIST (region)
 //         (
@@ -797,20 +803,25 @@ func (c *CustomFuncs) constructOr(conditions memo.ScalarListExpr) opt.ScalarExpr
 //         )
 //
 // Now consider the following query:
-// SELECT sum(total) FROM orders WHERE created_at >= '2019-05-04' AND created_at < '2019-05-05'
+// SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
 //
 // Normally, the index would not be utilized but because we know what the
 // partition values are for the prefix of the index, we can generate
 // filters that allow us to use the index (adding the appropriate in-between
 // filters to catch all the values that are not part of the partitions).
 // By doing so, we get the following plan:
-// ----
 // scalar-group-by
 //  ├── select
-//  │    ├── scan orders@orders_by_created_at
-//  │    │    └── constraint: /1/4/2: [ - /'europe-west2') [/'europe-west2'/'2019-05-04 00:00:00+00:00' - /'europe-west2'/'2019-05-04 23:59:59.999999+00:00'] [/e'europe-west2\x00'/'2019-05-04 00:00:00+00:00' - /'us-east1') [/'us-east1'/'2019-05-04 00:00:00+00:00' - /'us-east1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-east1\x00'/'2019-05-04 00:00:00+00:00' - /'us-west1') [/'us-west1'/'2019-05-04 00:00:00+00:00' - /'us-west1'/'2019-05-04 23:59:59.999999+00:00'] [/e'us-west1\x00'/'2019-05-04 00:00:00+00:00' - ]
+//  │    ├── scan orders@orders_by_seq_num
+//  │    │    └── constraint: /1/4/2: [ - /'europe-west2')
+//  │    │                            [/'europe-west2'/100 - /'europe-west2'/199]
+//  │    │                            [/e'europe-west2\x00'/100 - /'us-east1')
+//  │    │                            [/'us-east1'/100 - /'us-east1'/199]
+//  │    │                            [/e'us-east1\x00'/100 - /'us-west1')
+//  │    │                            [/'us-west1'/100 - /'us-west1'/199]
+//  │    │                            [/e'us-west1\x00'/100 - ]
 //  │    └── filters
-//  │         └── (created_at >= '2019-05-04 00:00:00+00:00') AND (created_at < '2019-05-05 00:00:00+00:00')
+//  │         └── (seq_num >= 100) AND (seq_num < 200)
 //  └── aggregations
 //       └── sum
 //            └── variable: total
