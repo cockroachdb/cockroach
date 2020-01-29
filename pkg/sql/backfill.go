@@ -831,7 +831,7 @@ func (sc *SchemaChanger) distBackfill(
 		// Index backfilling ingests SSTs that don't play nicely with running txns
 		// since they just add their keys blindly. Running a Scan of the target
 		// spans at the time the SSTs' keys will be written will calcify history up
-		// to then since the scan will resolve intents and populate tscache to keep
+		// to then since the scan will resolveUsername intents and populate tscache to keep
 		// anything else from sneaking under us. Since these are new indexes, these
 		// spans should be essentially empty, so this should be a pretty quick and
 		// cheap scan.

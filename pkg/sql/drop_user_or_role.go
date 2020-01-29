@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -36,17 +36,17 @@ type DropUserNode struct {
 	run dropUserRun
 }
 
-// DropUser drops a list of users.
-// Privileges: DELETE on system.users.
-func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
-	return p.DropUserNode(ctx, n.Names, n.IfExists, false /* isRole */, "DROP USER")
+// DropUserOrRole drops a list of users.
+// Privileges: CREATEROLE privilege.
+func (p *planner) DropUserOrRole(ctx context.Context, n *tree.DropUserOrRole) (planNode, error) {
+	return p.DropUserNode(ctx, n.Names, n.IfExists, n.IsRole, "DROP USER")
 }
 
 // DropUserNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -143,7 +143,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		}
 	}
 
-	// Was there any object dependin on that user?
+	// Was there any object depending on that user?
 	if f.Len() > 0 {
 		fnl := tree.NewFmtCtx(tree.FmtSimple)
 		defer fnl.Close()
@@ -178,12 +178,15 @@ func (n *DropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-user",
 			params.p.txn,
+<<<<<<< HEAD:pkg/sql/drop_user.go
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE username=$1 AND "isRole" = $2`,
 				userTableName,
 			),
+=======
+			`DELETE FROM system.users WHERE username=$1`,
+>>>>>>> Refactoring Users and Roles to be the same. (Same as PG):pkg/sql/drop_user_or_role.go
 			normalizedUsername,
-			n.isRole,
 		)
 		if err != nil {
 			return err

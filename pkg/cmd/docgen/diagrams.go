@@ -350,10 +350,11 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
-		name:   "alter_user_password_stmt",
+		name:   "alter_user_or_role_stmt",
 		inline: []string{"password_clause", "opt_with"},
 		replace: map[string]string{
-			"string_or_placeholder 'WITH'":      "name 'WITH'",
+			"string_or_placeholder":             "name'",
+			"role_options":                      "OPTIONS",
 			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 		unlink: []string{"name", "password"},
@@ -587,21 +588,12 @@ var specs = []stmtSpec{
 		inline: []string{"opt_column_list"},
 	},
 	{
-		name:   "create_role_stmt",
-		inline: []string{"role_or_group"},
+		name:   "create_user_or_role_stmt",
+		inline: []string{"role_or_group_or_user"},
 		replace: map[string]string{
 			"string_or_placeholder": "name",
+			"role_options":          "OPTIONS",
 		},
-	},
-	{
-		name:   "create_user_stmt",
-		inline: []string{"opt_with", "password_clause", "opt_password"},
-		replace: map[string]string{
-			"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
-			"'USER' string_or_placeholder":     "'USER' name",
-			"'EXISTS' string_or_placeholder":   "'EXISTS' name",
-		},
-		unlink: []string{"password"},
 	},
 	{
 		name: "default_value_column_level",
@@ -673,7 +665,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
-		name:    "drop_role_stmt",
+		name:    "drop_user_or_role_stmt",
 		replace: map[string]string{"string_or_placeholder_list": "name"},
 	},
 	{

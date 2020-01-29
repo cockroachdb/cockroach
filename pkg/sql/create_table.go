@@ -580,7 +580,7 @@ func ResolveFK(
 			tbl.State = sqlbase.TableDescriptor_ADD
 		}
 
-		// If we resolve the same table more than once, we only want to edit a
+		// If we resolveUsername the same table more than once, we only want to edit a
 		// single instance of it, so replace target with previously resolved table.
 		if prev, ok := backrefs[target.ID]; ok {
 			target = prev
@@ -1143,7 +1143,7 @@ func dequalifyColumnRefs(
 //
 // The caller must also ensure that the SchemaResolver is configured
 // to bypass caching and enable visibility of just-added descriptors.
-// This is used to resolve sequence and FK dependencies. Also see the
+// This is used to resolveUsername sequence and FK dependencies. Also see the
 // comment at the start of the global scope resolveFK().
 //
 // If the table definition *may* use the SERIAL type, the caller is
@@ -1517,7 +1517,7 @@ func MakeTableDesc(
 		}
 	}
 
-	// With all structural elements in place and IDs allocated, we can resolve the
+	// With all structural elements in place and IDs allocated, we can resolveUsername the
 	// constraints and qualifications.
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
 	// been allocated since the FKs will reference those IDs. Resolution also

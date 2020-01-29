@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -29,10 +29,10 @@ import (
 // CreateUserNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateUserNode struct {
-	ifNotExists    bool
-	isRole         bool
-	rolePrivileges roleprivilege.List
-	userAuthInfo
+	ifNotExists bool
+	isRole      bool
+	roleOptions roleoption.List
+	userNameInfo
 
 	run createUserRun
 }
@@ -40,63 +40,85 @@ type CreateUserNode struct {
 var userTableName = tree.NewTableName("system", "users")
 var roleOptionsTableName = tree.NewTableName("system", "role_options")
 
-// CreateUser creates a user.
+// CreateUserOrRole creates a user.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
-	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists,
-		false /* isRole */, "CREATE USER", nil)
+func (p *planner) CreateUserOrRole(
+	ctx context.Context, n *tree.CreateUserOrRole,
+) (planNode, error) {
+
+	return p.CreateUserNode(ctx, n.Name, n.IfNotExists, n.IsRole,
+		"CREATE ROLE OR USER", n.OptionsWithValues)
 }
 
-// CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
+// CreateUserNode creates a "create user" plan node.
+// This can be called from CREATE USER or CREATE ROLE.
 func (p *planner) CreateUserNode(
 	ctx context.Context,
-	nameE, passwordE tree.Expr,
+	nameE tree.Expr,
 	ifNotExists bool,
 	isRole bool,
 	opName string,
-	rolePrivileges roleprivilege.List,
+	optionsWithValues tree.OptionsWithValues,
 ) (*CreateUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := rolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	var roleOptions roleoption.List
+	roleOptions, err := optionsWithValues.ToRoleOptions(p.TypeAsString, "CREATE ROLE OR USER")
+	if err != nil {
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, passwordE, opName)
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
+		return nil, err
+	}
+
+	ua, err := p.getUserAuthInfo(nameE, opName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CreateUserNode{
-		userAuthInfo:   ua,
-		ifNotExists:    ifNotExists,
-		isRole:         isRole,
-		rolePrivileges: rolePrivileges,
+		userNameInfo: ua,
+		ifNotExists:  ifNotExists,
+		isRole:       isRole,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
 func (n *CreateUserNode) startExec(params runParams) error {
+<<<<<<< HEAD:pkg/sql/create_user.go
 	telemetry.Inc(sqltelemetry.SchemaChangeCreate("user"))
 
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
+=======
+	normalizedUsername, err := n.userNameInfo.resolveUsername()
+>>>>>>> Refactoring Users and Roles to be the same. (Same as PG):pkg/sql/create_user_or_role.go
 	if err != nil {
 		return err
 	}
 
-	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
-		// We disallow setting a non-empty password in insecure mode
-		// because insecure means an observer may have MITM'ed the change
-		// and learned the password.
-		//
-		// It's valid to clear the password (WITH PASSWORD NULL) however
-		// since that forces cert auth when moving back to secure mode,
-		// and certs can't be MITM'ed over the insecure SQL connection.
-		return pgerror.New(pgcode.InvalidPassword,
-			"setting or updating a password is not supported in insecure mode")
+	var hashedPassword []byte
+	if n.roleOptions.Contains(roleoption.PASSWORD) {
+		hashedPassword, err := n.roleOptions.GetHashedPassword()
+		if err != nil {
+			return err
+		}
+
+		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+			// We disallow setting a non-empty password in insecure mode
+			// because insecure means an observer may have MITM'ed the change
+			// and learned the password.
+			//
+			// It's valid to clear the password (WITH PASSWORD NULL) however
+			// since that forces cert auth when moving back to secure mode,
+			// and certs can't be MITM'ed over the insecure SQL connection.
+			return pgerror.New(pgcode.InvalidPassword,
+				"setting or updating a password is not supported in insecure mode")
+		}
 	}
 
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.
@@ -139,6 +161,11 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
+<<<<<<< HEAD:pkg/sql/create_user.go
+=======
+	hasCreateRole := n.roleOptions.Contains(roleoption.CREATEROLE)
+
+>>>>>>> Refactoring Users and Roles to be the same. (Same as PG):pkg/sql/create_user_or_role.go
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
@@ -230,62 +257,32 @@ func NormalizeAndValidateUsernameNoBlacklist(username string) (string, error) {
 
 var errNoUserNameSpecified = errors.New("no username specified")
 
-type userAuthInfo struct {
-	name     func() (string, error)
-	password func() (bool, string, error)
+type userNameInfo struct {
+	name func() (string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
+func (p *planner) getUserAuthInfo(nameE tree.Expr, ctx string) (userNameInfo, error) {
 	name, err := p.TypeAsString(nameE, ctx)
 	if err != nil {
-		return userAuthInfo{}, err
+		return userNameInfo{}, err
 	}
-	var password func() (bool, string, error)
-	if passwordE != nil {
-		password, err = p.typeAsStringOrNull(passwordE, ctx)
-		if err != nil {
-			return userAuthInfo{}, err
-		}
-	}
-	return userAuthInfo{name: name, password: password}, nil
+
+	return userNameInfo{name: name}, nil
 }
 
-// resolve returns the actual user name and (hashed) password.  The
-// returned hashed password slice is nil iff the user was specified to
-// have no password (e.g. CREATE USER without a PASSWORD clause, or
-// using PASSWORD NULL). If the password was specified but empty
-// (e.g. PASSWORD ''), an error is reported instead.
-func (ua *userAuthInfo) resolve() (string, []byte, error) {
+// resolveUsername returns the actual user name.
+func (ua *userNameInfo) resolveUsername() (string, error) {
 	name, err := ua.name()
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 	if name == "" {
-		return "", nil, errNoUserNameSpecified
+		return "", errNoUserNameSpecified
 	}
 	normalizedUsername, err := NormalizeAndValidateUsername(name)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
-	var hashedPassword []byte
-	if ua.password != nil {
-		isNull, resolvedPassword, err := ua.password()
-		if err != nil {
-			return "", nil, err
-		}
-		if isNull {
-			return normalizedUsername, hashedPassword, nil
-		}
-		if resolvedPassword == "" {
-			return "", nil, security.ErrEmptyPassword
-		}
-
-		hashedPassword, err = security.HashPassword(resolvedPassword)
-		if err != nil {
-			return "", nil, err
-		}
-	}
-
-	return normalizedUsername, hashedPassword, nil
+	return normalizedUsername, nil
 }
