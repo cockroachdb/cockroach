@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package colserde_test
+package colcontainer_test
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -49,14 +49,14 @@ func TestQueue(t *testing.T) {
 					BatchSize:     1 + rng.Intn(int(coldata.BatchSize())),
 					Nulls:         true,
 					BatchAccumulator: func(b coldata.Batch) {
-						batches = append(batches, copyBatch(b))
+						batches = append(batches, colexec.CopyBatch(testAllocator, b))
 					},
 				})
 				typs := op.Typs()
 
 				// Create queue.
 				directoryName := uuid.FastMakeV4().String()
-				queueCfg := colserde.DiskQueueCfg{
+				queueCfg := colcontainer.DiskQueueCfg{
 					FS:               fs,
 					Path:             testingFilePath,
 					Dir:              directoryName,
@@ -64,7 +64,7 @@ func TestQueue(t *testing.T) {
 					MaxFileSizeBytes: maxFileSizeBytes,
 				}
 				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
-				q, err := colserde.NewDiskQueue(typs, queueCfg)
+				q, err := colcontainer.NewDiskQueue(typs, queueCfg)
 				require.NoError(t, err)
 
 				// Run verification.
@@ -81,7 +81,7 @@ func TestQueue(t *testing.T) {
 						} else if err != nil {
 							t.Fatal(err)
 						}
-						assertEqualBatches(t, batches[0], b)
+						coldata.AssertEqualBatches(t, batches[0], b)
 						batches = batches[1:]
 					}
 				}
@@ -93,7 +93,7 @@ func TestQueue(t *testing.T) {
 					} else if err != nil {
 						t.Fatal(err)
 					}
-					assertEqualBatches(t, batches[0], b)
+					coldata.AssertEqualBatches(t, batches[0], b)
 					batches = batches[1:]
 					i++
 				}
@@ -159,7 +159,7 @@ func BenchmarkQueues(b *testing.B) {
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)
-		q, err := colserde.NewDiskQueue(typs, colserde.DiskQueueCfg{
+		q, err := colcontainer.NewDiskQueue(typs, colcontainer.DiskQueueCfg{
 			FS:               vfs.Default,
 			Path:             testingFilePath,
 			BufferSizeBytes:  int(bufSize),
