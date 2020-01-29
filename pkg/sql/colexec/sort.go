@@ -111,6 +111,7 @@ type allSpooler struct {
 }
 
 var _ spooler = &allSpooler{}
+var _ resetter = &allSpooler{}
 
 func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
 	return &allSpooler{
@@ -222,6 +223,7 @@ type sortOp struct {
 }
 
 var _ bufferingInMemoryOperator = &sortOp{}
+var _ resetter = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
@@ -432,7 +434,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered() coldata.Batch {
+func (p *sortOp) ExportBuffered(Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

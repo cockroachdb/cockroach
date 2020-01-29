@@ -28,6 +28,8 @@ var zeroInt64Column = make([]int64, coldata.MaxBatchSize)
 
 var zeroFloat64Column = make([]float64, coldata.MaxBatchSize)
 
+var zeroUint16Column = make([]uint16, coldata.MaxBatchSize)
+
 var zeroUint64Column = make([]uint64, coldata.MaxBatchSize)
 
 // CopyBatch copies the original batch and returns that copy. However, note that

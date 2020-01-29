@@ -954,7 +954,7 @@ func TestHashJoiner(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					if hj, ok := result.Op.(*hashJoinEqOp); ok {
+					if hj, ok := result.Op.(*hashJoiner); ok {
 						hj.outputBatchSize = outputBatchSize
 					}
 					return result.Op, nil
@@ -969,7 +969,7 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 	for _, tc := range hjTestCases {
 		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
 		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
-		hjOp, err := NewEqHashJoinerOp(
+		hjOp, err := NewHashJoiner(
 			testAllocator,
 			leftSource, rightSource,
 			tc.leftEqCols, tc.rightEqCols,
@@ -1037,33 +1037,20 @@ func BenchmarkHashJoiner(b *testing.B) {
 									for i := 0; i < b.N; i++ {
 										leftSource := NewRepeatableBatchSource(batch)
 										rightSource := newFiniteBatchSource(batch, nBatches)
-
-										spec := hashJoinerSpec{
-											left: hashJoinerSourceSpec{
-												eqCols:      []uint32{0, 2},
-												outCols:     []uint32{0, 1},
-												sourceTypes: sourceTypes,
-												source:      leftSource,
-												outer:       fullOuter,
-											},
-
-											right: hashJoinerSourceSpec{
-												eqCols:      []uint32{1, 3},
-												outCols:     []uint32{2, 3},
-												sourceTypes: sourceTypes,
-												source:      rightSource,
-												outer:       fullOuter,
-											},
-
-											rightDistinct: rightDistinct,
+										joinType := sqlbase.JoinType_INNER
+										if fullOuter {
+											joinType = sqlbase.JoinType_FULL_OUTER
 										}
-
-										hj := &hashJoinEqOp{
-											allocator:       testAllocator,
-											spec:            spec,
-											outputBatchSize: coldata.BatchSize(),
-										}
-
+										hj, err := NewHashJoiner(
+											testAllocator,
+											leftSource, rightSource,
+											[]uint32{0, 2}, []uint32{1, 3},
+											[]uint32{0, 1}, []uint32{2, 3},
+											sourceTypes, sourceTypes,
+											rightDistinct,
+											joinType,
+										)
+										require.NoError(b, err)
 										hj.Init()
 
 										for i := 0; i < nBatches; i++ {

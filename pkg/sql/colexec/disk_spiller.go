@@ -27,15 +27,15 @@ import (
 type bufferingInMemoryOperator interface {
 	Operator
 
-	// ExportBuffered returns all the batches that have been buffered up and have
-	// not yet been processed by the operator. It needs to be called once the
-	// memory limit has been reached in order to "dump" the buffered tuples into
-	// a disk-backed operator. It will return a zero-length batch once the buffer
-	// has been emptied.
+	// ExportBuffered returns all the batches that have been buffered up from the
+	// input and have not yet been processed by the operator. It needs to be
+	// called once the memory limit has been reached in order to "dump" the
+	// buffered tuples into a disk-backed operator. It will return a zero-length
+	// batch once the buffer has been emptied.
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered() coldata.Batch
+	ExportBuffered(input Operator) coldata.Batch
 }
 
 // oneInputDiskSpiller is an Operator that manages the fallback from an
@@ -199,6 +199,7 @@ func (d *oneInputDiskSpiller) Child(nth int, verbose bool) execinfra.OpNode {
 //
 // NOTE: bufferExportingOperator assumes that both sources will have been
 // initialized when bufferExportingOperator.Init() is called.
+// NOTE: it is assumed that secondSource is the input to firstSource.
 type bufferExportingOperator struct {
 	ZeroInputNode
 	NonExplainable
@@ -228,7 +229,7 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next(ctx)
 	}
-	batch := b.firstSource.ExportBuffered()
+	batch := b.firstSource.ExportBuffered(b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.Next(ctx)

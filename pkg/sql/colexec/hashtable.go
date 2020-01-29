@@ -112,6 +112,8 @@ type hashTable struct {
 	cancelChecker CancelChecker
 }
 
+var _ resetter = &hashTable{}
+
 func newHashTable(
 	allocator *Allocator,
 	numBuckets uint64,
@@ -221,9 +223,8 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 // hashTable with every single input key.
 // NOTE: the hashTable *must* have been already built.
 func (ht *hashTable) findSameTuples(ctx context.Context) {
-	ht.same = make([]uint64, ht.vals.length+1)
 	ht.head = make([]bool, ht.vals.length+1)
-	ht.allocateVisited()
+	ht.maybeAllocateSameAndVisited()
 
 	nKeyCols := len(ht.keyCols)
 	batchStart := uint64(0)
@@ -354,9 +355,24 @@ func (ht *hashTable) buildNextChains(ctx context.Context) {
 	}
 }
 
-// allocateVisited allocates the visited array in the hashTable.
-func (ht *hashTable) allocateVisited() {
-	ht.visited = make([]bool, ht.vals.length+1)
+// maybeAllocateSameAndVisited makes sure that same and visited arrays of the
+// hashTable are allocated and of the correct size. If the hashTable is reused,
+// the allocation will occur only if the previous arrays' capacity is not
+// sufficient.
+func (ht *hashTable) maybeAllocateSameAndVisited() {
+	if ht.same == nil || uint64(cap(ht.same)) < ht.vals.length+1 {
+		ht.same = make([]uint64, ht.vals.length+1)
+		ht.visited = make([]bool, ht.vals.length+1)
+	} else {
+		// We don't need to allocate new arrays, but we'll need to slice them up
+		// and reset.
+		ht.same = ht.same[:ht.vals.length+1]
+		ht.visited = ht.visited[:ht.vals.length+1]
+		for n := 0; n < len(ht.same); n += copy(ht.same[n:], zeroUint64Column) {
+		}
+		for n := 0; n < len(ht.visited); n += copy(ht.visited[n:], zeroBoolColumn) {
+		}
+	}
 
 	// Since keyID = 0 is reserved for end of list, it can be marked as visited
 	// at the beginning.
@@ -456,4 +472,23 @@ func (ht *hashTable) distinctCheck(nToCheck uint16, sel []uint16) uint16 {
 	}
 
 	return nDiffers
+}
+
+func (ht *hashTable) reset() {
+	ht.allocator.Clear()
+	// TODO(yuzefovich): support resetting with a different numBuckets.
+	for n := 0; n < len(ht.first); n += copy(ht.first[n:], zeroUint64Column) {
+	}
+	for n := 0; n < len(ht.next); n += copy(ht.next[n:], zeroUint64Column) {
+	}
+	for n := 0; n < len(ht.head); n += copy(ht.head[n:], zeroBoolColumn) {
+	}
+	ht.vals.reset()
+	// ht.buckets doesn't need to be reset because buckets are always initialized
+	// when computing the hash.
+	copy(ht.groupID[:coldata.BatchSize()], zeroUint64Column)
+	// ht.toCheck doesn't need to be reset because it is populated manually every
+	// time before checking the columns.
+	copy(ht.headID[:coldata.BatchSize()], zeroUint64Column)
+	copy(ht.differs[:coldata.BatchSize()], zeroBoolColumn)
 }
