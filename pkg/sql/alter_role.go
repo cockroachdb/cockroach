@@ -14,46 +14,67 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
-// alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
+// AlterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
-	name           func() (string, error)
-	rolePrivileges roleprivilege.List
+	userNameInfo
+	ifExists    bool
+	isRole      bool
+	roleOptions roleoption.List
 
 	run alterRoleRun
 }
 
-// AlterRolePrivileges alters a user's permissios
-func (p *planner) AlterRolePrivileges(
-	ctx context.Context, n *tree.AlterRolePrivileges,
+// AlterUser is an alias for AlterRole.
+// Privileges: CREATEROLE privilege.
+func (p *planner) AlterUser(ctx context.Context, n *tree.AlterUser) (planNode, error) {
+	return p.AlterRoleNode(ctx, n.Name, n.IfExists, n.IsRole, "ALTER USER", n.KVOptions)
+}
+
+func (p *planner) AlterRoleNode(
+	ctx context.Context,
+	nameE tree.Expr,
+	ifExists bool,
+	isRole bool,
+	opName string,
+	kvOptions tree.KVOptions,
 ) (*alterRoleNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := n.RolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsString, opName)
+	if err != nil {
+		return nil, err
+	}
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
-	name, err := p.TypeAsString(n.Name, "ALTER ROLE")
+	ua, err := p.getUserAuthInfo(nameE, opName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &alterRoleNode{
-		name:           name,
-		rolePrivileges: n.RolePrivileges,
+		userNameInfo: ua,
+		ifExists:     ifExists,
+		isRole:       isRole,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
@@ -64,6 +85,14 @@ type alterRoleRun struct {
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {
+	var opName string
+	if n.isRole {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlter("role"))
+		opName = "alter-role"
+	} else {
+		telemetry.Inc(sqltelemetry.SchemaChangeAlter("user"))
+		opName = "alter-user"
+	}
 	name, err := n.name()
 	if err != nil {
 		return err
@@ -83,7 +112,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	// Check if role exists.
 	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
 		params.ctx,
-		"update-role",
+		opName,
 		params.p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", userTableName),
@@ -93,18 +122,63 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 	if row == nil {
-		return errors.Newf("role %s does not exist", normalizedUsername)
+		if n.ifExists {
+			return nil
+		}
+		return errors.Newf("role/user %s does not exist", normalizedUsername)
 	}
 
-	stmts, err := n.rolePrivileges.GetSQLStmts()
+	stmts, err := n.roleOptions.GetSQLStmts()
 	if err != nil {
 		return err
 	}
 
-	for _, stmt := range stmts {
-		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	if n.roleOptions.Contains(roleoption.PASSWORD) {
+		hashedPassword, err := n.roleOptions.GetHashedPassword()
+		if err != nil {
+			return err
+		}
+
+		// TODO(knz): Remove in 20.2.
+		if normalizedUsername == security.RootUser && len(hashedPassword) > 0 &&
+			!params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.VersionRootPassword) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`setting a root password requires all nodes to be upgraded to %s`,
+				clusterversion.VersionByKey(clusterversion.VersionRootPassword),
+			)
+		}
+
+		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+			// We disallow setting a non-empty password in insecure mode
+			// because insecure means an observer may have MITM'ed the change
+			// and learned the password.
+			//
+			// It's valid to clear the password (WITH PASSWORD NULL) however
+			// since that forces cert auth when moving back to secure mode,
+			// and certs can't be MITM'ed over the insecure SQL connection.
+			return pgerror.New(pgcode.InvalidPassword,
+				"setting or updating a password is not supported in insecure mode")
+		}
+
+		// Updating PASSWORD is a special case since PASSWORD lives in system.users
+		// while the rest of the role options lives in system.role_options.
+		n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
-			"update-role",
+			opName,
+			params.p.txn,
+			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+			normalizedUsername,
+			hashedPassword,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, stmt := range stmts {
+		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			params.ctx,
+			opName,
 			params.p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt,
@@ -113,6 +187,8 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+
+		n.run.rowsAffected += rowsAffected
 	}
 	return nil
 }

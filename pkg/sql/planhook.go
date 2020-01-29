@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -84,14 +83,19 @@ type PlanHookState interface {
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
-	CreateUserNode(
-		ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
-		rolePrivileges roleprivilege.List,
-	) (*CreateUserNode, error)
-	DropUserNode(
-		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
-	) (*DropUserNode, error)
-	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
+	CreateRoleNode(
+		ctx context.Context, nameE tree.Expr, ifNotExists bool,
+		isRole bool, opName string, kvOptions tree.KVOptions,
+	) (*CreateRoleNode, error)
+	AlterRoleNode(
+		ctx context.Context, nameE tree.Expr, ifExists bool, isRole bool,
+		opName string, kvOptions tree.KVOptions,
+	) (*alterRoleNode, error)
+	DropRoleNode(
+		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool,
+		opName string,
+	) (*DropRoleNode, error)
+	GetAllRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(

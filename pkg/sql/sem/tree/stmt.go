@@ -166,7 +166,6 @@ var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
 var _ CCLOnlyStatement = &CreateRole{}
-var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
 var _ CCLOnlyStatement = &RevokeRole{}
 var _ CCLOnlyStatement = &CreateChangefeed{}
@@ -196,20 +195,22 @@ func (*AlterSequence) StatementType() StatementType { return DDL }
 func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
 
 // StatementType implements the Statement interface.
-func (*AlterUserSetPassword) StatementType() StatementType { return RowsAffected }
+func (*AlterRole) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterUserSetPassword) StatementTag() string { return "ALTER USER" }
+func (*AlterRole) StatementTag() string { return "ALTER ROLE" }
 
-func (*AlterUserSetPassword) hiddenFromShowQueries() {}
+func (*AlterRole) cclOnlyStatement() {}
+
+func (*AlterRole) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
-func (*AlterRolePrivileges) StatementType() StatementType { return RowsAffected }
+func (*AlterUser) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterRolePrivileges) StatementTag() string { return "ALTER USER" }
+func (*AlterUser) StatementTag() string { return "ALTER USER" }
 
-func (*AlterRolePrivileges) hiddenFromShowQueries() {}
+func (*AlterUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*Backup) StatementType() StatementType { return Rows }
@@ -329,14 +330,6 @@ func (n *CreateTable) StatementTag() string {
 func (*CreateTable) modifiesSchema() bool { return true }
 
 // StatementType implements the Statement interface.
-func (*CreateUser) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CreateUser) StatementTag() string { return "CREATE USER" }
-
-func (*CreateUser) hiddenFromShowQueries() {}
-
-// StatementType implements the Statement interface.
 func (*CreateRole) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -345,6 +338,14 @@ func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
 func (*CreateRole) cclOnlyStatement() {}
 
 func (*CreateRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*CreateUser) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateUser) StatementTag() string { return "CREATE USER" }
+
+func (*CreateUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
@@ -419,18 +420,22 @@ func (*DropSequence) StatementType() StatementType { return DDL }
 func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
 
 // StatementType implements the Statement interface.
-func (*DropUser) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*DropUser) StatementTag() string { return "DROP USER" }
-
-// StatementType implements the Statement interface.
 func (*DropRole) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropRole) StatementTag() string { return "DROP ROLE" }
 
 func (*DropRole) cclOnlyStatement() {}
+
+func (*DropRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*DropUser) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropUser) StatementTag() string { return "DROP USER" }
+
+func (*DropUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
@@ -888,8 +893,8 @@ func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
-func (n *AlterUserSetPassword) String() string           { return AsString(n) }
-func (n *AlterRolePrivileges) String() string            { return AsString(n) }
+func (n *AlterRole) String() string                      { return AsString(n) }
+func (n *AlterUser) String() string                      { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }
 func (n *BeginTransaction) String() string               { return AsString(n) }
@@ -907,19 +912,19 @@ func (n *CreateChangefeed) String() string               { return AsString(n) }
 func (n *CreateDatabase) String() string                 { return AsString(n) }
 func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
+func (n *CreateUser) String() string                     { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }
-func (n *CreateUser) String() string                     { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
 func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
-func (n *DropRole) String() string                       { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
 func (n *DropSequence) String() string                   { return AsString(n) }
+func (n *DropRole) String() string                       { return AsString(n) }
 func (n *DropUser) String() string                       { return AsString(n) }
 func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }

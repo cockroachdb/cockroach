@@ -112,10 +112,10 @@ CREATE TABLE foo(x INT);
  GRANT SELECT ON foo TO user3;
  GRANT SELECT ON DATABASE test TO user1
 
-statement error cannot drop users or roles user1, user3: grants still exist on test, test.public.foo
+statement error cannot drop roles/users user1, user3: grants still exist on test, test.public.foo
 DROP USER IF EXISTS user1,user3
 
-statement error cannot drop users or roles user1, user3: grants still exist on test
+statement error cannot drop roles/users user1, user3: grants still exist on test
 REVOKE SELECT ON foo FROM user3;
   DROP USER IF EXISTS user1,user3
 
@@ -141,8 +141,8 @@ DROP USER user2
 
 user root
 
-statement error pq: cannot drop user or role root: grants still exist on .*
+statement error pq: cannot drop role/user root: grants still exist on .*
 DROP USER root
 
-statement error pq: cannot drop user or role admin: grants still exist on .*
+statement error pq: cannot drop role/user admin: grants still exist on .*
 DROP USER admin

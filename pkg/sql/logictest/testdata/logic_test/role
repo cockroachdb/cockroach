@@ -45,7 +45,7 @@ role_name  member  is_admin
 statement error role name "public" is reserved
 CREATE USER public
 
-statement error cannot drop user or role public: grants still exist on system.public.comments
+statement error cannot drop role/user public: grants still exist on system.public.comments
 DROP USER public
 
 statement ok

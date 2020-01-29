@@ -206,7 +206,7 @@ SELECT '' BETWEEN ''::BYTES AND '';
 ----
 true
 
-# Regression test for #44632.
+# Regression test for #44632: NULLIF should have the type of the first argument.
 query I
 SELECT NULLIF(NULL, 0) + NULLIF(NULL, 0)
 ----
@@ -221,8 +221,3 @@ query I
 SELECT NULLIF(0, NULL) + NULLIF(0, NULL)
 ----
 0
-
-query I
-SELECT IF(true, NULL, 1) + IF(false, 1, NULL)
-----
-NULL
