@@ -28,7 +28,6 @@ import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants
 import NonTableSummary from "./nonTableSummary";
 
 import "./databases.styl";
-import { Dispatch, bindActionCreators } from "redux";
 
 const databasePages = [
   { value: "tables", label: "Tables" },
@@ -93,9 +92,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
     const { user, system } = this.props.databasesByType;
 
     return <div>
-      <Helmet>
-        <title>Tables | Databases</title>
-      </Helmet>
+      <Helmet title="Tables | Databases" />
       <section className="section"><h1 className="base-heading">Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
@@ -122,9 +119,7 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
     const { user, system } = this.props.databasesByType;
 
     return <div>
-      <Helmet>
-        <title>Grants | Databases</title>
-      </Helmet>
+      <Helmet title="Grants | Databases" />
       <section className="section"><h1 className="base-heading">Databases</h1></section>
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
@@ -162,13 +157,9 @@ const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declar
   databasesByType: selectDatabasesByType(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshDatabases,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshDatabases,
+};
 
 // Connect the DatabaseTablesList class with our redux store.
 const databaseTablesListConnected = connect(

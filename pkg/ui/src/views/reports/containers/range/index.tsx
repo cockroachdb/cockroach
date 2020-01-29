@@ -34,7 +34,6 @@ import LogTable from "src/views/reports/containers/range/logTable";
 import AllocatorOutput from "src/views/reports/containers/range/allocator";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
-import { bindActionCreators, Dispatch } from "redux";
 
 interface RangeOwnProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
@@ -176,9 +175,7 @@ class Range extends React.Component<RangeProps, {}> {
 
     return (
       <div className="section">
-        <Helmet>
-          <title>{ `r${responseRangeID.toString()} Range | Debug` }</title>
-        </Helmet>
+        <Helmet title={ `r${responseRangeID.toString()} Range | Debug` } />
         <h1 className="base-heading">Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
@@ -195,14 +192,10 @@ const mapStateToProps = (state: AdminUIState, props: RangeProps) => ({
   rangeLog: state.cachedData.rangeLog[rangeLogRequestKey(rangeLogRequestFromProps(props))],
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshRange,
-      refreshAllocatorRange,
-      refreshRangeLog,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshRange,
+  refreshAllocatorRange,
+  refreshRangeLog,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Range);

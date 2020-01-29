@@ -14,7 +14,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
-import { Dispatch, bindActionCreators } from "redux";
 
 import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
@@ -246,9 +245,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   render() {
     return (
       <Fragment>
-        <Helmet>
-          <title>Custom Chart | Debug</title>
-        </Helmet>
+        <Helmet title="Custom Chart | Debug" />
         <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>
@@ -279,14 +276,10 @@ const mapStateToProps = (state: AdminUIState) => ({
     metricsMetadata: metricsMetadataSelector(state),
   });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNodes,
-      refreshMetricMetadata,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNodes,
+  refreshMetricMetadata,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
 

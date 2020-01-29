@@ -11,7 +11,6 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
-import { bindActionCreators, Dispatch } from "redux";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
@@ -114,12 +113,8 @@ const mapStateToProps = (state: AdminUIState) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNonTableStats,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNonTableStats,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(NonTableSummary);

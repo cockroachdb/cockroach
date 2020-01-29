@@ -10,7 +10,7 @@
 
 import React from "react";
 import _ from "lodash";
-import { Dispatch, bindActionCreators } from "redux";
+import { Dispatch, Action, bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
@@ -26,7 +26,7 @@ interface AlertSectionProps {
    * Raw dispatch method for the current store, will be used to dispatch
    * alert dismissal callbacks.
    */
-  dispatch: Dispatch<AdminUIState>;
+  dispatch: Dispatch<Action, AdminUIState>;
 }
 
 class AlertSection extends React.Component<AlertSectionProps, {}> {

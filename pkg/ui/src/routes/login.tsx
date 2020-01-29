@@ -15,6 +15,7 @@ import { Store } from "redux";
 import { doLogout, selectLoginState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 import LoginPage from "src/views/login/loginPage";
+import {normalizeConnectedComponent} from "src/util/normalizeConnectedComponent";
 
 export const LOGIN_PAGE = "/login";
 export const LOGOUT_PAGE = "/logout";
@@ -32,7 +33,7 @@ export default function createLoginRoutes(store: Store<AdminUIState>): JSX.Eleme
 
   return (
     <Fragment>
-      <Route path={LOGIN_PAGE} component={ LoginPage } />
+      <Route path={LOGIN_PAGE} component={normalizeConnectedComponent(LoginPage)} />
       <Route path={LOGOUT_PAGE} onEnter={ handleLogout } />
     </Fragment>
   );

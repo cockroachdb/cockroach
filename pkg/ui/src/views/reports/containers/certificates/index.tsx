@@ -13,7 +13,6 @@ import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -191,9 +190,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
   render() {
     return (
       <div className="section">
-        <Helmet>
-          <title>Certificates | Debug</title>
-        </Helmet>
+        <Helmet title="Certificates | Debug" />
         <h1 className="base-heading">Certificates</h1>
 
         <section className="section">
@@ -216,12 +213,8 @@ const mapStateToProps = (state: AdminUIState, props: CertificatesProps) => {
   };
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshCertificates,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshCertificates,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(Certificates);

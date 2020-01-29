@@ -13,7 +13,6 @@ import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
-import { bindActionCreators, Dispatch } from "redux";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -172,16 +171,12 @@ const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitD
   grants: grants(state, ownProps.name),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      setSort: databaseTablesSortSetting.set,
-      refreshDatabaseDetails,
-      refreshTableDetails,
-      refreshTableStats,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  setSort: databaseTablesSortSetting.set,
+  refreshDatabaseDetails,
+  refreshTableDetails,
+  refreshTableStats,
+};
 
 // Connect the DatabaseSummaryTables class with redux store.
 export default connect(
