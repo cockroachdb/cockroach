@@ -20,21 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
-func TestQueue(t *testing.T) {
+func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	fs := vfs.NewMem()
-	testingFilePath := "testing"
-	require.NoError(t, fs.MkdirAll("testing", 0755))
+	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
 
 	rng, _ := randutil.NewPseudoRand()
 	for _, bufferSizeBytes := range []int{0, 16<<10 + rng.Intn(1<<20) /* 16 KiB up to 1 MiB */} {
@@ -55,14 +51,6 @@ func TestQueue(t *testing.T) {
 				typs := op.Typs()
 
 				// Create queue.
-				directoryName := uuid.FastMakeV4().String()
-				queueCfg := colcontainer.DiskQueueCfg{
-					FS:               fs,
-					Path:             testingFilePath,
-					Dir:              directoryName,
-					BufferSizeBytes:  bufferSizeBytes,
-					MaxFileSizeBytes: maxFileSizeBytes,
-				}
 				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 				q, err := colcontainer.NewDiskQueue(typs, queueCfg)
 				require.NoError(t, err)
@@ -110,10 +98,10 @@ func TestQueue(t *testing.T) {
 				require.NoError(t, q.Close())
 
 				// Verify no directories are left over.
-				files, err := fs.List(testingFilePath)
+				files, err := queueCfg.FS.List(queueCfg.Path)
 				require.NoError(t, err)
 				for _, f := range files {
-					if strings.HasPrefix(f, directoryName) {
+					if strings.HasPrefix(f, queueCfg.Dir) {
 						t.Fatal("files left over after disk queue test")
 					}
 				}
@@ -129,8 +117,8 @@ var (
 	dataSizeBytes   = flag.String("datasize", "512MiB", "size of data in bytes to sort")
 )
 
-// BenchmarkQueues benchmarks a queue with parameters provided through flags.
-func BenchmarkQueues(b *testing.B) {
+// BenchmarkDiskQueue benchmarks a queue with parameters provided through flags.
+func BenchmarkDiskQueue(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
 	}
@@ -149,8 +137,10 @@ func BenchmarkQueues(b *testing.B) {
 	}
 	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
-	testingFilePath, cleanup := testutils.TempDir(b)
+	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
+	queueCfg.BufferSizeBytes = int(bufSize)
+	queueCfg.MaxFileSizeBytes = int(blockSize)
 
 	rng, _ := randutil.NewPseudoRand()
 	typs := []coltypes.T{coltypes.Int64}
@@ -159,12 +149,7 @@ func BenchmarkQueues(b *testing.B) {
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)
-		q, err := colcontainer.NewDiskQueue(typs, colcontainer.DiskQueueCfg{
-			FS:               vfs.Default,
-			Path:             testingFilePath,
-			BufferSizeBytes:  int(bufSize),
-			MaxFileSizeBytes: int(blockSize),
-		})
+		q, err := colcontainer.NewDiskQueue(typs, queueCfg)
 		require.NoError(b, err)
 		for {
 			batchToEnqueue := op.Next(ctx)
