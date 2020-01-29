@@ -311,15 +311,17 @@ func (t *test) failWithMsg(msg string) {
 	prefix := ""
 	if t.mu.failed {
 		prefix = "[not the first failure] "
+		// NB: the first failure is not always the relevant one due to:
+		// https://github.com/cockroachdb/cockroach/issues/44436
+		//
+		// So we chain all failures together in the order in which we see
+		// them.
+		msg = "\n" + msg
 	}
 	t.l.Printf("%stest failure: %s", prefix, msg)
 
-	if t.mu.failed {
-		return
-	}
-
 	t.mu.failed = true
-	t.mu.failureMsg = msg
+	t.mu.failureMsg += msg
 	t.mu.output = append(t.mu.output, msg...)
 	if t.mu.cancel != nil {
 		t.mu.cancel()
