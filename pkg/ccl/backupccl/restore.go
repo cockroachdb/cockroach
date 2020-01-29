@@ -686,7 +686,7 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 // - [C, D) -> /file2, /file5, requested
 //
 // This would be turned into two Import spans, one restoring [B, C) out of
-// /file1 and /file3, the other restoring [C, D) out of /file2 and /file5.
+// /file1 and /file4, the other restoring [C, D) out of /file2 and /file5.
 // Nothing is restored out of /file3 and only part of /file1 is used.
 //
 // NB: All grouping operates in the pre-rewrite keyspace, meaning the keyranges
