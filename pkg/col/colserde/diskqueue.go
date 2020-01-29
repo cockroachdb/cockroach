@@ -195,11 +195,9 @@ type Queue interface {
 }
 
 const (
-	// These values were chosen according to the RFC on vectorized external
-	// storage:
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20191113_vectorized_external_storage.md
-	defaultBufferSizeBytes  = 64 << 10 /* 64 KiB */
-	defaultMaxFileSizeBytes = 32 << 20 /* 32 MiB */
+	// These values were chosen by running BenchmarkQueue.
+	defaultBufferSizeBytes  = 128 << 10 /* 128 KiB */
+	defaultMaxFileSizeBytes = 32 << 20  /* 32 MiB */
 )
 
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
