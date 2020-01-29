@@ -764,3 +764,201 @@ SELECT job_id FROM [SHOW JOBS] WHERE
 description = 'CLEANUP JOB for ''ALTER TABLE test.public.t ALTER PRIMARY KEY USING COLUMNS (y)''' AND
 status = 'running'
 ----
+
+subtest add_drop_pk
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+
+statement error pq: primary key of table t dropped without subsequent addition of new primary key
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y), DROP CONSTRAINT "primary"
+
+statement error pq: multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   FAMILY fam_0_x (x),
+   FAMILY fam_1_y (y)
+)
+
+# Test that we can issue a DROP CONSTRAINT + ADD PRIMARY KEY
+# in the same transaction.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (y)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (y ASC),
+   FAMILY fam_0_x (x),
+   FAMILY fam_1_y (y)
+)
+
+# Ensure that we can't use a table with a dropped primary key
+# in any DML statements.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+INSERT INTO t VALUES (1, 1)
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+DELETE FROM t WHERE x = 1
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+UPDATE t SET x = 1 WHERE y = 1
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+SELECT * FROM t
+
+statement ok
+ROLLBACK
+
+# Ensure that DDL statements that don't add a primary key
+# as their first operation don't succeed either.
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+CREATE INDEX ON t(x)
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+ALTER TABLE t ADD COLUMN z INT
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT "primary"
+
+statement error pq: requested table does not have a primary key
+ALTER TABLE t ADD COLUMN z INT, ADD PRIMARY KEY (x)
+
+statement ok
+ROLLBACK
+
+# Ensure that other changes in the same transaction
+# as a DROP PRIMARY KEY get rolled back on failure.
+statement ok
+DROP TABLE IF EXISTS t1, t2;
+CREATE TABLE t1 (x INT PRIMARY KEY, y INT NOT NULL);
+CREATE TABLE t2 (x INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t1 DROP CONSTRAINT "primary"
+
+statement ok
+INSERT INTO t2 VALUES (1)
+
+statement error pq: primary key of table t1 dropped without subsequent addition of new primary key
+COMMIT
+
+query I
+SELECT * FROM t2
+----
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL)
+
+statement error pq: table "t" does not have a primary key, cannot perform ADD COLUMN z INT8 AS \(x \+ 1\) STORED
+ALTER TABLE t DROP CONSTRAINT "primary", ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
+
+statement ok
+DROP TABLE IF EXISTS t, t2 CASCADE;
+CREATE TABLE t (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y));
+ALTER TABLE t2 DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (x, y) INTERLEAVE IN PARENT t(x)
+
+query TT
+SHOW CREATE t2
+----
+t2  CREATE TABLE t2 (
+    x INT8 NOT NULL,
+    y INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+    FAMILY fam_0_x (x),
+    FAMILY fam_1_y (y)
+) INTERLEAVE IN PARENT t (x)
