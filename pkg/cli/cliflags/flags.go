@@ -918,6 +918,25 @@ The line length where sqlfmt will try to wrap.`,
 		Description: `How many in-memory nodes to create for the demo.`,
 	}
 
+	DemoNodeSQLMemSize = FlagInfo{
+		Name: "max-sql-memory",
+		Description: `
+Maximum memory capacity available for each node to store temporary data for SQL clients,
+including prepared queries and intermediate data rows during query execution.
+Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
+percentage of physical memory (e.g. .25).
+If left unspecified, defaults to 128MiB.
+`,
+	}
+	DemoNodeCacheSize = FlagInfo{
+		Name: "cache",
+		Description: `
+Total size in bytes for caches per node, shared evenly if there are multiple
+storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).
+If left unspecified, defaults to 64MiB. A percentage of physical memory
+can also be specified (e.g. .25).`,
+	}
+
 	RunDemoWorkload = FlagInfo{
 		Name:        "with-load",
 		Description: `Run a demo workload against the pre-loaded database.`,

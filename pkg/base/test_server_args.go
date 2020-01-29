@@ -85,6 +85,7 @@ type TestServerArgs struct {
 	TimeSeriesQueryWorkerMax    int
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
+	CacheSize                   int64
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
