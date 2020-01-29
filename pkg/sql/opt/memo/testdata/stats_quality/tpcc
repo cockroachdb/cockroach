@@ -102,7 +102,19 @@ ORDER BY i_id
 scan item
  ├── save-table-name: new_order_03_scan_1
  ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
- ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
+ ├── constraint: /1
+ │    ├── [/25 - /25]
+ │    ├── [/50 - /50]
+ │    ├── [/75 - /75]
+ │    ├── [/100 - /100]
+ │    ├── [/125 - /125]
+ │    ├── [/150 - /150]
+ │    ├── [/175 - /175]
+ │    ├── [/200 - /200]
+ │    ├── [/225 - /225]
+ │    ├── [/250 - /250]
+ │    ├── [/275 - /275]
+ │    └── [/300 - /300]
  ├── cardinality: [0 - 12]
  ├── stats: [rows=12, distinct(1)=12, null(1)=0, distinct(3)=11.8957521, null(3)=0, distinct(4)=11.9934177, null(4)=0, distinct(5)=11.9945581, null(5)=0]
  ├── cost: 13.09
@@ -146,7 +158,12 @@ project
  └── scan stock
       ├── save-table-name: new_order_04_scan_2
       ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
-      ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
+      ├── constraint: /2/1
+      │    ├── [/4/900 - /4/900]
+      │    ├── [/4/1000 - /4/1000]
+      │    ├── [/4/1100 - /4/1100]
+      │    ├── [/4/1400 - /4/1400]
+      │    └── [/4/1500 - /4/1500]
       ├── cardinality: [0 - 5]
       ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0]
       ├── cost: 6.26

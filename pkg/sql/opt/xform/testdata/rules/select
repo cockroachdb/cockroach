@@ -856,7 +856,9 @@ index-join b
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@inv_idx
       ├── columns: k:1(int!null)
-      ├── constraint: /4/1: [/'2' - /'2'] [/'[2]' - /'[2]']
+      ├── constraint: /4/1
+      │    ├── [/'2' - /'2']
+      │    └── [/'[2]' - /'[2]']
       └── key: (1)
 
 opt
