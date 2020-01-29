@@ -92,7 +92,6 @@ bool RowCounter::Count(const rocksdb::Slice& key, cockroach::roachpb::BulkOpSumm
     return true;
   }
 
-
   prev_key.assign(decoded_key.data(), decoded_key.size());
 
   uint64_t tbl;

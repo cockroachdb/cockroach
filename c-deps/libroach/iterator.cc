@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+#include "iterator.h"
 #include "chunked_buffer.h"
 #include "encoding.h"
-#include "iterator.h"
 #include "keys.h"
 
 using namespace cockroach;
 
-DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options) : iters_count(iters) {
+DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options)
+    : iters_count(iters) {
   read_opts.prefix_same_as_start = iter_options.prefix;
   read_opts.total_order_seek = !iter_options.prefix;
 
@@ -62,9 +63,7 @@ DBIterator::DBIterator(std::atomic<int64_t>* iters, DBIterOptions iter_options) 
   ++(*iters_count);
 }
 
-DBIterator::~DBIterator() {
-  --(*iters_count);
-}
+DBIterator::~DBIterator() { --(*iters_count); }
 
 void DBIterator::SetLowerBound(DBKey key) {
   if (key.key.data == NULL) {
@@ -74,7 +73,6 @@ void DBIterator::SetLowerBound(DBKey key) {
   }
   lower_bound = lower_bound_str;
 }
-
 
 void DBIterator::SetUpperBound(DBKey key) {
   if (key.key.data == NULL) {

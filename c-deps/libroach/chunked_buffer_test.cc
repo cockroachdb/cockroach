@@ -15,8 +15,8 @@
 // writing in pieces that are smaller than the maximum chunk size (128
 // MB). See #32896.
 TEST(ChunkedBuffer, PutSmall) {
-  const std::string data(1 << 20, '.'); // 1 MB
-  const int64_t total = 3LL << 30;      // 3 GB
+  const std::string data(1 << 20, '.');  // 1 MB
+  const int64_t total = 3LL << 30;       // 3 GB
   cockroach::chunkedBuffer buf;
   for (int64_t sum = 0; sum < total; sum += data.size()) {
     buf.Put(data, data);
@@ -27,8 +27,8 @@ TEST(ChunkedBuffer, PutSmall) {
 // writing in pieces that are larger than the maximum chunk size (128
 // MB). See #32896.
 TEST(ChunkedBuffer, PutLarge) {
-  const std::string data(256 << 20, '.'); // 256 MB
-  const int64_t total = 3LL << 30;        // 3 GB
+  const std::string data(256 << 20, '.');  // 256 MB
+  const int64_t total = 3LL << 30;         // 3 GB
   cockroach::chunkedBuffer buf;
   for (int64_t sum = 0; sum < total; sum += data.size()) {
     buf.Put(data, data);

@@ -290,7 +290,6 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 // merged with existing. This method is provided for invocation from Go code.
 DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
-
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
 // struct is changed, both places need to be updated.
@@ -322,11 +321,12 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 // SST key is greater than or equal to the timestamp of the tombstone, then it
 // is not considered a collision and we continue iteration from the next key in
 // the existing data.
-DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter, MVCCStatsResult* skippedKVStats, DBString* write_intent);
+DBIterState DBCheckForKeyCollisions(DBIterator* existingIter, DBIterator* sstIter,
+                                    MVCCStatsResult* skippedKVStats, DBString* write_intent);
 
 bool MVCCIsValidSplitKey(DBSlice key);
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
-                          int64_t target_size, DBString* split_key);
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split, int64_t target_size,
+                          DBString* split_key);
 
 // DBTxn contains the fields from a roachpb.Transaction that are
 // necessary for MVCC Get and Scan operations. Note that passing a
@@ -501,7 +501,7 @@ DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end)
 // May be called multiple times. The returned data won't necessarily reflect
 // the latest writes, only the keys whose underlying RocksDB blocks have been
 // flushed. Close cannot have been called.
-DBStatus DBSstFileWriterTruncate(DBSstFileWriter *fw, DBString* data);
+DBStatus DBSstFileWriterTruncate(DBSstFileWriter* fw, DBString* data);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
