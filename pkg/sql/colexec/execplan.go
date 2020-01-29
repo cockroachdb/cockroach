@@ -650,7 +650,7 @@ func NewColOperator(
 				// joiner, in order to handle NULL values correctly, needs to think
 				// that an empty set of equality columns doesn't form a key.
 				rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-				result.Op, err = NewEqHashJoinerOp(
+				result.Op, err = NewHashJoiner(
 					NewAllocator(ctx, hashJoinerMemAccount),
 					inputs[0],
 					inputs[1],
