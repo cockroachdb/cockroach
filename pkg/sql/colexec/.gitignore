@@ -8,6 +8,7 @@ count_agg.eg.go
 distinct.eg.go
 hashjoiner.eg.go
 hashtable.eg.go
+hash_utils.eg.go
 like_ops.eg.go
 mergejoinbase.eg.go
 mergejoiner_fullouter.eg.go
