@@ -202,7 +202,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	<-renamed
 
 	// Run another command in the transaction and make sure that we can still
-	// resolve the table name.
+	// resolveUsername the table name.
 	if _, err := txn.Exec("SELECT * FROM test.t"); err != nil {
 		t.Fatal(err)
 	}

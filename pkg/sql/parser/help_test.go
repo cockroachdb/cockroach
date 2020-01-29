@@ -66,7 +66,7 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
-		{`ALTER ROLE bleh ?? WITH NOCREATEROLE`, `ALTER ROLE`},
+		{`ALTER ROLE bleh ?? WITH NOCREATEROLE`, `ALTER USER`},
 
 		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
 		{`ALTER RANGE ??`, `ALTER RANGE`},
@@ -105,8 +105,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE USER blih ??`, `CREATE USER`},
 		{`CREATE USER blih WITH ??`, `CREATE USER`},
 
-		{`CREATE ROLE bleh ??`, `CREATE ROLE`},
-		{`CREATE ROLE bleh ?? WITH CREATEROLE`, `CREATE ROLE`},
+		{`CREATE ROLE bleh ??`, `CREATE USER`},
+		{`CREATE ROLE bleh ?? WITH CREATEROLE`, `CREATE USER`},
 
 		{`CREATE VIEW blah (??`, `CREATE VIEW`},
 		{`CREATE VIEW blah AS (SELECT c FROM x) ??`, `CREATE VIEW`},
@@ -141,9 +141,9 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
 
-		{`DROP ROLE ??`, `DROP ROLE`},
-		{`DROP ROLE IF ??`, `DROP ROLE`},
-		{`DROP ROLE IF EXISTS bluh ??`, `DROP ROLE`},
+		{`DROP ROLE ??`, `DROP USER`},
+		{`DROP ROLE IF ??`, `DROP USER`},
+		{`DROP ROLE IF EXISTS bluh ??`, `DROP USER`},
 
 		{`DROP SEQUENCE blah ??`, `DROP SEQUENCE`},
 		{`DROP SEQUENCE IF ??`, `DROP SEQUENCE`},

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -285,11 +285,11 @@ func (p *planner) resolveMemberOfWithAdminOption(
 	return ret, nil
 }
 
-// HasRolePrivilege converts the roleprivilege to it's SQL column name and
+// HasRoleOption converts the roleoption to it's SQL column name and
 // checks if the user belongs to a role where the roleprivilege has value true.
 // Only works on checking the "positive version" of the privilege.
 // Example: CREATEROLE instead of NOCREATEROLE.
-func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleprivilege.Kind) error {
+func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) error {
 	user := p.SessionData().User
 
 	if user == security.RootUser || user == security.NodeUser {
@@ -320,7 +320,7 @@ func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleprivil
 		fmt.Sprintf(
 			`SELECT * from %s WHERE "%s" = true AND username = ANY($1)`,
 			userTableName,
-			rolePrivilege.ToSQLColumnName()),
+			roleOption.ToSQLColumnName()),
 		roles)
 
 	if err != nil {
