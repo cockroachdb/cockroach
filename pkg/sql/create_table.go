@@ -126,6 +126,8 @@ func (n *createTableNode) startExec(params runParams) error {
 				"temporary tables are unsupported")
 		}
 
+		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
+
 		tempSchemaName := params.p.TemporarySchemaName()
 		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
 		var err error
