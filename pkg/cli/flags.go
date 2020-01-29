@@ -599,6 +599,8 @@ func init() {
 	BoolFlag(demoFlags, &demoCtx.runWorkload, cliflags.RunDemoWorkload, false)
 	VarFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
 	BoolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
+	VarFlag(demoFlags, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
+	VarFlag(demoFlags, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 	// Mark the --global flag as hidden until we investigate it more.
 	BoolFlag(demoFlags, &demoCtx.simulateLatency, cliflags.Global, false)
 	_ = demoFlags.MarkHidden(cliflags.Global.Name)
