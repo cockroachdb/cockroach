@@ -83,7 +83,7 @@ export function getValueFromString(key: string, params: string, fullString?: boo
 /**
  * Renders the Network Diagnostics Report page.
  */
-class Network extends React.Component<NetworkProps, INetworkState> {
+export class Network extends React.Component<NetworkProps, INetworkState> {
   state: INetworkState = {
     collapsed: false,
     filter: null,
