@@ -167,27 +167,27 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	//   range as a whole. Though they are replicated, they are unaddressable.
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
-	AbortSpanKey,                    // "abc-"
-	RangeFrozenStatusKey,            // "fzn-"
-	RangeLastGCKey,                  // "lgc-"
-	RangeAppliedStateKey,            // "rask"
-	RaftAppliedIndexLegacyKey,       // "rfta"
-	RaftTruncatedStateLegacyKey,     // "rftt"
-	RangeLeaseKey,                   // "rll-"
-	LeaseAppliedIndexLegacyKey,      // "rlla"
-	RangeStatsLegacyKey,             // "stat"
-	RangeTxnSpanGCThresholdKey,      // "tst-"
+	AbortSpanKey,                // "abc-"
+	RangeFrozenStatusKey,        // "fzn-"
+	RangeLastGCKey,              // "lgc-"
+	RangeAppliedStateKey,        // "rask"
+	RaftAppliedIndexLegacyKey,   // "rfta"
+	RaftTruncatedStateLegacyKey, // "rftt"
+	RangeLeaseKey,               // "rll-"
+	LeaseAppliedIndexLegacyKey,  // "rlla"
+	RangeStatsLegacyKey,         // "stat"
+	RangeTxnSpanGCThresholdKey,  // "tst-"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that
 	//   pertain to just one replica of a range. They are unreplicated and
 	//   unaddressable. The typical example is the Raft log. They all share
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
-	RaftTombstoneKey,               // "rftb"
-	RaftHardStateKey,               // "rfth"
-	RaftLastIndexKey,               // "rfti"
-	RaftLogKey,                     // "rftl"
-	RaftTruncatedStateKey,          // "rftt"
-	RangeLastReplicaGCTimestampKey, // "rlrt"
+	RangeTombstoneKey,                           // "rftb"
+	RaftHardStateKey,                            // "rfth"
+	RaftLastIndexKey,                            // "rfti"
+	RaftLogKey,                                  // "rftl"
+	RaftTruncatedStateKey,                       // "rftt"
+	RangeLastReplicaGCTimestampKey,              // "rlrt"
 	RangeLastVerificationTimestampKeyDeprecated, // "rlvt"
 
 	//   3. Range local keys: These also store metadata that pertains to a range

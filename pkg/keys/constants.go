@@ -110,8 +110,11 @@ var (
 	// replicated keys for the same Range ID, so they can be manipulated either
 	// together or individually in a single scan.
 	localRangeIDUnreplicatedInfix = []byte("u")
-	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
-	LocalRaftTombstoneSuffix = []byte("rftb")
+	// LocalRangeTombstoneSuffix is the suffix for the range tombstone.
+	//
+	// NB: This suffix was originally named LocalRaftTombstoneSuffix, which is
+	// why it starts off with "rft" as opposed to "rl".
+	LocalRangeTombstoneSuffix = []byte("rftb")
 	// LocalRaftHardStateSuffix is the Suffix for the raft HardState.
 	LocalRaftHardStateSuffix = []byte("rfth")
 	// LocalRaftLastIndexSuffix is the suffix for raft's last index.
