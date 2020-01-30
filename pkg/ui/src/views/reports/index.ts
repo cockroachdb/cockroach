@@ -10,7 +10,10 @@
 
 export { default as Certificates } from "./containers/certificates";
 export { default as CustomChart } from "./containers/customChart";
-export { DecommissionedNodeHistory } from "./containers/nodeHistory";
+export {
+  default as ConnectedDecommissionedNodeHistory,
+  DecommissionedNodeHistory,
+} from "./containers/nodeHistory/decommissionedNodeHistory";
 export { default as Debug } from "./containers/debug";
 export { default as EnqueueRange } from "./containers/enqueueRange";
 export { default as ProblemRanges } from "./containers/problemRanges";

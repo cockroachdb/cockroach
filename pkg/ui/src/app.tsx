@@ -50,7 +50,7 @@ import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { normalizeConnectedComponent } from "src/util/normalizeConnectedComponent";
-import { DecommissionedNodeHistory } from "src/views/reports";
+import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -171,11 +171,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
               <Route path={`:${nodeIDAttr}`} component={normalizeConnectedComponent(ProblemRanges)}/>
             </Route>
             <Route path="localities" component={normalizeConnectedComponent(Localities)}/>
-            <Route path="network" component={normalizeConnectedComponent(Network)}/>
-            <Route path="nodes" component={normalizeConnectedComponent(Nodes)}/>
             <Route path="nodes">
               <IndexRoute component={ normalizeConnectedComponent(Nodes) } />
-              <Route path="history" component={ normalizeConnectedComponent(DecommissionedNodeHistory) } />
+              <Route path="history" component={ normalizeConnectedComponent(ConnectedDecommissionedNodeHistory) } />
+            </Route>
+            <Route path="network" component={ normalizeConnectedComponent(Network) }>
+              <Route path={`:${nodeIDAttr}`} component={ normalizeConnectedComponent(Network) } />
             </Route>
             <Route path="settings" component={normalizeConnectedComponent(Settings)}/>
             <Route path={`certificates/:${nodeIDAttr}`} component={normalizeConnectedComponent(Certificates)}/>
