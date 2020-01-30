@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1403,7 +1404,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v1 := roachpb.Version{Major: 1}
-	v2 := cluster.BinaryServerVersion
+	v2 := clusterversion.BinaryServerVersion
 
 	testData := []struct {
 		name          string

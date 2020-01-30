@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -925,7 +926,7 @@ func inspectEngines(
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
-	_ cluster.ClusterVersion,
+	_ clusterversion.ClusterVersion,
 	_ error,
 ) {
 	for _, engine := range engines {
@@ -934,14 +935,14 @@ func inspectEngines(
 			emptyEngines = append(emptyEngines, engine)
 			continue
 		} else if err != nil {
-			return nil, nil, cluster.ClusterVersion{}, err
+			return nil, nil, clusterversion.ClusterVersion{}, err
 		}
 		clusterID := clusterIDContainer.Get()
 		if storeIdent.ClusterID != uuid.Nil {
 			if clusterID == uuid.Nil {
 				clusterIDContainer.Set(ctx, storeIdent.ClusterID)
 			} else if storeIdent.ClusterID != clusterID {
-				return nil, nil, cluster.ClusterVersion{},
+				return nil, nil, clusterversion.ClusterVersion{},
 					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
 			}
 		}
@@ -950,7 +951,7 @@ func inspectEngines(
 
 	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
 	if err != nil {
-		return nil, nil, cluster.ClusterVersion{}, err
+		return nil, nil, clusterversion.ClusterVersion{}, err
 	}
 	return bootstrappedEngines, emptyEngines, cv, nil
 }
@@ -2017,7 +2018,7 @@ func (s *Server) startServeSQL(
 }
 
 func (s *Server) bootstrapVersion() roachpb.Version {
-	v := cluster.BinaryServerVersion
+	v := clusterversion.BinaryServerVersion
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
 		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
 			v = ov
@@ -2028,7 +2029,7 @@ func (s *Server) bootstrapVersion() roachpb.Version {
 
 func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.Version) error {
 	if err := s.node.bootstrapCluster(
-		ctx, s.engines, cluster.ClusterVersion{Version: bootstrapVersion},
+		ctx, s.engines, clusterversion.ClusterVersion{Version: bootstrapVersion},
 		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,
 	); err != nil {
 		return err

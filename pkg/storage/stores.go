@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -273,11 +273,11 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 // engine, falling back to the zero value.
 func ReadVersionFromEngineOrZero(
 	ctx context.Context, e engine.Engine,
-) (cluster.ClusterVersion, error) {
-	var cv cluster.ClusterVersion
+) (clusterversion.ClusterVersion, error) {
+	var cv clusterversion.ClusterVersion
 	cv, err := ReadClusterVersion(ctx, e)
 	if err != nil {
-		return cluster.ClusterVersion{}, err
+		return clusterversion.ClusterVersion{}, err
 	}
 	return cv, nil
 }
@@ -285,7 +285,7 @@ func ReadVersionFromEngineOrZero(
 // WriteClusterVersionToEngines writes the given version to the given engines,
 // without any sanity checks.
 func WriteClusterVersionToEngines(
-	ctx context.Context, engines []engine.Engine, cv cluster.ClusterVersion,
+	ctx context.Context, engines []engine.Engine, cv clusterversion.ClusterVersion,
 ) error {
 	for _, eng := range engines {
 		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
@@ -308,7 +308,7 @@ func WriteClusterVersionToEngines(
 // 	  returned if any engine has a higher version.
 func SynthesizeClusterVersionFromEngines(
 	ctx context.Context, engines []engine.Engine, minSupportedVersion, serverVersion roachpb.Version,
-) (cluster.ClusterVersion, error) {
+) (clusterversion.ClusterVersion, error) {
 	// Find the most recent bootstrap info.
 	type originVersion struct {
 		roachpb.Version
@@ -327,10 +327,10 @@ func SynthesizeClusterVersionFromEngines(
 	// constraints, which at the latest the second loop will achieve
 	// (because then minStoreVersion don't change any more).
 	for _, eng := range engines {
-		var cv cluster.ClusterVersion
+		var cv clusterversion.ClusterVersion
 		cv, err := ReadVersionFromEngineOrZero(ctx, eng)
 		if err != nil {
-			return cluster.ClusterVersion{}, err
+			return clusterversion.ClusterVersion{}, err
 		}
 		if cv.Version == (roachpb.Version{}) {
 			// This is needed when a node first joins an existing cluster, in
@@ -342,7 +342,7 @@ func SynthesizeClusterVersionFromEngines(
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
 		if serverVersion.Less(cv.Version) {
-			return cluster.ClusterVersion{}, errors.Errorf(
+			return clusterversion.ClusterVersion{}, errors.Errorf(
 				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
 				serverVersion, eng, cv.Version)
 		}
@@ -362,7 +362,7 @@ func SynthesizeClusterVersionFromEngines(
 		minStoreVersion.Version = minSupportedVersion
 	}
 
-	cv := cluster.ClusterVersion{
+	cv := clusterversion.ClusterVersion{
 		Version: minStoreVersion.Version,
 	}
 	log.Eventf(ctx, "read ClusterVersion %+v", cv)
@@ -379,7 +379,7 @@ func SynthesizeClusterVersionFromEngines(
 	// may not yet have picked up the final versions we're actually planning
 	// to use.
 	if minStoreVersion.Version.Less(minSupportedVersion) {
-		return cluster.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
 			minStoreVersion.origin, minStoreVersion.Version, serverVersion, minSupportedVersion)
 	}
@@ -398,7 +398,7 @@ func SynthesizeClusterVersionFromEngines(
 // Version.
 //
 // If there aren't any stores, returns the minimum supported version of the binary.
-func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.ClusterVersion, error) {
+func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (clusterversion.ClusterVersion, error) {
 	var engines []engine.Engine
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
 		engines = append(engines, (*Store)(v).engine)
@@ -406,7 +406,7 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.Cluster
 	})
 	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.minSupportedVersion, ls.serverVersion)
 	if err != nil {
-		return cluster.ClusterVersion{}, err
+		return clusterversion.ClusterVersion{}, err
 	}
 	return cv, nil
 }
@@ -416,7 +416,7 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.Cluster
 // error encountered writing to the stores.
 //
 // WriteClusterVersion makes no attempt to validate the supplied version.
-func (ls *Stores) WriteClusterVersion(ctx context.Context, cv cluster.ClusterVersion) error {
+func (ls *Stores) WriteClusterVersion(ctx context.Context, cv clusterversion.ClusterVersion) error {
 	// Update all stores.
 	engines := ls.engines()
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
@@ -438,7 +438,7 @@ func (ls *Stores) engines() []engine.Engine {
 // OnClusterVersionChange is invoked when the running node receives a notification
 // indicating that the cluster version has changed. It checks the currently persisted
 // version and updates if it is older than the provided update.
-func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) error {
+func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) error {
 	// Grab a lock to make sure that there aren't two interleaved invocations of
 	// this method that result in clobbering of an update.
 	ls.mu.Lock()

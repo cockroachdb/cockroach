@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -296,7 +297,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
 	// write the new version into the index descriptor.
 	encodingVersion := sqlbase.BaseIndexFormatVersion
-	if cluster.Version.IsActive(params.ctx, params.p.EvalContext().Settings, cluster.VersionSecondaryIndexColumnFamilies) {
+	if cluster.Version.IsActive(params.ctx, params.p.EvalContext().Settings, clusterversion.VersionSecondaryIndexColumnFamilies) {
 		encodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 	}
 	indexDesc.Version = encodingVersion

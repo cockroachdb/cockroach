@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -954,7 +955,7 @@ func (r *Replica) ChangeReplicas(
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
-	unroll := !cluster.Version.IsActive(ctx, st, cluster.VersionAtomicChangeReplicas) ||
+	unroll := !cluster.Version.IsActive(ctx, st, clusterversion.VersionAtomicChangeReplicas) ||
 		!UseAtomicReplicationChanges.Get(&st.SV)
 
 	if unroll {
@@ -1299,7 +1300,7 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	canUseDemotion := cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionChangeReplicasDemotion)
+	canUseDemotion := cluster.Version.IsActive(ctx, r.store.ClusterSettings(), clusterversion.VersionChangeReplicasDemotion)
 	for _, target := range chgs.Removals() {
 		typ := internalChangeTypeRemove
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL && canUseDemotion {
@@ -1514,7 +1515,7 @@ func prepareChangeReplicasTrigger(
 
 	var crt *roachpb.ChangeReplicasTrigger
 	if !cluster.Version.IsActive(
-		ctx, store.ClusterSettings(), cluster.VersionAtomicChangeReplicasTrigger,
+		ctx, store.ClusterSettings(), clusterversion.VersionAtomicChangeReplicasTrigger,
 	) {
 		var deprecatedChangeType roachpb.ReplicaChangeType
 		var deprecatedRepDesc roachpb.ReplicaDescriptor
@@ -2019,7 +2020,7 @@ func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
 	useAtomic := cluster.Version.IsActive(
-		ctx, s.ClusterSettings(), cluster.VersionAtomicChangeReplicas)
+		ctx, s.ClusterSettings(), clusterversion.VersionAtomicChangeReplicas)
 	if useAtomic {
 		// AdminChangeReplicas will only allow atomic replication changes when
 		// this magic flag is set because we changed the corresponding request
