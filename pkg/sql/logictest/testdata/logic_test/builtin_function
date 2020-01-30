@@ -2495,3 +2495,64 @@ user root
 
 statement ok
 DROP DATABASE root_test CASCADE
+
+# Test for timezone builtin.
+subtest timezone_test
+
+statement ok
+SET TIME ZONE -3
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00')
+----
+1969-12-31 22:00:00 +0000 +0000
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::time)
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timetz)
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timestamp)
+----
+1970-01-01 04:00:00 -0300 -0300
+
+query T
+SELECT timezone('UTC+6', '1970-01-01 01:00'::timestamptz)
+----
+1969-12-31 22:00:00 +0000 +0000
+
+# These test the reciprocal works the other way around.
+# TODO(otan): delete these after 20.1.
+query T
+SELECT timezone('1970-01-01 01:00', 'UTC+6')
+----
+1969-12-31 22:00:00 +0000 +0000
+
+query T
+SELECT timezone('1970-01-01 01:00'::time, 'UTC+6')
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('1970-01-01 01:00'::timetz, 'UTC+6')
+----
+0000-01-01 22:00:00 -0600 -0600
+
+query T
+SELECT timezone('1970-01-01 01:00'::timestamp, 'UTC+6')
+----
+1970-01-01 04:00:00 -0300 -0300
+
+query T
+SELECT timezone('1970-01-01 01:00'::timestamptz, 'UTC+6')
+----
+1969-12-31 22:00:00 +0000 +0000
+
+statement ok
+SET TIME ZONE +0

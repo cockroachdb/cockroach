@@ -11,6 +11,7 @@
 package timeutil
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -24,21 +25,30 @@ func TestTimeZoneStringToLocation(t *testing.T) {
 
 	testCases := []struct {
 		tz             string
+		std            TimeZoneStringToLocationStandard
 		loc            *time.Location
 		expectedResult bool
 	}{
-		{"UTC", time.UTC, true},
-		{"Australia/Sydney", aus, true},
-		{"fixed offset:3600 (3600)", FixedOffsetTimeZoneToLocation(3600, "3600"), true},
-		{`GMT-3:00`, FixedOffsetTimeZoneToLocation(-3*60*60, "GMT-3:00"), true},
-		{"+10", FixedOffsetTimeZoneToLocation(10*60*60, "+10"), true},
-		{"-10:30", FixedOffsetTimeZoneToLocation(-(10*60*60 + 30*60), "-10:30"), true},
-		{"asdf", nil, false},
+		{"UTC", TimeZoneStringToLocationISO8601Standard, time.UTC, true},
+		{"Australia/Sydney", TimeZoneStringToLocationISO8601Standard, aus, true},
+		{"fixed offset:3600 (3600)", TimeZoneStringToLocationISO8601Standard, FixedOffsetTimeZoneToLocation(3600, "3600"), true},
+		{`GMT-3:00`, TimeZoneStringToLocationISO8601Standard, FixedOffsetTimeZoneToLocation(-3*60*60, "GMT-3:00"), true},
+		{"+10", TimeZoneStringToLocationISO8601Standard, FixedOffsetTimeZoneToLocation(10*60*60, "+10"), true},
+		{"-10:30", TimeZoneStringToLocationISO8601Standard, FixedOffsetTimeZoneToLocation(-(10*60*60 + 30*60), "-10:30"), true},
+		{"asdf", TimeZoneStringToLocationISO8601Standard, nil, false},
+
+		{"UTC", TimeZoneStringToLocationPOSIXStandard, time.UTC, true},
+		{"Australia/Sydney", TimeZoneStringToLocationPOSIXStandard, aus, true},
+		{"fixed offset:3600 (3600)", TimeZoneStringToLocationPOSIXStandard, FixedOffsetTimeZoneToLocation(3600, "3600"), true},
+		{`GMT-3:00`, TimeZoneStringToLocationPOSIXStandard, FixedOffsetTimeZoneToLocation(3*60*60, "GMT-3:00"), true},
+		{"+10", TimeZoneStringToLocationPOSIXStandard, FixedOffsetTimeZoneToLocation(-10*60*60, "+10"), true},
+		{"-10:30", TimeZoneStringToLocationPOSIXStandard, FixedOffsetTimeZoneToLocation((10*60*60 + 30*60), "-10:30"), true},
+		{"asdf", TimeZoneStringToLocationPOSIXStandard, nil, false},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.tz, func(t *testing.T) {
-			loc, err := TimeZoneStringToLocation(tc.tz)
+		t.Run(fmt.Sprintf("%s_%d", tc.tz, tc.std), func(t *testing.T) {
+			loc, err := TimeZoneStringToLocation(tc.tz, tc.std)
 			if tc.expectedResult {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.loc, loc)

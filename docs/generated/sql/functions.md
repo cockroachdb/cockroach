@@ -450,9 +450,27 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="timeofday"></a><code>timeofday() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current system time on one of the cluster nodes as a string.</p>
 </span></td></tr>
-<tr><td><a name="timezone"></a><code>timezone(timestamp: <a href="timestamp.html">timestamp</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Treat given time stamp without time zone as located in the specified time zone</p>
+<tr><td><a name="timezone"></a><code>timezone(time: <a href="time.html">time</a>, timezone: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Treat given time without time zone as located in the specified time zone
+This is deprecated in favor of timezone(str, time)</p>
 </span></td></tr>
-<tr><td><a name="timezone"></a><code>timezone(timestamptz: <a href="timestamp.html">timestamptz</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert given time stamp with time zone to the new time zone, with no time zone designation</p>
+<tr><td><a name="timezone"></a><code>timezone(timestamp: <a href="timestamp.html">timestamp</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Treat given time stamp without time zone as located in the specified time zone.
+This is deprecated in favor of timezone(str, timestamp)</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timestamptz: <a href="timestamp.html">timestamptz</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert given time stamp with time zone to the new time zone, with no time zone designation
+This is deprecated in favor of timezone(str, timestamptz)</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timetz: timetz, timezone: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Convert given time with time zone to the new time zone
+This is deprecated in favor of timezone(str, timetz)</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, time: <a href="time.html">time</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Treat given time without time zone as located in the specified time zone.</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Treat given time stamp without time zone as located in the specified time zone.</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert given time stamp with time zone to the new time zone, with no time zone designation.</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timestamptz_string: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Convert given time stamp with time zone to the new time zone, with no time zone designation.</p>
+</span></td></tr>
+<tr><td><a name="timezone"></a><code>timezone(timezone: <a href="string.html">string</a>, timetz: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Convert given time with time zone to the new time zone.</p>
 </span></td></tr>
 <tr><td><a name="transaction_timestamp"></a><code>transaction_timestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
