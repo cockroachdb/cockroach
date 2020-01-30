@@ -1003,15 +1003,22 @@ func (t *Transaction) Update(o *Transaction) {
 			// Nothing to do.
 		}
 
-		// If the refreshed timestamp move forward, overwrite
-		// WriteTooOld, otherwise the flags are cumulative.
-		if t.ReadTimestamp.Less(o.ReadTimestamp) {
-			t.WriteTooOld = o.WriteTooOld
-			t.CommitTimestampFixed = o.CommitTimestampFixed
-		} else {
+		if t.ReadTimestamp.Equal(o.ReadTimestamp) {
+			// If neither of the transactions has a bumped ReadTimestamp, then the
+			// WriteTooOld flag is cumulative.
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
 			t.CommitTimestampFixed = t.CommitTimestampFixed || o.CommitTimestampFixed
+		} else if t.ReadTimestamp.Less(o.ReadTimestamp) {
+			// If `o` has a higher ReadTimestamp (i.e. it's the result of a refresh,
+			// which refresh generally clears the WriteTooOld field), then it dictates
+			// the WriteTooOld field. This relies on refreshes not being performed
+			// concurrently with any requests whose response's WriteTooOld field
+			// matters.
+			t.WriteTooOld = o.WriteTooOld
+			t.CommitTimestampFixed = o.CommitTimestampFixed
 		}
+		// If t has a higher ReadTimestamp, than it gets to dictate the
+		// WriteTooOld field - so there's nothing to update.
 
 		if t.Sequence < o.Sequence {
 			t.Sequence = o.Sequence
