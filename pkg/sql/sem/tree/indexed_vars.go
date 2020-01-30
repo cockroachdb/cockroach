@@ -36,6 +36,9 @@ type IndexedVarContainer interface {
 type IndexedVar struct {
 	Idx  int
 	Used bool
+	// remapped indicates whether idxVarMap of the IVarContainer has already been
+	// applied.
+	remapped bool
 
 	col NodeFormatter
 
@@ -134,13 +137,13 @@ func (h *IndexedVarHelper) Container() IndexedVarContainer {
 // getIndex is a helper function that returns an "actual index" of the
 // IndexedVar.
 func (h *IndexedVarHelper) getIndex(ivar *IndexedVar) int {
-	if ivar.Used {
-		// ivar has already been bound, so the remapping step (if it was needed)
-		// has already occurred.
+	if ivar.remapped {
+		// ivar has already been remapped, so it contains the actual index.
 		return ivar.Idx
 	}
 	if h.indexVarMap != nil {
 		// indexVarMap is non-nil, so we need to remap the index.
+		ivar.remapped = true
 		return h.indexVarMap[ivar.Idx]
 	}
 	// indexVarMap is nil, so we return the index as is.
