@@ -40,91 +40,6 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 	return typs, b
 }
 
-// copyBatch copies the original batch. However, to increase test coverage, only
-// use the returned batch to assert equality, not as an input to a testing
-// function, since Copy simplifies the internals (e.g. if there are zero
-// elements to copy, copyBatch returns a zero-capacity batch, which is less
-// interesting than testing a batch with a different capacity of BatchSize() but
-// zero elements).
-func copyBatch(original coldata.Batch) coldata.Batch {
-	typs := make([]coltypes.T, original.Width())
-	for i, vec := range original.ColVecs() {
-		typs[i] = vec.Type()
-	}
-	b := coldata.NewMemBatchWithSize(typs, int(original.Length()))
-	b.SetLength(original.Length())
-	for colIdx, col := range original.ColVecs() {
-		b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
-			SliceArgs: coldata.SliceArgs{
-				ColType:   typs[colIdx],
-				Src:       col,
-				SrcEndIdx: uint64(original.Length()),
-			},
-		})
-	}
-	return b
-}
-
-func assertEqualBatches(t testing.TB, expected, actual coldata.Batch) {
-	t.Helper()
-
-	if actual.Selection() != nil {
-		t.Fatal("violated invariant that batches have no selection vectors")
-	}
-	require.Equal(t, expected.Length(), actual.Length())
-	if expected.Length() == 0 {
-		// The schema of a zero-length batch is undefined, so the rest of the check
-		// is not required.
-		return
-	}
-	require.Equal(t, expected.Width(), actual.Width())
-	for colIdx := 0; colIdx < expected.Width(); colIdx++ {
-		// Verify equality of ColVecs (this includes nulls). Since the coldata.Vec
-		// backing array is always of coldata.BatchSize() due to the scratch batch
-		// that the converter keeps around, the coldata.Vec needs to be sliced to
-		// the first length elements to match on length, otherwise the check will
-		// fail.
-		expectedVec := expected.ColVec(colIdx)
-		actualVec := actual.ColVec(colIdx)
-		typ := expectedVec.Type()
-		require.Equal(t, typ, actualVec.Type())
-		require.Equal(
-			t,
-			expectedVec.Nulls().Slice(0, uint64(expected.Length())),
-			actualVec.Nulls().Slice(0, uint64(actual.Length())),
-		)
-		if typ == coltypes.Bytes {
-			// Cannot use require.Equal for this type.
-			// TODO(asubiotto): Again, why not?
-			expectedBytes := expectedVec.Bytes().Window(0, int(expected.Length()))
-			resultBytes := actualVec.Bytes().Window(0, int(actual.Length()))
-			require.Equal(t, expectedBytes.Len(), resultBytes.Len())
-			for i := 0; i < expectedBytes.Len(); i++ {
-				if !bytes.Equal(expectedBytes.Get(i), resultBytes.Get(i)) {
-					t.Fatalf("bytes mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedBytes, resultBytes)
-				}
-			}
-		} else if typ == coltypes.Timestamp {
-			// Cannot use require.Equal for this type.
-			// TODO(yuzefovich): Again, why not?
-			expectedTimestamp := expectedVec.Timestamp()[0:expected.Length()]
-			resultTimestamp := actualVec.Timestamp()[0:actual.Length()]
-			require.Equal(t, len(expectedTimestamp), len(resultTimestamp))
-			for i := range expectedTimestamp {
-				if !expectedTimestamp[i].Equal(resultTimestamp[i]) {
-					t.Fatalf("Timestamp mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedTimestamp[i], resultTimestamp[i])
-				}
-			}
-		} else {
-			require.Equal(
-				t,
-				expectedVec.Window(expectedVec.Type(), 0, uint64(expected.Length())),
-				actualVec.Window(actualVec.Type(), 0, uint64(actual.Length())),
-			)
-		}
-	}
-}
-
 func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -134,14 +49,14 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
-	expected := copyBatch(b)
+	expected := colexec.CopyBatch(testAllocator, b)
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
 	actual := coldata.NewMemBatchWithSize(nil, 0)
 	require.NoError(t, c.ArrowToBatch(arrowData, actual))
 
-	assertEqualBatches(t, expected, actual)
+	coldata.AssertEquivalentBatches(t, expected, actual)
 }
 
 // roundTripBatch is a helper function that round trips a batch through the
@@ -184,11 +99,11 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		expected := copyBatch(b)
+		expected := colexec.CopyBatch(testAllocator, b)
 		actual, err := roundTripBatch(b, c, r)
 		require.NoError(t, err)
 
-		assertEqualBatches(t, expected, actual)
+		coldata.AssertEquivalentBatches(t, expected, actual)
 	}
 }
 
