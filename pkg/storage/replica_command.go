@@ -1836,9 +1836,9 @@ func execChangeReplicasTxn(
 // returns true, this is communicated back to the sender, which then proceeds to
 // call `kvBatchSnapshotStrategy.Send`. This uses the iterator captured earlier
 // to send the data in chunks, each chunk a streaming grpc message. The sender
-// then sends a final message with an indicaton that it's done and blocks again,
-// waiting for a second and final response from the recipient which indicates if
-// the snapshot was a success.
+// then sends a final message with an indication that it's done and blocks
+// again, waiting for a second and final response from the recipient which
+// indicates if the snapshot was a success.
 //
 // `receiveSnapshot` takes the key-value pairs sent and incrementally creates
 // three SSTs from them for direct ingestion: one for the replicated range-ID
@@ -1857,13 +1857,13 @@ func execChangeReplicasTxn(
 // snapshot* message is manually handed to the replica's Raft node (by calling
 // `stepRaftGroup` + `handleRaftReadyRaftMuLocked`). During the application
 // process, several other SSTs may be created for direct ingestion. An SST for
-// the unreplicated range-ID local keys is created for the Raft entries, hard
-// state, and truncated state. An SST is created for deleting each subsumed
-// replica's range-ID local keys and at most two SSTs are created for deleting
-// the user keys and range local keys of all subsumed replicas. All in all, a
-// maximum of 6 + SR SSTs will be created for direct ingestion where SR is the
-// number of subsumed replicas. In the case where there are no subsumed
-// replicas, 4 SSTs will be created.
+// the unreplicated range-ID local keys is created for the hard state and
+// truncated state. An SST is created for deleting each subsumed replica's
+// range-ID local keys and at most two SSTs are created for deleting the user
+// keys and range local keys of all subsumed replicas. All in all, a maximum of
+// 6 + SR SSTs will be created for direct ingestion where SR is the number of
+// subsumed replicas. In the case where there are no subsumed replicas, 4 SSTs
+// will be created.
 //
 // [1]: There is a third kind of snapshot, called "preemptive", which is how we
 // avoided the above fragility before learner replicas were introduced in the
@@ -1922,42 +1922,16 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.New("raft status not initialized")}
 	}
 
-	usesReplicatedTruncatedState, err := engine.MVCCGetProto(
-		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
-	)
-	if err != nil {
-		return errors.Wrap(err, "loading legacy truncated state")
-	}
-
-	canAvoidSendingLog := !usesReplicatedTruncatedState &&
-		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
-
-	if canAvoidSendingLog {
-		// If we're not using a legacy (replicated) truncated state, we avoid
-		// sending the (past) Raft log in the snapshot in the first place and
-		// send only those entries that are actually useful to the follower.
-		// This is done by changing the truncated state, which we're allowed
-		// to do since it is not a replicated key (and thus not subject to
-		// matching across replicas). The actual sending happens here:
-		_ = (*kvBatchSnapshotStrategy)(nil).Send
-		// and results in no log entries being sent at all. Note that
-		// Metadata.Index is really the applied index of the replica.
-		snap.State.TruncatedState = &roachpb.RaftTruncatedState{
-			Index: snap.RaftSnap.Metadata.Index,
-			Term:  snap.RaftSnap.Metadata.Term,
-		}
+	// We update the ReplicaState in the snapshot to match the snapshot metadata
+	// provided to use by etcd/raft.
+	metadata := snap.RaftSnap.Metadata
+	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
+		Index: metadata.Index,
+		Term:  metadata.Term,
 	}
 
 	req := SnapshotRequest_Header{
 		State: snap.State,
-		// Tell the recipient whether it needs to synthesize the new
-		// unreplicated TruncatedState. It could tell by itself by peeking into
-		// the data, but it uses a write only batch for performance which
-		// doesn't support that; this is easier. Notably, this is true if the
-		// snap index itself is the one at which the migration happens.
-		//
-		// See VersionUnreplicatedRaftTruncatedState.
-		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: sender,
@@ -1980,25 +1954,9 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	if err := r.store.cfg.Transport.SendSnapshot(
-		ctx,
-		&r.store.cfg.RaftConfig,
-		r.store.allocator.storePool,
-		req,
-		snap,
-		r.store.Engine().NewBatch,
-		sent,
+	if err := r.store.cfg.Transport.SendSnapshot(ctx, &r.store.cfg.RaftConfig,
+		r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch, sent,
 	); err != nil {
-		if errors.Cause(err) == errMalformedSnapshot {
-			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
-			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
-				log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
-			} else {
-				log.Warningf(ctx, "created checkpoint %s", dir)
-			}
-
-			log.Fatal(ctx, "malformed snapshot generated")
-		}
 		return &snapshotError{err}
 	}
 	return nil

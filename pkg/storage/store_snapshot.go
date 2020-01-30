@@ -25,12 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	crdberrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
 
@@ -225,7 +223,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, err
 	}
 	defer msstw.Close()
-	var logEntries [][]byte
 
 	for {
 		req, err := stream.Recv()
@@ -256,9 +253,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				}
 			}
 		}
-		if req.LogEntries != nil {
-			logEntries = append(logEntries, req.LogEntries...)
-		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key ranges, but
@@ -277,22 +271,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
 				SnapUUID:                       snapUUID,
 				SSTStorageScratch:              kvSS.scratch,
-				LogEntries:                     logEntries,
 				State:                          &header.State,
 				snapType:                       header.Type,
-			}
-
-			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
-			if expLen != uint64(len(logEntries)) {
-				// We've received a botched snapshot. We could fatal right here but opt
-				// to warn loudly instead, and fatal when applying the snapshot
-				// (in Replica.applySnapshot) in order to capture replica hard state.
-				log.Warningf(ctx,
-					"missing log entries in snapshot (%s): got %d entries, expected %d",
-					inSnap.String(), len(logEntries), expLen)
 			}
 
 			// 19.1 nodes don't set the Type field on the SnapshotRequest_Header proto
@@ -308,15 +290,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				inSnap.snapType = SnapshotRequest_PREEMPTIVE
 			}
 
-			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.scratch.SSTs()))
+			kvSS.status = fmt.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
 	}
 }
-
-// errMalformedSnapshot indicates that the snapshot in question is malformed,
-// for e.g. missing raft log entries.
-var errMalformedSnapshot = errors.New("malformed snapshot generated")
 
 // Send implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Send(
@@ -365,139 +343,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 	}
 
-	// Iterate over the specified range of Raft entries and send them all out
-	// together.
-	firstIndex := header.State.TruncatedState.Index + 1
-	endIndex := snap.RaftSnap.Metadata.Index + 1
-	preallocSize := endIndex - firstIndex
-	const maxPreallocSize = 1000
-	if preallocSize > maxPreallocSize {
-		// It's possible for the raft log to become enormous in certain
-		// sustained failure conditions. We may bail out of the snapshot
-		// process early in scanFunc, but in the worst case this
-		// preallocation is enough to run the server out of memory. Limit
-		// the size of the buffer we will preallocate.
-		preallocSize = maxPreallocSize
+	if header.State.TruncatedState.Index != snap.RaftSnap.Metadata.Index {
+		log.Fatalf(ctx, "snapshot TruncatedState index %d doesn't match its metadata index %d",
+			header.State.TruncatedState.Index, snap.RaftSnap.Metadata.Index)
 	}
-	logEntries := make([][]byte, 0, preallocSize)
-
-	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			logEntries = append(logEntries, bytes)
-			raftLogBytes += int64(len(bytes))
-			if snap.snapType == SnapshotRequest_PREEMPTIVE &&
-				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
-				// If the raft log is too large, abort the snapshot instead of
-				// potentially running out of memory. However, if this is a
-				// raft-initiated snapshot (instead of a preemptive one), we
-				// have a dilemma. It may be impossible to truncate the raft
-				// log until we have caught up a peer with a snapshot. Since
-				// we don't know the exact size at which we will run out of
-				// memory, we err on the size of allowing the snapshot if it
-				// is raft-initiated, while aborting preemptive snapshots at a
-				// reasonable threshold. (Empirically, this is good enough:
-				// the situations that result in large raft logs have not been
-				// observed to result in raft-initiated snapshots).
-				//
-				// By aborting preemptive snapshots here, we disallow replica
-				// changes until the current replicas have caught up and
-				// truncated the log (either the range is available, in which
-				// case this will eventually happen, or it's not,in which case
-				// the preemptive snapshot would be wasted anyway because the
-				// change replicas transaction would be unable to commit).
-				return false, errors.Errorf(
-					"aborting snapshot because raft log is too large "+
-						"(%d bytes after processing %d of %d entries)",
-					raftLogBytes, len(logEntries), endIndex-firstIndex)
-			}
-		}
-		return false, err
-	}
-
-	rangeID := header.State.Desc.RangeID
-
-	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return err
-	}
-
-	// The difference between the snapshot index (applied index at the time of
-	// snapshot) and the truncated index should equal the number of log entries
-	// shipped over.
-	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
-		// We've generated a botched snapshot. We could fatal right here but opt
-		// to warn loudly instead, and fatal at the caller to capture a checkpoint
-		// of the underlying storage engine.
-		entriesRange, err := extractRangeFromEntries(logEntries)
-		if err != nil {
-			return err
-		}
-		log.Warningf(ctx, "missing log entries in snapshot (%s): "+
-			"got %d entries, expected %d (TruncatedState.Index=%d, LogEntries=%s)",
-			snap.String(), len(logEntries), expLen, snap.State.TruncatedState.Index, entriesRange)
-		return errMalformedSnapshot
-	}
-
-	// Inline the payloads for all sideloaded proposals.
-	//
-	// TODO(tschottdorf): could also send slim proposals and attach sideloaded
-	// SSTables directly to the snapshot. Probably the better long-term
-	// solution, but let's see if it ever becomes relevant. Snapshots with
-	// inlined proposals are hopefully the exception.
-	{
-		var ent raftpb.Entry
-		for i := range logEntries {
-			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return err
-			}
-			if !sniffSideloadedRaftCommand(ent.Data) {
-				continue
-			}
-			if err := snap.WithSideloaded(func(ss SideloadStorage) error {
-				newEnt, err := maybeInlineSideloadedRaftCommand(
-					ctx, rangeID, ent, ss, snap.RaftEntryCache,
-				)
-				if err != nil {
-					return err
-				}
-				if newEnt != nil {
-					ent = *newEnt
-				}
-				return nil
-			}); err != nil {
-				if errors.Cause(err) == errSideloadedFileNotFound {
-					// We're creating the Raft snapshot based on a snapshot of
-					// the engine, but the Raft log may since have been
-					// truncated and corresponding on-disk sideloaded payloads
-					// unlinked. Luckily, we can just abort this snapshot; the
-					// caller can retry.
-					//
-					// TODO(tschottdorf): check how callers handle this. They
-					// should simply retry. In some scenarios, perhaps this can
-					// happen repeatedly and prevent a snapshot; not sending the
-					// log entries wouldn't help, though, and so we'd really
-					// need to make sure the entries are always here, for
-					// instance by pre-loading them into memory. Or we can make
-					// log truncation less aggressive about removing sideloaded
-					// files, by delaying trailing file deletion for a bit.
-					return &errMustRetrySnapshotDueToTruncation{
-						index: ent.Index,
-						term:  ent.Term,
-					}
-				}
-				return err
-			}
-			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
-			var err error
-			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return err
-			}
-		}
-	}
-	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
-	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+	kvSS.status = fmt.Sprintf("kv pairs: %d", n)
+	return stream.Send(&SnapshotRequest{})
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
