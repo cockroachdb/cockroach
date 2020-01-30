@@ -69,8 +69,6 @@ func buildOpaque(
 		plan, err = p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		plan, err = p.CreateIndex(ctx, n)
-	case *tree.CreateUser:
-		plan, err = p.CreateUser(ctx, n)
 	case *tree.CreateSequence:
 		plan, err = p.CreateSequence(ctx, n)
 	case *tree.CreateStats:
@@ -165,7 +163,6 @@ func init() {
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateIndex{},
-		&tree.CreateUser{},
 		&tree.CreateSequence{},
 		&tree.CreateStats{},
 		&tree.Deallocate{},
@@ -203,7 +200,6 @@ func init() {
 		&tree.ShowBackup{},
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
-		&tree.CreateRole{},
 		&tree.CreateRoleOrUser{},
 		&tree.DropRole{},
 		&tree.GrantRole{},

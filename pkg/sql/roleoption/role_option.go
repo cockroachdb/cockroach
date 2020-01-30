@@ -45,12 +45,6 @@ func (k Kind) Mask() uint32 {
 	return 1 << k
 }
 
-// ByValue is just an array of role option kinds sorted by value.
-var ByValue = [...]Kind{
-	CREATEROLE,
-	NOCREATEROLE,
-}
-
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
 	"CREATEROLE":   CREATEROLE,
@@ -176,16 +170,26 @@ func ListFromRoleOptions(strs []string) (KindList, error) {
 	return ret, nil
 }
 
+func (pl List) Contains(p Kind) bool {
+	for _, ro := range pl {
+		if ro.Option == p {
+			return true
+		}
+	}
+
+	return false
+}
+
 // CheckRoleOptionConflicts returns an error if two or more options conflict with each other.
 func (pl List) CheckRoleOptionConflicts() error {
-	roleoptionBits, err := pl.ToBitField()
+	roleOptionBits, err := pl.ToBitField()
 
 	if err != nil {
 		return err
 	}
 
-	if (roleoptionBits&CREATEROLE.Mask() != 0) &&
-		(roleoptionBits&NOCREATEROLE.Mask() != 0) {
+	if (roleOptionBits&CREATEROLE.Mask() != 0) &&
+		(roleOptionBits&NOCREATEROLE.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role option options")
 	}
 	return nil

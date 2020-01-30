@@ -165,7 +165,6 @@ type CCLOnlyStatement interface {
 var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
-var _ CCLOnlyStatement = &CreateRole{}
 var _ CCLOnlyStatement = &CreateRoleOrUser{}
 var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
@@ -328,24 +327,6 @@ func (n *CreateTable) StatementTag() string {
 
 // modifiesSchema implements the canModifySchema interface.
 func (*CreateTable) modifiesSchema() bool { return true }
-
-// StatementType implements the Statement interface.
-func (*CreateUser) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CreateUser) StatementTag() string { return "CREATE USER" }
-
-func (*CreateUser) hiddenFromShowQueries() {}
-
-// StatementType implements the Statement interface.
-func (*CreateRole) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
-
-func (*CreateRole) cclOnlyStatement() {}
-
-func (*CreateRole) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*CreateRoleOrUser) StatementType() StatementType { return RowsAffected }
@@ -917,12 +898,10 @@ func (n *CopyFrom) String() string                       { return AsString(n) }
 func (n *CreateChangefeed) String() string               { return AsString(n) }
 func (n *CreateDatabase) String() string                 { return AsString(n) }
 func (n *CreateIndex) String() string                    { return AsString(n) }
-func (n *CreateRole) String() string                     { return AsString(n) }
 func (n *CreateRoleOrUser) String() string               { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }
-func (n *CreateUser) String() string                     { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
 func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }

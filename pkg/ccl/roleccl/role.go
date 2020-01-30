@@ -37,7 +37,7 @@ func createRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true, /* isRole */
+	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, createRole.IsRole, /* isRole */
 		"CREATE ROLE", createRole.RoleOptions)
 }
 

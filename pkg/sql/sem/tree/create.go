@@ -1191,43 +1191,14 @@ func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 	if node.IfHasWith {
-		ctx.WriteString(" WITH ")
-	} else if len(node.RoleOptions) > 0 {
-		ctx.WriteString(" ")
+		ctx.WriteString(" WITH")
 	}
+
 	if len(node.RoleOptions) > 0 {
+		ctx.WriteString(" ")
 		// WIP
 		// pass in values here (ie pw for formatting)?
 		//node.RoleOptions.Format()
-	}
-}
-
-// CreateUser represents a CREATE USER statement.
-type CreateUser struct {
-	Name        Expr
-	Password    Expr // nil if no password specified
-	IfNotExists bool
-}
-
-// HasPassword returns if the CreateUser has a password.
-func (node *CreateUser) HasPassword() bool {
-	return node.Password != nil
-}
-
-// Format implements the NodeFormatter interface.
-func (node *CreateUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE USER ")
-	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	if node.HasPassword() {
-		ctx.WriteString(" WITH PASSWORD ")
-		if ctx.flags.HasFlags(FmtShowPasswords) {
-			ctx.FormatNode(node.Password)
-		} else {
-			ctx.WriteString("*****")
-		}
 	}
 }
 
@@ -1250,31 +1221,6 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Password)
 	} else {
 		ctx.WriteString("*****")
-	}
-}
-
-// CreateRole represents a CREATE ROLE statement.
-type CreateRole struct {
-	Name           Expr
-	RolePrivileges roleoption.KindList
-	IfHasWith      bool
-	IfNotExists    bool
-}
-
-// Format implements the NodeFormatter interface.
-func (node *CreateRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE ROLE ")
-	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
-	}
-	ctx.FormatNode(node.Name)
-	if node.IfHasWith {
-		ctx.WriteString(" WITH ")
-	} else if len(node.RolePrivileges) > 0 {
-		ctx.WriteString(" ")
-	}
-	if len(node.RolePrivileges) > 0 {
-		node.RolePrivileges.Format(&ctx.Buffer)
 	}
 }
 

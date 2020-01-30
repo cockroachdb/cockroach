@@ -41,8 +41,8 @@ var userTableName = tree.NewTableName("system", "users").String()
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
-	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, false /* isRole */, "CREATE USER", nil)
+func (p *planner) CreateUser(ctx context.Context, n *tree.CreateRoleOrUser) (planNode, error) {
+	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, n.IsRole /* isRole */, "CREATE USER", nil)
 }
 
 // CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
@@ -138,6 +138,9 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return err
 	}
 
+	canLogin := roleOptionBits&roleoption.LOGIN.Mask() != 0 ||
+		(roleOptionBits&roleoption.NOLOGIN.Mask() == 0 && !n.isRole)
+
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
@@ -147,7 +150,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		hashedPassword,
 		n.isRole,
 		roleOptionBits&roleoption.CREATEROLE.Mask() != 0,
-		roleOptionBits&roleoption.LOGIN.Mask() != 0,
+		canLogin,
 	)
 
 	if err != nil {
