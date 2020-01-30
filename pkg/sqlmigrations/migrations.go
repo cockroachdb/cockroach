@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -191,35 +192,35 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "create system.comment table",
 		workFn: createCommentTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
 	{
 		name:   "create system.replication_constraint_stats table",
 		workFn: createReplicationConstraintStatsTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationConstraintStatsTableID),
 	},
 	{
 		name:   "create system.replication_critical_localities table",
 		workFn: createReplicationCriticalLocalitiesTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationCriticalLocalitiesTableID),
 	},
 	{
 		name:   "create system.reports_meta table",
 		workFn: createReportsMetaTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReportsMetaTableID),
 	},
 	{
 		name:   "create system.replication_stats table",
 		workFn: createReplicationStatsTable,
 		// This migration has been introduced some time before 19.2.
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		newDescriptorIDs:    staticIDs(keys.ReplicationStatsTableID),
 	},
 	{
@@ -236,7 +237,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v19.2.
 		name:                "change reports fields from timestamp to timestamptz",
-		includedInBootstrap: cluster.VersionByKey(cluster.Version19_2),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
 		workFn: func(ctx context.Context, r runner) error {
 			// Note that these particular schema changes are idempotent.
 			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
@@ -264,7 +265,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(ajwerner): Bake this migration into v20.2.
 		name:                "create system.protected_ts_meta table",
 		workFn:              createProtectedTimestampsMetaTable,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionProtectedTimestamps),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionProtectedTimestamps),
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsMetaTableID),
 	},
 	{
@@ -272,21 +273,21 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(ajwerner): Bake this migration into v20.2.
 		name:                "create system.protected_ts_records table",
 		workFn:              createProtectedTimestampsRecordsTable,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionProtectedTimestamps),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionProtectedTimestamps),
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
 	{
 		// Introduced in v20.1
 		name:                "create new system.namespace table",
 		workFn:              createNewSystemNamespaceDescriptor,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
 	},
 	{
 		// Introduced in v20.1
 		name:                "migrate system.namespace_deprecated entries into system.namespace",
 		workFn:              migrateSystemNamespace,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionNamespaceTableWithSchemas),
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 	},
 }
 
@@ -830,11 +831,11 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	}
 	if v == (roachpb.Version{}) {
 		// The cluster was bootstrapped at v1.0 (or even earlier), so just use
-		// the MinSupportedVersion of the binary.
-		v = cluster.BinaryMinimumSupportedVersion
+		// the TestingBinaryMinSupportedVersion of the binary.
+		v = clusterversion.TestingBinaryMinSupportedVersion
 	}
 
-	b, err := protoutil.Marshal(&cluster.ClusterVersion{Version: v})
+	b, err := protoutil.Marshal(&clusterversion.ClusterVersion{Version: v})
 	if err != nil {
 		return errors.Wrap(err, "while marshaling version")
 	}

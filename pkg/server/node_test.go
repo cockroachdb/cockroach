@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -163,8 +163,8 @@ func createAndStartTestNode(
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		ctx, engines,
-		cluster.Version.BinaryMinSupportedVersion(cfg.Settings),
-		cluster.Version.BinaryVersion(cfg.Settings),
+		cfg.Settings.Version.BinaryVersion(),
+		cfg.Settings.Version.BinaryMinSupportedVersion(),
 		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestBootstrapCluster(t *testing.T) {
 	e := engine.NewDefaultInMem()
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []engine.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Add the initial keys for sql.
-	kvs, tableSplits := GetBootstrapSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef()).GetInitialValues(cluster.TestingClusterVersion)
+	kvs, tableSplits := GetBootstrapSchema(zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef()).GetInitialValues(clusterversion.TestingClusterVersion)
 	for _, kv := range kvs {
 		expectedKeys = append(expectedKeys, kv.Key)
 	}
@@ -265,7 +265,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	ctx := context.Background()
 	e := engine.NewDefaultInMem()
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []engine.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper.AddCloser(e)
 
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []engine.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer e.Close()
 
 	if _, err := bootstrapCluster(
-		ctx, []engine.Engine{e}, cluster.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []engine.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -413,8 +413,8 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer stopper.Stop(ctx)
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		ctx, engines,
-		cluster.BinaryMinimumSupportedVersion,
-		cluster.BinaryServerVersion,
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
 		node.clusterID)
 	if err != nil {
 		t.Fatal(err)
@@ -737,7 +737,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewDefaultInMem()
 		defer e.Close()
 		if _, err := bootstrapCluster(
-			ctx, []engine.Engine{e}, cluster.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+			ctx, []engine.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 		); err != nil {
 			t.Fatal(err)
 		}

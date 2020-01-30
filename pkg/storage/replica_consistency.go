@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -238,7 +237,7 @@ func (r *Replica) CheckConsistency(
 			}); err != nil {
 				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
 				// Intentionally continue with the assumption that it's the current version.
-				v = cluster.Version.ActiveVersion(ctx, r.store.cfg.Settings).Version
+				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
 			}
 			// For clusters that ever ran <19.1, we're not so sure that the stats are
 			// consistent. Verify this only for clusters that started out on 19.1 or

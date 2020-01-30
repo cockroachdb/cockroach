@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -123,7 +124,7 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 // in the schema. Also returns a list of split points (a split for each SQL
 // table descriptor part of the initial values). Both returned sets are sorted.
 func (ms MetadataSchema) GetInitialValues(
-	bootstrapVersion cluster.ClusterVersion,
+	bootstrapVersion clusterversion.ClusterVersion,
 ) ([]roachpb.KeyValue, []roachpb.RKey) {
 	var ret []roachpb.KeyValue
 	var splits []roachpb.RKey
@@ -146,7 +147,7 @@ func (ms MetadataSchema) GetInitialValues(
 
 		// TODO(solon): This if/else can be removed in 20.2, as there will be no
 		// need to support the deprecated namespace table.
-		if bootstrapVersion.IsActive(cluster.VersionNamespaceTableWithSchemas) {
+		if bootstrapVersion.IsActive(clusterversion.VersionNamespaceTableWithSchemas) {
 			if parentID != keys.RootNamespaceID {
 				ret = append(ret, roachpb.KeyValue{
 					Key:   NewPublicTableKey(parentID, desc.GetName()).Key(),
@@ -255,7 +256,7 @@ func LookupSystemTableDescriptorID(
 	}
 
 	if settings != nil &&
-		!cluster.Version.IsActive(ctx, settings, cluster.VersionNamespaceTableWithSchemas) &&
+		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
 		tableName == NamespaceTable.Name {
 		return DeprecatedNamespaceTable.ID
 	}
