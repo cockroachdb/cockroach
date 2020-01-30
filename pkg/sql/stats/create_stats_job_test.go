@@ -41,6 +41,8 @@ import (
 func TestCreateStatsControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/44522")
+
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
