@@ -83,7 +83,7 @@ function problemRangeRequestFromProps(props: ProblemRangesProps) {
  * per node basis. This page aggregates those lists together and displays all
  * unique range IDs that have problems.
  */
-class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
+export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
     props.refreshProblemRanges(problemRangeRequestFromProps(props));
   }

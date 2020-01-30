@@ -40,7 +40,7 @@ function storesRequestFromProps(props: StoresProps) {
 /**
  * Renders the Stores Report page.
  */
-class Stores extends React.Component<StoresProps, {}> {
+export class Stores extends React.Component<StoresProps, {}> {
   refresh(props = this.props) {
     props.refreshStores(storesRequestFromProps(props));
   }

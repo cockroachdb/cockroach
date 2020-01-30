@@ -246,7 +246,7 @@ const nodesTableRows: NodesTableRowParams[] = [
 /**
  * Renders the Nodes Diagnostics Report page.
  */
-class Nodes extends React.Component<NodesProps, {}> {
+export class Nodes extends React.Component<NodesProps, {}> {
   refresh(props = this.props) {
     props.refreshLiveness();
     props.refreshNodes();

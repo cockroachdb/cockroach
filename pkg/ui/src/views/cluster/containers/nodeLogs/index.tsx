@@ -38,7 +38,7 @@ interface LogProps {
 /**
  * Renders the main content of the logs page.
  */
-class Logs extends React.Component<LogProps & RouterState, {}> {
+export class Logs extends React.Component<LogProps & RouterState, {}> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));

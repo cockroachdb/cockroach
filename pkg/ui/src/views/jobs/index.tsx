@@ -245,7 +245,7 @@ const titleTooltip = (
   </span>
 );
 
-class JobsTable extends React.Component<JobsTableProps> {
+export class JobsTable extends React.Component<JobsTableProps> {
   refresh(props = this.props) {
     props.refreshJobs(new JobsRequest({
       status: props.status,

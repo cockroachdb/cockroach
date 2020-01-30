@@ -83,7 +83,7 @@ function rangeLogRequestFromProps(props: RangeProps) {
 /**
  * Renders the Range Report page.
  */
-class Range extends React.Component<RangeProps, {}> {
+export class Range extends React.Component<RangeProps, {}> {
   refresh(props = this.props) {
     props.refreshRange(rangeRequestFromProps(props));
     props.refreshAllocatorRange(allocatorRequestFromProps(props));
