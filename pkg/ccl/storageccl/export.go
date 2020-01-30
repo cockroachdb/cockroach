@@ -135,7 +135,9 @@ func evalExport(
 	// target size for files and then paginate the actual export. The external
 	// API may need to be modified to deal with the case where ReturnSST is true.
 	const targetSize = 0 // unlimited
-	data, summary, resume, err := e.ExportToSst(args.Key, args.EndKey, args.StartTime, h.Timestamp, exportAllRevisions, targetSize, io)
+	const maxSize = 0    // unlimited
+	data, summary, resume, err := e.ExportToSst(args.Key, args.EndKey,
+		args.StartTime, h.Timestamp, exportAllRevisions, targetSize, maxSize, io)
 	if resume != nil {
 		return result.Result{}, crdberrors.AssertionFailedf("expected nil resume key with unlimited target size")
 	}

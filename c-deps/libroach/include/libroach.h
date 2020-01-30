@@ -555,11 +555,18 @@ DBStatus DBUnlockFile(DBFileLock lock);
 
 // DBExportToSst exports changes over the keyrange and time interval between the
 // start and end DBKeys to an SSTable using an IncrementalIterator.
+//
 // If target_size is positive, it indicates that the export should produce SSTs
 // which are roughly target size. Specifically, it will return an SST such that
 // the last key is responsible for exceeding the targetSize. If the resume_key
 // is non-NULL then the returns sst will exceed the targetSize.
-DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64_t target_size,
+//
+// If max_size is positive, it is an absolute maximum on byte size for the
+// returned sst. If it is the case that the versions of the last key will lead
+// to an SST that exceeds maxSize, an error will be returned. This parameter
+// exists to prevent creating SSTs which are too large to be used.
+DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, 
+                       uint64_t target_size, uint64_t max_size,
                        DBIterOptions iter_opts, DBEngine* engine, DBString* data,
                        DBString* write_intent, DBString* summary, DBString* resume);
 

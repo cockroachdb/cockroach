@@ -334,7 +334,10 @@ func assertEqualKVs(
 		for start := startKey; start != nil; {
 			var sst []byte
 			var summary roachpb.BulkOpSummary
-			sst, summary, start, err = e.ExportToSst(start, endKey, startTime, endTime, exportAllRevisions, targetSize, io)
+			maxSize := uint64(0)
+			prevStart := start
+			sst, summary, start, err = e.ExportToSst(start, endKey, startTime, endTime,
+				exportAllRevisions, targetSize, maxSize, io)
 			require.NoError(t, err)
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
@@ -349,9 +352,27 @@ func assertEqualKVs(
 				})
 				dataSizeWithoutLastKey := dataSize
 				for _, kv := range loaded[firstKVofLastKey:] {
-					dataSizeWithoutLastKey -= uint64(kv.Key.Len() + len(kv.Value))
+					dataSizeWithoutLastKey -= uint64(len(kv.Key.Key) + len(kv.Value))
 				}
 				require.Truef(t, targetSize > dataSizeWithoutLastKey, "%d <= %d", targetSize, dataSizeWithoutLastKey)
+				// Ensure that maxSize leads to an error if exceeded.
+				// Note that this uses a relatively non-sensical value of maxSize which
+				// is equal to the targetSize.
+				maxSize = targetSize
+				dataSizeWhenExceeded := dataSize
+				for i := len(loaded) - 1; i >= 0; i-- {
+					kv := loaded[i]
+					lessThisKey := dataSizeWhenExceeded - uint64(len(kv.Key.Key)+len(kv.Value))
+					if lessThisKey >= maxSize {
+						dataSizeWhenExceeded = lessThisKey
+					} else {
+						break
+					}
+				}
+				_, _, _, err = e.ExportToSst(prevStart, endKey, startTime, endTime,
+					exportAllRevisions, targetSize, maxSize, io)
+				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
+					dataSizeWhenExceeded, maxSize), err)
 			}
 			kvs = append(kvs, loaded...)
 		}
