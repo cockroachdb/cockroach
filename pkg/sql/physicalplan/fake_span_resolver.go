@@ -11,6 +11,7 @@
 package physicalplan
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 
@@ -39,10 +40,12 @@ func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor) SpanResolver {
 	}
 }
 
-// fakeSplit indicates that a range starting at key is owned by a certain node.
-type fakeSplit struct {
-	key      roachpb.Key
-	nodeDesc *roachpb.NodeDescriptor
+// fakeRange indicates that a range between startKey and endKey is owned by a
+// certain node.
+type fakeRange struct {
+	startKey roachpb.Key
+	endKey   roachpb.Key
+	replica  *roachpb.NodeDescriptor
 }
 
 type fakeSpanResolverIterator struct {
@@ -53,9 +56,11 @@ type fakeSpanResolverIterator struct {
 	// conflicts.
 	txn *client.Txn
 	err error
-	// splits are ordered by the key; the first one is the beginning of the
-	// current range and the last one is the end of the queried span.
-	splits []fakeSplit
+
+	// ranges are ordered by the key; the start key of the first one is the
+	// beginning of the current range and the end key of the last one is the end
+	// of the queried span.
+	ranges []fakeRange
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
@@ -68,6 +73,12 @@ func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *client.Txn) SpanResolv
 func (fit *fakeSpanResolverIterator) Seek(
 	ctx context.Context, span roachpb.Span, scanDir kv.ScanDirection,
 ) {
+	// Set aside the last range from the previous seek.
+	var prevRange fakeRange
+	if fit.ranges != nil {
+		prevRange = fit.ranges[len(fit.ranges)-1]
+	}
+
 	// Scan the range and keep a list of all potential split keys.
 	kvs, err := fit.txn.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
@@ -118,25 +129,45 @@ func (fit *fakeSpanResolverIterator) Seek(
 		}
 	}
 
-	fit.splits = make([]fakeSplit, 0, numSplits+2)
-	fit.splits = append(fit.splits, fakeSplit{key: span.Key})
+	splits := make([]roachpb.Key, 0, numSplits+2)
+	splits = append(splits, span.Key)
 	for i := range splitKeys {
 		if _, ok := chosen[i]; ok {
-			fit.splits = append(fit.splits, fakeSplit{key: splitKeys[i]})
+			splits = append(splits, splitKeys[i])
 		}
 	}
-	fit.splits = append(fit.splits, fakeSplit{key: span.EndKey})
-
-	// Assign nodes randomly.
-	for i := range fit.splits {
-		fit.splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
-	}
+	splits = append(splits, span.EndKey)
 
 	if scanDir == kv.Descending {
 		// Reverse the order of the splits.
-		for i := 0; i < len(fit.splits)/2; i++ {
-			j := len(fit.splits) - i - 1
-			fit.splits[i], fit.splits[j] = fit.splits[j], fit.splits[i]
+		for i := 0; i < len(splits)/2; i++ {
+			j := len(splits) - i - 1
+			splits[i], splits[j] = splits[j], splits[i]
+		}
+	}
+
+	// Build ranges corresponding to the fake splits and assign them random
+	// replicas.
+	fit.ranges = make([]fakeRange, len(splits)-1)
+	for i := range fit.ranges {
+		fit.ranges[i] = fakeRange{
+			startKey: splits[i],
+			endKey:   splits[i+1],
+			replica:  fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))],
+		}
+	}
+
+	// Check for the case where the last range of the previous Seek() describes
+	// the same row as this seek. In this case we'll assign the same replica so we
+	// don't "split" column families of the same row across different replicas.
+	if prevRange.endKey != nil {
+		prefix, err := keys.EnsureSafeSplitKey(span.Key)
+		// EnsureSafeSplitKey returns an error for keys which do not specify a
+		// column family. In this case we don't need to worry about splitting the
+		// row.
+		if err == nil && len(prevRange.endKey) >= len(prefix) &&
+			bytes.Equal(prefix, prevRange.endKey[:len(prefix)]) {
+			fit.ranges[0].replica = prevRange.replica
 		}
 	}
 }
@@ -153,28 +184,28 @@ func (fit *fakeSpanResolverIterator) Error() error {
 
 // NeedAnother is part of the SpanResolverIterator interface.
 func (fit *fakeSpanResolverIterator) NeedAnother() bool {
-	return len(fit.splits) > 2
+	return len(fit.ranges) > 1
 }
 
 // Next is part of the SpanResolverIterator interface.
 func (fit *fakeSpanResolverIterator) Next(_ context.Context) {
-	if len(fit.splits) <= 2 {
+	if len(fit.ranges) <= 1 {
 		panic("Next called with no more ranges")
 	}
-	fit.splits = fit.splits[1:]
+	fit.ranges = fit.ranges[1:]
 }
 
 // Desc is part of the SpanResolverIterator interface.
 func (fit *fakeSpanResolverIterator) Desc() roachpb.RangeDescriptor {
 	return roachpb.RangeDescriptor{
-		StartKey: roachpb.RKey(fit.splits[0].key),
-		EndKey:   roachpb.RKey(fit.splits[1].key),
+		StartKey: roachpb.RKey(fit.ranges[0].startKey),
+		EndKey:   roachpb.RKey(fit.ranges[0].endKey),
 	}
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
 func (fit *fakeSpanResolverIterator) ReplicaInfo(_ context.Context) (kv.ReplicaInfo, error) {
-	n := fit.splits[0].nodeDesc
+	n := fit.ranges[0].replica
 	return kv.ReplicaInfo{
 		ReplicaDescriptor: roachpb.ReplicaDescriptor{NodeID: n.NodeID},
 		NodeDesc:          n,
