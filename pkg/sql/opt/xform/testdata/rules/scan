@@ -588,7 +588,10 @@ scalar-group-by
  ├── fd: ()-->(5)
  ├── scan orders@orders_by_seq_num
  │    ├── columns: total:3(decimal!null) seq_num:4(int!null)
- │    └── constraint: /1/4/2: [/'europe-west2'/100 - /'europe-west2'/199] [/'us-east1'/100 - /'us-east1'/199] [/'us-west1'/100 - /'us-west1'/199]
+ │    └── constraint: /1/4/2
+ │         ├── [/'europe-west2'/100 - /'europe-west2'/199]
+ │         ├── [/'us-east1'/100 - /'us-east1'/199]
+ │         └── [/'us-west1'/100 - /'us-west1'/199]
  └── aggregations
       └── sum [type=decimal, outer=(3)]
            └── variable: total [type=decimal]
@@ -614,7 +617,9 @@ select
  ├── fd: (1)-->(2)
  ├── scan xyz@tertiary
  │    ├── columns: x:1(int!null) y:2(int!null)
- │    ├── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -631,7 +636,9 @@ select
  ├── fd: (1)-->(2,3)
  ├── scan xyz@tertiary
  │    ├── columns: x:1(int!null) y:2(int!null) z:3(string!null)
- │    ├── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+ │    ├── constraint: /3/2/1
+ │    │    ├── [/'first'/2/6 - /'first'/9/9]
+ │    │    └── [/'second'/2/6 - /'second'/9/9]
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters

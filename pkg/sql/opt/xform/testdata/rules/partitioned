@@ -41,7 +41,14 @@ explain
       ├── fd: ()-->(4)
       ├── scan partitioned
       │    ├── columns: planet:1(string!null) region:2(string!null) subregion:3(string!null) val:4(int!null)
-      │    ├── constraint: /1/2/3/4: [ - /'earth'/'us'/'cali') [/'earth'/'us'/'cali'/1 - /'earth'/'us'/'cali'/1] [/'earth'/'us'/e'cali\x00'/1 - /'earth'/'us'/'seattle') [/'earth'/'us'/'seattle'/1 - /'earth'/'us'/'seattle'/1] [/'earth'/'us'/e'seattle\x00'/1 - /'jupiter'/'titan'/'red spot') [/'jupiter'/'titan'/'red spot'/1 - /'jupiter'/'titan'/'red spot'/1] [/'jupiter'/'titan'/e'red spot\x00'/1 - ]
+      │    ├── constraint: /1/2/3/4
+      │    │    ├── [ - /'earth'/'us'/'cali')
+      │    │    ├── [/'earth'/'us'/'cali'/1 - /'earth'/'us'/'cali'/1]
+      │    │    ├── [/'earth'/'us'/e'cali\x00'/1 - /'earth'/'us'/'seattle')
+      │    │    ├── [/'earth'/'us'/'seattle'/1 - /'earth'/'us'/'seattle'/1]
+      │    │    ├── [/'earth'/'us'/e'seattle\x00'/1 - /'jupiter'/'titan'/'red spot')
+      │    │    ├── [/'jupiter'/'titan'/'red spot'/1 - /'jupiter'/'titan'/'red spot'/1]
+      │    │    └── [/'jupiter'/'titan'/e'red spot\x00'/1 - ]
       │    └── key: (1-4)
       └── filters
            └── val = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
