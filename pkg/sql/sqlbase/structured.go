@@ -2320,6 +2320,27 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
+// CleanColumnFromFamily is nearly identical to RemoveColumnFromFamily, except
+// that it does not remove empty column families. This is because it is possible
+// to RESTORE a table that was mid-way through a column addition/deletion and
+// therefore has partial data for that column. In this case, the column should
+// not appear in the descriptor as it was not fully added at the time of BACKUP,
+// yet the job that was responsible for performing the BACKFILL is not present
+// in the restoring cluster.
+func (desc *MutableTableDescriptor) CleanColumnFromFamily(colID ColumnID) {
+	for i := range desc.Families {
+		for j, c := range desc.Families[i].ColumnIDs {
+			if c == colID {
+				desc.Families[i].ColumnIDs = append(
+					desc.Families[i].ColumnIDs[:j], desc.Families[i].ColumnIDs[j+1:]...)
+				desc.Families[i].ColumnNames = append(
+					desc.Families[i].ColumnNames[:j], desc.Families[i].ColumnNames[j+1:]...)
+				return
+			}
+		}
+	}
+}
+
 // RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
 func (desc *MutableTableDescriptor) RenameColumnDescriptor(

@@ -1643,6 +1643,29 @@ func isDatabaseEmpty(
 	return true, nil
 }
 
+// cleanTableDesc handles the case where a schema change was happening at the
+// time of backup. If a schema change were happening,
+func cleanTableDesc(tableDesc *sqlbase.TableDescriptor) {
+	tableDesc.GCMutations = nil
+	tableDesc.Mutations = nil
+	tableDesc.MutationJobs = nil
+	mutTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tableDesc)
+	for _, m := range tableDesc.Mutations {
+		switch desc := m.Descriptor_.(type) {
+		case *sqlbase.DescriptorMutation_Column:
+			if m.Direction == sqlbase.DescriptorMutation_DROP {
+				// If we're dropping a column, we need to remove references of it from
+				// the column families.
+				col := desc.Column
+				mutTableDesc.CleanColumnFromFamily(col.ID)
+			}
+		default:
+			continue
+		}
+	}
+	tableDesc = &(mutTableDesc.TableDescriptor)
+}
+
 // createImportingTables create the tables that we will restore into. It also
 // fetches the information from the old tables that we need for the restore.
 func createImportingTables(
@@ -1661,6 +1684,7 @@ func createImportingTables(
 	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
+			cleanTableDesc(tableDesc)
 			tables = append(tables, tableDesc)
 			oldTableIDs = append(oldTableIDs, tableDesc.ID)
 		}
