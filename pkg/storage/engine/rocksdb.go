@@ -2509,9 +2509,7 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, 0, nil, nil, err
 	}
 	if !opts.Inconsistent && len(intents) > 0 {
-		// When encountering intents during a consistent scan we still need to
-		// return the resume key.
-		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+		return nil, 0, nil, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	return kvData, numKVs, resumeSpan, intents, nil

@@ -2336,7 +2336,7 @@ func mvccScanToBytes(
 	}
 
 	if !opts.Inconsistent && len(intents) > 0 {
-		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+		return nil, 0, nil, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 	return
 }
