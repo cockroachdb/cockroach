@@ -15,7 +15,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 import { InjectedRouter, Params } from "react-router/lib/Router";
-import { bindActionCreators, Dispatch } from "redux";
 import { createSelector } from "reselect";
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
