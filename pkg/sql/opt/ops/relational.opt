@@ -77,6 +77,10 @@ define ScanPrivate {
     # to constrain the lookup spans further. This flag is used to record telemetry
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
+
+    # Partitioning represents the physical partitioning of data for this scan.
+    # It is used to determine the cost of the scan.
+    Partitioning Partitioning
 }
 
 # VirtualScan returns a result set containing every row in a virtual table.

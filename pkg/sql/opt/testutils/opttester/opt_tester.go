@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	optcluster "github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder" // for ExprFmtHideScalars.
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -81,6 +83,7 @@ type OptTester struct {
 	Flags Flags
 
 	catalog   cat.Catalog
+	cluster   optcluster.Info
 	sql       string
 	ctx       context.Context
 	semaCtx   tree.SemaContext
@@ -157,6 +160,9 @@ type Flags struct {
 	//
 	Locality roachpb.Locality
 
+	// NodeID specifies the ID of the planning node.
+	NodeID roachpb.NodeID
+
 	// Database specifies the current database to use for the query. This field
 	// is only used by the save-tables command when rewriteActualFlag=true.
 	Database string
@@ -176,9 +182,10 @@ type Flags struct {
 
 // New constructs a new instance of the OptTester for the given SQL statement.
 // Metadata used by the SQL query is accessed via the catalog.
-func New(catalog cat.Catalog, sql string) *OptTester {
+func New(catalog cat.Catalog, clusterInfo optcluster.Info, sql string) *OptTester {
 	ot := &OptTester{
 		catalog: catalog,
+		cluster: clusterInfo,
 		sql:     sql,
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(),
@@ -267,6 +274,13 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    The path of the file should be relative to
 //    testutils/opttester/testfixtures.
 //
+//  - node-info
+//
+//    Adds info about nodes in the cluster to the catalog. The input to this
+//    command should be in the form of a JSON array, where each element of the
+//    array specifies info about a single node, and matches the schema defined
+//    in testcat.NodeInfo. This is only available when using a TestCatalog.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -306,6 +320,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    can affect costing when there are multiple possible indexes to choose
 //    from, each in different localities.
 //
+//  - node: used to set the id of the node that plans the query. This id should
+//    match the id of one of the nodes previously added to the catalog using
+//    the node-info command. The choice of planning node can affect costing
+//    when an index is partitioned across multiple nodes.
+//
 //  - database: used to set the current database used by the query. This is
 //    used by the save-tables command when rewriteActualFlag=true.
 //
@@ -339,6 +358,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.Flags.Verbose = testing.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
+	ot.evalCtx.NodeID = ot.Flags.NodeID
 	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
 
 	switch d.Cmd {
@@ -457,6 +477,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "import":
 		ot.Import(tb)
 		return ""
+
+	case "node-info":
+		result, err := ot.NodeInfo(d.Input)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -656,6 +683,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return err
 		}
 
+	case "node":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("node requires one argument")
+		}
+		nodeID, err := strconv.ParseInt(arg.Vals[0], 10, 32)
+		if err != nil {
+			return errors.Wrap(err, "node")
+		}
+		f.NodeID = roachpb.NodeID(nodeID)
+
 	case "database":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("database requires one argument")
@@ -732,7 +769,7 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 // by the optimizer.
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
-	o.Init(&ot.evalCtx, ot.catalog)
+	o.Init(&ot.evalCtx, ot.catalog, ot.cluster)
 	if _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}
@@ -742,7 +779,7 @@ func (ot *OptTester) Memo() (string, error) {
 // Expr parses the input directly into an expression; see exprgen.Build.
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(&ot.evalCtx, ot.catalog, ot.cluster)
 	f.DisableOptimizations()
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
@@ -752,7 +789,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 // normalization; see exprgen.Build.
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(&ot.evalCtx, ot.catalog, ot.cluster)
 
 	f.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		// exprgen.Build doesn't run optimization, so we don't need to explicitly
@@ -1080,7 +1117,7 @@ func (ot *OptTester) Import(tb testing.TB) {
 	}
 	path := filepath.Join(filepath.Dir(optTesterFile), "testfixtures", ot.Flags.File)
 	datadriven.RunTest(tb.(*testing.T), path, func(t *testing.T, d *datadriven.TestData) string {
-		tester := New(ot.catalog, d.Input)
+		tester := New(ot.catalog, ot.cluster, d.Input)
 		return tester.RunCommand(t, d)
 	})
 }
@@ -1126,6 +1163,19 @@ func (ot *OptTester) SaveTables() (opt.Expr, error) {
 	}
 
 	return expr, nil
+}
+
+// NodeInfo adds info about nodes in the cluster to the test cluster. The input
+// to this command should be in the form of a JSON array, where each element of
+// the array specifies info about a single node, and matches the schema defined
+// in testcluster.NodeInfo. This is only available when using a TestCluster.
+func (ot *OptTester) NodeInfo(input string) (string, error) {
+	cluster, ok := ot.cluster.(*testcluster.Cluster)
+	if !ok {
+		return "", fmt.Errorf("node-info can only be used with TestCluster")
+	}
+
+	return cluster.SetNodeInfo(input)
 }
 
 // saveActualTables executes the given query against a running database and
@@ -1281,7 +1331,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
-	o.Init(&ot.evalCtx, ot.catalog)
+	o.Init(&ot.evalCtx, ot.catalog, ot.cluster)
 	return &o
 }
 

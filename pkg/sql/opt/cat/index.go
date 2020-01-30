@@ -165,6 +165,17 @@ type Index interface {
 	//   [ /us/seattle\x00 -               ]
 	//
 	PartitionByListPrefixes() []tree.Datums
+
+	// PartitionCount returns the number of partitions defined on this index.
+	// Each partition consists of a subset of index rows that is disjoint from
+	// the subsets in all other partitions. Each subset is defined by a range of
+	// keys that form a prefix on the index columns. Each partition is associated
+	// with a particular Zone.
+	PartitionCount() int
+
+	// Partition returns the ith partition defined on this index, where
+	// i < PartitionCount.
+	Partition(i int) IndexPartition
 }
 
 // IndexColumn describes a single column that is part of an index definition.

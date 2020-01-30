@@ -36,7 +36,7 @@ func TestSimplifyFilters(t *testing.T) {
 	}
 
 	var f norm.Factory
-	f.Init(&evalCtx, cat)
+	f.Init(&evalCtx, cat, nil /* cluster */)
 
 	tn := tree.NewTableName("t", "a")
 	a := f.Metadata().AddTable(cat.Table(tn), tn)
@@ -99,7 +99,7 @@ func TestCopyAndReplace(t *testing.T) {
 
 	m := o.Factory().DetachMemo()
 
-	o.Init(&evalCtx, cat)
+	o.Init(&evalCtx, cat, nil /* cluster */)
 	var replaceFn norm.ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if e.Op() == opt.PlaceholderOp {

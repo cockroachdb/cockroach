@@ -1,0 +1,192 @@
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c), INDEX c_idx (c))
+----
+
+opt
+SELECT * FROM abcd WHERE c = 1
+----
+index-join abcd
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+ ├── cost: 51.52
+ ├── key: (1,2)
+ ├── fd: ()-->(3), (1,2)-->(4)
+ └── scan abcd@c_idx
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── constraint: /3/1/2: [/1 - /1]
+      ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+      ├── cost: 10.61
+      ├── key: (1,2)
+      └── fd: ()-->(3)
+
+opt
+SELECT * FROM abcd WHERE a = 1 AND c = 1
+----
+index-join abcd
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+ ├── cost: 0.535
+ ├── key: (2)
+ ├── fd: ()-->(1,3), (2)-->(4)
+ └── scan abcd@c_idx
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── constraint: /3/1/2: [/1/1 - /1/1]
+      ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+      ├── cost: 0.116
+      ├── key: (2)
+      └── fd: ()-->(1,3)
+
+node-info
+[
+  {
+    "node_id": 1,
+    "locality": "region=us-east"
+  },
+  {
+    "node_id": 2,
+    "locality": "region=eu-west"
+  }
+]
+----
+
+exec-ddl
+CREATE TABLE abcd_part (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b, c),
+  INDEX c_idx (c) PARTITION BY RANGE (c) (
+    PARTITION c_low VALUES FROM (MINVALUE) TO (100),
+    PARTITION c_high VALUES FROM (100) TO (MAXVALUE)
+  )
+) PARTITION BY RANGE (a) (
+  PARTITION low VALUES FROM (MINVALUE) TO (100),
+  PARTITION high VALUES FROM (100) TO (MAXVALUE)
+);
+----
+
+exec-ddl
+ALTER PARTITION low OF TABLE abcd_part
+    CONFIGURE ZONE USING constraints='[+region=us-east]'
+----
+
+exec-ddl
+ALTER PARTITION high OF TABLE abcd_part
+    CONFIGURE ZONE USING constraints='[+region=eu-west]'
+----
+
+exec-ddl
+ALTER PARTITION c_low OF INDEX abcd_part@c_idx
+    CONFIGURE ZONE USING constraints='[+region=eu-west]'
+----
+
+exec-ddl
+ALTER PARTITION c_high OF INDEX abcd_part@c_idx
+    CONFIGURE ZONE USING constraints='[+region=us-east]'
+----
+
+exec-ddl
+SHOW CREATE abcd_part
+----
+TABLE abcd_part
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d int
+ ├── INDEX primary
+ │    ├── a int not null
+ │    ├── b int not null
+ │    ├── c int not null
+ │    └── partitioning
+ │         ├── from:[] to:[100]
+ │         │    └── ZONE
+ │         │         └── constraints: [+region=us-east]
+ │         └── from:[100] to:[]
+ │              └── ZONE
+ │                   └── constraints: [+region=eu-west]
+ └── INDEX c_idx
+      ├── c int not null
+      ├── a int not null
+      ├── b int not null
+      └── partitioning
+           ├── from:[] to:[100]
+           │    └── ZONE
+           │         └── constraints: [+region=eu-west]
+           └── from:[100] to:[]
+                └── ZONE
+                     └── constraints: [+region=us-east]
+
+# Both partitions are remote.
+opt node=1
+SELECT * FROM abcd_part WHERE a = 200 AND c = 1
+----
+index-join abcd_part
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+ ├── cost: 40.535
+ ├── key: (2)
+ ├── fd: ()-->(1,3), (2)-->(4)
+ └── scan abcd_part@c_idx
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── constraint: /3/1/2: [/1/200 - /1/200]
+      ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+      ├── cost: 40.116
+      ├── key: (2)
+      └── fd: ()-->(1,3)
+
+# Both partitions are local.
+opt node=1
+SELECT * FROM abcd_part WHERE a = 1 AND c = 200
+----
+index-join abcd_part
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+ ├── cost: 0.535
+ ├── key: (2)
+ ├── fd: ()-->(1,3), (2)-->(4)
+ └── scan abcd_part@c_idx
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── constraint: /3/1/2: [/200/1 - /200/1]
+      ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+      ├── cost: 0.116
+      ├── key: (2)
+      └── fd: ()-->(1,3)
+
+# The c_idx partition is local and the primary partition is remote.
+opt node=1
+SELECT * FROM abcd_part WHERE a = 200 AND c = 200
+----
+index-join abcd_part
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+ ├── cost: 40.535
+ ├── key: (2)
+ ├── fd: ()-->(1,3), (2)-->(4)
+ └── scan abcd_part@c_idx
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── constraint: /3/1/2: [/200/200 - /200/200]
+      ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+      ├── cost: 0.116
+      ├── key: (2)
+      └── fd: ()-->(1,3)
+
+# The primary partition is local and the c_idx partition is remote.
+opt node=1
+SELECT * FROM abcd_part WHERE a = 1 AND c = 1
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── stats: [rows=0.1, distinct(1)=0.1, null(1)=0, distinct(3)=0.1, null(3)=0]
+ ├── cost: 10.92
+ ├── key: (2)
+ ├── fd: ()-->(1,3), (2)-->(4)
+ ├── scan abcd_part
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ │    ├── constraint: /1/2/3: [/1 - /1]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ │    ├── cost: 10.81
+ │    ├── key: (2,3)
+ │    └── fd: ()-->(1), (2,3)-->(4)
+ └── filters
+      └── c = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]

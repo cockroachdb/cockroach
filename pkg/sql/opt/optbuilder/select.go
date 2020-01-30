@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -477,6 +478,10 @@ func (b *Builder) buildScan(
 		// Virtual tables should not be collected as view dependencies.
 	} else {
 		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
+		private.Partitioning = physical.NewPartitioning(
+			b.evalCtx, b.factory.Metadata(), tabMeta.Table.Index(cat.PrimaryIndex),
+		)
+
 		if indexFlags != nil {
 			private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 			if indexFlags.Index != "" || indexFlags.IndexID != 0 {

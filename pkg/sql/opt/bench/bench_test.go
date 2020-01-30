@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -332,6 +333,7 @@ type harness struct {
 	evalCtx   tree.EvalContext
 	prepMemo  *memo.Memo
 	cat       *testcat.Catalog
+	clust     *testcluster.Cluster
 	optimizer xform.Optimizer
 
 	s  serverutils.TestServerInterface
@@ -466,6 +468,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 	h.evalCtx = tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	h.prepMemo = nil
 	h.cat = nil
+	h.clust = nil
 	h.optimizer = xform.Optimizer{}
 
 	// Set up the catalog.
@@ -476,6 +479,9 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			tb.Fatalf("%v", err)
 		}
 	}
+
+	// Set up the cluster.
+	h.clust = testcluster.New()
 
 	if err := h.semaCtx.Placeholders.Init(len(h.query.args), nil /* typeHints */); err != nil {
 		tb.Fatal(err)
@@ -537,7 +543,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 		return
 	}
 
-	h.optimizer.Init(&h.evalCtx, h.cat)
+	h.optimizer.Init(&h.evalCtx, h.cat, h.clust)
 	if bmType == OptBuild {
 		h.optimizer.DisableOptimizations()
 	}

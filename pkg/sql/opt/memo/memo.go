@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -175,6 +176,12 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 
 	m.curID = 0
 	m.curWithID = 0
+}
+
+// AddClusterInfo adds information about the CockroachDB cluster to the
+// metadata.
+func (m *Memo) AddClusterInfo(cluster cluster.Info) {
+	m.metadata.AddClusterInfo(cluster)
 }
 
 // NotifyOnNewGroup sets a callback function which is invoked each time we

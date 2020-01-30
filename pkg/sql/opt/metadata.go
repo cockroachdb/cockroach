@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,6 +91,10 @@ type Metadata struct {
 	// needed for EXPLAIN (opt, env).
 	views []cat.View
 
+	// neighborhoods stores information about each metadata neighborhood, indexed
+	// by NeighborhoodID.index().
+	neighborhoods []NeighborhoodMeta
+
 	// currUniqueID is the highest UniqueID that has been assigned.
 	currUniqueID UniqueID
 
@@ -155,6 +160,11 @@ func (md *Metadata) Init() {
 	}
 	md.views = md.views[:0]
 
+	for i := range md.neighborhoods {
+		md.neighborhoods[i] = NeighborhoodMeta{}
+	}
+	md.neighborhoods = md.neighborhoods[:0]
+
 	md.currUniqueID = 0
 }
 
@@ -183,6 +193,7 @@ func (md *Metadata) CopyFrom(from *Metadata) {
 	md.sequences = append(md.sequences, from.sequences...)
 	md.deps = append(md.deps, from.deps...)
 	md.views = append(md.views, from.views...)
+	md.neighborhoods = append(md.neighborhoods, from.neighborhoods...)
 	md.currUniqueID = from.currUniqueID
 }
 
@@ -328,12 +339,12 @@ func (md *Metadata) AllTables() []TableMeta {
 	return md.tables
 }
 
-// TableByStableID looks up the catalog table associated with the given
+// TableByStableID looks up the table associated with the given
 // StableID (unique across all tables and stable across queries).
-func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
-	for _, mdTab := range md.tables {
-		if mdTab.Table.ID() == id {
-			return mdTab.Table
+func (md *Metadata) TableByStableID(id cat.StableID) *TableMeta {
+	for i := range md.tables {
+		if md.tables[i].Table.ID() == id {
+			return &md.tables[i]
 		}
 	}
 	return nil
@@ -496,3 +507,32 @@ func (md *Metadata) AllViews() []cat.View {
 // WithID=0 is reserved to mean "unknown expression".
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
+
+// AddClusterInfo adds information about the CockroachDB cluster to the
+// metadata.
+func (md *Metadata) AddClusterInfo(cluster cluster.Info) {
+	if cluster == nil {
+		return
+	}
+
+	md.neighborhoods = make([]NeighborhoodMeta, cluster.NeighborhoodCount())
+	for i := range md.neighborhoods {
+		clustNeighborhood := cluster.Neighborhood(i)
+		md.neighborhoods[i] = NeighborhoodMeta{
+			MetaID:       makeNeighborhoodID(i),
+			Neighborhood: clustNeighborhood,
+		}
+	}
+}
+
+// NeighborhoodMeta looks up the metadata for the neighborhood associated with
+// the given neighborhood id.
+func (md *Metadata) NeighborhoodMeta(neighborhoodID NeighborhoodID) *NeighborhoodMeta {
+	return &md.neighborhoods[neighborhoodID.index()]
+}
+
+// AllNeighborhoods returns the metadata for all neighborhoods. The result must
+// not be modified.
+func (md *Metadata) AllNeighborhoods() []NeighborhoodMeta {
+	return md.neighborhoods
+}
