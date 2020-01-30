@@ -98,7 +98,8 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := colexec.NewColOperator(ctx, flowCtx, args)
+				var result colexec.NewColOperatorResult
+				err := colexec.NewColOperator(ctx, flowCtx, args, &result)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -218,7 +219,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// accounts, so if the spilling is supported, we do *not* want to use
 				// streaming memory account.
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
-				result, err := colexec.NewColOperator(ctx, flowCtx, args)
+				var result colexec.NewColOperatorResult
+				err := colexec.NewColOperator(ctx, flowCtx, args, &result)
 				require.NoError(t, err)
 				err = execerror.CatchVectorizedRuntimeError(func() {
 					result.Op.Init()

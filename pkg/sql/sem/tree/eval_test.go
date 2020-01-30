@@ -223,7 +223,8 @@ func TestEval(t *testing.T) {
 				StreamingMemAccount: &acc,
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-			result, err := colexec.NewColOperator(ctx, flowCtx, args)
+			var result colexec.NewColOperatorResult
+			err = colexec.NewColOperator(ctx, flowCtx, args, &result)
 			if testutils.IsError(err, "unable to columnarize") {
 				// Skip this test as execution is not supported by the vectorized
 				// engine.

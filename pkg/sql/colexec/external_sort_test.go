@@ -257,6 +257,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
-	result, err := NewColOperator(ctx, flowCtx, args)
+	var result NewColOperatorResult
+	err := NewColOperator(ctx, flowCtx, args, &result)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }

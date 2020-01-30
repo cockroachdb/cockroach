@@ -119,8 +119,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	if args.memoryLimit > 0 {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
-	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
-	if err != nil {
+	var result colexec.NewColOperatorResult
+	if err = colexec.NewColOperator(ctx, flowCtx, constructorArgs, &result); err != nil {
 		return err
 	}
 	defer func() {

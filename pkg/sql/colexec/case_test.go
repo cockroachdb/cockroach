@@ -88,8 +88,8 @@ func TestCaseOp(t *testing.T) {
 				StreamingMemAccount: testMemAcc,
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-			result, err := NewColOperator(ctx, flowCtx, args)
-			if err != nil {
+			var result NewColOperatorResult
+			if err := NewColOperator(ctx, flowCtx, args, &result); err != nil {
 				return nil, err
 			}
 			return result.Op, nil

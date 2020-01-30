@@ -355,9 +355,16 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 }
 
 // NewColOperator creates a new columnar operator according to the given spec.
+// Note that the operator is returned as part of passed in `result`. This is
+// done so that in case this function panics, any memory monitoring
+// infrastructure created before the panic is not orphaned and can be correctly
+// cleaned up.
 func NewColOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
-) (result NewColOperatorResult, err error) {
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	args NewColOperatorArgs,
+	result *NewColOperatorResult,
+) error {
 	spec := args.Spec
 	inputs := args.Inputs
 	streamingMemAccount := args.StreamingMemAccount
@@ -384,16 +391,16 @@ func NewColOperator(
 		// around a planNode) because it creates complications, and a flow with
 		// such processor probably will not benefit from the vectorization.
 		if core.LocalPlanNode != nil {
-			return result, errors.Newf("core.LocalPlanNode is not supported")
+			return errors.Newf("core.LocalPlanNode is not supported")
 		}
 		// We also do not wrap MetadataTest{Sender,Receiver} because of the way
 		// metadata is propagated through the vectorized flow - it is drained at
 		// the flow shutdown unlike these test processors expect.
 		if core.MetadataTestSender != nil {
-			return result, errors.Newf("core.MetadataTestSender is not supported")
+			return errors.Newf("core.MetadataTestSender is not supported")
 		}
 		if core.MetadataTestReceiver != nil {
-			return result, errors.Newf("core.MetadataTestReceiver is not supported")
+			return errors.Newf("core.MetadataTestReceiver is not supported")
 		}
 
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
@@ -454,18 +461,18 @@ func NewColOperator(
 		switch {
 		case core.Noop != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 			result.Op, result.IsStreaming = NewNoop(inputs[0]), true
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 		case core.TableReader != nil:
 			if err := checkNumIn(inputs, 0); err != nil {
-				return result, err
+				return err
 			}
 			var scanOp *colBatchScan
 			scanOp, err = newColBatchScan(NewAllocator(ctx, streamingMemAccount), flowCtx, core.TableReader, post)
 			if err != nil {
-				return result, err
+				return err
 			}
 			result.Op, result.IsStreaming = scanOp, true
 			result.MetadataSources = append(result.MetadataSources, scanOp)
@@ -484,7 +491,7 @@ func NewColOperator(
 			result.ColumnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 		case core.Aggregator != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 			aggSpec := core.Aggregator
 			if len(aggSpec.Aggregations) == 0 {
@@ -526,7 +533,7 @@ func NewColOperator(
 				groupCols.Add(int(col))
 			}
 			if !orderedCols.SubsetOf(groupCols) {
-				return result, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+				return errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
 			}
 
 			aggTyps := make([][]types.T, len(aggSpec.Aggregations))
@@ -542,14 +549,14 @@ func NewColOperator(
 				aggFns[i] = agg.Func
 				_, retType, err := execinfrapb.GetAggregateInfo(agg.Func, aggTyps[i]...)
 				if err != nil {
-					return result, err
+					return err
 				}
 				result.ColumnTypes[i] = *retType
 			}
 			var typs []coltypes.T
 			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
-				return result, err
+				return err
 			}
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
@@ -570,7 +577,7 @@ func NewColOperator(
 
 		case core.Distinct != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 
 			var distinctCols, orderedCols util.FastIntSet
@@ -586,14 +593,14 @@ func NewColOperator(
 				}
 			}
 			if !orderedCols.SubsetOf(distinctCols) {
-				return result, errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
+				return errors.AssertionFailedf("ordered cols must be a subset of distinct cols")
 			}
 
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			var typs []coltypes.T
 			typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
 			if err != nil {
-				return result, err
+				return err
 			}
 			// TODO(yuzefovich): implement the distinct on partially ordered columns.
 			if allSorted {
@@ -607,7 +614,7 @@ func NewColOperator(
 			}
 		case core.Ordinality != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
 			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx), true
@@ -660,13 +667,13 @@ func NewColOperator(
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, args, &planningState,
+				ctx, result, flowCtx, args, &planningState,
 				core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
 			)
 
 		case core.MergeJoiner != nil:
 			if core.MergeJoiner.Type.IsSetOpJoin() {
-				return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
+				return errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 			}
 			// Merge joiner is a streaming operator when equality columns form a key
 			// for both of the inputs.
@@ -741,19 +748,19 @@ func NewColOperator(
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, args, &planningState,
+				ctx, result, flowCtx, args, &planningState,
 				core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
 			)
 
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 			input := inputs[0]
 			var inputTypes []coltypes.T
 			inputTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
-				return result, err
+				return err
 			}
 			orderingCols := core.Sorter.OutputOrdering.Columns
 			matchLen := core.Sorter.OrderingMatchLen
@@ -795,7 +802,7 @@ func NewColOperator(
 					NewAllocator(ctx, sorterMemAccount), input, inputTypes, orderingCols,
 				)
 				if err != nil {
-					return result, err
+					return err
 				}
 				result.Op = newOneInputDiskSpiller(
 					input, inMemorySorter.(bufferingInMemoryOperator),
@@ -827,14 +834,14 @@ func NewColOperator(
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
-				return result, err
+				return err
 			}
 			wf := core.Windower.WindowFns[0]
 			input := inputs[0]
 			var typs []coltypes.T
 			typs, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 			if err != nil {
-				return result, err
+				return err
 			}
 			tempPartitionColOffset, partitionColIdx := 0, -1
 			if len(core.Windower.PartitionBy) > 0 {
@@ -865,7 +872,7 @@ func NewColOperator(
 				// omitted, the window function operator is actually streaming.
 			}
 			if err != nil {
-				return result, err
+				return err
 			}
 
 			orderingCols := make([]uint32, len(wf.Ordering.Columns))
@@ -895,12 +902,12 @@ func NewColOperator(
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 		default:
-			return result, errors.Newf("unsupported processor core %q", core)
+			return errors.Newf("unsupported processor core %q", core)
 		}
 	}
 
 	if err != nil {
-		return result, err
+		return err
 	}
 
 	// After constructing the base operator, calculate its internal memory usage.
@@ -917,9 +924,9 @@ func NewColOperator(
 			ctx, flowCtx.NewEvalCtx(), post.Filter,
 			planningState.postFilterPlanning.indexVarMap, streamingMemAccount,
 		); err != nil {
-			return result, err
+			return err
 		}
-		planningState.postFilterPlanning.projectOutExtraCols(&result)
+		planningState.postFilterPlanning.projectOutExtraCols(result)
 	}
 	if post.Projection {
 		if len(planningState.postJoinerProjection) > 0 {
@@ -937,17 +944,17 @@ func NewColOperator(
 			)
 			err := helper.Init(expr, result.ColumnTypes, flowCtx.EvalCtx)
 			if err != nil {
-				return result, err
+				return err
 			}
 			var outputIdx int
 			result.Op, outputIdx, result.ColumnTypes, renderInternalMem, err = planProjectionOperators(
 				ctx, flowCtx.NewEvalCtx(), helper.Expr, result.ColumnTypes, result.Op, streamingMemAccount,
 			)
 			if err != nil {
-				return result, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return result, errors.AssertionFailedf("missing outputIdx")
+				return errors.AssertionFailedf("missing outputIdx")
 			}
 			result.InternalMemUsage += renderInternalMem
 			renderedCols = append(renderedCols, uint32(outputIdx))
@@ -965,7 +972,7 @@ func NewColOperator(
 	if post.Limit != 0 {
 		result.Op = NewLimitOp(result.Op, post.Limit)
 	}
-	return result, err
+	return err
 }
 
 type filterPlanningState struct {

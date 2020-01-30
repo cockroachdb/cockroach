@@ -950,8 +950,8 @@ func TestHashJoiner(t *testing.T) {
 						StreamingMemAccount: testMemAcc,
 					}
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-					result, err := NewColOperator(ctx, flowCtx, args)
-					if err != nil {
+					var result NewColOperatorResult
+					if err := NewColOperator(ctx, flowCtx, args, &result); err != nil {
 						return nil, err
 					}
 					if hj, ok := result.Op.(*hashJoinEqOp); ok {
@@ -1168,7 +1168,8 @@ func TestHashJoinerProjection(t *testing.T) {
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-	hjOp, err := NewColOperator(ctx, flowCtx, args)
+	var hjOp NewColOperatorResult
+	err := NewColOperator(ctx, flowCtx, args, &hjOp)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for {

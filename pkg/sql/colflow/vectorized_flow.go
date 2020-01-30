@@ -718,9 +718,21 @@ func (s *vectorizedFlowCreator) setupFlow(
 			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 			ProcessorConstructor: rowexec.NewProcessor,
 		}
-		result, err := colexec.NewColOperator(ctx, flowCtx, args)
+		var (
+			result            colexec.NewColOperatorResult
+			newColOperatorErr error
+			err               error
+		)
+		// The constructor can result in a panic, so we wrap it with a panic
+		// catcher.
+		err = execerror.CatchVectorizedRuntimeError(func() {
+			newColOperatorErr = colexec.NewColOperator(ctx, flowCtx, args, &result)
+		})
+		if err == nil {
+			err = newColOperatorErr
+		}
 		// Even when err is non-nil, it is possible that the buffering memory
-		// monitor and account have been created, so we always want to accumulate
+		// monitors and accounts have been created, so we always want to accumulate
 		// them for a proper cleanup.
 		s.bufferingMemMonitors = append(s.bufferingMemMonitors, result.BufferingOpMemMonitors...)
 		s.bufferingMemAccounts = append(s.bufferingMemAccounts, result.BufferingOpMemAccounts...)
