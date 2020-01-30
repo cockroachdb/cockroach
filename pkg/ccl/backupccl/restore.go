@@ -1853,7 +1853,12 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
-func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
+}
+
+// dropTables implements the OnFailOrCancel logic.
+func (r *restoreResumer) dropTables(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// No need to mark the tables as dropped if they were not even created in the

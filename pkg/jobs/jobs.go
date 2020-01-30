@@ -72,11 +72,18 @@ const (
 	StatusPaused Status = "paused"
 	// StatusFailed is for jobs that failed.
 	StatusFailed Status = "failed"
+	// StatusReverting is for jobs that failed or were canceled and their changes are being
+	// being reverted.
+	StatusReverting Status = "reverting"
 	// StatusSucceeded is for jobs that have successfully completed.
 	StatusSucceeded Status = "succeeded"
 	// StatusCanceled is for jobs that were explicitly canceled by the user and
 	// cannot be resumed.
 	StatusCanceled Status = "canceled"
+	// StatusCancelRequested is for jobs that were requested to be canceled by
+	// the user but may be still running Resume. The node that is running the job
+	// will change it to StatusReverting the next time it runs maybeAdoptJobs.
+	StatusCancelRequested Status = "cancel-requested"
 )
 
 // Terminal returns whether this status represents a "terminal" state: a state
@@ -284,6 +291,9 @@ func (j *Job) paused(ctx context.Context) error {
 			// Already paused - do nothing.
 			return nil
 		}
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
+		}
 		if md.Status.Terminal() {
 			return &InvalidStatusError{*j.ID(), md.Status, "pause", md.Payload.Error}
 		}
@@ -316,20 +326,59 @@ func (j *Job) resumed(ctx context.Context) error {
 	})
 }
 
-// Canceled sets the status of the tracked job to canceled. It does not directly
-// cancel the job; like job.Paused, it expects the job to call job.Progressed
-// soon, observe a "job is canceled" error, and abort further work.
+// CancelRequested sets the status of the tracked job to cancel-requested. It
+// does not directly cancel the job; like job.Paused, it expects the job to call
+// job.Progressed soon, observe a "job is cancel-requested" error, and abort.
+// Further the node the runs the job will actively cancel it when it notices
+// that it is in state StatusCancelRequested and will move it to state
+// StatusReverting.
+func (j *Job) cancelRequested(
+	ctx context.Context, fn func(context.Context, *client.Txn) error,
+) error {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusCancelRequested {
+			return nil
+		}
+		if md.Status != StatusPending && md.Status != StatusRunning && md.Status != StatusPaused {
+			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusCancelRequested)
+		return nil
+	})
+}
+
+// Reverted sets the status of the tracked job to reverted.
+func (j *Job) Reverted(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusReverting {
+			return nil
+		}
+		if md.Status != StatusCancelRequested && md.Status != StatusRunning && md.Status != StatusPending {
+			return fmt.Errorf("job with status %s cannot be reverted", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusReverting)
+		return nil
+	})
+}
+
+// Canceled sets the status of the tracked job to cancel.
 func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusCanceled {
-			// Already canceled - do nothing.
 			return nil
 		}
-		if md.Status != StatusPaused && md.Status.Terminal() {
-			if md.Payload.Error != "" {
-				return fmt.Errorf("job with status %s %q cannot be canceled", md.Status, md.Payload.Error)
-			}
-			return fmt.Errorf("job with status %s cannot be canceled", md.Status)
+		if md.Status != StatusReverting {
+			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
@@ -343,21 +392,20 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn
 	})
 }
 
-// NoopFn is an empty function that can be used for Failed and Succeeded. It indicates
-// no transactional callback should be made during these operations.
-var NoopFn = func(context.Context, *client.Txn) error { return nil }
-
 // Failed marks the tracked job as having failed with the given error.
 func (j *Job) Failed(
 	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
 ) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		// TODO(spaskob): should we fail if the terminal state is not StatusFailed?
 		if md.Status.Terminal() {
 			// Already done - do nothing.
 			return nil
 		}
-		if err := fn(ctx, txn); err != nil {
-			return err
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
 		}
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
@@ -373,12 +421,15 @@ func (j *Job) Failed(
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		// TODO(spaskob): should we fail if the terminal state is not StatusSucceeded?
 		if md.Status.Terminal() {
 			// Already done - do nothing.
 			return nil
 		}
-		if err := fn(ctx, txn); err != nil {
-			return err
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
 		}
 		ju.UpdateStatus(StatusSucceeded)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
@@ -519,16 +570,19 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Status != StatusRunning && md.Status != StatusPending {
-			return errors.Errorf("job %d has status %v which is not elligible for adopting", *j.ID(), md.Status)
-		}
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",
 				md.Payload.Lease, oldLease)
 		}
 		md.Payload.Lease = j.registry.newLease()
 		ju.UpdatePayload(md.Payload)
-		ju.UpdateStatus(StatusRunning)
+		// Jobs in states running or pending are adopted as running.
+		newStatus := StatusRunning
+		if md.Status == StatusCancelRequested {
+			// CancelRequested jobs are adopted as reverting.
+			newStatus = StatusReverting
+		}
+		ju.UpdateStatus(newStatus)
 		return nil
 	})
 }

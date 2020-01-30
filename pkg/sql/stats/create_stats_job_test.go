@@ -78,8 +78,8 @@ func TestCreateStatsControlJob(t *testing.T) {
 
 		if _, err := jobutils.RunJob(
 			t, sqlDB, &allowRequest, []string{"cancel"}, query,
-		); !testutils.IsError(err, "job canceled") {
-			t.Fatalf("expected 'job canceled' error, but got %+v", err)
+		); !testutils.IsError(err, "cancel-requested") {
+			t.Fatalf("expected 'cancel-requested' error, but got %+v", err)
 		}
 
 		// There should be no results here.
