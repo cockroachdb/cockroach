@@ -200,18 +200,21 @@ type Reader interface {
 	// within the interval is exported. Deletions are included if all revisions are
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
+	//
 	// If targetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will produce SSTs which contain
-	// all relevant versions of a key and will not add the first version of a new
-	// key if it would lead to the SST exceeding the targetSize. If exportAllRevisions
-	// is false, the returned SST will be smaller than target_size so long as the first
-	// kv pair is smaller than targetSize. If exportAllRevisions is true then
-	// targetSize may be exceeded by as much as the size of all of the versions of
-	// the last key. If the SST construction stops due to the targetSize,
-	// then a non-nil resumeKey will be returned.
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
+	//
+	// If maxSize is positive, it is an absolute maximum on byte size for the
+	// returned sst. If it is the case that the versions of the last key will lead
+	// to an SST that exceeds maxSize, an error will be returned. This parameter
+	// exists to prevent creating SSTs which are too large to be used.
 	ExportToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, io IterOptions,
+		exportAllRevisions bool, targetSize uint64, maxSize uint64,
+		io IterOptions,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise.
 	//

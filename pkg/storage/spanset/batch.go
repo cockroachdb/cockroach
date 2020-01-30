@@ -284,10 +284,10 @@ func (s spanSetReader) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io engine.IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	return s.r.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
 func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {

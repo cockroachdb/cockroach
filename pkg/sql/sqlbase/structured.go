@@ -2808,6 +2808,20 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 	return false
 }
 
+// IsPrimaryIndexDefaultRowID returns whether or not the table's primary
+// index is the default primary key on the hidden rowid column.
+func (desc *TableDescriptor) IsPrimaryIndexDefaultRowID() bool {
+	if len(desc.PrimaryIndex.ColumnIDs) != 1 {
+		return false
+	}
+	col, err := desc.FindColumnByID(desc.PrimaryIndex.ColumnIDs[0])
+	if err != nil {
+		// Should never be in this case.
+		panic(err)
+	}
+	return col.Hidden && col.Name == "rowid"
+}
+
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
 // There are three Validity types for the mutations:
 // Validated   - The constraint has already been added and validated, should
