@@ -329,7 +329,7 @@ distinct-on
  ├── ordering: +4,+2
  └── sort
       ├── columns: b:2(int!null) d:4(int!null) x:5(int!null)
-      ├── ordering: +4,+2
+      ├── ordering: +4,+2 opt(5)
       └── project
            ├── columns: x:5(int!null) b:2(int!null) d:4(int!null)
            ├── scan abcd
