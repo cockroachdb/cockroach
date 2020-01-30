@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -552,6 +553,9 @@ type ExecutorConfig struct {
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
+
+	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
+	ProtectedTimestampProvider protectedts.Provider
 }
 
 // Organization returns the value of cluster.organization.
@@ -843,6 +847,18 @@ func (p *planner) EvalAsOfTimestamp(asOf tree.AsOfClause) (_ hlc.Timestamp, err 
 }
 
 // ParseHLC parses a string representation of an `hlc.Timestamp`.
+// This differs from hlc.ParseTimestamp in that it parses the decimal
+// serialization of an hlc timestamp as opposed to the string serialization
+// performed by hlc.Timestamp.String().
+//
+// This function is used to parse:
+//
+//   1580361670629466905.0000000001
+//
+// hlc.ParseTimestamp() would be used to parse:
+//
+//   1580361670.629466905,1
+//
 func ParseHLC(s string) (hlc.Timestamp, error) {
 	dec, _, err := apd.NewFromString(s)
 	if err != nil {

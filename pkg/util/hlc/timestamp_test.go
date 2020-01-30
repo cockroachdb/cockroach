@@ -132,6 +132,38 @@ func TestTimestampString(t *testing.T) {
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.exp, c.ts.String())
+		parsed, err := ParseTimestamp(c.ts.String())
+		assert.NoError(t, err)
+		assert.Equal(t, c.ts, parsed)
+	}
+}
+
+func TestParseTimestamp(t *testing.T) {
+	for _, c := range []struct {
+		s      string
+		expErr string
+	}{
+		{
+			"asdf",
+			"failed to parse \"asdf\" as Timestamp",
+		},
+		{
+			"-1.-1,0",
+			"failed to parse \"-1.-1,0\" as Timestamp",
+		},
+		{
+			"9999999999999999999,0",
+			"failed to parse \"9999999999999999999,0\" as Timestamp: strconv.ParseInt: parsing \"9999999999999999999\": value out of range",
+		},
+		{
+			"1.9999999999999999999,0",
+			"failed to parse \"1.9999999999999999999,0\" as Timestamp: strconv.ParseInt: parsing \"9999999999999999999\": value out of range",
+		},
+	} {
+		_, err := ParseTimestamp(c.s)
+		if assert.Error(t, err) {
+			assert.Regexp(t, c.expErr, err.Error())
+		}
 	}
 }
 

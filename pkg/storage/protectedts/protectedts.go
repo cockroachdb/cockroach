@@ -113,6 +113,8 @@ type Cache interface {
 	// Nil values for from or to are equivalent to Key{}. The order of records
 	// between independent calls to Iterate is not defined; the order of records
 	// may differ even for the same key range that occurs at the same timestamp.
+	// The Records passed to the iterator are safe to be retained but must not be
+	// modified.
 	Iterate(_ context.Context, from, to roachpb.Key, it Iterator) (asOf hlc.Timestamp)
 
 	// QueryRecord determines whether a Record with the provided ID exists in
