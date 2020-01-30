@@ -75,10 +75,6 @@ message ResponseHeader {
     // The spanning operation didn't finish because the key limit was
     // exceeded.
     RESUME_KEY_LIMIT = 1;
-    // The spanning operation didn't finish because a range boundary
-    // was encountered and the command was configured to stop at range
-    // boundaries.
-    RESUME_RANGE_BOUNDARY = 2;
   }
 
   // txn is non-nil if the request specified a non-nil transaction.
