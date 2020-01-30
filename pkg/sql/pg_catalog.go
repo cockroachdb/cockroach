@@ -911,7 +911,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
-					oid = h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
+					oid = h.ForeignKeyConstraintOid(db, scName, table, con.FK)
 					contype = conTypeFK
 					// Foreign keys don't have a single linked index. Pick the first one
 					// that matches on the referenced table.
@@ -1209,7 +1209,7 @@ CREATE TABLE pg_catalog.pg_depend (
 				} else {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db, tree.PublicSchema, table, con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db, scName, table, con.FK)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid

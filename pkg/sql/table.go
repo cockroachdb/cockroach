@@ -139,6 +139,11 @@ type TableCollection struct {
 	// These are purged at the same time as allDescriptors.
 	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
 
+	// cachedDatabaseToSchemas is a mapping between all available schemas
+	// keyed by database.
+	// These are purged at the same time as allDescriptors.
+	cachedDatabaseToSchemas map[sqlbase.ID]map[sqlbase.ID]string
+
 	// settings are required to correctly resolve system.namespace accesses in
 	// mixed version (19.2/20.1) clusters.
 	// TODO(solon): This field could maybe be removed in 20.2.
@@ -662,11 +667,31 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 	return tc.allDatabaseDescriptors, nil
 }
 
+// getSchemasForDatabase returns the schemas for a given database
+// visible by the transaction. This uses the schema cache locally
+// if possible, or else performs a scan on kv.
+func (tc *TableCollection) getSchemasForDatabase(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
+) (map[sqlbase.ID]string, error) {
+	if tc.cachedDatabaseToSchemas == nil {
+		tc.cachedDatabaseToSchemas = make(map[sqlbase.ID]map[sqlbase.ID]string)
+	}
+	if _, ok := tc.cachedDatabaseToSchemas[dbID]; !ok {
+		var err error
+		tc.cachedDatabaseToSchemas[dbID], err = GetSchemasForDatabase(ctx, txn, dbID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return tc.cachedDatabaseToSchemas[dbID], nil
+}
+
 // releaseAllDescriptors releases the cached slice of all descriptors
 // held by TableCollection.
 func (tc *TableCollection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
 	tc.allDatabaseDescriptors = nil
+	tc.cachedDatabaseToSchemas = nil
 }
 
 // Copy the modified schema to the table collection. Used when initializing
