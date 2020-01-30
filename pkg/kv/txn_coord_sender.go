@@ -306,9 +306,15 @@ func (tc *TxnCoordSender) connectInterceptors() {
 func newLeafTxnCoordSender(
 	tcf *TxnCoordSenderFactory, tis *roachpb.LeafTxnInputState,
 ) client.TxnSender {
-	tis.Txn.AssertInitialized(context.TODO())
+	txn := &tis.Txn
+	txn.AssertInitialized(context.TODO())
 
-	if tis.Txn.Status != roachpb.PENDING {
+	// Deal with requests from 19.2 nodes which did not set ReadTimestamp.
+	if txn.ReadTimestamp.Less(txn.DeprecatedOrigTimestamp) {
+		txn.ReadTimestamp = txn.DeprecatedOrigTimestamp
+	}
+
+	if txn.Status != roachpb.PENDING {
 		log.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
 	}
 
@@ -330,7 +336,7 @@ func newLeafTxnCoordSender(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen = ds.rangeIteratorGen
 	}
-	tcs.initCommonInterceptors(tcf, &tis.Txn, client.LeafTxn, riGen)
+	tcs.initCommonInterceptors(tcf, txn, client.LeafTxn, riGen)
 
 	// Per-interceptor leaf initialization. If/when more interceptors
 	// need leaf initialization, this should be turned into an interface
@@ -369,7 +375,7 @@ func newLeafTxnCoordSender(
 
 	tcs.connectInterceptors()
 
-	tcs.mu.txn.Update(&tis.Txn)
+	tcs.mu.txn.Update(txn)
 	return tcs
 }
 

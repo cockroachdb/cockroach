@@ -142,13 +142,21 @@ func (sr *txnSpanRefresher) SendLocked(
 		// refreshes shouldn't check values below batchReadTimestamp, so initialize
 		// sr.refreshedTimestamp.
 		sr.refreshedTimestamp = batchReadTimestamp
+	} else if batchReadTimestamp.Less(sr.refreshedTimestamp) {
+		// sr.refreshedTimestamp might be ahead of batchReadTimestamp. We want to
+		// read at the latest refreshed timestamp, so bump the batch.
+		// batchReadTimestamp can be behind after a successful refresh, if the
+		// TxnCoordSender hasn't actually heard about the updated read timestamp.
+		// This can happen if a refresh succeeds, but then the retry of the batch
+		// that produced the timestamp fails without returning the update txn (for
+		// example, through a canceled ctx). The client should only be sending
+		// rollbacks in such cases.
+		ba.Txn.ReadTimestamp.Forward(sr.refreshedTimestamp)
+		ba.Txn.WriteTimestamp.Forward(sr.refreshedTimestamp)
 	} else if sr.refreshedTimestamp != batchReadTimestamp {
-		// Sanity check: we're supposed to control the read timestamp. What we're
-		// tracking in sr.refreshedTimestamp is not supposed to get out of sync
-		// with what batches use (which comes from tc.mu.txn).
 		return nil, roachpb.NewError(errors.AssertionFailedf(
-			"unexpected batch read timestamp: %s. Expected refreshed timestamp: %s. ba: %s",
-			batchReadTimestamp, sr.refreshedTimestamp, ba))
+			"unexpected batch read timestamp: %s. Expected refreshed timestamp: %s. ba: %s. txn: %s",
+			batchReadTimestamp, sr.refreshedTimestamp, ba, ba.Txn))
 	}
 
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
