@@ -321,12 +321,6 @@ func RaftHardStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftHardStateKey()
 }
 
-// RaftLastIndexKey returns a system-local key for the last index of the
-// Raft log.
-func RaftLastIndexKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftLastIndexKey()
-}
-
 // RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func RaftLogPrefix(rangeID roachpb.RangeID) roachpb.Key {
@@ -958,12 +952,6 @@ func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
 // RaftHardStateKey returns a system-local key for a Raft HardState.
 func (b RangeIDPrefixBuf) RaftHardStateKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRaftHardStateSuffix...)
-}
-
-// RaftLastIndexKey returns a system-local key for the last index of the
-// Raft log.
-func (b RangeIDPrefixBuf) RaftLastIndexKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftLastIndexSuffix...)
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all Entries

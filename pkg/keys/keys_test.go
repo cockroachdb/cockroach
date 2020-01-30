@@ -146,7 +146,6 @@ func TestKeyAddressError(t *testing.T) {
 			RangeLeaseKey(0),
 			RangeStatsLegacyKey(0),
 			RaftHardStateKey(0),
-			RaftLastIndexKey(0),
 			RaftLogPrefix(0),
 			RaftLogKey(0, 0),
 			RangeLastReplicaGCTimestampKey(0),

@@ -115,8 +115,6 @@ var (
 	localRangeIDUnreplicatedInfix = []byte("u")
 	// LocalRaftHardStateSuffix is the Suffix for the raft HardState.
 	LocalRaftHardStateSuffix = []byte("rfth")
-	// LocalRaftLastIndexSuffix is the suffix for raft's last index.
-	LocalRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
 	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's last
