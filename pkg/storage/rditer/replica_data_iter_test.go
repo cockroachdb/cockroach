@@ -86,7 +86,7 @@ func createRangeData(
 		{keys.LeaseAppliedIndexLegacyKey(desc.RangeID), ts0},
 		{keys.RangeStatsLegacyKey(desc.RangeID), ts0},
 		{keys.RangeTxnSpanGCThresholdKey(desc.RangeID), ts0},
-		{keys.RaftTombstoneKey(desc.RangeID), ts0},
+		{keys.RangeTombstoneKey(desc.RangeID), ts0},
 		{keys.RaftHardStateKey(desc.RangeID), ts0},
 		{keys.RaftLastIndexKey(desc.RangeID), ts0},
 		{keys.RaftLogKey(desc.RangeID, 1), ts0},

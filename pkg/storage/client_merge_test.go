@@ -193,7 +193,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 		delete(postKeys, k)
 	}
 
-	tombstoneKey := string(keys.RaftTombstoneKey(rhsDesc.RangeID))
+	tombstoneKey := string(keys.RangeTombstoneKey(rhsDesc.RangeID))
 	if _, ok := postKeys[tombstoneKey]; !ok {
 		t.Errorf("tombstone key (%s) missing after merge", roachpb.Key(tombstoneKey))
 	}
@@ -1765,14 +1765,14 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
 	checkTombstone := func(eng engine.Engine) {
-		var rhsTombstone roachpb.RaftTombstone
-		rhsTombstoneKey := keys.RaftTombstoneKey(rhsDesc.RangeID)
+		var rhsTombstone roachpb.RangeTombstone
+		rhsTombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 		ok, err = engine.MVCCGetProto(ctx, eng, rhsTombstoneKey, hlc.Timestamp{},
 			&rhsTombstone, engine.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if !ok {
-			t.Fatalf("missing raft tombstone at key %s", rhsTombstoneKey)
+			t.Fatalf("missing range tombstone at key %s", rhsTombstoneKey)
 		}
 		if e, a := roachpb.ReplicaID(math.MaxInt32), rhsTombstone.NextReplicaID; e != a {
 			t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
@@ -2908,8 +2908,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			if err := sst.ClearRange(r.Start, r.End); err != nil {
 				return err
 			}
-			tombstoneKey := keys.RaftTombstoneKey(rangeID)
-			tombstoneValue := &roachpb.RaftTombstone{NextReplicaID: math.MaxInt32}
+			tombstoneKey := keys.RangeTombstoneKey(rangeID)
+			tombstoneValue := &roachpb.RangeTombstone{NextReplicaID: math.MaxInt32}
 			if err := engine.MVCCBlindPutProto(context.TODO(), &sst, nil, tombstoneKey, hlc.Timestamp{}, tombstoneValue, nil); err != nil {
 				return err
 			}

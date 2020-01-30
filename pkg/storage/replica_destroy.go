@@ -211,8 +211,8 @@ func (r *Replica) setTombstoneKey(
 	}
 	r.mu.Unlock()
 
-	tombstoneKey := keys.RaftTombstoneKey(r.RangeID)
-	tombstone := &roachpb.RaftTombstone{
+	tombstoneKey := keys.RangeTombstoneKey(r.RangeID)
+	tombstone := &roachpb.RangeTombstone{
 		NextReplicaID: nextReplicaID,
 	}
 	// "Blind" because ms == nil and timestamp == hlc.Timestamp{}.

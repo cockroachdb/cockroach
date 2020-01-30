@@ -182,12 +182,12 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	//   pertain to just one replica of a range. They are unreplicated and
 	//   unaddressable. The typical example is the Raft log. They all share
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
-	RaftTombstoneKey,               // "rftb"
-	RaftHardStateKey,               // "rfth"
-	RaftLastIndexKey,               // "rfti"
-	RaftLogKey,                     // "rftl"
-	RaftTruncatedStateKey,          // "rftt"
-	RangeLastReplicaGCTimestampKey, // "rlrt"
+	RangeTombstoneKey,                           // "rftb"
+	RaftHardStateKey,                            // "rfth"
+	RaftLastIndexKey,                            // "rfti"
+	RaftLogKey,                                  // "rftl"
+	RaftTruncatedStateKey,                       // "rftt"
+	RangeLastReplicaGCTimestampKey,              // "rlrt"
 	RangeLastVerificationTimestampKeyDeprecated, // "rlvt"
 
 	//   3. Range local keys: These also store metadata that pertains to a range

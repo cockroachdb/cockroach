@@ -1428,9 +1428,9 @@ func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
 	//
 	// - snapshot received, a replica is lazily created with the "real" replica ID
 	// - the replica is eligible for GC because it is not yet a member of the range
-	// - GC queue runs, creating a raft tombstone with the replica's ID
+	// - GC queue runs, creating a range tombstone with the replica's ID
 	// - the replica is added to the range
-	// - lazy creation of the replica fails due to the raft tombstone
+	// - lazy creation of the replica fails due to the range tombstone
 	//
 	// Instead, the replica GC queue will create a tombstone with replica ID
 	// zero, which is never legitimately used, and thus never interferes with
