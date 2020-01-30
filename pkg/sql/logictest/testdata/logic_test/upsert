@@ -308,9 +308,8 @@ statement error ambiguous source name: "excluded"
 INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
 # Tests for upsert/on conflict returning
-# TODO(mjibson): Remove family definition once #41313 is fixed.
 statement ok
-CREATE TABLE upsert_returning (a INT PRIMARY KEY, b INT, c INT, d INT DEFAULT -1, FAMILY "primary" (a, b, c, d))
+CREATE TABLE upsert_returning (a INT PRIMARY KEY, b INT, c INT, d INT DEFAULT -1)
 
 statement count 1
 INSERT INTO upsert_returning VALUES (1, 1, NULL)
