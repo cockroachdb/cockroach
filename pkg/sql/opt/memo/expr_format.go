@@ -338,8 +338,17 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if t.Constraint != nil {
-			tp.Childf("constraint: %s", t.Constraint)
+		if c := t.Constraint; c != nil {
+			if c.IsContradiction() {
+				tp.Childf("constraint: contradiction")
+			} else if c.Spans.Count() == 1 {
+				tp.Childf("constraint: %s: %s", c.Columns.String(), c.Spans.Get(0).String())
+			} else {
+				n := tp.Childf("constraint: %s", c.Columns.String())
+				for i := 0; i < c.Spans.Count(); i++ {
+					n.Child(c.Spans.Get(i).String())
+				}
+			}
 		}
 		if t.HardLimit.IsSet() {
 			tp.Childf("limit: %s", t.HardLimit)
