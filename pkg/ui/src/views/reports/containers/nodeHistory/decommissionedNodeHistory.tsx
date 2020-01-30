@@ -49,7 +49,7 @@ export interface DecommissionedNodeHistoryProps {
   nodesSummary: NodesSummary;
 }
 
-class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
+export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();

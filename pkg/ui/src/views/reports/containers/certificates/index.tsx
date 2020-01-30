@@ -46,7 +46,7 @@ function certificatesRequestFromProps(props: CertificatesProps) {
 /**
  * Renders the Certificate Report page.
  */
-class Certificates extends React.Component<CertificatesProps, {}> {
+export class Certificates extends React.Component<CertificatesProps, {}> {
   refresh(props = this.props) {
     props.refreshCertificates(certificatesRequestFromProps(props));
   }

@@ -77,22 +77,19 @@ module.exports = function(config) {
     // test results reporter to use
     // possible values: "dots", "progress"
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ["progress"],
+    reporters: ["mocha", "progress"],
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
     singleRun: true,
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
-    webpack: Object.assign(webpackConfig, {
-      devtool: "inline-source-map",
-      externals: {
-        "react/addons": true,
-        "react/lib/ExecutionEnvironment": true,
-        "react/lib/ReactContext": true,
-      },
-      mode: "none",
-    }),
+    webpack: {
+      devtool: "source-map",
+      mode: "development",
+      module: webpackConfig.module,
+      resolve: webpackConfig.resolve,
+    },
 
     // "stats" needs to be copied to webpackMiddleware configuration in order
     // to correctly configure console output

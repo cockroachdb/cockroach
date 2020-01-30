@@ -32,7 +32,7 @@ interface ClusterVisualizationProps {
   clusterDataError: Error | null;
 }
 
-class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
+export class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
   readonly items = [
     { value: "list", name: "Node List" },
     { value: "map", name: "Node Map" },

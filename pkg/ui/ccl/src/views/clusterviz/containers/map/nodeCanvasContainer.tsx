@@ -11,7 +11,6 @@ import React from "react";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import { cockroach } from "src/js/protos";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
@@ -121,13 +120,9 @@ export default withRouter(connect(
     dataExists: selectDataExists(state),
     dataErrors: dataErrors(state),
   }),
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshNodes,
-        refreshLiveness,
-        refreshLocations,
-      },
-      dispatch,
-    ),
+  {
+    refreshNodes,
+    refreshLiveness,
+    refreshLocations,
+  },
 )(NodeCanvasContainer));

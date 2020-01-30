@@ -112,7 +112,7 @@ module.exports = (env, argv) => {
           use: ["cache-loader", "babel-loader"],
         },
         {
-          test: /\.tsx?$/,
+          test: /\.(ts|tsx)?$/,
           include: localRoots,
           exclude: /\/node_modules/,
           use: [

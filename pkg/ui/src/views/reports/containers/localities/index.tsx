@@ -86,7 +86,7 @@ interface LocalitiesProps {
   refreshNodes: typeof refreshNodes;
 }
 
-class Localities extends React.Component<LocalitiesProps, {}> {
+export class Localities extends React.Component<LocalitiesProps, {}> {
   componentWillMount() {
     this.props.refreshLocations();
     this.props.refreshNodes();

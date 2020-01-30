@@ -140,7 +140,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   }
 }
 
-class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
+export class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
 
   constructor(props: StatementDetailsProps) {
     super(props);

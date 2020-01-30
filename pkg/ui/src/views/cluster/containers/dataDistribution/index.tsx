@@ -148,7 +148,7 @@ interface DataDistributionPageProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-class DataDistributionPage extends React.Component<DataDistributionPageProps> {
+export class DataDistributionPage extends React.Component<DataDistributionPageProps> {
 
   componentDidMount() {
     this.props.refreshDataDistribution();
