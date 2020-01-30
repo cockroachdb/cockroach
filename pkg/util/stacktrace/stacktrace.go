@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package log
+package stacktrace
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -38,6 +37,11 @@ func NewStackTrace(depth int) *StackTrace {
 	return raven.NewStacktrace(depth+1, contextLines, crdbPaths)
 }
 
+var crdbPaths = []string{
+	"github.com/cockroachdb/cockroach",
+	"go.etcd.io/etcd/raft",
+}
+
 // PrintStackTrace produces a human-readable partial representation of
 // the stack trace.
 func PrintStackTrace(s *StackTrace) string {
@@ -51,13 +55,12 @@ func PrintStackTrace(s *StackTrace) string {
 
 // EncodeStackTrace produces a decodable string representation of the
 // stack trace.  This never fails.
-func EncodeStackTrace(s *StackTrace) string {
+func EncodeStackTrace(s *StackTrace) (string, error) {
 	v, err := json.Marshal(s)
 	if err != nil {
-		Errorf(context.Background(), "unable to encode stack trace: %+v", err)
-		return "<invalid stack trace>"
+		return "<invalid stack trace>", err
 	}
-	return string(v)
+	return string(v), nil
 }
 
 // DecodeStackTrace produces a stack trace from the encoded string.
@@ -65,11 +68,8 @@ func EncodeStackTrace(s *StackTrace) string {
 // caller is invited to include the string in the final reportable
 // object, as a fallback (instead of discarding the stack trace
 // entirely).
-func DecodeStackTrace(s string) (*StackTrace, bool) {
+func DecodeStackTrace(s string) (*StackTrace, error) {
 	var st raven.Stacktrace
 	err := json.Unmarshal([]byte(s), &st)
-	if err != nil {
-		Errorf(context.Background(), "unable to decode stack trace: %+v", err)
-	}
-	return &st, err == nil
+	return &st, err
 }

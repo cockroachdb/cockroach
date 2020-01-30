@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -137,8 +137,11 @@ func (pg *Error) Format(s fmt.State, verb rune) {
 		for _, d := range pg.SafeDetail {
 			fmt.Fprintf(s, "\n-- detail --\n%s", d.SafeMessage)
 			if d.EncodedStackTrace != "" {
-				if st, ok := log.DecodeStackTrace(d.EncodedStackTrace); ok {
-					fmt.Fprintf(s, "\n%s", log.PrintStackTrace(st))
+				st, err := stacktrace.DecodeStackTrace(d.EncodedStackTrace)
+				if err != nil {
+					fmt.Fprintf(s, "unable to encode stack trace: %+v", err)
+				} else {
+					fmt.Fprintf(s, "\n%s", stacktrace.PrintStackTrace(st))
 				}
 			}
 		}

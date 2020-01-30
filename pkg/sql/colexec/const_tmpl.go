@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
@@ -39,6 +40,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
 var _ time.Time
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.

@@ -15,8 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 type withCandidateCode struct {
@@ -43,8 +43,13 @@ func (w *withCandidateCode) FormatError(p errors.Printer) (next error) {
 	return w.cause
 }
 
+// decodeWithCandidateCode is a custom decoder that will be used when decoding
+// withCandidateCode error objects.
+// Note that as the last argument it takes proto.Message (and not
+// protoutil.Message which is required by linter) because the latter brings in
+// additional dependencies into this package and the former is sufficient here.
 func decodeWithCandidateCode(
-	_ context.Context, cause error, _ string, details []string, _ protoutil.SimpleMessage,
+	_ context.Context, cause error, _ string, details []string, _ proto.Message,
 ) error {
 	code := pgcode.Uncategorized
 	if len(details) > 0 {

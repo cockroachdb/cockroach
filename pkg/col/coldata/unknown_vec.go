@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // unknown is a Vec that represents an unhandled type. Used when a batch needs a placeholder Vec.
@@ -55,6 +56,10 @@ func (u unknown) Decimal() []apd.Decimal {
 }
 
 func (u unknown) Timestamp() []time.Time {
+	panic("Vec is of unknown type and should not be accessed")
+}
+
+func (u unknown) Interval() []duration.Duration {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
