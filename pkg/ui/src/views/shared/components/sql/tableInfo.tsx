@@ -15,7 +15,6 @@ import { selectTableInfo } from "oss/src/views/databases/containers/tableDetails
 import { TableInfo } from "oss/src/views/databases/data/tableInfo";
 import React from "react";
 import { connect } from "react-redux";
-import { bindActionCreators, Dispatch } from "redux";
 import * as protos from "src/js/protos";
 import { refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
 import { Highlight } from "./highlight";
@@ -68,14 +67,10 @@ const mapStateToProps = (state: AdminUIState, props: any) => {
   });
 };
 
-const mapDispatchToProps = (dispatch: Dispatch<AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshTableDetails,
-      refreshTableStats,
-    },
-    dispatch,
-);
+const mapDispatchToProps = {
+  refreshTableDetails,
+  refreshTableStats,
+};
 
 // tslint:disable-next-line:variable-name
 const TableInfoConnected = connect(
