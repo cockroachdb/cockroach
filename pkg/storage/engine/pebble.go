@@ -1163,9 +1163,8 @@ func pebbleExportToSst(
 				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			curSize := rows.BulkOpSummary.DataSize
-			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
-			isOverTarget := paginated && curSize > 0 && uint64(newSize) > targetSize
-			if isNewKey && isOverTarget {
+			reachedTargetSize := curSize > 0 && uint64(curSize) >= targetSize
+			if paginated && isNewKey && reachedTargetSize {
 				// Allocate the right size for resumeKey rather than using curKey.
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
 				break
@@ -1173,6 +1172,7 @@ func pebbleExportToSst(
 			if err := sstWriter.Put(unsafeKey, unsafeValue); err != nil {
 				return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
 			}
+			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			rows.BulkOpSummary.DataSize = newSize
 		}
 
