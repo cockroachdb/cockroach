@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -428,7 +429,11 @@ func qualifyFKColErrorWithDB(
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	return tree.ErrString(tree.NewUnresolvedName(db.Name, tree.PublicSchema, tbl.Name, col))
+	schema, err := schema.ResolveNameByID(ctx, txn, db.ID, tbl.GetParentSchemaID())
+	if err != nil {
+		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
+	}
+	return tree.ErrString(tree.NewUnresolvedName(db.Name, schema, tbl.Name, col))
 }
 
 // FKTableState is the state of the referencing table resolveFK() is called on.

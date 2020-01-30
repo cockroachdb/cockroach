@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -678,7 +679,7 @@ func (tc *TableCollection) getSchemasForDatabase(
 	}
 	if _, ok := tc.cachedDatabaseToSchemas[dbID]; !ok {
 		var err error
-		tc.cachedDatabaseToSchemas[dbID], err = GetSchemasForDatabase(ctx, txn, dbID)
+		tc.cachedDatabaseToSchemas[dbID], err = schema.GetForDatabase(ctx, txn, dbID)
 		if err != nil {
 			return nil, err
 		}
