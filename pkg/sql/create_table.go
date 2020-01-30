@@ -1345,6 +1345,14 @@ func MakeTableDesc(
 		}
 	}
 
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		// Increment the counter if this index could be storing data across multiple column families.
+		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
+			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
+		}
+	}
+
 	if n.Interleave != nil {
 		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
 			return desc, err

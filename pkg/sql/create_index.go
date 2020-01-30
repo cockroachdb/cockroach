@@ -13,12 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 type createIndexNode struct {
@@ -106,6 +108,11 @@ func (n *createIndexNode) startExec(params runParams) error {
 	indexDesc, err := MakeIndexDescriptor(n.n)
 	if err != nil {
 		return err
+	}
+
+	// Increment the counter if this index could be storing data across multiple column families.
+	if len(indexDesc.StoreColumnNames) > 1 && len(n.tableDesc.Families) > 1 {
+		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
 	// If all nodes in the cluster know how to handle secondary indexes with column families,
