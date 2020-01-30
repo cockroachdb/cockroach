@@ -62,11 +62,20 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := GetObjectNames(
-		ctx, p.txn, p, dbDesc, tree.PublicSchema, true, /*explicitPrefix*/
-	)
+	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	var tbNames TableNames
+	for _, schema := range schemas {
+		toAppend, err := GetObjectNames(
+			ctx, p.txn, p, dbDesc, schema, true, /*explicitPrefix*/
+		)
+		if err != nil {
+			return nil, err
+		}
+		tbNames = append(tbNames, toAppend...)
 	}
 
 	if len(tbNames) > 0 {
