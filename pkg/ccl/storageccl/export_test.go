@@ -333,9 +333,47 @@ func assertEqualKVs(
 		var kvs []engine.MVCCKeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
-			sst, _, start, err = e.ExportToSst(start, endKey, startTime, endTime, exportAllRevisions, targetSize, io)
+			var summary roachpb.BulkOpSummary
+			maxSize := uint64(0)
+			prevStart := start
+			sst, summary, start, err = e.ExportToSst(start, endKey, startTime, endTime,
+				exportAllRevisions, targetSize, maxSize, io)
 			require.NoError(t, err)
 			loaded := loadSST(t, sst, startKey, endKey)
+			// Ensure that the pagination worked properly.
+			if start != nil {
+				dataSize := uint64(summary.DataSize)
+				require.Truef(t, targetSize <= dataSize, "%d > %d",
+					targetSize, summary.DataSize)
+				// Now we want to ensure that if we remove the bytes due to the last
+				// key that we are below the target size.
+				firstKVofLastKey := sort.Search(len(loaded), func(i int) bool {
+					return loaded[i].Key.Key.Equal(loaded[len(loaded)-1].Key.Key)
+				})
+				dataSizeWithoutLastKey := dataSize
+				for _, kv := range loaded[firstKVofLastKey:] {
+					dataSizeWithoutLastKey -= uint64(len(kv.Key.Key) + len(kv.Value))
+				}
+				require.Truef(t, targetSize > dataSizeWithoutLastKey, "%d <= %d", targetSize, dataSizeWithoutLastKey)
+				// Ensure that maxSize leads to an error if exceeded.
+				// Note that this uses a relatively non-sensical value of maxSize which
+				// is equal to the targetSize.
+				maxSize = targetSize
+				dataSizeWhenExceeded := dataSize
+				for i := len(loaded) - 1; i >= 0; i-- {
+					kv := loaded[i]
+					lessThisKey := dataSizeWhenExceeded - uint64(len(kv.Key.Key)+len(kv.Value))
+					if lessThisKey >= maxSize {
+						dataSizeWhenExceeded = lessThisKey
+					} else {
+						break
+					}
+				}
+				_, _, _, err = e.ExportToSst(prevStart, endKey, startTime, endTime,
+					exportAllRevisions, targetSize, maxSize, io)
+				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
+					dataSizeWhenExceeded, maxSize), err)
+			}
 			kvs = append(kvs, loaded...)
 		}
 
