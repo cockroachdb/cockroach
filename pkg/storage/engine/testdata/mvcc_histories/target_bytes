@@ -1,0 +1,58 @@
+## Test opts.TargetBytes.
+
+run ok
+with ts=123,45
+  put      k=a v=abcdef
+  put      k=c v=ghijkl
+  put      k=e v=mnopqr
+----
+>> at end:
+data: "a"/0.000000123,45 -> /BYTES/abcdef
+data: "c"/0.000000123,45 -> /BYTES/ghijkl
+data: "e"/0.000000123,45 -> /BYTES/mnopqr
+
+# Scans without or with a large target size return all results.
+run ok
+with ts=300,0
+  scan     k=a end=z
+  scan     k=a end=z tb=0
+  scan     k=a end=z tb=10000000
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+
+
+run ok
+with ts=300,0
+# Target size one byte returns one result (overshooting instead of returning nothing).
+# Upping the target size accordingly results in more rows.
+# In all cases, we're seeing resume spans iff the byte target had an effect.
+  scan     k=a end=z tb=1
+  scan     k=a end=z tb=34
+  scan     k=a end=z tb=35
+  scan     k=a end=z tb=100
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: resume span ["c","z")
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: resume span ["c","z")
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: resume span ["e","z")
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+
+# Works just the same when not starting on an existing key.
+run ok
+scan     k=b end=z ts=300 tb=1
+----
+scan: "c" -> /BYTES/ghijkl @0.000000123,45
+scan: resume span ["e","z")
