@@ -29,7 +29,7 @@ type SettingsProps = SettingsOwnProps;
 /**
  * Renders the Cluster Settings Report page.
  */
-class Settings extends React.Component<SettingsProps, {}> {
+export class Settings extends React.Component<SettingsProps, {}> {
   refresh(props = this.props) {
     props.refreshSettings(new protos.cockroach.server.serverpb.SettingsRequest());
   }

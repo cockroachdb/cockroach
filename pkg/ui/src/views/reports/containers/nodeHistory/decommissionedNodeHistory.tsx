@@ -14,7 +14,6 @@ import { connect } from "react-redux";
 import { Link } from "react-router";
 import moment from "moment";
 import _ from "lodash";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import { AdminUIState } from "src/redux/state";
 import {
@@ -50,7 +49,7 @@ export interface DecommissionedNodeHistoryProps {
   nodesSummary: NodesSummary;
 }
 
-class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
+export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
