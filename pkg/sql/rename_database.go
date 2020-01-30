@@ -81,44 +81,55 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	// DDL statements bypass the cache.
 	lookupFlags.AvoidCached = true
-	tbNames, err := phyAccessor.GetObjectNames(
-		ctx, p.txn, dbDesc, tree.PublicSchema, tree.DatabaseListFlags{
-			CommonLookupFlags: lookupFlags,
-			ExplicitPrefix:    true,
-		})
+	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
 	if err != nil {
 		return err
 	}
-	lookupFlags.Required = false
-	for i := range tbNames {
-		objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
-			&tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags})
+	for _, schema := range schemas {
+		tbNames, err := phyAccessor.GetObjectNames(
+			ctx,
+			p.txn,
+			dbDesc,
+			schema,
+			tree.DatabaseListFlags{
+				CommonLookupFlags: lookupFlags,
+				ExplicitPrefix:    true,
+			},
+		)
 		if err != nil {
 			return err
 		}
-		if objDesc == nil {
-			continue
-		}
-		tbDesc := objDesc.TableDesc()
-		if len(tbDesc.DependedOnBy) > 0 {
-			viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, tbDesc.DependedOnBy[0].ID)
+		lookupFlags.Required = false
+		for i := range tbNames {
+			objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
+				&tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 			if err != nil {
 				return err
 			}
-			viewName := viewDesc.Name
-			if dbDesc.ID != viewDesc.ParentID {
-				var err error
-				viewName, err = p.getQualifiedTableName(ctx, viewDesc)
-				if err != nil {
-					log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
-						viewDesc.ID, err)
-					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
-					return sqlbase.NewDependentObjectError(msg)
-				}
+			if objDesc == nil {
+				continue
 			}
-			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
-			hint := fmt.Sprintf("you can drop %s instead.", viewName)
-			return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+			tbDesc := objDesc.TableDesc()
+			if len(tbDesc.DependedOnBy) > 0 {
+				viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, tbDesc.DependedOnBy[0].ID)
+				if err != nil {
+					return err
+				}
+				viewName := viewDesc.Name
+				if dbDesc.ID != viewDesc.ParentID {
+					var err error
+					viewName, err = p.getQualifiedTableName(ctx, viewDesc)
+					if err != nil {
+						log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
+							viewDesc.ID, err)
+						msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
+						return sqlbase.NewDependentObjectError(msg)
+					}
+				}
+				msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
+				hint := fmt.Sprintf("you can drop %s instead.", viewName)
+				return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+			}
 		}
 	}
 

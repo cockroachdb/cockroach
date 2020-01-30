@@ -156,9 +156,19 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 	if err != nil {
 		return err
 	}
-	tbNames, err := GetObjectNames(ctx, p.txn, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
+
+	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
 	if err != nil {
 		return err
+	}
+
+	var tbNames TableNames
+	for _, schema := range schemas {
+		toAppend, err := GetObjectNames(ctx, p.txn, p, dbDesc, schema, true /*explicitPrefix*/)
+		if err != nil {
+			return err
+		}
+		tbNames = append(tbNames, toAppend...)
 	}
 
 	for i := range tbNames {
