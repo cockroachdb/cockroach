@@ -689,7 +689,8 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// them when processing the index. The difference with unique secondary indexes
 		// is that the extra columns are not always there, and are used to unique-ify
 		// the index key, rather than provide the primary key column values.
-		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique && len(rf.currentTable.desc.Families) != 1 {
+		// TODO(pbardea): Commented out below.
+		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique /* && len(rf.currentTable.desc.Families) != 1 */ {
 			for range rf.currentTable.index.ExtraColumnIDs {
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
@@ -701,9 +702,6 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		}
 
 		switch {
-		case len(rf.currentTable.desc.Families) == 1:
-			// If we only have one family, we know that there is only 1 k/v pair per row.
-			rowDone = true
 		case !unchangedPrefix:
 			// If the prefix of the key has changed, current key is from a different
 			// row than the previous one.
@@ -915,7 +913,7 @@ func (rf *Fetcher) processKV(
 			var family *sqlbase.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(sqlbase.FamilyID(familyID))
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+				return "", "", errors.Mark(err, scrub.ErrSkipKVSentinel)
 			}
 
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, kv, prettyKey)
@@ -1158,11 +1156,20 @@ func (rf *Fetcher) NextRow(
 	// output a row containing the current values.
 	for {
 		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
+		skippingKV := false
 		if err != nil {
-			return nil, nil, nil, err
+			if errors.Is(err, scrub.ErrSkipKVSentinel) {
+				skippingKV = true
+			} else {
+				return nil, nil, nil, err
+			}
 		}
 		if rf.traceKV {
-			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
+			if skippingKV {
+				log.VEventf(ctx, 2, "skipped KV")
+			} else {
+				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
+			}
 		}
 
 		if rf.isCheck {

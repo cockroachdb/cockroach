@@ -42,6 +42,17 @@ const (
 	// ForeignKeyConstraintViolation occurs when a row in a
 	// table is violating a foreign key constraint.
 	ForeignKeyConstraintViolation = "foreign_key_violation"
+
+	// SkipKVError occurs when a stray KV that should not be read is found.
+	// This may occur when a column family was removed, but the KVs which used to
+	// belong to this column family remain.
+	SkipKVError = "skip_kv_error"
+)
+
+var (
+	// ErrSkipKVSentinel is used to mark if a stray KV was found and should be
+	// ignored.
+	ErrSkipKVSentinel = errors.New(SkipKVError)
 )
 
 // Error contains the details on the scrub error that was caught.
