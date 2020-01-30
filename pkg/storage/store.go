@@ -1120,7 +1120,7 @@ func (s *Store) IsStarted() bool {
 }
 
 // IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
-// as RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in
+// as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
 // principle exist at any RangeID, and this helper efficiently discovers all the
 // keys of the desired type (as specified by the supplied `keyFn`) and, for each
 // key-value pair discovered, unmarshals it into `msg` and then invokes `f`.

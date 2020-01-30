@@ -28,8 +28,8 @@ message RaftTruncatedState {
   optional uint64 term = 2 [(gogoproto.nullable) = false];
 }
 
-// RaftTombstone contains information about a replica that has been deleted.
-message RaftTombstone {
+// RangeTombstone contains information about a replica that has been deleted.
+message RangeTombstone {
   optional int32 next_replica_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }

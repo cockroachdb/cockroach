@@ -335,7 +335,7 @@ type Replica struct {
 		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
-		// RaftTombstone.NextReplicaID.
+		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
 
 		// The ID of the leader replica within the Raft group. Used to determine
