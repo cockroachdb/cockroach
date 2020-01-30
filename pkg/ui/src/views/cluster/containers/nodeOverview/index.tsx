@@ -198,8 +198,8 @@ export default connect(
       nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
-  () => ({
+  {
     refreshNodes,
     refreshLiveness,
-  }),
+  },
 )(NodeOverview);

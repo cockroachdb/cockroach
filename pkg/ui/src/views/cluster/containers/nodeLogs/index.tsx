@@ -129,10 +129,10 @@ const logsConnected = connect(
       currentNode: currentNode(state, ownProps),
     };
   },
-  () => ({
+  {
     refreshLogs,
     refreshNodes,
-  }),
+  },
 )(Logs);
 
 export default logsConnected;
