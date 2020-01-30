@@ -144,12 +144,6 @@ const (
 type checkOptions struct {
 	mode     checkResultsMode
 	expCount int
-	// If set, this represents the point where scanning stopped because
-	// StopAtRangeBoundary was set on the BatchRequest and the scanned range was
-	// exhausted (ResumeReason == RESUME_RANGE_BOUNDARY) as opposed to the scan
-	// being interrupted by MaxSpanRequestKeys).
-	// Ignored if all scans are supposed to have been satisfied.
-	nextRangeStart string
 }
 
 // checks the keys returned from a Scan/ReverseScan.
@@ -222,44 +216,24 @@ func checkResumeSpanScanResults(
 		}
 
 		// The scan is not expected to be satisfied, so there must be a resume span.
-		// If opt.nextRangeStart is set (and so the scan is supposed to have been
-		// interrupted by a range boundary), then the resume span should start there
-		// or further. If it's not set (and so the scan was interrupted because of
-		// MaxSpanRequestKeys), then the resume span should be identical to
-		// the original request if no results have been produced, or should continue
-		// after the last result otherwise.
+		// The resume span should be identical to the original request if no
+		// results have been produced, or should continue after the last result
+		// otherwise.
 		resumeKey := string(res.ResumeSpan.Key)
-		if opt.nextRangeStart != "" {
-			if res.ResumeReason != roachpb.RESUME_RANGE_BOUNDARY {
-				t.Fatalf("%s: scan %d (%s): expected resume reason RANGE_BOUNDARY but got: %s",
-					errInfo(), i, spans[i], res.ResumeReason)
-			}
-			var expResume string
-			if opt.nextRangeStart < spans[i][0] {
-				expResume = spans[i][0]
-			} else {
-				expResume = opt.nextRangeStart
-			}
-			if resumeKey != expResume {
-				t.Fatalf("%s: scan %d (%s): expected resume %q, got: %q",
-					errInfo(), i, spans[i], expResume, resumeKey)
+		if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
+			t.Fatalf("%s: scan %d (%s): unexpected resume reason %s",
+				errInfo(), i, spans[i], res.ResumeReason)
+		}
+		if rowLen == 0 {
+			if resumeKey != spans[i][0] {
+				t.Fatalf("%s: scan %d: expected resume %s, got: %s",
+					errInfo(), i, spans[i][0], resumeKey)
 			}
 		} else {
-			if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
-				t.Fatalf("%s: scan %d (%s): expected resume reason RANGE_BOUNDARY but got: %s",
-					errInfo(), i, spans[i], res.ResumeReason)
-			}
-			if rowLen == 0 {
-				if resumeKey != spans[i][0] {
-					t.Fatalf("%s: scan %d: expected resume %s, got: %s",
-						errInfo(), i, spans[i][0], resumeKey)
-				}
-			} else {
-				lastRes := expResults[i][rowLen-1]
-				if resumeKey <= lastRes {
-					t.Fatalf("%s: scan %d: expected resume %s to be above last result %s",
-						errInfo(), i, resumeKey, lastRes)
-				}
+			lastRes := expResults[i][rowLen-1]
+			if resumeKey <= lastRes {
+				t.Fatalf("%s: scan %d: expected resume %s to be above last result %s",
+					errInfo(), i, resumeKey, lastRes)
 			}
 		}
 
@@ -290,44 +264,24 @@ func checkResumeSpanReverseScanResults(
 		}
 
 		// The scan is not expected to be satisfied, so there must be a resume span.
-		// If opt.nextRangeStart is set (and so the scan is supposed to have been
-		// interrupted by a range boundary), then the resume span should start there
-		// or further. If it's not set (and so the scan was interrupted because of
-		// MaxSpanRequestKeys), then the resume span should be identical to
-		// the original request if no results have been produced, or should continue
-		// after the last result otherwise.
+		// The resume span should be identical to the original request if no
+		// results have been produced, or should continue after the last result
+		// otherwise.
 		resumeKey := string(res.ResumeSpan.EndKey)
-		if opt.nextRangeStart != "" {
-			if res.ResumeReason != roachpb.RESUME_RANGE_BOUNDARY {
-				t.Fatalf("%s: scan %d (%s): expected resume reason RANGE_BOUNDARY but got: %s",
-					errInfo(), i, spans[i], res.ResumeReason)
-			}
-			var expResume string
-			if opt.nextRangeStart > spans[i][1] {
-				expResume = spans[i][1]
-			} else {
-				expResume = opt.nextRangeStart
-			}
-			if resumeKey != expResume {
-				t.Fatalf("%s: scan %d (%s): expected resume %q, got: %q",
-					errInfo(), i, spans[i], expResume, resumeKey)
+		if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
+			t.Fatalf("%s: scan %d (%s): unexpected resume reason %s",
+				errInfo(), i, spans[i], res.ResumeReason)
+		}
+		if rowLen == 0 {
+			if resumeKey != spans[i][1] {
+				t.Fatalf("%s: scan %d (%s) expected resume %s, got: %s",
+					errInfo(), i, spans[i], spans[i][1], resumeKey)
 			}
 		} else {
-			if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
-				t.Fatalf("%s: scan %d (%s): expected resume reason RANGE_BOUNDARY but got: %s",
-					errInfo(), i, spans[i], res.ResumeReason)
-			}
-			if rowLen == 0 {
-				if resumeKey != spans[i][1] {
-					t.Fatalf("%s: scan %d (%s) expected resume %s, got: %s",
-						errInfo(), i, spans[i], spans[i][1], resumeKey)
-				}
-			} else {
-				lastRes := expResults[i][rowLen-1]
-				if resumeKey >= lastRes {
-					t.Fatalf("%s: scan %d: expected resume %s to be below last result %s",
-						errInfo(), i, resumeKey, lastRes)
-				}
+			lastRes := expResults[i][rowLen-1]
+			if resumeKey >= lastRes {
+				t.Fatalf("%s: scan %d: expected resume %s to be below last result %s",
+					errInfo(), i, resumeKey, lastRes)
 			}
 		}
 
