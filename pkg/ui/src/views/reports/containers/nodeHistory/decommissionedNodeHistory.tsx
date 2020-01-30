@@ -127,14 +127,10 @@ const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>) =>
-  bindActionCreators(
-    {
-      refreshNodes,
-      refreshLiveness,
-      setSort: decommissionedNodesSortSetting.set,
-    },
-    dispatch,
-  );
+const mapDispatchToProps = {
+  refreshNodes,
+  refreshLiveness,
+  setSort: decommissionedNodesSortSetting.set,
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory);

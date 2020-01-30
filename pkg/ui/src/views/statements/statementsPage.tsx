@@ -13,7 +13,6 @@ import _ from "lodash";
 import moment from "moment";
 import React from "react";
 import Helmet from "react-helmet";
-import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
@@ -360,12 +359,9 @@ const StatementsPageConnected = connect(
     totalFingerprints: selectTotalFingerprints(state),
     lastReset: selectLastReset(state),
   }),
-  dispatch => bindActionCreators(
-    {
-      refreshStatements,
-    },
-    dispatch,
-  ),
+  {
+    refreshStatements,
+  },
 )(StatementsPage);
 
 export default StatementsPageConnected;
