@@ -240,14 +240,14 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := MVCCScan(ctx, eng, startKey, endKey, int64(opts.numRows), ts, MVCCScanOptions{
+		res, err := MVCCScan(ctx, eng, startKey, endKey, int64(opts.numRows), ts, MVCCScanOptions{
 			Reverse: opts.reverse,
 		})
 		if err != nil {
 			b.Fatalf("failed scan: %+v", err)
 		}
-		if len(kvs) != opts.numRows {
-			b.Fatalf("failed to scan: %d != %d", len(kvs), opts.numRows)
+		if len(res.KVs) != opts.numRows {
+			b.Fatalf("failed to scan: %d != %d", len(res.KVs), opts.numRows)
 		}
 	}
 
