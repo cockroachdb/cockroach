@@ -575,6 +575,9 @@ func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
 				md.Payload.Lease, oldLease)
 		}
 		md.Payload.Lease = j.registry.newLease()
+		if md.Payload.StartedMicros == 0 {
+			md.Payload.StartedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		}
 		ju.UpdatePayload(md.Payload)
 		// Jobs in states running or pending are adopted as running.
 		newStatus := StatusRunning
