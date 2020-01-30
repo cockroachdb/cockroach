@@ -112,27 +112,8 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	cleanupFn := func() {
-		tempDirs := []string{dir}
-		for _, s := range tc.Servers {
-			for _, e := range s.Engines() {
-				tempDirs = append(tempDirs, e.GetAuxiliaryDir())
-			}
-		}
 		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
 		dirCleanupFn()                    // cleans up dir, which is the nodelocal:// storage
-
-		for _, temp := range tempDirs {
-			testutils.SucceedsSoon(t, func() error {
-				items, err := ioutil.ReadDir(temp)
-				if err != nil && !os.IsNotExist(err) {
-					t.Fatal(err)
-				}
-				for _, leftover := range items {
-					return errors.Errorf("found %q remaining in %s", leftover.Name(), temp)
-				}
-				return nil
-			})
-		}
 	}
 
 	return ctx, tc, sqlDB, dir, cleanupFn
