@@ -171,7 +171,6 @@ var _ = [...]interface{}{
 	RangeLastGCKey,                  // "lgc-"
 	RangeAppliedStateKey,            // "rask"
 	RaftAppliedIndexLegacyKey,       // "rfta"
-	RaftTombstoneIncorrectLegacyKey, // "rftb"
 	RaftTruncatedStateLegacyKey,     // "rftt"
 	RangeLeaseKey,                   // "rll-"
 	LeaseAppliedIndexLegacyKey,      // "rlla"
