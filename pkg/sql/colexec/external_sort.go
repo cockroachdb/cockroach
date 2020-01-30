@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/errors"
 )
 
 // Partitioner is the abstraction for on-disk storage.
@@ -107,9 +106,6 @@ type externalSorter struct {
 	numPartitions         int
 	merger                Operator
 	singlePartitionOutput Operator
-
-	// TODO(yuzefovich): remove this once actual disk queues are in-place.
-	diskQueuesUnlimitedAllocator *Allocator
 }
 
 var _ Operator = &externalSorter{}
@@ -140,13 +136,12 @@ func newExternalSorter(
 		execerror.VectorizedInternalPanic(err)
 	}
 	return &externalSorter{
-		OneInputNode:                 NewOneInputNode(inMemSorter),
-		diskQueuesUnlimitedAllocator: diskQueuesUnlimitedAllocator,
-		unlimitedAllocator:           unlimitedAllocator,
-		inMemSorter:                  inMemSorter,
-		partitioner:                  newDummyPartitioner(diskQueuesUnlimitedAllocator, inputTypes),
-		inputTypes:                   inputTypes,
-		ordering:                     ordering,
+		OneInputNode:       NewOneInputNode(inMemSorter),
+		unlimitedAllocator: unlimitedAllocator,
+		inMemSorter:        inMemSorter,
+		partitioner:        newDummyPartitioner(diskQueuesUnlimitedAllocator, inputTypes),
+		inputTypes:         inputTypes,
+		ordering:           ordering,
 	}
 }
 
@@ -198,6 +193,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					s.singlePartitionOutput = newPartitionerToOperator(
 						s.unlimitedAllocator, s.inputTypes, s.partitioner, 0, /* partitionIdx */
 					)
+					s.singlePartitionOutput.Init()
 				}
 				b := s.singlePartitionOutput.Next(ctx)
 				if b.Length() == 0 {
@@ -210,7 +206,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					syncInputs := make([]Operator, s.numPartitions)
 					for i := range syncInputs {
 						syncInputs[i] = newPartitionerToOperator(
-							s.diskQueuesUnlimitedAllocator, s.inputTypes, s.partitioner, i,
+							s.unlimitedAllocator, s.inputTypes, s.partitioner, i,
 						)
 					}
 					s.merger = NewOrderedSynchronizer(
@@ -280,7 +276,7 @@ func (o *inputPartitioningOperator) reset() {
 
 func newPartitionerToOperator(
 	allocator *Allocator, types []coltypes.T, partitioner Partitioner, partitionIdx int,
-) Operator {
+) *partitionerToOperator {
 	return &partitionerToOperator{
 		partitioner:  partitioner,
 		partitionIdx: partitionIdx,
@@ -341,7 +337,10 @@ func (d *dummyPartitioner) Dequeue(partitionIdx int, batch coldata.Batch) error 
 		partition = d.partitions[partitionIdx]
 	}
 	if partition == nil {
-		return errors.Newf("partition %d not found (len(partitions) = %d)", partitionIdx, len(d.partitions))
+		// TODO(yuzefovich): clarify the interface in this case.
+		//return errors.Newf("partition %d not found (len(partitions) = %d)", partitionIdx, len(d.partitions))
+		batch.SetLength(0)
+		return nil
 	}
 	return partition.Dequeue(batch)
 }

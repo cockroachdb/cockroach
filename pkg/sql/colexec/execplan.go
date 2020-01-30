@@ -641,19 +641,22 @@ func NewColOperator(
 					}
 				}
 
-				hashJoinerMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = result.createBufferingMemAccount(ctx, flowCtx, "hash-joiner")
+				hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
+				var hashJoinerMemAccount *mon.BoundAccount
+				if useStreamingMemAccountForBuffering {
+					hashJoinerMemAccount = streamingMemAccount
+				} else {
+					hashJoinerMemAccount = result.createBufferingMemAccount(
+						ctx, flowCtx, hashJoinerMemMonitorName,
+					)
 				}
 				// It is valid for empty set of equality columns to be considered as
 				// "key" (for example, the input has at most 1 row). However, hash
 				// joiner, in order to handle NULL values correctly, needs to think
 				// that an empty set of equality columns doesn't form a key.
 				rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-				result.Op, err = NewHashJoiner(
-					NewAllocator(ctx, hashJoinerMemAccount),
-					inputs[0],
-					inputs[1],
+				hjSpec, err := makeHashJoinerSpec(
+					core.HashJoiner.Type,
 					core.HashJoiner.LeftEqColumns,
 					core.HashJoiner.RightEqColumns,
 					leftOutCols,
@@ -661,8 +664,49 @@ func NewColOperator(
 					leftTypes,
 					rightTypes,
 					rightEqColsAreKey,
-					core.HashJoiner.Type,
 				)
+				if err != nil {
+					return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+				}
+				inMemoryHashJoiner := newHashJoiner(
+					NewAllocator(ctx, hashJoinerMemAccount), hjSpec, inputs[0], inputs[1],
+				)
+				if useStreamingMemAccountForBuffering {
+					// We will not be creating a disk-backed hash joiner because we're
+					// running a test that implicitly asked for only in-memory hash
+					// joiner.
+					result.Op = inMemoryHashJoiner
+				} else {
+					result.Op = newTwoInputDiskSpiller(
+						inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
+						hashJoinerMemMonitorName,
+						func(inputOne, inputTwo Operator) Operator {
+							monitorNamePrefix := "external-hash-joiner-"
+							// We unset the testing knob for memory limit because we external
+							// hash joiner under the hood uses another instance of in-memory
+							// hash joiner and the latter requires memory to work (this will
+							// give this internal in-memory hash joiner workmem number of
+							// bytes). This behavior is ok because we have already
+							// instantiated the "explicitly" in-memory hash join operator
+							// above.
+							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = 0
+							allocator := NewAllocator(
+								ctx, result.createBufferingMemAccount(
+									ctx, flowCtx, monitorNamePrefix,
+								))
+							diskQueuesUnlimitedAllocator := NewAllocator(
+								ctx, result.createBufferingUnlimitedMemAccount(
+									ctx, flowCtx, monitorNamePrefix+"disk-queues",
+								))
+							return newExternalHashJoiner(
+								allocator, hjSpec,
+								inputOne, inputTwo,
+								diskQueuesUnlimitedAllocator,
+							)
+						},
+						args.TestingKnobs.SpillingCallbackFn,
+					)
+				}
 				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
 			}
 
