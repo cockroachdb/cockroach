@@ -216,15 +216,6 @@ func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 	return txnID, err
 }
 
-// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
-// This key was accidentally made replicated though it is not, requiring awkward
-// workarounds. This method and all users can be removed in any binary version > 2.1.
-//
-// See https://github.com/cockroachdb/cockroach/issues/12154.
-func RaftTombstoneIncorrectLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneIncorrectLegacyKey()
-}
-
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
 // This key has subsumed the responsibility of the following three keys:
 // - RaftAppliedIndexLegacyKey
@@ -887,11 +878,6 @@ func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
 func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
 	key := append(b.replicatedPrefix(), LocalAbortSpanSuffix...)
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
-}
-
-// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
-func (b RangeIDPrefixBuf) RaftTombstoneIncorrectLegacyKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRaftTombstoneSuffix...)
 }
 
 // RangeAppliedStateKey returns a system-local key for the range applied state key.

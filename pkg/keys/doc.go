@@ -172,7 +172,6 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	RangeLastGCKey,                  // "lgc-"
 	RangeAppliedStateKey,            // "rask"
 	RaftAppliedIndexLegacyKey,       // "rfta"
-	RaftTombstoneIncorrectLegacyKey, // "rftb"
 	RaftTruncatedStateLegacyKey,     // "rftt"
 	RangeLeaseKey,                   // "rll-"
 	LeaseAppliedIndexLegacyKey,      // "rlla"
