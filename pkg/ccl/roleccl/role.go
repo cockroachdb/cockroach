@@ -24,7 +24,7 @@ import (
 func createRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	createRole, ok := stmt.(*tree.CreateRole)
+	createRole, ok := stmt.(*tree.CreateRoleOrUser)
 	if !ok {
 		return nil, nil
 	}
@@ -38,7 +38,7 @@ func createRolePlanHook(
 
 	// Call directly into the OSS code.
 	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, true, /* isRole */
-		"CREATE ROLE", createRole.RolePrivileges)
+		"CREATE ROLE", createRole.RoleOptions)
 }
 
 func dropRolePlanHook(

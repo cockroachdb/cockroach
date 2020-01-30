@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roleprivilege
+package roleoption
 
 import (
 	"bytes"
@@ -22,23 +22,30 @@ import (
 
 //go:generate stringer -type=Kind
 
-// Kind defines a role privilege. This is output by the parser
+// Kind defines a role option. This is output by the parser
 type Kind uint32
 
-// List of role privileges. ALL is specifically encoded so that it will automatically
-// pick up new role privileges.
+type RoleOption struct {
+	Option Kind
+	Value  string
+}
+
+// KindList of role options.
 const (
 	_ Kind = iota
 	CREATEROLE
 	NOCREATEROLE
+	LOGIN
+	NOLOGIN
+	PASSWORD
 )
 
-// Mask returns the bitmask for a given role privilege.
+// Mask returns the bitmask for a given role option.
 func (k Kind) Mask() uint32 {
 	return 1 << k
 }
 
-// ByValue is just an array of role privilege kinds sorted by value.
+// ByValue is just an array of role option kinds sorted by value.
 var ByValue = [...]Kind{
 	CREATEROLE,
 	NOCREATEROLE,
@@ -48,46 +55,43 @@ var ByValue = [...]Kind{
 var ByName = map[string]Kind{
 	"CREATEROLE":   CREATEROLE,
 	"NOCREATEROLE": NOCREATEROLE,
+	"LOGIN":        LOGIN,
+	"NOLOGIN":      NOLOGIN,
+	"PASSWORD":     PASSWORD,
 }
 
-// MapToSQLColumn is a map of roleprivilege (Kind) ->
+// MapToSQLColumn is a map of roleoption (Kind) ->
 // System.users SQL Column Name (string).
 var MapToSQLColumn = map[Kind]string{
 	CREATEROLE:   "hasCreateRole",
 	NOCREATEROLE: "hasCreateRole",
 }
 
-// MapToBool is a map of roleprivilege (Kind) ->
+// MapToBool is a map of roleoption (Kind) ->
 // bool value in system.users table (bool).
 var MapToBool = map[Kind]bool{
 	CREATEROLE:   true,
 	NOCREATEROLE: false,
 }
 
-// ToSQLColumnName returns the SQL Column Name corresponding to the Role Privilege.
+// ToSQLColumnName returns the SQL Column Name corresponding to the Role option.
 func (k Kind) ToSQLColumnName() string {
 	return MapToSQLColumn[k]
 }
 
-// List is a list of role privileges.
-type List []Kind
+// KindList is a list of role option kinds.
+type KindList []Kind
 
-// Len, Swap, and Less implement the Sort interface.
-func (pl List) Len() int {
+// List is a list of role options.
+type List []RoleOption
+
+func (pl KindList) Len() int {
 	return len(pl)
 }
 
-func (pl List) Swap(i, j int) {
-	pl[i], pl[j] = pl[j], pl[i]
-}
-
-func (pl List) Less(i, j int) bool {
-	return pl[i] < pl[j]
-}
-
-// names returns a list of role privilege names in the same
+// names returns a list of role option names in the same
 // order as 'pl'.
-func (pl List) names() []string {
+func (pl KindList) names() []string {
 	ret := make([]string, len(pl))
 	for i, p := range pl {
 		ret[i] = p.String()
@@ -97,84 +101,92 @@ func (pl List) names() []string {
 
 // Format prints out the list in a buffer.
 // This keeps the existing order and uses " " as separator.
-func (pl List) Format(buf *bytes.Buffer) {
+func (pl KindList) Format(buf *bytes.Buffer) {
 	for i, p := range pl {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
+
 		buf.WriteString(p.String())
+
+		//if p == PASSWORD {
+		//
+		//}
 	}
 }
 
 // String implements the Stringer interface.
 // This keeps the existing order and uses " " as separator.
-func (pl List) String() string {
+func (pl KindList) String() string {
 	return strings.Join(pl.names(), " ")
 }
 
 // ToBitField returns the bitfield representation of
-// a list of role privileges.
+// a list of role options.
 func (pl List) ToBitField() (uint32, error) {
 	var ret uint32
 	for _, p := range pl {
-		if ret&p.Mask() != 0 {
-			return 0, pgerror.Newf(pgcode.Syntax, "redundant role privilege options")
+		if ret&p.Option.Mask() != 0 {
+			return 0, pgerror.Newf(pgcode.Syntax, "redundant role option options")
 		}
-		ret |= p.Mask()
+		ret |= p.Option.Mask()
 	}
 	return ret, nil
 }
 
-// CreateSetStmtFromRolePrivileges returns a string of the form:
-// "SET "privilegeA" = true, "privilegeB" = false".
-func (pl List) CreateSetStmtFromRolePrivileges() (string, error) {
+// CreateSetStmtFromRoleOptions returns a string of the form:
+// "SET "optionA" = true, "optionB" = false".
+func (pl List) CreateSetStmtFromRoleOptions() (string, error) {
 	if len(pl) <= 0 {
-		return "", pgerror.Newf(pgcode.Syntax, "no role privileges found")
+		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
 	}
 	setStmt := "SET "
-	for i, privilege := range pl {
+	for i, roleOption := range pl {
+		option := roleOption.Option
 		if i == 0 {
 			setStmt += fmt.Sprintf(
 				"\"%s\" = %t ",
-				MapToSQLColumn[privilege],
-				MapToBool[privilege])
+				MapToSQLColumn[option],
+				MapToBool[option])
 		} else {
 			setStmt += fmt.Sprintf(
 				", \"%s\" = %t ",
-				MapToSQLColumn[privilege],
-				MapToBool[privilege])
+				MapToSQLColumn[option],
+				MapToBool[option])
 		}
 	}
 
 	return setStmt, nil
 }
 
+// WIP LIST FROM STRINGS HAS TO BE LIST FROM ROLEOPTION
+// OR ANOTHER WAY TO MAKE LIST EASILY FROM ROLEOPTION IN YACC
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
 // We convert each string to uppercase and search for it in the ByName map.
 // If an entry is not found in ByName, an error is returned.
-func ListFromStrings(strs []string) (List, error) {
-	ret := make(List, len(strs))
+func ListFromRoleOptions(strs []string) (KindList, error) {
+	ret := make(KindList, len(strs))
 	for i, s := range strs {
 		k, ok := ByName[strings.ToUpper(s)]
 		if !ok {
-			return nil, errors.Errorf("not a valid role privilege: %q", s)
+			return nil, errors.Errorf("not a valid role option: %q", s)
 		}
 		ret[i] = k
 	}
 	return ret, nil
 }
 
-// CheckRolePrivilegeConflicts returns an error if two or more options conflict with each other.
-func (pl List) CheckRolePrivilegeConflicts() error {
-	rolePrivilegeBits, err := pl.ToBitField()
+// CheckRoleOptionConflicts returns an error if two or more options conflict with each other.
+func (pl List) CheckRoleOptionConflicts() error {
+	roleoptionBits, err := pl.ToBitField()
 
 	if err != nil {
 		return err
 	}
 
-	if (rolePrivilegeBits&CREATEROLE.Mask() != 0) &&
-		(rolePrivilegeBits&NOCREATEROLE.Mask() != 0) {
-		return pgerror.Newf(pgcode.Syntax, "conflicting role privilege options")
+	if (roleoptionBits&CREATEROLE.Mask() != 0) &&
+		(roleoptionBits&NOCREATEROLE.Mask() != 0) {
+		return pgerror.Newf(pgcode.Syntax, "conflicting role option options")
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -27,9 +27,9 @@ import (
 // CreateUserNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateUserNode struct {
-	ifNotExists    bool
-	isRole         bool
-	RolePrivileges roleprivilege.List
+	ifNotExists bool
+	isRole      bool
+	roleOptions roleoption.List
 	userAuthInfo
 
 	run createUserRun
@@ -52,13 +52,13 @@ func (p *planner) CreateUserNode(
 	ifNotExists bool,
 	isRole bool,
 	opName string,
-	rolePrivileges roleprivilege.List,
+	roleOptions roleoption.List,
 ) (*CreateUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := rolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
@@ -68,10 +68,10 @@ func (p *planner) CreateUserNode(
 	}
 
 	return &CreateUserNode{
-		userAuthInfo:   ua,
-		ifNotExists:    ifNotExists,
-		isRole:         isRole,
-		RolePrivileges: rolePrivileges,
+		userAuthInfo: ua,
+		ifNotExists:  ifNotExists,
+		isRole:       isRole,
+		roleOptions:  roleOptions,
 	}, nil
 }
 
@@ -133,7 +133,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 			msg, normalizedUsername)
 	}
 
-	rolePrivilegeBits, err := n.RolePrivileges.ToBitField()
+	roleOptionBits, err := n.roleOptions.ToBitField()
 	if err != nil {
 		return err
 	}
@@ -142,11 +142,12 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3, $4)", userTableName),
+		fmt.Sprintf("insert into %s values ($1, $2, $3, $4, $5)", userTableName),
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
-		rolePrivilegeBits&roleprivilege.CREATEROLE.Mask() != 0,
+		roleOptionBits&roleoption.CREATEROLE.Mask() != 0,
+		roleOptionBits&roleoption.LOGIN.Mask() != 0,
 	)
 
 	if err != nil {

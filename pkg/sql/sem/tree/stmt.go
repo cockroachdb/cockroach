@@ -166,6 +166,7 @@ var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
 var _ CCLOnlyStatement = &CreateRole{}
+var _ CCLOnlyStatement = &CreateRoleOrUser{}
 var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
 var _ CCLOnlyStatement = &RevokeRole{}
@@ -204,12 +205,12 @@ func (*AlterUserSetPassword) StatementTag() string { return "ALTER USER" }
 func (*AlterUserSetPassword) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
-func (*AlterRolePrivileges) StatementType() StatementType { return RowsAffected }
+func (*AlterRoleOptions) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterRolePrivileges) StatementTag() string { return "ALTER USER" }
+func (*AlterRoleOptions) StatementTag() string { return "ALTER USER" }
 
-func (*AlterRolePrivileges) hiddenFromShowQueries() {}
+func (*AlterRoleOptions) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*Backup) StatementType() StatementType { return Rows }
@@ -345,6 +346,16 @@ func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
 func (*CreateRole) cclOnlyStatement() {}
 
 func (*CreateRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
+func (*CreateRoleOrUser) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateRoleOrUser) StatementTag() string { return "CREATE ROLE" }
+
+func (*CreateRoleOrUser) cclOnlyStatement() {}
+
+func (*CreateRoleOrUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
@@ -889,7 +900,7 @@ func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterUserSetPassword) String() string           { return AsString(n) }
-func (n *AlterRolePrivileges) String() string            { return AsString(n) }
+func (n *AlterRoleOptions) String() string               { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }
 func (n *BeginTransaction) String() string               { return AsString(n) }
@@ -907,6 +918,7 @@ func (n *CreateChangefeed) String() string               { return AsString(n) }
 func (n *CreateDatabase) String() string                 { return AsString(n) }
 func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
+func (n *CreateRoleOrUser) String() string               { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }

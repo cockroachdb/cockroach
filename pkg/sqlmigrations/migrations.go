@@ -301,22 +301,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v20.1.
-		name:                "add hasCreateRole column to system.users table",
-		workFn:              addHasCreateRoleToSystemUsers,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
-	},
-	{
-		// Introduced in v20.1.
-		name:                "rename isRole column login in system.users table",
-		workFn:              renameIsRoleColumnToLogin,
-		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
-	},
-	{
-		// Introduced in v20.1.
-		// Need to invert values after isRole is renamed to login
-		// since bool in isRole is opposite to login by default.
-		name:                "invert values in login column in system.users table",
-		workFn:              invertLoginColumnValues,
+		name:                "add login column to system.users as inverted value of isRole column",
+		workFn:              addLoginColumnInSystemUsers,
 		includedInBootstrap: cluster.VersionByKey(cluster.VersionCreateRolePrivilege),
 	},
 }
@@ -950,18 +936,20 @@ func addHasCreateRoleToSystemUsers(ctx context.Context, r runner) error {
 	return r.execAsNodeWithRetry(ctx, "addHasCreateRoleColumn", addHasCreateRoleColumn)
 }
 
-func renameIsRoleColumnToLogin(ctx context.Context, r runner) error {
-	const renameIsRoleColumn = `
-          ALTER TABLE system.users RENAME COLUMN "hasCreateRole" login
-          `
-	return r.execAsNodeWithRetry(ctx, "convertIsRoleToLogin", renameIsRoleColumn)
-}
+func addLoginColumnInSystemUsers(ctx context.Context, r runner) error {
+	const createLoginColumn = `
+					ALTER TABLE system.users ADD COLUMN IF NOT EXISTS login bool
+					`
+	const setLoginColumnValues = `
+					UPDATE system.users login = not "isRole" WHERE "isRole" IS NOT NULL
+					`
 
-func invertLoginColumnValues(ctx context.Context, r runner) error {
-	const invertLoginColumn = `
-					UPDATE system.users SET "login" = NOT "login"
-          `
-	return r.execAsNodeWithRetry(ctx, "invertLoginColumnValues", invertLoginColumn)
+	err := r.execAsNodeWithRetry(ctx, "createLoginColumn", createLoginColumn)
+	if err != nil {
+		return err
+	}
+
+	return r.execAsRootWithRetry(ctx, "setLoginColumnValues", setLoginColumnValues)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

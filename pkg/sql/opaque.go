@@ -55,8 +55,8 @@ func buildOpaque(
 		plan, err = p.AlterSequence(ctx, n)
 	case *tree.AlterUserSetPassword:
 		plan, err = p.AlterUserSetPassword(ctx, n)
-	case *tree.AlterRolePrivileges:
-		plan, err = p.AlterRolePrivileges(ctx, n)
+	case *tree.AlterRoleOptions:
+		plan, err = p.AlterRoleOptions(ctx, n)
 	case *tree.CommentOnColumn:
 		plan, err = p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnDatabase:
@@ -156,7 +156,7 @@ func init() {
 	for _, stmt := range []tree.Statement{
 		&tree.AlterUserSetPassword{},
 		&tree.AlterIndex{},
-		&tree.AlterRolePrivileges{},
+		&tree.AlterRoleOptions{},
 		&tree.AlterTable{},
 		&tree.AlterSequence{},
 		&tree.CommentOnColumn{},
@@ -204,6 +204,7 @@ func init() {
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
 		&tree.CreateRole{},
+		&tree.CreateRoleOrUser{},
 		&tree.DropRole{},
 		&tree.GrantRole{},
 		&tree.RevokeRole{},

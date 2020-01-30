@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -827,7 +827,7 @@ const (
 // TABLE/INDEX statement.
 type PartitionBy struct {
 	Fields NameList
-	// Exactly one of List or Range is required to be non-empty.
+	// Exactly one of KindList or Range is required to be non-empty.
 	List  []ListPartition
 	Range []RangePartition
 }
@@ -1168,6 +1168,40 @@ const (
 	_ = SeqOptAs
 )
 
+// CreateRoleOrUser represents a CREATE USER or CREATE ROLE statement.
+type CreateRoleOrUser struct {
+	Name        Expr
+	Password    Expr
+	IsRole      bool
+	IfNotExists bool
+	RoleOptions roleoption.List
+	IfHasWith   bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
+	}
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	if node.IfHasWith {
+		ctx.WriteString(" WITH ")
+	} else if len(node.RoleOptions) > 0 {
+		ctx.WriteString(" ")
+	}
+	if len(node.RoleOptions) > 0 {
+		// WIP
+		// pass in values here (ie pw for formatting)?
+		//node.RoleOptions.Format()
+	}
+}
+
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
 	Name        Expr
@@ -1222,7 +1256,7 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 // CreateRole represents a CREATE ROLE statement.
 type CreateRole struct {
 	Name           Expr
-	RolePrivileges roleprivilege.List
+	RolePrivileges roleoption.KindList
 	IfHasWith      bool
 	IfNotExists    bool
 }
@@ -1244,15 +1278,15 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterRolePrivileges represents an ALTER ROLE ... WITH <OPTION...> statement.
-type AlterRolePrivileges struct {
-	Name           Expr
-	IfHasWith      bool
-	RolePrivileges roleprivilege.List
+// AlterRoleOptions represents an ALTER ROLE ... WITH <OPTION...> statement.
+type AlterRoleOptions struct {
+	Name        Expr
+	IfHasWith   bool
+	RoleOptions roleoption.List
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
+func (node *AlterRoleOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ROLE ")
 	ctx.FormatNode(node.Name)
 	if node.IfHasWith {
@@ -1260,7 +1294,7 @@ func (node *AlterRolePrivileges) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString(" ")
 	}
-	node.RolePrivileges.Format(&ctx.Buffer)
+	//node.RoleOptions.Format(&ctx.Buffer)
 }
 
 // CreateView represents a CREATE VIEW statement.

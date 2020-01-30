@@ -16,30 +16,30 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
-	name           func() (string, error)
-	rolePrivileges roleprivilege.List
+	name        func() (string, error)
+	roleOptions roleoption.List
 
 	run alterRoleRun
 }
 
-// AlterRolePrivileges alters a user's permissios
-func (p *planner) AlterRolePrivileges(
-	ctx context.Context, n *tree.AlterRolePrivileges,
+// AlterRoleOptions alters a user's permissios
+func (p *planner) AlterRoleOptions(
+	ctx context.Context, n *tree.AlterRoleOptions,
 ) (*alterRoleNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
-	if err := p.HasRolePrivilege(ctx, roleprivilege.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	if err := n.RolePrivileges.CheckRolePrivilegeConflicts(); err != nil {
+	if err := n.RoleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
@@ -49,8 +49,8 @@ func (p *planner) AlterRolePrivileges(
 	}
 
 	return &alterRoleNode{
-		name:           name,
-		rolePrivileges: n.RolePrivileges,
+		name:        name,
+		roleOptions: n.RoleOptions,
 	}, nil
 }
 
@@ -77,7 +77,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	setStmt, err := n.rolePrivileges.CreateSetStmtFromRolePrivileges()
+	setStmt, err := n.roleOptions.CreateSetStmtFromRoleOptions()
 	if err != nil {
 		return err
 	}

@@ -586,23 +586,24 @@ var specs = []stmtSpec{
 		name:   "create_view_stmt",
 		inline: []string{"opt_column_list"},
 	},
-	{
-		name:   "create_role_stmt",
-		inline: []string{"role_or_group"},
-		replace: map[string]string{
-			"string_or_placeholder": "name",
-		},
-	},
-	{
-		name:   "create_user_stmt",
-		inline: []string{"opt_with", "password_clause", "opt_password"},
-		replace: map[string]string{
-			"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
-			"'USER' string_or_placeholder":     "'USER' name",
-			"'EXISTS' string_or_placeholder":   "'EXISTS' name",
-		},
-		unlink: []string{"password"},
-	},
+	//{
+	//	name:   "create_role_stmt",
+	//	inline: []string{"role_or_group"},
+	//	replace: map[string]string{
+	//		"string_or_placeholder": "name",
+	//	},
+	//},
+	//// WIP Make sure to update this.
+	//{
+	//	name:   "create_user_stmt",
+	//	inline: []string{"opt_with", "password_clause"},
+	//	replace: map[string]string{
+	//		"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
+	//		"'USER' string_or_placeholder":     "'USER' name",
+	//		"'EXISTS' string_or_placeholder":   "'EXISTS' name",
+	//	},
+	//	unlink: []string{"password"},
+	//},
 	{
 		name: "default_value_column_level",
 		stmt: "stmt_block",
