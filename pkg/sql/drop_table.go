@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -408,7 +407,7 @@ func (p *planner) initiateDropTable(
 			return err
 		}
 
-		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+		if err := job.WithTxn(p.txn).Succeeded(ctx, nil); err != nil {
 			return errors.Wrapf(err,
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}

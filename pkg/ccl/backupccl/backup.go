@@ -1471,7 +1471,7 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *client.DB) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn) error {
+func (b *backupResumer) OnFailOrCancel(context.Context, interface{}) error {
 	return nil
 }
 

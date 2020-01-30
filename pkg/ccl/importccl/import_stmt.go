@@ -1079,7 +1079,12 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
+}
+
+// dropTables implements the OnFailOrCancel logic.
+func (r *importResumer) dropTables(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.

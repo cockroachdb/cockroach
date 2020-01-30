@@ -3928,6 +3928,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 // and index backfills is canceled.
 func TestCancelSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("")
 
 	const (
 		numNodes = 3

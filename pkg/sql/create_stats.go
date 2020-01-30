@@ -456,9 +456,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
-	return nil
-}
+func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
 
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn) error {
