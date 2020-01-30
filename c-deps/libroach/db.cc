@@ -1136,9 +1136,8 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64
     // Check to see if this is the first version of key and adding it would
     // put us over the limit (we might already be over the limit).
     const int64_t cur_size = bulkop_summary.data_size();
-    const int64_t new_size = cur_size + decoded_key.size() + iter.value().size();
-    const bool is_over_target = cur_size > 0 && new_size > target_size;
-    if (paginated && is_new_key && is_over_target) {
+    const bool reached_target_size = cur_size > 0 && cur_size >= target_size;
+    if (paginated && is_new_key && reached_target_size) {
       resume_key.reserve(decoded_key.size());
       resume_key.assign(decoded_key.data(), decoded_key.size());
       break;
@@ -1154,6 +1153,7 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64
     if (!row_counter.Count((iter.key()), &bulkop_summary)) {
       return ToDBString("Error in row counter");
     }
+    const int64_t new_size = cur_size + decoded_key.size() + iter.value().size();
     bulkop_summary.set_data_size(new_size);
   }
   *summary = ToDBString(bulkop_summary.SerializeAsString());

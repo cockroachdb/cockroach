@@ -201,14 +201,10 @@ type Reader interface {
 	// requested or if the start.Timestamp is non-zero. Returns the bytes of an
 	// SSTable containing the exported keys, the size of exported data, or an error.
 	// If targetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will produce SSTs which contain
-	// all relevant versions of a key and will not add the first version of a new
-	// key if it would lead to the SST exceeding the targetSize. If exportAllRevisions
-	// is false, the returned SST will be smaller than target_size so long as the first
-	// kv pair is smaller than targetSize. If exportAllRevisions is true then
-	// targetSize may be exceeded by as much as the size of all of the versions of
-	// the last key. If the SST construction stops due to the targetSize,
-	// then a non-nil resumeKey will be returned.
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
 	ExportToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, io IterOptions,
