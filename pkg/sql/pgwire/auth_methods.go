@@ -16,8 +16,8 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,26 +40,26 @@ func loadDefaultMethods() {
 	//
 	// Care should be taken by administrators to only accept this auth
 	// method over secure connections, e.g. those encrypted using SSL.
-	RegisterAuthMethod("password", authPassword, cluster.Version19_1, hba.ConnAny, nil)
+	RegisterAuthMethod("password", authPassword, clusterversion.Version19_1, hba.ConnAny, nil)
 
 	// The "cert" method requires a valid client certificate for the
 	// user attempting to connect.
 	//
 	// This method is only usable over SSL connections.
-	RegisterAuthMethod("cert", authCert, cluster.Version19_1, hba.ConnHostSSL, nil)
+	RegisterAuthMethod("cert", authCert, clusterversion.Version19_1, hba.ConnHostSSL, nil)
 
 	// The "cert-password" method requires either a valid client
 	// certificate for the connecting user, or, if no cert is provided,
 	// a cleartext password.
-	RegisterAuthMethod("cert-password", authCertPassword, cluster.Version19_1, hba.ConnAny, nil)
+	RegisterAuthMethod("cert-password", authCertPassword, clusterversion.Version19_1, hba.ConnAny, nil)
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("reject", authReject, cluster.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
+	RegisterAuthMethod("reject", authReject, clusterversion.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
 
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
-	RegisterAuthMethod("trust", authTrust, cluster.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
+	RegisterAuthMethod("trust", authTrust, clusterversion.VersionAuthLocalAndTrustRejectMethods, hba.ConnAny, nil)
 
 }
 

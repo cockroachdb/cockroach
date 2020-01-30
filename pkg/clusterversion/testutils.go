@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cluster
+package clusterversion
 
 // TestingClusterVersion is a ClusterVersion that tests can use when they don't
 // want to go through a Settings object.

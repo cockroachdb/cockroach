@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -144,10 +145,10 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
 			if st != nil &&
-				!cluster.Version.IsActive(context.TODO(), st, cluster.VersionAuthLocalAndTrustRejectMethods) {
+				!cluster.Version.IsActive(context.TODO(), st, clusterversion.VersionAuthLocalAndTrustRejectMethods) {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					`authentication rule type 'local' requires all nodes to be upgraded to %s`,
-					cluster.VersionByKey(cluster.VersionAuthLocalAndTrustRejectMethods),
+					clusterversion.VersionByKey(clusterversion.VersionAuthLocalAndTrustRejectMethods),
 				)
 			}
 		default:
@@ -194,7 +195,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`authentication method '%s' requires all nodes to be upgraded to %s`,
 				entry.Method.Value,
-				cluster.VersionByKey(method.minReqVersion))
+				clusterversion.VersionByKey(method.minReqVersion))
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
@@ -308,7 +309,7 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 func RegisterAuthMethod(
 	method string,
 	fn AuthMethod,
-	minReqVersion cluster.VersionKey,
+	minReqVersion clusterversion.VersionKey,
 	validConnTypes hba.ConnType,
 	checkEntry CheckHBAEntry,
 ) {
@@ -336,7 +337,7 @@ var (
 
 type authMethodEntry struct {
 	methodInfo
-	minReqVersion cluster.VersionKey
+	minReqVersion clusterversion.VersionKey
 }
 
 type methodInfo struct {

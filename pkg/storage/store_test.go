@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -234,12 +235,12 @@ func createTestStoreWithoutStart(
 	factory.setStore(store)
 	if err := InitEngine(
 		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
-		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
 	); err != nil {
 		t.Fatal(err)
 	}
 	var splits []roachpb.RKey
-	bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
+	bootstrapVersion := clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion}
 	kvs, tableSplits := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig).GetInitialValues(bootstrapVersion)
 	if opts.createSystemRanges {
 		splits = config.StaticSplits()
@@ -250,7 +251,7 @@ func createTestStoreWithoutStart(
 	}
 	if err := WriteInitialClusterData(
 		context.TODO(), eng, kvs, /* initialValues */
-		cluster.BinaryServerVersion,
+		clusterversion.BinaryServerVersion,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatal(err)
@@ -441,7 +442,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		// Bootstrap with a fake ident.
 		if err := InitEngine(
 			ctx, eng, testIdent,
-			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
 		); err != nil {
 			t.Fatalf("error bootstrapping store: %+v", err)
 		}
@@ -456,7 +457,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		// Bootstrap the system ranges.
 		var splits []roachpb.RKey
-		bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
+		bootstrapVersion := clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion}
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig).GetInitialValues(bootstrapVersion)
 		splits = config.StaticSplits()
 		splits = append(splits, tableSplits...)
@@ -465,7 +466,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		})
 
 		if err := WriteInitialClusterData(
-			ctx, eng, kvs /* initialValues */, cluster.BinaryServerVersion,
+			ctx, eng, kvs /* initialValues */, clusterversion.BinaryServerVersion,
 			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %+v", err)
@@ -523,7 +524,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	// Bootstrap should fail on non-empty engine.
 	switch err := errors.Cause(InitEngine(
 		ctx, eng, testIdent,
-		cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+		clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
 	)); err.(type) {
 	case *NotBootstrappedError:
 	default:

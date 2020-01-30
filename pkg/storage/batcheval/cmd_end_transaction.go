@@ -17,6 +17,7 @@ import (
 	"math"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1032,7 +1033,7 @@ func splitTriggerHelper(
 	}
 
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
-	if !cluster.Version.IsActive(ctx, rec.ClusterSettings(), cluster.VersionContainsEstimatesCounter) {
+	if !cluster.Version.IsActive(ctx, rec.ClusterSettings(), clusterversion.VersionContainsEstimatesCounter) {
 		deltaPostSplitLeft.ContainsEstimates = 0
 	}
 	return deltaPostSplitLeft, pd, nil
