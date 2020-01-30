@@ -216,12 +216,12 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	rows, _, _, err := engine.MVCCScan(ctx, e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
+	res, err := engine.MVCCScan(ctx, e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var foundKeys keySlice
-	for _, kv := range rows {
+	for _, kv := range res.KVs {
 		foundKeys = append(foundKeys, kv.Key)
 	}
 	var expectedKeys = keySlice{
