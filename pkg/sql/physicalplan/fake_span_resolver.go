@@ -11,6 +11,7 @@
 package physicalplan
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 
@@ -118,27 +119,40 @@ func (fit *fakeSpanResolverIterator) Seek(
 		}
 	}
 
-	fit.splits = make([]fakeSplit, 0, numSplits+2)
-	fit.splits = append(fit.splits, fakeSplit{key: span.Key})
+	splits := make([]fakeSplit, 0, numSplits+2)
+	splits = append(splits, fakeSplit{key: span.Key})
 	for i := range splitKeys {
 		if _, ok := chosen[i]; ok {
-			fit.splits = append(fit.splits, fakeSplit{key: splitKeys[i]})
+			splits = append(splits, fakeSplit{key: splitKeys[i]})
 		}
 	}
-	fit.splits = append(fit.splits, fakeSplit{key: span.EndKey})
+	splits = append(splits, fakeSplit{key: span.EndKey})
 
 	// Assign nodes randomly.
-	for i := range fit.splits {
-		fit.splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
+	for i := range splits {
+		splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
 	}
 
 	if scanDir == kv.Descending {
 		// Reverse the order of the splits.
-		for i := 0; i < len(fit.splits)/2; i++ {
-			j := len(fit.splits) - i - 1
-			fit.splits[i], fit.splits[j] = fit.splits[j], fit.splits[i]
+		for i := 0; i < len(splits)/2; i++ {
+			j := len(splits) - i - 1
+			splits[i], splits[j] = splits[j], splits[i]
 		}
 	}
+
+	// Check for the case where the previous Seek() call was for the same
+	// row. In this case we'll assign the same replica so we don't "split"
+	// column families of the same row across different replicas.
+	if fit.splits != nil {
+		prefixLen, err := keys.GetRowPrefixLength(span.Key)
+		if err == nil && len(fit.splits[0].key) >= prefixLen &&
+			bytes.Equal(span.Key[:prefixLen], fit.splits[0].key[:prefixLen]) {
+			splits[0].nodeDesc = fit.splits[0].nodeDesc
+		}
+	}
+
+	fit.splits = splits
 }
 
 // Valid is part of the SpanResolverIterator interface.
