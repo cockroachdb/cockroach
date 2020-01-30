@@ -84,9 +84,9 @@ type unreplicatedTruncStateTest struct {
 func TestTruncateLogUnreplicatedTruncatedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Check out the old cluster.VersionUnreplicatedRaftTruncatedState for
-	// information on what's being tested. The cluster version is gone,
-	// but the migration is done range by range and so it still exists.
+	// Check out the old clusterversion.VersionUnreplicatedRaftTruncatedState
+	// for information on what's being tested. The cluster version is gone, but
+	// the migration is done range by range and so it still exists.
 
 	const (
 		startsLegacy       = true

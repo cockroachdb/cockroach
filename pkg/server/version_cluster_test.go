@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,7 +56,7 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 		}
 		th.Fatalf("%d: %s (%T)", i, err, err)
 	}
-	var v cluster.ClusterVersion
+	var v clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
 		th.Fatalf("%d: %s", i, err)
 	}
@@ -166,7 +167,7 @@ func prev(version roachpb.Version) roachpb.Version {
 func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var newVersion = cluster.BinaryServerVersion
+	var newVersion = clusterversion.BinaryServerVersion
 	var oldVersion = prev(newVersion)
 
 	// Starts 3 nodes that have cluster versions set to be oldVersion and
@@ -205,7 +206,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	var newVersion = cluster.BinaryServerVersion
+	var newVersion = clusterversion.BinaryServerVersion
 	var oldVersion = prev(newVersion)
 
 	knobs := base.TestingKnobs{
@@ -346,7 +347,7 @@ func TestAllVersionsAgree(t *testing.T) {
 		TestCluster: tcRaw,
 	}
 
-	exp := cluster.BinaryServerVersion.String()
+	exp := clusterversion.BinaryServerVersion.String()
 
 	// The node bootstrapping the cluster starts at BinaryServerVersion, the
 	// others start at MinimumSupportedVersion and it takes them a gossip update
@@ -371,8 +372,8 @@ func TestAllVersionsAgree(t *testing.T) {
 // equal the MinSupportedVersion to avoid rot in tests using this (as we retire
 // old versions).
 func v0v1() (roachpb.Version, roachpb.Version) {
-	v1 := cluster.BinaryMinimumSupportedVersion
-	v0 := cluster.BinaryMinimumSupportedVersion
+	v1 := clusterversion.BinaryMinimumSupportedVersion
+	v0 := clusterversion.BinaryMinimumSupportedVersion
 	if v0.Minor > 0 {
 		v0.Minor--
 	} else {

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -216,7 +217,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	}
 	ctx := context.Background()
 	if tc.store == nil {
-		cv := cluster.ClusterVersion{Version: bootstrapVersion}
+		cv := clusterversion.ClusterVersion{Version: bootstrapVersion}
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
 		cfg.StorePool = NewTestStorePool(cfg)
@@ -12114,7 +12115,7 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 func TestContainsEstimatesClampProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_ = cluster.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
+	_ = clusterversion.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
 
 	someRequestToProposal := func(tc *testContext, ctx context.Context) *ProposalData {
 		cmdIDKey := storagebase.CmdIDKey("some-cmdid-key")
@@ -12138,7 +12139,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
-		version := cluster.VersionByKey(cluster.VersionContainsEstimatesCounter - 1)
+		version := clusterversion.VersionByKey(clusterversion.VersionContainsEstimatesCounter - 1)
 		cfg.Settings = cluster.MakeClusterSettings(version, version)
 		var tc testContext
 		tc.StartWithStoreConfigAndVersion(t, stopper, cfg, version)
@@ -12175,7 +12176,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 func TestContainsEstimatesClampApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_ = cluster.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
+	_ = clusterversion.VersionContainsEstimatesCounter // see for details on the ContainsEstimates migration
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()

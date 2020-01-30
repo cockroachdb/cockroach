@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -33,7 +34,8 @@ import (
 // parameters for CLI utilities (other than `cockroach start`, which
 // constructs a proper server.Config for the newly created server).
 var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	st := cluster.MakeClusterSettings(
+		clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	s := server.MakeConfig(context.Background(), st)
