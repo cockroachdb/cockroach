@@ -322,6 +322,39 @@ func GetAllDatabaseDescriptorIDs(ctx context.Context, txn *client.Txn) ([]sqlbas
 	return descIDs, nil
 }
 
+// GetSchemasForDatabase looks up and returns all available
+// schema ids to names
+func GetSchemasForDatabase(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
+) (map[sqlbase.ID]string, error) {
+	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
+
+	nameKey := sqlbase.NewSchemaKey(dbID, "" /* name */).Key()
+	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+
+	// Always add public schema ID.
+	// TODO(solon): This can be removed in 20.2, when this is always written.
+	// In 20.1, in a migrating state, it may be not included yet.
+	ret := make(map[sqlbase.ID]string, len(kvs)+1)
+	ret[sqlbase.ID(keys.PublicSchemaID)] = tree.PublicSchema
+
+	for _, kv := range kvs {
+		id := sqlbase.ID(kv.ValueInt())
+		if _, ok := ret[id]; ok {
+			continue
+		}
+		_, _, name, err := sqlbase.DecodeNameMetadataKey(kv.Key)
+		if err != nil {
+			return nil, err
+		}
+		ret[id] = name
+	}
+	return ret, nil
+}
+
 // writeDescToBatch adds a Put command writing a descriptor proto to the
 // descriptors table. It writes the descriptor desc at the id descID. If kvTrace
 // is enabled, it will log an event explaining the put that was performed.
