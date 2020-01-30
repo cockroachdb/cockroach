@@ -438,96 +438,112 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		intTyps[i] = *types.Int
 	}
 
-	for run := 0; run < nRuns; run++ {
-		for _, testSpec := range testSpecs {
-			for nCols := 1; nCols <= maxCols; nCols++ {
-				for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-					for _, addFilter := range []bool{false, true} {
-						triedWithoutOnExpr, triedWithOnExpr := false, false
-						if !testSpec.onExprSupported {
-							triedWithOnExpr = true
-						}
-						for !triedWithoutOnExpr || !triedWithOnExpr {
-							var (
-								lRows, rRows     sqlbase.EncDatumRows
-								lEqCols, rEqCols []uint32
-								inputTypes       []types.T
-								usingRandomTypes bool
-							)
-							if rng.Float64() < randTypesProbability {
-								inputTypes = generateRandomSupportedTypes(rng, nCols)
-								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-								// Since random types might not be comparable, we use the same
-								// equality columns for both inputs.
-								rEqCols = lEqCols
-								usingRandomTypes = true
-							} else {
-								inputTypes = intTyps[:nCols]
-								lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
-							}
-
-							outputTypes := append(inputTypes, inputTypes...)
-							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
-								outputTypes = inputTypes
-							}
-							outputColumns := make([]uint32, len(outputTypes))
-							for i := range outputColumns {
-								outputColumns[i] = uint32(i)
-							}
-
-							var filter, onExpr execinfrapb.Expression
-							if addFilter {
-								colTypes := append(inputTypes, inputTypes...)
-								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
-								filter = generateFilterExpr(
-									rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
-								)
-							}
-							if triedWithoutOnExpr {
-								colTypes := append(inputTypes, inputTypes...)
-								onExpr = generateFilterExpr(
-									rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
-								)
-							}
-							hjSpec := &execinfrapb.HashJoinerSpec{
-								LeftEqColumns:  lEqCols,
-								RightEqColumns: rEqCols,
-								OnExpr:         onExpr,
-								Type:           testSpec.joinType,
-							}
-							pspec := &execinfrapb.ProcessorSpec{
-								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
-								Core:  execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
-								Post:  execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outputColumns, Filter: filter},
-							}
-							args := verifyColOperatorArgs{
-								anyOrder:    true,
-								inputTypes:  [][]types.T{inputTypes, inputTypes},
-								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
-								outputTypes: outputTypes,
-								pspec:       pspec,
-							}
-							if err := verifyColOperator(args); err != nil {
-								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
-									testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
-								fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
-								prettyPrintTypes(inputTypes, "left" /* tableName */)
-								prettyPrintTypes(inputTypes, "right" /* tableName */)
-								prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
-								prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
-								t.Fatal(err)
-							}
-							if onExpr.Expr == "" {
-								triedWithoutOnExpr = true
-							} else {
+	// Interesting memory limits:
+	// - 0 - the default 64MiB memory limit will be used, and the sorter will not
+	//   spill to disk.
+	// - 1 - the in-memory sorter will hit the memory limit after spooling one
+	//   batch, so the external sort will take over.
+	for _, memoryLimit := range []int64{0, 1} {
+		for run := 0; run < nRuns; run++ {
+			for _, testSpec := range testSpecs {
+				for nCols := 1; nCols <= maxCols; nCols++ {
+					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
+						for _, addFilter := range []bool{false, true} {
+							triedWithoutOnExpr, triedWithOnExpr := false, false
+							if !testSpec.onExprSupported {
 								triedWithOnExpr = true
+							}
+							for !triedWithoutOnExpr || !triedWithOnExpr {
+								var (
+									lRows, rRows     sqlbase.EncDatumRows
+									lEqCols, rEqCols []uint32
+									inputTypes       []types.T
+									usingRandomTypes bool
+								)
+								if rng.Float64() < randTypesProbability {
+									inputTypes = generateRandomSupportedTypes(rng, nCols)
+									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+									// Since random types might not be comparable, we use the same
+									// equality columns for both inputs.
+									rEqCols = lEqCols
+									usingRandomTypes = true
+								} else {
+									inputTypes = intTyps[:nCols]
+									lRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+									rRows = sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
+								}
+
+								outputTypes := append(inputTypes, inputTypes...)
+								if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+									outputTypes = inputTypes
+								}
+								outputColumns := make([]uint32, len(outputTypes))
+								for i := range outputColumns {
+									outputColumns[i] = uint32(i)
+								}
+
+								var filter, onExpr execinfrapb.Expression
+								if addFilter {
+									colTypes := append(inputTypes, inputTypes...)
+									forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
+										testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
+									filter = generateFilterExpr(
+										rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
+									)
+								}
+								if triedWithoutOnExpr {
+									colTypes := append(inputTypes, inputTypes...)
+									onExpr = generateFilterExpr(
+										rng, nCols, nEqCols, colTypes, usingRandomTypes, false, /* forceLeftSide */
+									)
+								}
+								hjSpec := &execinfrapb.HashJoinerSpec{
+									LeftEqColumns:  lEqCols,
+									RightEqColumns: rEqCols,
+									OnExpr:         onExpr,
+									Type:           testSpec.joinType,
+								}
+								pspec := &execinfrapb.ProcessorSpec{
+									Input: []execinfrapb.InputSyncSpec{
+										{ColumnTypes: inputTypes},
+										{ColumnTypes: inputTypes},
+									},
+									Core: execinfrapb.ProcessorCoreUnion{HashJoiner: hjSpec},
+									Post: execinfrapb.PostProcessSpec{
+										Projection:    true,
+										OutputColumns: outputColumns,
+										Filter:        filter,
+									},
+								}
+								args := verifyColOperatorArgs{
+									anyOrder:    true,
+									inputTypes:  [][]types.T{inputTypes, inputTypes},
+									inputs:      []sqlbase.EncDatumRows{lRows, rRows},
+									outputTypes: outputTypes,
+									pspec:       pspec,
+									memoryLimit: memoryLimit,
+								}
+								if err := verifyColOperator(args); err != nil {
+									fmt.Printf("--- memory limit = %d join type = %s onExpr = %q"+
+										" filter = %q seed = %d run = %d ---\n",
+										memoryLimit, testSpec.joinType.String(), onExpr.Expr, filter.Expr, seed, run)
+									fmt.Printf("--- lEqCols = %v rEqCols = %v ---\n", lEqCols, rEqCols)
+									prettyPrintTypes(inputTypes, "left" /* tableName */)
+									prettyPrintTypes(inputTypes, "right" /* tableName */)
+									prettyPrintInput(lRows, inputTypes, "left" /* tableName */)
+									prettyPrintInput(rRows, inputTypes, "right" /* tableName */)
+									t.Fatal(err)
+								}
+								if onExpr.Expr == "" {
+									triedWithoutOnExpr = true
+								} else {
+									triedWithOnExpr = true
+								}
 							}
 						}
 					}
