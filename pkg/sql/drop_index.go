@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -203,7 +204,7 @@ func (p *planner) dropIndexByName(
 	// If we aren't at the cluster version where we have removed explicit foreign key IDs
 	// from the foreign key descriptors, fall back to the existing drop index logic.
 	// That means we pretend that we can never find replacements for any indexes.
-	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNoExplicitForeignKeyIndexIDs) {
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionNoExplicitForeignKeyIndexIDs) {
 		indexHasReplacementCandidate = func(func(*sqlbase.IndexDescriptor) bool) bool {
 			return false
 		}

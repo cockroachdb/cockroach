@@ -32,6 +32,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -142,7 +143,7 @@ func createTestStoreWithOpts(
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	stores := storage.NewStores(
 		ac, storeCfg.Clock,
-		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+		clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -178,7 +179,7 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		if err := storage.InitEngine(
 			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
-			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +188,7 @@ func createTestStoreWithOpts(
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
-		bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
+		bootstrapVersion := clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion}
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(storeCfg.DefaultZoneConfig, storeCfg.DefaultSystemZoneConfig).GetInitialValues(bootstrapVersion)
 		if !opts.dontCreateSystemRanges {
 			splits = config.StaticSplits()
@@ -200,7 +201,7 @@ func createTestStoreWithOpts(
 			ctx,
 			eng,
 			kvs, /* initialValues */
-			cluster.BinaryServerVersion,
+			clusterversion.BinaryServerVersion,
 			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
 		if err != nil {
 			t.Fatal(err)
@@ -862,7 +863,7 @@ func (m *multiTestContext) addStore(idx int) {
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
 		},
-			cluster.ClusterVersion{Version: cluster.BinaryServerVersion},
+			clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion},
 		); err != nil {
 			m.t.Fatal(err)
 		}
@@ -870,7 +871,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if needBootstrap && idx == 0 {
 		// Bootstrap the initial range on the first engine.
 		var splits []roachpb.RKey
-		bootstrapVersion := cluster.ClusterVersion{Version: cluster.BinaryServerVersion}
+		bootstrapVersion := clusterversion.ClusterVersion{Version: clusterversion.BinaryServerVersion}
 		kvs, tableSplits := sqlbase.MakeMetadataSchema(cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig).GetInitialValues(bootstrapVersion)
 		if !m.startWithSingleRange {
 			splits = config.StaticSplits()
@@ -883,7 +884,7 @@ func (m *multiTestContext) addStore(idx int) {
 			ctx,
 			eng,
 			kvs, /* initialValues */
-			cluster.BinaryServerVersion,
+			clusterversion.BinaryServerVersion,
 			len(m.engines), splits, cfg.Clock.PhysicalNow())
 		if err != nil {
 			m.t.Fatal(err)
@@ -895,7 +896,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 
 	sender := storage.NewStores(ambient, clock,
-		cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion,
+		clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion,
 	)
 	sender.AddStore(store)
 	perReplicaServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)

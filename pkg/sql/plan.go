@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -70,7 +71,7 @@ func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
 	// upon reading use the MVCC timestamp to populate the values.
 	var ts hlc.Timestamp
 	if !cluster.Version.IsActive(
-		r.ctx, r.ExecCfg().Settings, cluster.VersionTableDescModificationTimeFromMVCC,
+		r.ctx, r.ExecCfg().Settings, clusterversion.VersionTableDescModificationTimeFromMVCC,
 	) {
 		ts = r.p.txn.CommitTimestamp()
 	}

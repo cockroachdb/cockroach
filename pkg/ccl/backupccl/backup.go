@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1098,7 +1099,7 @@ func backupPlanHook(
 			return err
 		}
 		if len(to) > 1 &&
-			!cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionPartitionedBackup) {
+			!cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionPartitionedBackup) {
 			return errors.Errorf("partitioned backups can only be made on a cluster that has been fully upgraded to version 19.2")
 		}
 

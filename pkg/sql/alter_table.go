@@ -16,6 +16,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -318,7 +319,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAlterPrimaryKey:
 			// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
 			version := cluster.Version.ActiveVersionOrEmpty(params.ctx, params.p.ExecCfg().Settings)
-			if !version.IsActive(cluster.VersionPrimaryKeyChanges) {
+			if !version.IsActive(clusterversion.VersionPrimaryKeyChanges) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"all nodes are not the correct version for primary key changes")
 			}

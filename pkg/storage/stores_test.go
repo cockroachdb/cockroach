@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -31,7 +31,7 @@ import (
 )
 
 func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
-	return NewStores(ambientCtx, clock, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	return NewStores(ambientCtx, clock, clusterversion.BinaryMinimumSupportedVersion, clusterversion.BinaryServerVersion)
 }
 
 func TestStoresAddStore(t *testing.T) {
@@ -354,7 +354,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	if initialCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
 		t.Fatal(err)
 	} else {
-		expCV := cluster.ClusterVersion{
+		expCV := clusterversion.ClusterVersion{
 			Version: v1_0,
 		}
 		if !reflect.DeepEqual(initialCV, expCV) {
@@ -378,7 +378,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		if initialCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
 			t.Fatal(err)
 		} else {
-			expCV := cluster.ClusterVersion{
+			expCV := clusterversion.ClusterVersion{
 				Version: v1_0,
 			}
 			if !reflect.DeepEqual(initialCV, expCV) {
@@ -390,7 +390,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	// Bump a version to something more modern (but supported by this binary).
 	// Note that there's still only one store.
 	{
-		cv := cluster.ClusterVersion{
+		cv := clusterversion.ClusterVersion{
 			Version: versionB,
 		}
 		if err := ls0.WriteClusterVersion(ctx, cv); err != nil {
@@ -415,7 +415,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		ls01.AddStore(stores[0])
 		ls01.AddStore(stores[1])
 
-		expCV := cluster.ClusterVersion{
+		expCV := clusterversion.ClusterVersion{
 			Version: v1_0,
 		}
 		if cv, err := ls01.SynthesizeClusterVersion(ctx); err != nil {
@@ -437,7 +437,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 		}
 
 		// Write an updated Version to both stores.
-		cv := cluster.ClusterVersion{
+		cv := clusterversion.ClusterVersion{
 			Version: versionB,
 		}
 		if err := ls01.WriteClusterVersion(ctx, cv); err != nil {
@@ -446,7 +446,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	}
 
 	// Third node comes along, for now it's alone. It has a lower use version.
-	cv := cluster.ClusterVersion{
+	cv := clusterversion.ClusterVersion{
 		Version: versionA,
 	}
 
@@ -465,7 +465,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 
 	// Reading across all stores, we expect to pick up the lowest useVersion both
 	// from the third store.
-	expCV := cluster.ClusterVersion{
+	expCV := clusterversion.ClusterVersion{
 		Version: versionA,
 	}
 	if cv, err := ls012.SynthesizeClusterVersion(ctx); err != nil {
@@ -486,9 +486,9 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 	vOneDashOne := roachpb.Version{Major: 1, Unstable: 1}
 	vOne := roachpb.Version{Major: 1}
 
-	type testFn func(*cluster.ClusterVersion, *Stores) string
+	type testFn func(*clusterversion.ClusterVersion, *Stores) string
 	for name, setter := range map[string]testFn{
-		"StoreTooNew": func(cv *cluster.ClusterVersion, ls *Stores) string {
+		"StoreTooNew": func(cv *clusterversion.ClusterVersion, ls *Stores) string {
 			// This is what the running node requires from its stores.
 			ls.minSupportedVersion = vOne
 			// This is what the node is running.
@@ -497,7 +497,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			cv.Version = roachpb.Version{Major: 9}
 			return `cockroach version v1\.0-1 is incompatible with data in store <no-attributes>=<in-mem>; use version v9\.0 or later`
 		},
-		"StoreTooOldVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
+		"StoreTooOldVersion": func(cv *clusterversion.ClusterVersion, ls *Stores) string {
 			// This is what the running node requires from its stores.
 			ls.minSupportedVersion = roachpb.Version{Major: 5}
 			// This is what the node is running.
@@ -506,7 +506,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			cv.Version = roachpb.Version{Major: 4}
 			return `store <no-attributes>=<in-mem>, last used with cockroach version v4\.0, is too old for running version v9\.0 \(which requires data from v5\.0 or later\)`
 		},
-		"StoreTooOldMinVersion": func(cv *cluster.ClusterVersion, ls *Stores) string {
+		"StoreTooOldMinVersion": func(cv *clusterversion.ClusterVersion, ls *Stores) string {
 			// Like the previous test case, but this time cv.MinimumVersion is the culprit.
 			ls.minSupportedVersion = roachpb.Version{Major: 5}
 			ls.serverVersion = roachpb.Version{Major: 9}
@@ -519,7 +519,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			defer stopper.Stop(ctx)
 			ls.AddStore(stores[0])
 			// Configure versions and write.
-			var cv cluster.ClusterVersion
+			var cv clusterversion.ClusterVersion
 			expErr := setter(&cv, ls)
 			if err := ls.WriteClusterVersion(ctx, cv); err != nil {
 				t.Fatal(err)

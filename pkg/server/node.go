@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -214,7 +215,7 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
+	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (uuid.UUID, error) {
@@ -317,7 +318,7 @@ func (n *Node) AnnotateCtxWithSpan(
 func (n *Node) bootstrapCluster(
 	ctx context.Context,
 	engines []engine.Engine,
-	bootstrapVersion cluster.ClusterVersion,
+	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) error {
@@ -335,7 +336,7 @@ func (n *Node) bootstrapCluster(
 	return nil
 }
 
-func (n *Node) onClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) {
+func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) {
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
 	}
@@ -353,7 +354,7 @@ func (n *Node) start(
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	cv cluster.ClusterVersion,
+	cv clusterversion.ClusterVersion,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
@@ -557,7 +558,7 @@ func (n *Node) addStore(store *storage.Store) {
 	if err != nil {
 		log.Fatal(context.TODO(), err)
 	}
-	if cv == (cluster.ClusterVersion{}) {
+	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
 		// bootstrap process.
 		log.Fatal(context.TODO(), "attempting to add a store without a version")
