@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1161,8 +1162,8 @@ func MakeTableDesc(
 	// before the version has been initialized, leading to a panic. There are also
 	// cases where this function is called in tests where st is nil.
 	if st != nil {
-		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
-			version.IsActive(cluster.VersionSecondaryIndexColumnFamilies) {
+		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (clusterversion.ClusterVersion{}) &&
+			version.IsActive(clusterversion.VersionSecondaryIndexColumnFamilies) {
 			indexEncodingVersion = sqlbase.SecondaryIndexFamilyFormatVersion
 		}
 	}
@@ -1331,8 +1332,8 @@ func MakeTableDesc(
 	// If any nodes are not at version VersionPrimaryKeyColumnsOutOfFamilyZero, then return an error
 	// if a primary key column is not in column family 0.
 	if st != nil {
-		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (cluster.ClusterVersion{}) &&
-			!version.IsActive(cluster.VersionPrimaryKeyColumnsOutOfFamilyZero) {
+		if version := cluster.Version.ActiveVersionOrEmpty(ctx, st); version != (clusterversion.ClusterVersion{}) &&
+			!version.IsActive(clusterversion.VersionPrimaryKeyColumnsOutOfFamilyZero) {
 			var colsInFamZero util.FastIntSet
 			for _, colID := range desc.Families[0].ColumnIDs {
 				colsInFamZero.Add(int(colID))

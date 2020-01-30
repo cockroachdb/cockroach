@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,7 +67,7 @@ func (p *planner) createDatabase(
 	// TODO(solon): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
 	// the `shouldCreatePublicSchema` logic as well.
-	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, cluster.VersionNamespaceTableWithSchemas) {
+	if !cluster.Version.IsActive(ctx, p.ExecCfg().Settings, clusterversion.VersionNamespaceTableWithSchemas) {
 		shouldCreatePublicSchema = false
 	}
 

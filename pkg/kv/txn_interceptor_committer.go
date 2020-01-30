@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -278,7 +279,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 func (tc *txnCommitter) canCommitInParallelWithWrites(
 	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
 ) bool {
-	if !cluster.Version.IsActive(ctx, tc.st, cluster.VersionParallelCommits) {
+	if !cluster.Version.IsActive(ctx, tc.st, clusterversion.VersionParallelCommits) {
 		return false
 	}
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {
