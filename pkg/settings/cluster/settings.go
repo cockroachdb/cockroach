@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -57,7 +58,7 @@ type Settings struct {
 	beforeClusterVersionChangeMu struct {
 		syncutil.Mutex
 		// Callback to be called when the cluster version is about to be updated.
-		cb func(ctx context.Context, newVersion ClusterVersion)
+		cb func(ctx context.Context, newVersion clusterversion.ClusterVersion)
 	}
 }
 
@@ -166,7 +167,7 @@ var preserveDowngradeVersion = func() *settings.StringSetting {
 // MakeTestingClusterSettings returns a Settings object that has had its version
 // initialized to BinaryServerVersion.
 func MakeTestingClusterSettings() *Settings {
-	return MakeTestingClusterSettingsWithVersion(BinaryServerVersion, BinaryServerVersion)
+	return MakeTestingClusterSettingsWithVersion(clusterversion.BinaryServerVersion, clusterversion.BinaryServerVersion)
 }
 
 // MakeTestingClusterSettingsWithVersion returns a Settings object that has had
@@ -239,7 +240,7 @@ func (cv clusterVersionSetting) BinaryMinSupportedVersion(st *Settings) roachpb.
 func (cv clusterVersionSetting) Initialize(
 	ctx context.Context, version roachpb.Version, st *Settings,
 ) error {
-	if ver := cv.ActiveVersionOrEmpty(ctx, st); ver != (ClusterVersion{}) {
+	if ver := cv.ActiveVersionOrEmpty(ctx, st); ver != (clusterversion.ClusterVersion{}) {
 		// Allow initializing a second time as long as it's setting the version to
 		// what it was already set. This is useful in tests that use
 		// MakeTestingClusterSettings() which initializes the version, and the
@@ -255,7 +256,7 @@ func (cv clusterVersionSetting) Initialize(
 	}
 
 	// Return the serialized form of the new version.
-	newV := ClusterVersion{Version: version}
+	newV := clusterversion.ClusterVersion{Version: version}
 	encoded, err := protoutil.Marshal(&newV)
 	if err != nil {
 		return err
@@ -268,9 +269,9 @@ func (cv clusterVersionSetting) Initialize(
 // cluster version the caller may assume is in effect.
 //
 // ActiveVersion fatals if the version has not been initialized.
-func (cv *clusterVersionSetting) ActiveVersion(ctx context.Context, st *Settings) ClusterVersion {
+func (cv *clusterVersionSetting) ActiveVersion(ctx context.Context, st *Settings) clusterversion.ClusterVersion {
 	ver := cv.ActiveVersionOrEmpty(ctx, st)
-	if ver == (ClusterVersion{}) {
+	if ver == (clusterversion.ClusterVersion{}) {
 		log.Fatalf(ctx, "version not initialized")
 	}
 	return ver
@@ -280,12 +281,12 @@ func (cv *clusterVersionSetting) ActiveVersion(ctx context.Context, st *Settings
 // the active version was not initialized.
 func (cv *clusterVersionSetting) ActiveVersionOrEmpty(
 	ctx context.Context, st *Settings,
-) ClusterVersion {
+) clusterversion.ClusterVersion {
 	encoded := cv.GetInternal(&st.SV)
 	if encoded == nil {
-		return ClusterVersion{}
+		return clusterversion.ClusterVersion{}
 	}
-	var curVer ClusterVersion
+	var curVer clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal(encoded.([]byte), &curVer); err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -318,7 +319,7 @@ func (cv *clusterVersionSetting) ActiveVersionOrEmpty(
 // latest active version, node2 is aware that the sending node has, and it will
 // too, eventually.
 func (cv *clusterVersionSetting) IsActive(
-	ctx context.Context, st *Settings, versionKey VersionKey,
+	ctx context.Context, st *Settings, versionKey clusterversion.VersionKey,
 ) bool {
 	return cv.ActiveVersion(ctx, st).IsActive(versionKey)
 }
@@ -327,7 +328,7 @@ func (cv *clusterVersionSetting) IsActive(
 func (cv clusterVersionSetting) BeforeChange(
 	ctx context.Context, encodedVal []byte, sv *settings.Values,
 ) {
-	var clusterVersion ClusterVersion
+	var clusterVersion clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal(encodedVal, &clusterVersion); err != nil {
 		log.Fatalf(ctx, "failed to unmarshall version: %s", err)
 	}
@@ -347,7 +348,7 @@ func (cv clusterVersionSetting) BeforeChange(
 //
 // The callback can be set at most once.
 func (cv clusterVersionSetting) SetBeforeChange(
-	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion ClusterVersion),
+	ctx context.Context, st *Settings, cb func(ctx context.Context, newVersion clusterversion.ClusterVersion),
 ) {
 	st.beforeClusterVersionChangeMu.Lock()
 	defer st.beforeClusterVersionChangeMu.Unlock()
@@ -359,7 +360,7 @@ func (cv clusterVersionSetting) SetBeforeChange(
 
 // Decode is part of the StateMachineSettingImpl interface.
 func (cv clusterVersionSetting) Decode(val []byte) (interface{}, error) {
-	var clusterVersion ClusterVersion
+	var clusterVersion clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal(val, &clusterVersion); err != nil {
 		return "", err
 	}
@@ -372,7 +373,7 @@ func (cv clusterVersionSetting) DecodeToString(val []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return clusterVersion.(ClusterVersion).Version.String(), nil
+	return clusterVersion.(clusterversion.ClusterVersion).Version.String(), nil
 }
 
 // ValidateLogical is part of the StateMachineSettingImpl interface.
@@ -387,7 +388,7 @@ func (cv clusterVersionSetting) ValidateLogical(
 		return nil, err
 	}
 
-	var oldV ClusterVersion
+	var oldV clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal(curRawProto, &oldV); err != nil {
 		return nil, err
 	}
@@ -407,7 +408,7 @@ func (cv clusterVersionSetting) ValidateLogical(
 	}
 
 	// Return the serialized form of the new version.
-	newV := ClusterVersion{Version: newVersion}
+	newV := clusterversion.ClusterVersion{Version: newVersion}
 	return protoutil.Marshal(&newV)
 }
 
@@ -425,7 +426,7 @@ func (cv clusterVersionSetting) ValidateGossipUpdate(
 		}
 	}()
 
-	var ver ClusterVersion
+	var ver clusterversion.ClusterVersion
 	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
 		return err
 	}
@@ -454,5 +455,5 @@ func (cv clusterVersionSetting) validateSupportedVersionInner(
 
 // SettingsListDefault is part of the StateMachineSettingImpl interface.
 func (cv clusterVersionSetting) SettingsListDefault() string {
-	return BinaryServerVersion.String()
+	return clusterversion.BinaryServerVersion.String()
 }
