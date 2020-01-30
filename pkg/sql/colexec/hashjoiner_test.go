@@ -875,6 +875,8 @@ func init() {
 	}
 }
 
+// createSpecForHashJoiner creates a hash join processor spec based on a test
+// case.
 func createSpecForHashJoiner(tc joinTestCase) *execinfrapb.ProcessorSpec {
 	hjSpec := &execinfrapb.HashJoinerSpec{
 		LeftEqColumns:        tc.leftEqCols,
@@ -905,6 +907,31 @@ func createSpecForHashJoiner(tc joinTestCase) *execinfrapb.ProcessorSpec {
 	}
 }
 
+// runHashJoinTestCase is a helper function that runs a single test case
+// against a hash join operator (either in-memory or disk-backed one) which is
+// created by the provided constructor.
+func runHashJoinTestCase(
+	t *testing.T, tc joinTestCase, hjOpConstructor func(sources []Operator) (Operator, error),
+) {
+	tc.init()
+	if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
+		// Currently, onExpr is supported only for INNER join, so we skip all
+		// other cases.
+		return
+	}
+	inputs := []tuples{tc.leftTuples, tc.rightTuples}
+	typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
+	var runner testRunner
+	if tc.skipAllNullsInjection {
+		// We're omitting all nulls injection test. See comments for each such
+		// test case.
+		runner = runTestsWithoutAllNullsInjection
+	} else {
+		runner = runTestsWithTyps
+	}
+	runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
+}
+
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -926,23 +953,7 @@ func TestHashJoiner(t *testing.T) {
 		}
 		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
-				tc.init()
-				if !tc.onExpr.Empty() && tc.joinType != sqlbase.JoinType_INNER {
-					// Currently, onExpr is supported only for INNER join, so we skip all
-					// other cases.
-					continue
-				}
-				inputs := []tuples{tc.leftTuples, tc.rightTuples}
-				typs := [][]coltypes.T{tc.leftTypes, tc.rightTypes}
-				var runner testRunner
-				if tc.skipAllNullsInjection {
-					// We're omitting all nulls injection test. See comments for each such
-					// test case.
-					runner = runTestsWithoutAllNullsInjection
-				} else {
-					runner = runTestsWithTyps
-				}
-				runner(t, inputs, typs, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
+				runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := NewColOperatorArgs{
 						Spec:                spec,
@@ -969,15 +980,15 @@ func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
 	for _, tc := range hjTestCases {
 		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
 		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
-		hjOp, err := NewHashJoiner(
-			testAllocator,
-			leftSource, rightSource,
+		hjSpec, err := makeHashJoinerSpec(
+			tc.joinType,
 			tc.leftEqCols, tc.rightEqCols,
 			tc.leftOutCols, tc.rightOutCols,
 			tc.leftTypes, tc.rightTypes,
 			tc.rightEqColsAreKey,
-			tc.joinType)
+		)
 		require.NoError(t, err)
+		hjOp := newHashJoiner(testAllocator, hjSpec, leftSource, rightSource)
 		hjOp.Init()
 		for {
 			b := hjOp.Next(context.Background())
@@ -1041,16 +1052,18 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = sqlbase.JoinType_FULL_OUTER
 										}
-										hj, err := NewHashJoiner(
-											testAllocator,
-											leftSource, rightSource,
+										hjSpec, err := makeHashJoinerSpec(
+											joinType,
 											[]uint32{0, 2}, []uint32{1, 3},
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
-											joinType,
 										)
 										require.NoError(b, err)
+										hj := newHashJoiner(
+											testAllocator, hjSpec,
+											leftSource, rightSource,
+										)
 										hj.Init()
 
 										for i := 0; i < nBatches; i++ {

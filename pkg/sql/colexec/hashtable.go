@@ -433,7 +433,8 @@ func (ht *hashTable) distinctCheck(nToCheck uint16, sel []uint16) uint16 {
 }
 
 func (ht *hashTable) reset() {
-	ht.allocator.Clear()
+	// Note that we're not clearing the allocator because we're leaving it up to
+	// the caller.
 	// TODO(yuzefovich): support resetting with a different numBuckets.
 	for n := 0; n < len(ht.first); n += copy(ht.first[n:], zeroUint64Column) {
 	}

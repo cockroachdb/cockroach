@@ -67,9 +67,6 @@ type hashJoinerSourceSpec struct {
 	// the hash joiner.
 	sourceTypes []coltypes.T
 
-	// source specifies the input operator to the hash joiner.
-	source Operator
-
 	// outer specifies whether an outer join is required over the input.
 	outer bool
 }
@@ -222,8 +219,8 @@ var _ bufferingInMemoryOperator = &hashJoiner{}
 var _ resetter = &hashJoiner{}
 
 func (hj *hashJoiner) Init() {
-	hj.spec.left.source.Init()
-	hj.spec.right.source.Init()
+	hj.inputOne.Init()
+	hj.inputTwo.Init()
 
 	hj.ht = newHashTable(
 		hj.allocator,
@@ -233,21 +230,13 @@ func (hj *hashJoiner) Init() {
 		hj.spec.right.outCols,
 		false, /* allowNullEquality */
 	)
-	var outColTypes []coltypes.T
-	for _, probeOutCol := range hj.spec.left.outCols {
-		outColTypes = append(outColTypes, hj.spec.left.sourceTypes[probeOutCol])
-	}
-	for _, buildOutCol := range hj.spec.right.outCols {
-		outColTypes = append(outColTypes, hj.spec.right.sourceTypes[buildOutCol])
-	}
-	hj.output = hj.allocator.NewMemBatch(outColTypes)
 
 	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithSize(hj.spec.right.sourceTypes, 0 /* size */)
 	hj.state = hjBuilding
 }
 
 func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
-	hj.output.ResetInternalBatch()
+	hj.resetOutput()
 	for {
 		switch hj.state {
 		case hjBuilding:
@@ -273,7 +262,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 }
 
 func (hj *hashJoiner) build(ctx context.Context) {
-	hj.ht.build(ctx, hj.spec.right.source)
+	hj.ht.build(ctx, hj.inputTwo)
 
 	if !hj.spec.rightDistinct {
 		hj.ht.maybeAllocateSameAndVisited()
@@ -365,7 +354,7 @@ func (hj *hashJoiner) exec(ctx context.Context) {
 		hj.congregate(nResults, batch, batchSize)
 	} else {
 		for {
-			batch := hj.spec.left.source.Next(ctx)
+			batch := hj.inputOne.Next(ctx)
 			batchSize := batch.Length()
 
 			if batchSize == 0 {
@@ -536,12 +525,12 @@ func (hj *hashJoiner) congregate(nResults uint16, batch coldata.Batch, batchSize
 }
 
 func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
-	if hj.spec.left.source == input {
+	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
 		// point we haven't requested a single batch from the left.
 		return coldata.ZeroBatch
-	} else if hj.spec.right.source == input {
+	} else if hj.inputTwo == input {
 		if hj.exportBufferedState.rightExported == hj.ht.vals.length {
 			return coldata.ZeroBatch
 		}
@@ -567,6 +556,21 @@ func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
 	}
 }
 
+func (hj *hashJoiner) resetOutput() {
+	if hj.output == nil {
+		var outColTypes []coltypes.T
+		for _, probeOutCol := range hj.spec.left.outCols {
+			outColTypes = append(outColTypes, hj.spec.left.sourceTypes[probeOutCol])
+		}
+		for _, buildOutCol := range hj.spec.right.outCols {
+			outColTypes = append(outColTypes, hj.spec.right.sourceTypes[buildOutCol])
+		}
+		hj.output = hj.allocator.NewMemBatch(outColTypes)
+	} else {
+		hj.output.ResetInternalBatch()
+	}
+}
+
 func (hj *hashJoiner) reset() {
 	for _, input := range []Operator{hj.inputOne, hj.inputTwo} {
 		if r, ok := input.(resetter); ok {
@@ -582,21 +586,22 @@ func (hj *hashJoiner) reset() {
 	hj.ht.reset()
 	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroUint64Column)
 	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroUint16Column)
-	copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
+	if hj.spec.left.outer {
+		copy(hj.probeState.probeRowUnmatched[:coldata.BatchSize()], zeroBoolColumn)
+	}
 	// hj.probeState.buildRowMatched is reset after building the hash table is
 	// complete in build() method.
 	hj.emittingUnmatchedState.rowIdx = 0
 	hj.exportBufferedState.rightExported = 0
 }
 
-// NewHashJoiner creates a new equality hash join operator on the left and
-// right input tables. leftEqCols and rightEqCols specify the equality columns
-// while leftOutCols and rightOutCols specifies the output columns. leftTypes
-// and rightTypes specify the input column types of the two sources.
-func NewHashJoiner(
-	allocator *Allocator,
-	leftSource Operator,
-	rightSource Operator,
+// makeHashJoinerSpec creates a specification for columnar hash join operator.
+// leftEqCols and rightEqCols specify the equality columns while leftOutCols
+// and rightOutCols specifies the output columns. leftTypes and rightTypes
+// specify the input column types of the two sources. rightDistinct indicates
+// whether the equality columns of the right source form a key.
+func makeHashJoinerSpec(
+	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
 	leftOutCols []uint32,
@@ -604,9 +609,11 @@ func NewHashJoiner(
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	rightDistinct bool,
-	joinType sqlbase.JoinType,
-) (Operator, error) {
-	var leftOuter, rightOuter bool
+) (hashJoinerSpec, error) {
+	var (
+		spec                  hashJoinerSpec
+		leftOuter, rightOuter bool
+	)
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 	case sqlbase.JoinType_RIGHT_OUTER:
@@ -626,37 +633,42 @@ func NewHashJoiner(
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
 		if len(rightOutCols) != 0 {
-			return nil, errors.Errorf("semi-join can't have right-side output columns")
+			return spec, errors.Errorf("semi-join can't have right-side output columns")
 		}
 	case sqlbase.JoinType_LEFT_ANTI:
 		if len(rightOutCols) != 0 {
-			return nil, errors.Errorf("left anti join can't have right-side output columns")
+			return spec, errors.Errorf("left anti join can't have right-side output columns")
 		}
 	default:
-		return nil, errors.Errorf("hash join of type %s not supported", joinType)
+		return spec, errors.Errorf("hash join of type %s not supported", joinType)
 	}
 
 	left := hashJoinerSourceSpec{
 		eqCols:      leftEqCols,
 		outCols:     leftOutCols,
 		sourceTypes: leftTypes,
-		source:      leftSource,
 		outer:       leftOuter,
 	}
 	right := hashJoinerSourceSpec{
 		eqCols:      rightEqCols,
 		outCols:     rightOutCols,
 		sourceTypes: rightTypes,
-		source:      rightSource,
 		outer:       rightOuter,
 	}
-	spec := hashJoinerSpec{
+	spec = hashJoinerSpec{
 		joinType:      joinType,
 		left:          left,
 		right:         right,
 		rightDistinct: rightDistinct,
 	}
+	return spec, nil
+}
 
+// newHashJoiner creates a new equality hash join operator on the left and
+// right input tables.
+func newHashJoiner(
+	allocator *Allocator, spec hashJoinerSpec, leftSource, rightSource Operator,
+) Operator {
 	hj := &hashJoiner{
 		twoInputNode:    newTwoInputNode(leftSource, rightSource),
 		allocator:       allocator,
@@ -668,5 +680,5 @@ func NewHashJoiner(
 	if spec.left.outer {
 		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
 	}
-	return hj, nil
+	return hj
 }
