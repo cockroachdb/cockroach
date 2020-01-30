@@ -120,133 +120,43 @@ type NewColOperatorResult struct {
 	BufferingOpMemAccounts []*mon.BoundAccount
 }
 
-// joinerPlanningState is a helper struct used when creating a hash or merge
-// joiner to track the planning state.
-type joinerPlanningState struct {
-	// postJoinerProjection is the projection that has to be added after a
-	// joiner. It is needed because the joiners always output all the requested
-	// columns from the left side first followed by the columns from the right
-	// side. However, post.OutputColumns projection can have an arbitrary order
-	// of columns, and postJoinerProjection behaves as an "adapter" between the
-	// output of the joiner and the requested post.OutputColumns projection.
-	postJoinerProjection []uint32
-
-	// postFilterPlanning will be set by the operators that handle the
-	// projection themselves. This is needed to handle post.Filter correctly so
-	// that those operators output all the columns that are used by post.Filter
-	// even if some columns are not needed by post.OutputColumns. If it remains
-	// unset, then postFilterPlanning will act as a noop.
-	postFilterPlanning filterPlanningState
-}
-
 // createJoiner adds a new hash or merge join with the argument function
-// createJoinOpWithOnExprPlanning distinguishing between the two.
+// createJoinOp distinguishing between the two.
 // Note: the passed in 'result' will be modified accordingly.
 func createJoiner(
 	ctx context.Context,
 	result *NewColOperatorResult,
 	flowCtx *execinfra.FlowCtx,
 	args NewColOperatorArgs,
-	planningState *joinerPlanningState,
 	joinType sqlbase.JoinType,
-	createJoinOpWithOnExprPlanning func(
+	createJoinOp func(
 		result *NewColOperatorResult,
 		leftTypes, rightTypes []coltypes.T,
-		leftOutCols, rightOutCols []uint32,
-	) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error),
+	) (onExpr *execinfrapb.Expression, err error),
 ) error {
 	spec := args.Spec
 	inputs := args.Inputs
 	acc := args.StreamingMemAccount
-
-	var err error
-	if err = checkNumIn(inputs, 2); err != nil {
+	if err := checkNumIn(inputs, 2); err != nil {
 		return err
 	}
 
-	post := &spec.Post
-
-	var leftTypes, rightTypes []coltypes.T
-	leftTypes, err = typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
+	leftTypes, err := typeconv.FromColumnTypes(spec.Input[0].ColumnTypes)
 	if err != nil {
 		return err
 	}
-	rightTypes, err = typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
+	rightTypes, err := typeconv.FromColumnTypes(spec.Input[1].ColumnTypes)
 	if err != nil {
 		return err
 	}
 
-	nLeftCols := uint32(len(leftTypes))
-	nRightCols := uint32(len(rightTypes))
-
-	leftOutCols := make([]uint32, 0)
-	rightOutCols := make([]uint32, 0)
-
-	// Note that we do not need a special treatment in case of LEFT SEMI and
-	// LEFT ANTI joins when setting up outCols because in such cases there will
-	// be a projection with post.OutputColumns already projecting out the right
-	// side.
-	if post.Projection {
-		for _, col := range post.OutputColumns {
-			if col < nLeftCols {
-				leftOutCols = append(leftOutCols, col)
-			} else {
-				rightOutCols = append(rightOutCols, col-nLeftCols)
-			}
-		}
-		// Now that we know how many columns are output from the left side, we
-		// can populate the "post-joiner" projection. Consider an example:
-		// we have post.OutputColumns = {6, 2, 5, 7, 0, 3} with nLeftCols = 6.
-		// We've just populated output columns as follows:
-		// leftOutCols = {2, 5, 0, 3} and rightOutCols = {6, 7},
-		// and because the joiner always outputs the left columns first, the output
-		// will look as {2, 5, 0, 3, 6, 7}, so we need to add an extra projection.
-		// The code below will populate postJoinerProjection with
-		// {4, 0, 1, 5, 2, 3}.
-		// Note that we don't need to pay attention to any filter planning
-		// additions since those will be projected out before we will add this
-		// "post-joiner" projection.
-		var lOutIdx, rOutIdx uint32
-		for _, col := range post.OutputColumns {
-			if col < nLeftCols {
-				planningState.postJoinerProjection = append(planningState.postJoinerProjection, lOutIdx)
-				lOutIdx++
-			} else {
-				planningState.postJoinerProjection = append(planningState.postJoinerProjection, uint32(len(leftOutCols))+rOutIdx)
-				rOutIdx++
-			}
-		}
-	} else {
-		for i := uint32(0); i < nLeftCols; i++ {
-			leftOutCols = append(leftOutCols, i)
-		}
-		for i := uint32(0); i < nRightCols; i++ {
-			rightOutCols = append(rightOutCols, i)
-		}
-	}
-
-	if !post.Filter.Empty() {
-		planningState.postFilterPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
-		leftOutCols, rightOutCols, err = planningState.postFilterPlanning.renderAllNeededCols(
-			post.Filter, leftOutCols, rightOutCols,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	var (
-		onExpr         *execinfrapb.Expression
-		onExprPlanning filterPlanningState
-	)
-	onExpr, onExprPlanning, leftOutCols, rightOutCols, err = createJoinOpWithOnExprPlanning(
-		result, leftTypes, rightTypes, leftOutCols, rightOutCols,
-	)
+	onExpr, err := createJoinOp(result, leftTypes, rightTypes)
 	if err != nil {
 		return err
 	}
 
-	result.setProjectedByJoinerColumnTypes(spec, leftOutCols, rightOutCols)
+	result.ColumnTypes = append(result.ColumnTypes[:0], spec.Input[0].ColumnTypes...)
+	result.ColumnTypes = append(result.ColumnTypes, spec.Input[1].ColumnTypes...)
 
 	if onExpr != nil && joinType == sqlbase.JoinType_INNER {
 		// We will plan other Operators on top of the joiners, so we need to
@@ -254,9 +164,7 @@ func createJoiner(
 		if internalMemOp, ok := result.Op.(InternalMemoryOperator); ok {
 			result.InternalMemUsage += internalMemOp.InternalMemoryUsage()
 		}
-
-		err = result.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, onExprPlanning.indexVarMap, acc)
-		onExprPlanning.projectOutExtraCols(result)
+		err = result.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, acc)
 	}
 	return err
 }
@@ -368,8 +276,6 @@ func NewColOperator(
 
 	core := &spec.Core
 	post := &spec.Post
-
-	var planningState joinerPlanningState
 
 	// By default, we safely assume that an operator is not streaming. Note that
 	// projections, renders, filters, limits, offsets as well as all internal
@@ -614,23 +520,17 @@ func NewColOperator(
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 		case core.HashJoiner != nil:
-			createHashJoinerWithOnExprPlanning := func(
+			createHashJoiner := func(
 				result *NewColOperatorResult,
 				leftTypes, rightTypes []coltypes.T,
-				leftOutCols, rightOutCols []uint32,
-			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
+			) (*execinfrapb.Expression, error) {
 				var (
-					onExpr         *execinfrapb.Expression
-					onExprPlanning filterPlanningState
+					onExpr *execinfrapb.Expression
 				)
 				if !core.HashJoiner.OnExpr.Empty() {
 					onExpr = &core.HashJoiner.OnExpr
-					onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
-					leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
-						*onExpr, leftOutCols, rightOutCols,
-					)
 					if err != nil {
-						return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+						return onExpr, err
 					}
 				}
 
@@ -649,19 +549,16 @@ func NewColOperator(
 					inputs[1],
 					core.HashJoiner.LeftEqColumns,
 					core.HashJoiner.RightEqColumns,
-					leftOutCols,
-					rightOutCols,
 					leftTypes,
 					rightTypes,
 					rightEqColsAreKey,
 					core.HashJoiner.Type,
 				)
-				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+				return onExpr, err
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, args, &planningState,
-				core.HashJoiner.Type, createHashJoinerWithOnExprPlanning,
+				ctx, &result, flowCtx, args, core.HashJoiner.Type, createHashJoiner,
 			)
 
 		case core.MergeJoiner != nil:
@@ -672,14 +569,12 @@ func NewColOperator(
 			// for both of the inputs.
 			result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
-			createMergeJoinerWithOnExprPlanning := func(
+			createMergeJoiner := func(
 				result *NewColOperatorResult,
 				leftTypes, rightTypes []coltypes.T,
-				leftOutCols, rightOutCols []uint32,
-			) (*execinfrapb.Expression, filterPlanningState, []uint32, []uint32, error) {
+			) (*execinfrapb.Expression, error) {
 				var (
 					onExpr            *execinfrapb.Expression
-					onExprPlanning    filterPlanningState
 					filterOnlyOnLeft  bool
 					filterConstructor func(Operator) (Operator, error)
 				)
@@ -693,29 +588,22 @@ func NewColOperator(
 					result.IsStreaming = false
 
 					onExpr = &core.MergeJoiner.OnExpr
-					onExprPlanning = makeFilterPlanningState(len(leftTypes), len(rightTypes))
 					switch core.MergeJoiner.Type {
-					case sqlbase.JoinType_INNER:
-						leftOutCols, rightOutCols, err = onExprPlanning.renderAllNeededCols(
-							*onExpr, leftOutCols, rightOutCols,
-						)
 					case sqlbase.JoinType_LEFT_SEMI, sqlbase.JoinType_LEFT_ANTI:
+						onExprPlanning := makeFilterPlanningState(len(leftTypes), len(rightTypes))
 						filterOnlyOnLeft, err = onExprPlanning.isFilterOnlyOnLeft(*onExpr)
 						filterConstructor = func(op Operator) (Operator, error) {
 							r := NewColOperatorResult{
 								Op:          op,
 								ColumnTypes: append(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes...),
 							}
-							// We don't need to specify indexVarMap because the filter will be
-							// run alongside the merge joiner, and it will have access to all
-							// of the columns from both sides.
-							err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, nil /* indexVarMap */, streamingMemAccount)
+							err := r.planFilterExpr(ctx, flowCtx.NewEvalCtx(), *onExpr, streamingMemAccount)
 							return r.Op, err
 						}
 					}
 				}
 				if err != nil {
-					return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+					return onExpr, err
 				}
 
 				mergeJoinerMemAccount := streamingMemAccount
@@ -728,8 +616,6 @@ func NewColOperator(
 					core.MergeJoiner.Type,
 					inputs[0],
 					inputs[1],
-					leftOutCols,
-					rightOutCols,
 					leftTypes,
 					rightTypes,
 					core.MergeJoiner.LeftOrdering.Columns,
@@ -737,12 +623,11 @@ func NewColOperator(
 					filterConstructor,
 					filterOnlyOnLeft,
 				)
-				return onExpr, onExprPlanning, leftOutCols, rightOutCols, err
+				return onExpr, err
 			}
 
 			err = createJoiner(
-				ctx, &result, flowCtx, args, &planningState,
-				core.MergeJoiner.Type, createMergeJoinerWithOnExprPlanning,
+				ctx, &result, flowCtx, args, core.MergeJoiner.Type, createMergeJoiner,
 			)
 
 		case core.Sorter != nil:
@@ -914,19 +799,13 @@ func NewColOperator(
 
 	if !post.Filter.Empty() {
 		if err = result.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter,
-			planningState.postFilterPlanning.indexVarMap, streamingMemAccount,
+			ctx, flowCtx.NewEvalCtx(), post.Filter, streamingMemAccount,
 		); err != nil {
 			return result, err
 		}
-		planningState.postFilterPlanning.projectOutExtraCols(&result)
 	}
 	if post.Projection {
-		if len(planningState.postJoinerProjection) > 0 {
-			result.addProjection(planningState.postJoinerProjection)
-		} else {
-			result.addProjection(post.OutputColumns)
-		}
+		result.addProjection(post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
@@ -971,13 +850,6 @@ func NewColOperator(
 type filterPlanningState struct {
 	numLeftInputCols  int
 	numRightInputCols int
-	// indexVarMap will be populated when rendering all needed columns in case
-	// when at least one column from either side is used by the filter.
-	indexVarMap []int
-	// originalLeftOutCols and originalRightOutCols are stored so that we can
-	// remove all the extra columns that were added to handle the filter.
-	originalLeftOutCols  []uint32
-	originalRightOutCols []uint32
 }
 
 func makeFilterPlanningState(numLeftInputCols, numRightInputCols int) filterPlanningState {
@@ -985,91 +857,6 @@ func makeFilterPlanningState(numLeftInputCols, numRightInputCols int) filterPlan
 		numLeftInputCols:  numLeftInputCols,
 		numRightInputCols: numRightInputCols,
 	}
-}
-
-// renderAllNeededCols makes sure that all columns used by filter expression
-// will be output. It does so by extracting the indices of all indexed vars
-// used in the expression and appending those that are missing from *OutCols
-// slices to the slices. Additionally, it populates p.indexVarMap to be used
-// later to correctly remap the indexed vars and stores the original *OutCols
-// to be projected after the filter has been run.
-// It returns updated leftOutCols and rightOutCols.
-// NOTE: projectOutExtraCols must be called after the filter has been run.
-func (p *filterPlanningState) renderAllNeededCols(
-	filter execinfrapb.Expression, leftOutCols []uint32, rightOutCols []uint32,
-) ([]uint32, []uint32, error) {
-	neededColumnsForFilter, err := findIVarsInRange(
-		filter,
-		0, /* start */
-		p.numLeftInputCols+p.numRightInputCols,
-	)
-	if err != nil {
-		return nil, nil, errors.Errorf("error parsing filter expression %q: %s", filter, err)
-	}
-	if len(neededColumnsForFilter) > 0 {
-		// Store the original out columns to be restored later.
-		p.originalLeftOutCols = leftOutCols
-		p.originalRightOutCols = rightOutCols
-		// At least one column is referenced by the filter expression.
-		p.indexVarMap = make([]int, p.numLeftInputCols+p.numRightInputCols)
-		for i := range p.indexVarMap {
-			p.indexVarMap[i] = -1
-		}
-		// First, we process only the left side.
-		for i, lCol := range leftOutCols {
-			p.indexVarMap[lCol] = i
-		}
-		for _, neededCol := range neededColumnsForFilter {
-			if int(neededCol) < p.numLeftInputCols {
-				if p.indexVarMap[neededCol] == -1 {
-					p.indexVarMap[neededCol] = len(leftOutCols)
-					leftOutCols = append(leftOutCols, neededCol)
-				}
-			}
-		}
-		// Now that we know how many columns from the left will be output, we can
-		// process the right side.
-		//
-		// Here is the explanation of all the indices' dance below:
-		//   suppose we have two inputs with three columns in each, the filter
-		//   expression as @1 = @4 AND @3 = @5, and leftOutCols = {0} and
-		//   rightOutCols = {0} when this method was called. Note that only
-		//   ordinals in the expression are counting from 1, everything else is
-		//   zero-based.
-		// - After we processed the left side above, we have the following state:
-		//   neededColumnsForFilter = {0, 2, 3, 4}
-		//   leftOutCols = {0, 2}
-		//   p.indexVarMap = {0, -1, 1, -1, -1, -1}
-		// - We calculate rColOffset = 3 to know which columns for filter are from
-		//   the right side as well as to remap those for rightOutCols (the
-		//   remapping step is needed because rightOutCols "thinks" only in the
-		//   context of the right side).
-		// - Next, we add already present rightOutCols to the indexed var map:
-		//   rightOutCols = {0}
-		//   p.indexVarMap = {0, -1, 1, 2, -1, -1}
-		//   Note that we needed to remap the column index, and we could do so only
-		//   after the left side has been processed because we need to know how
-		//   many columns will be output from the left.
-		// - Then, we go through the needed columns for filter slice again, and add
-		//   any that are still missing to rightOutCols:
-		//   rightOutCols = {0, 1}
-		//   p.indexVarMap = {0, -1, 1, 2, 3, -1}
-		// - We also stored the fact that we appended 1 extra column for both
-		//   inputs, and we will project those out.
-		rColOffset := uint32(p.numLeftInputCols)
-		for i, rCol := range rightOutCols {
-			p.indexVarMap[rCol+rColOffset] = len(leftOutCols) + i
-		}
-		for _, neededCol := range neededColumnsForFilter {
-			if neededCol >= rColOffset {
-				if p.indexVarMap[neededCol] == -1 {
-					p.indexVarMap[neededCol] = len(rightOutCols) + len(leftOutCols)
-					rightOutCols = append(rightOutCols, neededCol-rColOffset)
-				}
-			}
-		}
-	}
-	return leftOutCols, rightOutCols, nil
 }
 
 // isFilterOnlyOnLeft returns whether the filter expression doesn't use columns
@@ -1083,33 +870,6 @@ func (p *filterPlanningState) isFilterOnlyOnLeft(filter execinfrapb.Expression) 
 		return false, errors.Errorf("error parsing filter expression %q: %s", filter, err)
 	}
 	return len(neededColumnsForFilter) == 0, nil
-}
-
-// projectOutExtraCols, possibly, adds a projection to remove all the extra
-// columns that were needed by the filter expression.
-// NOTE: result.ColumnTypes is updated if the projection is added.
-func (p *filterPlanningState) projectOutExtraCols(result *NewColOperatorResult) {
-	if p.indexVarMap == nil {
-		// If p.indexVarMap is nil, then this filter planning didn't add any extra
-		// columns, so there is nothing to project out.
-		return
-	}
-	projection := make([]uint32, 0, len(p.originalLeftOutCols)+len(p.originalRightOutCols))
-	for _, i := range p.originalLeftOutCols {
-		projection = append(projection, uint32(p.indexVarMap[i]))
-	}
-	rColOffset := uint32(p.numLeftInputCols)
-	for _, i := range p.originalRightOutCols {
-		projection = append(projection, uint32(p.indexVarMap[rColOffset+i]))
-	}
-	result.Op = NewSimpleProjectOp(result.Op, len(result.ColumnTypes), projection)
-
-	// Update output column types according to the projection.
-	newTypes := make([]types.T, 0, len(projection))
-	for _, j := range projection {
-		newTypes = append(newTypes, result.ColumnTypes[j])
-	}
-	result.ColumnTypes = newTypes
 }
 
 // createBufferingMemAccount instantiates a memory monitor and a memory account
@@ -1142,33 +902,17 @@ func (r *NewColOperatorResult) createBufferingUnlimitedMemAccount(
 	return &bufferingMemAccount
 }
 
-// setProjectedByJoinerColumnTypes sets column types on r according to a
-// joiner handled projection.
-// NOTE: r.ColumnTypes is updated.
-func (r *NewColOperatorResult) setProjectedByJoinerColumnTypes(
-	spec *execinfrapb.ProcessorSpec, leftOutCols, rightOutCols []uint32,
-) {
-	r.ColumnTypes = make([]types.T, 0, len(leftOutCols)+len(rightOutCols))
-	for _, leftOutCol := range leftOutCols {
-		r.ColumnTypes = append(r.ColumnTypes, spec.Input[0].ColumnTypes[leftOutCol])
-	}
-	for _, rightOutCol := range rightOutCols {
-		r.ColumnTypes = append(r.ColumnTypes, spec.Input[1].ColumnTypes[rightOutCol])
-	}
-}
-
 func (r *NewColOperatorResult) planFilterExpr(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	filter execinfrapb.Expression,
-	indexVarMap []int,
 	acc *mon.BoundAccount,
 ) error {
 	var (
 		helper               execinfra.ExprHelper
 		selectionInternalMem int
 	)
-	err := helper.InitWithRemapping(filter, r.ColumnTypes, evalCtx, indexVarMap)
+	err := helper.Init(filter, r.ColumnTypes, evalCtx)
 	if err != nil {
 		return err
 	}

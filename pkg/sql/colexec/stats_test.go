@@ -87,8 +87,6 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			sqlbase.InnerJoin,
 			leftInput,
 			rightInput,
-			[]uint32{0},
-			[]uint32{0},
 			[]coltypes.T{coltypes.Int64},
 			[]coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
