@@ -89,11 +89,11 @@ func (t *TeeEngine) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	eng1Sst, bulkOpSummary, resume1, err := t.eng1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
-	rocksSst, _, resume2, err2 := t.eng2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	eng1Sst, bulkOpSummary, resume1, err := t.eng1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	rocksSst, _, resume2, err2 := t.eng2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, bulkOpSummary, nil, err
 	}
@@ -672,11 +672,11 @@ func (t *TeeEngineReader) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	sst1, bulkOpSummary, resume1, err := t.reader1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
-	sst2, _, resume2, err2 := t.reader2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	sst1, bulkOpSummary, resume1, err := t.reader1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	sst2, _, resume2, err2 := t.reader2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, bulkOpSummary, nil, err
 	}
@@ -776,11 +776,11 @@ func (t *TeeEngineBatch) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	sst1, bulkOpSummary, resume1, err := t.batch1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
-	sst2, _, resume2, err2 := t.batch2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	sst1, bulkOpSummary, resume1, err := t.batch1.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	sst2, _, resume2, err2 := t.batch2.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
 		return nil, bulkOpSummary, nil, err
 	}

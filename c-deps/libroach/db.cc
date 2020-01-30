@@ -1075,7 +1075,8 @@ DBStatus DBUnlockFile(DBFileLock lock) {
   return ToDBStatus(rocksdb::Env::Default()->UnlockFile((rocksdb::FileLock*)lock));
 }
 
-DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64_t target_size,
+DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions,
+                       uint64_t target_size, uint64_t max_size,
                        DBIterOptions iter_opts, DBEngine* engine, DBString* data,
                        DBString* write_intent, DBString* summary, DBString* resume) {
   DBSstFileWriter* writer = DBSstFileWriterNew();
@@ -1154,6 +1155,9 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions, uint64
       return ToDBString("Error in row counter");
     }
     const int64_t new_size = cur_size + decoded_key.size() + iter.value().size();
+    if (max_size > 0 && new_size > max_size) {
+      return FmtStatus("export size (%ld bytes) exceeds max size (%ld bytes)", new_size, max_size);
+    }
     bulkop_summary.set_data_size(new_size);
   }
   *summary = ToDBString(bulkop_summary.SerializeAsString());

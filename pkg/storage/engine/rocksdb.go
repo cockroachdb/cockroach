@@ -780,7 +780,7 @@ func (r *RocksDB) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	start := MVCCKey{Key: startKey, Timestamp: startTS}
@@ -791,8 +791,10 @@ func (r *RocksDB) ExportToSst(
 	var bulkopSummary C.DBString
 	var resumeKey C.DBString
 
-	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end), C.bool(exportAllRevisions),
-		C.uint64_t(targetSize), goToCIterOptions(io), r.rdb, &data, &intentErr, &bulkopSummary, &resumeKey))
+	err := statusToError(C.DBExportToSst(goToCKey(start), goToCKey(end),
+		C.bool(exportAllRevisions),
+		C.uint64_t(targetSize), C.uint64_t(maxSize),
+		goToCIterOptions(io), r.rdb, &data, &intentErr, &bulkopSummary, &resumeKey))
 
 	if err != nil {
 		if err.Error() == "WriteIntentError" {
@@ -1005,10 +1007,10 @@ func (r *rocksDBReadOnly) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
 func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
@@ -1326,10 +1328,10 @@ func (r *rocksDBSnapshot) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, io)
+	return r.parent.ExportToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
 }
 
 // Get returns the value for the given key, nil otherwise using
@@ -1736,7 +1738,7 @@ func (r *rocksDBBatch) ExportToSst(
 	startKey, endKey roachpb.Key,
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
-	targetSize uint64,
+	targetSize, maxSize uint64,
 	io IterOptions,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	panic("unimplemented")
