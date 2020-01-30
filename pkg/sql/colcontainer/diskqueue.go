@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colserde
+package colcontainer
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -154,7 +155,7 @@ type diskQueue struct {
 
 	done bool
 
-	serializer *FileSerializer
+	serializer *colserde.FileSerializer
 	// numBufferedBatches is the number of batches buffered that haven't been
 	// flushed to disk. This is useful for a reader to determine whether to flush
 	// or not, since the number of buffered bytes will always be > 0 even though
@@ -164,7 +165,7 @@ type diskQueue struct {
 	writeFileIdx       int
 	writeFile          vfs.File
 	deserializerState  struct {
-		*FileDeserializer
+		*colserde.FileDeserializer
 		curBatch int
 	}
 	// readFileIdx is an index into the current file in files the deserializer is
@@ -195,11 +196,9 @@ type Queue interface {
 }
 
 const (
-	// These values were chosen according to the RFC on vectorized external
-	// storage:
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20191113_vectorized_external_storage.md
-	defaultBufferSizeBytes  = 64 << 10 /* 64 KiB */
-	defaultMaxFileSizeBytes = 32 << 20 /* 32 MiB */
+	// These values were chosen by running BenchmarkQueue.
+	defaultBufferSizeBytes  = 128 << 10 /* 128 KiB */
+	defaultMaxFileSizeBytes = 32 << 20  /* 32 MiB */
 )
 
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
@@ -308,7 +307,7 @@ func (d *diskQueue) rotateFile() error {
 
 	if d.serializer == nil {
 		writer := &diskQueueWriter{testingKnobAlwaysCompress: d.cfg.TestingKnobs.AlwaysCompress, wrapped: f}
-		d.serializer, err = NewFileSerializer(writer, d.typs)
+		d.serializer, err = colserde.NewFileSerializer(writer, d.typs)
 		if err != nil {
 			return err
 		}
@@ -478,7 +477,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 		decompressedBytes = d.scratchDecompressedReadBytes
 	}
 
-	deserializer, err := NewFileDeserializerFromBytes(decompressedBytes)
+	deserializer, err := colserde.NewFileDeserializerFromBytes(decompressedBytes)
 	if err != nil {
 		return false, err
 	}
