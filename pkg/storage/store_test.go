@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -2690,6 +2691,35 @@ func TestStoreGCThreshold(t *testing.T) {
 	}
 
 	assertThreshold(threshold)
+}
+
+// TestRaceOnTryGetOrCreateReplicas exercises a case where a race between
+// different raft messages addressed to different replica IDs could lead to
+// a nil pointer panic.
+func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+	s := tc.store
+	var wg sync.WaitGroup
+	for i := 3; i < 100; i++ {
+		wg.Add(1)
+		go func(rid roachpb.ReplicaID) {
+			defer wg.Done()
+			r, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			}, false)
+			if r != nil {
+				r.raftMu.Unlock()
+			}
+		}(roachpb.ReplicaID(i))
+	}
+	wg.Wait()
 }
 
 func TestStoreRangePlaceholders(t *testing.T) {
