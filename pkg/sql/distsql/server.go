@@ -247,7 +247,10 @@ func (ds *ServerImpl) setupFlow(
 				"EvalContext expected to be populated when IsLocal is set")
 		}
 
-		location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
+		location, err := timeutil.TimeZoneStringToLocation(
+			req.EvalContext.Location,
+			timeutil.TimeZoneStringToLocationISO8601Standard,
+		)
 		if err != nil {
 			tracing.FinishSpan(sp)
 			return ctx, nil, err

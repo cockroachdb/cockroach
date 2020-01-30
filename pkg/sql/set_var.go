@@ -214,7 +214,10 @@ func timeZoneVarGetStringVal(
 	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
 	case *tree.DString:
 		location := string(*v)
-		loc, err = timeutil.TimeZoneStringToLocation(location)
+		loc, err = timeutil.TimeZoneStringToLocation(
+			location,
+			timeutil.TimeZoneStringToLocationISO8601Standard,
+		)
 		if err != nil {
 			return "", wrapSetVarError("timezone", values[0].String(),
 				"cannot find time zone %q: %v", location, err)
@@ -255,7 +258,10 @@ func timeZoneVarGetStringVal(
 }
 
 func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
-	loc, err := timeutil.TimeZoneStringToLocation(s)
+	loc, err := timeutil.TimeZoneStringToLocation(
+		s,
+		timeutil.TimeZoneStringToLocationISO8601Standard,
+	)
 	if err != nil {
 		return wrapSetVarError("TimeZone", s, "%v", err)
 	}
