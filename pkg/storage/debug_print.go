@@ -257,13 +257,6 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 		}
 		return strconv.FormatInt(i, 10), nil
 
-	case bytes.Equal(suffix, keys.LocalRangeFrozenStatusSuffix):
-		b, err := value.GetBool()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatBool(b), nil
-
 	case bytes.Equal(suffix, keys.LocalAbortSpanSuffix):
 		msg = &roachpb.AbortSpanEntry{}
 
@@ -287,16 +280,6 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 
 	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
 		msg = &raftpb.HardState{}
-
-	case bytes.Equal(suffix, keys.LocalRaftLastIndexSuffix):
-		i, err := value.GetInt()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatInt(i, 10), nil
-
-	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffixDeprecated):
-		msg = &hlc.Timestamp{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
 		msg = &hlc.Timestamp{}

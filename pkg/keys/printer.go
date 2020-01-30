@@ -161,13 +161,9 @@ var (
 			psFunc: raftLogKeyParse,
 		},
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
-		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
-		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
-		{name: "RangeTxnSpanGCThreshold", suffix: LocalTxnSpanGCThresholdSuffix},
-		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
 	}
 

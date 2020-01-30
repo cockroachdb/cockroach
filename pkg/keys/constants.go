@@ -76,9 +76,8 @@ var (
 	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortSpanSuffix = []byte("abc-")
-	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
-	// No longer used; exists only to reserve the key so we don't use it.
-	LocalRangeFrozenStatusSuffix = []byte("fzn-")
+	// localRangeFrozenStatusSuffix is DEPRECATED and remains to prevent reuse.
+	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
@@ -100,10 +99,8 @@ var (
 	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
 	// LocalRangeStatsLegacySuffix is the suffix for range statistics.
 	LocalRangeStatsLegacySuffix = []byte("stat")
-	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
-	// threshold. No longer used; exists only to reserve the key so we don't use
-	// it.
-	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
+	// localTxnSpanGCThresholdSuffix is DEPRECATED and remains to prevent reuse.
+	localTxnSpanGCThresholdSuffix = []byte("tst-")
 
 	// 2. Unreplicated Range-ID keys
 	//
@@ -115,17 +112,16 @@ var (
 	localRangeIDUnreplicatedInfix = []byte("u")
 	// LocalRaftHardStateSuffix is the Suffix for the raft HardState.
 	LocalRaftHardStateSuffix = []byte("rfth")
-	// LocalRaftLastIndexSuffix is the suffix for raft's last index.
-	LocalRaftLastIndexSuffix = []byte("rfti")
+	// localRaftLastIndexSuffix is DEPRECATED and remains to prevent reuse.
+	localRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
 	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's last
 	// replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
-	// LocalRangeLastVerificationTimestampSuffixDeprecated is the suffix for a
-	// range's last verification timestamp (for checking integrity of on-disk
-	// data). Note: DEPRECATED.
-	LocalRangeLastVerificationTimestampSuffixDeprecated = []byte("rlvt")
+	// localRangeLastVerificationTimestampSuffix is DEPRECATED and remains to
+	// prevent reuse.
+	localRangeLastVerificationTimestampSuffix = []byte("rlvt")
 
 	// 3. Range local keys
 	//
@@ -182,10 +178,9 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
-	//
-	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent reuse.
+	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
+	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
-	_                                   = localRemovedLeakedRaftEntriesSuffix
 	// LocalStoreSuggestedCompactionsMin is the start of the span of
 	// possible suggested compaction keys for a store.
 	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
