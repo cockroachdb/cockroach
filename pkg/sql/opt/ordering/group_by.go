@@ -88,7 +88,13 @@ func distinctOnBuildChildReqOrdering(
 	if childIdx != 0 {
 		return physical.OrderingChoice{}
 	}
-	return required.Intersection(&parent.(*memo.DistinctOnExpr).Ordering)
+	// The FD set of the input doesn't "pass through" to the DistinctOn FD set;
+	// check the ordering to see if it can be simplified with respect to the input
+	// FD set.
+	distinctOn := parent.(*memo.DistinctOnExpr)
+	result := required.Intersection(&distinctOn.Ordering)
+	result.Simplify(&distinctOn.Input.Relational().FuncDeps)
+	return result
 }
 
 func distinctOnBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
