@@ -43,6 +43,15 @@ import { RangesMain } from "src/views/devtools/containers/raftRanges";
 import { RaftMessages } from "src/views/devtools/containers/raftMessages";
 import Raft from "src/views/devtools/containers/raft";
 import NotFound from "src/views/app/components/NotFound";
+import { ProblemRanges } from "src/views/reports/containers/problemRanges";
+import { Localities } from "src/views/reports/containers/localities";
+import { Nodes } from "src/views/reports/containers/nodes";
+import { DecommissionedNodeHistory } from "src/views/reports";
+import { Network } from "src/views/reports/containers/network";
+import { Settings } from "src/views/reports/containers/settings";
+import { Certificates } from "src/views/reports/containers/certificates";
+import { Range } from "src/views/reports/containers/range";
+import { Stores } from "src/views/reports/containers/stores";
 
 describe("Routing to", () => {
   const store: Store<AdminUIState, Action> = createAdminUIStore();
@@ -408,6 +417,83 @@ describe("Routing to", () => {
     it("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/node/node-id-attr");
       assert.lengthOf(appWrapper.find(RaftMessages), 1);
+    });
+  });
+
+  describe("'/reports/problemranges' path", () => {
+    it("routes to <ProblemRanges> component", () => {
+      navigateToPath("/reports/problemranges");
+      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+    });
+  });
+
+  describe("'/reports/problemranges/:nodeIDAttr' path", () => {
+    it("routes to <ProblemRanges> component", () => {
+      navigateToPath("/reports/problemranges/1");
+      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+    });
+  });
+
+  describe("'/reports/localities' path", () => {
+    it("routes to <Localities> component", () => {
+      navigateToPath("/reports/localities");
+      assert.lengthOf(appWrapper.find(Localities), 1);
+    });
+  });
+
+  describe("'/reports/nodes' path", () => {
+    it("routes to <Nodes> component", () => {
+      navigateToPath("/reports/nodes");
+      assert.lengthOf(appWrapper.find(Nodes), 1);
+    });
+  });
+
+  describe("'/reports/nodes/history' path", () => {
+    it("routes to <DecommissionedNodeHistory> component", () => {
+      navigateToPath("/reports/nodes/history");
+      assert.lengthOf(appWrapper.find(DecommissionedNodeHistory), 1);
+    });
+  });
+
+  describe("'/reports/network' path", () => {
+    it("routes to <Network> component", () => {
+      navigateToPath("/reports/network");
+      assert.lengthOf(appWrapper.find(Network), 1);
+    });
+  });
+
+  describe("'/reports/network/:nodeIDAttr' path", () => {
+    it("routes to <Network> component", () => {
+      navigateToPath("/reports/network/1");
+      assert.lengthOf(appWrapper.find(Network), 1);
+    });
+  });
+
+  describe("'/reports/settings' path", () => {
+    it("routes to <Settings> component", () => {
+      navigateToPath("/reports/settings");
+      assert.lengthOf(appWrapper.find(Settings), 1);
+    });
+  });
+
+  describe("'/reports/certificates/:nodeIDAttr' path", () => {
+    it("routes to <Certificates> component", () => {
+      navigateToPath("/reports/certificates/1");
+      assert.lengthOf(appWrapper.find(Certificates), 1);
+    });
+  });
+
+  describe("'/reports/range/:nodeIDAttr' path", () => {
+    it("routes to <Range> component", () => {
+      navigateToPath("/reports/range/1");
+      assert.lengthOf(appWrapper.find(Range), 1);
+    });
+  });
+
+  describe("'/reports/stores/:nodeIDAttr' path", () => {
+    it("routes to <Stores> component", () => {
+      navigateToPath("/reports/stores/1");
+      assert.lengthOf(appWrapper.find(Stores), 1);
     });
   });
 
