@@ -68,7 +68,18 @@ func MakeTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) TimeTZ {
 
 // MakeTimeTZFromTime creates a TimeTZ from a time.Time.
 // It will be trimmed to microsecond precision.
-func MakeTimeTZFromTime(t time.Time) TimeTZ {
+func MakeTimeTZFromTime(t time.Time, rounding timeofday.Rounding2400Spec) TimeTZ {
+	// We can't use timeofday.FromTime as it converts time zones, which we want to preserve.
+	// As such, we need to special case 2400 rounding.
+	if rounding == timeofday.RoundingAllow2400 {
+		ut := t.UnixNano()
+		if ut != 0 && ut%int64(time.Hour*24) == 0 {
+			return MakeTimeTZFromLocation(
+				timeofday.Time2400,
+				t.Location(),
+			)
+		}
+	}
 	return MakeTimeTZFromLocation(
 		timeofday.New(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()/1000),
 		t.Location(),
@@ -77,7 +88,7 @@ func MakeTimeTZFromTime(t time.Time) TimeTZ {
 
 // Now returns the TimeTZ of the current location.
 func Now() TimeTZ {
-	return MakeTimeTZFromTime(timeutil.Now())
+	return MakeTimeTZFromTime(timeutil.Now(), timeofday.RoundingDisallow2400)
 }
 
 // ParseTimeTZ parses and returns the TimeTZ represented by the
@@ -110,7 +121,7 @@ func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, erro
 			s,
 		)
 	}
-	retTime := timeofday.FromTime(t.Round(precision))
+	retTime := timeofday.FromTime(t.Round(precision), timeofday.RoundingAllow2400)
 	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if timeTZMaxTimeRegex.MatchString(s) {

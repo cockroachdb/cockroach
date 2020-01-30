@@ -58,7 +58,7 @@ func TestFromAndToTime(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual := FromTime(fromTime).ToTime().Format(time.RFC3339Nano)
+			actual := FromTime(fromTime, RoundingDisallow2400).ToTime().Format(time.RFC3339Nano)
 			if actual != td.exp {
 				t.Errorf("expected %s, got %s", td.exp, actual)
 			}

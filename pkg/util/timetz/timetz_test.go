@@ -21,6 +21,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMakeTimeTZFromTime(t *testing.T) {
+	testCases := []struct {
+		t        time.Time
+		rounding timeofday.Rounding2400Spec
+
+		exp TimeTZ
+	}{}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s_%s", tc.t.Format(time.RFC3339), tc.rounding), func(t *testing.T) {
+			ret := MakeTimeTZFromTime(tc.t, tc.rounding)
+			assert.Equal(t, tc.exp, ret)
+		})
+	}
+}
+
 func TestParseTimeTZToStringRoundTrip(t *testing.T) {
 	testCases := []string{
 		"24:00:00-1559",

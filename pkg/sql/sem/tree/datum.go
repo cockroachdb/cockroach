@@ -1889,7 +1889,7 @@ func ParseDTime(ctx ParseTimeContext, s string, precision time.Duration) (*DTime
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.Time, nil)
 	}
-	return MakeDTime(timeofday.FromTime(t).Round(precision)), nil
+	return MakeDTime(timeofday.FromTime(t, timeofday.RoundingDisallow2400).Round(precision)), nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1973,8 +1973,8 @@ type DTimeTZ struct {
 }
 
 var (
-	dMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
-	dMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
+	DMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
+	DMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
 )
 
 // NewDTimeTZ creates a DTimeTZ from a timetz.TimeTZ.
@@ -1983,8 +1983,8 @@ func NewDTimeTZ(t timetz.TimeTZ) *DTimeTZ {
 }
 
 // NewDTimeTZFromTime creates a DTimeTZ from time.Time.
-func NewDTimeTZFromTime(t time.Time) *DTimeTZ {
-	return &DTimeTZ{timetz.MakeTimeTZFromTime(t)}
+func NewDTimeTZFromTime(t time.Time, rounding timeofday.Rounding2400Spec) *DTimeTZ {
+	return &DTimeTZ{timetz.MakeTimeTZFromTime(t, rounding)}
 }
 
 // NewDTimeTZFromOffset creates a DTimeTZ from a TimeOfDay and offset.
@@ -2040,17 +2040,17 @@ func (d *DTimeTZ) Next(ctx *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DTimeTZ) IsMax(_ *EvalContext) bool {
-	return d.TimeOfDay == dMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
+	return d.TimeOfDay == DMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
 }
 
 // IsMin implements the Datum interface.
 func (d *DTimeTZ) IsMin(_ *EvalContext) bool {
-	return d.TimeOfDay == dMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
+	return d.TimeOfDay == DMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
 }
 
 // Max implements the Datum interface.
 func (d *DTimeTZ) Max(_ *EvalContext) (Datum, bool) {
-	return dMaxTimeTZ, true
+	return DMaxTimeTZ, true
 }
 
 // Round returns a new DTimeTZ to the specified precision.
@@ -2060,7 +2060,7 @@ func (d *DTimeTZ) Round(precision time.Duration) *DTimeTZ {
 
 // Min implements the Datum interface.
 func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
-	return dMinTimeTZ, true
+	return DMinTimeTZ, true
 }
 
 // AmbiguousFormat implements the Datum interface.

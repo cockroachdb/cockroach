@@ -980,9 +980,8 @@ func DecodeTimeTZAscending(b []byte) ([]byte, timetz.TimeTZ, error) {
 	if err != nil {
 		return nil, timetz.TimeTZ{}, err
 	}
-	// Do not use timeofday.FromInt, as it loses 24:00:00 encoding.
 	return b, timetz.TimeTZ{
-		TimeOfDay:  timeofday.TimeOfDay(unixMicros - int64(offsetSecs)*offsetSecsToMicros),
+		TimeOfDay:  timeofday.FromInt(unixMicros-int64(offsetSecs)*offsetSecsToMicros, timeofday.RoundingAllow2400),
 		OffsetSecs: offsetSecs,
 	}, nil
 }
@@ -993,9 +992,8 @@ func DecodeTimeTZDescending(b []byte) ([]byte, timetz.TimeTZ, error) {
 	if err != nil {
 		return nil, timetz.TimeTZ{}, err
 	}
-	// Do not use timeofday.FromInt, as it loses 24:00:00 encoding.
 	return b, timetz.TimeTZ{
-		TimeOfDay:  timeofday.TimeOfDay(^unixMicros - int64(^offsetSecs)*offsetSecsToMicros),
+		TimeOfDay:  timeofday.FromInt(^unixMicros-int64(^offsetSecs)*offsetSecsToMicros, timeofday.RoundingAllow2400),
 		OffsetSecs: ^offsetSecs,
 	}, nil
 }
@@ -2174,8 +2172,10 @@ func DecodeUntaggedTimeTZValue(b []byte) (remaining []byte, t timetz.TimeTZ, err
 	if err != nil {
 		return b, timetz.TimeTZ{}, err
 	}
-	// Do not use timeofday.FromInt as it truncates 24:00 into 00:00.
-	return b, timetz.MakeTimeTZ(timeofday.TimeOfDay(timeOfDayMicros), int32(offsetSecs)), nil
+	return b, timetz.MakeTimeTZ(
+		timeofday.FromInt(timeOfDayMicros, timeofday.RoundingAllow2400),
+		int32(offsetSecs),
+	), nil
 }
 
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.

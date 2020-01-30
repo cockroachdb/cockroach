@@ -2988,7 +2988,7 @@ func (ctx *EvalContext) GetTxnTime(precision time.Duration) *DTimeTZ {
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return NewDTimeTZFromTime(ctx.GetRelativeParseTime().Round(precision))
+	return NewDTimeTZFromTime(ctx.GetRelativeParseTime().Round(precision), timeofday.RoundingDisallow2400)
 }
 
 // GetTxnTimeNoZone retrieves the current transaction time as per
@@ -2999,7 +2999,7 @@ func (ctx *EvalContext) GetTxnTimeNoZone(precision time.Duration) *DTime {
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision)))
+	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision), timeofday.RoundingDisallow2400))
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
@@ -3569,10 +3569,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DTimeTZ:
 			return MakeDTime(d.TimeOfDay.Round(roundTo)), nil
 		case *DTimestamp:
-			return MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
+			return MakeDTime(timeofday.FromTime(d.Time, timeofday.RoundingDisallow2400).Round(roundTo)), nil
 		case *DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time).Round(roundTo)), nil
+			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time, timeofday.RoundingDisallow2400).Round(roundTo)), nil
 		case *DInterval:
 			return MakeDTime(timeofday.Min.Add(d.Duration).Round(roundTo)), nil
 		}
@@ -3589,7 +3589,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DTimeTZ:
 			return d.Round(roundTo), nil
 		case *DTimestampTZ:
-			return NewDTimeTZFromTime(d.Time.Round(roundTo)), nil
+			return NewDTimeTZFromTime(d.Time.Round(roundTo), timeofday.RoundingDisallow2400), nil
 		}
 
 	case types.TimestampFamily:

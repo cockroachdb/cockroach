@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/pkg/errors"
@@ -472,8 +473,22 @@ func TestMarshalColumnValue(t *testing.T) {
 		},
 		{
 			typ:   types.Time,
-			datum: tree.MakeDTime(timeofday.FromInt(314159)),
+			datum: tree.MakeDTime(timeofday.FromInt(314159, timeofday.RoundingAllow2400)),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			typ: types.TimeTZ,
+			datum: tree.NewDTimeTZFromOffset(
+				timeofday.FromInt(314159, timeofday.RoundingAllow2400),
+				3*60*60,
+			),
+			exp: func() (v roachpb.Value) {
+				v.SetTimeTZ(timetz.MakeTimeTZ(
+					timeofday.FromInt(314159, timeofday.RoundingAllow2400),
+					3*60*60,
+				))
+				return
+			}(),
 		},
 		{
 			typ:   types.Timestamp,

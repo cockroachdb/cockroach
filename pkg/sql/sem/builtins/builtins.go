@@ -2534,7 +2534,12 @@ may increase either contention or retry errors, or both.`,
 				tTime := timeofday.TimeOfDay(*tArg).ToTime()
 				_, beforeOffsetSecs := tTime.In(ctx.GetLocation()).Zone()
 				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
+				return tree.NewDTimeTZ(
+					timetz.MakeTimeTZFromTime(
+						tTime.In(loc).Add(durationDelta),
+						timeofday.RoundingDisallow2400,
+					),
+				), nil
 			},
 			Info: "Treat given time without time zone as located in the specified time zone.",
 		},
@@ -2556,7 +2561,9 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				tTime := tArg.TimeTZ.ToTime()
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
+				return tree.NewDTimeTZ(
+					timetz.MakeTimeTZFromTime(tTime.In(loc), timeofday.RoundingDisallow2400),
+				), nil
 			},
 			Info: "Convert given time with time zone to the new time zone.",
 		},
@@ -2627,7 +2634,9 @@ may increase either contention or retry errors, or both.`,
 				tTime := timeofday.TimeOfDay(*tArg).ToTime()
 				_, beforeOffsetSecs := tTime.In(ctx.GetLocation()).Zone()
 				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
+				return tree.NewDTimeTZ(
+					timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta), timeofday.RoundingDisallow2400),
+				), nil
 			},
 			Info: "Treat given time without time zone as located in the specified time zone\n" +
 				"This is deprecated in favor of timezone(str, time)",
@@ -2650,7 +2659,9 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				tTime := tArg.TimeTZ.ToTime()
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
+				return tree.NewDTimeTZ(
+					timetz.MakeTimeTZFromTime(tTime.In(loc), timeofday.RoundingDisallow2400),
+				), nil
 			},
 			Info: "Convert given time with time zone to the new time zone\n" +
 				"This is deprecated in favor of timezone(str, timetz)",

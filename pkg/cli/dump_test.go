@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -201,6 +202,8 @@ func TestDumpRandom(t *testing.T) {
 			d date,
 			m timestamp,
 			mtz timestamptz,
+			t time,
+			ttz timetz,
 			n interval,
 			o bool,
 			e decimal,
@@ -209,7 +212,7 @@ func TestDumpRandom(t *testing.T) {
 			u uuid,
 			ip inet,
 			j json,
-			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip)
+			PRIMARY KEY (rowid, i, si, bi, f, fr, d, m, mtz, t, ttz, n, o, e, s, b, u, ip)
 		);
 		SET extra_float_digits = 3;
 	`, nil); err != nil {
@@ -234,6 +237,7 @@ func TestDumpRandom(t *testing.T) {
 			f := rnd.Float64()
 			d, _ := pgdate.MakeCompatibleDateFromDisk(rnd.Int63n(10000)).ToTime()
 			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond)
+			tt := timeofday.New(rnd.Intn(24), rnd.Intn(60), rnd.Intn(60), rnd.Intn(1000000)).ToTime()
 			sign := 1 - rnd.Int63n(2)*2
 			dur := duration.MakeDuration(sign*rnd.Int63(), sign*rnd.Int63n(1000), sign*rnd.Int63n(1000))
 			n := dur.String()
@@ -281,6 +285,8 @@ func TestDumpRandom(t *testing.T) {
 				d,
 				m,
 				m,
+				tt,
+				tt,
 				[]byte(n), // intervals come out as `[]byte`s
 				o,
 				[]byte(e), // decimals come out as `[]byte`s
@@ -290,14 +296,14 @@ func TestDumpRandom(t *testing.T) {
 				[]byte(ip.String()),
 				[]byte(j.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, si, bi, f, fr, d, m, mtz, t, ttz, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)

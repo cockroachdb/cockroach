@@ -58,9 +58,9 @@ func SampleDatum(t *types.T) Datum {
 	case types.DateFamily:
 		return NewDDate(pgdate.MakeCompatibleDateFromDisk(123123))
 	case types.TimeFamily:
-		return MakeDTime(timeofday.FromInt(789))
+		return MakeDTime(timeofday.FromInt(789, timeofday.RoundingAllow2400))
 	case types.TimeTZFamily:
-		return NewDTimeTZFromOffset(timeofday.FromInt(345), 5*60*60 /* OffsetSecs */)
+		return NewDTimeTZFromOffset(timeofday.FromInt(345, timeofday.RoundingAllow2400), 5*60*60 /* OffsetSecs */)
 	case types.TimestampFamily:
 		return MakeDTimestamp(timeutil.Unix(123, 123), time.Second)
 	case types.TimestampTZFamily:

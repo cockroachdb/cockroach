@@ -249,11 +249,12 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if typs[i].Family() == types.TimeFamily {
-					dt = tree.MakeDTime(timeofday.FromTime(d))
-				} else if typs[i].Family() == types.TimeTZFamily {
-					dt = tree.NewDTimeTZFromTime(d)
-				} else {
+				switch typs[i].Family() {
+				case types.TimeFamily:
+					dt = tree.MakeDTime(timeofday.FromTime(d, timeofday.RoundingAllow2400))
+				case types.TimeTZFamily:
+					dt = tree.NewDTimeTZFromTime(d, timeofday.RoundingAllow2400)
+				default:
 					dt = tree.MakeDTimestamp(d, time.Microsecond)
 				}
 				ds = tree.AsStringWithFlags(dt, tree.FmtBareStrings)

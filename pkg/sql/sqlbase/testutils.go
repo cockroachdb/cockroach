@@ -417,7 +417,12 @@ var (
 		},
 		types.TimeFamily: {
 			tree.MakeDTime(timeofday.Min),
+			tree.MakeDTime(timeofday.MicrosecondBeforeMax),
 			tree.MakeDTime(timeofday.Max),
+		},
+		types.TimeTZFamily: {
+			tree.DMinTimeTZ,
+			tree.DMaxTimeTZ,
 		},
 		types.TimestampFamily: func() []tree.Datum {
 			res := make([]tree.Datum, len(randTimestampSpecials))

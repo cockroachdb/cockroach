@@ -1284,7 +1284,7 @@ func (rd randData) time() time.Time {
 
 func (rd randData) timetz() timetz.TimeTZ {
 	return timetz.MakeTimeTZ(
-		timeofday.FromInt(rd.Int63n(int64(timeofday.Max))),
+		timeofday.FromInt(rd.Int63n(int64(timeofday.Max)), timeofday.RoundingAllow2400),
 		rd.Int31n(timetz.MaxTimeTZOffsetSecs*2)-timetz.MaxTimeTZOffsetSecs,
 	)
 }

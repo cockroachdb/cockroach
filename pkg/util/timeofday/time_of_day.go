@@ -28,11 +28,15 @@ const (
 	// Min is the minimum TimeOfDay value (midnight).
 	Min = TimeOfDay(0)
 
-	// Max is the maximum TimeOfDay value (1 second before midnight)
-	Max = TimeOfDay(microsecondsPerDay - 1)
+	// MicrosecondBeforeMax is the maximum TimeOfDay value
+	// just before Max.
+	MicrosecondBeforeMax = TimeOfDay(microsecondsPerDay - 1)
 
 	// Time2400 is a special value to represent the 24:00 input time
 	Time2400 = TimeOfDay(microsecondsPerDay)
+
+	// Max is Time2400
+	Max = Time2400
 
 	microsecondsPerSecond = 1e6
 	microsecondsPerMinute = 60 * microsecondsPerSecond
@@ -42,13 +46,29 @@ const (
 	secondsPerDay         = 24 * 60 * 60
 )
 
+// Rounding2400Spec specifies the way to round timeofday operations
+// when involving 2400 time.
+type Rounding2400Spec int
+
+const (
+	// RoundingAllow2400 means that when time is at exactly 2400,
+	// it should return Time2400. Time2400 + 1 microsecond results in 00:00:00.000001.
+	// This should be the default for expressions which have already been parsed,
+	// as otherwise data encoding Time2400 may be lost.
+	RoundingAllow2400 Rounding2400Spec = iota
+	// RoundingDisallow2400 will move Time2400 directly to 00:00:00.
+	// This should be the default for anything that is unparsed.
+	RoundingDisallow2400
+)
+
 // New creates a TimeOfDay representing the specified time.
+// Allows 2400 time, but mods otherwise.
 func New(hour, min, sec, micro int) TimeOfDay {
 	hours := time.Duration(hour) * time.Hour
 	minutes := time.Duration(min) * time.Minute
 	seconds := time.Duration(sec) * time.Second
 	micros := time.Duration(micro) * time.Microsecond
-	return FromInt(int64((hours + minutes + seconds + micros) / time.Microsecond))
+	return FromInt(int64((hours+minutes+seconds+micros)/time.Microsecond), RoundingAllow2400)
 }
 
 func (t TimeOfDay) String() string {
@@ -63,13 +83,18 @@ func (t TimeOfDay) String() string {
 // FromInt constructs a TimeOfDay from an int64, representing microseconds since
 // midnight. Inputs outside the range [0, microsecondsPerDay) are modded as
 // appropriate.
-func FromInt(i int64) TimeOfDay {
-	return TimeOfDay(positiveMod(i, microsecondsPerDay))
+func FromInt(i int64, rounding Rounding2400Spec) TimeOfDay {
+	return TimeOfDay(positiveMod(i, microsecondsPerDay, rounding))
 }
 
 // positive_mod returns x mod y in the range [0, y). (Go's modulo operator
 // preserves sign.)
-func positiveMod(x, y int64) int64 {
+// If rounding is set to RoundingAllow2400, anything that is not 00:00:00
+// that mods as a whole day results in Time2400.
+func positiveMod(x, y int64, rounding Rounding2400Spec) int64 {
+	if x != 0 && rounding == RoundingAllow2400 && x%y == 0 {
+		return microsecondsPerDay
+	}
 	if x < 0 {
 		return x%y + y
 	}
@@ -77,14 +102,13 @@ func positiveMod(x, y int64) int64 {
 }
 
 // FromTime constructs a TimeOfDay from a time.Time, ignoring the date and time zone.
-func FromTime(t time.Time) TimeOfDay {
+func FromTime(t time.Time, rounding Rounding2400Spec) TimeOfDay {
 	// Adjust for timezone offset so it won't affect the time. This is necessary
 	// at times, like when casting from a TIMESTAMPTZ.
 	_, offset := t.Zone()
 	unixSeconds := t.Unix() + int64(offset)
-
 	nanos := (unixSeconds%secondsPerDay)*int64(time.Second) + int64(t.Nanosecond())
-	return FromInt(nanos / nanosPerMicro)
+	return FromInt(nanos/nanosPerMicro, rounding)
 }
 
 // ToTime converts a TimeOfDay to a time.Time, using the Unix epoch as the date.
@@ -99,21 +123,15 @@ func Random(rng *rand.Rand) TimeOfDay {
 
 // Round takes a TimeOfDay, and rounds it to the given precision.
 func (t TimeOfDay) Round(precision time.Duration) TimeOfDay {
-	if t == Time2400 {
-		return t
-	}
 	ret := t.ToTime().Round(precision)
-	// Rounding Max should give Time2400, not 00:00.
-	// To catch this, see if we are comparing against the same day.
-	if ret.Day() != t.ToTime().Day() {
-		return Time2400
-	}
-	return FromTime(ret)
+	// 2400 time is always allowed for Round operations.
+	return FromTime(ret, RoundingAllow2400)
 }
 
 // Add adds a Duration to a TimeOfDay, wrapping into the next day if necessary.
 func (t TimeOfDay) Add(d duration.Duration) TimeOfDay {
-	return FromInt(int64(t) + d.Nanos()/nanosPerMicro)
+	// Add operations never round to 2400.
+	return FromInt(int64(t)+d.Nanos()/nanosPerMicro, RoundingDisallow2400)
 }
 
 // Difference returns the interval between t1 and t2, which may be negative.
