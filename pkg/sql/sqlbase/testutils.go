@@ -363,6 +363,10 @@ var (
 	// randInterestingDatums is a collection of interesting datums that can be
 	// used for random testing.
 	randInterestingDatums = map[types.Family][]tree.Datum{
+		types.BoolFamily: {
+			tree.DBoolTrue,
+			tree.DBoolFalse,
+		},
 		types.IntFamily: {
 			tree.NewDInt(tree.DInt(0)),
 			tree.NewDInt(tree.DInt(-1)),
@@ -419,6 +423,11 @@ var (
 			tree.MakeDTime(timeofday.Min),
 			tree.MakeDTime(timeofday.Max),
 		},
+		types.TimeTZFamily: {
+			tree.DMinTimeTZ,
+			// Uncomment this once #44548 has been resolved.
+			// tree.DMaxTimeTZ,
+		},
 		types.TimestampFamily: func() []tree.Datum {
 			res := make([]tree.Datum, len(randTimestampSpecials))
 			for i, t := range randTimestampSpecials {
@@ -458,6 +467,46 @@ var (
 			tree.NewDBytes("\u2603"), // unicode snowman
 			tree.NewDBytes("\xFF"),   // invalid utf-8 sequence, but a valid bytes
 		},
+		types.OidFamily: {
+			tree.NewDOid(0),
+		},
+		types.UuidFamily: {
+			tree.DMinUUID,
+			tree.DMaxUUID,
+		},
+		types.INetFamily: {
+			tree.DMinIPAddr,
+			tree.DMaxIPAddr,
+		},
+		types.JsonFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				`{}`,
+				`1`,
+				`{"test": "json"}`,
+			} {
+				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.BitFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				0,
+				1<<63 - 1,
+			} {
+				d, err := tree.NewDBitArrayFromInt(i, 64)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
 	}
 	randTimestampSpecials = []time.Time{
 		{},
@@ -522,14 +571,22 @@ func init() {
 	})
 }
 
-// randInterestingDatum returns an interesting Datum of type typ. If there are
-// no such Datums, it returns nil. Note that it pays attention to the width of
-// the requested type for Int and Float type families.
+// randInterestingDatum returns an interesting Datum of type typ.
+// If there are no such Datums for a scalar type, it panics. Otherwise,
+// it returns nil if there are no such Datums. Note that it pays attention
+// to the width of the requested type for Int and Float type families.
 func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
-	specials := randInterestingDatums[typ.Family()]
-	if len(specials) == 0 {
+	specials, ok := randInterestingDatums[typ.Family()]
+	if !ok || len(specials) == 0 {
+		for _, sc := range types.Scalar {
+			// Panic if a scalar type doesn't have an interesting datum.
+			if sc == typ {
+				panic(fmt.Sprintf("no interesting datum for type %s found", typ.String()))
+			}
+		}
 		return nil
 	}
+
 	special := specials[rng.Intn(len(specials))]
 	switch typ.Family() {
 	case types.IntFamily:
