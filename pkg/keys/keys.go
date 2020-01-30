@@ -286,9 +286,9 @@ func makeRangeIDUnreplicatedKey(
 	return key
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneKey()
+// RangeTombstoneKey returns a system-local key for a range tombstone.
+func RangeTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeTombstoneKey()
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
@@ -897,9 +897,9 @@ func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func (b RangeIDPrefixBuf) RaftTombstoneKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftTombstoneSuffix...)
+// RangeTombstoneKey returns a system-local key for a range tombstone.
+func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeTombstoneSuffix...)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.

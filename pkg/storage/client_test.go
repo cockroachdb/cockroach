@@ -1592,9 +1592,9 @@ func verifyRecomputedStats(
 
 func waitForTombstone(
 	t *testing.T, reader engine.Reader, rangeID roachpb.RangeID,
-) (tombstone roachpb.RaftTombstone) {
+) (tombstone roachpb.RangeTombstone) {
 	testutils.SucceedsSoon(t, func() error {
-		tombstoneKey := keys.RaftTombstoneKey(rangeID)
+		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := engine.MVCCGetProto(
 			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 		)

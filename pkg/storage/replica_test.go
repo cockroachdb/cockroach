@@ -6887,7 +6887,7 @@ func TestReplicaDestroy(t *testing.T) {
 	} else if ok {
 		// If the range is destroyed, only a tombstone key should be there.
 		k1 := iter.Key().Key
-		if tombstoneKey := keys.RaftTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
+		if tombstoneKey := keys.RangeTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
 			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
 		}
 
