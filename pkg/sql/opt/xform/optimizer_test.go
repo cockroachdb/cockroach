@@ -150,9 +150,7 @@ func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runDataDrivenTest(
 		t, "testdata/physprops/",
-		memo.ExprFmtHideMiscProps|
-			memo.ExprFmtHideConstraints|
-			memo.ExprFmtHideFuncDeps|
+		memo.ExprFmtHideConstraints|
 			memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideStats|
 			memo.ExprFmtHideCost|
