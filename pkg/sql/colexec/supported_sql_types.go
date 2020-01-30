@@ -29,4 +29,5 @@ var allSupportedSQLTypes = []types.T{
 	*types.Uuid,
 	*types.Timestamp,
 	*types.TimestampTZ,
+	*types.Interval,
 }

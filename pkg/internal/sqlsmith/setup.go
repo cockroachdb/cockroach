@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS seed_vec AS
 		'2001-01-01'::DATE + g AS _date,
 		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
 		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
+		g * '1 day'::INTERVAL AS _interval,
 		g % 2 = 1 AS _bool,
 		g::DECIMAL AS _decimal,
 		g::STRING AS _string,

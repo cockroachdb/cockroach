@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	raven "github.com/getsentry/raven-go"
@@ -265,11 +266,6 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	})
 }
 
-var crdbPaths = []string{
-	"github.com/cockroachdb/cockroach",
-	"go.etcd.io/etcd/raft",
-}
-
 func uptimeTag(now time.Time) string {
 	uptime := now.Sub(startTime)
 	switch {
@@ -474,7 +470,7 @@ func SendCrashReport(
 		return
 	}
 	err := ReportablesToSafeError(depth+1, format, reportables)
-	ex := raven.NewException(err, NewStackTrace(depth+1))
+	ex := raven.NewException(err, stacktrace.NewStackTrace(depth+1))
 	SendReport(ctx, err.Error(), crashReportType, nil, ex)
 }
 
@@ -499,7 +495,7 @@ func SendReport(
 	errMsg string,
 	crashReportType ReportType,
 	extraDetails map[string]interface{},
-	details ...ReportableObject,
+	details ...stacktrace.ReportableObject,
 ) {
 	packet := raven.NewPacket(errMsg, details...)
 

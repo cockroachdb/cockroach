@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -246,6 +247,14 @@ func decodeTableKeyToCol(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		vec.Timestamp()[idx] = t
+	case types.IntervalFamily:
+		var d duration.Duration
+		if dir == sqlbase.IndexDescriptor_ASC {
+			rkey, d, err = encoding.DecodeDurationAscending(key)
+		} else {
+			rkey, d, err = encoding.DecodeDurationDescending(key)
+		}
+		vec.Interval()[idx] = d
 	default:
 		return rkey, false, errors.AssertionFailedf("unsupported type %+v", log.Safe(valType))
 	}
@@ -301,6 +310,10 @@ func UnmarshalColumnValueToCol(
 		var v time.Time
 		v, err = value.GetTime()
 		vec.Timestamp()[idx] = v
+	case types.IntervalFamily:
+		var v duration.Duration
+		v, err = value.GetDuration()
+		vec.Interval()[idx] = v
 	default:
 		return errors.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
 	}

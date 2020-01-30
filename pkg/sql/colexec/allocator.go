@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -142,13 +143,14 @@ func (a *Allocator) Clear() {
 }
 
 const (
-	sizeOfBool    = int(unsafe.Sizeof(true))
-	sizeOfInt16   = int(unsafe.Sizeof(int16(0)))
-	sizeOfInt32   = int(unsafe.Sizeof(int32(0)))
-	sizeOfInt64   = int(unsafe.Sizeof(int64(0)))
-	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
-	sizeOfTime    = int(unsafe.Sizeof(time.Time{}))
-	sizeOfUint16  = int(unsafe.Sizeof(uint16(0)))
+	sizeOfBool     = int(unsafe.Sizeof(true))
+	sizeOfInt16    = int(unsafe.Sizeof(int16(0)))
+	sizeOfInt32    = int(unsafe.Sizeof(int32(0)))
+	sizeOfInt64    = int(unsafe.Sizeof(int64(0)))
+	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
+	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
+	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	sizeOfUint16   = int(unsafe.Sizeof(uint16(0)))
 )
 
 // sizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
@@ -196,6 +198,8 @@ func estimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
 			acc += sizeOfTime
+		case coltypes.Interval:
+			acc += sizeOfDuration
 		case coltypes.Unhandled:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:

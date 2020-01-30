@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -97,6 +98,10 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 		var t time.Time
 		buf, t, err = encoding.DecodeUntaggedTimeValue(buf)
 		vec.Timestamp()[idx] = t
+	case types.IntervalFamily:
+		var d duration.Duration
+		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
+		vec.Interval()[idx] = d
 	default:
 		return buf, errors.AssertionFailedf(
 			"couldn't decode type: %s", log.Safe(t))

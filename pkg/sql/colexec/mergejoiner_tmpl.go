@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
@@ -49,6 +50,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "time" package.
 var _ time.Time
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64

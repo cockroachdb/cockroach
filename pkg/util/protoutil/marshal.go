@@ -25,12 +25,6 @@ type Message interface {
 	Size() int
 }
 
-// SimpleMessage aliases the proto.Message interface for use in APIs
-// that do not require/support the Message interface defined above.
-// This is needed, for example, to implement error encode/decode
-// functions without a linter error.
-type SimpleMessage = proto.Message
-
 // MaybeFuzz takes the given proto and, if nullability fuzzing is enabled, walks it using a
 // RandomZeroInsertingVisitor. A suitable copy is made and returned if fuzzing took place.
 func MaybeFuzz(pb Message) Message {
