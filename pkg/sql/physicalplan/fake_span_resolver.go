@@ -11,6 +11,7 @@
 package physicalplan
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 
@@ -118,27 +119,47 @@ func (fit *fakeSpanResolverIterator) Seek(
 		}
 	}
 
-	fit.splits = make([]fakeSplit, 0, numSplits+2)
-	fit.splits = append(fit.splits, fakeSplit{key: span.Key})
+	splits := make([]fakeSplit, 0, numSplits+2)
+	splits = append(splits, fakeSplit{key: span.Key})
 	for i := range splitKeys {
 		if _, ok := chosen[i]; ok {
-			fit.splits = append(fit.splits, fakeSplit{key: splitKeys[i]})
+			splits = append(splits, fakeSplit{key: splitKeys[i]})
 		}
 	}
-	fit.splits = append(fit.splits, fakeSplit{key: span.EndKey})
+	splits = append(splits, fakeSplit{key: span.EndKey})
 
 	// Assign nodes randomly.
-	for i := range fit.splits {
-		fit.splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
+	for i := range splits {
+		splits[i].nodeDesc = fit.fsr.nodes[rand.Intn(len(fit.fsr.nodes))]
 	}
 
 	if scanDir == kv.Descending {
 		// Reverse the order of the splits.
-		for i := 0; i < len(fit.splits)/2; i++ {
-			j := len(fit.splits) - i - 1
-			fit.splits[i], fit.splits[j] = fit.splits[j], fit.splits[i]
+		for i := 0; i < len(splits)/2; i++ {
+			j := len(splits) - i - 1
+			splits[i], splits[j] = splits[j], splits[i]
 		}
 	}
+
+	// Check for the case where the previous Seek() call was for the same
+	// row. In this case we'll assign the same replica so we don't "split"
+	// column families of the same row across different replicas.
+	if fit.splits != nil {
+		// In the normal usage pattern, Next() is called until fit.splits has two
+		// elements left: the start key and end key of the last range. The first has
+		// the replica we may want to match.
+		prevSplit := fit.splits[0]
+		prefix, err := keys.EnsureSafeSplitKey(span.Key)
+		if err == nil {
+			// We can ignore an error here since it indicates that our span is not a
+			// point lookup.
+			if len(prevSplit.key) >= len(prefix) && bytes.Equal(prefix, prevSplit.key[:len(prefix)]) {
+				splits[0].nodeDesc = prevSplit.nodeDesc
+			}
+		}
+	}
+
+	fit.splits = splits
 }
 
 // Valid is part of the SpanResolverIterator interface.
