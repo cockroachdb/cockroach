@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +37,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.

@@ -14,8 +14,10 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// TODO(yuzefovich): in most cases only need a single zero value.
 var zeroBoolColumn = make([]bool, coldata.MaxBatchSize)
 
 var zeroDecimalColumn = make([]apd.Decimal, coldata.MaxBatchSize)
@@ -25,6 +27,8 @@ var zeroInt16Column = make([]int16, coldata.MaxBatchSize)
 var zeroInt32Column = make([]int32, coldata.MaxBatchSize)
 
 var zeroInt64Column = make([]int64, coldata.MaxBatchSize)
+
+var zeroIntervalColumn = make([]duration.Duration, coldata.MaxBatchSize)
 
 var zeroFloat64Column = make([]float64, coldata.MaxBatchSize)
 
