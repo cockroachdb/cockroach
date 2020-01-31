@@ -50,7 +50,7 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
-import { DecommissionedNodeHistory } from "src/views/reports";
+import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
@@ -124,14 +124,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route path="/data-distribution" component={ DataDistributionPage } />
 
                   { /* statement statistics */ }
-                  <Route exact path="/statements" component={ StatementsPage }/>
-                  <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
-                  <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
-                  <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  <Route path="/statements" component={ StatementsPage }/>
+                  <Route path={ `/statements/:${appAttr}`} component={ StatementsPage } />
+                  <Route path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  <Route path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
 
-                  <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
-                  <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
-                  <Route exact path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
+                  <Route path="/statement" component={() => <Redirect to="/statements" />}/>
+                  <Route path={`/statement/:${statementAttr}`} component={StatementDetails}/>
+                  <Route path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
 
                   { /* debug pages */ }
                   <Route exact path="/debug" component={Debug}/>
@@ -143,9 +143,9 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     <Raft>
                       <Switch>
                         <Redirect exact from="/raft" to="/raft/ranges" />
-                        <Route path="/raft/ranges" component={RaftRanges}/>
-                        <Route path="/raft/messages/all" component={RaftMessages}/>
-                        <Route path={`/raft/messages/node/:${nodeIDAttr}`} component={RaftMessages}/>
+                        <Route exact path="/raft/ranges" component={RaftRanges}/>
+                        <Route exact path="/raft/messages/all" component={RaftMessages}/>
+                        <Route exact path={`/raft/messages/node/:${nodeIDAttr}`} component={RaftMessages}/>
                       </Switch>
                     </Raft>
                   </Route>
@@ -153,9 +153,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route path="/reports/problemranges" component={ ProblemRanges } />
                   <Route path={`/reports/problemranges/:${nodeIDAttr}`} component={ ProblemRanges }/>
                   <Route path="/reports/localities" component={ Localities } />
+                  <Route path={`/reports/network/:${nodeIDAttr}`} component={ Network } />
                   <Route path="/reports/network" component={ Network } />
                   <Route path="/reports/nodes" component={ Nodes } />
-                  <Route path="/reports/nodes/history" component={ DecommissionedNodeHistory } />
+                  <Route path="/reports/nodes/history" component={ ConnectedDecommissionedNodeHistory } />
                   <Route path="/reports/settings" component={ Settings } />
                   <Route path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
                   <Route path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
