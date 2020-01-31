@@ -337,8 +337,8 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
 }
-func (u *sqlSymUnion) roleOptionType() roleoption.Kind {
-    return u.val.(roleoption.Kind)
+func (u *sqlSymUnion) roleOptionType() roleoption.Option {
+    return u.val.(roleoption.Option)
 }
 func (u *sqlSymUnion) roleOption() roleoption.RoleOption {
     return u.val.(roleoption.RoleOption)
@@ -643,10 +643,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_view_stmt
 %type <tree.Statement> alter_sequence_stmt
 %type <tree.Statement> alter_database_stmt
-%type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
-%type <tree.Statement> alter_role_stmt
+%type <tree.Statement> alter_role_or_user_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -667,9 +666,6 @@ func newNameFromStr(s string) *tree.Name {
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
 %type <tree.Statement> alter_zone_database_stmt
-
-// ALTER USER
-%type <tree.Statement> alter_user_password_stmt
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1151,8 +1147,7 @@ stmt:
 // %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
-| alter_user_stmt     // EXTEND WITH HELP: ALTER USER
-| alter_role_stmt
+| alter_role_or_user_stmt // EXTEND WITH HELP: ALTER USER
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -1279,15 +1274,6 @@ alter_sequence_options_stmt:
   {
     $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
-
-// %Help: ALTER USER - change user properties
-// %Category: Priv
-// %Text:
-// ALTER USER [IF EXISTS] <name> WITH PASSWORD <password>
-// %SeeAlso: CREATE USER
-alter_user_stmt:
-  alter_user_password_stmt
-| ALTER USER error // SHOW HELP: ALTER USER
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -5084,12 +5070,20 @@ truncate_stmt:
 password_clause:
   PASSWORD string_or_placeholder
   {
-    $$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: $2.expr().String()}
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: $2.expr().String()}
   }
 | PASSWORD NULL
   {
-    $$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: ""}
-  }
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+	}
 
 // %Help: CREATE ROLE - define a new role or user
 // %Category: Priv
@@ -5126,18 +5120,16 @@ create_role_or_user_stmt:
 // %Category: Priv
 // %Text: ALTER ROLE <name> [WITH] <options...>
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
-alter_role_stmt:
-	ALTER ROLE string_or_placeholder role_options
+alter_role_or_user_stmt:
+	ALTER role_or_group_or_user string_or_placeholder role_options
 {
-	$$.val = &tree.AlterRoleOptions{Name: $3.expr()}
-//	$$.val = &tree.AlterRoleOptions{Name: $3.expr(), RoleOptions: $4.roleOptionList()}
+	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), RoleOptions: $4.roleOptionList()}
 }
-| ALTER ROLE string_or_placeholder WITH role_options
+| ALTER role_or_group_or_user string_or_placeholder WITH role_options
 {
-	$$.val = &tree.AlterRoleOptions{Name: $3.expr(), IfHasWith: true}
-	//$$.val = &tree.AlterRoleOptions{Name: $3.expr(), IfHasWith: true, RoleOptions: $5.roleOptionList()}
+	$$.val = &tree.AlterRoleOrUserOptions{Name: $3.expr(), IfHasWith: true, RoleOptions: $5.roleOptionList()}
 }
-| ALTER ROLE error // SHOW HELP: ALTER ROLE
+| ALTER role_or_group_or_user error // SHOW HELP: ALTER ROLE
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
@@ -5168,18 +5160,34 @@ create_view_stmt:
 role_option:
   CREATEROLE
   {
-  	$$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: ""}
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: ""}
   }
   | NOCREATEROLE
   {
-		$$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: ""}
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: ""}
 	}
   | LOGIN {
-		$$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: ""}
-  }
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+	}
   | NOLOGIN {
-		$$.val = roleoption.RoleOption{Option: roleoption.ByName[$1], Value: ""}
-  }
+		option, err := roleoption.ToOption($1)
+		if err != nil {
+			return setErr(sqllex, err)
+		}
+		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+	}
   | password_clause
 
 role_options:
@@ -5189,10 +5197,10 @@ role_options:
 		roleOptionList[0] = $1.roleOption()
 		$$.val = roleOptionList
 	}
-//	role_option role_options
-//	{
-//		$$.val = append($2.roleOptionList(), $1.roleOption())
-//	}
+	| role_options role_option
+	{
+		$$.val = append($1.roleOptionList(), $2.roleOption())
+	}
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
@@ -5380,17 +5388,6 @@ alter_rename_database_stmt:
   ALTER DATABASE database_name RENAME TO database_name
   {
     $$.val = &tree.RenameDatabase{Name: tree.Name($3), NewName: tree.Name($6)}
-  }
-
-// https://www.postgresql.org/docs/10/static/sql-alteruser.html
-alter_user_password_stmt:
-  ALTER USER string_or_placeholder password_clause
-  {
-    $$.val = &tree.AlterUserSetPassword{Name: $3.expr(), Password: $4.expr()}
-  }
-| ALTER USER IF EXISTS string_or_placeholder password_clause
-  {
-    $$.val = &tree.AlterUserSetPassword{Name: $5.expr(), Password: $6.expr(), IfExists: true}
   }
 
 alter_rename_table_stmt:

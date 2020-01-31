@@ -13,6 +13,7 @@ package roleoption
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -20,19 +21,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-//go:generate stringer -type=Kind
+//go:generate stringer -type=Option
 
-// Kind defines a role option. This is output by the parser
-type Kind uint32
+// Option defines a role option. This is output by the parser
+type Option uint32
 
 type RoleOption struct {
-	Option Kind
+	Option Option
 	Value  string
 }
 
 // KindList of role options.
 const (
-	_ Kind = iota
+	_ Option = iota
 	CREATEROLE
 	NOCREATEROLE
 	LOGIN
@@ -41,12 +42,12 @@ const (
 )
 
 // Mask returns the bitmask for a given role option.
-func (k Kind) Mask() uint32 {
+func (k Option) Mask() uint32 {
 	return 1 << k
 }
 
 // ByName is a map of string -> kind value.
-var ByName = map[string]Kind{
+var ByName = map[string]Option{
 	"CREATEROLE":   CREATEROLE,
 	"NOCREATEROLE": NOCREATEROLE,
 	"LOGIN":        LOGIN,
@@ -54,27 +55,51 @@ var ByName = map[string]Kind{
 	"PASSWORD":     PASSWORD,
 }
 
-// MapToSQLColumn is a map of roleoption (Kind) ->
+// MapToSQLColumn is a map of roleoption (Option) ->
 // System.users SQL Column Name (string).
-var MapToSQLColumn = map[Kind]string{
+var MapToSQLColumn = map[Option]string{
 	CREATEROLE:   "hasCreateRole",
 	NOCREATEROLE: "hasCreateRole",
+	LOGIN:        "login",
+	NOLOGIN:      "login",
+	PASSWORD:     "hashedPassword",
 }
 
-// MapToBool is a map of roleoption (Kind) ->
+// MapToBool is a map of roleoption (Option) ->
 // bool value in system.users table (bool).
-var MapToBool = map[Kind]bool{
+var MapToBool = map[Option]bool{
 	CREATEROLE:   true,
 	NOCREATEROLE: false,
+	LOGIN:        true,
+	NOLOGIN:      false,
+}
+
+func ToOption(str string) (Option, error) {
+	ret := ByName[strings.ToUpper(str)]
+	if ret == 0 {
+		return 0, pgerror.New(pgcode.Syntax, "option does not exist")
+	}
+
+	return ret, nil
 }
 
 // ToSQLColumnName returns the SQL Column Name corresponding to the Role option.
-func (k Kind) ToSQLColumnName() string {
+func (k Option) ToSQLColumnName() string {
 	return MapToSQLColumn[k]
 }
 
+// ToSQLValue returns the value of option in it's SQL Column.
+func (ro RoleOption) ToSQLValue() string {
+	if ro.Option == PASSWORD {
+		// Need to hash the password here
+		return ro.Value
+	}
+
+	return strconv.FormatBool(MapToBool[ro.Option])
+}
+
 // KindList is a list of role option kinds.
-type KindList []Kind
+type KindList []Option
 
 // List is a list of role options.
 type List []RoleOption
@@ -137,17 +162,11 @@ func (pl List) CreateSetStmtFromRoleOptions() (string, error) {
 	setStmt := "SET "
 	for i, roleOption := range pl {
 		option := roleOption.Option
+		format := ", \"%s\" = %s "
 		if i == 0 {
-			setStmt += fmt.Sprintf(
-				"\"%s\" = %t ",
-				MapToSQLColumn[option],
-				MapToBool[option])
-		} else {
-			setStmt += fmt.Sprintf(
-				", \"%s\" = %t ",
-				MapToSQLColumn[option],
-				MapToBool[option])
+			format = "\"%s\" = %s "
 		}
+		setStmt += fmt.Sprintf(format, option.ToSQLColumnName(), roleOption.ToSQLValue())
 	}
 
 	return setStmt, nil
@@ -155,7 +174,7 @@ func (pl List) CreateSetStmtFromRoleOptions() (string, error) {
 
 // WIP LIST FROM STRINGS HAS TO BE LIST FROM ROLEOPTION
 // OR ANOTHER WAY TO MAKE LIST EASILY FROM ROLEOPTION IN YACC
-// ListFromStrings takes a list of strings and attempts to build a list of Kind.
+// ListFromStrings takes a list of strings and attempts to build a list of Option.
 // We convert each string to uppercase and search for it in the ByName map.
 // If an entry is not found in ByName, an error is returned.
 func ListFromRoleOptions(strs []string) (KindList, error) {
@@ -170,7 +189,7 @@ func ListFromRoleOptions(strs []string) (KindList, error) {
 	return ret, nil
 }
 
-func (pl List) Contains(p Kind) bool {
+func (pl List) Contains(p Option) bool {
 	for _, ro := range pl {
 		if ro.Option == p {
 			return true
@@ -188,8 +207,10 @@ func (pl List) CheckRoleOptionConflicts() error {
 		return err
 	}
 
-	if (roleOptionBits&CREATEROLE.Mask() != 0) &&
-		(roleOptionBits&NOCREATEROLE.Mask() != 0) {
+	if (roleOptionBits&CREATEROLE.Mask() != 0 &&
+		roleOptionBits&NOCREATEROLE.Mask() != 0) ||
+		(roleOptionBits&LOGIN.Mask() != 0 &&
+			roleOptionBits&NOLOGIN.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role option options")
 	}
 	return nil

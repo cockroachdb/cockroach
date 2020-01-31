@@ -196,20 +196,12 @@ func (*AlterSequence) StatementType() StatementType { return DDL }
 func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
 
 // StatementType implements the Statement interface.
-func (*AlterUserSetPassword) StatementType() StatementType { return RowsAffected }
+func (*AlterRoleOrUserOptions) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterUserSetPassword) StatementTag() string { return "ALTER USER" }
+func (*AlterRoleOrUserOptions) StatementTag() string { return "ALTER USER" }
 
-func (*AlterUserSetPassword) hiddenFromShowQueries() {}
-
-// StatementType implements the Statement interface.
-func (*AlterRoleOptions) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*AlterRoleOptions) StatementTag() string { return "ALTER USER" }
-
-func (*AlterRoleOptions) hiddenFromShowQueries() {}
+func (*AlterRoleOrUserOptions) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*Backup) StatementType() StatementType { return Rows }
@@ -880,8 +872,7 @@ func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
-func (n *AlterUserSetPassword) String() string           { return AsString(n) }
-func (n *AlterRoleOptions) String() string               { return AsString(n) }
+func (n *AlterRoleOrUserOptions) String() string         { return AsString(n) }
 func (n *AlterSequence) String() string                  { return AsString(n) }
 func (n *Backup) String() string                         { return AsString(n) }
 func (n *BeginTransaction) String() string               { return AsString(n) }

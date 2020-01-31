@@ -89,7 +89,9 @@ func createAuthSessionToken(username string) (sessionID int64, httpCookie *http.
 
 	// First things first. Does the user exist?
 	_, rows, err := runQuery(sqlConn,
-		makeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username), false)
+		// Need to handle migration here - what if migration not done yet?
+		// We want to check if login is true, if migration is not done, check Not is role.
+		makeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND login = true`, username), false)
 	if err != nil {
 		return -1, nil, err
 	}

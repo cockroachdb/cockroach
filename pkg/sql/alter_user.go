@@ -29,16 +29,17 @@ type alterUserSetPasswordNode struct {
 	run alterUserSetPasswordRun
 }
 
-// AlterUserSetPassword changes a user's password.
+// AlterRoleOrUserOptions changes a user's password.
 // Privileges: UPDATE on the users table.
 func (p *planner) AlterUserSetPassword(
-	ctx context.Context, n *tree.AlterUserSetPassword,
+	ctx context.Context, n *tree.AlterRoleOrUserOptions,
 ) (planNode, error) {
 	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(n.Name, n.Password, "ALTER USER")
+	password := tree.DNull
+	ua, err := p.getUserAuthInfo(n.Name, password, "ALTER USER")
 	if err != nil {
 		return nil, err
 	}

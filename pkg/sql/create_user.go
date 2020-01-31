@@ -42,13 +42,13 @@ var userTableName = tree.NewTableName("system", "users").String()
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
 func (p *planner) CreateUser(ctx context.Context, n *tree.CreateRoleOrUser) (planNode, error) {
-	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, n.IsRole /* isRole */, "CREATE USER", nil)
+	return p.CreateUserNode(ctx, n.Name, n.IfNotExists, n.IsRole /* isRole */, "CREATE USER", nil)
 }
 
 // CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
 func (p *planner) CreateUserNode(
 	ctx context.Context,
-	nameE, passwordE tree.Expr,
+	nameE tree.Expr,
 	ifNotExists bool,
 	isRole bool,
 	opName string,
@@ -61,6 +61,9 @@ func (p *planner) CreateUserNode(
 	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
+
+	// Need to handle empty and NULL password behaviour
+	passwordE := tree.DNull
 
 	ua, err := p.getUserAuthInfo(nameE, passwordE, opName)
 	if err != nil {

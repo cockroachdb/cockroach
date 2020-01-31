@@ -349,15 +349,15 @@ var specs = []stmtSpec{
 		},
 		unlink: []string{"table_name"},
 	},
-	{
-		name:   "alter_user_password_stmt",
-		inline: []string{"password_clause", "opt_with"},
-		replace: map[string]string{
-			"string_or_placeholder 'WITH'":      "name 'WITH'",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-		unlink: []string{"name", "password"},
-	},
+	//{
+	//	name:   "alter_user_password_stmt",
+	//	inline: []string{"password_clause", "opt_with"},
+	//	replace: map[string]string{
+	//		"string_or_placeholder 'WITH'":      "name 'WITH'",
+	//		"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
+	//		"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
+	//	unlink: []string{"name", "password"},
+	//},
 	{
 		name:    "alter_sequence_options_stmt",
 		inline:  []string{"sequence_option_list", "sequence_option_elem"},

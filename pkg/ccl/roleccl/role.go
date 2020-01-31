@@ -37,7 +37,7 @@ func createRolePlanHook(
 	}
 
 	// Call directly into the OSS code.
-	return p.CreateUserNode(ctx, createRole.Name, nil /* password */, createRole.IfNotExists, createRole.IsRole, /* isRole */
+	return p.CreateUserNode(ctx, createRole.Name, createRole.IfNotExists, createRole.IsRole, /* isRole */
 		"CREATE ROLE", createRole.RoleOptions)
 }
 
@@ -122,8 +122,9 @@ func grantRolePlanHook(
 		// "role public does not exist". This matches postgres behavior.
 
 		// Check roles: these have to be roles.
+		// Updated to match pg, can be roles or users.
 		for _, r := range grant.Roles {
-			if isRole, ok := users[string(r)]; !ok || !isRole {
+			if _, ok := users[string(r)]; !ok {
 				return pgerror.Newf(pgcode.UndefinedObject, "role %s does not exist", r)
 			}
 		}

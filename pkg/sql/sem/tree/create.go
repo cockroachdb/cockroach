@@ -1171,7 +1171,6 @@ const (
 // CreateRoleOrUser represents a CREATE USER or CREATE ROLE statement.
 type CreateRoleOrUser struct {
 	Name        Expr
-	Password    Expr
 	IsRole      bool
 	IfNotExists bool
 	RoleOptions roleoption.List
@@ -1202,15 +1201,17 @@ func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterUserSetPassword represents an ALTER USER ... WITH PASSWORD statement.
-type AlterUserSetPassword struct {
-	Name     Expr
-	Password Expr
-	IfExists bool
+// AlterRoleOrUserOptions represents an ALTER ROLE or ALTER USER statement.
+type AlterRoleOrUserOptions struct {
+	Name        Expr
+	IfExists    bool
+	RoleOptions roleoption.List
+	IfHasWith   bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
+func (node *AlterRoleOrUserOptions) Format(ctx *FmtCtx) {
+	// WIP: Need to fix this.
 	ctx.WriteString("ALTER USER ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -1218,29 +1219,10 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 	ctx.WriteString(" WITH PASSWORD ")
 	if ctx.flags.HasFlags(FmtShowPasswords) {
-		ctx.FormatNode(node.Password)
+		//ctx.FormatNode(node.Password)
 	} else {
 		ctx.WriteString("*****")
 	}
-}
-
-// AlterRoleOptions represents an ALTER ROLE ... WITH <OPTION...> statement.
-type AlterRoleOptions struct {
-	Name        Expr
-	IfHasWith   bool
-	RoleOptions roleoption.List
-}
-
-// Format implements the NodeFormatter interface.
-func (node *AlterRoleOptions) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ROLE ")
-	ctx.FormatNode(node.Name)
-	if node.IfHasWith {
-		ctx.WriteString(" WITH ")
-	} else {
-		ctx.WriteString(" ")
-	}
-	//node.RoleOptions.Format(&ctx.Buffer)
 }
 
 // CreateView represents a CREATE VIEW statement.

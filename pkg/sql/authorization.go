@@ -289,7 +289,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 // checks if the user belongs to a role where the roleprivilege has value true.
 // Only works on checking the "positive version" of the privilege.
 // Example: CREATEROLE instead of NOCREATEROLE.
-func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleoption.Kind) error {
+func (p *planner) HasRolePrivilege(ctx context.Context, rolePrivilege roleoption.Option) error {
 	user := p.SessionData().User
 
 	if user == security.RootUser || user == security.NodeUser {
