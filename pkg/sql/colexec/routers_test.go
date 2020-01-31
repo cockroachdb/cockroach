@@ -536,7 +536,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	// Never-ending input of 0s.
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
-	in := NewRepeatableBatchSource(batch)
+	in := NewRepeatableBatchSource(testAllocator, batch)
 
 	unbufferedCh := make(chan struct{})
 	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs)
@@ -799,7 +799,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// numbers.
 	batch := testAllocator.NewMemBatch(types)
 	batch.SetLength(coldata.BatchSize())
-	input := NewRepeatableBatchSource(batch)
+	input := NewRepeatableBatchSource(testAllocator, batch)
 
 	var wg sync.WaitGroup
 	for _, numOutputs := range []int{2, 4, 8, 16} {

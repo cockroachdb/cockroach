@@ -27,7 +27,7 @@ func TestCancelChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
-	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(batch)))
+	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(testAllocator, batch)))
 	cancel()
 	err := execerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
