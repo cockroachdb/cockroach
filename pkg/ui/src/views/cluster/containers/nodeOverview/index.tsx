@@ -14,7 +14,6 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import _ from "lodash";
-import { Action, Dispatch, bindActionCreators } from "redux";
 
 import "./nodeOverview.styl";
 
@@ -200,12 +199,8 @@ export default withRouter(connect(
       nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshNodes,
-        refreshLiveness,
-      },
-      dispatch,
-    ),
+  {
+    refreshNodes,
+    refreshLiveness,
+  },
 )(NodeOverview));

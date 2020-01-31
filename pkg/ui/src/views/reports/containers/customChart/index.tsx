@@ -43,7 +43,7 @@ interface UrlState {
   charts: string;
 }
 
-class CustomChart extends React.Component<CustomChartProps & RouteComponentProps> {
+export class CustomChart extends React.Component<CustomChartProps & RouteComponentProps> {
   // Selector which computes dropdown options based on the nodes available on
   // the cluster.
   private nodeOptions = createSelector(

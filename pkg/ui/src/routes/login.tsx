@@ -19,7 +19,6 @@ import LoginPage from "src/views/login/loginPage";
 export const LOGIN_PAGE = "/login";
 export const LOGOUT_PAGE = "/logout";
 
-// tslint:disable-next-line:variable-name
 export function createLoginRoute() {
   return (
     <Route exact path={LOGIN_PAGE} component={ LoginPage } />

@@ -14,7 +14,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import {
   nodeIDAttr, dashboardNameAttr,
@@ -255,14 +254,10 @@ export default withRouter(connect(
       hoverState: hoverStateSelector(state),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshNodes,
-        refreshLiveness,
-        hoverOn,
-        hoverOff,
-      },
-      dispatch,
-    ),
+  {
+    refreshNodes,
+    refreshLiveness,
+    hoverOn,
+    hoverOff,
+  },
 )(NodeGraphs));

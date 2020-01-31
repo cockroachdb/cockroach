@@ -14,7 +14,6 @@ import { connect } from "react-redux";
 import moment, { Moment } from "moment";
 import { createSelector } from "reselect";
 import _ from "lodash";
-import { Action, Dispatch, bindActionCreators } from "redux";
 
 import {
   LivenessStatus,
@@ -531,14 +530,10 @@ const NodesMainConnected = connect(
       nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshNodes,
-        refreshLiveness,
-      },
-      dispatch,
-    ),
+  {
+    refreshNodes,
+    refreshLiveness,
+  },
 )(NodesMain);
 
 export { NodesMainConnected as NodesOverview };
