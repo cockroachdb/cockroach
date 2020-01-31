@@ -1028,7 +1028,7 @@ DBStatus DBSstFileWriterCopyData(DBSstFileWriter* fw, DBString* data) {
     return ToDBStatus(status);
   }
   if (sst_contents.size() != file_size) {
-    return FmtStatus("expected to read %" PRIu64 " bytes but got %zu", file_size,
+        return FmtStatus("expected to read %" PRIu64 " bytes but got %zu", file_size,
                      sst_contents.size());
   }
 
@@ -1156,7 +1156,8 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions,
     }
     const int64_t new_size = cur_size + decoded_key.size() + iter.value().size();
     if (max_size > 0 && new_size > max_size) {
-      return FmtStatus("export size (%ld bytes) exceeds max size (%ld bytes)", new_size, max_size);
+      return FmtStatus("export size (%" PRIi64 " bytes) exceeds max size (%" PRIi64 " bytes)",
+                       new_size, max_size);
     }
     bulkop_summary.set_data_size(new_size);
   }
