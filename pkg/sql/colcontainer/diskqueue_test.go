@@ -29,7 +29,8 @@ import (
 func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
+	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
+	require.NoError(t, err)
 	defer cleanup()
 
 	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
@@ -146,7 +147,8 @@ func BenchmarkDiskQueue(b *testing.B) {
 	}
 	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
-	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
+	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
+	require.NoError(b, err)
 	defer cleanup()
 	queueCfg.BufferSizeBytes = int(bufSize)
 	queueCfg.MaxFileSizeBytes = int(blockSize)
