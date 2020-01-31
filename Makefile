@@ -319,6 +319,7 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/kisielk/errcheck \
 		./vendor/github.com/mattn/goveralls \
 		./vendor/github.com/mibk/dupl \
+		./vendor/github.com/mmatczuk/go_generics/cmd/go_generics \
 		./vendor/github.com/wadey/gocovmerge \
 		./vendor/golang.org/x/lint/golint \
 		./vendor/golang.org/x/perf/cmd/benchstat \
