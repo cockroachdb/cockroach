@@ -1013,7 +1013,6 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 // work as intended on backup and restore jobs.
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#24136")
 
 	// force every call to update
 	defer jobs.TestingSetProgressThresholds()()
@@ -1034,7 +1033,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	// PAUSE JOB and CANCEL JOB are racy in that it's hard to guarantee that the
-	// job is still running when executing a PAUSE or CANCEL--or that the job has
+	// job is still running when executing a PAUSE or CANCEL; or that the job has
 	// even started running. To synchronize, we install a store response filter
 	// which does a blocking receive whenever it encounters an export or import
 	// response. Below, when we want to guarantee the job is in progress, we do
@@ -1106,7 +1105,9 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
 		} {
-			ops := []string{"PAUSE", "RESUME", "PAUSE"}
+			// TODO(spaskob): make the test more comprehensive after
+			// fixing the racy-ness of job control operations. See #24136.
+			ops := []string{"PAUSE"} // , "RESUME", "PAUSE"}
 			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, ops, query, pauseDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
