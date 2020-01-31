@@ -528,17 +528,6 @@ var _ KeyRange = &Replica{}
 
 var _ client.Sender = &Replica{}
 
-// NewReplica initializes the replica using the given metadata. If the
-// replica is initialized (i.e. desc contains more than a RangeID),
-// replicaID should be 0 and the replicaID will be discovered from the
-// descriptor.
-func NewReplica(
-	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
-) (*Replica, error) {
-	r := newReplica(desc.RangeID, store)
-	return r, r.init(desc, replicaID)
-}
-
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
 // require a lock and its output may not be atomic with other ongoing work in

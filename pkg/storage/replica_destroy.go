@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
@@ -61,6 +62,36 @@ func (s destroyStatus) IsAlive() bool {
 // Removed returns whether the replica has been removed.
 func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
+}
+
+// removePreemptiveSnapshot is a migration put in place during the 20.1 release
+// to remove any on-disk preemptive snapshots which may still be resident on a
+// 19.2 node's store due to a rapid upgrade.
+//
+// TODO(ajwerner): Remove during 20.2.
+func removePreemptiveSnapshot(
+	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
+) (err error) {
+	batch := s.Engine().NewWriteOnlyBatch()
+	defer batch.Close()
+	const rangeIDLocalOnly = false
+	const mustClearRange = false
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "failed to remove preemptive snapshot for range %v", desc)
+		}
+	}()
+	if err := clearRangeData(desc, s.Engine(), batch, rangeIDLocalOnly, mustClearRange); err != nil {
+		return err
+	}
+	if err := writeTombstoneKey(ctx, batch, desc.RangeID, desc.NextReplicaID); err != nil {
+		return err
+	}
+	if err := batch.Commit(true); err != nil {
+		return err
+	}
+	log.Infof(ctx, "removed preemptive snapshot for %v", desc)
+	return nil
 }
 
 // mergedTombstoneReplicaID is the replica ID written into the tombstone
@@ -210,8 +241,16 @@ func (r *Replica) setTombstoneKey(
 		r.mu.tombstoneMinReplicaID = nextReplicaID
 	}
 	r.mu.Unlock()
+	return writeTombstoneKey(ctx, writer, r.RangeID, nextReplicaID)
+}
 
-	tombstoneKey := keys.RaftTombstoneKey(r.RangeID)
+func writeTombstoneKey(
+	ctx context.Context,
+	writer engine.Writer,
+	rangeID roachpb.RangeID,
+	nextReplicaID roachpb.ReplicaID,
+) error {
+	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: nextReplicaID,
 	}

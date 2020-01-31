@@ -1550,12 +1550,17 @@ func (r *Replica) acquireSplitLock(
 	// state. We could imagine alternatively handling the RaftGroupDeleted
 	// error here and then not being guaranteed a Replica in the pre and post
 	// split apply hooks but that doesn't necessarily seem worth it.
-	const replicaID = 0
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	rightRng, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
-		replicaID, nil, /* creatingReplica */
+		rightReplDesc.ReplicaID, nil, /* creatingReplica */
 		rightReplDesc.GetType() == roachpb.LEARNER)
+	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
+	// has already been removed. This case is handled properly in split post apply.
+	if _, isRaftGroupDeletedError := err.(*roachpb.RaftGroupDeletedError); isRaftGroupDeletedError {
+		return func() {}, nil
+	}
 	if err != nil {
+		log.Fatalf(ctx, "%v %T %+v", err, err, err)
 		return nil, err
 	}
 	if rightRng.IsInitialized() {

@@ -277,7 +277,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			); err != nil {
 				t.Fatal(err)
 			}
-			repl, err := NewReplica(testDesc, tc.store, 0)
+			repl, err := newReplica(ctx, testDesc, tc.store, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -389,7 +389,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDesc(ctx, &newDesc)
+	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.assertStateLocked(ctx, tc.engine)
@@ -1909,7 +1909,7 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true,
 			},
 		},
-		// Existing key at "0", ten init puts.
+		// Existing key at "0", ten load puts.
 		{
 			roachpb.Key("0"),
 			[]roachpb.Request{
@@ -6880,7 +6880,7 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}
 
-	repl.setDesc(ctx, newDesc)
+	repl.setDescRaftMuLocked(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
 	func() {
 		tc.repl.raftMu.Lock()

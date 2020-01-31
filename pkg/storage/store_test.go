@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -548,7 +547,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		}},
 		NextReplicaID: 2,
 	}
-	r, err := NewReplica(desc, s, 0)
+	r, err := newReplica(context.Background(), desc, s, 1)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -702,7 +701,7 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 		}
 	}
 
-	rep.setDesc(ctx, newDesc)
+	rep.setDescRaftMuLocked(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
 	if err := store.RemoveReplica(ctx, rep, origDesc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
@@ -1003,20 +1002,10 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	newRangeID := roachpb.RangeID(3)
 	desc := &roachpb.RangeDescriptor{
 		RangeID: newRangeID,
-		InternalReplicas: []roachpb.ReplicaDescriptor{{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 1,
-		}},
-		NextReplicaID: 2,
 	}
 
-	r := &Replica{
-		RangeID:   desc.RangeID,
-		store:     store,
-		abortSpan: abortspan.New(desc.RangeID),
-	}
-	if err := r.init(desc, 0); err != nil {
+	r, err := newReplica(context.Background(), desc, store, 1)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -1030,11 +1019,16 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}
 
 	// Initialize the range with start and end keys.
-	r.mu.Lock()
-	r.mu.state.Desc.StartKey = roachpb.RKey("b")
-	r.mu.state.Desc.EndKey = roachpb.RKey("d")
-	r.mu.Unlock()
-
+	desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	desc.StartKey = roachpb.RKey("b")
+	desc.EndKey = roachpb.RKey("d")
+	desc.InternalReplicas = []roachpb.ReplicaDescriptor{{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}}
+	desc.NextReplicaID = 2
+	r.setDescRaftMuLocked(ctx, desc)
 	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
 		t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
 	}
@@ -1371,7 +1365,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
 	)
 	require.NoError(t, err)
-	newRng, err := NewReplica(rhsDesc, store, 0)
+	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
 	require.NoError(t, err)
 	newLeftDesc := *repl.Desc()
 	newLeftDesc.EndKey = splitKey
@@ -2823,80 +2817,6 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 }
 
-// Test that we remove snapshot placeholders on error conditions.
-func TestStoreRemovePlaceholderOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	s := tc.store
-	ctx := context.Background()
-
-	// Clobber the existing range so we can test nonoverlapping placeholders.
-	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{}
-	data, err := protoutil.Marshal(snapData)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Wrap the snapshot in a minimal header. The request will error because the
-	// replica tombstone for the range requires that a new replica have an ID
-	// greater than 1.
-	snapHeader := &SnapshotRequest_Header{
-		State: storagepb.ReplicaState{Desc: repl1.Desc()},
-		RaftMessageRequest: RaftMessageRequest{
-			RangeID: 1,
-			ToReplica: roachpb.ReplicaDescriptor{
-				NodeID:    1,
-				StoreID:   1,
-				ReplicaID: 0,
-			},
-			FromReplica: roachpb.ReplicaDescriptor{
-				NodeID:    2,
-				StoreID:   2,
-				ReplicaID: 2,
-			},
-			Message: raftpb.Message{
-				Type: raftpb.MsgSnap,
-				Snapshot: raftpb.Snapshot{
-					Data: data,
-				},
-			},
-		},
-	}
-	const expected = "preemptive snapshot from term 0 received"
-	if err := s.processPreemptiveSnapshotRequest(ctx, snapHeader,
-		IncomingSnapshot{
-			SnapUUID: uuid.MakeV4(),
-			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
-		}); !testutils.IsPError(err, expected) {
-		t.Fatalf("expected %s, but found %v", expected, err)
-	}
-
-	s.mu.Lock()
-	numPlaceholders := len(s.mu.replicaPlaceholders)
-	s.mu.Unlock()
-
-	if numPlaceholders != 0 {
-		t.Fatalf("expected 0 placeholders, but found %d", numPlaceholders)
-	}
-	if n := atomic.LoadInt32(&s.counts.removedPlaceholders); n != 1 {
-		t.Fatalf("expected 1 removed placeholder, but found %d", n)
-	}
-}
-
 // Test that we remove snapshot placeholders when raft ignores the
 // snapshot. This is testing the removal of placeholder after handleRaftReady
 // processing for an uninitialized Replica.
@@ -2928,7 +2848,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	uninitRepl1, err := NewReplica(&uninitDesc, s, 0)
+	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2958,7 +2878,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			FromReplica: roachpb.ReplicaDescriptor{
 				NodeID:    2,
 				StoreID:   2,
-				ReplicaID: 2,
+				ReplicaID: 3,
 			},
 			Message: raftpb.Message{
 				Type: raftpb.MsgSnap,

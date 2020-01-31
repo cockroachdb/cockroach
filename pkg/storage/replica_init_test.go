@@ -55,7 +55,7 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 			var r Replica
 			r.mu.state.Desc = &c.oldDesc
 			r.mu.lastReplicaAdded = c.lastReplicaAdded
-			r.setDesc(context.Background(), &c.newDesc)
+			r.setDescRaftMuLocked(context.Background(), &c.newDesc)
 			if c.expectedLastReplicaAdded != r.mu.lastReplicaAdded {
 				t.Fatalf("expected %d, but found %d",
 					c.expectedLastReplicaAdded, r.mu.lastReplicaAdded)
