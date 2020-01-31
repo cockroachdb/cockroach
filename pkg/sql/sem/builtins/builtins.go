@@ -402,7 +402,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				dIPAddr := tree.MustBeDIPAddr(args[0])
-				return tree.NewDString(dIPAddr.IPAddr.CidrString()), nil
+				return tree.NewDString(dIPAddr.IPAddr.CIDRString()), nil
 			},
 			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
 				"For CIDR types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +

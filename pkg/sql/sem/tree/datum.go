@@ -358,7 +358,7 @@ func ParseDIPAddrFromINetString(s string, inetOid oid.Oid) (*DIPAddr, error) {
 		err = ipaddr.ParseINet(s, &d.IPAddr)
 	case oid.T_cidr:
 		d.Typ = types.Cidr
-		err = ipaddr.ParseCidr(s, &d.IPAddr)
+		err = ipaddr.ParseCIDR(s, &d.IPAddr)
 	default:
 		panic(errors.AssertionFailedf("unexpected OID: %d", inetOid))
 	}

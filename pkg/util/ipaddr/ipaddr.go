@@ -111,6 +111,10 @@ func (ipAddr *IPAddr) FromBuffer(data []byte) ([]byte, error) {
 // representation. In order to retain postgres compatibility we ensure
 // IPv4-mapped IPv6 stays in IPv6 format, unlike net.Addr.String().
 func (ipAddr IPAddr) String() string {
+	return ipAddr.toString(false)
+}
+
+func (ipAddr IPAddr) toString(is_cidr bool) string {
 	ip := net.IP(uint128.Uint128(ipAddr.Addr).GetBytes())
 	isIPv4MappedIPv6 := ipAddr.Family == IPv6family && ip.Equal(ip.To4())
 	var maskSize byte
@@ -120,6 +124,11 @@ func (ipAddr IPAddr) String() string {
 	} else {
 		maskSize = 128
 	}
+
+	if is_cidr {
+		return ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
+	}
+
 	if ipAddr.Mask == maskSize && isIPv4MappedIPv6 {
 		return "::ffff:" + ip.String()
 	} else if ipAddr.Mask == maskSize {
@@ -132,9 +141,8 @@ func (ipAddr IPAddr) String() string {
 	return ip.String() + "/" + strconv.Itoa(int(ipAddr.Mask))
 }
 
-func (ipAddr IPAddr) CidrString() string {
-	// TODO(jeb) impl me
-	return ipAddr.String()
+func (ipAddr IPAddr) CIDRString() string {
+	return ipAddr.toString(false)
 }
 
 // Compare two IPAddrs. IPv4-mapped IPv6 addresses are not equal to their IPv4
@@ -175,16 +183,15 @@ func getFamily(addr string) IPFamily {
 	return IPv4family
 }
 
-func ParseCidr(s string, dest *IPAddr) error {
+func ParseCIDR(s string, dest *IPAddr) error {
 	/*
 			PG is *very* lenient on what it accepts as input for CIDRs.
 			For example, '10' is legitimate input for PG, which then gets
-		  converted to '10.0.0.0' internally, and will always be '10.0.0.0'
+		  converted to '10.0.0.0/8' internally, and will always be '10.0.0.0/8'
 			for all future outputs. Also, PG accepts input without the
 			subnet mask. Thus we need to support the very loose inputs
 			PG accepts.
 	*/
-	//var maskSize byte
 	i := strings.IndexByte(s, '/')
 	family := getFamily(s)
 
@@ -193,13 +200,20 @@ func ParseCidr(s string, dest *IPAddr) error {
 		addr, maskStr = s[:i], s[i+1:]
 	} else {
 		// If no CIDR spec was given, infer width from net class.
+		addr = s
 		if family == IPv4family {
 			// look at first octet to determine network class
-			i = strings.Index(s, ".")
-			highOctet, err := strconv.Atoi(s[:i])
+			var highOctet int
+			var err error
+			i = strings.Index(addr, ".")
+			if i > -1 {
+				highOctet, err = strconv.Atoi(addr[:i])
+			} else {
+				highOctet, err = strconv.Atoi(addr)
+			}
 			if err != nil {
 				return pgerror.WithCandidateCode(
-					errors.Errorf("could not parse %q as inet. invalid mask", s),
+					errors.Errorf("could not parse %q as inet. invalid mask", addr),
 					pgcode.InvalidTextRepresentation)
 			}
 
@@ -215,13 +229,17 @@ func ParseCidr(s string, dest *IPAddr) error {
 			} else { /* Class A */
 				bits = 8
 			}
+			octetCount := strings.Count(addr, ".") + 1
+			if bits < octetCount*8 {
+				bits = octetCount * 8
+			}
 
 			// If there are no additional bits specified for a class D address
 			// adjust bits to 4.
 			if bits == 8 && highOctet == 224 {
 				bits = 4
 			}
-			maskStr = "/" + strconv.Itoa(bits)
+			maskStr = strconv.Itoa(bits)
 		}
 	}
 
@@ -237,11 +255,15 @@ func ParseCidr(s string, dest *IPAddr) error {
 	}
 
 	if family == IPv4family {
-		// Trims IPv4 suffix "." to match postgres compitibility.
-		addr = strings.TrimRight(addr, ".")
+		// do not trim IPv4 suffix "." for CIDR, to match postgres compatibility.
+		if addr[len(addr)-1:] == "." {
+			return pgerror.WithCandidateCode(
+				errors.Errorf("could not parse %q as inet. invalid cidr", addr),
+				pgcode.InvalidTextRepresentation)
+		}
 
-		// If the mask is outside the defined octets, postgres will raise an error.
 		octetCount := strings.Count(addr, ".") + 1
+		// TODO(jeb): unclear that this `if` check is correct, particularly the "octetCount+1"
 		if (octetCount+1)*8-1 < maskOnes {
 			return pgerror.WithCandidateCode(
 				errors.Errorf("could not parse %q as inet. mask is larger than provided octets", s),
@@ -249,13 +271,14 @@ func ParseCidr(s string, dest *IPAddr) error {
 		}
 
 		// Append extra ".0" to ensure there are a total of 4 octets.
-		var buffer bytes.Buffer
-		buffer.WriteString(addr)
-		for i := 0; i < 4-octetCount; i++ {
-			buffer.WriteString(".0")
+		if octetCount < 4 {
+			var buffer bytes.Buffer
+			buffer.WriteString(addr)
+			for i := 0; i < 4-octetCount; i++ {
+				buffer.WriteString(".0")
+			}
+			addr = buffer.String()
 		}
-		buffer.WriteString(maskStr)
-		addr = buffer.String()
 	}
 
 	ip := net.ParseIP(addr)
@@ -318,6 +341,7 @@ func ParseINet(s string, dest *IPAddr) error {
 			errors.Errorf("could not parse %q as inet. invalid mask", s),
 			pgcode.InvalidTextRepresentation)
 	}
+
 
 	if family == IPv4family {
 		// If the mask is outside the defined octets, postgres will raise an error.
@@ -741,6 +765,8 @@ func (ip Addr) subIPAddrIPv6(o Addr) (int64, error) {
 	return diff, nil
 }
 
+// Merge finds the smallest network which includes both networks.
+// Returns a CIDR.
 func (ipaddr IPAddr) Merge(addr IPAddr) IPAddr {
 	var newIPAddr IPAddr
 	// TODO(jeb) impl me
