@@ -36,6 +36,7 @@ get: "k1" -> <no data>
 run error
 get k=k1 ts=9,0 failOnMoreRecent
 ----
+get: "k1" -> <no data>
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 0.000000009,0 too old; wrote at 0.000000010,1
 
 run ok
@@ -97,26 +98,31 @@ get: "k2" -> <no data>
 run error
 get k=k2 ts=9,0 failOnMoreRecent
 ----
+get: "k2" -> <no data>
 error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=10,0
 ----
+get: "k2" -> <no data>
 error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=10,0 failOnMoreRecent
 ----
+get: "k2" -> <no data>
 error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=11,0
 ----
+get: "k2" -> <no data>
 error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=11,0 failOnMoreRecent
 ----
+get: "k2" -> <no data>
 error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 
 run ok
@@ -159,6 +165,7 @@ error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
 run error
 get k=k1 ts=9,0 inconsistent failOnMoreRecent
 ----
+get: "k1" -> <no data>
 error: (*withstack.withStack:) cannot allow inconsistent reads with fail on more recent option
 
 run error
