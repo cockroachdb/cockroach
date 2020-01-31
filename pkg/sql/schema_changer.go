@@ -825,7 +825,10 @@ func (sc *SchemaChanger) maybeGCMutations(
 		func(txn *client.Txn) error {
 			job, err := sc.jobRegistry.LoadJobWithTxn(ctx, mutation.JobID, txn)
 			if err != nil {
-				return err
+				// If we can't find the job, the job will not appear at a later time.
+				// We should consider this job as already succeeded and ignore the
+				// error.
+				return nil
 			}
 			return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
 		},
