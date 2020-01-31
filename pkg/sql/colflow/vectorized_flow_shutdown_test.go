@@ -234,9 +234,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						batch := colexec.NewAllocator(ctxRemote, &sourceMemAccount).NewMemBatch(typs)
+						remoteAllocator := colexec.NewAllocator(ctxRemote, &sourceMemAccount)
+						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}

@@ -93,14 +93,12 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
-
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
 		for i := 0; i < int(coldata.BatchSize()); i++ {
 			col[i] = int64(i)
 		}
 	}
-
 	batch.SetLength(coldata.BatchSize())
 
 	var (
@@ -119,48 +117,50 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 				vec.Nulls().UnsetNulls()
 			}
 		}
+		leftSource := newFiniteBatchSource(batch, 0)
+		rightSource := newFiniteBatchSource(batch, 0)
 		for _, fullOuter := range []bool{false, true} {
-				for _, nBatches := range []int{1 << 2, 1 << 7} {
-					for _, memoryLimit := range []int64{0, 1} {
-						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-						shouldSpill := memoryLimit > 0
-						name := fmt.Sprintf(
-							"nulls=%t/fullOuter=%t/batches=%d/spilled=%t",
-							hasNulls, fullOuter, nBatches, shouldSpill)
-						joinType := sqlbase.JoinType_INNER
-						if fullOuter {
-							joinType = sqlbase.JoinType_FULL_OUTER
-						}
-						spec := createSpecForHashJoiner(joinTestCase{
-							joinType:          joinType,
-							leftTypes:         sourceTypes,
-							leftOutCols:       []uint32{0, 1},
-							leftEqCols:        []uint32{0, 2},
-							rightTypes:        sourceTypes,
-							rightOutCols:      []uint32{2, 3},
-							rightEqCols:       []uint32{0, 1},
-						})
-						b.Run(name, func(b *testing.B) {
-							// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
-							// batch) * nCols (number of columns / row) * 2 (number of sources).
-							b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols * 2))
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								leftSource := newFiniteBatchSource(batch, nBatches)
-								rightSource := newFiniteBatchSource(batch, nBatches)
-								hj, accounts, monitors, err := createDiskBackedHashJoiner(
-									ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() {},
-								)
-								memAccounts = append(memAccounts, accounts...)
-								memMonitors = append(memMonitors, monitors...)
-								require.NoError(b, err)
-								hj.Init()
-								for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
-								}
-							}
-						})
+			for _, nBatches := range []int{1 << 2, 1 << 7} {
+				for _, memoryLimit := range []int64{0, 1} {
+					flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+					shouldSpill := memoryLimit > 0
+					name := fmt.Sprintf(
+						"nulls=%t/fullOuter=%t/batches=%d/spilled=%t",
+						hasNulls, fullOuter, nBatches, shouldSpill)
+					joinType := sqlbase.JoinType_INNER
+					if fullOuter {
+						joinType = sqlbase.JoinType_FULL_OUTER
 					}
+					spec := createSpecForHashJoiner(joinTestCase{
+						joinType:     joinType,
+						leftTypes:    sourceTypes,
+						leftOutCols:  []uint32{0, 1},
+						leftEqCols:   []uint32{0, 2},
+						rightTypes:   sourceTypes,
+						rightOutCols: []uint32{2, 3},
+						rightEqCols:  []uint32{0, 1},
+					})
+					b.Run(name, func(b *testing.B) {
+						// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
+						// batch) * nCols (number of columns / row) * 2 (number of sources).
+						b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols * 2))
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							leftSource.reset(nBatches)
+							rightSource.reset(nBatches)
+							hj, accounts, monitors, err := createDiskBackedHashJoiner(
+								ctx, flowCtx, spec, []Operator{leftSource, rightSource}, func() {},
+							)
+							memAccounts = append(memAccounts, accounts...)
+							memMonitors = append(memMonitors, monitors...)
+							require.NoError(b, err)
+							hj.Init()
+							for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+							}
+						}
+					})
 				}
+			}
 		}
 	}
 	for _, memAccount := range memAccounts {

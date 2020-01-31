@@ -1022,7 +1022,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize()) * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := NewRepeatableBatchSource(batch)
+										leftSource := NewRepeatableBatchSource(testAllocator, batch)
 										rightSource := newFiniteBatchSource(batch, nBatches)
 										joinType := sqlbase.JoinType_INNER
 										if fullOuter {

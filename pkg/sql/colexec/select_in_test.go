@@ -123,7 +123,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 		}
 	}
 
-	source := NewRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 	inOp := &selectInOpInt64{
 		OneInputNode: NewOneInputNode(source),
