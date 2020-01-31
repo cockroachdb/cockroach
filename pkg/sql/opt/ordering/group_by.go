@@ -61,19 +61,10 @@ func groupByBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) 
 	provided := groupBy.Input.ProvidedPhysical().Ordering
 	inputFDs := &groupBy.Input.Relational().FuncDeps
 
-	// GroupBy can only provide orderings on grouping columns. We retain the
-	// longest prefix of grouping columns (or columns equivalent to any of them).
-	groupingCols := inputFDs.ComputeEquivClosure(groupBy.GroupingCols)
-	for i := range provided {
-		if !groupingCols.Contains(provided[i].ID()) {
-			provided = provided[:i]
-			break
-		}
-	}
-	provided = remapProvided(provided, inputFDs, groupBy.GroupingCols)
 	// Since the input's provided ordering has to satisfy both <required> and the
 	// GroupBy internal ordering, it may need to be trimmed.
-	return trimProvided(provided, required, &expr.Relational().FuncDeps)
+	provided = trimProvided(provided, required, inputFDs)
+	return remapProvided(provided, inputFDs, groupBy.GroupingCols)
 }
 
 func distinctOnCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
@@ -88,14 +79,23 @@ func distinctOnBuildChildReqOrdering(
 	if childIdx != 0 {
 		return physical.OrderingChoice{}
 	}
-	return required.Intersection(&parent.(*memo.DistinctOnExpr).Ordering)
+	// The FD set of the input doesn't "pass through" to the DistinctOn FD set;
+	// check the ordering to see if it can be simplified with respect to the input
+	// FD set.
+	distinctOn := parent.(*memo.DistinctOnExpr)
+	result := required.Intersection(&distinctOn.Ordering)
+	result.Simplify(&distinctOn.Input.Relational().FuncDeps)
+	return result
 }
 
 func distinctOnBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
-	// The input's provided ordering satisfies both <required> and the DistinctOn
-	// internal ordering; it may need to be trimmed.
-	d := expr.(*memo.DistinctOnExpr)
-	return trimProvided(d.Input.ProvidedPhysical().Ordering, required, &d.Relational().FuncDeps)
+	distinctOn := expr.(*memo.DistinctOnExpr)
+	provided := distinctOn.Input.ProvidedPhysical().Ordering
+	inputFDs := &distinctOn.Input.Relational().FuncDeps
+	// Since the input's provided ordering has to satisfy both <required> and the
+	// DistinctOn internal ordering, it may need to be trimmed.
+	provided = trimProvided(provided, required, inputFDs)
+	return remapProvided(provided, inputFDs, distinctOn.Relational().OutputCols)
 }
 
 // StreamingGroupingColOrdering returns an ordering on grouping columns that is

@@ -2034,3 +2034,18 @@ SELECT max(z) FROM xyz WHERE y = 100 GROUP BY y
 
 statement ok
 DROP TABLE xyz
+
+# Regression test for #44469 (DistinctOn needs to remap the provided ordering).
+statement ok
+CREATE TABLE t44469_a (a INT, INDEX (a))
+
+statement ok
+CREATE TABLE t44469_b (b INT, INDEX (b))
+
+statement ok
+CREATE TABLE t44469_cd (c INT, d INT, INDEX (c, d));
+
+statement ok
+SELECT DISTINCT ON (b) b
+FROM t44469_a INNER LOOKUP JOIN t44469_b ON a = b INNER LOOKUP JOIN t44469_cd ON c = 1 AND d = a
+ORDER BY b
