@@ -141,7 +141,7 @@ package keys
 
 // NB: The sorting order of the symbols below map to the physical layout.
 // Preserve group-wise ordering when adding new constants.
-var keymap = [...]interface{}{ // lint:ignore U1001
+var _ = [...]interface{}{
 	MinKey,
 
 	// There are four types of local key data enumerated below: replicated
@@ -168,7 +168,6 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
 	AbortSpanKey,                    // "abc-"
-	RangeFrozenStatusKey,            // "fzn-"
 	RangeLastGCKey,                  // "lgc-"
 	RangeAppliedStateKey,            // "rask"
 	RaftAppliedIndexLegacyKey,       // "rfta"
@@ -177,7 +176,6 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	RangeLeaseKey,                   // "rll-"
 	LeaseAppliedIndexLegacyKey,      // "rlla"
 	RangeStatsLegacyKey,             // "stat"
-	RangeTxnSpanGCThresholdKey,      // "tst-"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that
 	//   pertain to just one replica of a range. They are unreplicated and
@@ -185,11 +183,9 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
 	RaftTombstoneKey,               // "rftb"
 	RaftHardStateKey,               // "rfth"
-	RaftLastIndexKey,               // "rfti"
 	RaftLogKey,                     // "rftl"
 	RaftTruncatedStateKey,          // "rftt"
 	RangeLastReplicaGCTimestampKey, // "rlrt"
-	RangeLastVerificationTimestampKeyDeprecated, // "rlvt"
 
 	//   3. Range local keys: These also store metadata that pertains to a range
 	//   as a whole. They are replicated and addressable. Typical examples are
@@ -241,4 +237,13 @@ var keymap = [...]interface{}{ // lint:ignore U1001
 	TableDataMax,
 
 	MaxKey,
+}
+
+// Unused, deprecated keys.
+var _ = [...]interface{}{
+	localRaftLastIndexSuffix,
+	localRangeFrozenStatusSuffix,
+	localRangeLastVerificationTimestampSuffix,
+	localRemovedLeakedRaftEntriesSuffix,
+	localTxnSpanGCThresholdSuffix,
 }

@@ -96,8 +96,10 @@ db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		`)
 
 	// Splits and merges
-	check(t, step(split(`foo`)), `db.Split(ctx, "foo") // nil`)
-	check(t, step(merge(`foo`)), `db.Merge(ctx, "foo") // nil`)
-	checkErr(t, step(split(`foo`)), `db.Split(ctx, "foo") // aborted in distSender: context canceled`)
-	checkErr(t, step(merge(`foo`)), `db.Merge(ctx, "foo") // aborted in distSender: context canceled`)
+	check(t, step(split(`foo`)), `db.AdminSplit(ctx, "foo") // nil`)
+	check(t, step(merge(`foo`)), `db.AdminMerge(ctx, "foo") // nil`)
+	checkErr(t, step(split(`foo`)),
+		`db.AdminSplit(ctx, "foo") // aborted in distSender: context canceled`)
+	checkErr(t, step(merge(`foo`)),
+		`db.AdminMerge(ctx, "foo") // aborted in distSender: context canceled`)
 }
