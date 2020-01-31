@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -279,12 +278,6 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
-		}
-		// Enable better compatibility with PostgreSQL date math.
-		if req.Version >= 22 {
-			sd.DurationAdditionMode = duration.AdditionModeCompatible
-		} else {
-			sd.DurationAdditionMode = duration.AdditionModeLegacy
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {

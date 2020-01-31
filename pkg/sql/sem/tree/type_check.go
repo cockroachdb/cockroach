@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -142,7 +141,7 @@ const (
 	RejectSubqueries
 
 	// RejectSpecial is used in common places like the LIMIT clause.
-	RejectSpecial SemaRejectFlags = RejectAggregates | RejectGenerators | RejectWindowApplications
+	RejectSpecial = RejectAggregates | RejectGenerators | RejectWindowApplications
 )
 
 // ScalarProperties contains the properties of the current scalar
@@ -206,11 +205,6 @@ func (sc *SemaContext) GetLocation() *time.Location {
 		return time.UTC
 	}
 	return *sc.Location
-}
-
-// GetAdditionMode implements ParseTimeContext.
-func (sc *SemaContext) GetAdditionMode() duration.AdditionMode {
-	return duration.AdditionModeCompatible
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
