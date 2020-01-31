@@ -253,7 +253,7 @@ func (r *Replica) handleMergeResult(ctx context.Context, merge *storagepb.Merge)
 }
 
 func (r *Replica) handleDescResult(ctx context.Context, desc *roachpb.RangeDescriptor) {
-	r.setDesc(ctx, desc)
+	r.setDescRaftMuLocked(ctx, desc)
 }
 
 func (r *Replica) handleLeaseResult(ctx context.Context, lease *roachpb.Lease) {

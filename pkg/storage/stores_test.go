@@ -148,7 +148,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 			},
 		}
 
-		replica, err := NewReplica(desc, store, 0)
+		replica, err := newReplica(ctx, desc, store, replicaID)
 		if err != nil {
 			t.Fatalf("unexpected error when creating replica: %+v", err)
 		}

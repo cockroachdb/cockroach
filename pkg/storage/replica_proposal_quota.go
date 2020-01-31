@@ -84,12 +84,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.mu.replicaID == 0 {
-		// The replica was created from preemptive snapshot and has not been
-		// added to the Raft group.
-		return
-	}
-
 	// We need to check if the replica is being destroyed and if so, unblock
 	// all ongoing and subsequent quota acquisition goroutines (if any).
 	//

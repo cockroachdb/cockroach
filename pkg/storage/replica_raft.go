@@ -1086,11 +1086,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
 	var startKey roachpb.RKey
-	if msg.Type == raftpb.MsgHeartbeat {
-		if r.mu.replicaID == 0 {
-			log.Fatalf(ctx, "preemptive snapshot attempted to send a heartbeat: %+v", msg)
-		}
-	} else if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
+	if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
 		// When the follower is potentially an uninitialized replica waiting for
 		// a split trigger, send the replica's StartKey along. See the method
 		// below for more context:
@@ -1320,12 +1316,6 @@ func (r *Replica) withRaftGroupLocked(
 		return errRemoved
 	}
 
-	if r.mu.replicaID == 0 {
-		// The replica's raft group has not yet been configured (i.e. the replica
-		// was created from a preemptive snapshot).
-		return nil
-	}
-
 	if r.mu.internalRaftGroup == nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
@@ -1550,11 +1540,15 @@ func (r *Replica) acquireSplitLock(
 	// state. We could imagine alternatively handling the RaftGroupDeleted
 	// error here and then not being guaranteed a Replica in the pre and post
 	// split apply hooks but that doesn't necessarily seem worth it.
-	const replicaID = 0
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	rightRng, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
-		replicaID, nil, /* creatingReplica */
+		rightReplDesc.ReplicaID, nil, /* creatingReplica */
 		rightReplDesc.GetType() == roachpb.LEARNER)
+	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
+	// has already been removed. This case is handled properly in split post apply.
+	if _, isRaftGroupDeletedError := err.(*roachpb.RaftGroupDeletedError); isRaftGroupDeletedError {
+		return func() {}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
