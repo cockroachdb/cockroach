@@ -8,16 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination } from "antd";
+import { Icon } from "antd";
 import _ from "lodash";
 import moment from "moment";
-import { DATE_FORMAT } from "src/util/format";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
+import { createSelector } from "reselect";
+import { PaginationComponent, PaginationSettings } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -26,7 +25,9 @@ import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
+import { DATE_FORMAT } from "src/util/format";
 import { Pick } from "src/util/pick";
+import { getMatchParamByName } from "src/util/query";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
@@ -34,10 +35,8 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
-import { getMatchParamByName } from "src/util/query";
-
 import "./statements.styl";
+import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -49,10 +48,6 @@ interface StatementsPageProps {
   lastReset: string;
   refreshStatements: typeof refreshStatements;
 }
-type PaginationSettings = {
-  pageSize: number;
-  current: number;
-};
 
 interface StatementsPageState {
   sortSetting: SortSetting;
@@ -217,12 +212,8 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             </div>
           )}
         </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={this.filteredStatementsData().length}
+        <PaginationComponent
+          pagination={{ ...pagination, total: this.filteredStatementsData().length }}
           onChange={this.onChangePage}
           hideOnSinglePage={data.length === 0}
         />
