@@ -30,7 +30,7 @@ func TestApplier(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
 
-	a := MakeApplier(db)
+	a := MakeApplier(db, db)
 	check := func(t *testing.T, s Step, expected string) {
 		t.Helper()
 		require.NoError(t, a.Apply(ctx, &s))
@@ -45,13 +45,13 @@ func TestApplier(t *testing.T) {
 	}
 
 	// Basic operations
-	check(t, step(get(`a`)), `db.Get(ctx, "a") // (nil, nil)`)
+	check(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, nil)`)
 
-	check(t, step(put(`a`, `1`)), `db.Put(ctx, "a", 1) // nil`)
-	check(t, step(get(`a`)), `db.Get(ctx, "a") // ("1", nil)`)
+	check(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // nil`)
+	check(t, step(get(`a`)), `db0.Get(ctx, "a") // ("1", nil)`)
 
-	checkErr(t, step(get(`a`)), `db.Get(ctx, "a") // (nil, aborted in distSender: context canceled)`)
-	checkErr(t, step(put(`a`, `1`)), `db.Put(ctx, "a", 1) // aborted in distSender: context canceled`)
+	checkErr(t, step(get(`a`)), `db1.Get(ctx, "a") // (nil, aborted in distSender: context canceled)`)
+	checkErr(t, step(put(`a`, `1`)), `db0.Put(ctx, "a", 1) // aborted in distSender: context canceled`)
 
 	// Batch
 	check(t, step(batch(put(`b`, `2`), get(`a`))), `
@@ -59,7 +59,7 @@ func TestApplier(t *testing.T) {
   b := &Batch{}
   b.Put(ctx, "b", 2) // nil
   b.Get(ctx, "a") // ("1", nil)
-  db.Run(ctx, b) // nil
+  db1.Run(ctx, b) // nil
 }
 `)
 	checkErr(t, step(batch(put(`b`, `2`), get(`a`))), `
@@ -67,13 +67,13 @@ func TestApplier(t *testing.T) {
   b := &Batch{}
   b.Put(ctx, "b", 2) // aborted in distSender: context canceled
   b.Get(ctx, "a") // (nil, aborted in distSender: context canceled)
-  db.Run(ctx, b) // aborted in distSender: context canceled
+  db0.Run(ctx, b) // aborted in distSender: context canceled
 }
 `)
 
 	// Txn commit
 	check(t, step(closureTxn(ClosureTxnType_Commit, put(`e`, `5`), batch(put(`f`, `6`)))), `
-db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   {
     b := &Batch{}
@@ -86,7 +86,7 @@ db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 
 	// Txn commit in batch
 	check(t, step(closureTxnCommitInBatch(opSlice(get(`a`), put(`f`, `6`)), put(`e`, `5`))), `
-db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   b := &Batch{}
   b.Get(ctx, "a") // ("1", nil)
@@ -98,7 +98,7 @@ db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 
 	// Txn rollback
 	check(t, step(closureTxn(ClosureTxnType_Rollback, put(`e`, `5`))), `
-db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db1.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
   txn.Put(ctx, "e", 5) // nil
   return errors.New("rollback")
 }) // rollback
@@ -106,17 +106,17 @@ db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 
 	// Txn error
 	checkErr(t, step(closureTxn(ClosureTxnType_Rollback, put(`e`, `5`))), `
-db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
   txn.Put(ctx, "e", 5)
   return errors.New("rollback")
 }) // context canceled
 		`)
 
 	// Splits and merges
-	check(t, step(split(`foo`)), `db.AdminSplit(ctx, "foo") // nil`)
-	check(t, step(merge(`foo`)), `db.AdminMerge(ctx, "foo") // nil`)
+	check(t, step(split(`foo`)), `db1.AdminSplit(ctx, "foo") // nil`)
+	check(t, step(merge(`foo`)), `db0.AdminMerge(ctx, "foo") // nil`)
 	checkErr(t, step(split(`foo`)),
-		`db.AdminSplit(ctx, "foo") // aborted in distSender: context canceled`)
+		`db1.AdminSplit(ctx, "foo") // aborted in distSender: context canceled`)
 	checkErr(t, step(merge(`foo`)),
-		`db.AdminMerge(ctx, "foo") // aborted in distSender: context canceled`)
+		`db0.AdminMerge(ctx, "foo") // aborted in distSender: context canceled`)
 }

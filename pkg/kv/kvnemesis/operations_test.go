@@ -25,19 +25,19 @@ func TestOperationsFormat(t *testing.T) {
 		step     Step
 		expected string
 	}{
-		{step: step(get(`a`)), expected: `db.Get(ctx, "a")`},
+		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
 		{step: step(batch(get(`b`), get(`c`))), expected: `
 			{
 			  b := &Batch{}
 			  b.Get(ctx, "b")
 			  b.Get(ctx, "c")
-			  db.Run(ctx, b)
+			  db0.Run(ctx, b)
 			}
 		`},
 		{
 			step: step(closureTxn(ClosureTxnType_Commit, batch(get(`d`), get(`e`)), put(`f`, `g`))),
 			expected: `
-			db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			  {
 			    b := &Batch{}
 			    b.Get(ctx, "d")
@@ -54,7 +54,7 @@ func TestOperationsFormat(t *testing.T) {
 	for _, test := range tests {
 		expected := strings.TrimSpace(test.expected)
 		var actual strings.Builder
-		test.step.format(&actual, formatCtx{receiver: `db`, indent: "\t\t\t"})
+		test.step.format(&actual, formatCtx{indent: "\t\t\t"})
 		assert.Equal(t, expected, strings.TrimSpace(actual.String()))
 	}
 }

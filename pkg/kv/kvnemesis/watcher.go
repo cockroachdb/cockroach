@@ -30,8 +30,8 @@ import (
 // ClosedTimestampTargetInterval allows for setting the closed timestamp target
 // interval.
 type ClosedTimestampTargetInterval interface {
-	Set(time.Duration) error
-	ResetToDefault() error
+	Set(context.Context, time.Duration) error
+	ResetToDefault(context.Context) error
 }
 
 // Watcher slurps all changes that happen to some span of kvs using RangeFeed.
@@ -40,33 +40,54 @@ type Watcher struct {
 	mu struct {
 		syncutil.Mutex
 		kvs             *Engine
+		frontier        *span.Frontier
 		frontierWaiters map[hlc.Timestamp][]chan error
 	}
-	cancel   func()
-	g        ctxgroup.Group
-	frontier *span.Frontier
+	cancel func()
+	g      ctxgroup.Group
 }
 
 // Watch starts a new Watcher over the given span of kvs. See Watcher.
 func Watch(
-	ctx context.Context, db *client.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
+	ctx context.Context, dbs []*client.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
 ) (*Watcher, error) {
+	if len(dbs) < 1 {
+		return nil, errors.New(`at least one db must be given`)
+	}
+	firstDB := dbs[0]
+
 	w := &Watcher{
-		ct:       ct,
-		frontier: span.MakeFrontier(dataSpan),
+		ct: ct,
 	}
 	w.mu.kvs = MakeEngine()
+	w.mu.frontier = span.MakeFrontier(dataSpan)
 	w.mu.frontierWaiters = make(map[hlc.Timestamp][]chan error)
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.g = ctxgroup.WithContext(ctx)
 
-	sender := db.NonTransactionalSender()
-	ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+	dss := make([]*kv.DistSender, len(dbs))
+	for i := range dbs {
+		sender := dbs[i].NonTransactionalSender()
+		dss[i] = sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
+	}
 
-	startTs := db.Clock().Now()
+	startTs := firstDB.Clock().Now()
 	eventC := make(chan *roachpb.RangeFeedEvent, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
-		return ds.RangeFeed(ctx, dataSpan, startTs, true /* withDiff */, eventC)
+		ts := startTs
+		for i := 0; ; i = (i + 1) % len(dbs) {
+			w.mu.Lock()
+			ts.Forward(w.mu.frontier.Frontier())
+			w.mu.Unlock()
+
+			ds := dss[i]
+			err := ds.RangeFeed(ctx, dataSpan, ts, true /* withDiff */, eventC)
+			if isRetryableRangeFeedErr(err) {
+				log.Infof(ctx, "got retryable RangeFeed error: %+v", err)
+				continue
+			}
+			return err
+		}
 	})
 	w.g.GoCtx(func(ctx context.Context) error {
 		return w.processEvents(ctx, eventC)
@@ -79,6 +100,15 @@ func Watch(
 	}
 
 	return w, nil
+}
+
+func isRetryableRangeFeedErr(err error) bool {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return false
+	default:
+		return true
+	}
 }
 
 // Finish tears down the Watcher and returns all the kvs it has ingested. It may
@@ -99,11 +129,11 @@ func (w *Watcher) Finish() *Engine {
 // guaranteed to have been ingested.
 func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr error) {
 	log.Infof(ctx, `watcher waiting for %s`, ts)
-	if err := w.ct.Set(1 * time.Millisecond); err != nil {
+	if err := w.ct.Set(ctx, 1*time.Millisecond); err != nil {
 		return err
 	}
 	defer func() {
-		if err := w.ct.ResetToDefault(); err != nil {
+		if err := w.ct.ResetToDefault(ctx); err != nil {
 			retErr = errors.WithSecondaryError(retErr, err)
 		}
 	}()
@@ -161,9 +191,9 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 						`expected (%s, %s) previous value %s got: %s`, e.Key, prevTs, prevValue, e.PrevValue))
 				}
 			case *roachpb.RangeFeedCheckpoint:
-				if w.frontier.Forward(e.Span, e.ResolvedTS) {
-					frontier := w.frontier.Frontier()
-					w.mu.Lock()
+				w.mu.Lock()
+				if w.mu.frontier.Forward(e.Span, e.ResolvedTS) {
+					frontier := w.mu.frontier.Frontier()
 					log.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 						frontier, timeutil.Now().Sub(frontier.GoTime()))
 					for ts, chs := range w.mu.frontierWaiters {
@@ -176,8 +206,8 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 							ch <- nil
 						}
 					}
-					w.mu.Unlock()
 				}
+				w.mu.Unlock()
 			}
 		}
 	}
