@@ -12,13 +12,10 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
 var (
-	timeCtx = NewParseTimeContext(duration.AdditionModeCompatible, timeutil.Now())
+	timeCtx = NewParseTimeContext(timeutil.Now())
 )
 
 func FuzzParseDDecimal(data []byte) int {

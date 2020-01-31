@@ -103,7 +103,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 			if (iv.Duration == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
 			}
-			ts.WallTime = duration.Add(evalCtx, stmtTimestamp, iv.Duration).UnixNano()
+			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
 			break
 		}
 		convErr = errors.Errorf("value is neither timestamp, decimal, nor interval")
@@ -116,7 +116,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 	case *DDecimal:
 		ts, convErr = DecimalToHLC(&d.Decimal)
 	case *DInterval:
-		ts.WallTime = duration.Add(evalCtx, stmtTimestamp, d.Duration).UnixNano()
+		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()
 	default:
 		convErr = errors.Errorf("expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
 	}

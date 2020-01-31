@@ -272,7 +272,7 @@ func TestAdd(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		if res := Add(nil, test.t, test.d); !test.exp.Equal(res) {
+		if res := Add(test.t, test.d); !test.exp.Equal(res) {
 			t.Errorf("%d: expected Add(%v, %d) = %v, found %v",
 				i, test.t, test.d, test.exp, res)
 		}
@@ -467,28 +467,28 @@ func BenchmarkAdd(b *testing.B) {
 		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
 		d := Duration{Days: 1}
 		for i := 0; i < b.N; i++ {
-			Add(AdditionModeCompatible, s, d)
+			Add(s, d)
 		}
 	})
 	b.Run("fast-path-by-day-number", func(b *testing.B) {
 		s := time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
 		d := Duration{Months: 1}
 		for i := 0; i < b.N; i++ {
-			Add(AdditionModeCompatible, s, d)
+			Add(s, d)
 		}
 	})
 	b.Run("no-adjustment", func(b *testing.B) {
 		s := time.Date(2018, 01, 31, 0, 0, 0, 0, time.UTC)
 		d := Duration{Months: 2}
 		for i := 0; i < b.N; i++ {
-			Add(AdditionModeCompatible, s, d)
+			Add(s, d)
 		}
 	})
 	b.Run("with-adjustment", func(b *testing.B) {
 		s := time.Date(2018, 01, 31, 0, 0, 0, 0, time.UTC)
 		d := Duration{Months: 1}
 		for i := 0; i < b.N; i++ {
-			Add(AdditionModeCompatible, s, d)
+			Add(s, d)
 		}
 	})
 }
