@@ -194,9 +194,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		for _, success := range []bool{true, false} {
 			expected := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expected), func(t *testing.T) {
-				inputs := []colexec.Operator{colexec.NewRepeatableBatchSource(batch)}
+				inputs := []colexec.Operator{colexec.NewRepeatableBatchSource(testAllocator, batch)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexec.NewRepeatableBatchSource(batch))
+					inputs = append(inputs, colexec.NewRepeatableBatchSource(testAllocator, batch))
 				}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
