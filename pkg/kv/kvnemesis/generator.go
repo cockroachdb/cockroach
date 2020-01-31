@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // OpP is a key used to configure the relative proportions of various options.
@@ -73,11 +74,56 @@ const (
 	// OpPMergeIsSplit is an operation that Merges at a key that is likely to
 	// currently be split.
 	OpPMergeIsSplit OpP = "MergeIsSplit"
+
+	// OpPChangeReplicas is an operation that adds and/or removes replicas from
+	// the range containing a key.
+	OpPChangeReplicas OpP = "ChangeReplicas"
 )
 
 // GeneratorConfig configures the relative probabilities of producing various
 // operations.
-type GeneratorConfig map[OpP]int
+type GeneratorConfig struct {
+	OpPs                  map[OpP]int
+	NumNodes, NumReplicas int
+}
+
+// newAllOperationsConfig returns a GeneratorConfig that exercises *all*
+// options. You probably want NewDefaultConfig. Most of the time, these will be
+// the same, but having both allows us to merge code for operations that do not
+// yet pass (for example, if the new operation finds a kv bug or edge case).
+func newAllOperationsConfig() GeneratorConfig {
+	return GeneratorConfig{OpPs: map[OpP]int{
+		OpPGetMissing:              1,
+		OpPGetExisting:             1,
+		OpPPutMissing:              1,
+		OpPPutExisting:             1,
+		OpPBatch:                   1,
+		OpPClosureTxn:              5,
+		OpPClosureTxnCommitInBatch: 5,
+		OpPSplitNew:                1,
+		OpPSplitAgain:              1,
+		OpPMergeNotSplit:           1,
+		OpPMergeIsSplit:            1,
+		OpPChangeReplicas:          1,
+	}}
+}
+
+// NewDefaultConfig returns a GeneratorConfig that is a reasonable default
+// starting point for general KV usage. Nemesis test variants that want to
+// stress particular areas may want to start with this and eliminate some
+// operations/make some operations more likely.
+func NewDefaultConfig() GeneratorConfig {
+	config := newAllOperationsConfig()
+	// TODO(dan): This fails with a WriteTooOld error if the same key is Put twice
+	// in a single batch. However, if the same Batch is committed using txn.Run,
+	// then it works and only the last one is materialized. We could make the
+	// db.Run behavior match txn.Run by ensuring that all requests in a
+	// nontransactional batch are disjoint and upgrading to a transactional batch
+	// (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can be used
+	// to efficiently check this.
+	config.OpPs[OpPBatch] = 0
+	return config
+}
 
 // GeneratorDataSpan returns a span that contains all of the operations created
 // by this Generator.
@@ -87,6 +133,10 @@ func GeneratorDataSpan() roachpb.Span {
 		EndKey: roachpb.Key(keys.MakeTablePrefix(51)),
 	}
 }
+
+// GetReplicasFn is a function that returns the current replicas for the range
+// containing a key.
+type GetReplicasFn func(roachpb.Key) []roachpb.ReplicationTarget
 
 // Generator incrementally constructs KV traffic designed to maximally test edge
 // cases.
@@ -117,15 +167,26 @@ type Generator struct {
 }
 
 // MakeGenerator constructs a Generator.
-func MakeGenerator(config GeneratorConfig) *Generator {
+func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator, error) {
+	if config.NumNodes <= 0 {
+		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
+	}
+	if config.NumReplicas <= 0 {
+		return nil, errors.Errorf(`NumReplicas must be positive got: %d`, config.NumReplicas)
+	}
+	if config.NumReplicas > config.NumNodes {
+		return nil, errors.Errorf(`NumReplicas (%d) must <= NumNodes (%d)`,
+			config.NumReplicas, config.NumNodes)
+	}
 	g := &Generator{}
 	g.mu.generator = generator{
 		Config:           config,
+		replicasFn:       replicasFn,
 		keys:             make(map[string]struct{}),
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
 	}
-	return g
+	return g, nil
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -138,7 +199,8 @@ func (g *Generator) RandStep(rng *rand.Rand) Step {
 }
 
 type generator struct {
-	Config GeneratorConfig
+	Config     GeneratorConfig
+	replicasFn GetReplicasFn
 
 	nextValue int
 
@@ -176,6 +238,9 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	if len(g.currentSplits) > 0 {
 		allowed[OpPMergeIsSplit] = randMergeIsSplit
 	}
+	if g.Config.NumNodes > g.Config.NumReplicas {
+		allowed[OpPChangeReplicas] = randChangeReplicas
+	}
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -185,12 +250,12 @@ type opGenFunc func(*generator, *rand.Rand) Operation
 func (g *generator) selectOp(rng *rand.Rand, contextuallyValid map[OpP]opGenFunc) Operation {
 	var total int
 	for op := range contextuallyValid {
-		total += g.Config[op]
+		total += g.Config.OpPs[op]
 	}
 	target := rng.Intn(total)
 	var sum int
 	for op, fn := range contextuallyValid {
-		sum += g.Config[op]
+		sum += g.Config.OpPs[op]
 		if sum > target {
 			return fn(g, rng)
 		}
@@ -253,6 +318,44 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 	// out a concurrent split for the same key.
 	delete(g.currentSplits, key)
 	return merge(key)
+}
+
+func randChangeReplicas(g *generator, rng *rand.Rand) Operation {
+	key := randKey(rng)
+	current := g.replicasFn(roachpb.Key(key))
+	var changes []roachpb.ReplicationChange
+	if len(current) > g.Config.NumReplicas {
+		changes = append(changes, roachpb.ReplicationChange{
+			ChangeType: roachpb.REMOVE_REPLICA,
+			Target:     current[rng.Intn(len(current))],
+		})
+	} else if len(current) < g.Config.NumNodes {
+		candidatesMap := make(map[roachpb.ReplicationTarget]struct{})
+		for i := 0; i < g.Config.NumNodes; i++ {
+			t := roachpb.ReplicationTarget{NodeID: roachpb.NodeID(i + 1), StoreID: roachpb.StoreID(i + 1)}
+			candidatesMap[t] = struct{}{}
+		}
+		for _, replica := range current {
+			delete(candidatesMap, replica)
+		}
+		var candidates []roachpb.ReplicationTarget
+		for candidate := range candidatesMap {
+			candidates = append(candidates, candidate)
+		}
+		candidate := candidates[rng.Intn(len(candidates))]
+		changes = append(changes, roachpb.ReplicationChange{
+			ChangeType: roachpb.ADD_REPLICA,
+			Target:     candidate,
+		})
+		// Sometimes test atomic swaps
+		if len(current) == g.Config.NumReplicas && rng.Intn(2) == 0 {
+			changes = append(changes, roachpb.ReplicationChange{
+				ChangeType: roachpb.REMOVE_REPLICA,
+				Target:     current[rng.Intn(len(current))],
+			})
+		}
+	}
+	return changeReplicas(key, changes...)
 }
 
 func randBatch(g *generator, rng *rand.Rand) Operation {
@@ -353,4 +456,8 @@ func split(key string) Operation {
 
 func merge(key string) Operation {
 	return Operation{Merge: &MergeOperation{Key: []byte(key)}}
+}
+
+func changeReplicas(key string, changes ...roachpb.ReplicationChange) Operation {
+	return Operation{ChangeReplicas: &ChangeReplicasOperation{Key: []byte(key), Changes: changes}}
 }
