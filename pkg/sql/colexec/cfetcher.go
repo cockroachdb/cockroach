@@ -948,7 +948,7 @@ func (rf *cFetcher) processValue(
 			var family *sqlbase.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
-				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+				return "", "", errors.Mark(err, scrub.IgnoreKVErrorSentinel)
 			}
 
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)

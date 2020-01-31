@@ -42,6 +42,13 @@ const (
 	// ForeignKeyConstraintViolation occurs when a row in a
 	// table is violating a foreign key constraint.
 	ForeignKeyConstraintViolation = "foreign_key_violation"
+	// IgnoreKVError occurs when a column family was removed, but the underlying
+	// KV is still present. These KVs should be ignored by the fetcher.
+	IgnoreKVError = "ignore_kv_error"
+)
+
+var (
+	IgnoreKVErrorSentinel = errors.New(IgnoreKVError)
 )
 
 // Error contains the details on the scrub error that was caught.
