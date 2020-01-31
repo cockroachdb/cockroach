@@ -412,12 +412,6 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{
-		Name:        "range.snapshots.preemptive-applied",
-		Help:        "Number of applied pre-emptive snapshots",
-		Measurement: "Snapshots",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -1060,15 +1054,14 @@ type StoreMetrics struct {
 	// accordingly.
 
 	// Range event metrics.
-	RangeSplits                     *metric.Counter
-	RangeMerges                     *metric.Counter
-	RangeAdds                       *metric.Counter
-	RangeRemoves                    *metric.Counter
-	RangeSnapshotsGenerated         *metric.Counter
-	RangeSnapshotsNormalApplied     *metric.Counter
-	RangeSnapshotsLearnerApplied    *metric.Counter
-	RangeSnapshotsPreemptiveApplied *metric.Counter
-	RangeRaftLeaderTransfers        *metric.Counter
+	RangeSplits                  *metric.Counter
+	RangeMerges                  *metric.Counter
+	RangeAdds                    *metric.Counter
+	RangeRemoves                 *metric.Counter
+	RangeSnapshotsGenerated      *metric.Counter
+	RangeSnapshotsNormalApplied  *metric.Counter
+	RangeSnapshotsLearnerApplied *metric.Counter
+	RangeRaftLeaderTransfers     *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1267,15 +1260,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
 
 		// Range event metrics.
-		RangeSplits:                     metric.NewCounter(metaRangeSplits),
-		RangeMerges:                     metric.NewCounter(metaRangeMerges),
-		RangeAdds:                       metric.NewCounter(metaRangeAdds),
-		RangeRemoves:                    metric.NewCounter(metaRangeRemoves),
-		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),
-		RangeSnapshotsNormalApplied:     metric.NewCounter(metaRangeSnapshotsNormalApplied),
-		RangeSnapshotsLearnerApplied:    metric.NewCounter(metaRangeSnapshotsLearnerApplied),
-		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
-		RangeRaftLeaderTransfers:        metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeSplits:                  metric.NewCounter(metaRangeSplits),
+		RangeMerges:                  metric.NewCounter(metaRangeMerges),
+		RangeAdds:                    metric.NewCounter(metaRangeAdds),
+		RangeRemoves:                 metric.NewCounter(metaRangeRemoves),
+		RangeSnapshotsGenerated:      metric.NewCounter(metaRangeSnapshotsGenerated),
+		RangeSnapshotsNormalApplied:  metric.NewCounter(metaRangeSnapshotsNormalApplied),
+		RangeSnapshotsLearnerApplied: metric.NewCounter(metaRangeSnapshotsLearnerApplied),
+		RangeRaftLeaderTransfers:     metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),

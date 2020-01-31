@@ -277,7 +277,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 			); err != nil {
 				t.Fatal(err)
 			}
-			repl, err := NewReplica(testDesc, tc.store, 0)
+			repl, err := newReplica(ctx, testDesc, tc.store, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -389,7 +389,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDesc(ctx, &newDesc)
+	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.assertStateLocked(ctx, tc.engine)
@@ -6869,30 +6869,6 @@ func TestReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// First try and fail with a stale descriptor.
-	origDesc := repl.Desc()
-	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
-	for i := range newDesc.InternalReplicas {
-		if newDesc.InternalReplicas[i].StoreID == tc.store.StoreID() {
-			newDesc.InternalReplicas[i].ReplicaID++
-			newDesc.NextReplicaID++
-			break
-		}
-	}
-
-	repl.setDesc(ctx, newDesc)
-	expectedErr := "replica descriptor's ID has changed"
-	func() {
-		tc.repl.raftMu.Lock()
-		defer tc.repl.raftMu.Unlock()
-		if err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
-			DestroyData: true,
-		}); !testutils.IsError(err, expectedErr) {
-			t.Fatalf("expected error %q but got %v", expectedErr, err)
-		}
-	}()
-
-	// Now try a fresh descriptor and succeed.
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()

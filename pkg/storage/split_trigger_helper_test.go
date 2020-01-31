@@ -47,7 +47,7 @@ func TestMaybeDropMsgApp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := map[testMsgAppDropper]bool{
-		// Already init'ed.
+		// Already load'ed.
 		{initialized: true}: false,
 		// Left hand side not found.
 		{initialized: false}: false,
