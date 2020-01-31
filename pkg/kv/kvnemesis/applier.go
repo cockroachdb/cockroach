@@ -14,24 +14,28 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Applier executes Steps.
 type Applier struct {
-	db *client.DB
-	mu struct {
+	dbs []*client.DB
+	mu  struct {
+		dbIdx int
 		syncutil.Mutex
 		txns map[string]*client.Txn
 	}
 }
 
 // MakeApplier constructs an Applier that executes against the given DB.
-func MakeApplier(db *client.DB) *Applier {
+func MakeApplier(dbs ...*client.DB) *Applier {
 	a := &Applier{
-		db: db,
+		dbs: dbs,
 	}
 	a.mu.txns = make(map[string]*client.Txn)
 	return a
@@ -41,29 +45,46 @@ func MakeApplier(db *client.DB) *Applier {
 // error is only returned from Apply if there is an internal coding error within
 // Applier, errors from a Step execution are saved in the Step itself.
 func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
-	step.Before = a.db.Clock().Now()
+	var db *client.DB
+	db, step.DBID = a.getNextDBRoundRobin()
+
+	step.Before = db.Clock().Now()
 	defer func() {
-		step.After = a.db.Clock().Now()
+		step.After = db.Clock().Now()
 		if p := recover(); p != nil {
 			retErr = errors.Errorf(`panic applying step %s: %v`, step, p)
 		}
 	}()
-	a.applyOp(ctx, &step.Op)
+	applyOp(ctx, db, &step.Op)
 	return nil
 }
 
-func (a *Applier) applyOp(ctx context.Context, op *Operation) {
+func (a *Applier) getNextDBRoundRobin() (*client.DB, int32) {
+	a.mu.Lock()
+	dbIdx := a.mu.dbIdx
+	a.mu.dbIdx = (a.mu.dbIdx + 1) % len(a.dbs)
+	a.mu.Unlock()
+	return a.dbs[dbIdx], int32(dbIdx)
+}
+
+func applyOp(ctx context.Context, db *client.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation, *PutOperation, *BatchOperation:
-		applyClientOp(ctx, a.db, op)
+		applyClientOp(ctx, db, op)
 	case *SplitOperation:
-		err := a.db.AdminSplit(ctx, o.Key, o.Key, hlc.MaxTimestamp)
+		err := db.AdminSplit(ctx, o.Key, o.Key, hlc.MaxTimestamp)
 		o.Result = resultError(ctx, err)
 	case *MergeOperation:
-		err := a.db.AdminMerge(ctx, o.Key)
+		err := db.AdminMerge(ctx, o.Key)
+		o.Result = resultError(ctx, err)
+	case *ChangeReplicasOperation:
+		ctx = client.ChangeReplicasCanMixAddAndRemoveContext(ctx)
+		desc := getRangeDesc(ctx, o.Key, db)
+		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
+		// TODO(dan): Save returned desc?
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
-		txnErr := a.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		txnErr := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				applyClientOp(ctx, txn, op)
@@ -179,5 +200,40 @@ func resultError(ctx context.Context, err error) Result {
 	return Result{
 		Type: ResultType_Error,
 		Err:  &ee,
+	}
+}
+
+func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*client.DB) roachpb.RangeDescriptor {
+	var dbIdx int
+	var opts = retry.Options{}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
+		sender := dbs[dbIdx].NonTransactionalSender()
+		descs, _, err := client.RangeLookup(ctx, sender, key, roachpb.CONSISTENT, 0, false)
+		if err != nil {
+			log.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
+			continue
+		}
+		if len(descs) != 1 {
+			log.Infof(ctx, "unexpected number of descriptors for %s: %d", key, len(descs))
+			continue
+		}
+		return descs[0]
+	}
+	panic(`unreachable`)
+}
+
+func newGetReplicasFn(dbs ...*client.DB) GetReplicasFn {
+	ctx := context.Background()
+	return func(key roachpb.Key) []roachpb.ReplicationTarget {
+		desc := getRangeDesc(ctx, key, dbs...)
+		replicas := desc.Replicas().All()
+		targets := make([]roachpb.ReplicationTarget, len(replicas))
+		for i, replica := range replicas {
+			targets[i] = roachpb.ReplicationTarget{
+				NodeID:  replica.NodeID,
+				StoreID: replica.StoreID,
+			}
+		}
+		return targets
 	}
 }

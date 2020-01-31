@@ -51,7 +51,7 @@ func (s steps) After() hlc.Timestamp {
 }
 
 func (s Step) String() string {
-	fctx := formatCtx{receiver: `db`, indent: ``}
+	var fctx formatCtx
 	var buf strings.Builder
 	s.format(&buf, fctx)
 	return buf.String()
@@ -64,6 +64,10 @@ type formatCtx struct {
 }
 
 func (s Step) format(w *strings.Builder, fctx formatCtx) {
+	if fctx.receiver != `` {
+		panic(`cannot specify receiver in Step.format fctx`)
+	}
+	fctx.receiver = fmt.Sprintf(`db%d`, s.DBID)
 	w.WriteString("\n")
 	w.WriteString(fctx.indent)
 	s.Op.format(w, fctx)
@@ -91,9 +95,11 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *PutOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
-		o.format(w)
+		o.format(w, fctx)
 	case *MergeOperation:
-		o.format(w)
+		o.format(w, fctx)
+	case *ChangeReplicasOperation:
+		o.format(w, fctx)
 	case *BatchOperation:
 		newFctx := fctx
 		newFctx.indent = fctx.indent + `  `
@@ -165,13 +171,13 @@ func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
 	op.Result.format(w)
 }
 
-func (op SplitOperation) format(w *strings.Builder) {
-	fmt.Fprintf(w, `db.AdminSplit(ctx, %s)`, roachpb.Key(op.Key))
+func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
 	op.Result.format(w)
 }
 
-func (op MergeOperation) format(w *strings.Builder) {
-	fmt.Fprintf(w, `db.AdminMerge(ctx, %s)`, roachpb.Key(op.Key))
+func (op MergeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.AdminMerge(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
 	op.Result.format(w)
 }
 
@@ -180,6 +186,11 @@ func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
 	w.WriteString(fctx.indent)
 	w.WriteString(`b := &Batch{}`)
 	formatOps(w, fctx, op.Ops)
+}
+
+func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Changes)
+	op.Result.format(w)
 }
 
 func (r Result) format(w *strings.Builder) {
