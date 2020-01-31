@@ -501,8 +501,9 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
   return db->EnvWriteFile(path, contents);
 }
 
-DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file) {
-  return db->EnvOpenFile(path, (rocksdb::WritableFile**)file);
+DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path,  uint64_t bytes_per_sync,
+                       DBWritableFile* file) {
+  return db->EnvOpenFile(path, bytes_per_sync, (rocksdb::WritableFile**)file);
 }
 
 DBStatus DBEnvReadFile(DBEngine* db, DBSlice path, DBSlice* contents) {
@@ -1207,4 +1208,27 @@ DBStatus DBEnvCloseDirectory(DBEngine* db, DBDirectory file) {
 
 DBStatus DBEnvRenameFile(DBEngine* db, DBSlice oldname, DBSlice newname) {
   return db->EnvRenameFile(oldname, newname);
+}
+
+DBStatus DBEnvCreateDir(DBEngine* db, DBSlice name) {
+  return db->EnvCreateDir(name);
+}
+
+DBStatus DBEnvDeleteDir(DBEngine* db, DBSlice name) {
+  return db->EnvDeleteDir(name);
+}
+
+DBListDirResults DBEnvListDir(DBEngine* db, DBSlice name) {
+  DBListDirResults result;
+  std::vector<std::string> contents;
+  result.status = db->EnvListDir(name, &contents);
+  result.n = contents.size();
+  // We malloc the names so it can be deallocated by the caller using free().
+  const int size = contents.size() * sizeof(DBString);
+  result.names = reinterpret_cast<DBString*>(malloc(size));
+  memset(result.names, 0, size);
+  for (int i = 0; i < contents.size(); i++) {
+    result.names[i] = ToDBString(rocksdb::Slice(contents[i].data(), contents[i].size()));
+  }
+  return result;
 }
