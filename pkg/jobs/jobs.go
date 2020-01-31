@@ -421,10 +421,11 @@ func (j *Job) Failed(
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
 	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
-		// TODO(spaskob): should we fail if the terminal state is not StatusSucceeded?
-		if md.Status.Terminal() {
-			// Already done - do nothing.
+		if md.Status == StatusSucceeded {
 			return nil
+		}
+		if md.Status != StatusRunning && md.Status != StatusPending {
+			return errors.Errorf("Job with status %s cannot be marked as succeeded", md.Status)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
