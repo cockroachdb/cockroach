@@ -602,9 +602,9 @@ func cmdGet(e *evalCtx) error {
 		opts.FailOnMoreRecent = true
 	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
-	if err != nil {
-		return err
-	}
+	// NB: the error is returned below. This ensures the test can
+	// ascertain no result is populated in the intent when an error
+	// occurs.
 	if intent != nil {
 		fmt.Fprintf(e.results.buf, "get: %v -> intent {%s} %s\n", key, intent.Txn, intent.Status)
 	}
@@ -613,7 +613,7 @@ func cmdGet(e *evalCtx) error {
 	} else {
 		fmt.Fprintf(e.results.buf, "get: %v -> <no data>\n", key)
 	}
-	return nil
+	return err
 }
 
 func cmdIncrement(e *evalCtx) error {
