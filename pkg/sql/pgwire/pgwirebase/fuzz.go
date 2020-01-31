@@ -15,13 +15,12 @@ package pgwirebase
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq/oid"
 )
 
 var (
-	timeCtx = tree.NewParseTimeContext(duration.AdditionModeCompatible, timeutil.Now())
+	timeCtx = tree.NewParseTimeContext(timeutil.Now())
 	// Compile a slice of all oids.
 	oids = func() []oid.Oid {
 		var ret []oid.Oid
