@@ -10,9 +10,10 @@
 
 import { Checkbox, Divider } from "antd";
 import Dropdown, { DropdownOption } from "oss/src/views/shared/components/dropdown";
-import PropTypes from "prop-types";
 import React from "react";
-import { InjectedRouter, RouterState } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+
+import { getMatchParamByName } from "src/util/query";
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
 import "./sort.styl";
@@ -26,22 +27,18 @@ interface ISortProps {
   filter: NetworkFilter;
 }
 
-export class Sort extends React.Component<ISortProps, {}> {
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState; };
-
+class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   onChange = ({ target }: any) => this.props.onChangeCollapse(target.checked);
 
   pageView = () => {
-    const { router } = this.context;
-    return router.params.node_id || "cluster";
+    const { match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
+    return nodeId || "cluster";
   }
 
   navigateTo = (selected: DropdownOption) => {
     this.props.onChangeCollapse(false);
-    this.context.router.push(`reports/network/${selected.value}`);
+    this.props.history.push(`/reports/network/${selected.value}`);
   }
 
   componentDidMount() {
@@ -60,8 +57,8 @@ export class Sort extends React.Component<ISortProps, {}> {
   })
 
   render() {
-    const { router } = this.context;
-    const { collapsed, sort, onChangeFilter, deselectFilterByKey, filter } = this.props;
+    const { collapsed, sort, onChangeFilter, deselectFilterByKey, filter, match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
     return (
       <div className="Sort-latency">
         <Dropdown
@@ -72,8 +69,10 @@ export class Sort extends React.Component<ISortProps, {}> {
         />
         <Filter sort={sort} onChangeFilter={onChangeFilter} deselectFilterByKey={deselectFilterByKey} filter={filter} />
         <Divider type="vertical" style={{ height: "100%" }} />
-        <Checkbox disabled={!router.params.node_id || router.params.node_id === "cluster"} checked={collapsed} onChange={this.onChange}>Collapse Nodes</Checkbox>
+        <Checkbox disabled={!nodeId || nodeId === "cluster"} checked={collapsed} onChange={this.onChange}>Collapse Nodes</Checkbox>
       </div>
     );
   }
 }
+
+export default withRouter(Sort);

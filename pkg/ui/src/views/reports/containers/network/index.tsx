@@ -26,8 +26,9 @@ import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } fro
 import Loading from "src/views/shared/components/loading";
 import { Latency } from "./latency";
 import { Legend } from "./legend";
+import Sort from "./sort";
+import { getMatchParamByName } from "src/util/query";
 import "./network.styl";
-import { Sort } from "./sort";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -160,7 +161,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     displayIdentities: Identity[],
     noConnections: NoConnection[],
   ) {
-    const { params: { node_id } } = this.props;
+    const { match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
     const { collapsed, filter } = this.state;
     const mean = d3Mean(latencies);
     const sortParams = this.getSortParams(displayIdentities);
@@ -178,8 +180,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       <Latency
         displayIdentities={this.filteredDisplayIdentities(displayIdentities)}
         staleIDs={staleIDs}
-        multipleHeader={node_id !== "cluster"}
-        node_id={node_id}
+        multipleHeader={nodeId !== "cluster"}
+        node_id={nodeId}
         collapsed={collapsed}
         nodesSummary={nodesSummary}
         std={{
@@ -249,11 +251,12 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   }
 
   getDisplayIdentities = (healthyIDsContext: _.CollectionChain<number>, staleIDsContext: _.CollectionChain<number>, identityByID: Map<number, Identity>) => {
-    const { params: { node_id } } = this.props;
+    const { match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
     const identityContent = healthyIDsContext.union(staleIDsContext.value()).map(nodeID => identityByID.get(nodeID)).sortBy(identity => identity.nodeID);
     const sort = this.getSortParams(identityContent.value());
-    if (sort.some(x => (x.id === node_id))) {
-      return identityContent.sortBy(identity => getValueFromString(node_id, identity.locality, true)).value();
+    if (sort.some(x => (x.id === nodeId))) {
+      return identityContent.sortBy(identity => getValueFromString(nodeId, identity.locality, true)).value();
     }
     return identityContent.value();
   }
