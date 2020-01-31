@@ -442,11 +442,16 @@ func (w *readWriterManager) parse(input string) operand {
 	panic(fmt.Sprintf("couldn't find readwriter with id %d", id))
 }
 
+type iteratorInfo struct {
+	id         uint64
+	lowerBound roachpb.Key
+}
+
 type iteratorManager struct {
 	rng          *rand.Rand
 	testRunner   *metaTestRunner
 	readerToIter map[engine.Reader][]engine.Iterator
-	iterToId     map[engine.Iterator]uint64
+	iterToInfo   map[engine.Iterator]iteratorInfo
 	liveIters    []engine.Iterator
 	iterCounter  uint64
 }
@@ -465,7 +470,10 @@ func (i *iteratorManager) open(rw engine.ReadWriter, options engine.IterOptions)
 	i.iterCounter++
 	iter := rw.NewIterator(options)
 	i.readerToIter[rw] = append(i.readerToIter[rw], iter)
-	i.iterToId[iter] = i.iterCounter
+	i.iterToInfo[iter] = iteratorInfo{
+		id:         i.iterCounter,
+		lowerBound: options.LowerBound,
+	}
 	i.liveIters = append(i.liveIters, iter)
 	return iter
 }
@@ -475,14 +483,14 @@ func (i *iteratorManager) opener() string {
 }
 
 func (i *iteratorManager) count() int {
-	return len(i.iterToId)
+	return len(i.iterToInfo)
 }
 
 func (i *iteratorManager) close(op operand) {
 	iter := op.(engine.Iterator)
 	iter.Close()
 
-	delete(i.iterToId, iter)
+	delete(i.iterToInfo, iter)
 	// Clear iter from liveIters
 	for j, iter2 := range i.liveIters {
 		if iter == iter2 {
@@ -506,13 +514,13 @@ func (i *iteratorManager) close(op operand) {
 }
 
 func (i *iteratorManager) closeAll() {
-	for iter, _ := range i.iterToId {
+	for iter, _ := range i.iterToInfo {
 		iter.Close()
 	}
 }
 
 func (i *iteratorManager) toString(op operand) string {
-	return fmt.Sprintf("iter%d", i.iterToId[op.(engine.Iterator)])
+	return fmt.Sprintf("iter%d", i.iterToInfo[op.(engine.Iterator)].id)
 }
 
 func (i *iteratorManager) parse(input string) operand {
@@ -522,8 +530,8 @@ func (i *iteratorManager) parse(input string) operand {
 		panic(err)
 	}
 
-	for iter, id2 := range i.iterToId {
-		if id == id2 {
+	for iter, info := range i.iterToInfo {
+		if id == info.id {
 			return iter
 		}
 	}

@@ -67,7 +67,7 @@ func (m *metaTestRunner) init() {
 		OPERAND_ITERATOR: &iteratorManager{
 			rng:          m.rng,
 			readerToIter: make(map[engine.Reader][]engine.Iterator),
-			iterToId:     make(map[engine.Iterator]uint64),
+			iterToInfo:   make(map[engine.Iterator]iteratorInfo),
 			iterCounter:  0,
 		},
 	}

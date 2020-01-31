@@ -84,22 +84,27 @@ func isBatchIterator(m *metaTestRunner, iter engine.Iterator) bool {
 }
 
 // Helper function to run MVCCScan given a key range and a reader.
-func runMvccScan(ctx context.Context, m *metaTestRunner, reverse bool, args []operand) string {
+func runMvccScan(ctx context.Context, m *metaTestRunner, reverse bool, inconsistent bool, args []operand) string {
 	key := args[0].(engine.MVCCKey)
 	endKey := args[1].(engine.MVCCKey)
-	txn := args[2].(*roachpb.Transaction)
 	if endKey.Less(key) {
 		tmpKey := endKey
 		endKey = key
 		key = tmpKey
+	}
+	ts := key.Timestamp
+	var txn *roachpb.Transaction
+	if !inconsistent {
+		txn = args[2].(*roachpb.Transaction)
+		ts = txn.ReadTimestamp
 	}
 	// While MVCCScanning on a batch works in Pebble, it does not in rocksdb.
 	// This is due to batch iterators not supporting SeekForPrev. For now, use
 	// m.engine instead of a readWriterManager-generated engine.Reader, otherwise
 	// we will try MVCCScanning on batches and produce diffs between runs on
 	// different engines that don't point to an actual issue.
-	kvs, _, intent, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, math.MaxInt64, txn.ReadTimestamp, engine.MVCCScanOptions{
-		Inconsistent: false,
+	kvs, _, intent, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, math.MaxInt64, ts, engine.MVCCScanOptions{
+		Inconsistent: inconsistent,
 		Tombstones:   true,
 		Reverse:      reverse,
 		Txn:          txn,
@@ -125,7 +130,7 @@ func printIterState(iter engine.Iterator) string {
 // List of operations, where each operation is defined as one instance of mvccOp.
 var operations = []mvccOp{
 	{
-		name: "mvcc_get",
+		name: "mvcc_inconsistent_get",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
 			reader := args[0].(engine.Reader)
 			key := args[1].(engine.MVCCKey)
@@ -142,6 +147,29 @@ var operations = []mvccOp{
 		operands: []operandType{
 			OPERAND_READWRITER,
 			OPERAND_MVCC_KEY,
+		},
+		weight: 10,
+	},
+	{
+		name: "mvcc_get",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			reader := args[0].(engine.Reader)
+			key := args[1].(engine.MVCCKey)
+			txn := args[2].(*roachpb.Transaction)
+			val, intent, err := engine.MVCCGet(ctx, reader, key.Key, txn.ReadTimestamp, engine.MVCCGetOptions{
+				Inconsistent: false,
+				Tombstones:   true,
+				Txn:          txn,
+			})
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+			return fmt.Sprintf("val = %v, intent = %v", val, intent)
+		},
+		operands: []operandType{
+			OPERAND_READWRITER,
+			OPERAND_MVCC_KEY,
+			OPERAND_TRANSACTION,
 		},
 		weight: 10,
 	},
@@ -181,9 +209,42 @@ var operations = []mvccOp{
 		weight: 30,
 	},
 	{
+		name: "mvcc_delete",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			writer := args[0].(engine.ReadWriter)
+			key := args[1].(engine.MVCCKey)
+			txn := args[2].(*roachpb.Transaction)
+			txn.Sequence++
+
+			err := engine.MVCCDelete(ctx, writer, nil, key.Key, txn.WriteTimestamp, txn)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err)
+			}
+
+			// Update the txn's intent spans to account for this intent being written.
+			txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{
+				Key: key.Key,
+			})
+			// If this write happened on a batch, track that in the txn manager so
+			// that the batch is committed before the transaction is aborted or
+			// committed.
+			if batch, ok := writer.(engine.Batch); ok {
+				txnManager := m.managers[OPERAND_TRANSACTION].(*txnManager)
+				txnManager.inFlightBatches[txn] = append(txnManager.inFlightBatches[txn], batch)
+			}
+			return "ok"
+		},
+		operands: []operandType{
+			OPERAND_READWRITER,
+			OPERAND_MVCC_KEY,
+			OPERAND_TRANSACTION,
+		},
+		weight: 10,
+	},
+	{
 		name: "mvcc_scan",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			return runMvccScan(ctx, m, false, args)
+			return runMvccScan(ctx, m, false, false, args)
 		},
 		operands: []operandType{
 			OPERAND_MVCC_KEY,
@@ -193,9 +254,20 @@ var operations = []mvccOp{
 		weight: 10,
 	},
 	{
+		name: "mvcc_inconsistent_scan",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			return runMvccScan(ctx, m, false, true, args)
+		},
+		operands: []operandType{
+			OPERAND_MVCC_KEY,
+			OPERAND_MVCC_KEY,
+		},
+		weight: 10,
+	},
+	{
 		name: "mvcc_reverse_scan",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			return runMvccScan(ctx, m, true, args)
+			return runMvccScan(ctx, m, true, false, args)
 		},
 		operands: []operandType{
 			OPERAND_MVCC_KEY,
@@ -295,6 +367,13 @@ var operations = []mvccOp{
 				LowerBound: key.Key,
 				UpperBound: endKey.Key.Next(),
 			})
+			if _, ok := args[0].(engine.Batch); ok {
+				// When Next()-ing on a newly initialized batch iter without a key,
+				// pebble's iterator stays invalid while RocksDB's finds the key after
+				// the first key. This is a known difference. For now seek the iterator
+				// to standardize behaviour for this test.
+				iter.SeekGE(key)
+			}
 
 			return iterManager.toString(iter)
 		},
@@ -326,6 +405,16 @@ var operations = []mvccOp{
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
 			iter := args[0].(engine.Iterator)
 			key := args[1].(engine.MVCCKey)
+			if isBatchIterator(m, iter) {
+				// RocksDB batch iterators do not account for lower bounds consistently:
+				// https://github.com/cockroachdb/cockroach/issues/44512
+				// In the meantime, ensure the SeekGE key >= lower bound.
+				iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+				lowerBound := iterManager.iterToInfo[iter].lowerBound
+				if key.Key.Compare(lowerBound) < 0 {
+					key.Key = lowerBound
+				}
+			}
 			iter.SeekGE(key)
 
 			return printIterState(iter)
@@ -406,7 +495,7 @@ var operations = []mvccOp{
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
 			iter := args[0].(engine.Iterator)
 			if isBatchIterator(m, iter) {
-				return "noop due to missing seekLT support in rocksdb batch iterators"
+				return "noop due to missing Prev support in rocksdb batch iterators"
 			}
 			// The rocksdb iterator does not treat kindly to a Prev() if it is already
 			// invalid. Don't run prev if that is the case.
@@ -425,5 +514,52 @@ var operations = []mvccOp{
 			OPERAND_ITERATOR,
 		},
 		weight: 10,
+	},
+	{
+		// Note that this is not an MVCC* operation; unlike MVCC{Put,Get,Scan}, etc,
+		// it does not respect transactions. This often yields interesting
+		// behaviour.
+		name: "delete_range",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			key := args[0].(engine.MVCCKey)
+			endKey := args[1].(engine.MVCCKey)
+			if endKey.Less(key) {
+				tmpKey := key
+				key = endKey
+				endKey = tmpKey
+			}
+			err := m.engine.ClearRange(key, endKey)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err.Error())
+			}
+			return "ok"
+		},
+		operands: []operandType{
+			OPERAND_MVCC_KEY,
+			OPERAND_MVCC_KEY,
+		},
+		weight: 2,
+	},
+	{
+		name: "compact",
+		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			key := args[0].(engine.MVCCKey).Key
+			endKey := args[1].(engine.MVCCKey).Key
+			if endKey.Compare(key) < 0 {
+				tmpKey := key
+				key = endKey
+				endKey = tmpKey
+			}
+			err := m.engine.CompactRange(key, endKey, false)
+			if err != nil {
+				return fmt.Sprintf("error: %s", err.Error())
+			}
+			return "ok"
+		},
+		operands: []operandType{
+			OPERAND_MVCC_KEY,
+			OPERAND_MVCC_KEY,
+		},
+		weight: 5,
 	},
 }
