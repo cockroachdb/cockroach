@@ -152,3 +152,18 @@ SELECT DISTINCT v FROM kv@idx WHERE v > 0
 1
 2
 5
+
+# Regression test for #44296.
+statement ok
+CREATE TABLE t0(c0 INT UNIQUE);
+
+statement ok
+CREATE VIEW v0(c0) AS SELECT DISTINCT t0.c0 FROM t0;
+
+statement ok
+INSERT INTO t0 (c0) VALUES (NULL), (NULL);
+
+query I
+SELECT * FROM v0 WHERE v0.c0 IS NULL
+----
+NULL
