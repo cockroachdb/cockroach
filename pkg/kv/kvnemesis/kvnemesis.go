@@ -27,15 +27,18 @@ import (
 func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,
-	db *client.DB,
 	ct ClosedTimestampTargetInterval,
 	config GeneratorConfig,
+	dbs ...*client.DB,
 ) ([]error, error) {
 	const concurrency, numSteps = 5, 30
 
-	g := MakeGenerator(config)
-	a := MakeApplier(db)
-	w, err := Watch(ctx, db, ct, GeneratorDataSpan())
+	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
+	if err != nil {
+		return nil, err
+	}
+	a := MakeApplier(dbs...)
+	w, err := Watch(ctx, dbs, ct, GeneratorDataSpan())
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +54,12 @@ func RunNemesis(
 			step := g.RandStep(rng)
 			if err := a.Apply(ctx, &step); err != nil {
 				buf.Reset()
-				step.format(&buf, formatCtx{receiver: `db`, indent: `  ` + workerName + ` ERR `})
+				step.format(&buf, formatCtx{indent: `  ` + workerName + ` ERR `})
 				log.Infof(ctx, "error: %+v\n\n%s", err, buf.String())
 				return err
 			}
 			buf.Reset()
-			step.format(&buf, formatCtx{receiver: `db`, indent: `  ` + workerName + ` OP  `})
+			step.format(&buf, formatCtx{indent: `  ` + workerName + ` OP  `})
 			log.Info(ctx, buf.String())
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 		}
@@ -84,7 +87,7 @@ func RunNemesis(
 		log.Infof(ctx, "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
 
 		span := GeneratorDataSpan()
-		scanKVs, err := db.Scan(ctx, span.Key, span.EndKey, -1)
+		scanKVs, err := dbs[0].Scan(ctx, span.Key, span.EndKey, -1)
 		if err != nil {
 			log.Infof(ctx, "could not scan actual latest values: %+v", err)
 		} else {
@@ -106,7 +109,10 @@ func printRepro(stepsByWorker [][]Step) string {
 	for _, steps := range stepsByWorker {
 		buf.WriteString("g.GoCtx(func(ctx context.Context) error {")
 		for _, step := range steps {
-			step.format(&buf, formatCtx{receiver: `db`, indent: "  "})
+			fctx := formatCtx{receiver: fmt.Sprintf(`db%d`, step.DBID), indent: "  "}
+			buf.WriteString("\n")
+			buf.WriteString(fctx.indent)
+			step.Op.format(&buf, fctx)
 		}
 		buf.WriteString("\n  return nil\n")
 		buf.WriteString("})\n")

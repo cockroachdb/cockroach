@@ -26,7 +26,7 @@
 // - Validate read only transactions
 // - CPut/InitPut/Increment/Delete
 // - DeleteRange/ClearRange/RevertRange/Scan/ReverseScan
-// - ChangeReplicas/TransferLease
+// - TransferLease
 // - ExportRequest
 // - AddSSTable
 // - Root and leaf transactions
