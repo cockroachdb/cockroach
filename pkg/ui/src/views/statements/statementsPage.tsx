@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination } from "antd";
+import { Icon } from "antd";
 import _ from "lodash";
 import moment from "moment";
+import { PaginationComponent, PaginationSettings } from "oss/src/components/pagination/pagination";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
-
 import * as protos from "src/js/protos";
 import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -35,7 +35,6 @@ import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
 import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
-
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type RouteProps = RouteComponentProps<any, any>;
 
@@ -47,10 +46,6 @@ interface StatementsPageProps {
   lastReset: string;
   refreshStatements: typeof refreshStatements;
 }
-type PaginationSettings = {
-  pageSize: number;
-  current: number;
-};
 
 interface StatementsPageState {
   sortSetting: SortSetting;
@@ -212,12 +207,8 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
             </div>
           )}
         </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={this.filteredStatementsData().length}
+        <PaginationComponent
+          pagination={{ ...pagination, total: this.filteredStatementsData().length }}
           onChange={this.onChangePage}
           hideOnSinglePage={data.length === 0}
         />

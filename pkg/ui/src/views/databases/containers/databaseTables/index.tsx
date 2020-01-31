@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import tableIcon from "!!raw-loader!assets/tableIcon.svg";
-import _ from "lodash";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
+import { PaginationComponent } from "oss/src/components/pagination/pagination";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
@@ -23,7 +22,6 @@ import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, gran
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import "./databaseTables.styl";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -75,35 +73,45 @@ class DatabaseTableListEmpty extends React.Component {
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
 class DatabaseSummaryTables extends DatabaseSummaryBase {
-  totalSize() {
-    const tableInfos = this.props.tableInfos;
-    return _.sumBy(tableInfos, (ti) => ti.physicalSize);
+  state = {
+    pagination: {
+      pageSize: 20,
+      current: 1,
+    },
+  };
+
+  onChangePage = (current: number) => {
+    const { pagination } = this.state;
+    this.setState({ pagination: { ...pagination, current }});
   }
 
-  totalRangeCount() {
-    const tableInfos = this.props.tableInfos;
-    return _.sumBy(tableInfos, (ti) => ti.rangeCount);
+  getDatabaseSummaryData = (values: any) => {
+    const { pagination: { current, pageSize } } = this.state;
+    const currentDefault = current - 1;
+    const start = (currentDefault * pageSize);
+    const end = (currentDefault * pageSize + pageSize);
+    const data = values.slice(start, end);
+    return data;
   }
 
   render() {
+    const { pagination } = this.state;
     const { tableInfos, sortSetting } = this.props;
     const dbID = this.props.name;
-
     const numTables = tableInfos && tableInfos.length || 0;
-
     return (
       <div className="database-summary">
-        <SummaryCard>
-          <div className="database-summary-title">
-            <h2>{dbID}</h2>
-          </div>
+        <div className="database-summary-title">
+          <h2 className="base-heading">{dbID}</h2>
+        </div>
           <div className="l-columns">
             <div className="l-columns__left">
               <div className="database-summary-table sql-table">
                 {
                   (numTables === 0) ? <DatabaseTableListEmpty /> :
+                  <React.Fragment>
                     <DatabaseTableListSortedTable
-                      data={tableInfos}
+                      data={this.getDatabaseSummaryData(tableInfos)}
                       sortSetting={sortSetting}
                       onChangeSortSetting={(setting) => this.props.setSort(setting)}
                       columns={[
@@ -139,40 +147,32 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                           cell: (tableInfo) => tableInfo.numIndices,
                           sort: (tableInfo) => tableInfo.numIndices,
                         },
-                      ]} />
-                }
-              </div>
-            </div>
-            <div className="l-columns__right">
-              <SummaryBar>
-                <SummaryHeadlineStat
-                  title="Database Size"
-                  tooltip="Approximate total disk size of this database across all replicas."
-                  value={this.totalSize()}
-                  format={Bytes} />
-                <SummaryHeadlineStat
-                  title={(numTables === 1) ? "Table" : "Tables"}
-                  tooltip="The total number of tables in this database."
-                  value={numTables} />
-                <SummaryHeadlineStat
-                  title="Total Range Count"
-                  tooltip="The total ranges across all tables in this database."
-                  value={this.totalRangeCount()} />
-              </SummaryBar>
+                    ]} />
+                    <PaginationComponent
+                      pagination={{ ...pagination, total: numTables }}
+                      onChange={this.onChangePage}
+                    />
+                  </React.Fragment>
+              }
             </div>
           </div>
-        </SummaryCard>
+          {/* <div className="l-columns__right">
+            <SummaryBarContainer name={name} />
+          </div> */}
+        </div>
       </div>
     );
   }
 }
 
-const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => ({ // RootState contains declaration for whole state
-  tableInfos: selectTableInfos(state, ownProps.name),
-  sortSetting: databaseTablesSortSetting.selector(state),
-  dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
-  grants: grants(state, ownProps.name),
-});
+const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
+  return ({ // RootState contains declaration for whole state
+    tableInfos: selectTableInfos(state, ownProps.name),
+    sortSetting: databaseTablesSortSetting.selector(state),
+    dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
+    grants: grants(state, ownProps.name),
+  });
+};
 
 const mapDispatchToProps = {
   setSort: databaseTablesSortSetting.set,

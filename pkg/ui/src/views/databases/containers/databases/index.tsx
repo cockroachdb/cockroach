@@ -9,25 +9,21 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React from "react";
 import PropTypes from "prop-types";
+import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
-
+import { refreshDatabases } from "src/redux/apiReducers";
+import { AdminUIState } from "src/redux/state";
+import { Pick } from "src/util/pick";
+import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
+import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-
-import { AdminUIState } from "src/redux/state";
-import { refreshDatabases } from "src/redux/apiReducers";
-import { Pick } from "src/util/pick";
-
-import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";
-import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
-import NonTableSummary from "./nonTableSummary";
-
 import "./databases.styl";
+import NonTableSummary from "./nonTableSummary";
 
 const databasePages = [
   { value: "tables", label: "Tables" },
