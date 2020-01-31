@@ -62,7 +62,7 @@ func MakeTimeTZ(t timeofday.TimeOfDay, offsetSecs int32) TimeTZ {
 
 // MakeTimeTZFromLocation creates a TimeTZ from a TimeOfDay and time.Location.
 func MakeTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) TimeTZ {
-	_, zoneOffsetSecs := timeutil.Unix(0, 0).In(loc).Zone()
+	_, zoneOffsetSecs := timeutil.Now().In(loc).Zone()
 	return TimeTZ{TimeOfDay: t, OffsetSecs: -int32(zoneOffsetSecs)}
 }
 
