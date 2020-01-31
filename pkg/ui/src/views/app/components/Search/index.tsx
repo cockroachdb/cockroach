@@ -8,8 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, Form, Icon, Input } from "antd";
+import { Button, Form, Input } from "antd";
 import { InputProps } from "antd/lib/input";
+import CancelIcon from "assets/cancel.svg";
+import SearchIcon from "assets/search.svg";
 import React from "react";
 import "./search.styl";
 
@@ -59,7 +61,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const { value, submitted } = this.state;
     if (value.length > 0) {
       if (submitted) {
-        return <Button onClick={this.onClear} type="default" className="_clear-search" icon="close" />;
+        return <Button onClick={this.onClear} type="default" className="_clear-search"><img className="_suffix-icon" src={CancelIcon} /></Button>;
       }
       return <Button type="default" htmlType="submit" className="_submit-search">Enter</Button>;
     }
@@ -85,7 +87,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
             className={className}
             placeholder="Search Statement"
             onChange={this.onChange}
-            prefix={<Icon className="_prefix-icon" type="search" />}
+            prefix={<img className="_prefix-icon" src={SearchIcon} />}
             suffix={this.renderSuffix()}
             value={value}
             {...this.props}

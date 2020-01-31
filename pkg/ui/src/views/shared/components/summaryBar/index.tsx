@@ -58,7 +58,7 @@ function numberToString(n: number) {
   return n.toString();
 }
 
-function computeValue(value: number, format: (n: number) => string = numberToString) {
+export function formatNumberForDisplay(value: number, format: (n: number) => string = numberToString) {
   if (!_.isNumber(value)) {
     return "-";
   }
@@ -111,7 +111,7 @@ export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNod
   return (
     <SummaryValue
       title={props.title}
-      value={computeValue(props.value, props.format)}
+      value={formatNumberForDisplay(props.value, props.format)}
       classModifier="number"
     >
       {props.children}
@@ -150,7 +150,7 @@ export function SummaryStatBreakdown(props: SummaryStatBreakdownProps & {childre
         { props.title }
       </span>
       <span className="summary-stat-breakdown__value">
-        { computeValue(props.value, props.format) }
+        { formatNumberForDisplay(props.value, props.format) }
       </span>
     </div>
   </div>;
@@ -213,7 +213,7 @@ function aggregateLatestValuesFromMetrics(data?: TSResponse, aggregator?: Summar
 export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProps, {}> {
   render() {
     return <div className="summary-headline">
-      <div className="summary-headline__value">{computeValue(this.props.value, this.props.format)}</div>
+      <div className="summary-headline__value">{formatNumberForDisplay(this.props.value, this.props.format)}</div>
       <div className="summary-headline__title">
         {this.props.title}
         <div className="section-heading__tooltip">

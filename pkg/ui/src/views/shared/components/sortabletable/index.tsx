@@ -68,6 +68,7 @@ interface TableProps {
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
   drawer?: boolean;
+  firstCellBordered?: boolean;
 }
 
 export interface ExpandableConfig {
@@ -144,7 +145,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   renderRow = (rowIndex: number) => {
-    const { columns, expandableConfig, drawer } = this.props;
+    const { columns, expandableConfig, drawer, firstCellBordered } = this.props;
     const classes = classNames(
       "sort-table__row",
       "sort-table__row--body",
@@ -171,7 +172,7 @@ export class SortableTable extends React.Component<TableProps> {
         {expandableConfig ? this.expansionControl(expanded) : null}
         {_.map(columns, (c: SortableColumn, colIndex: number) => {
           return (
-            <td className={classNames("sort-table__cell", c.className)} key={colIndex}>
+            <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellBordered && colIndex === 0 }, c.className)} key={colIndex}>
               {c.cell(rowIndex)}
             </td>
           );
@@ -231,7 +232,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -256,9 +257,13 @@ export class SortableTable extends React.Component<TableProps> {
                     }
                   }
                 }
+                if (firstCellBordered && colIndex === 0) {
+                  classes.push("sort-table__cell--header");
+                }
                 return (
                   <th className={classNames(classes)} key={colIndex} onClick={onClick}>
                     {c.title}
+                    {!_.isUndefined(c.sortKey) && <span className="sortable__actions" />}
                   </th>
                 );
               })}
@@ -272,6 +277,12 @@ export class SortableTable extends React.Component<TableProps> {
           <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
             <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
           </DrawerComponent>
+        )}
+        {count === 0 && (
+          <div className="table__no-results">
+            <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
+            <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+          </div>
         )}
       </React.Fragment>
     );

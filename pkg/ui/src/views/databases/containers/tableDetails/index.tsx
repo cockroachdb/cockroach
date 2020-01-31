@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Highlight } from "oss/src/views/shared/components/sql/highlight";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -21,7 +22,6 @@ import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SqlBox } from "src/views/shared/components/sql/box";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
@@ -89,7 +89,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
           </div>
           <div className="content l-columns">
             <div className="l-columns__left">
-              <SqlBox value={ tableInfo.createStatement } />
+              <div className="box-highlight"><Highlight value={ tableInfo.createStatement } /></div>
               <div className="sql-table">
                 <GrantsSortedTable
                   data={tableInfo.grants}
@@ -134,7 +134,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
  *         SELECTORS
  */
 
-function selectTableInfo(state: AdminUIState, props: RouterState): TableInfo {
+export function selectTableInfo(state: AdminUIState, props: RouterState): TableInfo {
   const db = props.params[databaseNameAttr];
   const table = props.params[tableNameAttr];
   const details = state.cachedData.tableDetails[generateTableID(db, table)];

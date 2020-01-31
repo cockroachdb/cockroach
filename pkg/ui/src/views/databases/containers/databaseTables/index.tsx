@@ -10,6 +10,7 @@
 
 import tableIcon from "!!raw-loader!assets/tableIcon.svg";
 import _ from "lodash";
+import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
@@ -18,7 +19,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
 import { trustIcon } from "src/util/trust";
-import { databaseDetails, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
+import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos } from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
@@ -92,73 +93,75 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
 
     return (
       <div className="database-summary">
-        <div className="database-summary-title">
-          <h2 className="base-heading">{dbID}</h2>
-        </div>
-        <div className="l-columns">
-          <div className="l-columns__left">
-            <div className="database-summary-table sql-table">
-              {
-                (numTables === 0) ? <DatabaseTableListEmpty /> :
-                  <DatabaseTableListSortedTable
-                    data={tableInfos}
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
-                    columns={[
-                      {
-                        title: "Table Name",
-                        cell: (tableInfo) => {
-                          return (
-                            <div className="sort-table__unbounded-column">
-                              <Link to={`/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
-                            </div>
-                          );
+        <SummaryCard>
+          <div className="database-summary-title">
+            <h2>{dbID}</h2>
+          </div>
+          <div className="l-columns">
+            <div className="l-columns__left">
+              <div className="database-summary-table sql-table">
+                {
+                  (numTables === 0) ? <DatabaseTableListEmpty /> :
+                    <DatabaseTableListSortedTable
+                      data={tableInfos}
+                      sortSetting={sortSetting}
+                      onChangeSortSetting={(setting) => this.props.setSort(setting)}
+                      columns={[
+                        {
+                          title: "Table Name",
+                          cell: (tableInfo) => {
+                            return (
+                              <div className="sort-table__unbounded-column">
+                                <Link to={`/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
+                              </div>
+                            );
+                          },
+                          sort: (tableInfo) => tableInfo.name,
+                          className: "expand-link", // don't pad the td element to allow the link to expand
                         },
-                        sort: (tableInfo) => tableInfo.name,
-                        className: "expand-link", // don't pad the td element to allow the link to expand
-                      },
-                      {
-                        title: "Size",
-                        cell: (tableInfo) => Bytes(tableInfo.physicalSize),
-                        sort: (tableInfo) => tableInfo.physicalSize,
-                      },
-                      {
-                        title: "Ranges",
-                        cell: (tableInfo) => tableInfo.rangeCount,
-                        sort: (tableInfo) => tableInfo.rangeCount,
-                      },
-                      {
-                        title: "# of Columns",
-                        cell: (tableInfo) => tableInfo.numColumns,
-                        sort: (tableInfo) => tableInfo.numColumns,
-                      },
-                      {
-                        title: "# of Indices",
-                        cell: (tableInfo) => tableInfo.numIndices,
-                        sort: (tableInfo) => tableInfo.numIndices,
-                      },
-                    ]} />
-              }
+                        {
+                          title: "Size",
+                          cell: (tableInfo) => Bytes(tableInfo.physicalSize),
+                          sort: (tableInfo) => tableInfo.physicalSize,
+                        },
+                        {
+                          title: "Ranges",
+                          cell: (tableInfo) => tableInfo.rangeCount,
+                          sort: (tableInfo) => tableInfo.rangeCount,
+                        },
+                        {
+                          title: "# of Columns",
+                          cell: (tableInfo) => tableInfo.numColumns,
+                          sort: (tableInfo) => tableInfo.numColumns,
+                        },
+                        {
+                          title: "# of Indices",
+                          cell: (tableInfo) => tableInfo.numIndices,
+                          sort: (tableInfo) => tableInfo.numIndices,
+                        },
+                      ]} />
+                }
+              </div>
+            </div>
+            <div className="l-columns__right">
+              <SummaryBar>
+                <SummaryHeadlineStat
+                  title="Database Size"
+                  tooltip="Approximate total disk size of this database across all replicas."
+                  value={this.totalSize()}
+                  format={Bytes} />
+                <SummaryHeadlineStat
+                  title={(numTables === 1) ? "Table" : "Tables"}
+                  tooltip="The total number of tables in this database."
+                  value={numTables} />
+                <SummaryHeadlineStat
+                  title="Total Range Count"
+                  tooltip="The total ranges across all tables in this database."
+                  value={this.totalRangeCount()} />
+              </SummaryBar>
             </div>
           </div>
-          <div className="l-columns__right">
-            <SummaryBar>
-              <SummaryHeadlineStat
-                title="Database Size"
-                tooltip="Approximate total disk size of this database across all replicas."
-                value={this.totalSize()}
-                format={Bytes} />
-              <SummaryHeadlineStat
-                title={(numTables === 1) ? "Table" : "Tables"}
-                tooltip="The total number of tables in this database."
-                value={numTables} />
-              <SummaryHeadlineStat
-                title="Total Range Count"
-                tooltip="The total ranges across all tables in this database."
-                value={this.totalRangeCount()} />
-            </SummaryBar>
-          </div>
-        </div>
+        </SummaryCard>
       </div>
     );
   }

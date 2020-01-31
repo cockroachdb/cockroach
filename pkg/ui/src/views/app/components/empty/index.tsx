@@ -8,18 +8,33 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Button } from "antd";
 import React from "react";
-import NoResults from "assets/no-results.png";
+import heroBannerLp from "assets/heroBannerLp.png";
 import "./styles.styl";
 
-interface IEmptyProps {
+export interface IEmptyProps {
+  title?: string;
   description?: string;
+  button?: React.ReactNode;
+  buttonHref?: string;
+  backgroundImage?: string;
 }
 
-// tslint:disable-next-line: variable-name
-export const Empty: React.SFC <IEmptyProps> = ({ description = "No Data" }) => (
-  <div className="Empty">
-    <img src={NoResults} />
-    <p className="Empty__label">{description}</p>
-  </div>
-);
+export default function Empty (props: IEmptyProps) {
+  const {
+    title = "No results",
+    description,
+    button = "Learn more",
+    backgroundImage = heroBannerLp,
+    buttonHref = "https://www.cockroachlabs.com/docs/stable/",
+  } = props;
+  return (
+    <div className="empty-container">
+      <h2 className="empty-container__title">{title}</h2>
+      {description && <p className="empty-container__description">{description}</p>}
+      <Button target="_blank" href={buttonHref} className="empty-container__button" type="primary">{button}</Button>
+      <img className="empty-container__background" src={backgroundImage} alt="Empty screen" />
+    </div>
+  );
+}

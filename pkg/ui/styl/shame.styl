@@ -12,9 +12,6 @@
 // react-select's css file uses rules with extremely high specificity, making
 // numerous !important statements necessary.
 // @stylint off
-.has-value.Select--single > .Select-control .Select-value .Select-value-label,
-.has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
-  color $link-color !important
 
 .Select-option
   padding 10px 25px !important
@@ -27,6 +24,7 @@
   position relative !important
   white-space nowrap !important
   max-width 250px !important
+  padding 0 0 0 3px !important
 
 .Select-control
   line-height inherit !important
@@ -67,7 +65,7 @@
   cursor pointer
 
 .Select-arrow
-  border-top-color $link-color !important
+  border-top-color $adminui-grey-1 !important
 
 .Select
   display block
@@ -337,3 +335,176 @@
       color $blue
     &--yellow
       color $yellow
+
+.ant-pagination
+  display flex
+  justify-content center
+  align-items flex-end
+  margin 40px 0
+  &.mini
+    .ant-pagination-item, .ant-pagination-prev, .ant-pagination-next
+      margin 0 5px
+  .ant-pagination-item
+    a
+      color $body-color
+      font-size 14px
+      font-family Lato-Medium
+      &:hover
+        color $link-color
+  .ant-pagination-item-active
+    background transparent
+    border-radius 2px
+    border 1px solid $link-color
+    a
+      color $link-color
+  .ant-pagination-next, .ant-pagination-prev
+    .ant-pagination-item-link
+      font-size 12px
+      color $body-color
+    &:hover
+      .ant-pagination-item-link
+        color $link-color
+    &.ant-pagination-disabled
+      .ant-pagination-item-link
+        color #b8bbbc
+      &:hover
+        .ant-pagination-item-link
+          color #b8bbbc
+
+.tooltip__preset--white
+  max-width 500px
+  .ant-tooltip-content
+    position relative
+    &:after, &:before
+      content ''
+      display block;
+      position absolute;
+      width 0
+      height 0
+      transform translate(-50%, 0)
+      left 50%
+      border-style solid
+    &:after
+      top -19px
+      border-color transparent transparent #fff transparent
+      border-width 10px
+    &:before
+      top -21px
+      border-color transparent transparent $popover-border-color transparent
+      border-width 10px
+  .ant-tooltip-arrow
+    &:before
+      background-color transparent
+  .ant-tooltip-inner
+    padding 10px
+    border-radius 3px
+    border solid 1px $popover-border-color
+    box-shadow 0 4px 4px 0 rgba(0, 0, 0, 0.15)
+    background rgba(255, 255, 255, .98)
+    font-family Lato-Regular
+    text-align left
+    color $body-color
+.drawer--preset-black
+  display flex
+  align-items center
+  /* width */
+  ::-webkit-scrollbar {
+    width 7px
+  }
+
+  /* Track */
+  ::-webkit-scrollbar-track {
+    background transparent
+    border-radius 10px
+  }
+
+  /* Handle */
+  ::-webkit-scrollbar-thumb {
+    background #5f6c87
+    border-radius 10px
+  }
+
+  /* Handle on hover */
+  ::-webkit-scrollbar-thumb:hover {
+    background #5f6c87ad
+  }
+  .ant-divider
+    width 1px
+    background #5f6c87
+    margin: 0 15px
+    height 14px
+  .__actions
+    button, a
+      width auto
+      color #f6f6f6
+      font-size 12px
+      font-family Lato-Bold
+      line-height 2
+      letter-spacing 0.1px
+      &:hover
+        color #5f6c87
+  .ant-drawer-content
+    overflow auto
+  .ant-drawer-mask
+    background-color transparent
+  .ant-drawer-content-wrapper
+    padding-left 80px
+    box-shadow none !important
+  .ant-drawer-content
+    background #242a35
+  .ant-drawer-header
+    padding 15px 0
+    margin 0 24px
+    background transparent
+    border-bottom: 1px solid #5f6c87;
+  .ant-drawer-body
+    padding 15px 20px
+    margin 0 4px
+    height 190px
+    overflow-x hidde
+    overflow-y auto
+  .drawer__content
+    color #f6f6f6
+    font-family RobotoMono-Regular
+    font-size 12px
+    line-height 24px
+    ._text-bold
+      color #87beff
+      font-family RobotoMono-Bold
+
+.cockroach--tabs
+  .ant-tabs-bar
+    border-bottom 1px solid $grey2
+  .ant-tabs-tab
+    font-family SourceSansPro-Regular
+    font-size 16px
+    line-height 1.5
+    letter-spacing normal
+    color $placeholder
+    &:hover
+      color $adminui-grey-1 
+  .ant-tabs-tab-active
+    color $adminui-grey-1 
+  .ant-tabs-ink-bar
+    height 3px
+    border-radius 40px
+    background-color $blue
+
+.page--header
+  &__titile
+    margin-bottom 25px
+  &__back-btn
+    margin-bottom 17px
+    font-family Roboto-Regular
+    font-size 12px
+    line-height 1.67
+    letter-spacing 0.3px
+    color $popover-color
+    a
+      text-decoration underline
+      text-transform none
+      font-family Roboto-Regular
+      font-size 12px
+      line-height 1.67
+      letter-spacing 0.3px
+      color $popover-color
