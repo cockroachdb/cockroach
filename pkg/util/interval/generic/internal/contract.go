@@ -18,6 +18,7 @@ type T = interface {
 	EndKey() []byte
 	String() string
 	// Used for testing only.
+	New() T
 	SetID(uint64)
 	SetKey([]byte)
 	SetEndKey([]byte)
