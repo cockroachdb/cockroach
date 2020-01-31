@@ -27,7 +27,7 @@ interface ReduxDebugState {
   copied: boolean;
 }
 
-class ReduxDebug extends React.Component<ReduxDebugProps, ReduxDebugState> {
+export class ReduxDebug extends React.Component<ReduxDebugProps, ReduxDebugState> {
   constructor(props: any) {
     super(props);
     this.state = { copied: false };

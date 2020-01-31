@@ -14,7 +14,6 @@ import { Link, withRouter } from "react-router-dom";
 import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import "./events.styl";
 
@@ -177,13 +176,9 @@ const eventBoxConnected = withRouter(connect(
       eventsValid: eventsValidSelector(state),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshEvents,
-      },
-      dispatch,
-    ),
+  {
+    refreshEvents,
+  },
 )(EventBoxUnconnected));
 
 // Connect the EventsList class with our redux store.
@@ -195,14 +190,10 @@ const eventPageConnected = withRouter(connect(
       sortSetting: eventsSortSetting.selector(state),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshEvents,
-        setSort: eventsSortSetting.set,
-      },
-      dispatch,
-    ),
+  {
+    refreshEvents,
+    setSort: eventsSortSetting.set,
+  },
 )(EventPageUnconnected));
 
 export { eventBoxConnected as EventBox };

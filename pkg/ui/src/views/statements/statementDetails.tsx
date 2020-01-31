@@ -80,7 +80,6 @@ interface StatementDetailsOwnProps {
   nodeNames: { [nodeId: string]: string };
   refreshStatements: typeof refreshStatements;
   nodesSummary: NodesSummary;
-  router: InjectedRouter;
 }
 
 type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
@@ -141,7 +140,7 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   }
 }
 
-class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
+export class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
 
   constructor(props: StatementDetailsProps) {
     super(props);
@@ -167,7 +166,7 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
     this.props.refreshStatements();
   }
 
-  prevPage = () => this.props.router.goBack();
+  prevPage = () => this.props.history.goBack();
 
   render() {
     const app = getMatchParamByName(this.props.match, appAttr);

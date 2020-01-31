@@ -11,9 +11,8 @@
 import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Action, Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
-import { RouteComponentProps } from "react-router-dom";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
@@ -125,21 +124,17 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const logsConnected = connect(
+const logsConnected = withRouter(connect(
   (state: AdminUIState, ownProps: RouteComponentProps) => {
     return {
       logs: state.cachedData.logs,
       currentNode: currentNode(state, ownProps),
     };
   },
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshLogs,
-        refreshNodes,
-      },
-      dispatch,
-    ),
-)(Logs);
+  {
+    refreshLogs,
+    refreshNodes,
+  },
+)(Logs));
 
 export default logsConnected;

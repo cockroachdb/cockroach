@@ -13,7 +13,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import { Dispatch, Action, bindActionCreators } from "redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";

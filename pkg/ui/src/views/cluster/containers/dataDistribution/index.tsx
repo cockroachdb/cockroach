@@ -14,7 +14,6 @@ import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import Helmet from "react-helmet";
 import { withRouter } from "react-router-dom";
-import { Action, bindActionCreators, Dispatch } from "redux";
 
 import Loading from "src/views/shared/components/loading";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -213,15 +212,11 @@ const DataDistributionPageConnected = withRouter(connect(
     localityTree: selectLocalityTree(state),
     localityTreeErrors: localityTreeErrors(state),
   }),
-  (dispatch: Dispatch<Action, AdminUIState>) =>
-    bindActionCreators(
-      {
-        refreshDataDistribution,
-        refreshNodes,
-        refreshLiveness,
-      },
-      dispatch,
-    ),
+  {
+    refreshDataDistribution,
+    refreshNodes,
+    refreshLiveness,
+  },
 )(DataDistributionPage));
 
 export default DataDistributionPageConnected;

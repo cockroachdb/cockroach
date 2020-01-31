@@ -13,7 +13,6 @@ import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { bindActionCreators } from "redux";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
@@ -169,14 +168,11 @@ const LoginPageConnected = withRouter(connect(
       location: state.router.location,
     };
   },
-  dispatch => bindActionCreators(
-    {
-      handleLogin: (username: string, password: string) => {
-        return dispatch(doLogin(username, password));
-      },
+  (dispatch) => ({
+    handleLogin: (username: string, password: string) => {
+      return dispatch(doLogin(username, password));
     },
-    dispatch,
-  ),
+  }),
 )(LoginPage));
 
 export default LoginPageConnected;

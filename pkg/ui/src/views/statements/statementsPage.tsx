@@ -13,7 +13,6 @@ import _ from "lodash";
 import moment from "moment";
 import React from "react";
 import Helmet from "react-helmet";
-import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -60,7 +59,7 @@ interface StatementsPageState {
   search?: string;
 }
 
-class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
+export class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
 
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
@@ -379,6 +378,6 @@ const StatementsPageConnected = withRouter(connect(
   {
     refreshStatements,
   },
-)(StatementsPage);
+)(StatementsPage));
 
 export default StatementsPageConnected;
