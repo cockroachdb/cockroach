@@ -350,56 +350,12 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
 		if batch != nil {
+			// Reset the stats.
 			*ms = goldenMS
 			batch.Close()
 		}
-		batch = r.store.Engine().NewBatch()
 		var opLogger *engine.OpLoggerBatch
-		if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
-			// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
-			// cluster setting we'll need a way to turn this on when any
-			// replica (not just the leaseholder) wants it and off when no
-			// replicas want it. This turns out to be pretty involved.
-			//
-			// The current plan is to:
-			// - create a range-id local key that stores all replicas that are
-			//   subscribed to logical operations, along with their corresponding
-			//   liveness epoch.
-			// - create a new command that adds or subtracts replicas from this
-			//   structure. The command will be a write across the entire replica
-			//   span so that it is serialized with all writes.
-			// - each replica will add itself to this set when it first needs
-			//   logical ops. It will then wait until it sees the replicated command
-			//   that added itself pop out through Raft so that it knows all
-			//   commands that are missing logical ops are gone.
-			// - It will then proceed as normal, relying on the logical ops to
-			//   always be included on the raft commands. When its no longer
-			//   needs logical ops, it will remove itself from the set.
-			// - The leaseholder will have a new queue to detect registered
-			//   replicas that are no longer live and remove them from the
-			//   set to prevent "leaking" subscriptions.
-			// - The condition here to add logical logging will be:
-			//     if len(replicaState.logicalOpsSubs) > 0 { ... }
-			//
-			// An alternative to this is the reduce the cost of the including
-			// the logical op log to a negligible amount such that it can be
-			// included on all raft commands, regardless of whether any replica
-			// has a rangefeed running or not.
-			//
-			// Another alternative is to make the setting table/zone-scoped
-			// instead of a fine-grained per-replica state.
-			opLogger = engine.NewOpLoggerBatch(batch)
-			batch = opLogger
-		}
-		if util.RaceEnabled {
-			// During writes we may encounter a versioned value newer than the request
-			// timestamp, and may have to retry at a higher timestamp. This is still
-			// safe as we're only ever writing at timestamps higher than the timestamp
-			// any write latch would be declared at. But because of this, we don't
-			// assert on access timestamps using spanset.NewBatchAt.
-			batch = spanset.NewBatch(batch, spans)
-		}
-
+		batch, opLogger = r.newBatchedEngine(spans)
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
@@ -418,7 +374,61 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 		}
 		break
 	}
-	return
+	return batch, br, res, pErr
+}
+
+// newBatchedEngine creates and engine.Batch. Depending on whether rangefeeds
+// are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
+// OpLogger is attached to the returned engine.Batch, recording all operations.
+// Its recording should be attached to the Result of request evaluation.
+func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (engine.Batch, *engine.OpLoggerBatch) {
+	batch := r.store.Engine().NewBatch()
+	var opLogger *engine.OpLoggerBatch
+	if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
+		// cluster setting we'll need a way to turn this on when any
+		// replica (not just the leaseholder) wants it and off when no
+		// replicas want it. This turns out to be pretty involved.
+		//
+		// The current plan is to:
+		// - create a range-id local key that stores all replicas that are
+		//   subscribed to logical operations, along with their corresponding
+		//   liveness epoch.
+		// - create a new command that adds or subtracts replicas from this
+		//   structure. The command will be a write across the entire replica
+		//   span so that it is serialized with all writes.
+		// - each replica will add itself to this set when it first needs
+		//   logical ops. It will then wait until it sees the replicated command
+		//   that added itself pop out through Raft so that it knows all
+		//   commands that are missing logical ops are gone.
+		// - It will then proceed as normal, relying on the logical ops to
+		//   always be included on the raft commands. When its no longer
+		//   needs logical ops, it will remove itself from the set.
+		// - The leaseholder will have a new queue to detect registered
+		//   replicas that are no longer live and remove them from the
+		//   set to prevent "leaking" subscriptions.
+		// - The condition here to add logical logging will be:
+		//     if len(replicaState.logicalOpsSubs) > 0 { ... }
+		//
+		// An alternative to this is the reduce the cost of the including
+		// the logical op log to a negligible amount such that it can be
+		// included on all raft commands, regardless of whether any replica
+		// has a rangefeed running or not.
+		//
+		// Another alternative is to make the setting table/zone-scoped
+		// instead of a fine-grained per-replica state.
+		opLogger = engine.NewOpLoggerBatch(batch)
+		batch = opLogger
+	}
+	if util.RaceEnabled {
+		// During writes we may encounter a versioned value newer than the request
+		// timestamp, and may have to retry at a higher timestamp. This is still
+		// safe as we're only ever writing at timestamps higher than the timestamp
+		// any write latch would be declared at. But because of this, we don't
+		// assert on access timestamps using spanset.NewBatchAt.
+		batch = spanset.NewBatch(batch, spans)
+	}
+	return batch, opLogger
 }
 
 // isOnePhaseCommit returns true iff the BatchRequest contains all writes in the
