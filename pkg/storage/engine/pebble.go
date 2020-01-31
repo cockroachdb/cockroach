@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
@@ -326,10 +327,22 @@ type Pebble struct {
 
 var _ Engine = &Pebble{}
 
+// A call to NewPebble may initialize an encrypted FS. GetEngineFS uses a
+// previously initialized encrypted FS, if any.
+type encryptedFS struct {
+	syncutil.Mutex
+	fs vfs.FS
+}
+
+var pebbleEncryptedFS encryptedFS
+
 // NewEncryptedEnvFunc creates an encrypted environment and returns the vfs.FS to use for reading
 // and writing data. This should be initialized by calling engineccl.Init() before calling
 // NewPebble(). The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
+//
+// Must be called at most once for each fs since each file system can only have one set of
+// registry files.
 var NewEncryptedEnvFunc func(fs vfs.FS, fr *PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte) (vfs.FS, EncryptionStatsHandler, error)
 
 // NewPebble creates a new Pebble instance, at the specified path.
@@ -388,6 +401,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		if err != nil {
 			return nil, err
 		}
+		pebbleEncryptedFS.Lock()
+		pebbleEncryptedFS.fs = cfg.Opts.FS
+		pebbleEncryptedFS.Unlock()
 	}
 
 	// The context dance here is done so that we have a clean context without
@@ -414,6 +430,25 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		fs:           cfg.Opts.FS,
 		logger:       cfg.Opts.Logger,
 	}, nil
+}
+
+// GetEngineFS returns an engine.FS. If the fs parameter is not nil, it is
+// used in constructing the engine.FS.
+func GetEngineFS(fs vfs.FS) FS {
+	// Leaving the path field empty activates the hack in CreateFile() which
+	// we don't want more test code to rely on. So we set the path to an
+	// arbitrary value.
+	path := "x"
+	if fs != nil {
+		return &Pebble{fs: fs, path: path}
+	}
+	pebbleEncryptedFS.Lock()
+	defer pebbleEncryptedFS.Unlock()
+	fs = pebbleEncryptedFS.fs
+	if fs == nil {
+		fs = vfs.Default
+	}
+	return &Pebble{fs: fs, path: path}
 }
 
 func newTeeInMem(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) *TeeEngine {
@@ -857,6 +892,7 @@ func (p *Pebble) LinkFile(oldname, newname string) error {
 	return p.fs.Link(oldname, newname)
 }
 
+// The FS implementation only uses Pebble.FS and Pebble.path.
 var _ FS = &Pebble{}
 
 // CreateFile implements the FS interface.
