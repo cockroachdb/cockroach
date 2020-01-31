@@ -13,7 +13,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -65,6 +64,11 @@ func TestDiskQueue(t *testing.T) {
 				q, err := colcontainer.NewDiskQueue(typs, queueCfg)
 				require.NoError(t, err)
 
+				// Verify that a directory was created.
+				directories, err := queueCfg.FS.List(queueCfg.Path)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(directories))
+
 				// Run verification.
 				ctx := context.Background()
 				for {
@@ -108,13 +112,9 @@ func TestDiskQueue(t *testing.T) {
 				require.NoError(t, q.Close())
 
 				// Verify no directories are left over.
-				files, err := queueCfg.FS.List(queueCfg.Path)
+				directories, err = queueCfg.FS.List(queueCfg.Path)
 				require.NoError(t, err)
-				for _, f := range files {
-					if strings.HasPrefix(f, queueCfg.Dir) {
-						t.Fatal("files left over after disk queue test")
-					}
-				}
+				require.Equal(t, 0, len(directories))
 			})
 		}
 	}

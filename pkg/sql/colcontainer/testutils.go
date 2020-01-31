@@ -35,6 +35,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func(), err
 		if err := fs.MkdirAll(inMemDirName, 0755); err != nil {
 			t.Fatal(err)
 		}
+		path = inMemDirName
 	} else {
 		fs = vfs.Default
 		path, cleanup = testutils.TempDir(t)
