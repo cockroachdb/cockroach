@@ -102,7 +102,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 			sel[i] = uint16(i)
 		}
 	}
-	source := NewRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 
 	plusOp := &projPlusInt64Int64ConstOp{
@@ -336,7 +336,7 @@ func benchmarkProjOp(
 			sel[i] = i
 		}
 	}
-	source := NewRepeatableBatchSource(batch)
+	source := NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 
 	op := makeProjOp(source, intType)
