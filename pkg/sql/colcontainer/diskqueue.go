@@ -227,7 +227,11 @@ type DiskQueueCfg struct {
 }
 
 // EnsureDefaults ensures that optional fields are set to reasonable defaults.
-func (cfg *DiskQueueCfg) EnsureDefaults() {
+// If any necessary options have been elided, an error is returned.
+func (cfg *DiskQueueCfg) EnsureDefaults() error {
+	if cfg.FS == nil {
+		return errors.New("FS unset on DiskQueueCfg")
+	}
 	// An unset Path is allowed. A random directory name will be generated if
 	// unset.
 	if cfg.Dir == "" {
@@ -239,11 +243,14 @@ func (cfg *DiskQueueCfg) EnsureDefaults() {
 	if cfg.MaxFileSizeBytes == 0 {
 		cfg.MaxFileSizeBytes = defaultMaxFileSizeBytes
 	}
+	return nil
 }
 
 // NewDiskQueue creates a Queue that spills to disk.
 func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
-	cfg.EnsureDefaults()
+	if err := cfg.EnsureDefaults(); err != nil {
+		return nil, err
+	}
 	d := &diskQueue{
 		typs:  typs,
 		cfg:   cfg,
