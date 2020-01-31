@@ -8,22 +8,38 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import * as hljs from "highlight.js";
 import React from "react";
-import { Highlight } from "./highlight";
-import "./sqlhighlight.styl";
 
 interface SqlBoxProps {
   value: string;
 }
-class SqlBox extends React.Component<SqlBoxProps> {
+
+export class Highlight extends React.Component<SqlBoxProps> {
+
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
+
+  shouldComponentUpdate(newProps: SqlBoxProps) {
+    return newProps.value !== this.props.value;
+  }
+
+  componentDidMount() {
+    hljs.configure({
+      tabReplace: "  ",
+    });
+    hljs.highlightBlock(this.preNode.current);
+  }
+
+  componentDidUpdate() {
+    hljs.highlightBlock(this.preNode.current);
+  }
+
   render() {
     const { value } = this.props;
     return (
-      <div className="box-highlight">
-        <Highlight value={value} />
-      </div>
+      <span className="sql-highlight" ref={this.preNode}>
+        {value}
+      </span>
     );
   }
 }
-export default SqlBox;

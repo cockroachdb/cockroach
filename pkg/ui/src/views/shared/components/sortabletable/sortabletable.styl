@@ -14,28 +14,50 @@
 .sort-table
   @extend $table-base
 
+  .sort-table__cell--header
+    border-right 1px solid $table-border
+    width 250px
+
   &__row--header
+    background-color $background-color
+    border-bottom 1px solid $table-border
     // Display the sort direction arrow in header cells.
     .sort-table__cell
-      padding 18px 20px
-      color $tooltip-color
-
-      &--sortable:after
-        display inline-block
-        width 20px
-        line-height 12px
-        font-size 10px
-        vertical-align middle
-        text-align center
-        content "▼"
+      position relative
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.17
+      letter-spacing 1.5px
+      color $placeholder
+      .sortable__actions
+        position relative
+        padding 11px
+        &:after, &:before
+          content ""
+          position absolute
+          right 5px
+          width 0
+          height 0
+          border-style solid
+        &:after
+          top 12px
+          border-width 0 3px 3.8px 3px
+          border-color transparent transparent $grey-light transparent
+        &:before
+          bottom 12px
+          border-width 3.8px 3px 0 3px;
+          border-color $grey-light transparent transparent transparent
 
       &--descending
         color $body-color
+        .sortable__actions:before
+          border-color $blue transparent transparent transparent
 
       &--ascending
         color $body-color
-        &:after
-          content "▲"
+        .sortable__actions:after
+          border-color transparent transparent $blue transparent
 
   &__unbounded-column
     white-space normal
@@ -43,17 +65,15 @@
 
   &__row
     border-top 1px solid transparent
+    border-bottom 1px solid $table-border 
     &.drawer-active
-      border 1px solid #3a7ce1
-      .sort-table__cell
-        &:last-child
-          border-right 1px solid #3a7ce1
+      background-color $background-color
+      .statement__tooltip
+        color $main-blue-color
+        text-decoration underline
     &--expandable
       border-top: none
       cursor pointer
-
-    &--expanded-area
-      background-color #E2E5EE !important // TODO(vilterp): palette-ize
 
   &__cell__expansion-control
     -webkit-user-select: none; /* Safari */
@@ -63,3 +83,21 @@
 
     div
       width 15px
+
+.table__no-results
+  display flex
+  justify-content center
+  align-items center
+  flex-direction column
+  padding 75px 0 60px
+  p
+    font-family SourceSansPro-Regular
+    font-size 16px
+    line-height 1.5
+    color $adminui-grey-1
+  a
+    font-family SourceSansPro-Regular
+    font-size 14px
+    line-height 1.57
+    letter-spacing 0.1px
+    color $blue

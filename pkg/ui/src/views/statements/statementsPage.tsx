@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination, Tooltip } from "antd";
+import { Icon, Pagination } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import React from "react";
@@ -31,6 +31,7 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
+import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
 import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
@@ -120,21 +121,17 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
     switch (type) {
       case "jump-prev":
         return (
-          <Tooltip placement="bottom" title="Previous 5 pages">
-            <div className="_pg-jump">
-              <Icon type="left" />
-              <span className="_jump-dots">•••</span>
-            </div>
-          </Tooltip>
+          <div className="_pg-jump">
+            <Icon type="left" />
+            <span className="_jump-dots">•••</span>
+          </div>
         );
       case "jump-next":
         return (
-          <Tooltip placement="bottom" title="Next 5 pages">
-            <div className="_pg-jump">
-              <Icon type="right" />
-              <span className="_jump-dots">•••</span>
-            </div>
-          </Tooltip>
+          <div className="_pg-jump">
+            <Icon type="right" />
+            <span className="_jump-dots">•••</span>
+          </div>
         );
       default:
         return originalElement;
@@ -168,7 +165,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
     const selectedApp = this.props.params[appAttr] || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
-
+    const data = this.getStatementsData();
     return (
       <React.Fragment>
         <PageConfig>
@@ -196,14 +193,24 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
               {this.renderLastCleared()}
             </h4>
           </div>
-          <StatementsSortedTable
-            className="statements-table"
-            data={this.getStatementsData()}
-            columns={makeStatementsColumns(statements, selectedApp, search)}
-            sortSetting={this.state.sortSetting}
-            onChangeSortSetting={this.changeSortSetting}
-            drawer
-          />
+          {data.length === 0 && search.length === 0 && (
+            <Empty
+              title="This page helps you identify frequently executed or high latency SQL statements."
+              description="No SQL statements were executed since this page was last cleared."
+              buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
+            />
+          )}
+          {(data.length > 0 || search.length > 0) && (
+            <div className="statements-table-wrapper">
+              <StatementsSortedTable
+                className="statements-table"
+                data={data}
+                columns={makeStatementsColumns(statements, selectedApp, search)}
+                sortSetting={this.state.sortSetting}
+                onChangeSortSetting={this.changeSortSetting}
+              />
+            </div>
+          )}
         </section>
         <Pagination
           size="small"
@@ -212,6 +219,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteP
           current={pagination.current}
           total={this.filteredStatementsData().length}
           onChange={this.onChangePage}
+          hideOnSinglePage={data.length === 0}
         />
       </React.Fragment>
     );

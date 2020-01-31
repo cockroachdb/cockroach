@@ -8,14 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import _ from "lodash";
 import * as Long from "long";
 import { Moment } from "moment";
+import React from "react";
 import { createSelector } from "reselect";
-
-import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
-import { ExpandableConfig } from "src/views/shared/components/sortabletable";
+import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
 
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
@@ -73,6 +71,7 @@ interface SortedTableProps<T> {
     expansionKey: (obj: T) => string;
   };
   drawer?: boolean;
+  firstCellBordered?: boolean;
 }
 
 interface SortedTableState {
@@ -191,8 +190,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, sortSetting, onChangeSortSetting } = this.props;
-
+    const { data, sortSetting, onChangeSortSetting, firstCellBordered } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
       expandableConfig = {
@@ -213,6 +211,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           className={this.props.className}
           expandableConfig={expandableConfig}
           drawer={this.props.drawer}
+          firstCellBordered={firstCellBordered}
         />
       );
     }

@@ -27,11 +27,13 @@
   color $link-color
 
 .statement-count-title, .last-cleared-title
-  font-family Lato-Regular
+  font-family SourceSansPro-Regular
   font-size 14px
   padding 0px
   margin 0px
-  color $body-color
+  color $placeholder
+  line-height 1.57
+  letter-spacing 0.1px
   .label
     font-family Lato-Bold
     color #394455
@@ -92,48 +94,77 @@
 
 .statements-table__col-rows, .statements-table__col-latency
   .bar-chart
-    width 140px
+    min-width 180px
 
 .statements-table__col-count, .statements-table__col-retries, .statements-table__col-rows
   .bar-chart
-    margin-left 3em
+    margin-left 0
 
     .label
-      left -3em
-      width 2.5em
+      left 0
+      width 40px
 
 .bar-chart
   height 14px
-  margin-left 5em
   position relative
-
+  display flex
+  align-items center
+  flex-direction row
+  > span
+    width 100%
+    display flex
+    align-items center
+    flex-direction row
+    
+  &__multiplebars
+    width calc(100% - 75px)
+    border-radius 3px
+    position relative
+    display flex
+    align-items center
+  
   .label
-    position absolute
-    left -5em
-    width 4.5em
-    text-align right
-    top -2px
+    position relative
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.83
+    color $adminui-grey-1
+    width 75px
 
   &__bar
     display inline-block
-    height 14px
+    height 13px
+    border-radius 3px
 
     &--dev
       position absolute
       height 3px
-      top 6px
+
+  .count-first-try, .count-total, .count-retry, .count-max-retries
+    border-radius 3px
+    position absolute
+    left 40px
 
   .count-first-try, .count-total
-    background-color $link-color
-
+    background-color $grey-light
   .count-retry, .count-max-retries
     background-color $alert-color
 
-  .rows, .latency-parse, .latency-plan, .latency-run, .latency-overhead, .latency-overall
-    background-color $link-color
+  .rows
+    background-color $grey-light
+    border-radius 3px
 
-  .rows-dev, .latency-parse-dev, .latency-plan-dev, .latency-run-dev, .latency-overhead-dev, .latency-overall-dev
-    background-color $warning-color
+  .rows-dev
+    background-color $blue
+
+  .latency-parse, .latency-plan, .latency-run, .latency-overhead, .latency-overall
+    background-color $grey-light
+
+  .latency-parse-dev, .latency-plan-dev, .latency-run-dev, .latency-overhead-dev
+    background-color $blue
+
+  .latency-overall-dev
+    background-color $blue
 
 .numeric-stats-table
   @extend $table-base
@@ -147,56 +178,66 @@
 
 .numeric-stat-legend
   white-space nowrap
+  width 282px
+  font-family SourceSansPro-SemiBold
+  font-size 12px
+  line-height 1.67
+  letter-spacing 0.3px
+  color $adminui-grey-1
+  font-weight 600
 
   th
     position relative
-    padding-left 24px
-    padding-right 5px
+    display flex
+    align-items center
 
   td
     text-align right
 
   &__bar
-    position absolute
-    width 21px
-    left 0
+    width 41px
+    border-radius 10px
+    margin-right 14px
 
     &--mean
-      height 14px
-      top 2px
-      background-color $link-color
+      height 13px
+      background-color $grey-light
 
     &--dev
       height 3px
-      top 8px
-      background-color $warning-color
+      background-color $blue
 
 $plan-node-line-color = #DADADA                                 // connecting line: light gray
-$plan-node-warning-color = #D18737                              // dark orange
+$plan-node-warning-color = #b26000                              // dark orange
 $plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
 $plan-node-warning-border-color = rgba(209, 135, 55, 0.3)       // dark orange 2
 $plan-node-details-background-color = #F6F6F6                   // grayish-white
 $plan-node-details-border-color = #ACB8CB                       // dark gray
-$plan-node-attribute-key-color = #5cc123                        // light green
+$plan-node-attribute-key-color = #37a806                        // light green
 
 .plan-view-table
   @extend $table-base
+  .plan-view-table__cell
+    padding 0
+  .summary--card__title
+    font-size 16px
+    display inline-block
+    margin-bottom 10px
+    padding 0
+    text-transform none
   &__row
     &--body
-      border-top $table-cell-border
-      &:nth-child(odd)
-        background-color $stats-table-tr--bg
-
+      border-top none
+      &:hover
+        background-color $adminui-white
   &__tooltip
-    width 520px
-
     .hover-tooltip__text
       width 520px
+      margin-left 15px
 
 .plan-view
   color $body-color
   position relative
-  padding-left 6px
 
   .plan-view-container
     height 100%
@@ -215,8 +256,8 @@ $plan-node-attribute-key-color = #5cc123                        // light green
       font-size smaller
 
   .node-icon
-    margin 0 10px 0 12px
-
+    margin 0 10px 0 0
+    color $grey-light
   .warning-icon
     margin 0 4px 0 4px
     position relative
@@ -235,16 +276,24 @@ $plan-node-attribute-key-color = #5cc123                        // light green
   .nodeDetails
     position relative
     padding 6px 0
-    margin 2px 0
     border 1px solid transparent
+    b
+      font-family SourceSansPro-SemiBold
+      font-size 12px
+      font-weight 600
+      line-height 1.67
+      letter-spacing 0.3px
+      color $text-color
 
   .nodeAttributes
-    color $body-color
+    color $adminui-grey-2
     padding 7px 16px 0px 18px
-    margin-left 16px
-    border-left 1px solid $plan-node-line-color
-    background-color white
-    font-family Inconsolata-Regular, monospace
+    margin-left 3px
+    border-left 1px solid $grey-light
+    font-family RobotoMono-Medium
+    font-size 12px
+    font-weight 500
+    line-height 1.83
 
     .nodeAttributeKey
       color $plan-node-attribute-key-color
@@ -263,37 +312,62 @@ $plan-node-attribute-key-color = #5cc123                        // light green
         content ''
         width 1px
         height 19px
-        background-color $plan-node-line-color
+        background-color $grey-light
         position absolute
         top -10px
-        left 17px
+        left 4px
 
       ul
-        padding-left 40px
-
+        padding-left 27px
+        position relative
+        &:last-child
+          &:before
+            content ''
+            width 28px
+            height 29px
+            position absolute
+            border-left 1px solid $grey-light
+            border-bottom 1px solid $grey-light
+            top -10px
+            left 4px
+            border-bottom-left-radius 10px
+          li
+            &:before
+              content none
+            &:first-child:after
+              content none
         li
           // first node: horizontal line, to parent
-          &:first-child:after
-            content ''
-            height 1px
-            width 34px
-            background-color $plan-node-line-color
-            position absolute
-            top 17px
-            left -22px
-
-          // vertical line, to parent
+          .nodeDetails
+            margin-left 12px
+          &:not(:first-child):after
+            left 16px
+          &:last-child
+            .nodeAttributes
+              border-color transparent
+          &:first-child
+            &:after
+              content ''
+              height 1px
+              width 27px
+              background-color $grey-light
+              position absolute
+              top 18px
+              left -22px
           &:before
             content ''
             width 1px
             height 100%
-            background-color $plan-node-line-color
+            background-color $grey-light
             position absolute
             top -10px
             left -23px
 
 .statements-table-container
   padding 18px 24px
+.statements-table-wrapper
+  padding 20px
+  background-color $adminui-white
 
 .statements-statistic
   display flex
@@ -329,13 +403,16 @@ $plan-node-attribute-key-color = #5cc123                        // light green
     .anticon
       display block
 
-.statements-table__col-query-text
-  font-family RobotoMono-Regular
+.statements-table__col-query-text a
+  font-family RobotoMono-Medium
   font-size 12px
-  color #3e80de
-  line-height 2
-  text-decoration underline
-  text-overflow ellipsis
-  overflow: hidden
+  line-height 1.83
+  color $adminui-grey-1
+  width 400px
+  text-decoration none
+  cursor pointer
+  &:hover
+    color $blue
+    text-decoration underline
   ._text-bold
     font-family RobotoMono-Bold
