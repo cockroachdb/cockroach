@@ -58,6 +58,10 @@ var AllTypes []T
 // type in a binary expression.
 var CompatibleTypes map[T][]T
 
+// ComparableTypes maps a type to a slice of types that can be used with that
+// type in a comparison expression.
+var ComparableTypes map[T][]T
+
 // NumberTypes is a slice containing all numeric types.
 var NumberTypes = []T{Int16, Int32, Int64, Float64, Decimal}
 
@@ -67,6 +71,9 @@ var IntTypes = []T{Int16, Int32, Int64}
 // FloatTypes is a slice containing all float types.
 var FloatTypes = []T{Float64}
 
+// TimeTypes is a slice containing all time-related types.
+var TimeTypes = []T{Timestamp, Interval}
+
 func init() {
 	for i := Bool; i < Unhandled; i++ {
 		AllTypes = append(AllTypes, i)
@@ -75,13 +82,24 @@ func init() {
 	CompatibleTypes = make(map[T][]T)
 	CompatibleTypes[Bool] = append(CompatibleTypes[Bool], Bool)
 	CompatibleTypes[Bytes] = append(CompatibleTypes[Bytes], Bytes)
-	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], NumberTypes...)
-	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], NumberTypes...)
-	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], NumberTypes...)
-	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], NumberTypes...)
-	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], NumberTypes...)
-	CompatibleTypes[Timestamp] = append(CompatibleTypes[Timestamp], Timestamp)
-	CompatibleTypes[Interval] = append(CompatibleTypes[Interval], Interval)
+	CompatibleTypes[Decimal] = append(CompatibleTypes[Decimal], append(NumberTypes, Interval)...)
+	CompatibleTypes[Int16] = append(CompatibleTypes[Int16], append(NumberTypes, Interval)...)
+	CompatibleTypes[Int32] = append(CompatibleTypes[Int32], append(NumberTypes, Interval)...)
+	CompatibleTypes[Int64] = append(CompatibleTypes[Int64], append(NumberTypes, Interval)...)
+	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], append(NumberTypes, Interval)...)
+	CompatibleTypes[Timestamp] = append(CompatibleTypes[Timestamp], TimeTypes...)
+	CompatibleTypes[Interval] = append(CompatibleTypes[Interval], append(NumberTypes, TimeTypes...)...)
+
+	ComparableTypes = make(map[T][]T)
+	ComparableTypes[Bool] = append(ComparableTypes[Bool], Bool)
+	ComparableTypes[Bytes] = append(ComparableTypes[Bytes], Bytes)
+	ComparableTypes[Decimal] = append(ComparableTypes[Decimal], NumberTypes...)
+	ComparableTypes[Int16] = append(ComparableTypes[Int16], NumberTypes...)
+	ComparableTypes[Int32] = append(ComparableTypes[Int32], NumberTypes...)
+	ComparableTypes[Int64] = append(ComparableTypes[Int64], NumberTypes...)
+	ComparableTypes[Float64] = append(ComparableTypes[Float64], NumberTypes...)
+	ComparableTypes[Timestamp] = append(ComparableTypes[Timestamp], Timestamp)
+	ComparableTypes[Interval] = append(ComparableTypes[Interval], Interval)
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
