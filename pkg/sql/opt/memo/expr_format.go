@@ -1050,8 +1050,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	switch t := private.(type) {
 	case *opt.ColumnID:
 		fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
-		label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify, f.Catalog)
-		fmt.Fprintf(f.Buffer, " %s", label)
+		if f.Memo != nil {
+			label := f.Memo.metadata.QualifiedAlias(*t, fullyQualify, f.Catalog)
+			fmt.Fprintf(f.Buffer, " %s", label)
+		} else {
+			fmt.Fprintf(f.Buffer, " unknown%d", *t)
+		}
 
 	case *TupleOrdinal:
 		fmt.Fprintf(f.Buffer, " %d", *t)
