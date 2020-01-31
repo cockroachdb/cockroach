@@ -364,9 +364,10 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
 }
 
 // EnvOpenFile opens a new file in the given engine.
-DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+DBStatus DBImpl::EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) {
   rocksdb::Status status;
-  const rocksdb::EnvOptions soptions;
+  rocksdb::EnvOptions soptions;
+  soptions.bytes_per_sync = bytes_per_sync;
   std::unique_ptr<rocksdb::WritableFile> rocksdb_file;
 
   // Create the file.
@@ -498,6 +499,18 @@ DBStatus DBImpl::EnvCloseDirectory(rocksdb::Directory* file) {
 
 DBStatus DBImpl::EnvRenameFile(DBSlice oldname, DBSlice newname) {
   return ToDBStatus(this->rep->GetEnv()->RenameFile(ToString(oldname), ToString(newname)));
+}
+
+DBStatus DBImpl::EnvCreateDir(DBSlice name) {
+  return ToDBStatus(this->rep->GetEnv()->CreateDirIfMissing(ToString(name)));
+}
+
+DBStatus DBImpl::EnvDeleteDir(DBSlice name) {
+  return ToDBStatus(this->rep->GetEnv()->DeleteDir(ToString(name)));
+}
+
+DBStatus DBImpl::EnvListDir(DBSlice name, std::vector<std::string>* result) {
+  return ToDBStatus(this->rep->GetEnv()->GetChildren(ToString(name), result));
 }
 
 }  // namespace cockroach

@@ -519,7 +519,8 @@ void DBRunSSTDump(int argc, char** argv);
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
 // DBEnvOpenFile opens a DBWritableFile as a new "file" in the given engine.
-DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file);
+DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, uint64_t bytes_per_sync,
+                       DBWritableFile* file);
 
 // DBEnvReadFile reads the file with the given path in the given engine.
 DBStatus DBEnvReadFile(DBEngine* db, DBSlice path, DBSlice* contents);
@@ -593,6 +594,22 @@ DBStatus DBEnvCloseDirectory(DBEngine* db, DBDirectory file);
 // DBEnvRenameFile renames oldname to newname using the given engine.
 DBStatus DBEnvRenameFile(DBEngine* db, DBSlice oldname, DBSlice newname);
 
+// DBEnvCreateDir creates a directory with name.
+DBStatus DBEnvCreateDir(DBEngine* db, DBSlice name);
+
+// DBEnvDeleteDir deletes the directory with name.
+DBStatus DBEnvDeleteDir(DBEngine* db, DBSlice name);
+
+// DBListDirResults is the contents of a directory.
+typedef struct {
+  DBStatus status;
+  DBString* names;
+  int n;
+} DBListDirResults;
+
+// DBEnvListDir lists the contents of the directory with name.
+DBListDirResults DBEnvListDir(DBEngine* db, DBSlice name);
+  
 #ifdef __cplusplus
 }  // extern "C"
 #endif
