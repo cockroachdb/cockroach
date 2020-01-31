@@ -332,10 +332,7 @@ type Replica struct {
 		// the raftMu.
 		proposals         map[storagebase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
-		// The ID of the replica within the Raft group. May be 0 if the replica has
-		// been created from a preemptive snapshot (i.e. before being added to the
-		// Raft group). The replica ID will be non-zero whenever the replica is
-		// part of a Raft group.
+		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID
 		// The minimum allowed ID for this replica. Initialized from
 		// RaftTombstone.NextReplicaID.
@@ -528,17 +525,6 @@ var _ KeyRange = &Replica{}
 
 var _ client.Sender = &Replica{}
 
-// NewReplica initializes the replica using the given metadata. If the
-// replica is initialized (i.e. desc contains more than a RangeID),
-// replicaID should be 0 and the replicaID will be discovered from the
-// descriptor.
-func NewReplica(
-	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
-) (*Replica, error) {
-	r := newReplica(desc.RangeID, store)
-	return r, r.init(desc, replicaID)
-}
-
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
 // require a lock and its output may not be atomic with other ongoing work in
@@ -553,18 +539,6 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.replicaID
-}
-
-// minReplicaID returns the minimum replica ID this replica could ever possibly
-// have. If this replica currently knows its replica ID (i.e. ReplicaID() is
-// non-zero) then it returns it. Otherwise it returns r.mu.tombstoneMinReplicaID.
-func (r *Replica) minReplicaID() roachpb.ReplicaID {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.mu.replicaID != 0 {
-		return r.mu.replicaID
-	}
-	return r.mu.tombstoneMinReplicaID
 }
 
 // cleanupFailedProposal cleans up after a proposal that has failed. It
@@ -1132,7 +1106,7 @@ func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
 }
 
 func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
-	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	rightDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	// If we have written a tombstone for this range then we know that the RHS
 	// must have already been removed at the split replica ID.
 	return r.mu.tombstoneMinReplicaID != 0 ||
@@ -1140,11 +1114,7 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		// ID which is above the replica ID of the split then we would not have
 		// written a tombstone but we will have a replica ID that will exceed the
 		// split replica ID.
-		(r.mu.replicaID > rightDesc.ReplicaID &&
-			// If we're catching up from a preemptive snapshot we won't be in the split.
-			// and we won't know whether our current replica ID indicates we've been
-			// removed.
-			hasRightDesc)
+		r.mu.replicaID > rightDesc.ReplicaID
 }
 
 // endCmds holds necessary information to end a batch after Raft

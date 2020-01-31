@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
@@ -50,12 +51,19 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 		{desc(1, 2, 3), desc(1, 3), 3, 3},
 		{desc(1, 2, 3), desc(1, 2), 3, 0},
 	}
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var r Replica
 			r.mu.state.Desc = &c.oldDesc
 			r.mu.lastReplicaAdded = c.lastReplicaAdded
-			r.setDesc(context.Background(), &c.newDesc)
+			r.store = tc.store
+			r.setDescRaftMuLocked(context.Background(), &c.newDesc)
 			if c.expectedLastReplicaAdded != r.mu.lastReplicaAdded {
 				t.Fatalf("expected %d, but found %d",
 					c.expectedLastReplicaAdded, r.mu.lastReplicaAdded)

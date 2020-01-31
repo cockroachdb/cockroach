@@ -847,8 +847,7 @@ func (s *snapshotError) Error() string {
 	return fmt.Sprintf("snapshot failed: %s", s.cause.Error())
 }
 
-// IsSnapshotError returns true iff the error indicates a preemptive
-// snapshot failed.
+// IsSnapshotError returns true iff the error indicates a snapshot failed.
 func IsSnapshotError(err error) bool {
 	return causer.Visit(err, func(err error) bool {
 		_, ok := errors.Cause(err).(*snapshotError)
@@ -992,26 +991,6 @@ func (r *Replica) changeReplicasImpl(
 
 	if err := validateReplicationChanges(desc, chgs); err != nil {
 		return nil, err
-	}
-
-	settings := r.ClusterSettings()
-	if useLearners := cluster.Version.IsActive(
-		ctx, settings, cluster.VersionLearnerReplicas,
-	); !useLearners {
-		// NB: we will never use atomic replication changes while learners are not
-		// also active.
-		if len(chgs) != 1 {
-			return nil, errors.Errorf("need exactly one change, got %+v", chgs)
-		}
-		switch chgs[0].ChangeType {
-		case roachpb.ADD_REPLICA:
-			return r.addReplicaLegacyPreemptiveSnapshot(ctx, chgs[0].Target, desc, priority, reason, details)
-		case roachpb.REMOVE_REPLICA:
-			// We're removing a single voter.
-			return r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
-		default:
-			return nil, errors.Errorf("unknown change type %d", chgs[0].ChangeType)
-		}
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
@@ -1387,75 +1366,10 @@ func (r *Replica) tryRollBackLearnerReplica(
 	}
 }
 
-func (r *Replica) addReplicaLegacyPreemptiveSnapshot(
-	ctx context.Context,
-	target roachpb.ReplicationTarget,
-	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
-	details string,
-) (*roachpb.RangeDescriptor, error) {
-	if desc == nil {
-		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
-	}
-
-	nodeUsed := false // tracks NodeID only
-	for _, existingRep := range desc.Replicas().All() {
-		nodeUsedByExistingRep := existingRep.NodeID == target.NodeID
-		nodeUsed = nodeUsed || nodeUsedByExistingRep
-	}
-
-	// If the replica exists on the remote node, no matter in which store,
-	// abort the replica add.
-	if nodeUsed {
-		return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, target)
-	}
-
-	// Send a pre-emptive snapshot. Note that the replica to which this
-	// snapshot is addressed has not yet had its replica ID initialized; this
-	// is intentional, and serves to avoid the following race with the replica
-	// GC queue:
-	//
-	// - snapshot received, a replica is lazily created with the "real" replica ID
-	// - the replica is eligible for GC because it is not yet a member of the range
-	// - GC queue runs, creating a raft tombstone with the replica's ID
-	// - the replica is added to the range
-	// - lazy creation of the replica fails due to the raft tombstone
-	//
-	// Instead, the replica GC queue will create a tombstone with replica ID
-	// zero, which is never legitimately used, and thus never interferes with
-	// raft operations. Racing with the replica GC queue can still partially
-	// negate the benefits of pre-emptive snapshots, but that is a recoverable
-	// degradation, not a catastrophic failure.
-	//
-	// NB: A closure is used here so that we can release the snapshot as soon
-	// as it has been applied on the remote and before the ChangeReplica
-	// operation is processed. This is important to allow other ranges to make
-	// progress which might be required for this ChangeReplicas operation to
-	// complete. See #10409.
-	{
-		preemptiveRepDesc := roachpb.ReplicaDescriptor{
-			NodeID:  target.NodeID,
-			StoreID: target.StoreID,
-			// NB: if we're still sending preemptive snapshot, the recipient is
-			// very likely a 19.1 node and does not understand this field. It
-			// won't matter to set it here, but don't anyway.
-			Type:      nil,
-			ReplicaID: 0, // intentional
-		}
-		if err := r.sendSnapshot(ctx, preemptiveRepDesc, SnapshotRequest_PREEMPTIVE, priority); err != nil {
-			return nil, err
-		}
-	}
-
-	iChgs := []internalReplicationChange{{target: target, typ: internalChangeTypeAddVoterViaPreemptiveSnap}}
-	return execChangeReplicasTxn(ctx, r.store, desc, reason, details, iChgs)
-}
-
 type internalChangeType byte
 
 const (
-	internalChangeTypeAddVoterViaPreemptiveSnap internalChangeType = iota + 1
+	_ internalChangeType = iota + 1
 	internalChangeTypeAddLearner
 	internalChangeTypePromoteLearner
 	// internalChangeTypeDemote changes a voter to a learner. This will
@@ -1517,10 +1431,6 @@ func prepareChangeReplicasTrigger(
 		}
 		for _, chg := range chgs {
 			switch chg.typ {
-			case internalChangeTypeAddVoterViaPreemptiveSnap:
-				// Legacy code.
-				added = append(added,
-					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_FULL))
 			case internalChangeTypeAddLearner:
 				added = append(added,
 					updatedDesc.AddReplica(chg.target.NodeID, chg.target.StoreID, roachpb.LEARNER))
@@ -1782,7 +1692,7 @@ func execChangeReplicasTxn(
 // ConfChange. It then uses the normal mechanisms to catch up with whatever got
 // committed to the Raft log during the snapshot transfer. In contrast to adding
 // the voting replica directly, this avoids a period of fragility when the
-// replica would be a full member, but very far behind. [1]
+// replica would be a full member, but very far behind.
 //
 // Snapshots are expensive and mostly unexpected (except learner snapshots
 // during rebalancing). The quota pool is responsible for keeping a leader from
@@ -1816,7 +1726,7 @@ func execChangeReplicasTxn(
 // into `receiveSnapshot`, which does the bulk of the work. `receiveSnapshot`
 // starts by waiting for a reservation in the snapshot rate limiter. It then
 // reads the header message and hands it to `shouldAcceptSnapshotData` to
-// determine if it can use the snapshot [2]. `shouldAcceptSnapshotData` is
+// determine if it can use the snapshot [1]. `shouldAcceptSnapshotData` is
 // advisory and can return false positives. If `shouldAcceptSnapshotData`
 // returns true, this is communicated back to the sender, which then proceeds to
 // call `kvBatchSnapshotStrategy.Send`. This uses the iterator captured earlier
@@ -1837,7 +1747,7 @@ func execChangeReplicasTxn(
 // `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks
 // the same things as `shouldAcceptSnapshotData` to make sure nothing has
 // changed while the snapshot was being transferred. It then guarantees that
-// there is either an initialized[3] replica or a `ReplicaPlaceholder`[4] to
+// there is either an initialized[2] replica or a `ReplicaPlaceholder`[3] to
 // accept the snapshot by creating a placeholder if necessary. Finally, a *Raft
 // snapshot* message is manually handed to the replica's Raft node (by calling
 // `stepRaftGroup` + `handleRaftReadyRaftMuLocked`). During the application
@@ -1850,27 +1760,19 @@ func execChangeReplicasTxn(
 // number of subsumed replicas. In the case where there are no subsumed
 // replicas, 4 SSTs will be created.
 //
-// [1]: There is a third kind of snapshot, called "preemptive", which is how we
-// avoided the above fragility before learner replicas were introduced in the
-// 19.2 cycle. It's essentially a snapshot that we made very fast by staging it
-// on a remote node right before we added a replica on that node. However,
-// preemptive snapshots came with all sorts of complexity that we're delighted
-// to be rid of. They have to stay around for clusters with mixed 19.1 and 19.2
-// nodes, but after 19.2, we can remove them entirely.
-//
-// [2]: The largest class of rejections here is if the store contains a replica
+// [1]: The largest class of rejections here is if the store contains a replica
 // that overlaps the snapshot but has a different id (we maintain an invariant
 // that replicas on a store never overlap). This usually happens when the
 // recipient has an old copy of a replica that is no longer part of a range and
 // the `replicaGCQueue` hasn't gotten around to collecting it yet. So if this
 // happens, `shouldAcceptSnapshotData` will queue it up for consideration.
 //
-// [3]: A uninitialized replica is created when a replica that's being added
+// [2]: A uninitialized replica is created when a replica that's being added
 // gets traffic from its new peers before it gets a snapshot. It may be possible
 // to get rid of uninitialized replicas (by dropping all Raft traffic except
 // votes on the floor), but this is a cleanup that hasn't happened yet.
 //
-// [4]: The placeholder is essentially a snapshot lock, making any future
+// [3]: The placeholder is essentially a snapshot lock, making any future
 // callers of `shouldAcceptSnapshotData` return an error so that we no longer
 // have to worry about racing with a second snapshot. See the comment on
 // ReplicaPlaceholder for details.
@@ -1881,11 +1783,9 @@ func (r *Replica) sendSnapshot(
 	priority SnapshotRequest_Priority,
 ) (retErr error) {
 	defer func() {
-		if snapType != SnapshotRequest_PREEMPTIVE {
-			// Report the snapshot status to Raft, which expects us to do this once we
-			// finish sending the snapshot.
-			r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
-		}
+		// Report the snapshot status to Raft, which expects us to do this once we
+		// finish sending the snapshot.
+		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
@@ -1956,8 +1856,11 @@ func (r *Replica) sendSnapshot(
 			},
 		},
 		RangeSize: r.GetMVCCStats().Total(),
-		// Recipients can choose to decline preemptive snapshots.
-		CanDecline: snapType == SnapshotRequest_PREEMPTIVE,
+		// Recipients currently cannot choose to decline any snapshots.
+		// In 19.2 and earlier versions pre-emptive snapshots could be declined.
+		//
+		// TODO(ajwerner): Consider removing the CanDecline flag.
+		CanDecline: false,
 		Priority:   priority,
 		Strategy:   SnapshotRequest_KV_BATCH,
 		Type:       snapType,

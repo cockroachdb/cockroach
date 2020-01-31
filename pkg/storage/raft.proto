@@ -131,7 +131,7 @@ message SnapshotRequest {
   enum Type {
     RAFT = 0;
     LEARNER = 1;
-    PREEMPTIVE = 2;
+    reserved 2;
   }
 
   message Header {
