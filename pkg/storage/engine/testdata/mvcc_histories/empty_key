@@ -1,6 +1,7 @@
 run error
 get ts=0,1 k=
 ----
+get: /Min -> <no data>
 error: (*errors.fundamental:) attempted access to empty key
 
 run error

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-#include <rocksdb/sst_dump_tool.h>
 #include <libroach.h>
+#include <rocksdb/sst_dump_tool.h>
 
 void DBRunSSTDump(int argc, char** argv) {
   rocksdb::SSTDumpTool tool;

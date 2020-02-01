@@ -13,9 +13,9 @@
 #include <rocksdb/filter_policy.h>
 #include <rocksdb/slice_transform.h>
 #include <rocksdb/table.h>
-#include "db.h"
 #include "cache.h"
 #include "comparator.h"
+#include "db.h"
 #include "encoding.h"
 #include "godefs.h"
 #include "merge.h"
@@ -51,29 +51,29 @@ class DBLogger : public rocksdb::Logger {
                     va_list ap) override {
     int go_log_level = util::log::Severity::UNKNOWN;  // compiler tells us to initialize it
     switch (log_level) {
-      case rocksdb::DEBUG_LEVEL:
-        // There is no DEBUG severity. Just give it INFO severity, then.
-        go_log_level = util::log::Severity::INFO;
-        break;
-      case rocksdb::INFO_LEVEL:
-        go_log_level = util::log::Severity::INFO;
-        break;
-      case rocksdb::WARN_LEVEL:
-        go_log_level = util::log::Severity::WARNING;
-        break;
-      case rocksdb::ERROR_LEVEL:
-        go_log_level = util::log::Severity::ERROR;
-        break;
-      case rocksdb::FATAL_LEVEL:
-        go_log_level = util::log::Severity::FATAL;
-        break;
-      case rocksdb::HEADER_LEVEL:
-        // There is no HEADER severity. Just give it INFO severity, then.
-        go_log_level = util::log::Severity::INFO;
-        break;
-      case rocksdb::NUM_INFO_LOG_LEVELS:
-        assert(false);
-        return;
+    case rocksdb::DEBUG_LEVEL:
+      // There is no DEBUG severity. Just give it INFO severity, then.
+      go_log_level = util::log::Severity::INFO;
+      break;
+    case rocksdb::INFO_LEVEL:
+      go_log_level = util::log::Severity::INFO;
+      break;
+    case rocksdb::WARN_LEVEL:
+      go_log_level = util::log::Severity::WARNING;
+      break;
+    case rocksdb::ERROR_LEVEL:
+      go_log_level = util::log::Severity::ERROR;
+      break;
+    case rocksdb::FATAL_LEVEL:
+      go_log_level = util::log::Severity::FATAL;
+      break;
+    case rocksdb::HEADER_LEVEL:
+      // There is no HEADER severity. Just give it INFO severity, then.
+      go_log_level = util::log::Severity::INFO;
+      break;
+    case rocksdb::NUM_INFO_LOG_LEVELS:
+      assert(false);
+      return;
     }
 
     // First try with a small fixed size buffer.
@@ -141,9 +141,7 @@ class DBLogger : public rocksdb::Logger {
 
 }  // namespace
 
-rocksdb::Logger* NewDBLogger(bool use_primary_log) {
-  return new DBLogger(use_primary_log);
-}
+rocksdb::Logger* NewDBLogger(bool use_primary_log) { return new DBLogger(use_primary_log); }
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
@@ -168,7 +166,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Periodically sync SST writes to smooth out disk usage. Not performing such
   // syncs can be faster but can cause performance blips when the OS decides it
   // needs to flush data.
-  options.bytes_per_sync = 512 << 10;      // 512 KB
+  options.bytes_per_sync = 512 << 10;  // 512 KB
   // Enabling `strict_bytes_per_sync` prevents the situation where an SST is
   // generated fast enough that the async writeback submissions fall behind.
   // It enforces we wait for any previous `bytes_per_sync` sync to finish before

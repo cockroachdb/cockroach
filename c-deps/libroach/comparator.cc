@@ -41,14 +41,13 @@ bool DBComparator::Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const
 
 namespace {
 
-void ShrinkSlice(rocksdb::Slice* a, size_t size) {
-  a->remove_suffix(a->size() - size);
-}
+void ShrinkSlice(rocksdb::Slice* a, size_t size) { a->remove_suffix(a->size() - size); }
 
 int SharedPrefixLen(const rocksdb::Slice& a, const rocksdb::Slice& b) {
   auto n = std::min(a.size(), b.size());
   int i = 0;
-  for (; i < n && a[i] == b[i]; ++i) {}
+  for (; i < n && a[i] == b[i]; ++i) {
+  }
   return i;
 }
 
@@ -68,7 +67,8 @@ bool FindSeparator(rocksdb::Slice* a, std::string* a_backing, const rocksdb::Sli
     // So b is smaller than a.
     return false;
   }
-  if ((prefix < b.size() - 1) || static_cast<unsigned char>((*a)[prefix]) + 1 < static_cast<unsigned char>(b[prefix])) {
+  if ((prefix < b.size() - 1) ||
+      static_cast<unsigned char>((*a)[prefix]) + 1 < static_cast<unsigned char>(b[prefix])) {
     // a and b do not have consecutive characters at prefix.
     (*a_backing)[prefix]++;
     ShrinkSlice(a, prefix + 1);
@@ -97,7 +97,8 @@ void DBComparator::FindShortestSeparator(std::string* start, const rocksdb::Slic
     return;
   }
   auto found = FindSeparator(&key_s, start, key_l);
-  if (!found) return;
+  if (!found)
+    return;
   start->resize(key_s.size() + 1);
   (*start)[key_s.size()] = 0x00;
 }

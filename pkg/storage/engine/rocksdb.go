@@ -2417,10 +2417,13 @@ func (r *rocksDBIterator) MVCCGet(
 	r.clearState()
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp), goToCTxn(opts.Txn),
-		C.bool(opts.Inconsistent), C.bool(opts.Tombstones),
+		C.bool(opts.Inconsistent), C.bool(opts.Tombstones), C.bool(opts.FailOnMoreRecent),
 	)
 
 	if err := statusToError(state.status); err != nil {
+		return nil, nil, err
+	}
+	if err := writeTooOldToError(timestamp, state.write_too_old_timestamp); err != nil {
 		return nil, nil, err
 	}
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
@@ -2486,9 +2489,13 @@ func (r *rocksDBIterator) MVCCScan(
 		goToCTimestamp(timestamp), C.int64_t(max),
 		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
 		C.bool(opts.Reverse), C.bool(opts.Tombstones),
+		C.bool(opts.FailOnMoreRecent),
 	)
 
 	if err := statusToError(state.status); err != nil {
+		return nil, 0, nil, nil, err
+	}
+	if err := writeTooOldToError(timestamp, state.write_too_old_timestamp); err != nil {
 		return nil, 0, nil, nil, err
 	}
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, opts.Txn); err != nil {
@@ -2717,6 +2724,13 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 	}
 }
 
+func cToGoTimestamp(ts C.DBTimestamp) hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime: int64(ts.wall_time),
+		Logical:  int32(ts.logical),
+	}
+}
+
 func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
 	var r C.DBTxn
 	if txn != nil {
@@ -2747,16 +2761,22 @@ func statusToError(s C.DBStatus) error {
 	return &Error{msg: cStringToGoString(s)}
 }
 
+func writeTooOldToError(readTS hlc.Timestamp, existingCTS C.DBTimestamp) error {
+	existingTS := cToGoTimestamp(existingCTS)
+	if !existingTS.IsEmpty() {
+		// The txn can't write at the existing timestamp, so we provide the
+		// error with the timestamp immediately after it.
+		return roachpb.NewWriteTooOldError(readTS, existingTS.Next())
+	}
+	return nil
+}
+
 func uncertaintyToError(
-	readTS hlc.Timestamp, existingTS C.DBTimestamp, txn *roachpb.Transaction,
+	readTS hlc.Timestamp, existingCTS C.DBTimestamp, txn *roachpb.Transaction,
 ) error {
-	if existingTS.wall_time != 0 || existingTS.logical != 0 {
-		return roachpb.NewReadWithinUncertaintyIntervalError(
-			readTS, hlc.Timestamp{
-				WallTime: int64(existingTS.wall_time),
-				Logical:  int32(existingTS.logical),
-			},
-			txn)
+	existingTS := cToGoTimestamp(existingCTS)
+	if !existingTS.IsEmpty() {
+		return roachpb.NewReadWithinUncertaintyIntervalError(readTS, existingTS, txn)
 	}
 	return nil
 }
