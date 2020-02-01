@@ -940,7 +940,7 @@ DBSstFileWriter* DBSstFileWriterNew() {
   // This makes the sstables produced by Pebble and RocksDB byte-by-byte identical, which is
   // useful for testing.
   table_options.index_shortening =
-    rocksdb::BlockBasedTableOptions::IndexShorteningMode::kShortenSeparatorsAndSuccessor;
+      rocksdb::BlockBasedTableOptions::IndexShorteningMode::kShortenSeparatorsAndSuccessor;
 
   rocksdb::Options* options = new rocksdb::Options();
   options->comparator = &kComparator;
@@ -1102,7 +1102,7 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions,
   std::string resume_key;
   // Seek to the MVCC metadata key for the provided start key and let the
   // incremental iterator find the appropriate version.
-  const DBKey seek_key = { .key = start.key };
+  const DBKey seek_key = {.key = start.key};
   for (state = iter.seek(seek_key);; state = iter.next(skip_current_key_versions)) {
     if (state.status.data != NULL) {
       DBSstFileWriterClose(writer);
@@ -1129,7 +1129,8 @@ DBStatus DBExportToSst(DBKey start, DBKey end, bool export_all_revisions,
 
     // Skip tombstone (len=0) records when start time is zero (non-incremental)
     // and we are not exporting all versions.
-    const bool is_skipping_deletes = start.wall_time == 0 && start.logical == 0 && !export_all_revisions;
+    const bool is_skipping_deletes =
+        start.wall_time == 0 && start.logical == 0 && !export_all_revisions;
     if (is_skipping_deletes && iter.value().size() == 0) {
       continue;
     }
@@ -1183,7 +1184,8 @@ DBStatus DBEnvOpenReadableFile(DBEngine* db, DBSlice path, DBReadableFile* file)
   return db->EnvOpenReadableFile(path, (rocksdb::RandomAccessFile**)file);
 }
 
-DBStatus DBEnvReadAtFile(DBEngine* db, DBReadableFile file, DBSlice buffer, int64_t offset, int* n) {
+DBStatus DBEnvReadAtFile(DBEngine* db, DBReadableFile file, DBSlice buffer, int64_t offset,
+                         int* n) {
   return db->EnvReadAtFile((rocksdb::RandomAccessFile*)file, buffer, offset, n);
 }
 

@@ -213,8 +213,8 @@ MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64
 
 bool MVCCIsValidSplitKey(DBSlice key) { return IsValidSplitKey(ToSlice(key)); }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
-                          int64_t target_size, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split, int64_t target_size,
+                          DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -269,26 +269,28 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey min_split,
 }
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool inconsistent, bool tombstones) {
+                      bool inconsistent, bool tombstones, bool fail_on_more_recent) {
   // Get is implemented as a scan where we retrieve a single key. We specify an
   // empty key for the end key which will ensure we don't retrieve a key
   // different than the start key. This is a bit of a hack.
   const DBSlice end = {0, 0};
   ScopedStats scoped_iter(iter);
   mvccForwardScanner scanner(iter, key, end, timestamp, 1 /* max_keys */, txn, inconsistent,
-                             tombstones);
+                             tombstones, fail_on_more_recent);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool inconsistent, bool reverse,
-                       bool tombstones) {
+                       bool tombstones, bool fail_on_more_recent) {
   ScopedStats scoped_iter(iter);
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, inconsistent, tombstones,
+                               fail_on_more_recent);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, inconsistent, tombstones,
+                               fail_on_more_recent);
     return scanner.scan();
   }
 }

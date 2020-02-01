@@ -467,7 +467,8 @@ DBStatus DBImpl::EnvCloseReadableFile(rocksdb::RandomAccessFile* file) {
   return kSuccess;
 }
 
-DBStatus DBImpl::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset, int* n) {
+DBStatus DBImpl::EnvReadAtFile(rocksdb::RandomAccessFile* file, DBSlice buffer, int64_t offset,
+                               int* n) {
   size_t max_bytes_to_read = buffer.len;
   char* scratch = buffer.data;
   rocksdb::Slice result;
@@ -488,9 +489,7 @@ DBStatus DBImpl::EnvOpenDirectory(DBSlice path, rocksdb::Directory** file) {
   return kSuccess;
 }
 
-DBStatus DBImpl::EnvSyncDirectory(rocksdb::Directory* file) {
-  return ToDBStatus(file->Fsync());
-}
+DBStatus DBImpl::EnvSyncDirectory(rocksdb::Directory* file) { return ToDBStatus(file->Fsync()); }
 
 DBStatus DBImpl::EnvCloseDirectory(rocksdb::Directory* file) {
   delete file;

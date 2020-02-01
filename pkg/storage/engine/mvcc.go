@@ -707,9 +707,20 @@ func (b *getBuffer) release() {
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
 type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
-	Inconsistent bool
-	Tombstones   bool
-	Txn          *roachpb.Transaction
+	Inconsistent     bool
+	Tombstones       bool
+	FailOnMoreRecent bool
+	Txn              *roachpb.Transaction
+}
+
+func (opts *MVCCGetOptions) validate() error {
+	if opts.Inconsistent && opts.Txn != nil {
+		return errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if opts.Inconsistent && opts.FailOnMoreRecent {
+		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
+	}
+	return nil
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -727,6 +738,12 @@ type MVCCGetOptions struct {
 //
 // Note that transactional gets must be consistent. Put another way, only
 // non-transactional gets may be inconsistent.
+//
+// When reading in "fail on more recent" mode, a WriteTooOldError will be
+// returned if the read observes a version with a timestamp above the read
+// timestamp. Similarly, a WriteIntentError will be returned if the read
+// observes another transaction's intent, even if it has a timestamp above
+// the read timestamp.
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
@@ -738,14 +755,14 @@ func MVCCGet(
 func mvccGet(
 	ctx context.Context, iter Iterator, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (value *roachpb.Value, intent *roachpb.Intent, err error) {
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
 	if timestamp.WallTime < 0 {
 		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
 	}
-	if opts.Inconsistent && opts.Txn != nil {
-		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
-	}
-	if len(key) == 0 {
-		return nil, nil, emptyKeyError()
+	if err := opts.validate(); err != nil {
+		return nil, nil, err
 	}
 
 	// If the iterator has a specialized implementation, defer to that.
@@ -760,12 +777,13 @@ func mvccGet(
 	// specify an empty key for the end key which will ensure we don't retrieve a
 	// key different than the start key. This is a bit of a hack.
 	*mvccScanner = pebbleMVCCScanner{
-		parent:       iter,
-		start:        key,
-		ts:           timestamp,
-		maxKeys:      1,
-		inconsistent: opts.Inconsistent,
-		tombstones:   opts.Tombstones,
+		parent:           iter,
+		start:            key,
+		ts:               timestamp,
+		maxKeys:          1,
+		inconsistent:     opts.Inconsistent,
+		tombstones:       opts.Tombstones,
+		failOnMoreRecent: opts.FailOnMoreRecent,
 	}
 
 	mvccScanner.init(opts.Txn)
@@ -1659,9 +1677,7 @@ func mvccPutInternal(
 			// instead of allowing their transactions to continue and be retried
 			// before committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
-			maybeTooOldErr = &roachpb.WriteTooOldError{
-				Timestamp: readTimestamp, ActualTimestamp: writeTimestamp,
-			}
+			maybeTooOldErr = roachpb.NewWriteTooOldError(readTimestamp, writeTimestamp)
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
@@ -2287,11 +2303,11 @@ func mvccScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	if opts.Inconsistent && opts.Txn != nil {
-		return nil, 0, nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
-	}
 	if len(endKey) == 0 {
 		return nil, 0, nil, nil, emptyKeyError()
+	}
+	if err := opts.validate(); err != nil {
+		return nil, 0, nil, nil, err
 	}
 	if max == 0 {
 		resumeSpan = &roachpb.Span{Key: key, EndKey: endKey}
@@ -2307,14 +2323,15 @@ func mvccScanToBytes(
 	defer pebbleMVCCScannerPool.Put(mvccScanner)
 
 	*mvccScanner = pebbleMVCCScanner{
-		parent:       iter,
-		reverse:      opts.Reverse,
-		start:        key,
-		end:          endKey,
-		ts:           timestamp,
-		maxKeys:      max,
-		inconsistent: opts.Inconsistent,
-		tombstones:   opts.Tombstones,
+		parent:           iter,
+		reverse:          opts.Reverse,
+		start:            key,
+		end:              endKey,
+		ts:               timestamp,
+		maxKeys:          max,
+		inconsistent:     opts.Inconsistent,
+		tombstones:       opts.Tombstones,
+		failOnMoreRecent: opts.FailOnMoreRecent,
 	}
 
 	mvccScanner.init(opts.Txn)
@@ -2408,10 +2425,21 @@ type MVCCScanOptions struct {
 	// to return no results.
 
 	// See the documentation for MVCCScan for information on these parameters.
-	Inconsistent bool
-	Tombstones   bool
-	Reverse      bool
-	Txn          *roachpb.Transaction
+	Inconsistent     bool
+	Tombstones       bool
+	Reverse          bool
+	FailOnMoreRecent bool
+	Txn              *roachpb.Transaction
+}
+
+func (opts *MVCCScanOptions) validate() error {
+	if opts.Inconsistent && opts.Txn != nil {
+		return errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if opts.Inconsistent && opts.FailOnMoreRecent {
+		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
+	}
+	return nil
 }
 
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
@@ -2445,6 +2473,12 @@ type MVCCScanOptions struct {
 //
 // Note that transactional scans must be consistent. Put another way, only
 // non-transactional scans may be inconsistent.
+//
+// When scanning in "fail on more recent" mode, a WriteTooOldError will be
+// returned if the scan observes a version with a timestamp above the read
+// timestamp. Similarly, a WriteIntentError will be returned if the scan
+// observes another transaction's intent, even if it has a timestamp above
+// the read timestamp.
 func MVCCScan(
 	ctx context.Context,
 	reader Reader,
