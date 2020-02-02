@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -161,7 +160,7 @@ func (s *substringFunctionOperator) Next(ctx context.Context) coldata.Batch {
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
-					execerror.VectorizedInternalPanic(fmt.Sprintf("negative substring length %d not allowed", length))
+					execerror.NonVectorizedPanic(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				end := start + length
