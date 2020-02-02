@@ -21,14 +21,6 @@ var (
 		`11`: true,
 		`16`: true,
 	}
-	// Note: if you modify queriesToSkip here, please adjust roachtest/tpchvec.go
-	// accordingly.
-	queriesToSkip = map[string]bool{
-		// TODO(yuzefovich): for some reason, second and third columns returned by
-		// query 12 are ASCII codes of the digits, i.e. we expect 6202 but get
-		// [54 50 48 50] instead.
-		`12`: true,
-	}
 )
 
 func init() {
