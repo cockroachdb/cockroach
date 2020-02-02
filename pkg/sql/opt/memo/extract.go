@@ -117,20 +117,41 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 		return opt.ColSet{}
 	}
 
-	arg := e.Child(0)
-	var res opt.ColSet
-	if filter, ok := arg.(*AggFilterExpr); ok {
-		res.Add(filter.Filter.(*VariableExpr).Col)
-		arg = filter.Input
-	}
-	if distinct, ok := arg.(*AggDistinctExpr); ok {
-		arg = distinct.Input
-	}
-	if variable, ok := arg.(*VariableExpr); ok {
-		res.Add(variable.Col)
+	switch e.Op() {
+	case opt.CorrOp:
+		var res opt.ColSet
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			arg := e.Child(i)
+			if filter, ok := arg.(*AggFilterExpr); ok {
+				res.Add(filter.Filter.(*VariableExpr).Col)
+				arg = filter.Input
+			}
+			if distinct, ok := arg.(*AggDistinctExpr); ok {
+				arg = distinct.Input
+			}
+			if variable, ok := arg.(*VariableExpr); ok {
+				res.Add(variable.Col)
+			}
+		}
+
 		return res
+	default:
+		arg := e.Child(0)
+		var res opt.ColSet
+		if filter, ok := arg.(*AggFilterExpr); ok {
+			res.Add(filter.Filter.(*VariableExpr).Col)
+			arg = filter.Input
+		}
+		if distinct, ok := arg.(*AggDistinctExpr); ok {
+			arg = distinct.Input
+		}
+		if variable, ok := arg.(*VariableExpr); ok {
+			res.Add(variable.Col)
+			return res
+		}
+
+		panic(errors.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
 	}
-	panic(errors.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
 }
 
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the

@@ -1223,6 +1223,28 @@ SELECT 123 FROM kv ORDER BY max(v)
 ----
 123
 
+subtest statistics
+
+statement OK
+CREATE TABLE statistics_agg_test (
+  y float,
+  x float,
+  int_y int,
+  int_x int
+)
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.0,  10.0, 1,  10),
+  (2.0,  25.0, 2,  25),
+  (3.0,  40.0, 3,  40),
+  (4.0, 100.0, 4, 100)
+
+query RR
+SELECT corr(y, x)::decimal, corr(int_y, int_x)::decimal FROM statistics_agg_test;
+----
+0.9326733179802503 0.9326733179802503
+
 subtest string_agg
 
 statement OK

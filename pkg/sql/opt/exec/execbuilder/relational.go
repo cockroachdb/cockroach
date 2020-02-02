@@ -919,27 +919,54 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		var argIdx []exec.ColumnOrdinal
 		var filterOrd exec.ColumnOrdinal = -1
 
-		if item.Agg.ChildCount() > 0 {
-			child := item.Agg.Child(0)
+		switch item.Agg.Op() {
+		case opt.CorrOp:
+			argIdx = make([]exec.ColumnOrdinal, item.Agg.ChildCount())
+			for j := range argIdx {
+				child := item.Agg.Child(j)
 
-			if aggFilter, ok := child.(*memo.AggFilterExpr); ok {
-				filter, ok := aggFilter.Filter.(*memo.VariableExpr)
+				if aggFilter, ok := child.(*memo.AggFilterExpr); ok {
+					filter, ok := aggFilter.Filter.(*memo.VariableExpr)
+					if !ok {
+						return execPlan{}, errors.Errorf("only VariableOp args supported")
+					}
+					filterOrd = input.getColumnOrdinal(filter.Col)
+					child = aggFilter.Input
+				}
+
+				if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
+					distinct = true
+					child = aggDistinct.Input
+				}
+				v, ok := child.(*memo.VariableExpr)
 				if !ok {
 					return execPlan{}, errors.Errorf("only VariableOp args supported")
 				}
-				filterOrd = input.getColumnOrdinal(filter.Col)
-				child = aggFilter.Input
+				argIdx[j] = input.getColumnOrdinal(v.Col)
 			}
+		default:
+			if item.Agg.ChildCount() > 0 {
+				child := item.Agg.Child(0)
 
-			if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
-				distinct = true
-				child = aggDistinct.Input
+				if aggFilter, ok := child.(*memo.AggFilterExpr); ok {
+					filter, ok := aggFilter.Filter.(*memo.VariableExpr)
+					if !ok {
+						return execPlan{}, errors.Errorf("only VariableOp args supported")
+					}
+					filterOrd = input.getColumnOrdinal(filter.Col)
+					child = aggFilter.Input
+				}
+
+				if aggDistinct, ok := child.(*memo.AggDistinctExpr); ok {
+					distinct = true
+					child = aggDistinct.Input
+				}
+				v, ok := child.(*memo.VariableExpr)
+				if !ok {
+					return execPlan{}, errors.Errorf("only VariableOp args supported")
+				}
+				argIdx = []exec.ColumnOrdinal{input.getColumnOrdinal(v.Col)}
 			}
-			v, ok := child.(*memo.VariableExpr)
-			if !ok {
-				return execPlan{}, errors.Errorf("only VariableOp args supported")
-			}
-			argIdx = []exec.ColumnOrdinal{input.getColumnOrdinal(v.Col)}
 		}
 
 		constArgs := b.extractAggregateConstArgs(item.Agg)

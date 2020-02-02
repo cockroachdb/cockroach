@@ -468,6 +468,7 @@ message AggregatorSpec {
     STRING_AGG = 21;
     BIT_AND = 22;
     BIT_OR = 23;
+    CORR = 24;
   }
 
   enum Type {

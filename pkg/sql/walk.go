@@ -388,11 +388,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 					buf.WriteString(inputCols[groupingCol].Name)
 				} else {
 					fmt.Fprintf(&buf, "%s(", agg.funcName)
-					if agg.argRenderIdx != noRenderIdx {
+					if 0 < len(agg.argRenderIdxs) {
 						if agg.isDistinct() {
 							buf.WriteString("DISTINCT ")
 						}
-						buf.WriteString(inputCols[agg.argRenderIdx].Name)
+						for _, idx := range agg.argRenderIdxs {
+							buf.WriteString(inputCols[idx].Name)
+						}
 					}
 					buf.WriteByte(')')
 					if agg.filterRenderIdx != noRenderIdx {
