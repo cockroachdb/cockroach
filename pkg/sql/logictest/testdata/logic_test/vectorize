@@ -627,6 +627,10 @@ SELECT substring(x, 1, abs(y)) FROM builtin_test
 Hel
 Th
 
+# Regression test for #44625.
+statement error negative substring length -1 not allowed
+SELECT substring(x, 0, -1) FROM builtin_test
+
 query I
 SELECT abs(y) FROM builtin_test
 ----
