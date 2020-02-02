@@ -19,12 +19,56 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 const zipfMax uint64 = 100000
+
+func makeStorageConfig(path string) base.StorageConfig {
+	return base.StorageConfig{
+		Attrs:           roachpb.Attributes{},
+		Dir:             path,
+		MustExist:       false,
+		MaxSize:         0,
+		Settings:        cluster.MakeTestingClusterSettings(),
+		UseFileRegistry: false,
+		ExtraOptions:    nil,
+	}
+}
+
+// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
+// storage capacity.
+func createTestRocksDBEngine(path string) (engine.Engine, error) {
+	return engine.NewEngine(enginepb.EngineTypeRocksDB, 1<<20, makeStorageConfig(path))
+}
+
+// createTestPebbleEngine returns a new in-memory Pebble storage engine.
+func createTestPebbleEngine(path string) (engine.Engine, error) {
+	return engine.NewEngine(enginepb.EngineTypePebble, 1<<20, makeStorageConfig(path))
+}
+
+type engineImpl struct{
+	name   string
+	create func(path string) (engine.Engine, error)
+}
+var _ fmt.Stringer = &engineImpl{}
+
+func (e *engineImpl) String() string {
+	return e.name
+}
+
+var engineImplRocksDB = engineImpl{"rocksdb", createTestRocksDBEngine}
+var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
+
+var mvccEngineImpls = []engineImpl{
+	engineImplRocksDB,
+	engineImplPebble,
+}
 
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
@@ -34,6 +78,10 @@ type metaTestRunner struct {
 	t           *testing.T
 	rng         *rand.Rand
 	seed        int64
+	path        string
+	engineImpls []engineImpl
+	curEngine   int
+	numRestarts int
 	engine      engine.Engine
 	tsGenerator tsGenerator
 	managers    map[operandType]operandManager
@@ -46,6 +94,14 @@ func (m *metaTestRunner) init() {
 	// test runs should guarantee the same operations being generated.
 	m.rng = rand.New(rand.NewSource(m.seed))
 	m.tsGenerator.init(m.rng)
+	m.numRestarts = len(m.engineImpls) - 1
+	m.curEngine = 0
+
+	var err error
+	m.engine, err = m.engineImpls[0].create(m.path)
+	if err != nil {
+		m.t.Fatal(err)
+	}
 
 	m.managers = map[operandType]operandManager{
 		operandTransaction: &txnManager{
@@ -57,7 +113,7 @@ func (m *metaTestRunner) init() {
 		},
 		operandReadWriter: &readWriterManager{
 			rng:          m.rng,
-			eng:          m.engine,
+			m:            m,
 			batchToIDMap: make(map[engine.Batch]int),
 		},
 		operandMVCCKey: &keyManager{
@@ -89,6 +145,10 @@ func (m *metaTestRunner) init() {
 // Run this function in a defer to ensure any Fatals on m.t do not cause panics
 // due to leaked iterators.
 func (m *metaTestRunner) closeAll() {
+	if m.engine == nil {
+		// Engine already closed; possibly running in a defer after a panic.
+		return
+	}
 	// Close all open objects. This should let the engine close cleanly.
 	closingOrder := []operandType{
 		operandIterator,
@@ -98,6 +158,8 @@ func (m *metaTestRunner) closeAll() {
 	for _, operandType := range closingOrder {
 		m.managers[operandType].closeAll()
 	}
+	m.engine.Close()
+	m.engine = nil
 }
 
 // generateAndRun generates n operations using a TPCC-style deck shuffle with
@@ -105,10 +167,38 @@ func (m *metaTestRunner) closeAll() {
 func (m *metaTestRunner) generateAndRun(n int) {
 	deck := newDeck(m.rng, m.weights...)
 
-	for i := 0; i < n; i++ {
-		op := &operations[deck.Int()]
+	for numRestart := 0; numRestart <= m.numRestarts; numRestart++ {
+		if numRestart > 0 {
+			// Insert and run a restart operation.
+			m.runOp(opRun{
+				op:   m.nameToOp["restart"],
+				args: nil,
+			})
+		}
+		for i := uint64(0); i < n; i++ {
+			op := &operations[deck.Int()]
 
-		m.resolveAndRunOp(op)
+			m.resolveAndRunOp(op)
+		}
+	}
+}
+
+// Closes the current engine and starts another one up, with the same path.
+func (m *metaTestRunner) restart() {
+	m.closeAll()
+	m.curEngine++
+	if m.curEngine > m.numRestarts {
+		// If we're restarting more times than the number of engine implementations
+		// specified, just restart with the last engine type again. This is useful
+		// for when a check file with multiple restarts is passed in for a run with
+		// only one engine type specified.
+		m.curEngine = m.numRestarts
+	}
+
+	var err error
+	m.engine, err = m.engineImpls[m.curEngine].create(m.path)
+	if err != nil {
+		m.t.Fatal(err)
 	}
 }
 

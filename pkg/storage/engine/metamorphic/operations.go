@@ -584,4 +584,18 @@ var operations = []mvccOp{
 		},
 		weight: 2,
 	},
+	{
+		name:         "restart",
+		run:          func(ctx context.Context, m *metaTestRunner, args ...operand) string {
+			m.restart()
+			// TODO(itsbilal): Write the old and new engine names here. Would be
+			// helpful if the checker could ignore this.
+			return "ok"
+		},
+		operands:     nil,
+		// The restart operation is special; it's added by the metaTestRunner
+		// manually. To prevent it from being inadvertently added by the deck, set
+		// weight to 0.
+		weight:       0,
+	},
 }
