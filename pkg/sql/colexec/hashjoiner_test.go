@@ -964,31 +964,6 @@ func TestHashJoiner(t *testing.T) {
 	}
 }
 
-func TestHashJoinerOutputsOnlyRequestedColumns(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	for _, tc := range hjTestCases {
-		leftSource := newOpTestInput(1, tc.leftTuples, tc.leftTypes)
-		rightSource := newOpTestInput(1, tc.rightTuples, tc.rightTypes)
-		hjOp, err := NewEqHashJoinerOp(
-			testAllocator,
-			leftSource, rightSource,
-			tc.leftEqCols, tc.rightEqCols,
-			tc.leftOutCols, tc.rightOutCols,
-			tc.leftTypes, tc.rightTypes,
-			tc.rightEqColsAreKey,
-			tc.joinType)
-		require.NoError(t, err)
-		hjOp.Init()
-		for {
-			b := hjOp.Next(context.Background())
-			if b.Length() == 0 {
-				break
-			}
-			require.Equal(t, len(tc.leftOutCols)+(len(tc.rightOutCols)), b.Width())
-		}
-	}
-}
-
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
 	nCols := 4

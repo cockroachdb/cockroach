@@ -143,21 +143,12 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func (eh *ExprHelper) Init(
 	expr execinfrapb.Expression, types []types.T, evalCtx *tree.EvalContext,
 ) error {
-	return eh.InitWithRemapping(expr, types, evalCtx, nil /* indexVarMap */)
-}
-
-// InitWithRemapping initializes the ExprHelper.
-// indexVarMap specifies an optional (i.e. it can be left nil) map that will be
-// used to remap the indices of IndexedVars before binding them to a container.
-func (eh *ExprHelper) InitWithRemapping(
-	expr execinfrapb.Expression, types []types.T, evalCtx *tree.EvalContext, indexVarMap []int,
-) error {
 	if expr.Empty() {
 		return nil
 	}
 	eh.evalCtx = evalCtx
 	eh.Types = types
-	eh.Vars = tree.MakeIndexedVarHelperWithRemapping(eh, len(types), indexVarMap)
+	eh.Vars = tree.MakeIndexedVarHelper(eh, len(types))
 
 	if expr.LocalExpr != nil {
 		eh.Expr = expr.LocalExpr
