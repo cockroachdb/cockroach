@@ -302,6 +302,15 @@ func (r *Replica) QuotaAvailable() uint64 {
 	return r.mu.proposalQuota.ApproximateQuota()
 }
 
+// GetProposalQuota returns the Replica's internal proposal quota.
+// It is not safe to be used concurrently so do ensure that the Replica is
+// no longer active.
+func (r *Replica) GetProposalQuota() *quotapool.IntPool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.proposalQuota
+}
+
 func (r *Replica) QuotaReleaseQueueLen() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
