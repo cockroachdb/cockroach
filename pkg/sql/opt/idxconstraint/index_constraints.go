@@ -1061,7 +1061,10 @@ func (c *indexConstraintCtx) simplifyFilter(
 type Instance struct {
 	indexConstraintCtx
 
-	filters memo.FiltersExpr
+	requiredFilters memo.FiltersExpr
+	// allFilters includes requiredFilters along with optional filters that don't
+	// need to generate remaining filters (see Instance.Init()).
+	allFilters memo.FiltersExpr
 
 	constraint   constraint.Constraint
 	consolidated constraint.Constraint
@@ -1069,27 +1072,42 @@ type Instance struct {
 	initialized  bool
 }
 
-// Init processes the filter and calculates the spans.
+// Init processes the filters and calculates the spans.
+//
+// Optional filters are filters that can be used for determining spans, but
+// they need not generate remaining filters. This is e.g. used for check
+// constraints that can help generate better spans but don't actually need to be
+// enforced.
 func (ic *Instance) Init(
-	filters memo.FiltersExpr,
+	requiredFilters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
 	columns []opt.OrderingColumn,
 	notNullCols opt.ColSet,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	ic.filters = filters
+	ic.requiredFilters = requiredFilters
+	if len(optionalFilters) == 0 {
+		ic.allFilters = requiredFilters
+	} else {
+		// Force allocation of a bigger slice.
+		// TODO(radu): we should keep the required and optional filters separate and
+		// add a helper for iterating through all of them.
+		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
+		ic.allFilters = append(ic.allFilters, optionalFilters...)
+	}
 	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
-	constraints := make([]*constraint.Constraint, 0, 1)
 	if isInverted {
-		ic.tight, constraints = ic.makeInvertedIndexSpansForExpr(
-			&ic.filters, constraints, false,
+		tight, constraints := ic.makeInvertedIndexSpansForExpr(
+			&ic.allFilters, nil /* constraints */, false,
 		)
 		// makeInvertedIndexSpansForExpr is guaranteed to add at least one
 		// constraint. It may be an "unconstrained" constraint.
+		ic.tight = tight
 		ic.constraint = *constraints[0]
 	} else {
-		ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.filters, &ic.constraint)
+		ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 	}
 	// Note: we only consolidate spans at the end; consolidating partial results
 	// can lead to worse spans, for example:
@@ -1125,8 +1143,7 @@ func (ic *Instance) Constraint() *constraint.Constraint {
 // AllInvertedIndexConstraints returns all constraints that can be created on
 // the specified inverted index. Only works for inverted indexes.
 func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
-	allConstraints := make([]*constraint.Constraint, 0)
-	_, allConstraints = ic.makeInvertedIndexSpansForExpr(&ic.filters, allConstraints, true)
+	_, allConstraints := ic.makeInvertedIndexSpansForExpr(&ic.allFilters, nil /* constraints */, true /* allPaths */)
 
 	return allConstraints, nil
 }
@@ -1139,15 +1156,15 @@ func (ic *Instance) RemainingFilters() memo.FiltersExpr {
 		return memo.TrueFilter
 	}
 	if ic.constraint.IsUnconstrained() {
-		return ic.filters
+		return ic.requiredFilters
 	}
 	var newFilters memo.FiltersExpr
-	for i := range ic.filters {
+	for i := range ic.requiredFilters {
 		prefix := ic.getMaxSimplifyPrefix(&ic.constraint)
-		condition := ic.simplifyFilter(ic.filters[i].Condition, &ic.constraint, prefix)
+		condition := ic.simplifyFilter(ic.requiredFilters[i].Condition, &ic.constraint, prefix)
 		if condition.Op() != opt.TrueOp {
 			if newFilters == nil {
-				newFilters = make(memo.FiltersExpr, 0, len(ic.filters))
+				newFilters = make(memo.FiltersExpr, 0, len(ic.requiredFilters))
 			}
 			newFilters = append(newFilters, ic.factory.ConstructFiltersItem(condition))
 		}
