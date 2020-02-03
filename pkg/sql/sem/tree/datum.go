@@ -2170,12 +2170,13 @@ func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
 		return t.Time, true
 	case *DTimestamp:
 		// Normalize to the timezone of the context.
-		_, zoneOffset := ctx.GetRelativeParseTime().Zone()
-		return t.Time.In(ctx.GetLocation()).Add(-time.Duration(zoneOffset) * time.Second), true
+		_, zoneOffset := t.Time.In(ctx.GetLocation()).Zone()
+		ts := t.Time.In(ctx.GetLocation()).Add(-time.Duration(zoneOffset) * time.Second)
+		return ts, true
 	case *DTime:
 		// Normalize to the timezone of the context.
 		toTime := timeofday.TimeOfDay(*t).ToTime()
-		_, zoneOffsetSecs := ctx.GetRelativeParseTime().Zone()
+		_, zoneOffsetSecs := toTime.In(ctx.GetLocation()).Zone()
 		return toTime.In(ctx.GetLocation()).Add(-time.Duration(zoneOffsetSecs) * time.Second), true
 	case *DTimeTZ:
 		return t.ToTime(), true

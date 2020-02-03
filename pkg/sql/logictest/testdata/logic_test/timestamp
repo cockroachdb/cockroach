@@ -255,3 +255,43 @@ query B
 select localtimestamp(3) - localtimestamp <= '1ms'::interval
 ----
 true
+
+# When doing daylight savings comparisons, ensure they compare correctly.
+# Test day before and after DST.
+subtest regression_django-cockroachdb_120
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query B
+SELECT '2011-03-13'::date = '2011-03-13'::timestamp
+----
+true
+
+query B
+SELECT '2011-03-13'::date = '2011-03-13'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-13'::timestamp = '2011-03-13'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-14'::date = '2011-03-14'::timestamp
+----
+true
+
+query B
+SELECT '2011-03-14'::date = '2011-03-14'::timestamptz
+----
+true
+
+query B
+SELECT '2011-03-14'::timestamp = '2011-03-14'::timestamptz
+----
+true
+
+statement ok
+SET TIME ZONE 0
