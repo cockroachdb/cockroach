@@ -2347,6 +2347,7 @@ func mvccScanToBytes(
 
 	res.KVData = mvccScanner.results.finish()
 	res.NumKeys = mvccScanner.results.count
+	res.NumBytes = mvccScanner.results.bytes
 
 	res.Intents, err = buildScanIntents(mvccScanner.intents.Repr())
 	if err != nil {
@@ -2469,6 +2470,10 @@ type MVCCScanResult struct {
 	KVData  [][]byte
 	KVs     []roachpb.KeyValue
 	NumKeys int64
+	// NumBytes is the number of bytes this scan result accrued in terms of the
+	// MVCCScanOptions.TargetBytes parameter. This roughly measures the bytes
+	// used for encoding the uncompressed kv pairs contained in the result.
+	NumBytes int64
 
 	ResumeSpan *roachpb.Span
 	Intents    []roachpb.Intent

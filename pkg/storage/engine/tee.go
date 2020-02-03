@@ -1234,6 +1234,9 @@ func (t *TeeEngineIter) MVCCScan(
 	if res1.NumKeys != res2.NumKeys {
 		log.Fatalf(t.ctx, "mismatching number of KVs returned from engines MVCCScan: %d != %d", res1.NumKeys, res2.NumKeys)
 	}
+	if res1.NumBytes != res2.NumBytes {
+		log.Fatalf(t.ctx, "mismatching NumBytes returned from engines MVCCScan: %d != %d", res1.NumBytes, res2.NumBytes)
+	}
 
 	// At least one side is expected to have only one contiguous slice inside it.
 	// This lets us simplify the checking code below.

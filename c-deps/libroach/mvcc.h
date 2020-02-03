@@ -156,6 +156,7 @@ template <bool reverse> class mvccScanner {
       if (kvs_->Count() > 0) {
         kvs_->GetChunks(&results_.data.bufs, &results_.data.len);
         results_.data.count = kvs_->Count();
+        results_.data.bytes = kvs_->NumBytes();
       }
       if (intents_->Count() > 0) {
         results_.intents = ToDBSlice(intents_->Data());
