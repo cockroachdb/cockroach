@@ -446,26 +446,3 @@ func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	ts.adv = advanceInfo{}
 	return adv
 }
-
-// stepLocked advances the sequencing step. This is a no-op if the txn
-// is read-only.
-//
-// This no-op behavior is needed because concurrent clients using the
-// same client.Txn are racing with each other to (re)configure the
-// stepping mode. This is a bug/misdesign, see this issue:
-// https://github.com/cockroachdb/cockroach/issues/44201
-//
-// Until that issue is fixed, we simply say "calling step() is
-// possible even with misconfigured stepping modes, as long as the txn
-// is read-only". This is valid because read-only txns do not emit
-// mutations and thus all Step() calls would be no-ops anyway.
-//
-// TODO(andrei,knz): Remove this method and (*planner).step() when
-// remaining invalid concurrent uses of client.Txns have been
-// eliminated.
-func (ts *txnState) stepLocked(ctx context.Context) error {
-	if ts.readOnly {
-		return nil
-	}
-	return ts.mu.txn.Step(ctx)
-}

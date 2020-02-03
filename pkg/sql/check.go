@@ -27,6 +27,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// validateCheckExpr verifies that the given CHECK expression returns true
+// for all the rows in the table.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing client.Txn safely.
 func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
@@ -221,6 +226,11 @@ func nonMatchingRowQuery(
 	), originColNames, nil
 }
 
+// validateForeignKey verifies that all the rows in the srcTable
+// have a matching row in their referenced table.
+//
+// It operates entirely on the current goroutine and is thus able to
+// reuse an existing client.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
 	srcTable *sqlbase.TableDescriptor,

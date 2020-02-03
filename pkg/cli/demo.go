@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -87,6 +88,15 @@ var defaultLocalities = demoLocalityList{
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "c"}}},
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
 }
+
+var demoNodeCacheSizeValue = newBytesOrPercentageValue(
+	&demoCtx.cacheSize,
+	memoryPercentResolver,
+)
+var demoNodeSQLMemSizeValue = newBytesOrPercentageValue(
+	&demoCtx.sqlPoolMemorySize,
+	memoryPercentResolver,
+)
 
 type regionPair struct {
 	regionA string
@@ -268,25 +278,49 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // testServerArgsForTransientCluster creates the test arguments for
 // a necessary server in the demo cluster.
 func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
+	// Assign a path to the store spec, to be saved.
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
+
 	args := base.TestServerArgs{
 		PartOfCluster: true,
 		Insecure:      true,
 		Stopper: initBacktrace(
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
+		JoinAddr:          joinAddr,
+		StoreSpecs:        []base.StoreSpec{storeSpec},
+		SQLMemoryPoolSize: demoCtx.sqlPoolMemorySize,
+		CacheSize:         demoCtx.cacheSize,
 	}
 
 	if demoCtx.localities != nil {
 		args.Locality = demoCtx.localities[int(nodeID-1)]
 	}
 
-	// Assign a path to the store spec, to be saved.
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
-	args.StoreSpecs = []base.StoreSpec{storeSpec}
-	args.JoinAddr = joinAddr
-
 	return args
+}
+
+func maybeWarnMemSize(ctx context.Context) {
+	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
+		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
+		maxRecommendedMem := int64(.75 * float64(maxMemory))
+		if requestedMem > maxRecommendedMem {
+			log.Shout(
+				ctx,
+				log.Severity_WARNING,
+				fmt.Sprintf(`HIGH MEMORY USAGE
+The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
+number of nodes (%d) results in potentially high memory usage on your
+device.
+This server is running at increased risk of memory-related failures.`,
+					demoNodeSQLMemSizeValue,
+					demoNodeCacheSizeValue,
+					demoCtx.nodes,
+				),
+			)
+		}
+	}
 }
 
 func setupTransientCluster(
@@ -326,6 +360,7 @@ func setupTransientCluster(
 	if err != nil {
 		return c, err
 	}
+	maybeWarnMemSize(ctx)
 	c.cleanup = func() {
 		c.stopper.Stop(ctx)
 	}

@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/vfs"
 	"github.com/golang/snappy"
 )
 
@@ -166,7 +166,7 @@ type diskQueue struct {
 	numBufferedBatches int
 	writer             *diskQueueWriter
 	writeFileIdx       int
-	writeFile          vfs.File
+	writeFile          engine.File
 	deserializerState  struct {
 		*colserde.FileDeserializer
 		curBatch int
@@ -174,7 +174,7 @@ type diskQueue struct {
 	// readFileIdx is an index into the current file in files the deserializer is
 	// reading from.
 	readFileIdx                  int
-	readFile                     vfs.File
+	readFile                     engine.File
 	scratchDecompressedReadBytes []byte
 }
 
@@ -207,7 +207,7 @@ const (
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
-	FS vfs.FS
+	FS engine.FS
 	// Path is where the temporary directory that will contain this DiskQueue's
 	// files should be created. The directory name will be a UUID.
 	Path string
@@ -253,7 +253,7 @@ func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
 		cfg:     cfg,
 		files:   make([]file, 0, 4),
 	}
-	if err := cfg.FS.MkdirAll(filepath.Join(cfg.Path, d.dirName), 0755); err != nil {
+	if err := cfg.FS.CreateDir(filepath.Join(cfg.Path, d.dirName)); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -286,7 +286,7 @@ func (d *diskQueue) Close() error {
 		d.readFile = nil
 		// The readFile will be removed below in RemoveAll.
 	}
-	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
+	if err := d.cfg.FS.DeleteDir(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	return nil
@@ -300,14 +300,11 @@ func (d *diskQueue) Close() error {
 // to write to.
 func (d *diskQueue) rotateFile() error {
 	fName := filepath.Join(d.cfg.Path, d.dirName, strconv.Itoa(d.seqNo))
-	f, err := d.cfg.FS.Create(fName)
+	f, err := d.cfg.FS.CreateFileWithSync(fName, bytesPerSync)
 	if err != nil {
 		return err
 	}
 	d.seqNo++
-	f = vfs.NewSyncingFile(f, vfs.SyncingFileOptions{
-		BytesPerSync: bytesPerSync,
-	})
 
 	if d.serializer == nil {
 		writer := &diskQueueWriter{testingKnobAlwaysCompress: d.cfg.TestingKnobs.AlwaysCompress, wrapped: f}
@@ -338,7 +335,7 @@ func (d *diskQueue) rotateFile() error {
 	return nil
 }
 
-func (d *diskQueue) resetWriters(f vfs.File) error {
+func (d *diskQueue) resetWriters(f engine.File) error {
 	d.writer.reset(f)
 	return d.serializer.Reset(d.writer)
 }
@@ -419,7 +416,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 			if err := d.readFile.Close(); err != nil {
 				return false, err
 			}
-			if err := d.cfg.FS.Remove(d.files[d.readFileIdx].name); err != nil {
+			if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
 				return false, err
 			}
 			d.readFile = nil
@@ -432,7 +429,7 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 	}
 	if d.readFile == nil {
 		// File is not open.
-		f, err := d.cfg.FS.Open(fileToRead.name)
+		f, err := d.cfg.FS.OpenFile(fileToRead.name)
 		if err != nil {
 			return false, err
 		}

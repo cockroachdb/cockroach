@@ -161,6 +161,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLMemoryPoolSize != 0 {
 		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
 	}
+	if params.CacheSize != 0 {
+		cfg.CacheSize = params.CacheSize
+	}
 
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}

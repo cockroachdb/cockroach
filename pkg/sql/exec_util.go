@@ -1136,8 +1136,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.settings = cfg.Settings
 		sc.ieFactory = ieFactory
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(ctx, cfg.Clock.Now(), tracing, ieFactory)
-			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
+			if err := sc.exec(ctx, true /* inSession */); err != nil {
 				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
 					onError(err)
 				}

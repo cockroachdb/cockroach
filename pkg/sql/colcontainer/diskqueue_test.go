@@ -28,8 +28,7 @@ import (
 func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
-	require.NoError(t, err)
+	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
 	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
@@ -65,7 +64,7 @@ func TestDiskQueue(t *testing.T) {
 				require.NoError(t, err)
 
 				// Verify that a directory was created.
-				directories, err := queueCfg.FS.List(queueCfg.Path)
+				directories, err := queueCfg.FS.ListDir(queueCfg.Path)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(directories))
 
@@ -112,7 +111,7 @@ func TestDiskQueue(t *testing.T) {
 				require.NoError(t, q.Close())
 
 				// Verify no directories are left over.
-				directories, err = queueCfg.FS.List(queueCfg.Path)
+				directories, err = queueCfg.FS.ListDir(queueCfg.Path)
 				require.NoError(t, err)
 				require.Equal(t, 0, len(directories))
 			})
@@ -147,8 +146,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	}
 	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
-	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
-	require.NoError(b, err)
+	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	queueCfg.BufferSizeBytes = int(bufSize)
 	queueCfg.MaxFileSizeBytes = int(blockSize)

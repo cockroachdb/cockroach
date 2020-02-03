@@ -64,11 +64,8 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// in flight whose spans haven't been accounted for.
 	//
 	// As a special case, allow for async rollbacks and heartbeats to be sent
-	// whenever. As another special case, we allow concurrent requests on AS OF
-	// SYSTEM TIME transactions. I think these transactions can't experience
-	// retriable errors, so they're safe. And they're used concurrently by schema
-	// change code.
-	if !gs.allowConcurrentRequests && !ba.Txn.CommitTimestampFixed {
+	// whenever.
+	if !gs.allowConcurrentRequests {
 		asyncRequest := ba.IsSingleAbortTxnRequest() || ba.IsSingleHeartbeatTxnRequest()
 		if !asyncRequest {
 			if gs.requestInFlight {
