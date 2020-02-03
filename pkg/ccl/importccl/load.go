@@ -39,6 +39,44 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TestingGetDescriptorFromDB is a wrapper for getDescriptorFromDB.
+func TestingGetDescriptorFromDB(
+	ctx context.Context, db *gosql.DB, dbName string,
+) (*sqlbase.DatabaseDescriptor, error) {
+	return getDescriptorFromDB(ctx, db, dbName)
+}
+
+// getDescriptorFromDB returns the descriptor in bytes of the given table name.
+func getDescriptorFromDB(
+	ctx context.Context, db *gosql.DB, dbName string,
+) (*sqlbase.DatabaseDescriptor, error) {
+	var dbDescBytes []byte
+	// Due to the namespace migration, the row may not exist in system.namespace
+	// so a fallback to system.namespace_deprecated is required.
+	// TODO(sqlexec): In 20.2, this logic can be removed.
+	for _, tableName := range []string{"system.namespace", "system.namespace_deprecated"} {
+		if err := db.QueryRow(fmt.Sprintf(`SELECT
+			d.descriptor
+		FROM %s n INNER JOIN system.descriptor d ON n.id = d.id
+		WHERE n."parentID" = $1
+		AND n.name = $2`, tableName),
+			keys.RootNamespaceID,
+			dbName,
+		).Scan(&dbDescBytes); err != nil {
+			if err == gosql.ErrNoRows {
+				continue
+			}
+			return nil, errors.Wrap(err, "fetch database descriptor")
+		}
+		var dbDescWrapper sqlbase.Descriptor
+		if err := protoutil.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
+			return nil, errors.Wrap(err, "unmarshal database descriptor")
+		}
+		return dbDescWrapper.GetDatabase(), nil
+	}
+	return nil, gosql.ErrNoRows
+}
+
 // Load converts r into SSTables and backup descriptors. database is the name
 // of the database into which the SSTables will eventually be written. uri
 // is the storage location. ts is the time at which the MVCC data will
@@ -76,23 +114,10 @@ func Load(
 	}
 	defer dir.Close()
 
-	var dbDescBytes []byte
-	if err := db.QueryRow(`
-		SELECT
-			d.descriptor
-		FROM system.namespace n INNER JOIN system.descriptor d ON n.id = d.id
-		WHERE n."parentID" = $1
-		AND n.name = $2`,
-		keys.RootNamespaceID,
-		database,
-	).Scan(&dbDescBytes); err != nil {
-		return backupccl.BackupDescriptor{}, errors.Wrap(err, "fetch database descriptor")
+	dbDesc, err := getDescriptorFromDB(ctx, db, database)
+	if err != nil {
+		return backupccl.BackupDescriptor{}, err
 	}
-	var dbDescWrapper sqlbase.Descriptor
-	if err := protoutil.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
-		return backupccl.BackupDescriptor{}, errors.Wrap(err, "unmarshal database descriptor")
-	}
-	dbDesc := dbDescWrapper.GetDatabase()
 
 	privs := dbDesc.GetPrivileges()
 

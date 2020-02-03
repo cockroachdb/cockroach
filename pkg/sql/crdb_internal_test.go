@@ -34,7 +34,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// TestGetAllNamesInternal tests both namespace and namespace_deprecated
+// entries.
+func TestGetAllNamesInternal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		batch := txn.NewBatch()
+		batch.Put(sqlbase.NewTableKey(999, 444, "bob").Key(), 9999)
+		batch.Put(sqlbase.NewDeprecatedTableKey(1000, "alice").Key(), 10000)
+		batch.Put(sqlbase.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(), 9999)
+		return txn.CommitInBatch(ctx, batch)
+	})
+	require.NoError(t, err)
+
+	names, err := sql.TestingGetAllNames(ctx, nil, s.InternalExecutor().(*sql.InternalExecutor))
+	require.NoError(t, err)
+
+	assert.Equal(t, sql.NamespaceKey{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
+	assert.Equal(t, sql.NamespaceKey{ParentID: 1000, Name: "alice"}, names[10000])
+}
 
 // TestRangeLocalityBasedOnNodeIDs tests that the replica_localities shown in crdb_internal.ranges
 // are correct reflection of the localities of the stores in the range descriptor which
