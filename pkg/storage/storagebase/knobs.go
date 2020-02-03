@@ -16,12 +16,10 @@ package storagebase
 
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {
-	// TestingEvalFilter is called before evaluating each command. The
-	// number of times this callback is run depends on the propEvalKV
-	// setting, and it is therefore deprecated in favor of either
-	// TestingProposalFilter (which runs only on the lease holder) or
-	// TestingApplyFilter (which runs on each replica). If your filter is
-	// not idempotent, consider wrapping it in a
+	// TestingEvalFilter is called before evaluating each command. This filter is
+	// deprecated in favor of either TestingProposalFilter (which runs only on the
+	// lease holder) or TestingApplyFilter (which runs on each replica). If your
+	// filter is not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
 	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
 	// to one of the other filters. See #10493
