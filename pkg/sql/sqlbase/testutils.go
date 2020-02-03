@@ -123,7 +123,6 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			return special
 		}
 	}
-	timePrec := tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())
 	switch typ.Family() {
 	case types.BoolFamily:
 		return tree.MakeDBool(rng.Intn(2) == 1)
@@ -165,7 +164,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		}
 		return tree.NewDDate(d)
 	case types.TimeFamily:
-		return tree.MakeDTime(timeofday.Random(rng)).Round(timePrec)
+		return tree.MakeDTime(timeofday.Random(rng)).Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.TimeTZFamily:
 		return tree.NewDTimeTZFromOffset(
 			timeofday.Random(rng),
@@ -173,9 +172,10 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			// second offsets making some tests break when comparing
 			// results in == results out using string comparison.
 			(rng.Int31n(28*60+59)-(14*60+59))*60,
-		).Round(timePrec)
+		).Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.TimestampFamily:
-		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)), timePrec)
+		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.IntervalFamily:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
@@ -223,7 +223,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		_, _ = rng.Read(p)
 		return tree.NewDBytes(tree.DBytes(p))
 	case types.TimestampTZFamily:
-		return tree.MakeDTimestampTZ(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)), timePrec)
+		return tree.MakeDTimestampTZ(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.CollatedStringFamily:
 		// Generate a random Unicode string.
 		var buf bytes.Buffer

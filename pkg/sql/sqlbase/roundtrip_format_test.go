@@ -52,16 +52,15 @@ func TestRandParseDatumStringAs(t *testing.T) {
 				// get an interesting datum for a time related type that
 				// doesn't have the precision that we requested. In these
 				// cases, manually correct the type ourselves.
-				prec := tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())
 				switch d := datum.(type) {
 				case *tree.DTimestampTZ:
-					datum = d.Round(prec)
+					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTimestamp:
-					datum = d.Round(prec)
+					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTime:
-					datum = d.Round(prec)
+					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTimeTZ:
-					datum = d.Round(prec)
+					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				}
 
 				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
