@@ -1,0 +1,217 @@
+## Test opts.TargetBytes.
+
+# First, put some old data that we'll shadow.
+run ok
+with ts=1,0
+  put      k=a v=nevergoingtobeseen
+  put      k=e v=sameasabove
+  put      k=aa v=willbetombstoned
+del        k=aa ts=250,1
+----
+>> at end:
+data: "a"/0.000000001,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/0.000000250,1 -> /<empty>
+data: "aa"/0.000000001,0 -> /BYTES/willbetombstoned
+data: "e"/0.000000001,0 -> /BYTES/sameasabove
+
+run ok
+with ts=123,45
+  put      k=a v=abcdef
+  put      k=c v=ghijkllkjihg
+  put      k=e v=mnopqr
+----
+>> at end:
+data: "a"/0.000000123,45 -> /BYTES/abcdef
+data: "a"/0.000000001,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/0.000000250,1 -> /<empty>
+data: "aa"/0.000000001,0 -> /BYTES/willbetombstoned
+data: "c"/0.000000123,45 -> /BYTES/ghijkllkjihg
+data: "e"/0.000000123,45 -> /BYTES/mnopqr
+data: "e"/0.000000001,0 -> /BYTES/sameasabove
+
+# Scans without or with a large target size return all results.
+
+run ok
+with ts=300,0 k=a end=z
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+
+run ok
+with ts=300,0 k=a end=z targetbytes=0
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+
+run ok
+with ts=300,0 k=a end=z targetbytes=10000000
+  scan
+  scan reverse=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+
+
+run ok
+# Target size one byte returns one result (overshooting instead of returning nothing).
+# Upping the target size accordingly results in more rows.
+# In all cases, we're seeing resume spans iff the byte target had an effect.
+#
+# a@123,45 -> abcdef clocks in at 34 bytes as follows:
+#
+#    8 bytes size buf
+# + 14 key timestamp component
+# +  6 key bytes component
+# +  6 value bytes
+#
+# c@123,45 similarly accounts for 40 bytes.
+
+scan     k=a end=z ts=300,0 targetbytes=1
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: resume span ["aa","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: resume span ["aa","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["e","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=74
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["e","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=75
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+
+# Works just the same when not starting on an existing key.
+run ok
+scan     k=b end=z ts=300 targetbytes=1
+----
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["e","z")
+
+# Reverse scans.
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=1 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: resume span ["a","c\x00")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: resume span ["a","c\x00")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["a","aa\x00")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["a","aa\x00")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=75 reverse=true
+----
+scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+
+# Scans that return the tombstone (at aa@250,1). The kv pair at a has 34 bytes,
+# aa has 24 (just a key).
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: resume span ["aa","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: resume span ["c","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: resume span ["c","z")
+
+run ok
+scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true
+----
+scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["e","z")
+
+# ... and similarly in reverse.
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: resume span ["a","aa\x00")
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: resume span ["a","a\x00")
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: resume span ["a","a\x00")
+
+run ok
+scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true
+----
+scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
+scan: "aa" -> /<empty> @0.000000250,1
+scan: "a" -> /BYTES/abcdef @0.000000123,45

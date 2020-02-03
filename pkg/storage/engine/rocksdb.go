@@ -2485,8 +2485,8 @@ func (r *rocksDBIterator) MVCCScan(
 
 	r.clearState()
 	state := C.MVCCScan(
-		r.iter, goToCSlice(start), goToCSlice(end),
-		goToCTimestamp(timestamp), C.int64_t(max),
+		r.iter, goToCSlice(start), goToCSlice(end), goToCTimestamp(timestamp),
+		C.int64_t(max), C.int64_t(opts.TargetBytes),
 		goToCTxn(opts.Txn), C.bool(opts.Inconsistent),
 		C.bool(opts.Reverse), C.bool(opts.Tombstones),
 		C.bool(opts.FailOnMoreRecent),
