@@ -40,3 +40,17 @@ temp_table_test
 
 statement ok
 DROP TABLE temp_table_ref CASCADE; DROP TABLE temp_table_test CASCADE
+
+subtest foreign_key_errors
+
+statement ok
+CREATE TEMP TABLE a (a int)
+
+statement error cannot add a SET NULL cascading action on column "test\.pg_temp.*\.b\.c" which has a NOT NULL constraint
+CREATE TEMP TABLE b (c int NOT NULL PRIMARY KEY, FOREIGN KEY (c) REFERENCES a ON UPDATE SET NULL)
+
+statement error cannot add a SET DEFAULT cascading action on column "test\.pg_temp_.*\.b\.c" which has a NOT NULL constraint and a NULL default expression
+CREATE TEMP TABLE b (c int DEFAULT NULL PRIMARY KEY, FOREIGN KEY (c) REFERENCES a ON UPDATE SET DEFAULT)
+
+statement ok
+DROP TABLE a

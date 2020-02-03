@@ -20,7 +20,7 @@ import (
 const inMemDirName = "testing"
 
 // NewTestingDiskQueueCfg returns a DiskQueueCfg and a non-nil cleanup function.
-func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
+func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func(), error) {
 	t.Helper()
 
 	var (
@@ -30,12 +30,12 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
 		path    string
 	)
 
-	cfg.EnsureDefaults()
 	if inMem {
 		fs = vfs.NewMem()
 		if err := fs.MkdirAll(inMemDirName, 0755); err != nil {
 			t.Fatal(err)
 		}
+		path = inMemDirName
 	} else {
 		fs = vfs.Default
 		path, cleanup = testutils.TempDir(t)
@@ -46,5 +46,9 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
 	if cleanup == nil {
 		cleanup = func() {}
 	}
-	return cfg, cleanup
+	if err := cfg.EnsureDefaults(); err != nil {
+		return cfg, cleanup, err
+	}
+
+	return cfg, cleanup, nil
 }

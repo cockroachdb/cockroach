@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -948,9 +949,18 @@ func (c *cascader) updateRows(
 									if err != nil {
 										return nil, nil, nil, 0, err
 									}
+									schema, err := schema.ResolveNameByID(
+										ctx,
+										c.txn,
+										referencingTable.ParentID,
+										referencingTable.GetParentSchemaID(),
+									)
+									if err != nil {
+										return nil, nil, nil, 0, err
+									}
 									return nil, nil, nil, 0, pgerror.Newf(pgcode.NullValueNotAllowed,
 										"cannot cascade a null value into %q as it violates a NOT NULL constraint",
-										tree.ErrString(tree.NewUnresolvedName(database.Name, tree.PublicSchema, referencingTable.Name, column.Name)))
+										tree.ErrString(tree.NewUnresolvedName(database.Name, schema, referencingTable.Name, column.Name)))
 								}
 							}
 							continue
