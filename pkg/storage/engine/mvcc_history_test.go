@@ -703,7 +703,12 @@ func cmdScan(e *evalCtx) error {
 		e.scanArg("max", &imax)
 		max = int64(imax)
 	}
-	vals, _, intents, err := MVCCScan(e.ctx, e.engine, key, endKey, max, ts, opts)
+	if key := "targetbytes"; e.hasArg(key) {
+		var tb int
+		e.scanArg(key, &tb)
+		opts.TargetBytes = int64(tb)
+	}
+	vals, resumeSpan, intents, err := MVCCScan(e.ctx, e.engine, key, endKey, max, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intents when an error
 	// occurs.
@@ -712,6 +717,9 @@ func cmdScan(e *evalCtx) error {
 	}
 	for _, val := range vals {
 		fmt.Fprintf(e.results.buf, "scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
+	}
+	if resumeSpan != nil {
+		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
 	}
 	if len(vals) == 0 {
 		fmt.Fprintf(e.results.buf, "scan: %v-%v -> <no data>\n", key, endKey)

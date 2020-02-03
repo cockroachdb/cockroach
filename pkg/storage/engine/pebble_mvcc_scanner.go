@@ -33,6 +33,7 @@ const (
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
 	count int64
+	bytes int64
 	repr  []byte
 	bufs  [][]byte
 }
@@ -76,6 +77,7 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	encodeKeyToBuf(p.repr[startIdx+kvLenSize:startIdx+kvLenSize+lenKey], key, lenKey)
 	copy(p.repr[startIdx+kvLenSize+lenKey:], value)
 	p.count++
+	p.bytes += int64(lenToAdd)
 }
 
 func (p *pebbleResults) finish() [][]byte {
@@ -96,8 +98,13 @@ type pebbleMVCCScanner struct {
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
 	ts hlc.Timestamp
-	// Max number of keys to return.
+	// Max number of keys to return. Note that targetBytes below is implemented
+	// by mutating maxKeys. (In particular, one must not assume that if maxKeys
+	// is zero initially it will always be zero).
 	maxKeys int64
+	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
+	// if nonzero.
+	targetBytes int64
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -549,6 +556,14 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
 		p.results.put(p.curMVCCKey(), val)
+		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
+			// When the target bytes are met or exceeded, stop producing more
+			// keys. We implement this by reducing maxKeys to the current
+			// number of keys.
+			//
+			// TODO(bilal): see if this can be implemented more transparently.
+			p.maxKeys = p.results.count
+		}
 		if p.results.count == p.maxKeys {
 			return false
 		}
