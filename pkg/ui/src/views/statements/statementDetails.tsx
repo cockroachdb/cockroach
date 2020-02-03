@@ -275,7 +275,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 </div>
               </SummaryCard>
               <SummaryCard>
-                <h2 className="summary--card__title">Execution Count</h2>
+                <h2 className="base-heading summary--card__title">Execution Count</h2>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">First Attempts</h4>
                   <p className="summary--card__item--value">{ firstAttemptsBarChart }</p>
@@ -293,7 +293,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                   <p className="summary--card__item--value">{ totalCountBarChart }</p>
                 </div>
                 <p className="summary--card__divider"></p>
-                <h2 className="summary--card__title">Rows Affected</h2>
+                <h2 className="base-heading summary--card__title">Rows Affected</h2>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Mean Rows</h4>
                   <p className="summary--card__item--value">{ rowsBarChart(true) }</p>
@@ -316,7 +316,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         </TabPane>
         <TabPane tab="Execution Stats" key="3">
           <SummaryCard>
-            <h2 className="summary--card__title">
+            <h2 className="base-heading summary--card__title">
               Execution Latency By Phase
               <div className="numeric-stats-table__tooltip">
                 <ToolTipWrapper text="The execution latency of this statement, broken down by phase.">
@@ -341,7 +341,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             />
           </SummaryCard>
           <SummaryCard>
-            <h2 className="summary--card__title">
+            <h2 className="base-heading summary--card__title">
               Stats By Node
               <div className="numeric-stats-table__tooltip">
                 <ToolTipWrapper text="text">
