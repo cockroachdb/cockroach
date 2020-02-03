@@ -13,42 +13,51 @@ package colcontainer
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 const inMemDirName = "testing"
 
 // NewTestingDiskQueueCfg returns a DiskQueueCfg and a non-nil cleanup function.
-func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func(), error) {
+func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (DiskQueueCfg, func()) {
 	t.Helper()
 
 	var (
 		cfg     DiskQueueCfg
 		cleanup func()
-		fs      vfs.FS
+		fs      engine.FS
 		path    string
 	)
 
 	if inMem {
-		fs = vfs.NewMem()
-		if err := fs.MkdirAll(inMemDirName, 0755); err != nil {
+		ngn := engine.NewDefaultInMem()
+		fs = ngn.(engine.FS)
+		if err := fs.CreateDir(inMemDirName); err != nil {
 			t.Fatal(err)
 		}
 		path = inMemDirName
+		cleanup = ngn.Close
 	} else {
-		fs = vfs.Default
-		path, cleanup = testutils.TempDir(t)
+		ngn, err := engine.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs = ngn.(engine.FS)
+		tempPath, dirCleanup := testutils.TempDir(t)
+		path = tempPath
+		cleanup = func() {
+			ngn.Close()
+			dirCleanup()
+		}
 	}
 	cfg.FS = fs
 	cfg.Path = path
 
-	if cleanup == nil {
-		cleanup = func() {}
-	}
 	if err := cfg.EnsureDefaults(); err != nil {
-		return cfg, cleanup, err
+		t.Fatal(err)
 	}
 
-	return cfg, cleanup, nil
+	return cfg, cleanup
 }
