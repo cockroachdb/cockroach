@@ -1,5 +1,7 @@
 # LogicTest: local
 
+skip https://github.com/cockroachdb/cockroach/issues/43043
+
 # Check SHOW KV TRACE FOR SESSION.
 
 statement ok
