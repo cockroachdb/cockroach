@@ -154,7 +154,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
- ├── fd: ()~~>(2)
  ├── scan xyz
  │    └── columns: x:5(int) y:6(int) z:7(int)
  ├── scan abc@bc
@@ -299,7 +298,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) RIGHT OUTER JOIN xyz ON a=z
 ----
 left-join (hash)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int)
- ├── fd: ()~~>(2)
  ├── scan xyz
  │    └── columns: x:5(int) y:6(int) z:7(int)
  ├── scan abc@bc
@@ -1545,22 +1543,27 @@ project
                 │    ├── cardinality: [0 - 1]
                 │    ├── key: ()
                 │    ├── fd: ()-->(1,4,7,9)
-                │    ├── select
+                │    ├── limit
                 │    │    ├── columns: col0:7(int!null) col2:9(int)
                 │    │    ├── cardinality: [0 - 1]
                 │    │    ├── key: ()
                 │    │    ├── fd: ()-->(7,9)
-                │    │    ├── index-join t
-                │    │    │    ├── columns: col0:7(int) col2:9(int)
-                │    │    │    ├── lax-key: (7)
-                │    │    │    ├── fd: ()-->(9), (9)~~>(7)
-                │    │    │    └── scan t@secondary
-                │    │    │         ├── columns: pk:6(int!null) col2:9(int)
-                │    │    │         ├── constraint: /9: [/NULL - /NULL]
-                │    │    │         ├── key: (6)
-                │    │    │         └── fd: ()-->(9), (9)~~>(6)
-                │    │    └── filters
-                │    │         └── col0 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+                │    │    ├── select
+                │    │    │    ├── columns: col0:7(int!null) col2:9(int)
+                │    │    │    ├── lax-key: (9)
+                │    │    │    ├── fd: ()-->(7,9)
+                │    │    │    ├── index-join t
+                │    │    │    │    ├── columns: col0:7(int) col2:9(int)
+                │    │    │    │    ├── lax-key: (7,9)
+                │    │    │    │    ├── fd: ()-->(9), (9)~~>(7)
+                │    │    │    │    └── scan t@secondary
+                │    │    │    │         ├── columns: pk:6(int!null) col2:9(int)
+                │    │    │    │         ├── constraint: /9: [/NULL - /NULL]
+                │    │    │    │         ├── key: (6)
+                │    │    │    │         └── fd: ()-->(9), (9)~~>(6)
+                │    │    │    └── filters
+                │    │    │         └── col0 = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+                │    │    └── const: 1 [type=int]
                 │    └── filters
                 │         └── col2 = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
                 └── filters
