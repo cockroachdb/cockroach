@@ -12,13 +12,11 @@ package tree
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=Option
@@ -91,16 +89,6 @@ func (k Option) ToSQLColumnName() string {
 
 // ToSQLValue returns the value of option in it's SQL Column.
 func (ro RoleOption) ToSQLValue() string {
-	if ro.Option == PASSWORD {
-		if ro.ValueIsNull {
-			// Make sure password isn't used
-			return "NULL"
-		} else {
-			// Need to hash the password here
-			return fmt.Sprintf("'%s'", ro.Value)
-		}
-	}
-
 	return strconv.FormatBool(MapToBool[ro.Option])
 }
 
@@ -155,42 +143,6 @@ func (pl RoleOptionList) ToBitField() (uint32, error) {
 			return 0, pgerror.Newf(pgcode.Syntax, "redundant role option options")
 		}
 		ret |= p.Option.Mask()
-	}
-	return ret, nil
-}
-
-// CreateSetStmtFromRoleOptions returns a string of the form:
-// "SET "optionA" = true, "optionB" = false".
-func (pl RoleOptionList) CreateSetStmtFromRoleOptions() (string, error) {
-	if len(pl) <= 0 {
-		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
-	}
-	setStmt := "SET "
-	for i, roleOption := range pl {
-		option := roleOption.Option
-		format := ", \"%s\" = %s "
-		if i == 0 {
-			format = "\"%s\" = %s "
-		}
-		setStmt += fmt.Sprintf(format, option.ToSQLColumnName(), roleOption.ToSQLValue())
-	}
-
-	return setStmt, nil
-}
-
-// WIP LIST FROM STRINGS HAS TO BE LIST FROM ROLEOPTION
-// OR ANOTHER WAY TO MAKE LIST EASILY FROM ROLEOPTION IN YACC
-// ListFromStrings takes a list of strings and attempts to build a list of Option.
-// We convert each string to uppercase and search for it in the ByName map.
-// If an entry is not found in ByName, an error is returned.
-func ListFromRoleOptions(strs []string) (KindList, error) {
-	ret := make(KindList, len(strs))
-	for i, s := range strs {
-		k, ok := ByName[strings.ToUpper(s)]
-		if !ok {
-			return nil, errors.Errorf("not a valid role option: %q", s)
-		}
-		ret[i] = k
 	}
 	return ret, nil
 }

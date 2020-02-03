@@ -107,17 +107,41 @@ func (n *alterRoleOrUserNode) startExec(params runParams) error {
 			"setting or updating a password is not supported in insecure mode")
 	}
 
-	setStmt, err := n.roleOptions.CreateSetStmtFromRoleOptions()
+	setStmt, err := n.CreateSetStmt(hashedPassword)
 	if err != nil {
 		return err
 	}
+
+	// 1. Only setting role options excluding password.
+	passwordClause := ""
+	// 2. Only setting password.
+	if n.roleOptions.Contains(tree.PASSWORD) {
+		passwordClause = fmt.Sprintf("\"%s\" = $2", tree.PASSWORD.ToSQLColumnName())
+		// 3. Setting both password and other role options.
+		if setStmt != "" {
+			passwordClause = fmt.Sprintf("\"%s\" = $2, ", tree.PASSWORD.ToSQLColumnName())
+		}
+	} else {
+		stmt := fmt.Sprintf(`UPDATE %s SET %s WHERE username = $1`, userTableName, setStmt)
+
+		n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"update-role",
+			params.p.txn,
+			stmt,
+			normalizedUsername,
+		)
+	}
+
+	stmt := fmt.Sprintf(`UPDATE %s SET %s %s WHERE username = $1`, userTableName, passwordClause, setStmt)
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		"update-role",
 		params.p.txn,
-		fmt.Sprintf(`UPDATE %s %s WHERE username = $1`, userTableName, setStmt),
+		stmt,
 		normalizedUsername,
+		hashedPassword,
 	)
 
 	if err != nil {
@@ -128,6 +152,30 @@ func (n *alterRoleOrUserNode) startExec(params runParams) error {
 			"user %s does not exist", name)
 	}
 	return nil
+}
+
+// CreateSetStmtFromRoleOptions returns a string of the form:
+// "SET "optionA" = true, "optionB" = false".
+func (n *alterRoleOrUserNode) CreateSetStmt() (string, error) {
+	if len(n.roleOptions) <= 0 {
+		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
+	}
+	setStmt := ""
+	for i, roleOption := range n.roleOptions {
+		option := roleOption.Option
+		// Password is a special case
+		if option == tree.PASSWORD {
+
+		} else {
+			format := ", \"%s\" = %s "
+			if i == 0 {
+				format = "\"%s\" = %s "
+			}
+			setStmt += fmt.Sprintf(format, option.ToSQLColumnName(), roleOption.ToSQLValue())
+		}
+	}
+
+	return setStmt, nil
 }
 
 func (*alterRoleOrUserNode) Next(runParams) (bool, error) { return false, nil }
