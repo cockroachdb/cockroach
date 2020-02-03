@@ -46,12 +46,9 @@ func registerTPCHVec(r *testRegistry) {
 		7:  "can cause OOM",
 		8:  "can cause OOM",
 		9:  "can cause OOM",
-		12: "the query is skipped by tpch workload",
 		19: "can cause OOM",
 	}
-	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{
-		12: "the query is skipped by tpch workload",
-	}
+	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{}
 
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
 		TPCHTables := []string{
