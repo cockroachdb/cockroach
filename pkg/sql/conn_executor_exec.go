@@ -446,7 +446,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// well as in-between very stage of cascading actions.
 	// This TODO can be removed when the cascading code is reorganized
 	// accordingly and the missing call to Step() is introduced.
-	if err := ex.state.stepLocked(ctx); err != nil {
+	if err := ex.state.mu.txn.Step(ctx); err != nil {
 		return makeErrEvent(err)
 	}
 
