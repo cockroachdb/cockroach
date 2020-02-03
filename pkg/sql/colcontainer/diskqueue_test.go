@@ -13,7 +13,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -29,7 +28,8 @@ import (
 func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
+	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(t, true /* inMem */)
+	require.NoError(t, err)
 	defer cleanup()
 
 	availableTyps := make([]coltypes.T, 0, len(coltypes.AllTypes))
@@ -63,6 +63,11 @@ func TestDiskQueue(t *testing.T) {
 				queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 				q, err := colcontainer.NewDiskQueue(typs, queueCfg)
 				require.NoError(t, err)
+
+				// Verify that a directory was created.
+				directories, err := queueCfg.FS.List(queueCfg.Path)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(directories))
 
 				// Run verification.
 				ctx := context.Background()
@@ -107,13 +112,9 @@ func TestDiskQueue(t *testing.T) {
 				require.NoError(t, q.Close())
 
 				// Verify no directories are left over.
-				files, err := queueCfg.FS.List(queueCfg.Path)
+				directories, err = queueCfg.FS.List(queueCfg.Path)
 				require.NoError(t, err)
-				for _, f := range files {
-					if strings.HasPrefix(f, queueCfg.Dir) {
-						t.Fatal("files left over after disk queue test")
-					}
-				}
+				require.Equal(t, 0, len(directories))
 			})
 		}
 	}
@@ -146,7 +147,8 @@ func BenchmarkDiskQueue(b *testing.B) {
 	}
 	numBatches := int(dataSize / (8 * int64(coldata.BatchSize())))
 
-	queueCfg, cleanup := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
+	queueCfg, cleanup, err := colcontainer.NewTestingDiskQueueCfg(b, false /* inMem */)
+	require.NoError(b, err)
 	defer cleanup()
 	queueCfg.BufferSizeBytes = int(bufSize)
 	queueCfg.MaxFileSizeBytes = int(blockSize)

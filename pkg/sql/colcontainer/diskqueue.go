@@ -129,10 +129,10 @@ func (w *diskQueueWriter) numBytesBuffered() int {
 // diskQueue is an on-disk queue of coldata.Batches that implements the Queue
 // interface. coldata.Batches are serialized and buffered up until
 // DiskQueueCfg.BufferSizeBytes are reached, after which they are compressed and
-// flushed to a file. Files will be created in DiskQueueCfg.Dir with increasing
-// sequence numbers. When a file reaches DiskQueueCfg.MaxFileSizeBytes, a new file
-// is created with the next sequential file number to store the next batches in
-// the queue.
+// flushed to a file. A directory with a random UUID name will be created in
+// cfg.Path, and files will be created in that directory using sequence numbers.
+// When a file reaches DiskQueueCfg.MaxFileSizeBytes, a new file is created with
+// the next sequential file number to store the next batches in the queue.
 // Note that files will be cleaned up as coldata.Batches are dequeued from the
 // diskQueue. DiskQueueCfg.Dir will also be removed on Close, deleting all files.
 // A diskQueue will never use more memory than cfg.BufferSizeBytes, but not all
@@ -148,6 +148,9 @@ func (w *diskQueueWriter) numBytesBuffered() int {
 //  ensure that we only use DiskQueues for the write-everything, read-everything
 //  pattern.
 type diskQueue struct {
+	// dirName is the directory in cfg.Path that holds this queue's files.
+	dirName string
+
 	typs  []coltypes.T
 	cfg   DiskQueueCfg
 	files []file
@@ -205,11 +208,9 @@ const (
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS vfs.FS
-	// Path is where the temporary files should be created.
+	// Path is where the temporary directory that will contain this DiskQueue's
+	// files should be created. The directory name will be a UUID.
 	Path string
-	// Dir is the directory that will be created to store all of a Queue's files.
-	// This directory will be removed on Close.
-	Dir string
 	// BufferSizeBytes is the number of bytes to buffer before compressing and
 	// writing to disk.
 	BufferSizeBytes int
@@ -227,11 +228,10 @@ type DiskQueueCfg struct {
 }
 
 // EnsureDefaults ensures that optional fields are set to reasonable defaults.
-func (cfg *DiskQueueCfg) EnsureDefaults() {
-	// An unset Path is allowed. A random directory name will be generated if
-	// unset.
-	if cfg.Dir == "" {
-		cfg.Dir = uuid.FastMakeV4().String()
+// If any necessary options have been elided, an error is returned.
+func (cfg *DiskQueueCfg) EnsureDefaults() error {
+	if cfg.FS == nil {
+		return errors.New("FS unset on DiskQueueCfg")
 	}
 	if cfg.BufferSizeBytes == 0 {
 		cfg.BufferSizeBytes = defaultBufferSizeBytes
@@ -239,17 +239,21 @@ func (cfg *DiskQueueCfg) EnsureDefaults() {
 	if cfg.MaxFileSizeBytes == 0 {
 		cfg.MaxFileSizeBytes = defaultMaxFileSizeBytes
 	}
+	return nil
 }
 
 // NewDiskQueue creates a Queue that spills to disk.
 func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
-	cfg.EnsureDefaults()
-	d := &diskQueue{
-		typs:  typs,
-		cfg:   cfg,
-		files: make([]file, 0, 4),
+	if err := cfg.EnsureDefaults(); err != nil {
+		return nil, err
 	}
-	if err := cfg.FS.MkdirAll(filepath.Join(cfg.Path, cfg.Dir), 0755); err != nil {
+	d := &diskQueue{
+		dirName: uuid.FastMakeV4().String(),
+		typs:    typs,
+		cfg:     cfg,
+		files:   make([]file, 0, 4),
+	}
+	if err := cfg.FS.MkdirAll(filepath.Join(cfg.Path, d.dirName), 0755); err != nil {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
@@ -282,7 +286,7 @@ func (d *diskQueue) Close() error {
 		d.readFile = nil
 		// The readFile will be removed below in RemoveAll.
 	}
-	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.Path, d.cfg.Dir)); err != nil {
+	if err := d.cfg.FS.RemoveAll(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
 	return nil
@@ -295,7 +299,7 @@ func (d *diskQueue) Close() error {
 // any file (i.e. during initialization). This will simply create the first file
 // to write to.
 func (d *diskQueue) rotateFile() error {
-	fName := filepath.Join(d.cfg.Path, d.cfg.Dir, strconv.Itoa(d.seqNo))
+	fName := filepath.Join(d.cfg.Path, d.dirName, strconv.Itoa(d.seqNo))
 	f, err := d.cfg.FS.Create(fName)
 	if err != nil {
 		return err
