@@ -731,6 +731,13 @@ func (r *testRunner) runTest(
 		defer close(done) // closed only after we've grabbed the debug info below
 
 		// This is the call to actually run the test.
+		defer func() {
+			if r := recover(); r != nil {
+				// TODO(andreimatei): prevent the cluster from being reused.
+				t.Fatalf("test panicked: %v", r)
+			}
+		}()
+
 		t.spec.Run(runCtx, t, c)
 	}()
 
