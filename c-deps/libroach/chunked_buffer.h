@@ -36,6 +36,8 @@ class chunkedBuffer {
 
   // Get the number of key/value pairs written to this chunkedBuffer.
   int Count() const { return count_; }
+  // Get the number of bytes written to this chunkedBuffer.
+  int NumBytes() const { return bytes_; }
 
  private:
   void put(const char* data, int len, int next_size_hint);
@@ -43,6 +45,7 @@ class chunkedBuffer {
  private:
   std::vector<DBSlice> bufs_;
   int64_t count_;
+  int64_t bytes_;
   char* buf_ptr_;
 };
 
