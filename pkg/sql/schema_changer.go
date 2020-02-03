@@ -581,8 +581,13 @@ func (sc *SchemaChanger) maybeDropTable(
 
 // maybe backfill a created table by executing the AS query. Return nil if
 // successfully backfilled.
+//
+// Note that this does not connect to the tracing settings of the
+// surrounding SQL transaction. This should be OK as (at the time of
+// this writing) this code path is only used for standalone CREATE
+// TABLE AS statements, which cannot be traced.
 func (sc *SchemaChanger) maybeBackfillCreateTableAs(
-	ctx context.Context, table *sqlbase.TableDescriptor, tracing *SessionTracing,
+	ctx context.Context, table *sqlbase.TableDescriptor,
 ) error {
 	if table.Adding() && table.IsAs() {
 		// Acquire lease.
@@ -668,7 +673,10 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 					func(ts hlc.Timestamp) {
 						_ = sc.clock.Update(ts)
 					},
-					tracing,
+					// Make a session tracing object on-the-fly. This is OK
+					// because it sets "enabled: false" and thus none of the
+					// other fields are used.
+					&SessionTracing{},
 				)
 				defer recv.Release()
 
@@ -940,7 +948,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 //
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
-func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, tracing *SessionTracing) error {
+func (sc *SchemaChanger) exec(ctx context.Context, inSession bool) error {
 	ctx = logtags.AddTag(ctx, "scExec", nil)
 
 	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
@@ -971,7 +979,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, tracing *Sess
 		return err
 	}
 
-	if err := sc.maybeBackfillCreateTableAs(ctx, tableDesc, tracing); err != nil {
+	if err := sc.maybeBackfillCreateTableAs(ctx, tableDesc); err != nil {
 		return err
 	}
 
@@ -1065,7 +1073,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, tracing *Sess
 	}
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(ctx, &lease, tracing)
+	err = sc.runStateMachineAndBackfill(ctx, &lease)
 
 	defer func() {
 		if err := waitToUpdateLeases(err == nil /* refreshStats */); err != nil && !errors.Is(err, sqlbase.ErrDescriptorNotFound) {
@@ -1083,7 +1091,7 @@ func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, tracing *Sess
 	// a permanent error. All other errors are transient errors that are
 	// resolved by retrying the backfill.
 	if isPermanentSchemaChangeError(err) {
-		if rollbackErr := sc.rollbackSchemaChange(ctx, err, &lease, tracing); rollbackErr != nil {
+		if rollbackErr := sc.rollbackSchemaChange(ctx, err, &lease); rollbackErr != nil {
 			// Note: the "err" object is captured by rollbackSchemaChange(), so
 			// it does not simply disappear.
 			return errors.Wrap(rollbackErr, "while rolling back schema change")
@@ -1137,10 +1145,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 }
 
 func (sc *SchemaChanger) rollbackSchemaChange(
-	ctx context.Context,
-	err error,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	tracing *SessionTracing,
+	ctx context.Context, err error, lease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
@@ -1162,7 +1167,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, tracing); errPurge != nil {
+	if errPurge := sc.runStateMachineAndBackfill(ctx, lease); errPurge != nil {
 		// Don't return this error because we do want the caller to know
 		// that an integrity constraint was violated with the original
 		// schema change. The reversed schema change will be
@@ -1531,7 +1536,7 @@ func (sc *SchemaChanger) notFirstInLine(
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, tracing *SessionTracing,
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
@@ -1542,7 +1547,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	}
 
 	// Run backfill(s).
-	if err := sc.runBackfill(ctx, lease, tracing); err != nil {
+	if err := sc.runBackfill(ctx, lease); err != nil {
 		return err
 	}
 
@@ -2108,10 +2113,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
 			for tableID, sc := range schemaChangers {
 				if timeutil.Since(sc.execAfter) > 0 {
-					sessionTracing := &SessionTracing{}
-
 					execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
-					err := sc.exec(execCtx, false /* inSession */, sessionTracing)
+					err := sc.exec(execCtx, false /* inSession */)
 					cleanup()
 
 					// Advance the execAfter time so that this schema
@@ -2391,11 +2394,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
+// Also, the SessionTracing inside the context is unrelated to the one
+// used in the surrounding SQL session, so session tracing is unable
+// to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context,
-	ts hlc.Timestamp,
-	tracing *SessionTracing,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ctx context.Context, ts hlc.Timestamp, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) extendedEvalContext {
 	dummyLocation := time.UTC
 
@@ -2418,7 +2421,10 @@ func createSchemaChangeEvalCtx(
 	}
 
 	evalCtx := extendedEvalContext{
-		Tracing: tracing,
+		// Make a session tracing object on-the-fly. This is OK
+		// because it sets "enabled: false" and thus none of the
+		// other fields are used.
+		Tracing: &SessionTracing{},
 		EvalContext: tree.EvalContext{
 			SessionData:      sd,
 			InternalExecutor: ieFactory(ctx, sd),
