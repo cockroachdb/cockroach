@@ -101,6 +101,7 @@ func (la *latch) ID() uint64         { return la.id }
 func (la *latch) Key() []byte        { return la.span.Key }
 func (la *latch) EndKey() []byte     { return la.span.EndKey }
 func (la *latch) String() string     { return fmt.Sprintf("%s@%s", la.span, la.ts) }
+func (la *latch) New() *latch        { return new(latch) }
 func (la *latch) SetID(v uint64)     { la.id = v }
 func (la *latch) SetKey(v []byte)    { la.span.Key = v }
 func (la *latch) SetEndKey(v []byte) { la.span.EndKey = v }
