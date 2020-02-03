@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -1173,7 +1172,7 @@ type CreateRoleOrUser struct {
 	Name        Expr
 	IsRole      bool
 	IfNotExists bool
-	RoleOptions roleoption.List
+	RoleOptions RoleOptionList
 	IfHasWith   bool
 }
 
@@ -1205,7 +1204,7 @@ func (node *CreateRoleOrUser) Format(ctx *FmtCtx) {
 type AlterRoleOrUserOptions struct {
 	Name        Expr
 	IfExists    bool
-	RoleOptions roleoption.List
+	RoleOptions RoleOptionList
 	IfHasWith   bool
 }
 

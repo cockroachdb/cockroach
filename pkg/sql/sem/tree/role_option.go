@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roleoption
+package tree
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ type Option uint32
 
 type RoleOption struct {
 	Option      Option
-	Value       string
+	Value       Expr
 	ValueIsNull bool
 }
 
@@ -94,10 +94,10 @@ func (ro RoleOption) ToSQLValue() string {
 	if ro.Option == PASSWORD {
 		if ro.ValueIsNull {
 			// Make sure password isn't used
-			return ""
+			return "NULL"
 		} else {
 			// Need to hash the password here
-			return ro.Value
+			return fmt.Sprintf("'%s'", ro.Value)
 		}
 	}
 
@@ -107,8 +107,8 @@ func (ro RoleOption) ToSQLValue() string {
 // KindList is a list of role option kinds.
 type KindList []Option
 
-// List is a list of role options.
-type List []RoleOption
+// RoleOptionList is a list of role options.
+type RoleOptionList []RoleOption
 
 func (pl KindList) Len() int {
 	return len(pl)
@@ -148,7 +148,7 @@ func (pl KindList) String() string {
 
 // ToBitField returns the bitfield representation of
 // a list of role options.
-func (pl List) ToBitField() (uint32, error) {
+func (pl RoleOptionList) ToBitField() (uint32, error) {
 	var ret uint32
 	for _, p := range pl {
 		if ret&p.Option.Mask() != 0 {
@@ -161,7 +161,7 @@ func (pl List) ToBitField() (uint32, error) {
 
 // CreateSetStmtFromRoleOptions returns a string of the form:
 // "SET "optionA" = true, "optionB" = false".
-func (pl List) CreateSetStmtFromRoleOptions() (string, error) {
+func (pl RoleOptionList) CreateSetStmtFromRoleOptions() (string, error) {
 	if len(pl) <= 0 {
 		return "", pgerror.Newf(pgcode.Syntax, "no role options found")
 	}
@@ -195,7 +195,7 @@ func ListFromRoleOptions(strs []string) (KindList, error) {
 	return ret, nil
 }
 
-func (pl List) Contains(p Option) bool {
+func (pl RoleOptionList) Contains(p Option) bool {
 	for _, ro := range pl {
 		if ro.Option == p {
 			return true
@@ -206,7 +206,7 @@ func (pl List) Contains(p Option) bool {
 }
 
 // CheckRoleOptionConflicts returns an error if two or more options conflict with each other.
-func (pl List) CheckRoleOptionConflicts() error {
+func (pl RoleOptionList) CheckRoleOptionConflicts() error {
 	roleOptionBits, err := pl.ToBitField()
 
 	if err != nil {

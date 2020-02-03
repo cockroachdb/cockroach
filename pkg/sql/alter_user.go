@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -34,7 +33,7 @@ type alterUserSetPasswordNode struct {
 func (p *planner) AlterUserSetPassword(
 	ctx context.Context, n *tree.AlterRoleOrUserOptions,
 ) (planNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, tree.CREATEROLE); err != nil {
 		return nil, err
 	}
 

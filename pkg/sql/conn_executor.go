@@ -2422,7 +2422,7 @@ type connExPrepStmtsAccessor struct {
 
 var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 
-// List is part of the preparedStatementsAccessor interface.
+// RoleOptionList is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 	// Return a copy of the data, to prevent modification of the map.
 	stmts := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts

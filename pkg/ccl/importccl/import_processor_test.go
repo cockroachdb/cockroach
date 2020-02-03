@@ -239,7 +239,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	tests := []struct {
 		name         string
 		spec         testSpec
-		inputOffsets []int64 // List of file ids that were fully processed
+		inputOffsets []int64 // RoleOptionList of file ids that were fully processed
 	}{
 		{
 			"csv-two-invalid",

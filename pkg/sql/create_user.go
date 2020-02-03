@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -29,7 +28,7 @@ import (
 type CreateUserNode struct {
 	ifNotExists bool
 	isRole      bool
-	roleOptions roleoption.List
+	roleOptions tree.RoleOptionList
 	userAuthInfo
 
 	run createUserRun
@@ -52,9 +51,9 @@ func (p *planner) CreateUserNode(
 	ifNotExists bool,
 	isRole bool,
 	opName string,
-	roleOptions roleoption.List,
+	roleOptions tree.RoleOptionList,
 ) (*CreateUserNode, error) {
-	if err := p.HasRolePrivilege(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.HasRolePrivilege(ctx, tree.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -62,8 +61,12 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	// Need to handle empty and NULL password behaviour
-	passwordE := tree.DNull
+	passwordE := tree.Expr(nil)
+	for _, ro := range roleOptions {
+		if ro.Option == tree.PASSWORD {
+			passwordE = ro.Value
+		}
+	}
 
 	ua, err := p.getUserAuthInfo(nameE, passwordE, opName)
 	if err != nil {
@@ -141,8 +144,8 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return err
 	}
 
-	canLogin := roleOptionBits&roleoption.LOGIN.Mask() != 0 ||
-		(roleOptionBits&roleoption.NOLOGIN.Mask() == 0 && !n.isRole)
+	canLogin := roleOptionBits&tree.LOGIN.Mask() != 0 ||
+		(roleOptionBits&tree.NOLOGIN.Mask() == 0 && !n.isRole)
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
@@ -152,7 +155,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
-		roleOptionBits&roleoption.CREATEROLE.Mask() != 0,
+		roleOptionBits&tree.CREATEROLE.Mask() != 0,
 		canLogin,
 	)
 

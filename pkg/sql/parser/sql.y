@@ -31,7 +31,6 @@ import (
 
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
-    "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -337,14 +336,14 @@ func (u *sqlSymUnion) privilegeType() privilege.Kind {
 func (u *sqlSymUnion) privilegeList() privilege.List {
     return u.val.(privilege.List)
 }
-func (u *sqlSymUnion) roleOptionType() roleoption.Option {
-    return u.val.(roleoption.Option)
+func (u *sqlSymUnion) roleOptionType() tree.Option {
+    return u.val.(tree.Option)
 }
-func (u *sqlSymUnion) roleOption() roleoption.RoleOption {
-    return u.val.(roleoption.RoleOption)
+func (u *sqlSymUnion) roleOption() tree.RoleOption {
+    return u.val.(tree.RoleOption)
 }
-func (u *sqlSymUnion) roleOptionList() roleoption.List {
-    return u.val.(roleoption.List)
+func (u *sqlSymUnion) roleOptionList() tree.RoleOptionList {
+    return u.val.(tree.RoleOptionList)
 }
 func (u *sqlSymUnion) isRole() bool {
  return u.val.(bool)
@@ -840,7 +839,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> name opt_name opt_name_parens opt_to_savepoint
 %type <str> privilege savepoint_name
-%type <roleoption.RoleOption> role_option password_clause
+%type <tree.RoleOption> role_option password_clause
 %type <tree.Operator> subquery_op
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
@@ -1034,7 +1033,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.TargetList> opt_on_targets_roles
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
-%type <roleoption.List> role_options
+%type <tree.RoleOptionList> role_options
 %type <tree.AuditMode> audit_mode
 
 %type <str> relocate_kw
@@ -5053,19 +5052,19 @@ truncate_stmt:
 password_clause:
   PASSWORD string_or_placeholder
   {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: $2.expr().String()}
+		$$.val = tree.RoleOption{Option: option, Value: $2.expr()}
   }
 | PASSWORD NULL
   {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+		$$.val = tree.RoleOption{Option: option, Value: tree.DNull}
 	}
 
 // %Help: CREATE ROLE - define a new role or user
@@ -5143,40 +5142,40 @@ create_view_stmt:
 role_option:
   CREATEROLE
   {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+		$$.val = tree.RoleOption{Option: option, Value: tree.DNull}
   }
   | NOCREATEROLE
   {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+		$$.val = tree.RoleOption{Option: option, Value: tree.DNull}
 	}
   | LOGIN {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+		$$.val = tree.RoleOption{Option: option, Value: tree.DNull}
 	}
   | NOLOGIN {
-		option, err := roleoption.ToOption($1)
+		option, err := tree.ToOption($1)
 		if err != nil {
 			return setErr(sqllex, err)
 		}
-		$$.val = roleoption.RoleOption{Option: option, Value: ""}
+		$$.val = tree.RoleOption{Option: option, Value: tree.DNull}
 	}
   | password_clause
 
 role_options:
 	role_option
 	{
-		roleOptionList := make(roleoption.List, 1)
+		roleOptionList := make(tree.RoleOptionList, 1)
 		roleOptionList[0] = $1.roleOption()
 		$$.val = roleOptionList
 	}

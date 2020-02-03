@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -86,7 +85,7 @@ type PlanHookState interface {
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	CreateUserNode(
 		ctx context.Context, nameE tree.Expr, ifNotExists bool, isRole bool, opName string,
-		rolePrivileges roleoption.List,
+		rolePrivileges tree.RoleOptionList,
 	) (*CreateUserNode, error)
 	DropUserNode(
 		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
