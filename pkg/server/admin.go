@@ -1244,6 +1244,9 @@ func (s *adminServer) Cluster(
 }
 
 // Health returns liveness for the node target of the request.
+//
+// NB: this is deprecated. If you're looking for the code serving /health,
+// you want (*statusServer).Details.
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {

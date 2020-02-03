@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // startAttemptUpgrade attempts to upgrade cluster version.
@@ -114,7 +114,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		if newVersion == "" {
 			newVersion = version
 		} else if version != newVersion {
-			return false, errors.New("not all nodes are running the latest version yet")
+			return false, errors.Newf("not all nodes are running the latest version yet (saw %s and %s)", newVersion, version)
 		}
 	}
 
@@ -127,7 +127,9 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	// Check if auto upgrade is enabled at current version.
+	// Check if auto upgrade is enabled at current version. This is read from
+	// the KV store so that it's in effect on all nodes immediately following a
+	// SET CLUSTER SETTING.
 	datums, err := s.internalExecutor.QueryEx(
 		ctx, "read-downgrade", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},

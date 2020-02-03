@@ -261,8 +261,8 @@ func (mq *mergeQueue) process(
 	// Use a lower threshold for load based splitting so we don't find ourselves
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
-	loadBasedSplitPossible := lhsRepl.SplitByLoadQPSThreshold() < 2*mergedQPS
-	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, lhsRepl.GetMaxBytes(), sysCfg); ok || loadBasedSplitPossible {
+	conservativeLoadBasedSplitThreshold := 0.5 * lhsRepl.SplitByLoadQPSThreshold()
+	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, lhsRepl.GetMaxBytes(), sysCfg); ok || mergedQPS >= conservativeLoadBasedSplitThreshold {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size, estimated QPS: %d, %v)",
@@ -328,14 +328,15 @@ func (mq *mergeQueue) process(
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
-	reason := fmt.Sprintf("lhs+rhs has (size=%s+%s qps=%.2f+%.2f --> %.2fqps) below threshold (size=%s, qps=%.2f)",
+	reason := fmt.Sprintf("lhs+rhs has (size=%s+%s=%s qps=%.2f+%.2f=%.2fqps) below threshold (size=%s, qps=%.2f)",
 		humanizeutil.IBytes(lhsStats.Total()),
 		humanizeutil.IBytes(rhsStats.Total()),
+		humanizeutil.IBytes(mergedStats.Total()),
 		lhsQPS,
 		rhsQPS,
 		mergedQPS,
-		humanizeutil.IBytes(mergedStats.Total()),
-		mergedQPS,
+		humanizeutil.IBytes(minBytes),
+		conservativeLoadBasedSplitThreshold,
 	)
 	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
