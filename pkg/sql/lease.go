@@ -1299,7 +1299,12 @@ func (c *tableNameCache) get(
 
 	defer table.mu.Unlock()
 
-	if !nameMatchesTable(&table.ImmutableTableDescriptor, dbID, schemaID, tableName) {
+	if !nameMatchesTable(
+		&table.ImmutableTableDescriptor.TableDescriptor,
+		dbID,
+		schemaID,
+		tableName,
+	) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
 			dbID, tableName, table.ID, table.ParentID, table.Name))
@@ -1441,7 +1446,7 @@ func (m *LeaseManager) SetInternalExecutor(executor sqlutil.InternalExecutor) {
 }
 
 func nameMatchesTable(
-	table *sqlbase.ImmutableTableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
+	table *sqlbase.TableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
 ) bool {
 	return table.ParentID == dbID && table.Name == tableName &&
 		table.GetParentSchemaID() == schemaID
@@ -1520,7 +1525,7 @@ func (m *LeaseManager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	if !nameMatchesTable(table, dbID, schemaID, tableName) {
+	if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
 		// That can mean two things. Assume the table is being renamed from A to B.
 		// a) `tableName` is A. The transaction doing the RENAME committed (so the
@@ -1564,7 +1569,7 @@ func (m *LeaseManager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		if !nameMatchesTable(table, dbID, schemaID, tableName) {
+		if !nameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(table); err != nil {
