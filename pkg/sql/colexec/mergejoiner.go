@@ -178,8 +178,6 @@ func NewMergeJoinOp(
 	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
-	leftOutCols []uint32,
-	rightOutCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -187,6 +185,19 @@ func NewMergeJoinOp(
 	filterConstructor func(Operator) (Operator, error),
 	filterOnlyOnLeft bool,
 ) (Operator, error) {
+	// TODO(yuzefovich): get rid off "outCols" entirely and plumb the assumption
+	// of outputting all columns into the merge joiner itself.
+	leftOutCols := make([]uint32, len(leftTypes))
+	for i := range leftOutCols {
+		leftOutCols[i] = uint32(i)
+	}
+	rightOutCols := make([]uint32, len(rightTypes))
+	for i := range rightOutCols {
+		rightOutCols[i] = uint32(i)
+	}
+	if joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI {
+		rightOutCols = rightOutCols[:0]
+	}
 	base, err := newMergeJoinBase(
 		allocator,
 		left,

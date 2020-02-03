@@ -570,14 +570,22 @@ func NewEqHashJoinerOp(
 	rightSource Operator,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
-	leftOutCols []uint32,
-	rightOutCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	rightDistinct bool,
 	joinType sqlbase.JoinType,
 ) (Operator, error) {
 	var leftOuter, rightOuter bool
+	// TODO(yuzefovich): get rid of "outCols" entirely and plumb the assumption
+	// of outputting all columns into the hash joiner itself.
+	leftOutCols := make([]uint32, len(leftTypes))
+	for i := range leftOutCols {
+		leftOutCols[i] = uint32(i)
+	}
+	rightOutCols := make([]uint32, len(rightTypes))
+	for i := range rightOutCols {
+		rightOutCols[i] = uint32(i)
+	}
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 	case sqlbase.JoinType_RIGHT_OUTER:
@@ -596,13 +604,9 @@ func NewEqHashJoinerOp(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-		if len(rightOutCols) != 0 {
-			return nil, errors.Errorf("semi-join can't have right-side output columns")
-		}
+		rightOutCols = rightOutCols[:0]
 	case sqlbase.JoinType_LEFT_ANTI:
-		if len(rightOutCols) != 0 {
-			return nil, errors.Errorf("left anti join can't have right-side output columns")
-		}
+		rightOutCols = rightOutCols[:0]
 	default:
 		return nil, errors.Errorf("hash join of type %s not supported", joinType)
 	}
