@@ -4617,12 +4617,11 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 				}
 			}
 		} else {
-			// Regular character, so we simply copy it.
-			ret[retIndex] = s[sIndex]
-			retIndex++
-			sIndex++
+			// Regular symbol, so we simply copy it.
+			copy(ret[retIndex:], s[sIndex:sIndex+w])
+			retIndex += w
+			sIndex += w
 		}
-
 	}
 	return string(ret), nil
 }
@@ -4702,9 +4701,9 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 				}
 			}
 		} else {
-			// Regular character, so we'll simply copy it.
-			retLen++
-			i++
+			// Regular symbol, so we'll simply copy it.
+			retLen += w
+			i += w
 		}
 	}
 	return changed, retLen, nil
