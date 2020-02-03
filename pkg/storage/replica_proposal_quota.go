@@ -90,25 +90,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		return
 	}
 
-	// We need to check if the replica is being destroyed and if so, unblock
-	// all ongoing and subsequent quota acquisition goroutines (if any).
-	//
-	// TODO(irfansharif): There is still a potential problem here that leaves
-	// clients hanging if the replica gets destroyed but this code path is
-	// never taken. Moving quota pool draining to every point where a
-	// replica can get destroyed is an option, alternatively we can clear
-	// our leader status and close the proposalQuota whenever the replica is
-	// destroyed.
-	if r.mu.destroyStatus.Removed() {
-		if r.mu.proposalQuota != nil {
-			r.mu.proposalQuota.Close("destroyed")
-		}
-		r.mu.proposalQuota = nil
-		r.mu.lastUpdateTimes = nil
-		r.mu.quotaReleaseQueue = nil
-		return
-	}
-
 	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {

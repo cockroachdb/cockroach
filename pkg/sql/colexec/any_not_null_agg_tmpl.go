@@ -80,6 +80,7 @@ type anyNotNull_TYPEAgg struct {
 	col                         _GOTYPESLICE
 	nulls                       *coldata.Nulls
 	curIdx                      int
+	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
 
@@ -119,6 +120,8 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		// this group should be null.
 		if !a.foundNonNullForCurrentGroup {
 			a.nulls.SetNull(uint16(a.curIdx))
+		} else {
+			execgen.SET(a.col, a.curIdx, a.curAgg)
 		}
 		a.curIdx++
 		a.done = true
@@ -174,11 +177,16 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 	// {{define "findAnyNotNull" -}}
 
 	if a.groups[i] {
-		// If this is a new group, check if any non-nulls have been found for the
-		// current group. The `a.curIdx` check is necessary because for the first
+		// The `a.curIdx` check is necessary because for the first
 		// group in the result set there is no "current group."
-		if !a.foundNonNullForCurrentGroup && a.curIdx >= 0 {
-			a.nulls.SetNull(uint16(a.curIdx))
+		if a.curIdx >= 0 {
+			// If this is a new group, check if any non-nulls have been found for the
+			// current group.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(uint16(a.curIdx))
+			} else {
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+			}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
@@ -193,8 +201,7 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
-		v := execgen.UNSAFEGET(col, int(i))
-		execgen.SET(a.col, a.curIdx, v)
+		a.curAgg = execgen.UNSAFEGET(col, int(i))
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}
