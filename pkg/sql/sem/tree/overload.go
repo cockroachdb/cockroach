@@ -133,7 +133,7 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
-	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
+	// MatchAt checks if the parameter type at index i of the TypeList matches type Typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool

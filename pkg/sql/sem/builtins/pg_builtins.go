@@ -1710,7 +1710,7 @@ SELECT description
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}, Typ: types.INet}), nil
 			},
 			Info: notUsableInfo,
 		},
@@ -1732,7 +1732,7 @@ SELECT description
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.INet),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}, Typ: types.INet}), nil
 			},
 			Info: notUsableInfo,
 		},

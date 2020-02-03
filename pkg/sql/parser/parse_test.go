@@ -1527,8 +1527,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
 
-		{`SELECT b <<= c`, `SELECT inet_contained_by_or_equals(b, c)`},
-		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
+		{`SELECT b <<= c`, `SELECT network_contained_by_or_equals(b, c)`},
+		{`SELECT b >>= c`, `SELECT network_contains_or_equals(b, c)`},
 
 		{`SELECT NUMERIC 'foo'`, `SELECT DECIMAL 'foo'`},
 		{`SELECT REAL 'foo'`, `SELECT FLOAT4 'foo'`},
@@ -3180,7 +3180,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a FROM t ORDER BY a DESC NULLS FIRST`, 6224, ``},
 
 		{`CREATE TABLE a(b BOX)`, 21286, `box`},
-		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`},
 		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`},
 		{`CREATE TABLE a(b LINE)`, 21286, `line`},
 		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`},

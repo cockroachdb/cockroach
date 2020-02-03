@@ -518,8 +518,9 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
-%token <str> CHARACTER CHARACTERISTICS CHECK
+%token <str> CACHE CANCEL CASCADE CASE CAST
+%token <str> CIDR CIDR_CONTAINED_BY_OR_EQUALS CIDR_CONTAINS_OR_EQUALS
+%token <str> CHANGEFEED CHAR CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
@@ -561,7 +562,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NONE NORMAL
+%token <str> NAN NAME NAMES NATURAL NETWORK_CONTAINED_BY_OR_EQUALS NETWORK_CONTAINS_OR_EQUALS
+%token <str> NEXT NO NO_INDEX_JOIN NONE NORMAL
 %token <str> NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -1082,7 +1084,8 @@ func newNameFromStr(s string) *tree.Name {
 %left      '|'
 %left      '#'
 %left      '&'
-%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND
+%left      LSHIFT RSHIFT CIDR_CONTAINS_OR_EQUALS CIDR_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_EQUALS
+%left      INET_CONTAINED_BY_OR_EQUALS NETWORK_CONTAINS_OR_EQUALS NETWORK_CONTAINED_BY_OR_EQUALS AND_AND
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -7139,6 +7142,10 @@ const_typename:
   {
     $$.val = types.INet
   }
+| CIDR
+  {
+    $$.val = types.Cidr
+  }
 | OID
   {
     $$.val = types.Oid
@@ -7809,6 +7816,22 @@ a_expr:
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contains_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr CIDR_CONTAINED_BY_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("cidr_contained_by_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr CIDR_CONTAINS_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("cidr_contains_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr NETWORK_CONTAINED_BY_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("network_contained_by_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr NETWORK_CONTAINS_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("network_contains_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {
@@ -9623,6 +9646,7 @@ unreserved_keyword:
 | CANCEL
 | CASCADE
 | CHANGEFEED
+| CIDR
 | CLUSTER
 | COLUMNS
 | COMMENT

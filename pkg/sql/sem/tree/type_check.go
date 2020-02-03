@@ -1866,7 +1866,7 @@ func TypeCheckSameTypedExprs(
 	}
 }
 
-// Used to set placeholders to the desired typ.
+// Used to set placeholders to the desired Typ.
 func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ *types.T) error {
 	for _, i := range s.placeholderIdxs {
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "placeholder")
@@ -1878,7 +1878,7 @@ func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ *types.T) error {
 	return nil
 }
 
-// Used to type check constants to the same type. An optional typ can be
+// Used to type check constants to the same type. An optional Typ can be
 // provided to signify the desired shared type, which can be set to the
 // required shared type using the second parameter.
 func typeCheckSameTypedConsts(
@@ -1889,8 +1889,8 @@ func typeCheckSameTypedConsts(
 			typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "constant")
 			if err != nil {
 				// In this case, even though the constExpr has been shown to be
-				// upcastable to typ based on canConstantBecome, it can't actually be
-				// parsed as typ.
+				// upcastable to Typ based on canConstantBecome, it can't actually be
+				// parsed as Typ.
 				return nil, err
 			}
 			s.typedExprs[i] = typedExpr
@@ -1898,7 +1898,7 @@ func typeCheckSameTypedConsts(
 		return typ, nil
 	}
 
-	// If typ is not a wildcard, all consts try to become typ.
+	// If Typ is not a wildcard, all consts try to become Typ.
 	if typ.Family() != types.AnyFamily {
 		all := true
 		for _, i := range s.constIdxs {
@@ -1919,7 +1919,7 @@ func typeCheckSameTypedConsts(
 		}
 	}
 
-	// If not all constIdxs could become typ but they have a mutual
+	// If not all constIdxs could become Typ but they have a mutual
 	// resolvable type, use this common type.
 	if bestType, ok := commonConstantType(s.exprs, s.constIdxs); ok {
 		return setTypeForConsts(bestType)

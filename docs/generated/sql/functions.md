@@ -248,6 +248,10 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="cidr_contained_by_or_equals"></a><code>cidr_contained_by_or_equals(val: cidr, container: cidr) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
+<tr><td><a name="cidr_contains_or_equals"></a><code>cidr_contains_or_equals(container: cidr, val: cidr) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
 <tr><td><a name="ilike_escape"></a><code>ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches case insensetively <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="inet_contained_by_or_equals"></a><code>inet_contained_by_or_equals(val: <a href="inet.html">inet</a>, container: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
@@ -258,6 +262,14 @@
 </span></td></tr>
 <tr><td><a name="like_escape"></a><code>like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
+<tr><td><a name="network_contained_by_or_equals"></a><code>network_contained_by_or_equals(val: <a href="inet.html">inet</a>, container: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
+<tr><td><a name="network_contained_by_or_equals"></a><code>network_contained_by_or_equals(val: cidr, container: cidr) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
+<tr><td><a name="network_contains_or_equals"></a><code>network_contains_or_equals(container: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
+<tr><td><a name="network_contains_or_equals"></a><code>network_contains_or_equals(container: cidr, val: cidr) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
+</span></td></tr>
 <tr><td><a name="not_ilike_escape"></a><code>not_ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches case insensetively with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="not_like_escape"></a><code>not_like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
@@ -265,6 +277,15 @@
 <tr><td><a name="not_similar_to_escape"></a><code>not_similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr>
 <tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr></tbody>
+</table>
+
+### CIDR functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="inet_merge"></a><code>inet_merge(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; cidr</code></td><td><span class="funcdesc"><p>Returns the smallest network which includes both of the given networks.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -513,6 +534,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="abbrev"></a><code>abbrev(val: <a href="inet.html">inet</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the combined IP address and prefix length to an abbreviated display format as text.For INET types, this will omit the prefix length if it’s not the default (32 or IPv4, 128 for IPv6)</p>
 <p>For example, <code>abbrev('192.168.1.2/24')</code> returns <code>'192.168.1.2/24'</code></p>
 </span></td></tr>
+<tr><td><a name="abbrev"></a><code>abbrev(val: cidr) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the combined IP address and prefix length to an abbreviated display format as text.For CIDR types, this will omit the prefix length if it’s not the default (32 or IPv4, 128 for IPv6)</p>
+<p>For example, <code>abbrev('192.168.1.2/24')</code> returns <code>'192.168.1.2/24'</code></p>
+</span></td></tr>
 <tr><td><a name="broadcast"></a><code>broadcast(val: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Gets the broadcast address for the network address represented by the value.</p>
 <p>For example, <code>broadcast('192.168.1.2/24')</code> returns <code>'192.168.1.255/24'</code></p>
 </span></td></tr>
@@ -531,8 +555,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="netmask"></a><code>netmask(val: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Creates an IP network mask corresponding to the prefix length in the value.</p>
 <p>For example, <code>netmask('192.168.1.2/16')</code> returns <code>'255.255.0.0'</code></p>
 </span></td></tr>
+<tr><td><a name="network"></a><code>network(val: <a href="inet.html">inet</a>) &rarr; cidr</code></td><td><span class="funcdesc"><p>Extract the network part of an IP address.</p>
+<p>For example, <code>network('192.168.1.5/24')</code> returns <code>'192.168.1.0/24'</code></p>
+</span></td></tr>
 <tr><td><a name="set_masklen"></a><code>set_masklen(val: <a href="inet.html">inet</a>, prefixlen: <a href="int.html">int</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Sets the prefix length of <code>val</code> to <code>prefixlen</code>.</p>
 <p>For example, <code>set_masklen('192.168.1.2', 16)</code> returns <code>'192.168.1.2/16'</code>.</p>
+</span></td></tr>
+<tr><td><a name="set_masklen"></a><code>set_masklen(val: cidr, prefixlen: <a href="int.html">int</a>) &rarr; cidr</code></td><td><span class="funcdesc"><p>Sets the prefix length of <code>val</code> to <code>prefixlen</code>.</p>
+<p>For example, <code>set_masklen('192.168.1.0/24', 16)</code> returns <code>'192.168.0.0/16'</code>.</p>
 </span></td></tr>
 <tr><td><a name="text"></a><code>text(val: <a href="inet.html">inet</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the IP address and prefix length to text.</p>
 </span></td></tr></tbody>

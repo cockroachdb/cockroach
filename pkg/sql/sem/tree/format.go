@@ -362,7 +362,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
-				// p.typ will be nil if the placeholder has not been type-checked yet.
+				// p.Typ will be nil if the placeholder has not been type-checked yet.
 				typ = p.typ
 			} else if d.AmbiguousFormat() {
 				typ = d.ResolvedType()

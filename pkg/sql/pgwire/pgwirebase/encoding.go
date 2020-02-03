@@ -304,8 +304,8 @@ func DecodeOidDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as uuid", b)
 			}
 			return d, nil
-		case oid.T_inet:
-			d, err := tree.ParseDIPAddrFromINetString(string(b))
+		case oid.T_inet, oid.T_cidr:
+			d, err := tree.ParseDIPAddrFromINetString(string(b), id)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax,
 					"could not parse string %q as inet", b)
@@ -557,12 +557,12 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return u, nil
-		case oid.T_inet:
+		case oid.T_inet, oid.T_cidr:
 			ipAddr, err := pgBinaryToIPAddr(b)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
+			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr, Typ: types.OidToType[id]}), nil
 		case oid.T_jsonb:
 			if len(b) < 1 {
 				return nil, NewProtocolViolationErrorf("no data to decode")

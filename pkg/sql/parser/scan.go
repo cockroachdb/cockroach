@@ -238,7 +238,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			switch s.peek() {
 			case '=': // <<=
 				s.pos++
-				lval.id = INET_CONTAINED_BY_OR_EQUALS
+				lval.id = NETWORK_CONTAINED_BY_OR_EQUALS
 				return
 			}
 			lval.id = LSHIFT
@@ -265,7 +265,7 @@ func (s *scanner) scan(lval *sqlSymType) {
 			switch s.peek() {
 			case '=': // >>=
 				s.pos++
-				lval.id = INET_CONTAINS_OR_EQUALS
+				lval.id = NETWORK_CONTAINS_OR_EQUALS
 				return
 			}
 			lval.id = RSHIFT

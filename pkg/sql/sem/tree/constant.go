@@ -464,6 +464,7 @@ var (
 		types.INet,
 		types.Jsonb,
 		types.VarBit,
+		types.Cidr,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
 	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String}

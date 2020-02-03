@@ -11,7 +11,10 @@
 package tree
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,6 +56,7 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, erro
 // parseStringAs parses s as type t for simple types. Arrays and collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
+	log.Info(context.TODO(), "JEB::parse_string.parseStringAs() - HEAD")
 	switch t.Family() {
 	case types.ArrayFamily:
 		return ParseDArrayFromString(ctx, s, t.ArrayContents())
@@ -69,7 +73,7 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	case types.FloatFamily:
 		return ParseDFloat(s)
 	case types.INetFamily:
-		return ParseDIPAddrFromINetString(s)
+		return ParseDIPAddrFromINetString(s, t.Oid())
 	case types.IntFamily:
 		return ParseDInt(s)
 	case types.IntervalFamily:
