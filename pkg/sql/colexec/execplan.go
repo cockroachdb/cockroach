@@ -1193,7 +1193,15 @@ func planProjectionOperators(
 		buffer := NewBufferOp(input)
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
-		if caseOutputType == coltypes.Unhandled {
+		switch caseOutputType {
+		case coltypes.Bytes:
+			// Currently, there is a contradiction between the way CASE operator
+			// works (which populates its output in arbitrary order) and the flat
+			// bytes implementation of Bytes type (which prohibits sets in arbitrary
+			// order), so we reject such scenario to fall back to row-by-row engine.
+			return nil, resultIdx, ct, internalMemUsed, errors.Newf(
+				"unsupported type %s in CASE operator", t.ResolvedType().String())
+		case coltypes.Unhandled:
 			return nil, resultIdx, ct, internalMemUsed, errors.Newf(
 				"unsupported type %s", t.ResolvedType().String())
 		}
