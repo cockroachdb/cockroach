@@ -11,6 +11,7 @@
 package kv_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"regexp"
@@ -2230,6 +2231,41 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// Expect a transaction coord retry, which should succeed.
+			txnCoordRetry: true,
+		},
+		{
+			// This test checks the behavior of batches that were split by the
+			// DistSender. We'll check that the whole batch is retried after a
+			// successful refresh, and that previously-successful prefix sub-batches
+			// are not refreshed (but are retried instead).
+			name: "multi-range with scan getting updated results after refresh",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				// Write to "a". This value will not be seen by the Get the first time
+				// it's evaluated, but it will be see when it's retried at a bumped
+				// timestamp.
+				if err := db.Put(ctx, "a", "newval"); err != nil {
+					return err
+				}
+				// This will cause a WriteTooOldError on the 2nd sub-batch, which will
+				// cause a refresh.
+				return db.Put(ctx, "b", "newval")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Get("a")
+				b.Put("b", "put2")
+				err := txn.Run(ctx, b)
+				if err != nil {
+					return err
+				}
+				gr := b.RawResponse().Responses[0].GetGet()
+				if b, err := gr.Value.GetBytes(); err != nil {
+					return err
+				} else if bytes.Compare(b, []byte("newval")) != 0 {
+					return fmt.Errorf("expected \"newval\", got: %v", b)
+				}
+				return txn.Commit(ctx)
+			},
 			txnCoordRetry: true,
 		},
 		{
