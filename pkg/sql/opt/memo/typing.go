@@ -47,6 +47,9 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 			return o.ReturnType
 		}
 	}
+	if inputType.Family() == types.UnknownFamily {
+		return types.Unknown
+	}
 	panic(errors.AssertionFailedf("could not find type for unary expression %s", log.Safe(op)))
 }
 
@@ -55,6 +58,9 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
+		if leftType.Family() == types.UnknownFamily && rightType.Family() == types.UnknownFamily {
+			return types.Unknown
+		}
 		panic(errors.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
 	}
 	return o.ReturnType

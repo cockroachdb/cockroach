@@ -12,6 +12,15 @@
 [FoldNullUnary, Normalize]
 (Unary $input:(Null)) => (FoldNullUnary (OpName) $input)
 
+# FoldNullBinary replaces the binary operator with null if both inputs are null.
+[FoldNullBinary, Normalize]
+(Binary
+    $left:(Null)
+    $right:(Null)
+)
+=>
+(FoldNullBinary (OpName) $left $right)
+
 # FoldNullBinaryLeft replaces the binary operator with null if its left input
 # is null and it does not allow null arguments.
 [FoldNullBinaryLeft, Normalize]

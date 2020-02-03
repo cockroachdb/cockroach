@@ -30,6 +30,16 @@ values
 # FoldNullUnary
 # --------------------------------------------------
 norm expect=FoldNullUnary
+SELECT -NULLIF(NULL, 0)
+----
+values
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,) [type=tuple{unknown}]
+
+norm expect=FoldNullUnary
 SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
@@ -41,9 +51,20 @@ project
       ├── null [type=int]
       └── null [type=int]
 
-# --------------------------------------------------
-# FoldNullBinaryLeft, FoldNullBinaryRight
-# --------------------------------------------------
+# -------------------------------------------------------
+# FoldNullBinary, FoldNullBinaryLeft, FoldNullBinaryRight
+# -------------------------------------------------------
+# Regression test for #44632.
+norm expect=FoldNullBinary
+SELECT NULLIF(NULL, 0) + NULLIF(NULL, 0);
+----
+values
+ ├── columns: "?column?":1(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,) [type=tuple{unknown}]
+
 norm expect=(FoldNullBinaryLeft,FoldNullBinaryRight)
 SELECT
     null::int & 1 AS ra, 1 & null::int AS rb,
