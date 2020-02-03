@@ -640,14 +640,6 @@ func splitBatchAndCheckForRefreshSpans(
 //
 // When the request spans ranges, it is split by range and a partial
 // subset of the batch request is sent to affected ranges in parallel.
-//
-// Note that on error, this method will return any batch responses for
-// successfully processed batch requests. This allows the caller to
-// deal with potential retry situations where a batch is split so that
-// EndTxn is processed alone, after earlier requests in the batch
-// succeeded. Where possible, the caller may be able to update spans
-// encountered in the transaction and retry just the EndTxn request to
-// avoid client-side serializable txn retries.
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -747,6 +739,10 @@ func (ds *DistSender) Send(
 		parts = parts[1:]
 	}
 
+	if pErr != nil {
+		return nil, pErr
+	}
+
 	var reply *roachpb.BatchResponse
 	if len(rplChunks) > 0 {
 		reply = rplChunks[0]
@@ -759,7 +755,7 @@ func (ds *DistSender) Send(
 		reply.BatchResponse_Header = lastHeader
 	}
 
-	return reply, pErr
+	return reply, nil
 }
 
 type response struct {

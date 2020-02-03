@@ -53,8 +53,6 @@ const (
 // storage.Store, storage.Replica.
 type Sender interface {
 	// Send sends a batch for evaluation.
-	// The contract about whether both a response and an error can be
-	// returned varies between layers.
 	//
 	// The caller retains ownership of all the memory referenced by the
 	// BatchRequest; the callee is not allowed to hold on to any parts
