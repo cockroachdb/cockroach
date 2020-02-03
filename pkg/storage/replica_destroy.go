@@ -175,11 +175,22 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	return nil
 }
 
-// cancelPendingCommandsLocked cancels all outstanding proposals.
-// It requires that both mu and raftMu are held.
-func (r *Replica) cancelPendingCommandsLocked(ctx context.Context) {
+// disconnectReplicationRaftMuLocked is called when a Replica is being removed.
+// It cancels all outstanding proposals, closes the proposalQuota if there
+// is one, and removes the in-memory raft state.
+func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	r.raftMu.AssertHeld()
-	r.mu.AssertHeld()
+	r.readOnlyCmdMu.Lock()
+	defer r.readOnlyCmdMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// NB: In the very rare scenario that we're being removed but currently
+	// believe we are the leaseholder and there are more requests waiting for
+	// quota than total quota then failure to close the proposal quota here could
+	// leave those requests stuck forever.
+	if pq := r.mu.proposalQuota; pq != nil {
+		pq.Close("destroyed")
+	}
 	r.mu.proposalBuf.FlushLockedWithoutProposing()
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
@@ -189,6 +200,7 @@ func (r *Replica) cancelPendingCommandsLocked(ctx context.Context) {
 			Err: roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 		})
 	}
+	r.mu.internalRaftGroup = nil
 }
 
 // setTombstoneKey writes a tombstone to disk to ensure that replica IDs never

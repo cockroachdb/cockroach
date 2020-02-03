@@ -78,3 +78,27 @@ SELECT * FROM public.table_a ORDER BY a
 
 statement ok
 DROP TABLE pg_temp.table_a; DROP TABLE public.table_a
+
+# Test operations on a database with temp tables inside them.
+subtest test_database_operations
+
+statement ok
+CREATE DATABASE bob; USE bob; CREATE TEMP TABLE a(a int); USE defaultdb
+
+statement ok
+SET sql_safe_updates = true
+
+statement error DROP DATABASE on non-empty database without explicit CASCADE
+DROP DATABASE bob
+
+statement ok
+CREATE VIEW a_view AS SELECT a FROM bob.pg_temp.a
+
+statement error cannot rename database because view "defaultdb.public.a_view" depends on table "a"
+ALTER DATABASE bob RENAME TO alice
+
+statement ok
+DROP VIEW a_view; ALTER DATABASE bob RENAME TO alice
+
+statement ok
+DROP DATABASE alice CASCADE

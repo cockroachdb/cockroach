@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -5179,3 +5180,126 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		mtc.waitForValues(keyB, []int64{curB, curB, curB})
 	})
 }
+
+// TestReplicaRemovalClosesProposalQuota is a somewhat contrived test to ensure
+// that when a replica is removed that it closes its proposal quota if it has
+// one. This used to not be the case though it wasn't really very consequential.
+// Firstly, it's rare that a removed replica has a proposal quota to begin with.
+// Replicas which believe they are they leaseholder can only be removed if they
+// have lost the lease and are behind. This requires a network partition.
+// Regardless, there was never actually a problem because once the replica has
+// been removed, all commands will eventually fail and remove themselves from
+// the quota pool. This potentially adds latency as every pending request will
+// need to acquire and release their quota. This is almost always very fast as
+// it is rarely the case that there are more outstanding requests than there is
+// quota. Nevertheless, we have this test to ensure that the pool does get
+// closed if only to avoid asking the question and to ensure that that case is
+// tested.
+func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	// These variables track the request count to make sure that all of the
+	// requests have made it to the Replica.
+	var (
+		rangeID         int64
+		putRequestCount int64
+	)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+				DisableReplicaGCQueue: true,
+				TestingRequestFilter: storagebase.ReplicaRequestFilter(func(r roachpb.BatchRequest) *roachpb.Error {
+					if r.RangeID == roachpb.RangeID(atomic.LoadInt64(&rangeID)) {
+						if _, isPut := r.GetArg(roachpb.Put); isPut {
+							atomic.AddInt64(&putRequestCount, 1)
+						}
+					}
+					return nil
+				}),
+			}},
+			RaftConfig: base.RaftConfig{
+				// Set the proposal quota to a tiny amount so that each write will
+				// exceed it.
+				RaftProposalQuota: 512,
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	desc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+	atomic.StoreInt64(&rangeID, int64(desc.RangeID))
+	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+	// Partition node 1 from receiving any requests or responses.
+	// This will prevent it from successfully replicating anything.
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
+	store, repl := getFirstStoreReplica(t, tc.Server(0), key)
+	funcs := unreliableRaftHandlerFuncs{}
+	tc.Servers[0].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		RaftMessageHandler:         store,
+		unreliableRaftHandlerFuncs: funcs,
+	})
+	// NB: We need to be sure that our Replica is the leaseholder for this
+	// test to make sense. It usually is.
+	lease, pendingLease := repl.GetLease()
+	if pendingLease != (roachpb.Lease{}) || lease.OwnedBy(store.StoreID()) {
+		t.Skip("the replica is not the leaseholder, this happens rarely under stressrace")
+	}
+	var wg sync.WaitGroup
+	const N = 100
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			k := append(key[0:len(key):len(key)], strconv.Itoa(i)...)
+			_, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+				RangeID: desc.RangeID,
+			}, putArgs(k, bytes.Repeat([]byte{'a'}, 1000)))
+			require.Regexp(t,
+				`result is ambiguous \(removing replica\)|`+
+					`r`+strconv.Itoa(int(desc.RangeID))+" was not found on s1", pErr.GoError())
+		}(i)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if seen := atomic.LoadInt64(&putRequestCount); seen < N {
+			return fmt.Errorf("saw %d, waiting for %d", seen, N)
+		}
+		return nil
+	})
+	desc = *repl.Desc()
+	fromReplDesc, found := desc.GetReplicaDescriptor(3)
+	require.True(t, found)
+	replDesc, found := desc.GetReplicaDescriptor(store.StoreID())
+	require.True(t, found)
+	newReplDesc := replDesc
+	newReplDesc.ReplicaID = desc.NextReplicaID
+	require.Nil(t, store.HandleRaftRequest(ctx, &storage.RaftMessageRequest{
+		RangeID:       desc.RangeID,
+		RangeStartKey: desc.StartKey,
+		FromReplica:   fromReplDesc,
+		ToReplica:     newReplDesc,
+		Message:       raftpb.Message{Type: raftpb.MsgVote, Term: 2},
+	}, noopRaftMessageResponseSteam{}))
+	ts := waitForTombstone(t, store.Engine(), desc.RangeID)
+	require.Equal(t, ts.NextReplicaID, desc.NextReplicaID)
+	wg.Wait()
+	_, err = repl.GetProposalQuota().Acquire(ctx, 1)
+	require.Regexp(t, "closed.*destroyed", err)
+}
+
+type noopRaftMessageResponseSteam struct{}
+
+func (n noopRaftMessageResponseSteam) Context() context.Context {
+	return context.Background()
+}
+
+func (n noopRaftMessageResponseSteam) Send(*storage.RaftMessageResponse) error {
+	return nil
+}
+
+var _ storage.RaftMessageResponseStream = noopRaftMessageResponseSteam{}

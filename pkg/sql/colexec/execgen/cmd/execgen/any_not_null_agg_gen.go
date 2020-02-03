@@ -28,6 +28,7 @@ func genAnyNotNullAgg(wr io.Writer) error {
 	s := string(t)
 
 	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
+	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)

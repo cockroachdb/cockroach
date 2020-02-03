@@ -8794,13 +8794,9 @@ func TestCancelPendingCommands(t *testing.T) {
 		t.Fatalf("command finished earlier than expected with error %v", pErr)
 	default:
 	}
-
 	tc.repl.raftMu.Lock()
-	tc.repl.mu.Lock()
-	tc.repl.cancelPendingCommandsLocked(ctx)
-	tc.repl.mu.Unlock()
+	tc.repl.disconnectReplicationRaftMuLocked(ctx)
 	tc.repl.raftMu.Unlock()
-
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)

@@ -40,6 +40,7 @@ type countAgg struct {
 	vec      []int64
 	nulls    *coldata.Nulls
 	curIdx   int
+	curAgg   int64
 	done     bool
 	countRow bool
 }
@@ -53,6 +54,7 @@ func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
 
 func (a *countAgg) Reset() {
 	a.curIdx = -1
+	a.curAgg = 0
 	a.nulls.UnsetNulls()
 	a.done = false
 }
@@ -74,6 +76,7 @@ func (a *countAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	}
 	inputLen := b.Length()
 	if inputLen == 0 {
+		a.vec[a.curIdx] = a.curAgg
 		a.curIdx++
 		a.done = true
 		return
@@ -116,8 +119,11 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 	// {{define "accumulateCount" -}}
 
 	if a.groups[i] {
+		if a.curIdx != -1 {
+			a.vec[a.curIdx] = a.curAgg
+		}
 		a.curIdx++
-		a.vec[a.curIdx] = 0
+		a.curAgg = int64(0)
 	}
 	var y int64
 	// {{if .ColWithNulls}}
@@ -128,7 +134,7 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 	// {{else}}
 	y = int64(1)
 	// {{end}}
-	a.vec[a.curIdx] += y
+	a.curAgg += y
 	// {{end}}
 
 	// {{/*
