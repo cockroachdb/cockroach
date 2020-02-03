@@ -2504,6 +2504,7 @@ func (r *rocksDBIterator) MVCCScan(
 
 	kvData := [][]byte{copyFromSliceVector(state.data.bufs, state.data.len)}
 	numKVs := int64(state.data.count)
+	numBytes := int64(state.data.bytes)
 
 	var resumeSpan *roachpb.Span
 	if resumeKey := cSliceToGoBytes(state.resume_key); resumeKey != nil {
@@ -2530,6 +2531,7 @@ func (r *rocksDBIterator) MVCCScan(
 	return MVCCScanResult{
 		KVData:     kvData,
 		NumKeys:    numKVs,
+		NumBytes:   numBytes,
 		ResumeSpan: resumeSpan,
 		Intents:    intents,
 	}, nil
