@@ -40,13 +40,43 @@
     width 120px
 
   &__duration
-    font-style italic
+    font-family SourceSansPro-Regular
+    font-size 12px
+    line-height 1.67
+    letter-spacing 0.3px
+    color $colors--neutral-8
+    &--right
+      margin-left 48px
 
   &__status, &__running-status
     text-transform capitalize
-
+  &__progress
+    display flex
+    align-items center
+    justify-content flex-start
+  &__status
+    margin-bottom 8px
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    font-weight 600
+    line-height 1.71
+    letter-spacing 0.1px
+    color $colors--neutral-8
+    &--percentage
+      font-family SourceSansPro-Regular
+      font-size 12px
+      margin 0 6px 0 0
+      line-height 1.67
+      letter-spacing 0.3px
+      width 40px
+      text-align right
+    &--succeed
+      color $colors--primary-green-3
+    &--failed
+      color $colors--functional-red-3
+    &--canceled
+      color $colors--functional-orange-3
   .job-detail
-    max-width 1000px
     white-space pre-wrap
     padding 5px
     margin-top 5px
@@ -62,9 +92,6 @@
     white-space nowrap
     max-width 500px
     word-wrap break-word
-
-  &__cell--sql
-    font-family Inconsolata-Regular
 
   &__status-icon
     display inline-block

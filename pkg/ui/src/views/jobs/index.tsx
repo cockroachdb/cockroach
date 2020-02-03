@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
-import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
+import { Icon, Pagination, Tooltip } from "antd";
+import classNames from "classnames";
 import _ from "lodash";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
@@ -19,20 +19,20 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 
+import { Link } from "react-router";
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
-import * as docsURL from "src/util/docs";
-import { trustIcon } from "src/util/trust";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import Empty from "../app/components/empty";
 import "./index.styl";
 
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
@@ -91,43 +91,51 @@ const JOB_STATUS_PENDING = "pending";
 const JOB_STATUS_PAUSED = "paused";
 const JOB_STATUS_RUNNING = "running";
 
-const STATUS_ICONS: { [state: string]: string } = {
-  [JOB_STATUS_SUCCEEDED]: succeededIcon,
-  [JOB_STATUS_FAILED]: failedIcon,
+const renamedStatuses = (status: string) => {
+  switch (status) {
+    case JOB_STATUS_SUCCEEDED:
+      return "Completed";
+    case JOB_STATUS_FAILED:
+      return "Import failed";
+    case JOB_STATUS_CANCELED:
+      return "Import failed";
+    default:
+      return status;
+  }
 };
 
 class JobStatusCell extends React.Component<{ job: Job }, {}> {
   is(...statuses: string[]) {
     return statuses.indexOf(this.props.job.status) !== -1;
   }
-
   renderProgress() {
     if (this.is(JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
+      const className = classNames("jobs-table__status", {
+        "jobs-table__status--succeed": this.is(JOB_STATUS_SUCCEEDED),
+        "jobs-table__status--failed": this.is(JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
+      });
       return (
-        <div className="jobs-table__status">
-          {this.props.job.status in STATUS_ICONS
-            ? <div
-                className="jobs-table__status-icon"
-                dangerouslySetInnerHTML={trustIcon(STATUS_ICONS[this.props.job.status])}
-              />
-            : null}
-          {this.props.job.status}
+        <div className={className}>
+          {renamedStatuses(this.props.job.status)}
         </div>
       );
     }
     const percent = this.props.job.fraction_completed * 100;
     return (
-      <div>
+      <div className="jobs-table__progress">
         {this.props.job.running_status
           ? <div className="jobs-table__running-status">{this.props.job.running_status}</div>
           : null}
+
+        <div className="jobs-table__status--percentage" title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</div>
         <Line
           percent={percent}
-          strokeWidth={10}
-          trailWidth={10}
+          strokeWidth={11}
+          trailWidth={11}
+          strokeColor="#0788ff"
+          trailColor="#d6dbe7"
           className="jobs-table__progress-bar"
         />
-        <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
       </div>
     );
   }
@@ -143,7 +151,7 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
         const remaining = duration / fractionCompleted - duration;
-        return formatDuration(moment.duration(remaining)) + " remaining";
+        return <span className="jobs-table__duration--right">{formatDuration(moment.duration(remaining)) + " remaining"}</span>;
       }
     } else if (this.is(JOB_STATUS_SUCCEEDED)) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
@@ -188,23 +196,37 @@ class JobsSortedTable extends SortedTable<Job> {}
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
-    title: "ID",
-    cell: job => String(job.id),
-    sort: job => job.id,
-  },
-  {
     title: "Description",
+    className: "cl-table__col-query-text",
     cell: job => {
       // If a [SQL] job.statement exists, it means that job.description
       // is a human-readable message. Otherwise job.description is a SQL
       // statement.
       const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
-      return <div className={`jobs-table__cell--description${additionalStyle}`}>{job.description}</div>;
+      return (
+        <Link className={`jobs-table__cell--description${additionalStyle}`} to="/">
+          <div className="cl-table-link__tooltip">
+            <Tooltip overlayClassName="preset-black" placement="bottom" title={
+              <pre style={{ whiteSpace: "pre-wrap" }}>{ job.description }</pre>
+            }>
+              <div className={`jobs-table__cell--description${additionalStyle}`} >
+                {job.statement || job.description}
+              </div>
+            </Tooltip>
+          </div>
+        </Link>
+      );
     },
     sort: job => job.description,
   },
   {
-    title: "User",
+    title: "Job ID",
+    titleAlign: "right",
+    cell: job => String(job.id),
+    sort: job => job.id,
+  },
+  {
+    title: "Users",
     cell: job => job.username,
     sort: job => job.username,
   },
@@ -239,22 +261,46 @@ interface JobsTableProps {
   jobs: CachedDataReducerState<JobsResponse>;
 }
 
-const titleTooltip = (
-  <span>
-    Some jobs can be paused or canceled through SQL. For details, view the docs
-    on the <a href={docsURL.pauseJob} target="_blank"><code>PAUSE JOB</code></a>{" "}
-    and <a href={docsURL.cancelJob} target="_blank"><code>CANCEL JOB</code></a>{" "}
-    statements.
-  </span>
-);
-
 export class JobsTable extends React.Component<JobsTableProps> {
+  state = {
+    pagination: {
+      pageSize: 20,
+      current: 1,
+    },
+  };
+
   refresh(props = this.props) {
     props.refreshJobs(new JobsRequest({
       status: props.status,
       type: props.type,
       limit: parseInt(props.show, 10),
     }));
+  }
+
+  onChangePage = (current: number) => {
+    const { pagination } = this.state;
+    this.setState({ pagination: { ...pagination, current }});
+  }
+
+  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+    switch (type) {
+      case "jump-prev":
+        return (
+          <div className="_pg-jump">
+            <Icon type="left" />
+            <span className="_jump-dots">•••</span>
+          </div>
+        );
+      case "jump-next":
+        return (
+          <div className="_pg-jump">
+            <Icon type="right" />
+            <span className="_jump-dots">•••</span>
+          </div>
+        );
+      default:
+        return originalElement;
+    }
   }
 
   componentWillMount() {
@@ -277,40 +323,63 @@ export class JobsTable extends React.Component<JobsTableProps> {
     this.props.setShow(selected.value);
   }
 
-  renderJobExpanded = (job: Job) => {
-    return (
-      <div>
-        <h3>Statement</h3>
-        <pre className="job-detail">{job.statement || job.description}</pre>
+  getData = () => {
+    const { pagination: { current, pageSize } } = this.state;
+    const jobs = this.props.jobs.data.jobs;
+    const currentDefault = current - 1;
+    const start = (currentDefault * pageSize);
+    const end = (currentDefault * pageSize + pageSize);
+    const data = jobs.slice(start, end);
+    return data;
+  }
 
-        {job.status === "failed"
-          ? [
-              <h3>Error</h3>,
-              <pre className="job-detail">{job.error}</pre>,
-            ]
-          : null}
-      </div>
-    );
+  renderCounts = () => {
+    const { pagination: { current, pageSize } } = this.state;
+    const total = this.props.jobs.data.jobs.length;
+    const pageCount = current * pageSize > total ? total : current * pageSize;
+    const count = total > 10 ? pageCount : current * total;
+    return `${count} of ${total} jobs`;
   }
 
   renderTable = () => {
     const jobs = this.props.jobs.data.jobs;
+    const { pagination } = this.state;
     if (_.isEmpty(jobs)) {
-      return <div className="no-results"><h2 className="base-heading">No Results</h2></div>;
+      return (
+        <Empty
+          title="Jobs will show up here"
+          description="Jobs can include backup, import, restore or cdc running."
+          buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html"
+        />
+      );
     }
     return (
-      <JobsSortedTable
-        data={jobs}
-        sortSetting={this.props.sort}
-        onChangeSortSetting={this.props.setSort}
-        className="jobs-table"
-        rowClass={job => "jobs-table__row--" + job.status}
-        columns={jobsTableColumns}
-        expandableConfig={{
-          expandedContent: this.renderJobExpanded,
-          expansionKey: (job) => job.id.toString(),
-        }}
-      />
+      <React.Fragment>
+        <div className="cl-table-statistic">
+          <h4 className="cl-count-title">
+            {this.renderCounts()}
+          </h4>
+        </div>
+        <section className="cl-table-wrapper">
+          <JobsSortedTable
+            data={this.getData()}
+            sortSetting={this.props.sort}
+            onChangeSortSetting={this.props.setSort}
+            className="jobs-table"
+            rowClass={job => "jobs-table__row--" + job.status}
+            columns={jobsTableColumns}
+          />
+        </section>
+        <Pagination
+          size="small"
+          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          pageSize={pagination.pageSize}
+          current={pagination.current}
+          total={jobs.length}
+          onChange={this.onChangePage}
+          hideOnSinglePage
+        />
+      </React.Fragment>
     );
   }
 
@@ -321,13 +390,6 @@ export class JobsTable extends React.Component<JobsTableProps> {
         <section className="section">
           <h1 className="base-heading">
             Jobs
-            <div className="section-heading__tooltip">
-              <ToolTipWrapper text={titleTooltip}>
-                <div className="section-heading__tooltip-hover-area">
-                  <div className="section-heading__info-icon">i</div>
-                </div>
-              </ToolTipWrapper>
-            </div>
           </h1>
         </section>
         <div>
@@ -346,14 +408,6 @@ export class JobsTable extends React.Component<JobsTableProps> {
                 options={typeOptions}
                 selected={this.props.type.toString()}
                 onChange={this.onTypeSelected}
-              />
-            </PageConfigItem>
-            <PageConfigItem>
-              <Dropdown
-                title="Show"
-                options={showOptions}
-                selected={this.props.show}
-                onChange={this.onShowSelected}
               />
             </PageConfigItem>
           </PageConfig>
