@@ -358,6 +358,25 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
 ) (result NewColOperatorResult, err error) {
+	// Make sure that we clean up memory monitoring infrastructure in case of an
+	// error or a panic.
+	defer func() {
+		returnedErr := err
+		panicErr := recover()
+		if returnedErr != nil || panicErr != nil {
+			for _, memAccount := range result.BufferingOpMemAccounts {
+				memAccount.Close(ctx)
+			}
+			result.BufferingOpMemAccounts = result.BufferingOpMemAccounts[:0]
+			for _, memMonitor := range result.BufferingOpMemMonitors {
+				memMonitor.Stop(ctx)
+			}
+			result.BufferingOpMemMonitors = result.BufferingOpMemMonitors[:0]
+		}
+		if panicErr != nil {
+			execerror.VectorizedInternalPanic(panicErr)
+		}
+	}()
 	spec := args.Spec
 	inputs := args.Inputs
 	streamingMemAccount := args.StreamingMemAccount
