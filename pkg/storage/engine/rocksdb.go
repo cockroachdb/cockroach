@@ -3437,8 +3437,14 @@ var _ FS = &RocksDB{}
 
 // CreateFile implements the FS interface.
 func (r *RocksDB) CreateFile(name string) (File, error) {
+	return r.CreateFileWithSync(name, 0)
+}
+
+// CreateFileWithSync implements the FS interface.
+func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (File, error) {
 	var file C.DBWritableFile
-	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
+	if err := statusToError(C.DBEnvOpenFile(
+		r.rdb, goToCSlice([]byte(name)), C.uint64_t(bytesPerSync), &file)); err != nil {
 		return nil, notFoundErrOrDefault(err)
 	}
 	return &rocksdbWritableFile{file: file, rdb: r.rdb}, nil
@@ -3465,4 +3471,35 @@ func (r *RocksDB) OpenDir(name string) (File, error) {
 // RenameFile implements the FS interface.
 func (r *RocksDB) RenameFile(oldname, newname string) error {
 	return statusToError(C.DBEnvRenameFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname))))
+}
+
+// CreateDir implements the FS interface.
+func (r *RocksDB) CreateDir(name string) error {
+	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(name))))
+}
+
+// DeleteDir implements the FS interface.
+func (r *RocksDB) DeleteDir(name string) error {
+	return statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(name))))
+}
+
+// ListDir implements the FS interface.
+func (r *RocksDB) ListDir(name string) ([]string, error) {
+	list := C.DBEnvListDir(r.rdb, goToCSlice([]byte(name)))
+	n := list.n
+	names := list.names
+	// We can't index into names because it is a pointer, not a slice. The
+	// hackery below treats the pointer as an array and then constructs
+	// a slice from it.
+	nameSize := unsafe.Sizeof(C.DBString{})
+	nameVal := func(i int) C.DBString {
+		return *(*C.DBString)(unsafe.Pointer(uintptr(unsafe.Pointer(names)) + uintptr(i)*nameSize))
+	}
+	err := statusToError(list.status)
+	result := make([]string, n)
+	for i := range result {
+		result[i] = cStringToGoString(nameVal(i))
+	}
+	C.free(unsafe.Pointer(names))
+	return result, err
 }

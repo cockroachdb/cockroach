@@ -42,7 +42,7 @@ struct DBEngine {
   virtual DBString GetEnvStats(DBEnvStatsResult* stats) = 0;
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result) = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
-  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) = 0;
+  virtual DBStatus EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) = 0;
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents) = 0;
   virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) = 0;
   virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file) = 0;
@@ -58,7 +58,10 @@ struct DBEngine {
   virtual DBStatus EnvSyncDirectory(rocksdb::Directory* file) = 0;
   virtual DBStatus EnvCloseDirectory(rocksdb::Directory* file) = 0;
   virtual DBStatus EnvRenameFile(DBSlice oldname, DBSlice newname) = 0;
-
+  virtual DBStatus EnvCreateDir(DBSlice name) = 0;
+  virtual DBStatus EnvDeleteDir(DBSlice name) = 0;
+  virtual DBStatus EnvListDir(DBSlice name, std::vector<std::string>* result) = 0;
+  
   DBSSTable* GetSSTables(int* n);
   DBStatus GetSortedWALFiles(DBWALFile** out_files, int* n);
   DBString GetUserProperties();
@@ -99,7 +102,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
-  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
+  virtual DBStatus EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);
   virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
   virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
@@ -115,6 +118,9 @@ struct DBImpl : public DBEngine {
   virtual DBStatus EnvSyncDirectory(rocksdb::Directory* file);
   virtual DBStatus EnvCloseDirectory(rocksdb::Directory* file);
   virtual DBStatus EnvRenameFile(DBSlice oldname, DBSlice newname);
+  virtual DBStatus EnvCreateDir(DBSlice name);
+  virtual DBStatus EnvDeleteDir(DBSlice name);
+  virtual DBStatus EnvListDir(DBSlice name, std::vector<std::string>* result);
 };
 
 }  // namespace cockroach
