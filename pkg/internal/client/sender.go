@@ -133,6 +133,35 @@ type TxnSender interface {
 	// TxnStatus exports the txn's status.
 	TxnStatus() roachpb.TransactionStatus
 
+	// CreateSavepoint establishes a savepoint.
+	// This method is only valid when called on RootTxns.
+	//
+	// Committing (or aborting) the transaction causes every open
+	// savepoint to be released (or, respectively, rolled back)
+	// implicitly.
+	CreateSavepoint(context.Context) (SavepointToken, error)
+
+	// RollbackToSavepoint rolls back to the given savepoint.
+	// All savepoints "under" the savepoint being rolled back
+	// are also rolled back and their token must not be used any more.
+	// The token of the savepoint being rolled back remains valid
+	// and can be reused later (e.g. to release or roll back again).
+	// Aborting the txn implicitly rolls back all savepoints
+	// that are still open.
+	//
+	// This method is only valid when called on RootTxns.
+	RollbackToSavepoint(context.Context, SavepointToken) error
+
+	// ReleaseSavepoint releases the given savepoint.
+	// The savepoint must not have been rolled back or released already.
+	// All savepoints "under" the savepoint being released
+	// are also released and their token must not be used any more.
+	// Committing the txn implicitly releases all savepoints
+	// that are still open.
+	//
+	// This method is only valid when called on RootTxns.
+	ReleaseSavepoint(context.Context, SavepointToken) error
+
 	// SetFixedTimestamp makes the transaction run in an unusual way, at
 	// a "fixed timestamp": Timestamp and ReadTimestamp are set to ts,
 	// there's no clock uncertainty, and the txn's deadline is set to ts
@@ -273,6 +302,12 @@ const (
 	// operate on a snapshot taken at the latest Step() invocation.
 	SteppingEnabled SteppingMode = true
 )
+
+// SavepointToken represents a savepoint.
+type SavepointToken interface {
+	// SavepointToken is a marker interface.
+	SavepointToken()
+}
 
 // TxnStatusOpt represents options for TxnSender.GetMeta().
 type TxnStatusOpt int

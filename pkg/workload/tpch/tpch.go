@@ -120,9 +120,7 @@ func (w *tpch) Hooks() workload.Hooks {
 				if _, ok := queriesByName[queryName]; !ok {
 					return errors.Errorf(`unknown query: %s`, queryName)
 				}
-				if !queriesToSkip[queryName] {
-					w.selectedQueries = append(w.selectedQueries, queryName)
-				}
+				w.selectedQueries = append(w.selectedQueries, queryName)
 			}
 			return nil
 		},
@@ -237,7 +235,7 @@ func (w *worker) run(ctx context.Context) error {
 	checkExpectedOutput := func() error {
 		for rows.Next() {
 			if !w.config.disableChecks {
-				if !queriesToCheckOnlyNumRows[queryName] && !queriesToSkip[queryName] {
+				if !queriesToCheckOnlyNumRows[queryName] {
 					if err = rows.Scan(vals[:numColsByQueryName[queryName]]...); err != nil {
 						return errors.Errorf("[q%s]: %s", queryName, err)
 					}
@@ -245,7 +243,15 @@ func (w *worker) run(ctx context.Context) error {
 					expectedRow := expectedRowsByQueryName[queryName][numRows]
 					for i, expectedValue := range expectedRow {
 						if val := *vals[i].(*interface{}); val != nil {
-							actualValue := fmt.Sprint(val)
+							var actualValue string
+							// Currently, lib/pq for query 12 in the second and third columns
+							// (which are decimals) returns []byte. In order to compare it
+							// against our expected string value, we have this special case.
+							if byteArray, ok := val.([]byte); ok {
+								actualValue = string(byteArray)
+							} else {
+								actualValue = fmt.Sprint(val)
+							}
 							if strings.Compare(expectedValue, actualValue) != 0 {
 								var expectedFloat, actualFloat float64
 								var expectedFloatRounded, actualFloatRounded float64
@@ -323,14 +329,12 @@ func (w *worker) run(ctx context.Context) error {
 		return wrongOutputError{error: expectedOutputError}
 	}
 	if !w.config.disableChecks {
-		if !queriesToSkip[queryName] {
-			if numRows != numExpectedRowsByQueryName[queryName] {
-				return wrongOutputError{
-					error: errors.Errorf(
-						"[q%s] returned wrong number of rows: got %d, expected %d",
-						queryName, numRows, numExpectedRowsByQueryName[queryName],
-					)}
-			}
+		if numRows != numExpectedRowsByQueryName[queryName] {
+			return wrongOutputError{
+				error: errors.Errorf(
+					"[q%s] returned wrong number of rows: got %d, expected %d",
+					queryName, numRows, numExpectedRowsByQueryName[queryName],
+				)}
 		}
 	}
 	elapsed := timeutil.Since(start)
