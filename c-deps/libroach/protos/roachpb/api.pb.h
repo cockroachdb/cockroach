@@ -536,13 +536,12 @@ namespace roachpb {
 enum ResponseHeader_ResumeReason {
   ResponseHeader_ResumeReason_RESUME_UNKNOWN = 0,
   ResponseHeader_ResumeReason_RESUME_KEY_LIMIT = 1,
-  ResponseHeader_ResumeReason_RESUME_RANGE_BOUNDARY = 2,
   ResponseHeader_ResumeReason_ResponseHeader_ResumeReason_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ResponseHeader_ResumeReason_ResponseHeader_ResumeReason_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ResponseHeader_ResumeReason_IsValid(int value);
 const ResponseHeader_ResumeReason ResponseHeader_ResumeReason_ResumeReason_MIN = ResponseHeader_ResumeReason_RESUME_UNKNOWN;
-const ResponseHeader_ResumeReason ResponseHeader_ResumeReason_ResumeReason_MAX = ResponseHeader_ResumeReason_RESUME_RANGE_BOUNDARY;
+const ResponseHeader_ResumeReason ResponseHeader_ResumeReason_ResumeReason_MAX = ResponseHeader_ResumeReason_RESUME_KEY_LIMIT;
 const int ResponseHeader_ResumeReason_ResumeReason_ARRAYSIZE = ResponseHeader_ResumeReason_ResumeReason_MAX + 1;
 
 enum CheckConsistencyResponse_Status {
@@ -969,8 +968,6 @@ class ResponseHeader : public ::google::protobuf::MessageLite /* @@protoc_insert
     ResponseHeader_ResumeReason_RESUME_UNKNOWN;
   static const ResumeReason RESUME_KEY_LIMIT =
     ResponseHeader_ResumeReason_RESUME_KEY_LIMIT;
-  static const ResumeReason RESUME_RANGE_BOUNDARY =
-    ResponseHeader_ResumeReason_RESUME_RANGE_BOUNDARY;
   static inline bool ResumeReason_IsValid(int value) {
     return ResponseHeader_ResumeReason_IsValid(value);
   }

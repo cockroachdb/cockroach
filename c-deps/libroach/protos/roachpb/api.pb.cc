@@ -2880,7 +2880,6 @@ bool ResponseHeader_ResumeReason_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:
-    case 2:
       return true;
     default:
       return false;
@@ -2890,7 +2889,6 @@ bool ResponseHeader_ResumeReason_IsValid(int value) {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const ResponseHeader_ResumeReason ResponseHeader::RESUME_UNKNOWN;
 const ResponseHeader_ResumeReason ResponseHeader::RESUME_KEY_LIMIT;
-const ResponseHeader_ResumeReason ResponseHeader::RESUME_RANGE_BOUNDARY;
 const ResponseHeader_ResumeReason ResponseHeader::ResumeReason_MIN;
 const ResponseHeader_ResumeReason ResponseHeader::ResumeReason_MAX;
 const int ResponseHeader::ResumeReason_ARRAYSIZE;
