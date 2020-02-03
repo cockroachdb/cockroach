@@ -48,12 +48,13 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool inconsistent, bool tombstones, bool fail_on_more_recent)
+              int64_t target_bytes, DBTxn txn, bool inconsistent, bool tombstones, bool fail_on_more_recent)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
         end_key_(ToSlice(end)),
         max_keys_(max_keys),
+        target_bytes_(target_bytes),
         timestamp_(timestamp),
         txn_id_(ToSlice(txn.id)),
         txn_epoch_(txn.epoch),
@@ -557,6 +558,9 @@ template <bool reverse> class mvccScanner {
     // instructed to include tombstones in the results.
     if (value.size() > 0 || tombstones_) {
       kvs_->Put(cur_raw_key_, value);
+      if (target_bytes_ > 0 && kvs_->NumBytes() >= target_bytes_) {
+        max_keys_ = kvs_->Count();
+      }
       if (kvs_->Count() == max_keys_) {
         return false;
       }
@@ -745,7 +749,8 @@ template <bool reverse> class mvccScanner {
   rocksdb::Iterator* const iter_rep_;
   const rocksdb::Slice start_key_;
   const rocksdb::Slice end_key_;
-  const int64_t max_keys_;
+  int64_t max_keys_;
+  const int64_t target_bytes_; // see MVCCScanOptions
   const DBTimestamp timestamp_;
   const rocksdb::Slice txn_id_;
   const uint32_t txn_epoch_;
