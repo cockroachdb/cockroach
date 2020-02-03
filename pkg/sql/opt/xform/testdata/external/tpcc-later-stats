@@ -217,26 +217,26 @@ insert "order"
  └── f-k-checks
       └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
            └── anti-join (lookup customer)
-                ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
-                ├── key columns: [38 39 40] = [19 18 17]
+                ├── columns: column2:18(int!null) column3:19(int!null) column4:20(int!null)
+                ├── key columns: [19 18 20] = [27 26 25]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.26
                 ├── key: ()
-                ├── fd: ()-->(38-40)
+                ├── fd: ()-->(18-20)
                 ├── with-scan &1
-                │    ├── columns: column3:38(int!null) column2:39(int!null) column4:40(int!null)
+                │    ├── columns: column2:18(int!null) column3:19(int!null) column4:20(int!null)
                 │    ├── mapping:
-                │    │    ├──  column3:11(int) => column3:38(int)
-                │    │    ├──  column2:10(int) => column2:39(int)
-                │    │    └──  column4:12(int) => column4:40(int)
+                │    │    ├──  column2:10(int) => column2:18(int)
+                │    │    ├──  column3:11(int) => column3:19(int)
+                │    │    └──  column4:12(int) => column4:20(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1, distinct(38)=1, null(38)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+                │    ├── stats: [rows=1, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=1, null(20)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    ├── fd: ()-->(38-40)
-                │    └── prune: (38-40)
+                │    ├── fd: ()-->(18-20)
+                │    └── prune: (18-20)
                 └── filters (true)
 
 opt format=hide-qual
@@ -268,26 +268,26 @@ insert new_order
  └── f-k-checks
       └── f-k-checks-item: new_order(no_w_id,no_d_id,no_o_id) -> order(o_w_id,o_d_id,o_id)
            └── anti-join (lookup order)
-                ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
-                ├── key columns: [15 16 17] = [9 8 7]
+                ├── columns: column1:7(int!null) column2:8(int!null) column3:9(int!null)
+                ├── key columns: [9 8 7] = [12 11 10]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.11975196
                 ├── key: ()
-                ├── fd: ()-->(15-17)
+                ├── fd: ()-->(7-9)
                 ├── with-scan &1
-                │    ├── columns: column3:15(int!null) column2:16(int!null) column1:17(int!null)
+                │    ├── columns: column1:7(int!null) column2:8(int!null) column3:9(int!null)
                 │    ├── mapping:
-                │    │    ├──  column3:6(int) => column3:15(int)
-                │    │    ├──  column2:5(int) => column2:16(int)
-                │    │    └──  column1:4(int) => column1:17(int)
+                │    │    ├──  column1:4(int) => column1:7(int)
+                │    │    ├──  column2:5(int) => column2:8(int)
+                │    │    └──  column3:6(int) => column3:9(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0]
+                │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    ├── fd: ()-->(15-17)
-                │    └── prune: (15-17)
+                │    ├── fd: ()-->(7-9)
+                │    └── prune: (7-9)
                 └── filters (true)
 
 opt format=hide-qual
@@ -816,40 +816,40 @@ insert order_line
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
       │    └── anti-join (lookup order)
-      │         ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
-      │         ├── key columns: [30 31 32] = [24 23 22]
+      │         ├── columns: column1:22(int!null) column2:23(int!null) column3:24(int!null)
+      │         ├── key columns: [24 23 22] = [34 33 32]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 6]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 36.6185118
       │         ├── with-scan &1
-      │         │    ├── columns: column3:30(int!null) column2:31(int!null) column1:32(int!null)
+      │         │    ├── columns: column1:22(int!null) column2:23(int!null) column3:24(int!null)
       │         │    ├── mapping:
-      │         │    │    ├──  column3:13(int) => column3:30(int)
-      │         │    │    ├──  column2:12(int) => column2:31(int)
-      │         │    │    └──  column1:11(int) => column1:32(int)
+      │         │    │    ├──  column1:11(int) => column1:22(int)
+      │         │    │    ├──  column2:12(int) => column2:23(int)
+      │         │    │    └──  column3:13(int) => column3:24(int)
       │         │    ├── cardinality: [6 - 6]
-      │         │    ├── stats: [rows=6, distinct(30)=0.6, null(30)=0, distinct(31)=0.6, null(31)=0, distinct(32)=0.6, null(32)=0]
+      │         │    ├── stats: [rows=6, distinct(22)=0.6, null(22)=0, distinct(23)=0.6, null(23)=0, distinct(24)=0.6, null(24)=0]
       │         │    ├── cost: 0.01
-      │         │    └── prune: (30-32)
+      │         │    └── prune: (22-24)
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock@stock_item_fk_idx)
-                ├── columns: column6:50(int!null) column5:51(int!null)
-                ├── key columns: [51 50] = [33 34]
+                ├── columns: column5:44(int!null) column6:45(int!null)
+                ├── key columns: [44 45] = [50 51]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 6]
                 ├── stats: [rows=1e-10]
                 ├── cost: 36.1061434
                 ├── with-scan &1
-                │    ├── columns: column6:50(int!null) column5:51(int!null)
+                │    ├── columns: column5:44(int!null) column6:45(int!null)
                 │    ├── mapping:
-                │    │    ├──  column6:16(int) => column6:50(int)
-                │    │    └──  column5:15(int) => column5:51(int)
+                │    │    ├──  column5:15(int) => column5:44(int)
+                │    │    └──  column6:16(int) => column6:45(int)
                 │    ├── cardinality: [6 - 6]
-                │    ├── stats: [rows=6, distinct(50)=0.6, null(50)=0, distinct(51)=0.6, null(51)=0]
+                │    ├── stats: [rows=6, distinct(44)=0.6, null(44)=0, distinct(45)=0.6, null(45)=0]
                 │    ├── cost: 0.01
-                │    └── prune: (50,51)
+                │    └── prune: (44,45)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -1163,48 +1163,48 @@ insert history
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
       │    └── anti-join (lookup customer)
-      │         ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
-      │         ├── key columns: [41 42 43] = [22 21 20]
+      │         ├── columns: column1:21(int!null) column2:22(int!null) column3:23(int!null)
+      │         ├── key columns: [23 22 21] = [31 30 29]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── stats: [rows=1e-10]
       │         ├── cost: 6.26
       │         ├── key: ()
-      │         ├── fd: ()-->(41-43)
+      │         ├── fd: ()-->(21-23)
       │         ├── with-scan &1
-      │         │    ├── columns: column3:41(int!null) column2:42(int!null) column1:43(int!null)
+      │         │    ├── columns: column1:21(int!null) column2:22(int!null) column3:23(int!null)
       │         │    ├── mapping:
-      │         │    │    ├──  column3:12(int) => column3:41(int)
-      │         │    │    ├──  column2:11(int) => column2:42(int)
-      │         │    │    └──  column1:10(int) => column1:43(int)
+      │         │    │    ├──  column1:10(int) => column1:21(int)
+      │         │    │    ├──  column2:11(int) => column2:22(int)
+      │         │    │    └──  column3:12(int) => column3:23(int)
       │         │    ├── cardinality: [1 - 1]
-      │         │    ├── stats: [rows=1, distinct(41)=1, null(41)=0, distinct(42)=1, null(42)=0, distinct(43)=1, null(43)=0]
+      │         │    ├── stats: [rows=1, distinct(21)=1, null(21)=0, distinct(22)=1, null(22)=0, distinct(23)=1, null(23)=0]
       │         │    ├── cost: 0.01
       │         │    ├── key: ()
-      │         │    ├── fd: ()-->(41-43)
-      │         │    └── prune: (41-43)
+      │         │    ├── fd: ()-->(21-23)
+      │         │    └── prune: (21-23)
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
-                ├── columns: column5:55(int!null) column4:56(int!null)
-                ├── key columns: [55 56] = [45 44]
+                ├── columns: column4:54(int!null) column5:55(int!null)
+                ├── key columns: [55 54] = [60 59]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1e-10]
                 ├── cost: 6.15
                 ├── key: ()
-                ├── fd: ()-->(55,56)
+                ├── fd: ()-->(54,55)
                 ├── with-scan &1
-                │    ├── columns: column5:55(int!null) column4:56(int!null)
+                │    ├── columns: column4:54(int!null) column5:55(int!null)
                 │    ├── mapping:
-                │    │    ├──  column5:14(int) => column5:55(int)
-                │    │    └──  column4:13(int) => column4:56(int)
+                │    │    ├──  column4:13(int) => column4:54(int)
+                │    │    └──  column5:14(int) => column5:55(int)
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1, distinct(55)=1, null(55)=0, distinct(56)=1, null(56)=0]
+                │    ├── stats: [rows=1, distinct(54)=1, null(54)=0, distinct(55)=1, null(55)=0]
                 │    ├── cost: 0.01
                 │    ├── key: ()
-                │    ├── fd: ()-->(55,56)
-                │    └── prune: (55,56)
+                │    ├── fd: ()-->(54,55)
+                │    └── prune: (54,55)
                 └── filters (true)
 
 # --------------------------------------------------
