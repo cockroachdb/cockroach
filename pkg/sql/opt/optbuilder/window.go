@@ -196,6 +196,14 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				},
 			),
 		)
+
+		// If we have RANGE mode of framing with ORDER BY clause, we prohibit the
+		// simplification of the ordering because execution engine needs the full
+		// ordering information.
+		noOrderingSimplification := windowFrames[i].Mode == tree.RANGE &&
+			len(orderings[i].Columns) > 0
+		frames[frameIdx].OrderingSimplificationProhibited =
+			frames[frameIdx].OrderingSimplificationProhibited || noOrderingSimplification
 	}
 
 	for _, f := range frames {

@@ -1554,3 +1554,26 @@ GROUP BY
     tab_536191.col8, tab_536191.col5
 ----
 error (42P10): argument of ROWS must not contain variables
+
+# Make sure that ordering is not simplified in RANGE mode of framing when
+# PARTITION BY contains the ordering column.
+build
+SELECT
+	sum(col8) OVER (
+		PARTITION BY col8 ORDER BY col8 RANGE 0 PRECEDING
+	)
+FROM
+	table1
+----
+project
+ ├── columns: sum:4(decimal)
+ └── window partition=(2) ordering=+2
+      ├── columns: col5:1(char) col8:2(int2) rowid:3(int!null) sum:4(decimal)
+      ├── scan table1
+      │    └── columns: col5:1(char) col8:2(int2) rowid:3(int!null)
+      └── windows
+           └── windows-item: range from offset to current-row [type=decimal]
+                └── window-from-offset [type=decimal]
+                     ├── sum [type=decimal]
+                     │    └── variable: col8 [type=int2]
+                     └── const: 0 [type=int]

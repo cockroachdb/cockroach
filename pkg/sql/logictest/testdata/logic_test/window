@@ -3619,3 +3619,16 @@ ORDER BY
 2  1  2  2  2
 3  2  4  4  3
 4  2  4  4  4
+
+# Regression test for #43083.
+query R
+SELECT
+	sum(a) OVER (
+		PARTITION BY a ORDER BY a RANGE 0 PRECEDING
+	)
+FROM
+	t38901
+----
+1
+2
+3

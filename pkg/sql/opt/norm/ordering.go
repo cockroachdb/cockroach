@@ -99,6 +99,9 @@ func (c *CustomFuncs) CanSimplifyWindowOrdering(in memo.RelExpr, private *memo.W
 	if private.Ordering.Any() {
 		return false
 	}
+	if private.OrderingSimplificationProhibited {
+		return false
+	}
 	deps := c.withinPartitionFuncDeps(in, private)
 
 	return private.Ordering.CanSimplify(deps)
