@@ -487,6 +487,12 @@ type FS interface {
 	// exists.
 	CreateFile(name string) (File, error)
 
+	// CreateFileWithSync is similar to CreateFile, but the file is periodically
+	// synced whenever more than bytesPerSync bytes accumulate. This syncing
+	// does not provide any persistency guarantees, but can prevent latency
+	// spikes.
+	CreateFileWithSync(name string, bytesPerSync int) (File, error)
+
 	// LinkFile creates newname as a hard link to the oldname file.
 	LinkFile(oldname, newname string) error
 
@@ -503,6 +509,17 @@ type FS interface {
 	// RenameFile renames a file. It overwrites the file at newname if one exists,
 	// the same as os.Rename.
 	RenameFile(oldname, newname string) error
+
+	// CreateDir creates the named dir. Does nothing if the directory already
+	// exists.
+	CreateDir(name string) error
+
+	// DeleteDir removes the named dir.
+	DeleteDir(name string) error
+
+	// ListDir returns a listing of the given directory. The names returned are
+	// relative to the directory.
+	ListDir(name string) ([]string, error)
 }
 
 // Stats is a set of RocksDB stats. These are all described in RocksDB

@@ -567,7 +567,7 @@ DBStatus DBBatch::GetEncryptionRegistries(DBEncryptionRegistries* result) {
 
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
-DBStatus DBBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+DBStatus DBBatch::EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) {
   return FmtStatus("unsupported");
 }
 
@@ -605,7 +605,10 @@ DBStatus DBBatch::EnvCloseDirectory(rocksdb::Directory* file) { return FmtStatus
 DBStatus DBBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) {
   return FmtStatus("unsupported");
 }
-
+DBStatus DBBatch::EnvCreateDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvDeleteDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBBatch::EnvListDir(DBSlice name, std::vector<std::string>* result) { return FmtStatus("unsupported"); }
+  
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep, db->iters), updates(0) {}
 
 DBWriteOnlyBatch::~DBWriteOnlyBatch() {}
@@ -689,7 +692,7 @@ DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
 }
 
-DBStatus DBWriteOnlyBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+DBStatus DBWriteOnlyBatch::EnvOpenFile(DBSlice path, uint64_t bytes_per_sync, rocksdb::WritableFile** file) {
   return FmtStatus("unsupported");
 }
 
@@ -737,6 +740,11 @@ DBStatus DBWriteOnlyBatch::EnvCloseDirectory(rocksdb::Directory* file) {
   return FmtStatus("unsupported");
 }
 DBStatus DBWriteOnlyBatch::EnvRenameFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
+DBStatus DBWriteOnlyBatch::EnvCreateDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvDeleteDir(DBSlice name) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvListDir(DBSlice name, std::vector<std::string>* result) {
   return FmtStatus("unsupported");
 }
 

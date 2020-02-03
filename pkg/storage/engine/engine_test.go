@@ -1114,6 +1114,12 @@ func TestIngestDelayLimit(t *testing.T) {
 	}
 }
 
+type stringSorter []string
+
+func (s stringSorter) Len() int               { return len(s) }
+func (s stringSorter) Swap(i int, j int)      { s[i], s[j] = s[j], s[i] }
+func (s stringSorter) Less(i int, j int) bool { return strings.Compare(s[i], s[j]) < 0 }
+
 func TestEngineFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1152,6 +1158,19 @@ func TestEngineFS(t *testing.T) {
 				"7a: f = opendir /",
 				"7b: f.sync",
 				"7c: f.close",
+				"8a: f = create-with-sync /bar",
+				"8b: f.write ghe",
+				"8c: f.close",
+				"8d: f = open /bar",
+				"8e: f.read 3 == ghe",
+				"9a: create-dir /dir1",
+				"9b: create /dir1/bar",
+				"9c: list-dir /dir1 == bar",
+				"9d: create /dir1/baz",
+				"9e: list-dir /dir1 == bar,baz",
+				"9f: delete /dir1/bar",
+				"9g: delete /dir1/baz",
+				"9h: delete-dir /dir1",
 			}
 
 			var f File
@@ -1178,6 +1197,8 @@ func TestEngineFS(t *testing.T) {
 				switch s[0] {
 				case "create":
 					g, err = e.CreateFile(s[1])
+				case "create-with-sync":
+					g, err = e.CreateFileWithSync(s[1], 1)
 				case "link":
 					err = e.LinkFile(s[1], s[2])
 				case "open":
@@ -1188,6 +1209,21 @@ func TestEngineFS(t *testing.T) {
 					err = e.DeleteFile(s[1])
 				case "rename":
 					err = e.RenameFile(s[1], s[2])
+				case "create-dir":
+					err = e.CreateDir(s[1])
+				case "delete-dir":
+					err = e.DeleteDir(s[1])
+				case "list-dir":
+					result, err := e.ListDir(s[1])
+					if err != nil {
+						break
+					}
+					sort.Sort(stringSorter(result))
+					got := strings.Join(result, ",")
+					want := s[3]
+					if got != want {
+						t.Fatalf("%q: got %s, want %s", tc, got, want)
+					}
 				case "f.write":
 					_, err = f.Write([]byte(s[1]))
 				case "f.read":

@@ -872,6 +872,23 @@ func (p *Pebble) CreateFile(name string) (File, error) {
 	return p.fs.Create(name)
 }
 
+// CreateFileWithSync implements the FS interface.
+func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (File, error) {
+	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
+	// directory does not exist. Various tests in the storage package depend on
+	// this because they are accidentally creating the required directory on the
+	// actual filesystem instead of in the memory filesystem. See
+	// diskSideloadedStorage and SSTSnapshotStrategy.
+	if p.InMem() {
+		_ = p.fs.MkdirAll(p.fs.PathDir(name), 0755)
+	}
+	f, err := p.fs.Create(name)
+	if err != nil {
+		return nil, err
+	}
+	return vfs.NewSyncingFile(f, vfs.SyncingFileOptions{BytesPerSync: bytesPerSync}), nil
+}
+
 // OpenFile implements the FS interface.
 func (p *Pebble) OpenFile(name string) (File, error) {
 	return p.fs.Open(name)
@@ -885,6 +902,21 @@ func (p *Pebble) OpenDir(name string) (File, error) {
 // RenameFile implements the FS interface.
 func (p *Pebble) RenameFile(oldname, newname string) error {
 	return p.fs.Rename(oldname, newname)
+}
+
+// CreateDir implements the FS interface.
+func (p *Pebble) CreateDir(name string) error {
+	return p.fs.MkdirAll(name, 0755)
+}
+
+// DeleteDir implements the FS interface.
+func (p *Pebble) DeleteDir(name string) error {
+	return p.fs.Remove(name)
+}
+
+// ListDir implements the FS interface.
+func (p *Pebble) ListDir(name string) ([]string, error) {
+	return p.fs.List(name)
 }
 
 // CreateCheckpoint implements the Engine interface.

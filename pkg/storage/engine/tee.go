@@ -397,6 +397,24 @@ func (t *TeeEngine) CreateFile(filename string) (File, error) {
 	}, nil
 }
 
+// CreateFileWithSync implements the FS interface.
+func (t *TeeEngine) CreateFileWithSync(filename string, bytesPerSync int) (File, error) {
+	file1, err := t.eng1.CreateFileWithSync(filename, bytesPerSync)
+	if !t.inMem {
+		// No need to write twice if the two engines share the same file system.
+		return file1, err
+	}
+	file2, err2 := t.eng2.CreateFileWithSync(filename, bytesPerSync)
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	return &TeeEngineFile{
+		ctx:   t.ctx,
+		file1: file1,
+		file2: file2,
+	}, nil
+}
+
 // OpenFile implements the FS interface.
 func (t *TeeEngine) OpenFile(filename string) (File, error) {
 	file1, err := t.eng1.OpenFile(filename)
@@ -483,6 +501,40 @@ func (t *TeeEngine) RenameFile(oldname, newname string) error {
 	}
 	err2 := t.eng2.RenameFile(oldname, newname)
 	return fatalOnErrorMismatch(t.ctx, err, err2)
+}
+
+// CreateDir implements the FS interface.
+func (t *TeeEngine) CreateDir(name string) error {
+	err := t.eng1.CreateDir(name)
+	if !t.inMem {
+		// No need to create twice if the two engines share the same file system.
+		return err
+	}
+	err2 := t.eng2.CreateDir(name)
+	return fatalOnErrorMismatch(t.ctx, err, err2)
+}
+
+// DeleteDir implements the FS interface.
+func (t *TeeEngine) DeleteDir(name string) error {
+	err := t.eng1.DeleteDir(name)
+	if !t.inMem {
+		// No need to delete twice if the two engines share the same file system.
+		return err
+	}
+	err2 := t.eng2.DeleteDir(name)
+	return fatalOnErrorMismatch(t.ctx, err, err2)
+}
+
+// ListDir implements the FS interface.
+func (t *TeeEngine) ListDir(name string) ([]string, error) {
+	list1, err := t.eng1.ListDir(name)
+	_, err2 := t.eng2.ListDir(name)
+
+	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	// TODO(sbhola): compare the slices.
+	return list1, nil
 }
 
 // CreateCheckpoint implements the Engine interface.
