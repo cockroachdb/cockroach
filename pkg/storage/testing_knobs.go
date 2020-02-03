@@ -31,7 +31,7 @@ type StoreTestingKnobs struct {
 	TxnWaitKnobs            txnwait.TestingKnobs
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 
-	// TestingRequestFilter is called before evaluating each command on a
+	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
 	// blocking in the filter will not block interfering requests. If it
 	// returns an error, the command will not be evaluated.

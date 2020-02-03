@@ -251,25 +251,9 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr, hlc.Timestamp{}
 	}
 
-	// If a prefix of the batch was executed, collect refresh spans for
-	// that executed portion, and retry the remainder. The canonical
-	// case is a batch split between everything up to but not including
-	// the EndTxn. Requests up to the EndTxn succeed, but the EndTxn
-	// fails with a retryable error. We want to retry only the EndTxn.
 	ba.UpdateTxn(retryTxn)
-	retryBa := ba
-	if br != nil {
-		doneBa := ba
-		doneBa.Requests = ba.Requests[:len(br.Responses)]
-		log.VEventf(ctx, 2, "collecting refresh spans after partial batch execution of %s", doneBa)
-		if err := sr.appendRefreshSpans(ctx, doneBa, br); err != nil {
-			return nil, roachpb.NewError(err), hlc.Timestamp{}
-		}
-		retryBa.Requests = ba.Requests[len(br.Responses):]
-	}
-
 	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
-		retryBa, retryTxn.ReadTimestamp, pErr)
+		ba, retryTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
 	if ok := sr.tryUpdatingTxnSpans(ctx, retryTxn); !ok {
@@ -280,14 +264,14 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 	// newBa.Txn.ReadTimestamp to the current timestamp. Submit the
 	// batch again.
 	retryBr, retryErr, retryLargestRefreshTS := sr.sendLockedWithRefreshAttempts(
-		ctx, retryBa, maxRefreshAttempts-1,
+		ctx, ba, maxRefreshAttempts-1,
 	)
 	if retryErr != nil {
 		log.VEventf(ctx, 2, "retry failed with %s", retryErr)
 		return nil, retryErr, hlc.Timestamp{}
 	}
 
-	log.VEventf(ctx, 2, "retry successful @%s", retryBa.Txn.WriteTimestamp)
+	log.VEventf(ctx, 2, "retry successful @%s", ba.Txn.WriteTimestamp)
 	sr.autoRetryCounter.Inc(1)
 	retryTxn.ReadTimestamp.Forward(retryLargestRefreshTS)
 
