@@ -46,9 +46,3 @@ export function queryByName(location: Location, key: string) {
   const urlParams = new URLSearchParams(location.search);
   return urlParams.get(key);
 }
-
-export function removeURLParameters(location: Location, removeParams: string[]) {
-  const params = new URLSearchParams(location.search);
-  _.each(removeParams, param => params.delete(param));
-  return "?" + params;
-}
