@@ -114,13 +114,11 @@ type scTxnFn func(ctx context.Context, txn *client.Txn, evalCtx *extendedEvalCon
 type historicalTxnRunner func(ctx context.Context, fn scTxnFn) error
 
 // makeFixedTimestampRunner creates a historicalTxnRunner suitable for use by the helpers.
-func (sc *SchemaChanger) makeFixedTimestampRunner(
-	readAsOf hlc.Timestamp, tracing *SessionTracing,
-) historicalTxnRunner {
+func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) historicalTxnRunner {
 	runner := func(ctx context.Context, retryable scTxnFn) error {
 		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *client.Txn) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			evalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, tracing, sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, sc.ieFactory)
 			return retryable(ctx, txn, &evalCtx)
 		})
 	}
@@ -144,7 +142,7 @@ func (sc *SchemaChanger) fixedTimestampTxn(
 // able to reuse the original client.Txn safely. The various
 // function that it calls make their own txns.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, tracing *SessionTracing,
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -256,7 +254,7 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Add and drop columns.
 	if needColumnBackfill {
-		if err := sc.truncateAndBackfillColumns(ctx, tracing, lease, version); err != nil {
+		if err := sc.truncateAndBackfillColumns(ctx, lease, version); err != nil {
 			return err
 		}
 	}
@@ -264,7 +262,7 @@ func (sc *SchemaChanger) runBackfill(
 	// Add new indexes.
 	if len(addedIndexSpans) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
-		if err := sc.backfillIndexes(ctx, tracing, lease, version, addedIndexSpans); err != nil {
+		if err := sc.backfillIndexes(ctx, lease, version, addedIndexSpans); err != nil {
 			return err
 		}
 	}
@@ -286,7 +284,7 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Validate check and foreign key constraints.
 	if len(constraintsToValidate) > 0 {
-		if err := sc.validateConstraints(ctx, tracing, lease, constraintsToValidate); err != nil {
+		if err := sc.validateConstraints(ctx, lease, constraintsToValidate); err != nil {
 			return err
 		}
 	}
@@ -487,7 +485,6 @@ func (sc *SchemaChanger) addConstraints(
 // able to reuse the original client.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateConstraints(
 	ctx context.Context,
-	tracing *SessionTracing,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	constraints []sqlbase.ConstraintToUpdate,
 ) error {
@@ -526,7 +523,7 @@ func (sc *SchemaChanger) validateConstraints(
 	countDone := make(chan struct{}, len(constraints))
 
 	// The various checks below operate at a fixed timestamp.
-	runHistoricalTxn := sc.makeFixedTimestampRunner(readAsOf, tracing)
+	runHistoricalTxn := sc.makeFixedTimestampRunner(readAsOf)
 
 	for i := range constraints {
 		c := constraints[i]
@@ -778,7 +775,6 @@ func (sc *SchemaChanger) nRanges(
 // able to reuse the original client.Txn safely, so it makes its own.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
-	tracing *SessionTracing,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
@@ -938,7 +934,7 @@ func (sc *SchemaChanger) distBackfill(
 					return nil
 				}
 				cbw := metadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-				evalCtx := createSchemaChangeEvalCtx(ctx, txn.ReadTimestamp(), tracing, sc.ieFactory)
+				evalCtx := createSchemaChangeEvalCtx(ctx, txn.ReadTimestamp(), sc.ieFactory)
 				recv := MakeDistSQLReceiver(
 					ctx,
 					&cbw,
@@ -1057,7 +1053,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original client.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateIndexes(
-	ctx context.Context, tracing *SessionTracing, lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	if testDisableTableLeases {
 		return nil
@@ -1113,7 +1109,7 @@ func (sc *SchemaChanger) validateIndexes(
 
 	forwardIndexesDone := make(chan struct{})
 	invertedIndexesDone := make(chan struct{})
-	runHistoricalTxn := sc.makeFixedTimestampRunner(readAsOf, tracing)
+	runHistoricalTxn := sc.makeFixedTimestampRunner(readAsOf)
 
 	if len(forwardIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
@@ -1392,7 +1388,6 @@ func (sc *SchemaChanger) validateForwardIndexes(
 // able to reuse the original client.Txn safely.
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
-	tracing *SessionTracing,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	addingSpans []roachpb.Span,
@@ -1411,11 +1406,11 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	chunkSize := indexBulkBackfillChunkSize.Get(&sc.settings.SV)
 	if err := sc.distBackfill(
-		ctx, tracing, lease, version, indexBackfill, chunkSize,
+		ctx, lease, version, indexBackfill, chunkSize,
 		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
-	return sc.validateIndexes(ctx, tracing, lease)
+	return sc.validateIndexes(ctx, lease)
 }
 
 // truncateAndBackfillColumns performs the backfill operation on the given leased
@@ -1425,12 +1420,11 @@ func (sc *SchemaChanger) backfillIndexes(
 // able to reuse the original client.Txn safely.
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
-	tracing *SessionTracing,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
 	return sc.distBackfill(
-		ctx, tracing,
+		ctx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
 		backfill.ColumnMutationFilter, nil)
 }
