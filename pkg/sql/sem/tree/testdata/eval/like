@@ -417,6 +417,11 @@ like_escape('%日_', '漢%漢日漢_', '漢')
 ----
 true
 
+eval
+like_escape('a', '꧕', '�')
+----
+false
+
 # ILIKE with ESCAPE clause
 
 eval
