@@ -33,6 +33,7 @@ export interface SortableColumn {
   sortKey?: any;
   // className is a classname to apply to the td elements
   className?: string;
+  titleAlign?: "left" | "right" | "center";
 }
 
 /**
@@ -242,6 +243,9 @@ export class SortableTable extends React.Component<TableProps> {
               {expandableConfig ? <th className="sort-table__cell" /> : null}
               {_.map(columns, (c: SortableColumn, colIndex: number) => {
                 const classes = ["sort-table__cell"];
+                const style = {
+                  textAlign: c.titleAlign,
+                };
                 let onClick: (e: any) => void = undefined;
 
                 if (!_.isUndefined(c.sortKey)) {
@@ -261,7 +265,7 @@ export class SortableTable extends React.Component<TableProps> {
                   classes.push("sort-table__cell--header");
                 }
                 return (
-                  <th className={classNames(classes)} key={colIndex} onClick={onClick}>
+                  <th className={classNames(classes)} key={colIndex} onClick={onClick} style={style}>
                     {c.title}
                     {!_.isUndefined(c.sortKey) && <span className="sortable__actions" />}
                   </th>

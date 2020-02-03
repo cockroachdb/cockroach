@@ -36,6 +36,7 @@ export interface ColumnDescriptor<T> {
   rollup?: (objs: T[]) => React.ReactNode;
   // className to be applied to the td elements in this column.
   className?: string;
+  titleAlign?: "left" | "right" | "center";
 }
 
 /**
@@ -139,6 +140,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           sortKey: cd.sort ? ii : undefined,
           rollup: rollups[ii],
           className: cd.className,
+          titleAlign: cd.titleAlign,
         };
       });
     });
