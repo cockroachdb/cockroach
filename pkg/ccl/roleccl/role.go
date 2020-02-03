@@ -44,7 +44,7 @@ func createRolePlanHook(
 func dropRolePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanNode, error) {
-	dropRole, ok := stmt.(*tree.DropRole)
+	dropRole, ok := stmt.(*tree.DropRoleOrUser)
 	if !ok {
 		return nil, nil
 	}

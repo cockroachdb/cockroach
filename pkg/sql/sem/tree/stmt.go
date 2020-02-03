@@ -166,7 +166,6 @@ var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
 var _ CCLOnlyStatement = &CreateRoleOrUser{}
-var _ CCLOnlyStatement = &DropRole{}
 var _ CCLOnlyStatement = &GrantRole{}
 var _ CCLOnlyStatement = &RevokeRole{}
 var _ CCLOnlyStatement = &CreateChangefeed{}
@@ -403,18 +402,10 @@ func (*DropSequence) StatementType() StatementType { return DDL }
 func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
 
 // StatementType implements the Statement interface.
-func (*DropUser) StatementType() StatementType { return RowsAffected }
+func (*DropRoleOrUser) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*DropUser) StatementTag() string { return "DROP USER" }
-
-// StatementType implements the Statement interface.
-func (*DropRole) StatementType() StatementType { return RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*DropRole) StatementTag() string { return "DROP ROLE" }
-
-func (*DropRole) cclOnlyStatement() {}
+func (*DropRoleOrUser) StatementTag() string { return "DROP USER" }
 
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
@@ -898,11 +889,10 @@ func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
-func (n *DropRole) String() string                       { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropView) String() string                       { return AsString(n) }
 func (n *DropSequence) String() string                   { return AsString(n) }
-func (n *DropUser) String() string                       { return AsString(n) }
+func (n *DropRoleOrUser) String() string                 { return AsString(n) }
 func (n *Execute) String() string                        { return AsString(n) }
 func (n *Explain) String() string                        { return AsString(n) }
 func (n *Export) String() string                         { return AsString(n) }

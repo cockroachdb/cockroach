@@ -674,7 +674,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{"standalone_index_name": "index_name"},
 	},
 	{
-		name:    "drop_role_stmt",
+		name:    "drop_role_or_user_stmt",
 		replace: map[string]string{"string_or_placeholder_list": "name"},
 	},
 	{

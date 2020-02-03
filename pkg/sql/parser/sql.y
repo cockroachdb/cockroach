@@ -728,9 +728,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> drop_ddl_stmt
 %type <tree.Statement> drop_database_stmt
 %type <tree.Statement> drop_index_stmt
-%type <tree.Statement> drop_role_stmt
+%type <tree.Statement> drop_role_or_user_stmt
 %type <tree.Statement> drop_table_stmt
-%type <tree.Statement> drop_user_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 
@@ -2504,8 +2503,7 @@ discard_stmt:
 // DROP USER, DROP ROLE
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
-| drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
-| drop_user_stmt     // EXTEND WITH HELP: DROP USER
+| drop_role_or_user_stmt     // EXTEND WITH HELP: DROP ROLE / USER
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
@@ -2611,31 +2609,16 @@ drop_database_stmt:
 // %Category: Priv
 // %Text: DROP USER [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE USER, SHOW USERS
-drop_user_stmt:
-  DROP USER string_or_placeholder_list
+drop_role_or_user_stmt:
+  DROP role_or_group_or_user string_or_placeholder_list
   {
-    $$.val = &tree.DropUser{Names: $3.exprs(), IfExists: false}
+    $$.val = &tree.DropRoleOrUser{Names: $3.exprs(), IfExists: false, IsRole: $2.isRole()}
   }
-| DROP USER IF EXISTS string_or_placeholder_list
+| DROP role_or_group_or_user IF EXISTS string_or_placeholder_list
   {
-    $$.val = &tree.DropUser{Names: $5.exprs(), IfExists: true}
+    $$.val = &tree.DropRoleOrUser{Names: $5.exprs(), IfExists: true, IsRole: $2.isRole()}
   }
-| DROP USER error // SHOW HELP: DROP USER
-
-// %Help: DROP ROLE - remove a role
-// %Category: Priv
-// %Text: DROP ROLE [IF EXISTS] <role> [, ...]
-// %SeeAlso: CREATE ROLE, ALTER ROLE, SHOW ROLES
-drop_role_stmt:
-  DROP ROLE string_or_placeholder_list
-  {
-    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false}
-  }
-| DROP ROLE IF EXISTS string_or_placeholder_list
-  {
-    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true}
-  }
-| DROP ROLE error // SHOW HELP: DROP ROLE
+| DROP role_or_group_or_user error // SHOW HELP: DROP USER
 
 table_name_list:
   table_name

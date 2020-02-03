@@ -85,7 +85,7 @@ func buildOpaque(
 		plan, err = p.DropView(ctx, n)
 	case *tree.DropSequence:
 		plan, err = p.DropSequence(ctx, n)
-	case *tree.DropUser:
+	case *tree.DropRoleOrUser:
 		plan, err = p.DropUser(ctx, n)
 	case *tree.Grant:
 		plan, err = p.Grant(ctx, n)
@@ -169,7 +169,7 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropView{},
 		&tree.DropSequence{},
-		&tree.DropUser{},
+		&tree.DropRoleOrUser{},
 		&tree.Grant{},
 		&tree.RenameColumn{},
 		&tree.RenameDatabase{},
@@ -198,7 +198,6 @@ func init() {
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
 		&tree.CreateRoleOrUser{},
-		&tree.DropRole{},
 		&tree.GrantRole{},
 		&tree.RevokeRole{},
 		&tree.Import{},

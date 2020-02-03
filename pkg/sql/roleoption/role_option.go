@@ -27,8 +27,9 @@ import (
 type Option uint32
 
 type RoleOption struct {
-	Option Option
-	Value  string
+	Option      Option
+	Value       string
+	ValueIsNull bool
 }
 
 // KindList of role options.
@@ -91,8 +92,13 @@ func (k Option) ToSQLColumnName() string {
 // ToSQLValue returns the value of option in it's SQL Column.
 func (ro RoleOption) ToSQLValue() string {
 	if ro.Option == PASSWORD {
-		// Need to hash the password here
-		return ro.Value
+		if ro.ValueIsNull {
+			// Make sure password isn't used
+			return ""
+		} else {
+			// Need to hash the password here
+			return ro.Value
+		}
 	}
 
 	return strconv.FormatBool(MapToBool[ro.Option])
