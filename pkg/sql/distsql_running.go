@@ -993,7 +993,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 		// We place a sequence point before every postquery, so
 		// that each subsequent postquery can observe the writes
 		// by the previous step.
-		if err := planner.step(ctx); err != nil {
+		if err := planner.Txn().Step(ctx); err != nil {
 			recv.SetError(err)
 			return false
 		}
