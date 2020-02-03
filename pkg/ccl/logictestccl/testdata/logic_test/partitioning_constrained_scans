@@ -238,3 +238,25 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.partitioning.partition-constrained-scan' AND usage_count > 0
 ----
 sql.partitioning.partition-constrained-scan
+
+# Regression test for #44154: a remaining filter that is not identical to an
+# input filter should not be dropped.
+statement ok
+CREATE TABLE t0(c0 BOOL UNIQUE, c1 BOOL CHECK (true))
+
+statement ok
+INSERT INTO t0(c0) VALUES (true)
+
+query T
+EXPLAIN (OPT) SELECT * FROM t0 WHERE t0.c0 AND (c1 OR (c0 > false AND c0 < false))
+----
+select
+ ├── index-join t0
+ │    └── scan t0@t0_c0_key
+ │         └── constraint: /1: [/true - /true]
+ └── filters
+      └── c1 OR (c0 < false)
+
+query BB
+SELECT * FROM t0 WHERE t0.c0 AND (c1 OR (c0 > false AND c0 < false))
+----

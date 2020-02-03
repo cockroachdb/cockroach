@@ -229,21 +229,6 @@ func (n *FiltersExpr) Deduplicate() {
 	*n = dedup
 }
 
-// RetainCommonFilters retains only the filters found in n and other.
-func (n *FiltersExpr) RetainCommonFilters(other FiltersExpr) {
-	// TODO(ridwanmsharif): Faster intersection using a map
-	common := (*n)[:0]
-	for _, filter := range *n {
-		for _, otherFilter := range other {
-			if filter.Condition == otherFilter.Condition {
-				common = append(common, filter)
-				break
-			}
-		}
-	}
-	*n = common
-}
-
 // RemoveCommonFilters removes the filters found in other from n.
 func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
