@@ -9649,6 +9649,8 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 // to reflect the timestamp at which retried batches are executed.
 func TestReplicaLocalRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// TODO(andrei): make each subtest use its own testContext so that they don't
+	// have to use distinct keys.
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -9826,9 +9828,50 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 		},
-		// Handle multiple write too old errors.
+		// This test tests a scenario where a CPut is failing at its timestamp, but it would
+		// succeed if it'd evaluate at a bumped timestamp. The request is not retried at the
+		// bumped timestamp. We don't necessarily like this current behavior; for example if
+		// there's nothing to refresh, the request could be retried.
+		// The previous test shows different behavior for a non-transactional
+		// request or a 1PC one.
 		{
-			name: "local retry with multiple write too old errors",
+			name: "no local retry with failed CPut despite write too old errors on txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("e1", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				txn := newTxn("e1", ts.Prev())
+
+				// Send write to another key first to avoid 1PC.
+				ba.Txn = txn
+				put := putArgs([]byte("e1-other-key"), []byte("otherput"))
+				ba.Add(&put)
+				assignSeqNumsForReqs(ba.Txn, &put)
+				if _, err := send(ba); err != nil {
+					panic(err)
+				}
+
+				ba = roachpb.BatchRequest{}
+				ba.Txn = txn
+				cput := cPutArgs(roachpb.Key("e1"), []byte("cput"), []byte("put"))
+				ba.Add(&cput)
+				assignSeqNumsForReqs(ba.Txn, &cput)
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				// Indicate local retry is possible, even though we don't currently take
+				// advantage of this.
+				et.NoRefreshSpans = true
+				ba.Add(&et)
+				assignSeqNumsForReqs(ba.Txn, &et)
+				return
+			},
+			expErr: "unexpected value: <nil>",
+		},
+		// Handle multiple write too old errors on a non-transactional request.
+		//
+		// Note that in this test's scenario if the request was transactional, it
+		// generally would receive a ConditionFailedError from the CPuts.
+		{
+			name: "local retry with multiple write too old errors on non-txn request",
 			setupFn: func() (hlc.Timestamp, error) {
 				if _, err := put("f1", "put"); err != nil {
 					return hlc.Timestamp{}, err
@@ -9839,8 +9882,10 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return put("f3", "put")
 			},
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
-				ba.Timestamp = ts.Prev()
 				expTS = ts.Next()
+				// We're going to execute before any of the writes in setupFn.
+				ts.Logical = 0
+				ba.Timestamp = ts
 				for i := 1; i <= 3; i++ {
 					cput := cPutArgs(roachpb.Key(fmt.Sprintf("f%d", i)), []byte("cput"), []byte("put"))
 					ba.Add(&cput)
@@ -9852,19 +9897,24 @@ func TestReplicaLocalRetries(t *testing.T) {
 		{
 			name: "local retry with multiple write too old errors on 1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
-				if _, err := put("g1", "put"); err != nil {
+				// Do a couple of writes. Their timestamps are going to differ in their
+				// logical component. The batch that we're going to run in batchFn will
+				// run at a lower timestamp than all of them.
+				if _, err := put("ga1", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				if _, err := put("g2", "put"); err != nil {
+				if _, err := put("ga2", "put"); err != nil {
 					return hlc.Timestamp{}, err
 				}
-				return put("g3", "put")
+				return put("ga3", "put")
 			},
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
-				ba.Txn = newTxn("g1", ts.Prev())
 				expTS = ts.Next()
+				// We're going to execute before any of the writes in setupFn.
+				ts.Logical = 0
+				ba.Txn = newTxn("ga1", ts)
 				for i := 1; i <= 3; i++ {
-					cput := cPutArgs(roachpb.Key(fmt.Sprintf("g%d", i)), []byte("cput"), []byte("put"))
+					cput := cPutArgs(roachpb.Key(fmt.Sprintf("ga%d", i)), []byte("cput"), []byte("put"))
 					ba.Add(&cput)
 					assignSeqNumsForReqs(ba.Txn, &cput)
 				}
