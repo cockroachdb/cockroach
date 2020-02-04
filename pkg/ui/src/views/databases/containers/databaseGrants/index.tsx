@@ -18,6 +18,7 @@ import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, t
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import { PaginationComponent } from "oss/src/components/pagination/pagination";
 
 class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}
 
@@ -28,13 +29,38 @@ const grantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
 // DatabaseSummaryGrants displays a summary section describing the grants
 // active on a single database.
 class DatabaseSummaryGrants extends DatabaseSummaryBase {
+  state = {
+    pagination: {
+      pageSize: 20,
+      current: 1,
+    },
+  };
+
   totalUsers() {
     const grants = this.props.grants;
     return grants && grants.length;
   }
 
+  onChangePage = (current: number) => {
+    const { pagination } = this.state;
+    this.setState({ pagination: { ...pagination, current }});
+  }
+
+  getDatabaseSummaryData = (values: any) => {
+    const { pagination: { current, pageSize } } = this.state;
+    if (!values) {
+      return;
+    }
+    const currentDefault = current - 1;
+    const start = (currentDefault * pageSize);
+    const end = (currentDefault * pageSize + pageSize);
+    const data = values.slice(start, end);
+    return data;
+  }
+
   render() {
     const { grants, sortSetting } = this.props;
+    const { pagination } = this.state;
     const dbID = this.props.name;
 
     const numTables = tableInfos && tableInfos.length || 0;
@@ -49,21 +75,28 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
             <div className="database-summary-table sql-table">
               {
                 (numTables === 0) ? "" :
-                  <DatabaseGrantsSortedTable
-                    data={grants as protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[]}
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
-                    columns={[
-                      {
-                        title: "User",
-                        cell: (grant) => grant.user,
-                        sort: (grant) => grant.user,
-                      },
-                      {
-                        title: "Grants",
-                        cell: (grant) => grant.privileges.join(", "),
-                      },
-                    ]} />
+                  <React.Fragment>
+                    <DatabaseGrantsSortedTable
+                      data={this.getDatabaseSummaryData(grants) as protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[]}
+                      sortSetting={sortSetting}
+                      onChangeSortSetting={(setting) => this.props.setSort(setting)}
+                      columns={[
+                        {
+                          title: "User",
+                          cell: (grant) => grant.user,
+                          sort: (grant) => grant.user,
+                        },
+                        {
+                          title: "Grants",
+                          cell: (grant) => grant.privileges.join(", "),
+                        },
+                      ]} />
+                    <PaginationComponent
+                      pagination={{ ...pagination, total: this.totalUsers() }}
+                      onChange={this.onChangePage}
+                      hideOnSinglePage
+                    />
+                  </React.Fragment>
               }
             </div>
           </div>
