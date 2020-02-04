@@ -67,18 +67,29 @@ func ShowCreateTable(
 	primaryKeyIsOnVisibleColumn := false
 	visibleCols := desc.VisibleColumns()
 	for i := range visibleCols {
+		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == visibleCols[i].ID {
+			primaryKeyIsOnVisibleColumn = true
+		}
+	}
+	// If there is not an explicit primary key, display the primary key
+	// first with behind a comment. We do it here rather than normally
+	// because if we do it later we don't know whether to append a
+	// comma to the preceding line.
+	if !primaryKeyIsOnVisibleColumn {
+		f.WriteString("\n\t-- CONSTRAINT ")
+		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
+		f.WriteString(" ")
+		f.WriteString(desc.PrimaryKeyString())
+	}
+	for i := range visibleCols {
 		col := &visibleCols[i]
 		if i != 0 {
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
 		f.WriteString(col.SQLString())
-		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
-			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
-			// is on a visible column (not rowid).
-			primaryKeyIsOnVisibleColumn = true
-		}
 	}
+	// If there is an explicit primary key, display it without a comment.
 	if primaryKeyIsOnVisibleColumn {
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)

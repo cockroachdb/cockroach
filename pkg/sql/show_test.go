@@ -70,6 +70,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -89,6 +90,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -107,6 +109,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	s STRING NULL,
 	FAMILY "primary" (i, rowid),
@@ -133,6 +136,7 @@ func TestShowCreateTable(t *testing.T) {
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
@@ -157,6 +161,7 @@ func TestShowCreateTable(t *testing.T) {
 	index c(a asc, b desc)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	a INT8 NULL,
 	b INT8 NULL,
 	INDEX c (a ASC, b DESC),
@@ -173,6 +178,7 @@ func TestShowCreateTable(t *testing.T) {
 	k int REFERENCES items (c)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
@@ -193,6 +199,7 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
@@ -211,6 +218,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	x INT8 NULL,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x),
 	INDEX %[1]s_auto_index_fk_ref (x ASC),
@@ -227,6 +235,7 @@ func TestShowCreateTable(t *testing.T) {
 	k int8 REFERENCES items (c) ON DELETE SET NULL
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
@@ -268,6 +277,7 @@ func TestShowCreateTable(t *testing.T) {
 		// pretty-printed properly.
 		{
 			stmt: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i int DEFAULT 1,
 	j int DEFAULT 2,
 	k int DEFAULT 3,
@@ -276,6 +286,7 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
 )`,
 			expect: `CREATE TABLE %s (
+	-- CONSTRAINT "primary" PRIMARY KEY (rowid ASC)
 	i INT8 NULL DEFAULT 1:::INT8,
 	j INT8 NULL DEFAULT 2:::INT8,
 	k INT8 NULL DEFAULT 3:::INT8,
