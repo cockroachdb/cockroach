@@ -54,6 +54,7 @@ import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
+import "antd/es/tooltip/style/css";
 
 import "styl/app.styl";
 

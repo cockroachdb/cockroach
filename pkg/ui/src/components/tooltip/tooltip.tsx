@@ -11,7 +11,6 @@
 import * as React from "react";
 import { default as AntTooltip, TooltipProps as AntTooltipProps } from "antd/es/tooltip";
 
-import "antd/es/tooltip/style/css";
 import "./tooltip.styl";
 
 export interface TooltipProps {
