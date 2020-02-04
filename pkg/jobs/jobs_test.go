@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1987,5 +1988,89 @@ func TestJobInTxn(t *testing.T) {
 		// failure.
 		require.Error(t, txn.Commit())
 		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
+	})
+}
+
+// TestStartableJobErrors tests that the StartableJob returns the expected
+// errors when used incorrectly and performs the appropriate cleanup in
+// CleanupOnRollback.
+func TestStartableJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	jr := s.JobRegistry().(*jobs.Registry)
+	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	})
+	rec := jobs.Record{
+		Description:   "There's a snake in my boot!",
+		Username:      "Woody Pride",
+		DescriptorIDs: []sqlbase.ID{1, 2, 3},
+		Details:       jobspb.RestoreDetails{},
+		Progress:      jobspb.RestoreProgress{},
+	}
+	createStartableJob := func(t *testing.T) (sj *jobs.StartableJob) {
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+			return err
+		}))
+		return sj
+	}
+	t.Run("Start called more than once", func(t *testing.T) {
+		sj := createStartableJob(t)
+		_, err := sj.Start(ctx)
+		require.NoError(t, err)
+		_, err = sj.Start(ctx)
+		require.Regexp(t, `StartableJob \d+ cannot be started more than once`, err)
+	})
+	t.Run("Start called with active txn", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		defer func() {
+			require.NoError(t, txn.Rollback(ctx))
+		}()
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		require.NoError(t, err)
+		_, err = sj.Start(ctx)
+		require.Regexp(t, `cannot resume .* job which is not committed`, err)
+	})
+	t.Run("Start called with aborted txn", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		require.NoError(t, err)
+		require.NoError(t, txn.Rollback(ctx))
+		_, err = sj.Start(ctx)
+		require.Regexp(t, `cannot resume .* job which is not committed`, err)
+	})
+	t.Run("CleanupOnRollback called with active txn", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		defer func() {
+			require.NoError(t, txn.Rollback(ctx))
+		}()
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		require.NoError(t, err)
+		err = sj.CleanupOnRollback(ctx)
+		require.Regexp(t, `cannot call CleanupOnRollback for a StartableJob with a non-finalized transaction`, err)
+	})
+	t.Run("CleanupOnRollback called with committed txn", func(t *testing.T) {
+		sj := createStartableJob(t)
+		err := sj.CleanupOnRollback(ctx)
+		require.Regexp(t, `cannot call CleanupOnRollback for a StartableJob created by a committed transaction`, err)
+	})
+	t.Run("CleanupOnRollback positive case", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		require.NoError(t, err)
+		require.NoError(t, txn.Rollback(ctx))
+		require.NoError(t, sj.CleanupOnRollback(ctx))
+		for _, id := range jr.CurrentlyRunningJobs() {
+			require.NotEqual(t, id, *sj.ID())
+		}
 	})
 }
