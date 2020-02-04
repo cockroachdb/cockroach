@@ -12,6 +12,7 @@ import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
 import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 import _ from "lodash";
 import moment from "moment";
+import { DateFormat } from "src/util/format";
 import { Line } from "rc-progress";
 import React from "react";
 import { Helmet } from "react-helmet";
@@ -19,6 +20,7 @@ import { connect } from "react-redux";
 import { bindActionCreators, Dispatch } from "redux";
 import { cockroach } from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
@@ -36,7 +38,6 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -169,7 +170,7 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     }
     return (
       <ToolTipWrapper text={`System Time: ${tooltip}`}>
-        High-water Timestamp: {highwaterMoment.format("MMM DD, YYYY [at] h:mm A")}
+        High-water Timestamp: {highwaterMoment.format(DateFormat)}
       </ToolTipWrapper>
     );
   }
@@ -208,7 +209,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Creation Time",
-    cell: job => TimestampToMoment(job.created).format("MMM DD, YYYY [at] h:mm A"),
+    cell: job => TimestampToMoment(job.created).format(DateFormat),
     sort: job => TimestampToMoment(job.created).valueOf(),
   },
   {

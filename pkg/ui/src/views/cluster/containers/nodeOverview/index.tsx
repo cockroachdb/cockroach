@@ -8,27 +8,21 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { Link, RouterState } from "react-router";
 import { createSelector } from "reselect";
-import { RouterState, Link } from "react-router";
-import _ from "lodash";
-
-import "./nodeOverview.styl";
-
-import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { nodeIDAttr } from "src/util/constants";
-import { AdminUIState } from "src/redux/state";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { INodeStatus, MetricConstants, StatusMetrics } from  "src/util/proto";
-import { Bytes, Percentage } from "src/util/format";
+import { livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
-import {
-  SummaryBar, SummaryLabel, SummaryValue,
-} from "src/views/shared/components/summaryBar";
+import { Bytes, DateFormat, Percentage } from "src/util/format";
+import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
+import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
+import "./nodeOverview.styl";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -167,7 +161,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 value={livenessString}
                 classModifier={livenessString}
               />
-              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).format("MMM DD, YYYY [at] h:mm A")} />
+              <SummaryValue title="Last Update" value={LongToMoment(node.updated_at).format(DateFormat)} />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
                 title="Logs"
