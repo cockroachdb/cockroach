@@ -295,6 +295,35 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	br, pErr = tc.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
+
+	// Send the same batch but with a point read instead of a point write.
+	// In-flight writes should not be attached because read-only requests
+	// cannot be parallelized with a commit.
+	ba.Requests = nil
+	getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	getArgs.Sequence = 2
+	etArgsCopy = etArgs
+	ba.Add(&getArgs, &qiArgs, &etArgsCopy)
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+
+		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		require.True(t, et.Commit)
+		require.Len(t, et.IntentSpans, 2)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.IntentSpans)
+		require.Len(t, et.InFlightWrites, 0)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.COMMITTED
+		return br, nil
+	})
+
+	br, pErr = tc.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
 }
 
 // TestTxnCommitterAsyncExplicitCommitTask verifies that when txnCommitter
