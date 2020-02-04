@@ -123,6 +123,10 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter time.Time
+	// lastExecTime is the time at which this schema changer finished its most
+	// recent exec() attempt in the async schema changer. It is used for ensuring
+	// that we back off before retrying.
+	lastExecTime time.Time
 
 	// table.DropTime.
 	dropTime int64
@@ -2119,7 +2123,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 					// Advance the execAfter time so that this schema
 					// changer doesn't get called again for a while.
-					sc.execAfter = timeutil.Now().Add(delay)
+					sc.lastExecTime = timeutil.Now()
+					sc.execAfter = sc.lastExecTime.Add(delay)
 					schemaChangers[tableID] = sc
 
 					if err != nil {
@@ -2213,6 +2218,15 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if newExecTime != sc.execAfter {
 							resetTimer = true
 							sc.execAfter = newExecTime
+							// Frequent gossiped updates to the system config range could
+							// trigger the schema change to retry too frequently. We back off
+							// here to prevent this from happening. See #44299.
+							if execTimeAfterBackoff := sc.lastExecTime.Add(delay); !sc.lastExecTime.IsZero() && sc.execAfter.Before(execTimeAfterBackoff) {
+								if log.V(2) {
+									log.Infof(ctx, "schema change manager backing off before retrying on table %d", sc.tableID)
+								}
+								sc.execAfter = execTimeAfterBackoff
+							}
 							// Safe to modify map inplace while iterating over it.
 							s.forGC[id] = sc
 							if log.V(2) {
