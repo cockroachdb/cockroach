@@ -14,10 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -25,7 +23,6 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	force          bool
 	tableDesc      *sqlbase.TableDescriptor
 	index          *sqlbase.IndexDescriptor
 	rows           planNode
@@ -40,18 +37,6 @@ type splitRun struct {
 }
 
 func (n *splitNode) startExec(params runParams) error {
-	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
-	// TODO(jeffreyxiao): Remove this error, splitNode.force, and
-	// experimental_force_split_at in v20.1.
-	// This check is not intended to be foolproof. The setting could be outdated
-	// because of gossip inconsistency, or it could change halfway through the
-	// SPLIT AT's execution. It is, however, likely to prevent user error and
-	// confusion in the common case.
-	if !n.force && storagebase.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) && !stickyBitEnabled {
-		return errors.New("splits would be immediately discarded by merge queue; " +
-			"disable the merge queue first by running 'SET CLUSTER SETTING kv.range_merge.queue_enabled = false'")
-	}
 	return nil
 }
 
@@ -69,20 +54,12 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	// TODO(jeffreyxiao): Remove this check in v20.1.
-	// Don't set the manual flag if the cluster is not up-to-date.
-	st := params.EvalContext().Settings
-	stickyBitEnabled := cluster.Version.IsActive(params.ctx, st, cluster.VersionStickyBit)
-	expirationTime := hlc.Timestamp{}
-	if stickyBitEnabled {
-		expirationTime = n.expirationTime
-	}
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, expirationTime); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey, n.expirationTime); err != nil {
 		return false, err
 	}
 
 	n.run.lastSplitKey = rowKey
-	n.run.lastExpirationTime = expirationTime
+	n.run.lastExpirationTime = n.expirationTime
 
 	return true, nil
 }

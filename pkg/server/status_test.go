@@ -1230,8 +1230,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	// Create a split so that there's some records in the system.rangelog table.
 	// The test needs them.
 	if _, err := db.Exec(
-		`set experimental_force_split_at = true;
-		create table t(x int primary key);
+		`create table t(x int primary key);
 		alter table t split at values(1);`,
 	); err != nil {
 		t.Fatal(err)

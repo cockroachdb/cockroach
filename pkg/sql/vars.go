@@ -326,23 +326,6 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_force_split_at`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_force_split_at`),
-		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
-			if err != nil {
-				return err
-			}
-			m.SetForceSplitAt(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.ForceSplitAt)
-		},
-		GlobalDefault: globalFalse,
-	},
-
-	// CockroachDB extension.
 	`experimental_enable_primary_key_changes`: {
 		GetStringVal: makeBoolGetStringValFn(`experimental_enable_primary_key_changes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

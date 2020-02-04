@@ -145,13 +145,11 @@ func WriteInitialClusterData(
 		}
 
 		desc := &roachpb.RangeDescriptor{
-			RangeID:       rangeID,
-			StartKey:      startKey,
-			EndKey:        endKey,
-			NextReplicaID: 2,
-		}
-		if !bootstrapVersion.Less(cluster.VersionByKey(cluster.VersionGenerationComparable)) {
-			desc.GenerationComparable = proto.Bool(true)
+			RangeID:              rangeID,
+			StartKey:             startKey,
+			EndKey:               endKey,
+			NextReplicaID:        2,
+			GenerationComparable: proto.Bool(true),
 		}
 		replicas := []roachpb.ReplicaDescriptor{
 			{
