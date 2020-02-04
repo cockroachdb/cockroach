@@ -34,7 +34,6 @@ const (
 	_ VersionKey = iota - 1 // want first named one to start at zero
 	Version19_1
 	VersionStart19_2
-	VersionParallelCommits
 	VersionGenerationComparable
 	VersionLearnerReplicas
 	VersionTopLevelForeignKeys
@@ -192,11 +191,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	// 	Key:     VersionStickyBit,
 	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 3},
 	// },
-	{
-		// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
-		Key:     VersionParallelCommits,
-		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
-	},
+	// Removed.
+	// {
+	// 	// VersionParallelCommits is https://github.com/cockroachdb/cockroach/pull/37777.
+	// 	Key:     VersionParallelCommits,
+	// 	Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 4},
+	// },
 	{
 		// VersionGenerationComparable is https://github.com/cockroachdb/cockroach/pull/38334.
 		Key:     VersionGenerationComparable,
