@@ -324,6 +324,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
 
+			// Increment telemetry about uses of primary key changes.
+			telemetry.Inc(sqltelemetry.AlterPrimaryKeyCounter)
+
 			// Ensure that there is not another primary key change attempted within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
 			for i := range n.tableDesc.Mutations {
