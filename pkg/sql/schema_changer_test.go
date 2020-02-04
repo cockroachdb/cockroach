@@ -5284,3 +5284,101 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 		t.Fatal(err)
 	}
 }
+
+// TestOrphanedGCMutationsRemoved tests that if a table descriptor has a
+// GCMutations which references a job that does not exist anymore, that it will
+// eventually be cleaned up anyway. One way this can arise is when a table
+// was backed up right after an index deletion.
+func TestOrphanedGCMutationsRemoved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	const chunkSize = 200
+	// Disable synchronous schema change processing so that the mutations get
+	// processed asynchronously.
+	var enableAsyncSchemaChanges uint32
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: chunkSize,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	retryOpts := retry.Options{
+		InitialBackoff: 20 * time.Millisecond,
+		MaxBackoff:     200 * time.Millisecond,
+		Multiplier:     2,
+	}
+
+	// Create a k-v table.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`CREATE INDEX t_v ON t.test(v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add some data.
+	const maxValue = chunkSize + 1
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Wait until indexes are created.
+	for r := retry.Start(retryOpts); r.Next(); {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.Indexes) == 1 {
+			break
+		}
+	}
+
+	if _, err := sqlDB.Exec(`DROP INDEX t.t_v`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if e := 1; e != len(tableDesc.GCMutations) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GCMutations))
+	}
+
+	// Delete the associated job.
+	jobID := tableDesc.GCMutations[0].JobID
+	if _, err := sqlDB.Exec(fmt.Sprintf("DELETE FROM system.jobs WHERE id=%d", jobID)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure the GCMutations has not yet been completed.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if e := 1; e != len(tableDesc.GCMutations) {
+		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GCMutations))
+	}
+
+	// Enable async schema change processing for purged schema changes.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+
+	// Add immediate GC TTL to allow index creation purge to complete.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that GC mutations that cannot find their job will eventually be
+	// cleared.
+	testutils.SucceedsSoon(t, func() error {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.GCMutations) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
+		}
+		return nil
+	})
+}
