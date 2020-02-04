@@ -1352,6 +1352,71 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 	}
 }
 
+func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			err := engine.Put(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.Put(MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.Put(MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.Put(MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			batch := engine.NewBatch()
+			defer batch.Close()
+			txn := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					WriteTimestamp: hlc.Timestamp{WallTime: 10},
+				},
+				Name:                    "test",
+				Status:                  roachpb.PENDING,
+				DeprecatedOrigTimestamp: hlc.Timestamp{WallTime: 10},
+				ReadTimestamp:           hlc.Timestamp{WallTime: 10},
+				MaxTimestamp:            hlc.Timestamp{WallTime: 10},
+			}
+			iter := batch.NewIterator(IterOptions{
+				LowerBound: testKey1,
+				UpperBound: testKey5,
+			})
+			defer iter.Close()
+			iter.SeekGE(MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}})
+			iter.Next() // key2/5
+
+			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.
+			err = MVCCDelete(context.TODO(), batch, nil, testKey3, txn.WriteTimestamp, txn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Should Next() from key2/5 to key2/3 first, then Seek to key3, and see
+			// the intent.
+			iter.NextKey()
+
+			if iter.UnsafeKey().IsValue() {
+				t.Fatalf("expected iterator to land on an intent, got a value: %v", iter.UnsafeKey())
+			}
+		})
+	}
+}
+
 func mvccScanTest(ctx context.Context, t *testing.T, engine Engine) {
 	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
