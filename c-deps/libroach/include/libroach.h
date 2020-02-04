@@ -350,6 +350,8 @@ typedef struct {
   int32_t len;
   // count is the number of key/value pairs in bufs.
   int32_t count;
+  // bytes is the number of bytes (as measured by TargetSize) in bufs.
+  int64_t bytes;
 } DBChunkedBuffer;
 
 // DBScanResults contains the key/value pairs and intents encoded

@@ -34,15 +34,12 @@ func Scan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
 
+	var res engine.MVCCScanResult
 	var err error
-	var intents []roachpb.Intent
-	var resumeSpan *roachpb.Span
 
 	switch args.ScanFormat {
 	case roachpb.BATCH_RESPONSE:
-		var kvData [][]byte
-		var numKvs int64
-		kvData, numKvs, resumeSpan, intents, err = engine.MVCCScanToBytes(
+		res, err = engine.MVCCScanToBytes(
 			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp,
 			engine.MVCCScanOptions{
 				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
@@ -51,11 +48,9 @@ func Scan(
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.NumKeys = numKvs
-		reply.BatchResponses = kvData
+		reply.BatchResponses = res.KVData
 	case roachpb.KEY_VALUES:
-		var rows []roachpb.KeyValue
-		rows, resumeSpan, intents, err = engine.MVCCScan(
+		res, err = engine.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, cArgs.MaxKeys, h.Timestamp, engine.MVCCScanOptions{
 				Inconsistent: h.ReadConsistency != roachpb.CONSISTENT,
 				Txn:          h.Txn,
@@ -63,19 +58,19 @@ func Scan(
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.NumKeys = int64(len(rows))
-		reply.Rows = rows
+		reply.Rows = res.KVs
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}
+	reply.NumKeys = res.NumKeys
 
-	if resumeSpan != nil {
-		reply.ResumeSpan = resumeSpan
+	if res.ResumeSpan != nil {
+		reply.ResumeSpan = res.ResumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
-		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, intents)
+		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, res.Intents)
 	}
-	return result.FromEncounteredIntents(intents), err
+	return result.FromEncounteredIntents(res.Intents), err
 }

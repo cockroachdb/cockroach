@@ -64,7 +64,7 @@ func TestIterStats(t *testing.T) {
 			}
 			// Scanning a key range containing the tombstone sees it.
 			for i := 0; i < 10; i++ {
-				if _, _, _, err := mvccScanToKvs(
+				if _, err := mvccScanToKvs(
 					ctx, iter, roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64, hlc.Timestamp{}, MVCCScanOptions{},
 				); err != nil {
 					t.Fatal(err)

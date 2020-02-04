@@ -708,20 +708,23 @@ func cmdScan(e *evalCtx) error {
 		e.scanArg(key, &tb)
 		opts.TargetBytes = int64(tb)
 	}
-	vals, resumeSpan, intents, err := MVCCScan(e.ctx, e.engine, key, endKey, max, ts, opts)
+	res, err := MVCCScan(e.ctx, e.engine, key, endKey, max, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intents when an error
 	// occurs.
-	for _, intent := range intents {
+	for _, intent := range res.Intents {
 		fmt.Fprintf(e.results.buf, "scan: %v -> intent {%s} %s\n", key, intent.Txn, intent.Status)
 	}
-	for _, val := range vals {
+	for _, val := range res.KVs {
 		fmt.Fprintf(e.results.buf, "scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
 	}
-	if resumeSpan != nil {
-		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+	if res.ResumeSpan != nil {
+		fmt.Fprintf(e.results.buf, "scan: resume span [%s,%s)\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey)
 	}
-	if len(vals) == 0 {
+	if opts.TargetBytes > 0 {
+		fmt.Fprintf(e.results.buf, "scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)
+	}
+	if len(res.KVs) == 0 {
 		fmt.Fprintf(e.results.buf, "scan: %v-%v -> <no data>\n", key, endKey)
 	}
 	return err
