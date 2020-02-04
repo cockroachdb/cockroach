@@ -150,6 +150,10 @@ func (d *mysqloutfileReader) readFile(
 		} else if (!d.opts.HasEscape && field == "NULL") || d.opts.NullEncoding != nil && field == *d.opts.NullEncoding {
 			row = append(row, tree.DNull)
 		} else {
+			// This uses ParseStringAs instead of ParseDatumStringAs since mysql emits
+			// raw byte strings that do not using the same escaping as our ParseBytes
+			// function expects, and the difference between ParseStringAs and
+			// ParseDatumStringAs is whether or not it attempts to parse bytes.
 			datum, err := tree.ParseStringAs(d.conv.VisibleColTypes[len(row)], field, d.conv.EvalCtx)
 			if err != nil {
 				col := d.conv.VisibleCols[len(row)]
