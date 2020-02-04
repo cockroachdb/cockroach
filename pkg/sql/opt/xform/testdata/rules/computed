@@ -155,3 +155,20 @@ select
  │              └── k_interval + now() [type=timestamptz]
  └── filters
       └── k_interval = '03:00:00' [type=bool, outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
+
+# Verify that a stored NULL value is handled correctly (#44132).
+exec-ddl
+CREATE TABLE null_col (
+    a INT,
+    b INT AS (NULL) STORED,
+    INDEX ab (a, b)
+)
+----
+
+opt
+SELECT a, b FROM null_col WHERE a = 1
+----
+scan null_col@ab
+ ├── columns: a:1(int!null) b:2(int)
+ ├── constraint: /1/2/3: [/1/NULL - /1/NULL]
+ └── fd: ()-->(1)

@@ -501,7 +501,8 @@ func (c *CustomFuncs) computedColFilters(
 	for colID := range tabMeta.ComputedCols {
 		if c.tryFoldComputedCol(tabMeta, colID, constCols) {
 			constVal := constCols[colID]
-			eqOp := c.e.f.ConstructEq(c.e.f.ConstructVariable(colID), constVal)
+			// Note: Eq is not correct here because of NULLs.
+			eqOp := c.e.f.ConstructIs(c.e.f.ConstructVariable(colID), constVal)
 			computedColFilters = append(computedColFilters, c.e.f.ConstructFiltersItem(eqOp))
 		}
 	}
