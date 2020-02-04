@@ -226,34 +226,18 @@ func (r *Registry) makeJobID() int64 {
 func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
-	j := r.NewJob(record)
-	resumer, err := r.createResumer(j, r.settings)
+	var rj *StartableJob
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		rj, err = r.CreateStartableJobWithTxn(ctx, record, txn, resultsCh)
+		return err
+	}); err != nil {
+		return nil, nil, err
+	}
+	errCh, err := rj.Start(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	resumeCtx, cancel := r.makeCtx()
-	// Grab the lock on resuming the job before we insert it in the jobs table so
-	// that it cannot be resumed by another routine.
-	id := r.makeJobID()
-	if err := r.register(id, cancel); err != nil {
-		// We just created the id for the job, it could not be registered already.
-		return nil, nil, err
-	}
-	if err := j.insert(ctx, id, r.newLease()); err != nil {
-		// Use id instead of job.ID because the new id is not recorded in the job.
-		r.unregister(id)
-		return nil, nil, err
-	}
-	if err := j.Started(ctx); err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
-	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
-	if err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
-	return j, errCh, err
+	return rj.Job, errCh, nil
 }
 
 // Run starts previously unstarted jobs from a list of scheduled
@@ -326,6 +310,49 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 	return j, nil
+}
+
+// CreateStartableJobWithTxn creates a job to be started later, after the
+// creating txn commits. The method uses the passed txn to write the job in the
+// jobs table, marks it pending and gives the current node a lease. It
+// additionally registers the job with the Registry which will prevent the
+// Registry from adopting the job after the transaction commits. The resultsCh
+// will be connected to the output of the job and written to after the returned
+// StartableJob is started.
+//
+// The returned job is not associated with the user transaction. The intention
+// is that the job will not be modified again in txn. If the transaction is
+// committed, the caller must explicitly Start it. If the transaction is rolled
+// back then the caller must call CleanupOnRollback to unregister the job from
+// the Registry.
+func (r *Registry) CreateStartableJobWithTxn(
+	ctx context.Context, record Record, txn *client.Txn, resultsCh chan<- tree.Datums,
+) (*StartableJob, error) {
+	j, err := r.CreateJobWithTxn(ctx, record, txn)
+	if err != nil {
+		return nil, err
+	}
+	// The job itself must not hold on to this transaction. We ensure in Start()
+	// that the transaction used to create the job is committed. When jobs hold
+	// onto transactions they use the transaction in methods which modify the job.
+	// On the whole this pattern is bug-prone and hard to reason about.
+	j.WithTxn(nil)
+	resumer, err := r.createResumer(j, r.settings)
+	if err != nil {
+		return nil, err
+	}
+	resumerCtx, cancel := r.makeCtx()
+	if err := r.register(*j.ID(), cancel); err != nil {
+		return nil, err
+	}
+	return &StartableJob{
+		Job:        j,
+		txn:        txn,
+		resumer:    resumer,
+		resumerCtx: resumerCtx,
+		cancel:     cancel,
+		resultsCh:  resultsCh,
+	}, nil
 }
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
