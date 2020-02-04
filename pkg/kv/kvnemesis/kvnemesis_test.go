@@ -53,12 +53,13 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		// nontransactional batch are disjoint and upgrading to a transactional
 		// batch (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can
 		// be used to efficiently check this.
-		OpPBatch:         0,
-		OpPClosureTxn:    10,
-		OpPSplitNew:      1,
-		OpPSplitAgain:    1,
-		OpPMergeNotSplit: 1,
-		OpPMergeIsSplit:  1,
+		OpPBatch:                   0,
+		OpPClosureTxn:              5,
+		OpPClosureTxnCommitInBatch: 5,
+		OpPSplitNew:                1,
+		OpPSplitAgain:              1,
+		OpPMergeNotSplit:           1,
+		OpPMergeIsSplit:            1,
 	}
 
 	rng, _ := randutil.NewPseudoRand()
