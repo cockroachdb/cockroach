@@ -36,6 +36,11 @@ SELECT * from t@primary
 2 6 7 8
 9 10 11 12
 
+query T
+select feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.alter_primary_key' AND usage_count > 0
+----
+sql.schema.alter_primary_key
+
 # Test primary key changes on storing indexes with different column families (the randomizer will do this for us).
 statement ok
 DROP TABLE t;
