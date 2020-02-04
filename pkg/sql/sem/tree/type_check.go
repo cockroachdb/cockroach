@@ -1025,13 +1025,15 @@ func (expr *NotExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
+	typedSubExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
 
 	expr.Expr1, expr.Expr2 = typedSubExprs[0], typedSubExprs[1]
-	expr.typ = retType
+
+	// The return type of NULLIF is the type of the first expression.
+	expr.typ = typedSubExprs[0].ResolvedType()
 	return expr, nil
 }
 
