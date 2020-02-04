@@ -66,7 +66,13 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
-	tables = append(tables, "system.jobs", "system.descriptor", "system.namespace")
+	tables = append(
+		tables,
+		"system.jobs",
+		"system.descriptor",
+		"system.namespace",
+		"system.namespace_deprecated",
+	)
 	sort.Strings(tables)
 
 	var exp []string
@@ -110,6 +116,7 @@ writing ` + os.DevNull + `
   debug/system.jobs.txt
   debug/system.descriptor.txt
   debug/system.namespace.txt
+  debug/system.namespace_deprecated.txt
   debug/crdb_internal.kv_node_status.txt
   debug/crdb_internal.kv_store_status.txt
   debug/crdb_internal.schema_changes.txt
