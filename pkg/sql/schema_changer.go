@@ -832,7 +832,8 @@ func (sc *SchemaChanger) maybeGCMutations(
 		func(txn *client.Txn) error {
 			job, err := sc.jobRegistry.LoadJobWithTxn(ctx, mutation.JobID, txn)
 			if err != nil {
-				return err
+				log.Warningf(ctx, "ignoring error during logEvent while GCing mutations: %+v", err)
+				return nil
 			}
 			return job.WithTxn(txn).Succeeded(ctx, nil)
 		},
