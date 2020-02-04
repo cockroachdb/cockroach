@@ -609,7 +609,7 @@ type lockState struct {
 	holder struct {
 		locked bool
 		// LockStrength is always Exclusive
-		holder [lock.NumDurability]lockHolderInfo
+		holder [lock.MaxDurability + 1]lockHolderInfo
 	}
 
 	// Reservations:
@@ -1312,7 +1312,7 @@ func (l *lockState) tryUpdateLock(
 	}
 	if intent.Status.IsFinalized() {
 		l.holder.locked = false
-		for i := 0; i < int(lock.NumDurability); i++ {
+		for i := range l.holder.holder {
 			l.holder.holder[i].txn = nil
 			l.holder.holder[i].ts = hlc.Timestamp{}
 			l.holder.holder[i].seqs = nil
@@ -1324,7 +1324,7 @@ func (l *lockState) tryUpdateLock(
 	txn := &intent.Txn
 	_, beforeTs := l.getLockerInfo()
 	isLocked := false
-	for i := 0; i < int(lock.NumDurability); i++ {
+	for i := range l.holder.holder {
 		holderTxn := l.holder.holder[i].txn
 		if holderTxn == nil {
 			continue
