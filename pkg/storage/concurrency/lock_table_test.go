@@ -243,11 +243,8 @@ func TestLockTableBasic(t *testing.T) {
 				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			g := guardsByReqName[reqName]
-			g, err := lt.scanAndEnqueue(req, g)
+			g = lt.scanAndEnqueue(req, g)
 			guardsByReqName[reqName] = g
-			if err != nil {
-				return err.Error()
-			}
 			return fmt.Sprintf("start-waiting: %t", g.startWaiting())
 
 		case "acquire":
@@ -341,12 +338,9 @@ func TestLockTableBasic(t *testing.T) {
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			err := lt.done(g)
+			lt.done(g)
 			delete(guardsByReqName, reqName)
 			delete(requestsByName, reqName)
-			if err != nil {
-				return err.Error()
-			}
 			return lt.(*lockTableImpl).String()
 
 		case "guard-start-waiting":
@@ -372,10 +366,7 @@ func TestLockTableBasic(t *testing.T) {
 			default:
 				str = "old: "
 			}
-			state, err := g.currentState()
-			if err != nil {
-				return str + err.Error()
-			}
+			state := g.currentState()
 			var typeStr string
 			switch state.stateKind {
 			case waitForDistinguished:
