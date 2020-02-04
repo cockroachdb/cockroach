@@ -609,10 +609,11 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 					if meta != nil && meta.LeafTxnFinalState == nil && meta.Metrics == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
-					if row == nil {
+					if row != nil {
+						count++
+					} else if meta == nil {
 						break
 					}
-					count++
 				}
 				if count != expectedCount {
 					b.Fatalf("found %d rows, expected %d", count, expectedCount)

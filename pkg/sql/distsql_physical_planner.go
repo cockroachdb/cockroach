@@ -1117,6 +1117,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 
 		tr.MaxResults = n.maxResults
+		p.TotalEstimatedScannedRows += n.estimatedRowCount
 		if n.estimatedRowCount > p.MaxEstimatedRowCount {
 			p.MaxEstimatedRowCount = n.estimatedRowCount
 		}

@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -465,6 +467,9 @@ type DistSQLReceiver struct {
 	// statement.
 	bytesRead int64
 	rowsRead  int64
+
+	expectedRowsRead int64
+	progressAtomic   *uint64
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -647,6 +652,10 @@ func (r *DistSQLReceiver) Push(
 		if meta.Metrics != nil {
 			r.bytesRead += meta.Metrics.BytesRead
 			r.rowsRead += meta.Metrics.RowsRead
+			if r.progressAtomic != nil && r.expectedRowsRead != 0 {
+				progress := float64(r.rowsRead) / float64(r.expectedRowsRead)
+				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
+			}
 			meta.Metrics.Release()
 			meta.Release()
 		}
@@ -974,6 +983,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		return func() {}
 	}
 	dsp.FinalizePlan(planCtx, &physPlan)
+	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	return dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
