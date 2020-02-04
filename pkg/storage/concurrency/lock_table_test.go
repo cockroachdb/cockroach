@@ -251,11 +251,8 @@ func TestLockTableBasic(t *testing.T) {
 				d.Fatalf(t, "unknown request: %s", reqName)
 			}
 			g := guardsByReqName[reqName]
-			g, err := lt.scanAndEnqueue(req, g)
+			g = lt.scanAndEnqueue(req, g)
 			guardsByReqName[reqName] = g
-			if err != nil {
-				return err.Error()
-			}
 			return fmt.Sprintf("start-waiting: %t", g.startWaiting())
 
 		case "acquire":
@@ -349,12 +346,9 @@ func TestLockTableBasic(t *testing.T) {
 			if g == nil {
 				d.Fatalf(t, "unknown guard: %s", reqName)
 			}
-			err := lt.done(g)
+			lt.done(g)
 			delete(guardsByReqName, reqName)
 			delete(requestsByName, reqName)
-			if err != nil {
-				return err.Error()
-			}
 			return lt.(*lockTableImpl).String()
 
 		case "guard-start-waiting":
@@ -380,10 +374,7 @@ func TestLockTableBasic(t *testing.T) {
 			default:
 				str = "old: "
 			}
-			state, err := g.currentState()
-			if err != nil {
-				return str + err.Error()
-			}
+			state := g.currentState()
 			var typeStr string
 			switch state.stateKind {
 			case waitForDistinguished:
@@ -458,11 +449,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			if err != nil {
 				return err
 			}
-			g, err = e.lt.scanAndEnqueue(item.request, g)
-			if err != nil {
-				e.lm.Release(lg)
-				return err
-			}
+			g = e.lt.scanAndEnqueue(item.request, g)
 			if !g.startWaiting() {
 				break
 			}
@@ -475,24 +462,20 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				state, err := g.currentState()
-				if err != nil {
-					_ = e.lt.done(g)
-					return err
-				}
+				state := g.currentState()
 				switch state.stateKind {
 				case doneWaiting:
 					if !lastID.Equal(uuid.UUID{}) && item.request.tM != nil {
 						_, err = e.waitingFor(item.request.tM.ID, lastID, uuid.UUID{})
 						if err != nil {
-							_ = e.lt.done(g)
+							e.lt.done(g)
 							return err
 						}
 					}
 					break L
 				case waitSelf:
 					if item.request.tM == nil {
-						_ = e.lt.done(g)
+						e.lt.done(g)
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
 				case waitForDistinguished, waitFor, waitElsewhere:
@@ -503,7 +486,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 							lastID = state.txn.ID
 						}
 						if aborted {
-							_ = e.lt.done(g)
+							e.lt.done(g)
 							return err
 						}
 					}
@@ -520,7 +503,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				break
 			}
 		}
-		err = firstError(err, e.lt.done(g))
+		e.lt.done(g)
 		e.lm.Release(lg)
 		return err
 	}
