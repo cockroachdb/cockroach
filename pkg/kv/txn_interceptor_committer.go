@@ -142,12 +142,12 @@ func (tc *txnCommitter) SendLocked(
 		et.Key = ba.Txn.Key
 	}
 
-	// Determine whether the commit can be run in parallel with the rest of the
-	// writes in the batch. If not, move the in-flight writes currently attached
-	// to the EndTransaction request to the IntentSpans and clear the in-flight
-	// write set; no writes will be in-flight concurrently with the EndTransaction
+	// Determine whether the commit request can be run in parallel with the rest
+	// of the requests in the batch. If not, move the in-flight writes currently
+	// attached to the EndTxn request to the IntentSpans and clear the in-flight
+	// write set; no writes will be in-flight concurrently with the EndTxn
 	// request.
-	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallelWithWrites(ba, et) {
+	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ba, et) {
 		// NB: when parallel commits is disabled, this is the best place to
 		// detect whether the batch has only distinct spans. We can set this
 		// flag based on whether any of previously declared in-flight writes
@@ -191,8 +191,8 @@ func (tc *txnCommitter) SendLocked(
 		// all in-flight writes will succeed with the EndTransaction and can
 		// decide to skip the STAGING state.
 		//
-		// This is also possible if we never attached any in-flight writes to the
-		// EndTransaction request, either because canCommitInParallelWithWrites
+		// This is also possible if we never attached any in-flight writes to
+		// the EndTransaction request, either because canCommitInParallel
 		// returned false or because there were no unproven in-flight writes
 		// (see txnPipeliner) and there were no writes in the batch request.
 		return br, nil
@@ -277,9 +277,11 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 	return br, nil
 }
 
-// canCommitInParallelWithWrites determines whether the batch can issue its
-// committing EndTransaction in parallel with other in-flight writes.
-func (tc *txnCommitter) canCommitInParallelWithWrites(
+// canCommitInParallel determines whether the batch can issue its committing
+// EndTxn in parallel with the rest of its requests and with any in-flight
+// writes, which all should have corresponding QueryIntent requests in the
+// batch.
+func (tc *txnCommitter) canCommitInParallel(
 	ba roachpb.BatchRequest, et *roachpb.EndTransactionRequest,
 ) bool {
 	if !tc.st.Version.IsActive(cluster.VersionParallelCommits) {
@@ -301,13 +303,37 @@ func (tc *txnCommitter) canCommitInParallelWithWrites(
 		return false
 	}
 
-	// Similar to how we can't pipeline ranged writes, we also can't commit in
-	// parallel with them. The reason for this is that the status resolution
-	// process for STAGING transactions wouldn't know where to look for the
-	// intents.
+	// Check whether every request in the batch is compatable with a parallel
+	// commit. If any are incompatible then we cannot perform a parallel commit.
+	// We ignore the last request in the slice because we know it is the EndTxn.
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
-		if roachpb.IsTransactionWrite(req) && roachpb.IsRange(req) {
+		switch {
+		case roachpb.IsTransactionWrite(req):
+			if roachpb.IsRange(req) {
+				// Similar to how we can't pipeline ranged writes, we also can't
+				// commit in parallel with them. The reason for this is that the
+				// status resolution process for STAGING transactions wouldn't
+				// know where to look for the corresponding intents.
+				return false
+			}
+			// All other point writes are included in the EndTxn request's
+			// InFlightWrites set and are visible to the status resolution
+			// process for STAGING transactions. Populating InFlightWrites
+			// has already been done by the txnPipeliner.
+
+		case req.Method() == roachpb.QueryIntent:
+			// QueryIntent requests are compatable with parallel commits. The
+			// intents being queried are also attached to the EndTxn request's
+			// InFlightWrites set and are visible to the status resolution
+			// process for STAGING transactions. Populating InFlightWrites has
+			// already been done by the txnPipeliner.
+
+		default:
+			// All other request types, notably Get and Scan requests, are
+			// incompatible with parallel commits because their outcome is
+			// not taken into consideration by the status resolution process
+			// for STAGING transactions.
 			return false
 		}
 	}
