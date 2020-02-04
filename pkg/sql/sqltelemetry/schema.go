@@ -37,3 +37,7 @@ var CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_ta
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
+
+// AlterPrimaryKeyCounter is a counter that is incremented every time the
+// ALTER PRIMARY KEY command is used.
+var AlterPrimaryKeyCounter = telemetry.GetCounterOnce("sql.schema.alter_primary_key")
