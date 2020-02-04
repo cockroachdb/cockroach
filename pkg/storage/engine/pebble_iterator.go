@@ -201,11 +201,13 @@ func (p *pebbleIterator) NextKey() {
 		return
 	}
 	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
-
-	for p.iter.Next() {
-		if !bytes.Equal(p.keyBuf, p.UnsafeKey().Key) {
-			break
-		}
+	if !p.iter.Next() {
+		return
+	}
+	if bytes.Equal(p.keyBuf, p.UnsafeKey().Key) {
+		// This is equivalent to:
+		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
+		p.iter.SeekGE(append(p.keyBuf, 0, 0))
 	}
 }
 
