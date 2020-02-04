@@ -201,34 +201,18 @@ func (r *Registry) makeJobID() int64 {
 func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
-	j := r.NewJob(record)
-	resumer, err := r.createResumer(j, r.settings)
+	var rj *StartableJob
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) (err error) {
+		rj, err = r.CreateStartableJobWithTxn(ctx, record, txn, resultsCh)
+		return err
+	}); err != nil {
+		return nil, nil, err
+	}
+	errCh, err := rj.Start(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	resumeCtx, cancel := r.makeCtx()
-	// Grab the lock on resuming the job before we insert it in the jobs table so
-	// that it cannot be resumed by another routine.
-	id := r.makeJobID()
-	if err := r.register(id, cancel); err != nil {
-		// We just created the id for the job, it could not be registered already.
-		return nil, nil, err
-	}
-	if err := j.insert(ctx, id, r.newLease()); err != nil {
-		// Use id instead of job.ID because the new id is not recorded in the job.
-		r.unregister(id)
-		return nil, nil, err
-	}
-	if err := j.Started(ctx); err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
-	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
-	if err != nil {
-		r.unregister(id)
-		return nil, nil, err
-	}
-	return j, errCh, err
+	return rj.Job, errCh, nil
 }
 
 // Run starts previously unstarted jobs from a list of scheduled
@@ -295,6 +279,73 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 	return j, nil
+}
+
+// StartableJob is a job created with a transaction to be started later.
+// See Registry.CreateStartableJob
+type StartableJob struct {
+	*Job
+	txn        *client.Txn
+	resumer    Resumer
+	resumerCtx context.Context
+	cancel     context.CancelFunc
+	resultsCh  chan<- tree.Datums
+}
+
+// Start will resume a resumable job. The transaction used to create the
+// StartableJob must be committed. If a non-nil error is returned, the job was
+// not started and nothing will be send on errCh.
+func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err error) {
+	defer func() {
+		if err != nil {
+			sj.registry.unregister(*sj.ID())
+		}
+	}()
+	// TODO(ajwerner): Consider adding some protection against starting more than
+	// once.
+	if !sj.txn.IsCommitted() {
+		return nil, fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
+	}
+	if err := sj.Started(ctx); err != nil {
+		return nil, err
+	}
+	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job)
+	if err != nil {
+		return nil, err
+	}
+	return errCh, nil
+}
+
+// CreateStartableJobWithTxn creates a job to be started later, after the
+// creating txn commits. It stores writes job in the jobs table, marks it
+// pending and gives the current node a lease. It additionally registers the
+// job with the Registry which will prevent the Registry from adopting the job
+// after the transaction commits. The resultsCh will be connected to the output
+// of the job and written to after the returned StartableJob is started.
+func (r *Registry) CreateStartableJobWithTxn(
+	ctx context.Context, record Record, txn *client.Txn, resultsCh chan<- tree.Datums,
+) (*StartableJob, error) {
+	j, err := r.CreateJobWithTxn(ctx, record, txn)
+	if err != nil {
+		return nil, err
+	}
+	j.WithTxn(nil)
+	resumer, err := r.createResumer(j, r.settings)
+	if err != nil {
+		return nil, err
+	}
+	resumerCtx, cancel := r.makeCtx()
+	if err := r.register(*j.ID(), cancel); err != nil {
+		return nil, err
+	}
+	return &StartableJob{
+		Job:        j,
+		txn:        txn,
+		resumer:    resumer,
+		resumerCtx: resumerCtx,
+		cancel:     cancel,
+		resultsCh:  resultsCh,
+	}, nil
 }
 
 // LoadJob loads an existing job with the given jobID from the system.jobs
