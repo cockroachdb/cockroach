@@ -14,9 +14,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"io"
+	"math/rand"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,10 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
-// storage capacity.
-func createTestRocksDBEngine(path string) (engine.Engine, error) {
-	return engine.NewEngine(enginepb.EngineTypeRocksDB, 1<<20, base.StorageConfig{
+func makeStorageConfig(path string) base.StorageConfig {
+	return base.StorageConfig{
 		Attrs:           roachpb.Attributes{},
 		Dir:             path,
 		MustExist:       false,
@@ -39,20 +39,18 @@ func createTestRocksDBEngine(path string) (engine.Engine, error) {
 		Settings:        cluster.MakeTestingClusterSettings(),
 		UseFileRegistry: false,
 		ExtraOptions:    nil,
-	})
+	}
+}
+
+// createTestRocksDBEngine returns a new in-memory RocksDB engine with 1MB of
+// storage capacity.
+func createTestRocksDBEngine(path string) (engine.Engine, error) {
+	return engine.NewEngine(enginepb.EngineTypeRocksDB, 1<<20, makeStorageConfig(path))
 }
 
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine(path string) (engine.Engine, error) {
-	return engine.NewEngine(enginepb.EngineTypePebble, 1<<20, base.StorageConfig{
-		Attrs:           roachpb.Attributes{},
-		Dir:             path,
-		MustExist:       false,
-		MaxSize:         0,
-		Settings:        cluster.MakeTestingClusterSettings(),
-		UseFileRegistry: false,
-		ExtraOptions:    nil,
-	})
+	return engine.NewEngine(enginepb.EngineTypePebble, 1<<20, makeStorageConfig(path))
 }
 
 var mvccEngineImpls = []struct {
@@ -66,6 +64,7 @@ var mvccEngineImpls = []struct {
 var (
 	keep  = flag.Bool("keep", false, "keep temp directories after test")
 	check = flag.String("check", "", "run operations in specified file and check output for equality")
+	seed  = flag.Int64("seed", 456, "specify seed to use for random number generator")
 )
 
 func runMetaTest(ctx context.Context, t *testing.T, seed int64, checkFile io.Reader) {
@@ -78,13 +77,13 @@ func runMetaTest(ctx context.Context, t *testing.T, seed int64, checkFile io.Rea
 				}
 			}()
 
-			eng, err := engineImpl.create(path.Join(tempDir, engineImpl.name))
+			eng, err := engineImpl.create(filepath.Join(tempDir, engineImpl.name))
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer eng.Close()
 
-			outputFilePath := path.Join(tempDir, fmt.Sprintf("%s.meta", engineImpl.name))
+			outputFilePath := filepath.Join(tempDir, fmt.Sprintf("%s.meta", engineImpl.name))
 			fmt.Printf("output file path: %s\n", outputFilePath)
 
 			outputFile, err := os.Create(outputFilePath)
@@ -106,6 +105,7 @@ func runMetaTest(ctx context.Context, t *testing.T, seed int64, checkFile io.Rea
 			if checkFile != nil {
 				testRunner.parseFileAndRun(checkFile)
 			} else {
+				// TODO(itsbilal): Make this configurable.
 				testRunner.generateAndRun(10000)
 			}
 		})
@@ -116,7 +116,13 @@ func runMetaTest(ctx context.Context, t *testing.T, seed int64, checkFile io.Rea
 func TestMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	ctx := context.Background()
-	seeds := []int64{123}
+	if util.RaceEnabled {
+		// This test times out with the race detector enabled.
+		return
+	}
+
+	// Have one fixed seed, one user-specified seed, and one random seed.
+	seeds := []int64{123, *seed, rand.Int63()}
 
 	if *check != "" {
 		t.Run("check", func(t *testing.T) {
