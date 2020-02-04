@@ -147,7 +147,7 @@ func (tc *txnCommitter) SendLocked(
 	// attached to the EndTxn request to the IntentSpans and clear the in-flight
 	// write set; no writes will be in-flight concurrently with the EndTxn
 	// request.
-	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ctx, ba, et) {
+	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ba, et) {
 		// NB: when parallel commits is disabled, this is the best place to
 		// detect whether the batch has only distinct spans. We can set this
 		// flag based on whether any of previously declared in-flight writes
@@ -279,7 +279,7 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 // writes, which all should have corresponding QueryIntent requests in the
 // batch.
 func (tc *txnCommitter) canCommitInParallel(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
+	ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
 ) bool {
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {
 		return false
