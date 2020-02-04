@@ -53,7 +53,7 @@ var (
 
 	// There are four types of local key data enumerated below: replicated
 	// range-ID, unreplicated range-ID, range local, and store-local keys.
-	//
+
 	// 1. Replicated Range-ID keys
 	//
 	// LocalRangeIDPrefix is the prefix identifying per-range data
@@ -210,7 +210,7 @@ var (
 	// The value is a RangeDescriptor struct.
 	Meta2KeyMax = roachpb.Key(makeKey(Meta2Prefix, roachpb.RKeyMax))
 
-	// 1. System keys
+	// 2. System keys
 	//
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
@@ -229,9 +229,9 @@ var (
 	// BootstrapVersion is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+	//
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
-	//
 	DescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
@@ -239,8 +239,8 @@ var (
 	RangeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("range-idgen")))
 	// StoreIDGenerator is the global store ID generator sequence.
 	StoreIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("store-idgen")))
-	// StatusPrefix specifies the key prefix to store all status details.
 	//
+	// StatusPrefix specifies the key prefix to store all status details.
 	StatusPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("status-")))
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
