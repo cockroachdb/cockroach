@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -363,7 +364,16 @@ func (p *planner) getQualifiedTableName(
 	if err != nil {
 		return "", err
 	}
-	tbName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
+	schemaID := desc.GetParentSchemaID()
+	schemaName, err := schema.ResolveNameByID(ctx, p.txn, desc.ParentID, schemaID)
+	if err != nil {
+		return "", err
+	}
+	tbName := tree.MakeTableNameWithSchema(
+		tree.Name(dbDesc.Name),
+		tree.Name(schemaName),
+		tree.Name(desc.Name),
+	)
 	return tbName.String(), nil
 }
 

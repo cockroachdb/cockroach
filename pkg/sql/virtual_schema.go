@@ -155,11 +155,13 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
 		0, /* parentID */
+		0, /* parentSchemaID */
 		id,
 		columns,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
-		nil, /* semaCtx */
+		nil,   /* semaCtx */
+		false, /* temporary */
 	)
 	return mutDesc.TableDescriptor, err
 }
