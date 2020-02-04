@@ -29,6 +29,7 @@ var pgxBlackList20_1 = blacklist{
 	"v4.TestConnQueryErrorWhileReturningRows":                      "26925",
 	"v4.TestConnQueryReadRowMultipleTimes":                         "26925",
 	"v4.TestConnQueryValues":                                       "26925",
+	"v4.TestConnQueryValuesWithUnknownOID":                         "26925",
 	"v4.TestConnSendBatch":                                         "5807",
 	"v4.TestConnSendBatchWithPreparedStatement":                    "41558",
 	"v4.TestConnSimpleProtocol":                                    "21286",
