@@ -1,0 +1,14 @@
+run error
+with t=A k=k2
+  txn_begin ts=1
+  txn_step  seq=10
+  put       v=a
+  txn_ignore_seqs seqs=(5-15)
+  txn_step  seq=20
+  put       v=b
+----
+>> at end:
+txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=10} ts=0.000000001,0 del=false klen=12 vlen=6
+data: "k2"/0.000000001,0 -> /BYTES/a
+error: (*withstack.withStack:) previous intent of the transaction with the same epoch not found for "k2"/0,0 ("A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=20} rw=true stat=PENDING rts=0.000000001,0 wto=false max=0,0 isn=1)
