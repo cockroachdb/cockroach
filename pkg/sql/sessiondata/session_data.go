@@ -35,9 +35,6 @@ type SessionData struct {
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
-	// ForceSplitAt indicates whether checks to prevent incorrect usage of ALTER
-	// TABLE ... SPLIT AT should be skipped.
-	ForceSplitAt bool
 	// OptimizerFKs indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
 	OptimizerFKs bool

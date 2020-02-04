@@ -295,16 +295,6 @@ func (r *Replica) adminSplitWithDescriptor(
 	delayable bool,
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
-	if !cluster.Version.IsActive(ctx, r.store.ClusterSettings(), cluster.VersionStickyBit) {
-		// If sticky bits aren't supported yet but we receive one anyway, ignore
-		// it. The callers are supposed to only pass hlc.Timestamp{} in that
-		// case, but this is violated in at least one case (and there are lots of
-		// callers that aren't easy to audit and maintain audited). Take the
-		// small risk that the cluster version is actually active (but we don't
-		// know it yet) instead of risking broken descriptors.
-		args.ExpirationTime = hlc.Timestamp{}
-	}
-
 	var err error
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
