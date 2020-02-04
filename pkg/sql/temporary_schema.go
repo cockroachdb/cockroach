@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -80,6 +81,13 @@ func getTemporaryObjectNames(
 // views, temporary schema) created by the session.
 func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID ClusterWideID) error {
 	tempSchemaName := temporarySchemaName(sessionID)
+	sd := &sessiondata.SessionData{
+		SearchPath:    sqlbase.DefaultSearchPath.WithTemporarySchemaName(tempSchemaName),
+		User:          security.RootUser,
+		SequenceState: &sessiondata.SequenceState{},
+	}
+	ie := MakeInternalExecutor(ctx, server, MemoryMetrics{}, server.cfg.Settings)
+	ie.SetSessionData(sd)
 	return server.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
@@ -88,33 +96,8 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 			return err
 		}
 		for _, id := range dbIDs {
-			tbNames, err := getTemporaryObjectNames(ctx, txn, id, tempSchemaName)
-			if err != nil {
+			if err := cleanupSchemaObjects(ctx, server.cfg.Settings, ie.Exec, txn, id, tempSchemaName); err != nil {
 				return err
-			}
-			// TODO(andrei): We might want to accelerate the deletion of this data.
-			var query strings.Builder
-			query.WriteString("DROP TABLE")
-			for i, tbName := range tbNames {
-				if i != 0 {
-					query.WriteString(",")
-				}
-				query.WriteString(
-					fmt.Sprintf(" %s.%s.%s", tbName.CatalogName, tbName.SchemaName, tbName.Table()),
-				)
-			}
-			if len(tbNames) > 0 {
-				sd := &sessiondata.SessionData{
-					SearchPath:    sqlbase.DefaultSearchPath.WithTemporarySchemaName(tempSchemaName),
-					User:          security.RootUser,
-					SequenceState: &sessiondata.SequenceState{},
-				}
-				ie := MakeInternalExecutor(ctx, server, MemoryMetrics{}, server.cfg.Settings)
-				ie.SetSessionData(sd)
-				_, err = ie.Exec(ctx, "delete-temp-tables", txn, query.String())
-				if err != nil {
-					return err
-				}
 			}
 			// Even if no objects were found under the temporary schema, the schema
 			// itself may still exist (eg. a temporary table was created and then
@@ -126,4 +109,82 @@ func cleanupSessionTempObjects(ctx context.Context, server *Server, sessionID Cl
 		}
 		return nil
 	})
+}
+
+// TestingCleanupSchemaObjects is a wrapper around cleanupSchemaObjects, used for testing only.
+func TestingCleanupSchemaObjects(
+	ctx context.Context,
+	settings *cluster.Settings,
+	execQuery func(context.Context, string, *client.Txn, string, ...interface{}) (int, error),
+	txn *client.Txn,
+	dbID sqlbase.ID,
+	schemaName string,
+) error {
+	return cleanupSchemaObjects(ctx, settings, execQuery, txn, dbID, schemaName)
+}
+
+// cleanupSchemaObjects removes all objects that is located within a dbID and schema.
+func cleanupSchemaObjects(
+	ctx context.Context,
+	settings *cluster.Settings,
+	execQuery func(context.Context, string, *client.Txn, string, ...interface{}) (int, error),
+	txn *client.Txn,
+	dbID sqlbase.ID,
+	schemaName string,
+) error {
+	tbNames, err := getTemporaryObjectNames(ctx, txn, dbID, schemaName)
+	if err != nil {
+		return err
+	}
+	a := UncachedPhysicalAccessor{}
+
+	// TODO(andrei): We might want to accelerate the deletion of this data.
+	var tables TableNames
+	var views TableNames
+	for _, tbName := range tbNames {
+		desc, err := a.GetObjectDesc(
+			ctx,
+			txn,
+			settings,
+			&tbName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		if desc.TableDesc().ViewQuery != "" {
+			views = append(views, tbName)
+		} else {
+			tables = append(tables, tbName)
+		}
+	}
+
+	// Drop views before tables to avoid deleting required dependencies.
+	for _, toDelete := range []struct {
+		typeName string
+		tbNames  TableNames
+	}{
+		{"VIEW", views},
+		{"TABLE", tables},
+	} {
+		if len(toDelete.tbNames) > 0 {
+			var query strings.Builder
+			query.WriteString("DROP ")
+			query.WriteString(toDelete.typeName)
+
+			for i, tbName := range toDelete.tbNames {
+				if i != 0 {
+					query.WriteString(",")
+				}
+				query.WriteString(
+					fmt.Sprintf(" %s.%s.%s", tbName.CatalogName, tbName.SchemaName, tbName.Table()),
+				)
+			}
+			_, err = execQuery(ctx, "delete-temp-"+toDelete.typeName, txn, query.String())
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

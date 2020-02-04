@@ -92,9 +92,9 @@ statement error DROP DATABASE on non-empty database without explicit CASCADE
 DROP DATABASE bob
 
 statement ok
-CREATE VIEW a_view AS SELECT a FROM bob.pg_temp.a
+CREATE TEMP VIEW a_view AS SELECT a FROM bob.pg_temp.a
 
-statement error cannot rename database because view "defaultdb.public.a_view" depends on table "a"
+statement error cannot rename database because view "defaultdb.pg_temp_.*.a_view" depends on table "a"
 ALTER DATABASE bob RENAME TO alice
 
 statement ok
@@ -102,3 +102,43 @@ DROP VIEW a_view; ALTER DATABASE bob RENAME TO alice
 
 statement ok
 DROP DATABASE alice CASCADE
+
+# Test for temporary views.
+subtest temporary_views
+
+statement ok
+CREATE TABLE permanent_table(a int); CREATE TEMP TABLE temp_table(a int)
+
+statement ok
+INSERT INTO permanent_table VALUES (1); INSERT INTO temp_table VALUES (2)
+
+statement ok
+CREATE TEMP VIEW view_on_permanent AS SELECT a FROM permanent_table
+
+query I
+SELECT * from pg_temp.view_on_permanent
+----
+1
+
+statement ok
+CREATE TEMP VIEW view_on_temp AS SELECT a FROM temp_table
+
+query I
+SELECT * from pg_temp.view_on_temp
+----
+2
+
+# A "permanent" view on a temporary table gets upgraded to temporary.
+statement ok
+CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
+
+query I
+SELECT * from pg_temp.upgrade_temp_view
+----
+2
+
+statement ok
+DROP VIEW view_on_temp; DROP VIEW view_on_permanent; DROP VIEW upgrade_temp_view
+
+statement ok
+DROP TABLE permanent_table; DROP TABLE temp_table
