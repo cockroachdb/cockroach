@@ -13,6 +13,7 @@ package metamorphic
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -59,7 +60,7 @@ func closeItersOnBatch(m *metaTestRunner, reader engine.Reader) (results []opRun
 	// No need to close iters on non-batches (i.e. engines).
 	if batch, ok := reader.(engine.Batch); ok {
 		// Close all iterators for this batch first.
-		iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+		iterManager := m.managers[operandIterator].(*iteratorManager)
 		for _, iter := range iterManager.readerToIter[batch] {
 			results = append(results, opRun{
 				op:   m.nameToOp["iterator_close"],
@@ -73,7 +74,7 @@ func closeItersOnBatch(m *metaTestRunner, reader engine.Reader) (results []opRun
 // Returns true if the specified iterator is a batch iterator.
 func isBatchIterator(m *metaTestRunner, iter engine.Iterator) bool {
 	found := false
-	iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+	iterManager := m.managers[operandIterator].(*iteratorManager)
 	for _, iter2 := range iterManager.readerToIter[m.engine] {
 		if iter2 == iter {
 			found = true
@@ -88,13 +89,13 @@ func runMvccScan(ctx context.Context, m *metaTestRunner, reverse bool, inconsist
 	key := args[0].(engine.MVCCKey)
 	endKey := args[1].(engine.MVCCKey)
 	if endKey.Less(key) {
-		tmpKey := endKey
-		endKey = key
-		key = tmpKey
+		key, endKey = endKey, key
 	}
-	ts := key.Timestamp
+	var ts hlc.Timestamp
 	var txn *roachpb.Transaction
-	if !inconsistent {
+	if inconsistent {
+		ts = args[2].(hlc.Timestamp)
+	} else {
 		txn = args[2].(*roachpb.Transaction)
 		ts = txn.ReadTimestamp
 	}
@@ -103,7 +104,7 @@ func runMvccScan(ctx context.Context, m *metaTestRunner, reverse bool, inconsist
 	// m.engine instead of a readWriterManager-generated engine.Reader, otherwise
 	// we will try MVCCScanning on batches and produce diffs between runs on
 	// different engines that don't point to an actual issue.
-	kvs, _, intent, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, math.MaxInt64, ts, engine.MVCCScanOptions{
+	result, err := engine.MVCCScan(ctx, m.engine, key.Key, endKey.Key, math.MaxInt64, ts, engine.MVCCScanOptions{
 		Inconsistent: inconsistent,
 		Tombstones:   true,
 		Reverse:      reverse,
@@ -112,7 +113,7 @@ func runMvccScan(ctx context.Context, m *metaTestRunner, reverse bool, inconsist
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
-	return fmt.Sprintf("kvs = %v, intent = %v", kvs, intent)
+	return fmt.Sprintf("kvs = %v, intents = %v", result.KVs, result.Intents)
 }
 
 // Prints the key where an iterator is positioned, or valid = false if invalid.
@@ -128,13 +129,28 @@ func printIterState(iter engine.Iterator) string {
 }
 
 // List of operations, where each operation is defined as one instance of mvccOp.
+//
+// TODO(itsbilal): Add more missing MVCC operations, such as:
+//  - MVCCConditionalPut
+//  - MVCCBlindPut
+//  - MVCCMerge
+//  - MVCCClearTimeRange
+//  - MVCCIncrement
+//  - MVCCResolveWriteIntent in the aborted case
+//  - MVCCFindSplitKey
+//  - ingestions.
+//  - and any others that would be important to test.
 var operations = []mvccOp{
 	{
 		name: "mvcc_inconsistent_get",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
 			reader := args[0].(engine.Reader)
 			key := args[1].(engine.MVCCKey)
-			val, intent, err := engine.MVCCGet(ctx, reader, key.Key, key.Timestamp, engine.MVCCGetOptions{
+			ts := args[2].(hlc.Timestamp)
+			// TODO: Specify these bools as operands instead of having a separate
+			// operation for inconsistent cases. This increases visibility for anyone
+			// reading the output file.
+			val, intent, err := engine.MVCCGet(ctx, reader, key.Key, ts, engine.MVCCGetOptions{
 				Inconsistent: true,
 				Tombstones:   true,
 				Txn:          nil,
@@ -145,8 +161,9 @@ var operations = []mvccOp{
 			return fmt.Sprintf("val = %v, intent = %v", val, intent)
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
-			OPERAND_MVCC_KEY,
+			operandReadWriter,
+			operandMVCCKey,
+			operandPastTS,
 		},
 		weight: 10,
 	},
@@ -167,9 +184,9 @@ var operations = []mvccOp{
 			return fmt.Sprintf("val = %v, intent = %v", val, intent)
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
-			OPERAND_MVCC_KEY,
-			OPERAND_TRANSACTION,
+			operandReadWriter,
+			operandMVCCKey,
+			operandTransaction,
 		},
 		weight: 10,
 	},
@@ -193,18 +210,25 @@ var operations = []mvccOp{
 			})
 			// If this write happened on a batch, track that in the txn manager so
 			// that the batch is committed before the transaction is aborted or
-			// committed.
+			// committed. Note that this append happens without checking if this
+			// batch is already in the slice; readers of this slice need to be aware
+			// of duplicates.
 			if batch, ok := writer.(engine.Batch); ok {
-				txnManager := m.managers[OPERAND_TRANSACTION].(*txnManager)
-				txnManager.inFlightBatches[txn] = append(txnManager.inFlightBatches[txn], batch)
+				txnManager := m.managers[operandTransaction].(*txnManager)
+				openBatches, ok := txnManager.openBatches[txn]
+				if !ok {
+					txnManager.openBatches[txn] = make(map[engine.Batch]struct{})
+					openBatches = txnManager.openBatches[txn]
+				}
+				openBatches[batch] = struct{}{}
 			}
 			return "ok"
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
-			OPERAND_MVCC_KEY,
-			OPERAND_VALUE,
-			OPERAND_TRANSACTION,
+			operandReadWriter,
+			operandMVCCKey,
+			operandValue,
+			operandTransaction,
 		},
 		weight: 30,
 	},
@@ -229,15 +253,20 @@ var operations = []mvccOp{
 			// that the batch is committed before the transaction is aborted or
 			// committed.
 			if batch, ok := writer.(engine.Batch); ok {
-				txnManager := m.managers[OPERAND_TRANSACTION].(*txnManager)
-				txnManager.inFlightBatches[txn] = append(txnManager.inFlightBatches[txn], batch)
+				txnManager := m.managers[operandTransaction].(*txnManager)
+				openBatches, ok := txnManager.openBatches[txn]
+				if !ok {
+					txnManager.openBatches[txn] = make(map[engine.Batch]struct{})
+					openBatches = txnManager.openBatches[txn]
+				}
+				openBatches[batch] = struct{}{}
 			}
 			return "ok"
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
-			OPERAND_MVCC_KEY,
-			OPERAND_TRANSACTION,
+			operandReadWriter,
+			operandMVCCKey,
+			operandTransaction,
 		},
 		weight: 10,
 	},
@@ -247,9 +276,9 @@ var operations = []mvccOp{
 			return runMvccScan(ctx, m, false, false, args)
 		},
 		operands: []operandType{
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
-			OPERAND_TRANSACTION,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandTransaction,
 		},
 		weight: 10,
 	},
@@ -259,8 +288,9 @@ var operations = []mvccOp{
 			return runMvccScan(ctx, m, false, true, args)
 		},
 		operands: []operandType{
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandPastTS,
 		},
 		weight: 10,
 	},
@@ -270,17 +300,17 @@ var operations = []mvccOp{
 			return runMvccScan(ctx, m, true, false, args)
 		},
 		operands: []operandType{
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
-			OPERAND_TRANSACTION,
+			operandMVCCKey,
+			operandMVCCKey,
+			operandTransaction,
 		},
 		weight: 10,
 	},
 	{
 		name: "txn_open",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			txn := m.managers[OPERAND_TRANSACTION].(*txnManager).open()
-			return m.managers[OPERAND_TRANSACTION].toString(txn)
+			txn := m.managers[operandTransaction].(*txnManager).open()
+			return m.managers[operandTransaction].toString(txn)
 		},
 		operands: []operandType{},
 		weight:   4,
@@ -288,7 +318,7 @@ var operations = []mvccOp{
 	{
 		name: "txn_commit",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			txnManager := m.managers[OPERAND_TRANSACTION].(*txnManager)
+			txnManager := m.managers[operandTransaction].(*txnManager)
 			txn := args[0].(*roachpb.Transaction)
 			txn.Status = roachpb.COMMITTED
 			txnManager.close(txn)
@@ -296,18 +326,12 @@ var operations = []mvccOp{
 			return "ok"
 		},
 		dependentOps: func(m *metaTestRunner, args ...operand) (result []opRun) {
-			txnManager := m.managers[OPERAND_TRANSACTION].(*txnManager)
+			txnManager := m.managers[operandTransaction].(*txnManager)
 			txn := args[0].(*roachpb.Transaction)
-			closedBatches := make(map[engine.Batch]struct{})
 
 			// A transaction could have in-flight writes in some batches. Get a list
 			// of all those batches, and dispatch batch_commit operations for them.
-			for _, batch := range txnManager.inFlightBatches[txn] {
-				if _, ok := closedBatches[batch]; ok {
-					continue
-				}
-				closedBatches[batch] = struct{}{}
-
+			for batch := range txnManager.openBatches[txn] {
 				result = append(result, opRun{
 					op:   m.nameToOp["batch_commit"],
 					args: []operand{batch},
@@ -316,15 +340,15 @@ var operations = []mvccOp{
 			return
 		},
 		operands: []operandType{
-			OPERAND_TRANSACTION,
+			operandTransaction,
 		},
 		weight: 10,
 	},
 	{
 		name: "batch_open",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			batch := m.managers[OPERAND_READWRITER].(*readWriterManager).open()
-			return m.managers[OPERAND_READWRITER].toString(batch)
+			batch := m.managers[operandReadWriter].(*readWriterManager).open()
+			return m.managers[operandReadWriter].toString(batch)
 		},
 		operands: []operandType{},
 		weight:   4,
@@ -334,8 +358,8 @@ var operations = []mvccOp{
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
 			if batch, ok := args[0].(engine.Batch); ok {
 				err := batch.Commit(false)
-				m.managers[OPERAND_READWRITER].close(batch)
-				m.managers[OPERAND_TRANSACTION].(*txnManager).clearBatch(batch)
+				m.managers[operandReadWriter].close(batch)
+				m.managers[operandTransaction].(*txnManager).clearBatch(batch)
 				if err != nil {
 					return err.Error()
 				}
@@ -347,20 +371,18 @@ var operations = []mvccOp{
 			return closeItersOnBatch(m, args[0].(engine.Reader))
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
+			operandReadWriter,
 		},
 		weight: 10,
 	},
 	{
 		name: "iterator_open",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+			iterManager := m.managers[operandIterator].(*iteratorManager)
 			key := args[1].(engine.MVCCKey)
 			endKey := args[2].(engine.MVCCKey)
 			if endKey.Less(key) {
-				tmpKey := key
-				key = endKey
-				endKey = tmpKey
+				key, endKey = endKey, key
 			}
 			iter := iterManager.open(args[0].(engine.ReadWriter), engine.IterOptions{
 				Prefix:     false,
@@ -381,22 +403,22 @@ var operations = []mvccOp{
 			return closeItersOnBatch(m, args[0].(engine.Reader))
 		},
 		operands: []operandType{
-			OPERAND_READWRITER,
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
+			operandReadWriter,
+			operandMVCCKey,
+			operandMVCCKey,
 		},
 		weight: 2,
 	},
 	{
 		name: "iterator_close",
 		run: func(ctx context.Context, m *metaTestRunner, args ...operand) string {
-			iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+			iterManager := m.managers[operandIterator].(*iteratorManager)
 			iterManager.close(args[0].(engine.Iterator))
 
 			return "ok"
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
+			operandIterator,
 		},
 		weight: 5,
 	},
@@ -409,7 +431,7 @@ var operations = []mvccOp{
 				// RocksDB batch iterators do not account for lower bounds consistently:
 				// https://github.com/cockroachdb/cockroach/issues/44512
 				// In the meantime, ensure the SeekGE key >= lower bound.
-				iterManager := m.managers[OPERAND_ITERATOR].(*iteratorManager)
+				iterManager := m.managers[operandIterator].(*iteratorManager)
 				lowerBound := iterManager.iterToInfo[iter].lowerBound
 				if key.Key.Compare(lowerBound) < 0 {
 					key.Key = lowerBound
@@ -420,8 +442,8 @@ var operations = []mvccOp{
 			return printIterState(iter)
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
-			OPERAND_MVCC_KEY,
+			operandIterator,
+			operandMVCCKey,
 		},
 		weight: 5,
 	},
@@ -441,8 +463,8 @@ var operations = []mvccOp{
 			return printIterState(iter)
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
-			OPERAND_MVCC_KEY,
+			operandIterator,
+			operandMVCCKey,
 		},
 		weight: 5,
 	},
@@ -464,7 +486,7 @@ var operations = []mvccOp{
 			return printIterState(iter)
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
+			operandIterator,
 		},
 		weight: 10,
 	},
@@ -486,7 +508,7 @@ var operations = []mvccOp{
 			return printIterState(iter)
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
+			operandIterator,
 		},
 		weight: 10,
 	},
@@ -511,7 +533,7 @@ var operations = []mvccOp{
 			return printIterState(iter)
 		},
 		operands: []operandType{
-			OPERAND_ITERATOR,
+			operandIterator,
 		},
 		weight: 10,
 	},
@@ -524,9 +546,13 @@ var operations = []mvccOp{
 			key := args[0].(engine.MVCCKey)
 			endKey := args[1].(engine.MVCCKey)
 			if endKey.Less(key) {
-				tmpKey := key
-				key = endKey
-				endKey = tmpKey
+				key, endKey = endKey, key
+			} else if endKey.Equal(key) {
+				// Range tombstones where start = end can exhibit different behaviour on
+				// different engines; rocks treats it as a point delete, while pebble
+				// treats it as a nonexistent tombstone. For the purposes of this test,
+				// standardize behaviour.
+				endKey = endKey.Next()
 			}
 			err := m.engine.ClearRange(key, endKey)
 			if err != nil {
@@ -535,8 +561,8 @@ var operations = []mvccOp{
 			return "ok"
 		},
 		operands: []operandType{
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
+			operandMVCCKey,
+			operandMVCCKey,
 		},
 		weight: 2,
 	},
@@ -546,9 +572,7 @@ var operations = []mvccOp{
 			key := args[0].(engine.MVCCKey).Key
 			endKey := args[1].(engine.MVCCKey).Key
 			if endKey.Compare(key) < 0 {
-				tmpKey := key
-				key = endKey
-				endKey = tmpKey
+				key, endKey = endKey, key
 			}
 			err := m.engine.CompactRange(key, endKey, false)
 			if err != nil {
@@ -557,9 +581,9 @@ var operations = []mvccOp{
 			return "ok"
 		},
 		operands: []operandType{
-			OPERAND_MVCC_KEY,
-			OPERAND_MVCC_KEY,
+			operandMVCCKey,
+			operandMVCCKey,
 		},
-		weight: 5,
+		weight: 2,
 	},
 }

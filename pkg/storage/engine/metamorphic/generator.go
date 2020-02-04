@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+const zipfMax uint64 = 100000
+
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
 type metaTestRunner struct {
@@ -44,41 +46,45 @@ func (m *metaTestRunner) init() {
 	// Use a passed-in seed. Using the same seed for two consecutive metamorphic
 	// test runs should guarantee the same operations being generated.
 	m.rng = rand.New(rand.NewSource(m.seed))
+	m.tsGenerator.init(m.rng)
 
 	m.managers = map[operandType]operandManager{
-		OPERAND_TRANSACTION: &txnManager{
-			rng:             m.rng,
-			tsGenerator:     &m.tsGenerator,
-			txnIdMap:        make(map[string]*roachpb.Transaction),
-			inFlightBatches: make(map[*roachpb.Transaction][]engine.Batch),
-			testRunner:      m,
+		operandTransaction: &txnManager{
+			rng:         m.rng,
+			tsGenerator: &m.tsGenerator,
+			txnIdMap:    make(map[string]*roachpb.Transaction),
+			openBatches: make(map[*roachpb.Transaction]map[engine.Batch]struct{}),
+			testRunner:  m,
 		},
-		OPERAND_READWRITER: &readWriterManager{
+		operandReadWriter: &readWriterManager{
 			rng:          m.rng,
 			eng:          m.engine,
 			batchToIdMap: make(map[engine.Batch]int),
 		},
-		OPERAND_MVCC_KEY: &keyManager{
+		operandMVCCKey: &keyManager{
 			rng:         m.rng,
 			tsGenerator: &m.tsGenerator,
 		},
-		OPERAND_VALUE:       &valueManager{m.rng},
-		OPERAND_TEST_RUNNER: &testRunnerManager{m},
-		OPERAND_ITERATOR: &iteratorManager{
+		operandPastTS: &tsManager{
+			rng: m.rng,
+			tsGenerator: &m.tsGenerator,
+		},
+		operandValue:      &valueManager{m.rng},
+		operandTestRunner: &testRunnerManager{m},
+		operandIterator: &iteratorManager{
 			rng:          m.rng,
 			readerToIter: make(map[engine.Reader][]engine.Iterator),
 			iterToInfo:   make(map[engine.Iterator]iteratorInfo),
 			iterCounter:  0,
 		},
 	}
-	m.nameToOp = make(map[string]*mvccOp)
 
+	m.nameToOp = make(map[string]*mvccOp)
 	m.weights = make([]int, len(operations))
 	for i := range operations {
 		m.weights[i] = operations[i].weight
 		m.nameToOp[operations[i].name] = &operations[i]
 	}
-	m.ops = nil
 }
 
 // Run this function in a defer to ensure any Fatals on m.t do not cause panics
@@ -86,9 +92,9 @@ func (m *metaTestRunner) init() {
 func (m *metaTestRunner) closeAll() {
 	// Close all open objects. This should let the engine close cleanly.
 	closingOrder := []operandType{
-		OPERAND_ITERATOR,
-		OPERAND_READWRITER,
-		OPERAND_TRANSACTION,
+		operandIterator,
+		operandReadWriter,
+		operandTransaction,
 	}
 	for _, operandType := range closingOrder {
 		m.managers[operandType].closeAll()
@@ -97,14 +103,13 @@ func (m *metaTestRunner) closeAll() {
 
 // generateAndRun generates n operations using a TPCC-style deck shuffle with
 // weighted probabilities of each operation appearing.
-func (m *metaTestRunner) generateAndRun(n uint64) {
-	m.ops = make([]*mvccOp, n)
-	deck := NewDeck(m.rng, m.weights...)
+func (m *metaTestRunner) generateAndRun(n int) {
+	deck := newDeck(m.rng, m.weights...)
 
-	for i := uint64(0); i < n; i++ {
-		opToAdd := &operations[deck.Int()]
+	for i := 0; i < n; i++ {
+		op := &operations[deck.Int()]
 
-		m.resolveAndRunOp(opToAdd)
+		m.resolveAndRunOp(op)
 	}
 }
 
@@ -192,7 +197,6 @@ func (m *metaTestRunner) runOp(run opRun) string {
 		argStrings[i] = m.managers[op.operands[i]].toString(arg)
 	}
 
-	m.ops = append(m.ops, op)
 	output := op.run(m.ctx, m, run.args...)
 	m.printOp(op, argStrings, output)
 	return output
@@ -236,6 +240,11 @@ func (m *metaTestRunner) printOp(op *mvccOp, argStrings []string, output string)
 // Monotonically increasing timestamp generator.
 type tsGenerator struct {
 	lastTS hlc.Timestamp
+	zipf   *rand.Zipf
+}
+
+func (t *tsGenerator) init(rng *rand.Rand) {
+	t.zipf = rand.NewZipf(rng, 2, 5, zipfMax)
 }
 
 func (t *tsGenerator) generate() hlc.Timestamp {
@@ -245,6 +254,8 @@ func (t *tsGenerator) generate() hlc.Timestamp {
 
 func (t *tsGenerator) randomPastTimestamp(rng *rand.Rand) hlc.Timestamp {
 	var result hlc.Timestamp
-	result.WallTime = int64(float64(t.lastTS.WallTime+1) * rng.Float64())
+
+	// Return a result that's skewed toward the latest wall time.
+	result.WallTime = int64(float64(t.lastTS.WallTime) * float64((zipfMax - t.zipf.Uint64())) / float64(zipfMax))
 	return result
 }
