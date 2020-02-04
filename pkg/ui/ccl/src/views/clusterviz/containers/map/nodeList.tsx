@@ -7,7 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import {InjectedRouter, RouterState} from "react-router";
+import { RouteComponentProps } from "react-router-dom";
 
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { Dropdown } from "src/components/dropdown";
@@ -15,14 +15,14 @@ import { Button } from "src/components/button";
 
 import "./nodesList.styl";
 
-export default class NodeList extends React.Component<RouterState & { router: InjectedRouter }> {
+export default class NodeList extends React.Component<RouteComponentProps> {
   readonly items = [
     { value: "list", name: "Node List" },
     { value: "map", name: "Node Map" },
   ];
 
   handleMapTableToggle = (value: string) => {
-    this.props.router.push(`/overview/${value}`);
+    this.props.history.push(`/overview/${value}`);
   }
 
   render() {

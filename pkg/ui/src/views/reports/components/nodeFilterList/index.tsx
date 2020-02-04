@@ -10,6 +10,8 @@
 
 import _ from "lodash";
 import React from "react";
+import { Location } from "history";
+
 import * as protos from "src/js/protos";
 
 export interface NodeFilterListProps {
@@ -17,13 +19,16 @@ export interface NodeFilterListProps {
   localityRegex?: RegExp;
 }
 
-export function getFilters(location: any) {
+export function getFilters(location: Location) {
   const filters: NodeFilterListProps = {};
+  const searchParams = new URLSearchParams(location.search);
+  const nodeIds = searchParams.get("node_ids");
+  const locality = searchParams.get("locality");
 
   // Node id list.
-  if (!_.isEmpty(location.query.node_ids)) {
+  if (!_.isEmpty(nodeIds)) {
     const nodeIDs: Set<number> = new Set();
-    _.forEach(_.split(location.query.node_ids, ","), nodeIDString => {
+    _.forEach(_.split(nodeIds, ","), nodeIDString => {
       const nodeID = parseInt(nodeIDString, 10);
       if (nodeID) {
         nodeIDs.add(nodeID);
@@ -35,9 +40,9 @@ export function getFilters(location: any) {
   }
 
   // Locality regex filter.
-  if (!_.isEmpty(location.query.locality)) {
+  if (!_.isEmpty(locality)) {
     try {
-      filters.localityRegex = new RegExp(location.query.locality);
+      filters.localityRegex = new RegExp(locality);
     } catch (e) {
       // Ignore the error, the filter not appearing is feedback enough.
     }

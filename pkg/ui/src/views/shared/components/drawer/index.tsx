@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Drawer, Button, Divider } from "antd";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 interface IDrawerProps {
   visible: boolean;

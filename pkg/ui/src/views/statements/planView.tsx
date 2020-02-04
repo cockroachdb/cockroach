@@ -327,7 +327,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
         <thead>
         <tr className="plan-view-table__row--header">
           <th className="plan-view-table__cell">
-            <h2 className="summary--card__title">{this.props.title}</h2>
+            <h2 className="base-heading summary--card__title">{this.props.title}</h2>
             <div className="plan-view-table__tooltip">
               <ToolTipWrapper
                 text={lastSampledHelpText}>

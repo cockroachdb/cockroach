@@ -13,7 +13,7 @@ import moment from "moment";
 import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
 import React from "react";
 import { connect } from "react-redux";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshNodes } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -32,7 +32,7 @@ const timescaleDefaultSet = new LocalSetting(
   "timescale/default_set", (s: AdminUIState) => s.localSettings, false,
 );
 
-interface TimeScaleDropdownProps {
+interface TimeScaleDropdownProps extends RouteComponentProps {
   currentScale: timewindow.TimeScale;
   currentWindow: timewindow.TimeWindow;
   availableScales: timewindow.TimeScaleCollection;
@@ -72,7 +72,7 @@ export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?:
 
 // TimeScaleDropdown is the dropdown that allows users to select the time range
 // for graphs.
-class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRouterProps, {}> {
+class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   changeSettings = (newTimescaleKey: DropdownOption) => {
     const newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     newSettings.windowEnd = null;
@@ -178,11 +178,11 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
   }
 
   setQueryParams = (date: moment.Moment, type: DateTypes) => {
-    const { router, location } = this.props;
+    const { location, history } = this.props;
     const dataType = type === DateTypes.DATE_FROM ? "start" : "end";
     const timestamp = moment(date).format("X");
     const query = queryToObj(location, dataType, timestamp);
-    router.push({
+    history.push({
       pathname: location.pathname,
       search: `?${queryToString(query)}`,
     });
@@ -197,11 +197,11 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
   }
 
   setQueryParamsByDates = (duration: moment.Duration, dateEnd: moment.Moment) => {
-    const { router, location } = this.props;
+    const { location, history } = this.props;
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
     const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
-    router.push({
+    history.push({
       pathname: location.pathname,
       search: `?start=${start}&end=${moment.utc(dateEnd).format("X")}`,
     });
@@ -305,7 +305,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps & WithRou
   }
 }
 
-export default connect(
+export default withRouter(connect(
   (state: AdminUIState) => {
     return {
       nodeStatusesValid: state.cachedData.nodes.valid,
@@ -323,4 +323,4 @@ export default connect(
     refreshNodes: refreshNodes,
     setDefaultSet: timescaleDefaultSet.set,
   },
-)(withRouter(TimeScaleDropdown));
+)(TimeScaleDropdown));

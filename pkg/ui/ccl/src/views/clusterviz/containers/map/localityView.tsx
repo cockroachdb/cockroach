@@ -7,7 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps } from "react-router";
+import { withRouter } from "react-router-dom";
 
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
@@ -39,11 +40,11 @@ const LIVENESS_ICON_SPACING = 3;
 const LIVENESS_ICON_RADIUS = 8;
 const LIVENESS_TOTAL_WIDTH = LIVENESS_ICON_RADIUS * 2 + LIVENESS_ICON_SPACING;
 
-class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> {
+class LocalityView extends React.Component<LocalityViewProps & RouteComponentProps> {
   onClick = () => {
     const localityTree = this.props.localityTree;
     const destination = CLUSTERVIZ_ROOT + generateLocalityRoute(localityTree.tiers);
-    this.props.router.push(destination);
+    this.props.history.push(destination);
   }
 
   renderLivenessIcons(nodeCounts: { healthy: number, suspect: number, dead: number }) {

@@ -14,8 +14,9 @@ import moment from "moment";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
 import { createSelector } from "reselect";
+import { withRouter, RouteComponentProps } from "react-router-dom";
+
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -25,8 +26,9 @@ import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } fro
 import Loading from "src/views/shared/components/loading";
 import { Latency } from "./latency";
 import { Legend } from "./legend";
+import Sort from "./sort";
+import { getMatchParamByName } from "src/util/query";
 import "./network.styl";
-import { Sort } from "./sort";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -47,7 +49,7 @@ export interface NoConnection {
   to: Identity;
 }
 
-type NetworkProps = NetworkOwnProps & RouterState;
+type NetworkProps = NetworkOwnProps & RouteComponentProps;
 
 export interface NetworkFilter {
   [key: string]: Array<string>;
@@ -159,7 +161,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     displayIdentities: Identity[],
     noConnections: NoConnection[],
   ) {
-    const { params: { node_id } } = this.props;
+    const { match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
     const { collapsed, filter } = this.state;
     const mean = d3Mean(latencies);
     const sortParams = this.getSortParams(displayIdentities);
@@ -177,8 +180,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       <Latency
         displayIdentities={this.filteredDisplayIdentities(displayIdentities)}
         staleIDs={staleIDs}
-        multipleHeader={node_id !== "cluster"}
-        node_id={node_id}
+        multipleHeader={nodeId !== "cluster"}
+        node_id={nodeId}
         collapsed={collapsed}
         nodesSummary={nodesSummary}
         std={{
@@ -248,11 +251,12 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   }
 
   getDisplayIdentities = (healthyIDsContext: _.CollectionChain<number>, staleIDsContext: _.CollectionChain<number>, identityByID: Map<number, Identity>) => {
-    const { params: { node_id } } = this.props;
+    const { match } = this.props;
+    const nodeId = getMatchParamByName(match, "node_id");
     const identityContent = healthyIDsContext.union(staleIDsContext.value()).map(nodeID => identityByID.get(nodeID)).sortBy(identity => identity.nodeID);
     const sort = this.getSortParams(identityContent.value());
-    if (sort.some(x => (x.id === node_id))) {
-      return identityContent.sortBy(identity => getValueFromString(node_id, identity.locality, true)).value();
+    if (sort.some(x => (x.id === nodeId))) {
+      return identityContent.sortBy(identity => getValueFromString(nodeId, identity.locality, true)).value();
     }
     return identityContent.value();
   }
@@ -392,7 +396,6 @@ const nodeSummaryErrors = createSelector(
 );
 
 const mapStateToProps = (state: AdminUIState) => ({
-  // RootState contains declaration for whole state
   nodesSummary: nodesSummarySelector(state),
   nodeSummaryErrors: nodeSummaryErrors(state),
 });
@@ -402,4 +405,4 @@ const mapDispatchToProps = {
   refreshLiveness,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(Network);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Network));

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Helmet } from "react-helmet";
-import { RouterState } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 
 import NavigationBar from "src/views/app/components/layoutSidebar";
@@ -46,7 +46,7 @@ export interface LayoutProps {
  *
  * Individual pages provide their content via react-router.
  */
-class Layout extends React.Component<LayoutProps & RouterState, {}> {
+class Layout extends React.Component<LayoutProps & RouteComponentProps> {
   render() {
     const { clusterName, clusterVersion, clusterId } = this.props;
     return (
@@ -98,4 +98,4 @@ const mapStateToProps = (state: AdminUIState) => {
   };
 };
 
-export default connect(mapStateToProps)(Layout);
+export default withRouter(connect(mapStateToProps)(Layout));
