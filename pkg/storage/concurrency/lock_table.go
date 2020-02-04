@@ -1053,11 +1053,12 @@ func (l *lockState) acquireLock(
 	defer l.mu.Unlock()
 	if l.holder.locked {
 		// Already held.
-		txn, beforeTs := l.getLockerInfo()
-		if txn.ID != g.txn.ID {
+		updateTxn, updateTs := g.txn, g.ts
+		beforeTxn, beforeTs := l.getLockerInfo()
+		if beforeTxn.ID != updateTxn.ID {
 			return nil, errors.Errorf("caller violated contract")
 		}
-		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
+		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < updateTxn.Epoch {
 			// Clear the sequences for the older epoch.
 			l.holder.holder[durability].seqs = l.holder.holder[durability].seqs[:0]
 		}
@@ -1065,19 +1066,19 @@ func (l *lockState) acquireLock(
 		add := true
 		if len(seqs) > 0 {
 			lastSeq := seqs[len(seqs)-1]
-			if lastSeq > txn.Sequence {
+			if lastSeq > updateTxn.Sequence {
 				return nil, errors.Errorf("caller violated contract")
 			}
-			if lastSeq == txn.Sequence {
+			if lastSeq == updateTxn.Sequence {
 				// Idempotent lock acquisition.
 				add = false
 			}
 		}
 		if add {
-			l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
+			l.holder.holder[durability].seqs = append(seqs, updateTxn.Sequence)
 		}
-		l.holder.holder[durability].txn = g.txn
-		l.holder.holder[durability].ts = g.ts
+		l.holder.holder[durability].txn = updateTxn
+		l.holder.holder[durability].ts = updateTs
 		_, afterTs := l.getLockerInfo()
 		if afterTs.Less(beforeTs) {
 			return nil, errors.Errorf("caller violated contract")
