@@ -817,6 +817,10 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	// Get all the PK columns.
 	tab := md.Table(colMeta.Table)
 	var pkCols opt.ColSet
+	if tab.IndexCount() == 0 {
+		// Virtual tables have no indexes.
+		return false
+	}
 	primaryIndex := tab.Index(cat.PrimaryIndex)
 	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
 		pkCols.Add(colMeta.Table.ColumnID(primaryIndex.Column(i).Ordinal))

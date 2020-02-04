@@ -3734,6 +3734,12 @@ project
                           ├── variable: k [type=int]
                           └── variable: a [type=int]
 
+# Verify that we handle tables with no primary index (#44659).
+build
+SELECT table_schema FROM information_schema.columns GROUP BY table_name
+----
+error (42803): column "table_schema" must appear in the GROUP BY clause or be used in an aggregate function
+
 # Tests with aliases (see #28059).
 build
 SELECT x + 1 AS z FROM abxy GROUP BY z
