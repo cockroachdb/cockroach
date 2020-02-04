@@ -1042,13 +1042,22 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	mtc.Start(t, 3)
 
 	rep, err := mtc.stores[0].GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	repDesc, err := rep.GetReplicaDescriptor()
+	require.NoError(t, err)
+	desc := protoutil.Clone(rep.Desc()).(*roachpb.RangeDescriptor)
+	desc.AddReplica(2, 2, roachpb.LEARNER)
+	rep2Desc, found := desc.GetReplicaDescriptor(2)
+	require.True(t, found)
 	header := storage.SnapshotRequest_Header{
 		CanDecline: true,
 		RangeSize:  100,
-		State:      storagepb.ReplicaState{Desc: rep.Desc()},
+		State:      storagepb.ReplicaState{Desc: desc},
+		RaftMessageRequest: storage.RaftMessageRequest{
+			RangeID:     rep.RangeID,
+			FromReplica: repDesc,
+			ToReplica:   rep2Desc,
+		},
 	}
 	header.RaftMessageRequest.Message.Snapshot.Data = uuid.UUID{}.GetBytes()
 	// Cause this stream to return an error as soon as we ask it for something.
@@ -3641,90 +3650,6 @@ func TestRemovedReplicaError(t *testing.T) {
 		t.Fatal(pErr)
 		return errors.New("unreachable")
 	})
-}
-
-// TestRemoveRangeWithoutGC ensures that we do not panic when a
-// replica has been removed but not yet GC'd (and therefore
-// does not have an active raft group).
-func TestRemoveRangeWithoutGC(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicaGCQueue = true
-	sc.TestingKnobs.DisableEagerReplicaRemoval = true
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 2)
-	const rangeID roachpb.RangeID = 1
-	mtc.replicateRange(rangeID, 1)
-	mtc.transferLease(context.TODO(), rangeID, 0, 1)
-	mtc.unreplicateRange(rangeID, 0)
-
-	// Wait for store 0 to process the removal. The in-memory replica
-	// object still exists but store 0 is no longer present in the
-	// configuration.
-	testutils.SucceedsSoon(t, func() error {
-		rep, err := mtc.stores[0].GetReplica(rangeID)
-		if err != nil {
-			return err
-		}
-		desc := rep.Desc()
-		if len(desc.InternalReplicas) != 1 {
-			return errors.Errorf("range has %d replicas", len(desc.InternalReplicas))
-		}
-		return nil
-	})
-
-	// The replica's data is still on disk.
-	var desc roachpb.RangeDescriptor
-	descKey := keys.RangeDescriptorKey(roachpb.RKeyMin)
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
-		t.Fatal(err)
-	} else if !ok {
-		t.Fatal("expected range descriptor to be present")
-	}
-
-	// Stop and restart the store. The primary motivation for this test
-	// is to ensure that the store does not panic on restart (as was
-	// previously the case).
-	mtc.stopStore(0)
-	mtc.restartStore(0)
-
-	// Initially, the in-memory Replica object is recreated from the
-	// on-disk state.
-	if _, err := mtc.stores[0].GetReplica(rangeID); err != nil {
-		t.Fatal(err)
-	}
-
-	// Re-enable the GC queue to allow the replica to be destroyed
-	// (after the simulated passage of time).
-	mtc.advanceClock(context.TODO())
-	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
-	mtc.stores[0].SetReplicaGCQueueActive(true)
-	// There's a fun flake where between when the queue detects that this replica
-	// needs to be removed and when it actually gets processed whereby an older
-	// replica will send this replica a raft message which will give it an ID.
-	// When our replica ID changes the queue will ignore the previous addition and
-	// we won't be removed.
-	testutils.SucceedsSoon(t, func() error {
-		mtc.stores[0].MustForceReplicaGCScanAndProcess()
-
-		// The Replica object should be removed.
-		const msg = "r[0-9]+ was not found"
-		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, msg) {
-			return errors.Errorf("expected %s, got %v", msg, err)
-		}
-		return nil
-	})
-
-	// And the data should no longer be on disk.
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), &desc, engine.MVCCGetOptions{}); err != nil {
-		t.Fatal(err)
-	} else if ok {
-		t.Fatalf("expected range descriptor to be absent")
-	}
 }
 
 func TestTransferRaftLeadership(t *testing.T) {

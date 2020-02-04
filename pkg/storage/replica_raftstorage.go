@@ -738,10 +738,6 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
-	r.mu.RLock()
-	replicaID := r.mu.replicaID
-	r.mu.RUnlock()
-
 	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
@@ -750,8 +746,6 @@ func (r *Replica) applySnapshot(
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
 			case SnapshotRequest_LEARNER:
 				r.store.metrics.RangeSnapshotsLearnerApplied.Inc(1)
-			case SnapshotRequest_PREEMPTIVE:
-				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
 			}
 		}
 	}()
@@ -836,19 +830,13 @@ func (r *Replica) applySnapshot(
 				return err
 			}
 		}
-		// If this replica doesn't know its ReplicaID yet, we're applying a
-		// preemptive snapshot. In this case, we're going to have to write the
-		// sideloaded proposals into the Raft log. Otherwise, sideload.
-		if replicaID != 0 {
-			var err error
-			var sideloadedEntriesSize int64
-			logEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
-			if err != nil {
-				return err
-			}
-			raftLogSize += sideloadedEntriesSize
-		}
+		var sideloadedEntriesSize int64
 		var err error
+		logEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+		if err != nil {
+			return err
+		}
+		raftLogSize += sideloadedEntriesSize
 		_, lastTerm, raftLogSize, err = r.append(ctx, &unreplicatedSST, 0, invalidLastTerm, raftLogSize, logEntries)
 		if err != nil {
 			return err
@@ -940,7 +928,7 @@ func (r *Replica) applySnapshot(
 	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
 		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 	}
-	r.setDesc(ctx, s.Desc)
+	r.setDescRaftMuLocked(ctx, s.Desc)
 	if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
 		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 	}
@@ -967,7 +955,7 @@ func (r *Replica) applySnapshot(
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
-	// managed by r.setDesc and changes to r.mu.state.Lease must be handled
+	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.mu.state = s

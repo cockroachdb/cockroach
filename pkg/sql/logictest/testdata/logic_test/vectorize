@@ -1083,3 +1083,13 @@ CREATE TABLE t44304(c0 INT); INSERT INTO t44304 VALUES (0)
 query I
 SELECT * FROM t44304 WHERE CASE WHEN t44304.c0 > 0 THEN NULL END
 ----
+
+# Regression test for CASE operator and flat bytes.
+statement ok
+CREATE TABLE t44624(c0 STRING, c1 BOOL); INSERT INTO t44624(rowid, c0, c1) VALUES (0, '', true), (1, '', NULL)
+
+query TB
+SELECT * FROM t44624 ORDER BY CASE WHEN c1 IS NULL THEN c0 WHEN true THEN c0 END
+----
+·  true
+·  NULL

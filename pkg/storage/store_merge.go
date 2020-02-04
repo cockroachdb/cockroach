@@ -108,6 +108,6 @@ func (s *Store) MergeRange(
 	}
 
 	// Update the subsuming range's descriptor.
-	leftRepl.setDesc(ctx, &newLeftDesc)
+	leftRepl.setDescRaftMuLocked(ctx, &newLeftDesc)
 	return nil
 }

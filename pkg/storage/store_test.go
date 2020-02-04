@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -548,7 +548,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		}},
 		NextReplicaID: 2,
 	}
-	r, err := NewReplica(desc, s, 0)
+	r, err := newReplica(context.Background(), desc, s, 1)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -676,45 +676,6 @@ func TestReplicasByKey(t *testing.T) {
 		if !testutils.IsError(err, desc.expectedErrorOnAdd) {
 			t.Fatalf("adding replica %d: expected err %q, but encountered %v", i, desc.expectedErrorOnAdd, err)
 		}
-	}
-}
-
-func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
-
-	rep, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// First try and fail with a stale descriptor.
-	origDesc := rep.Desc()
-	newDesc := protoutil.Clone(origDesc).(*roachpb.RangeDescriptor)
-	for i := range newDesc.InternalReplicas {
-		if newDesc.InternalReplicas[i].StoreID == store.StoreID() {
-			newDesc.InternalReplicas[i].ReplicaID++
-			newDesc.NextReplicaID++
-			break
-		}
-	}
-
-	rep.setDesc(ctx, newDesc)
-	expectedErr := "replica descriptor's ID has changed"
-	if err := store.RemoveReplica(ctx, rep, origDesc.NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected error %q but got %v", expectedErr, err)
-	}
-
-	// Now try a fresh descriptor and succeed.
-	if err := store.RemoveReplica(ctx, rep, rep.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -1003,20 +964,10 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	newRangeID := roachpb.RangeID(3)
 	desc := &roachpb.RangeDescriptor{
 		RangeID: newRangeID,
-		InternalReplicas: []roachpb.ReplicaDescriptor{{
-			NodeID:    1,
-			StoreID:   1,
-			ReplicaID: 1,
-		}},
-		NextReplicaID: 2,
 	}
 
-	r := &Replica{
-		RangeID:   desc.RangeID,
-		store:     store,
-		abortSpan: abortspan.New(desc.RangeID),
-	}
-	if err := r.init(desc, 0); err != nil {
+	r, err := newReplica(context.Background(), desc, store, 1)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -1030,11 +981,16 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}
 
 	// Initialize the range with start and end keys.
-	r.mu.Lock()
-	r.mu.state.Desc.StartKey = roachpb.RKey("b")
-	r.mu.state.Desc.EndKey = roachpb.RKey("d")
-	r.mu.Unlock()
-
+	desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	desc.StartKey = roachpb.RKey("b")
+	desc.EndKey = roachpb.RKey("d")
+	desc.InternalReplicas = []roachpb.ReplicaDescriptor{{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}}
+	desc.NextReplicaID = 2
+	r.setDescRaftMuLocked(ctx, desc)
 	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
 		t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
 	}
@@ -1371,7 +1327,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
 	)
 	require.NoError(t, err)
-	newRng, err := NewReplica(rhsDesc, store, 0)
+	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
 	require.NoError(t, err)
 	newLeftDesc := *repl.Desc()
 	newLeftDesc.EndKey = splitKey
@@ -2823,80 +2779,6 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 }
 
-// Test that we remove snapshot placeholders on error conditions.
-func TestStoreRemovePlaceholderOnError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	s := tc.store
-	ctx := context.Background()
-
-	// Clobber the existing range so we can test nonoverlapping placeholders.
-	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{}
-	data, err := protoutil.Marshal(snapData)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Wrap the snapshot in a minimal header. The request will error because the
-	// replica tombstone for the range requires that a new replica have an ID
-	// greater than 1.
-	snapHeader := &SnapshotRequest_Header{
-		State: storagepb.ReplicaState{Desc: repl1.Desc()},
-		RaftMessageRequest: RaftMessageRequest{
-			RangeID: 1,
-			ToReplica: roachpb.ReplicaDescriptor{
-				NodeID:    1,
-				StoreID:   1,
-				ReplicaID: 0,
-			},
-			FromReplica: roachpb.ReplicaDescriptor{
-				NodeID:    2,
-				StoreID:   2,
-				ReplicaID: 2,
-			},
-			Message: raftpb.Message{
-				Type: raftpb.MsgSnap,
-				Snapshot: raftpb.Snapshot{
-					Data: data,
-				},
-			},
-		},
-	}
-	const expected = "preemptive snapshot from term 0 received"
-	if err := s.processPreemptiveSnapshotRequest(ctx, snapHeader,
-		IncomingSnapshot{
-			SnapUUID: uuid.MakeV4(),
-			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
-		}); !testutils.IsPError(err, expected) {
-		t.Fatalf("expected %s, but found %v", expected, err)
-	}
-
-	s.mu.Lock()
-	numPlaceholders := len(s.mu.replicaPlaceholders)
-	s.mu.Unlock()
-
-	if numPlaceholders != 0 {
-		t.Fatalf("expected 0 placeholders, but found %d", numPlaceholders)
-	}
-	if n := atomic.LoadInt32(&s.counts.removedPlaceholders); n != 1 {
-		t.Fatalf("expected 1 removed placeholder, but found %d", n)
-	}
-}
-
 // Test that we remove snapshot placeholders when raft ignores the
 // snapshot. This is testing the removal of placeholder after handleRaftReady
 // processing for an uninitialized Replica.
@@ -2928,7 +2810,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	uninitRepl1, err := NewReplica(&uninitDesc, s, 0)
+	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2958,7 +2840,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			FromReplica: roachpb.ReplicaDescriptor{
 				NodeID:    2,
 				StoreID:   2,
-				ReplicaID: 2,
+				ReplicaID: 3,
 			},
 			Message: raftpb.Message{
 				Type: raftpb.MsgSnap,
@@ -3304,6 +3186,105 @@ func TestSnapshotRateLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPreemptiveSnapshotsAreRemoved exercises a migration in 20.1 to remove any
+// data on disk for a Replica which holds a descriptor in its state that does
+// not contain the store. Prior to 20.1 such Replica state could exist on disk
+// in two scenario both generally due to a rapid upgrade from 19.1 to 19.2.
+//
+// See the comment on removePreemptiveSnapshot().
+//
+// TODO(ajwerner): remove this in 20.2 with removePreemptiveSnapshot().
+func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Create a store with a preemptive snapshot sitting in its engine before it's
+	// started. Ensure that the preemptive snapshots are removed and the replicas
+	// for those ranges are not created.
+	//
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	config := TestStoreConfig(hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset))
+	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{}, &config)
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(42))
+	tablePrefixEnd := tablePrefix.PrefixEnd()
+	const rangeID = 42
+
+	desc := roachpb.NewRangeDescriptor(
+		rangeID,
+		roachpb.RKey(tablePrefix),
+		roachpb.RKey(tablePrefixEnd),
+		roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
+			{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+		}),
+	)
+	const replicatedOnly, seekEnd = false, false
+	it := rditer.NewReplicaDataIterator(desc, s.Engine(), replicatedOnly, seekEnd)
+	defer it.Close()
+	lease := roachpb.Lease{
+		Start: s.Clock().Now(),
+	}
+	state := storagepb.ReplicaState{
+		Desc:        desc,
+		Lease:       &lease,
+		GCThreshold: &hlc.Timestamp{},
+		TruncatedState: &roachpb.RaftTruncatedState{
+			Term:  1,
+			Index: 11,
+		},
+		Stats: &enginepb.MVCCStats{ContainsEstimates: 1},
+	}
+	// Write some data into the range and then write the range descriptor and
+	// state.
+	func() {
+		b := s.engine.NewBatch()
+		defer b.Close()
+		stl := stateloader.Make(rangeID)
+		const N = 100
+		for i := 0; i < N; i++ {
+			const colID = 1
+			prefix := tablePrefix[0:len(tablePrefix):len(tablePrefix)]
+			k := roachpb.Key(encoding.EncodeIntValue(prefix, colID, int64(i)))
+			require.NoError(t, engine.MVCCBlindPutProto(ctx, b, state.Stats,
+				k, s.Clock().Now(), desc, nil))
+		}
+		require.NoError(t, engine.MVCCBlindPutProto(ctx, b, state.Stats,
+			keys.RangeDescriptorKey(desc.StartKey), hlc.Timestamp{}, desc, nil))
+		_, err := stl.Save(ctx, b, state, stateloader.TruncatedStateUnreplicated)
+		require.NoError(t, err)
+		require.NoError(t, b.Commit(true /* sync */))
+	}()
+
+	// Start the store.
+	require.NoError(t, s.Start(ctx, stopper))
+
+	// Ensure that the data for the preemptive snapshot has been removed.
+	snap := s.engine.NewSnapshot()
+	defer snap.Close()
+	it = rditer.NewReplicaDataIterator(desc, snap, replicatedOnly, seekEnd)
+	defer it.Close()
+	// The only key for the range we should find is the tombstone.
+	tombstoneKey := keys.RaftTombstoneKey(rangeID)
+	var foundTombstoneKey bool
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		// There should not be any data other than the tombstone key.
+		if k := it.UnsafeKey(); k.Equal(engine.MVCCKey{Key: tombstoneKey}) {
+			foundTombstoneKey = true
+		} else {
+			t.Fatalf("found data in the range which should have been removed: %v", k)
+		}
+	}
+	require.True(t, foundTombstoneKey)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

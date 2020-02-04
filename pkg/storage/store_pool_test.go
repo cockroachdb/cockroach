@@ -592,11 +592,13 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	// Create replica.
 	rg := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey([]byte("a")),
-		EndKey:   roachpb.RKey([]byte("b")),
+		RangeID:       1,
+		StartKey:      roachpb.RKey([]byte("a")),
+		EndKey:        roachpb.RKey([]byte("b")),
+		NextReplicaID: 1,
 	}
-	replica, err := NewReplica(&rg, store, roachpb.ReplicaID(0))
+	rg.AddReplica(1, 1, roachpb.VOTER_FULL)
+	replica, err := newReplica(ctx, &rg, store, 1)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}
