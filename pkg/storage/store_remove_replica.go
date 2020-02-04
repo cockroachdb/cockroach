@@ -83,19 +83,12 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 			return nil // already removed, noop
 		}
 
-		// We check both rep.mu.ReplicaID and rep.mu.state.Desc's replica ID because
-		// they can differ in cases when a replica's ID is increased due to an
-		// incoming raft message (see #14231 for background).
-		if rep.mu.replicaID >= nextReplicaID {
-			rep.mu.Unlock()
-			return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
-				rep, rep.mu.replicaID, nextReplicaID)
-		}
 		desc = rep.mu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 			rep.mu.Unlock()
-			return errors.Errorf("cannot remove replica %s; replica descriptor's ID has changed (%s >= %s)",
-				rep, repDesc.ReplicaID, nextReplicaID)
+			// NB: This should not in any way be possible starting in 20.1.
+			log.Fatalf(ctx, "replica descriptor's ID has changed (%s >= %s)",
+				repDesc.ReplicaID, nextReplicaID)
 		}
 
 		// This is a fatal error as an initialized replica can never become

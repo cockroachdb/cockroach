@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	// Messages that provide detail about why a preemptive snapshot was rejected.
+	// Messages that provide detail about why a snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots"
 	storeDrainingMsg        = "store is draining"
@@ -295,19 +295,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					inSnap.String(), len(logEntries), expLen)
 			}
 
-			// 19.1 nodes don't set the Type field on the SnapshotRequest_Header proto
-			// when sending this RPC, so in a mixed cluster setting we may have gotten
-			// the zero value of RAFT. Since the RPC didn't have type information
-			// previously, a 19.1 node receiving a snapshot distinguished between RAFT
-			// and PREEMPTIVE (19.1 nodes never sent LEARNER snapshots) by checking
-			// whether the replica was a placeholder (ReplicaID == 0).
-			//
-			// This adjustment can be removed after 19.2.
-			if inSnap.snapType == SnapshotRequest_RAFT &&
-				header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
-				inSnap.snapType = SnapshotRequest_PREEMPTIVE
-			}
-
 			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.scratch.SSTs()))
 			return inSnap, nil
 		}
@@ -387,31 +374,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
-			if snap.snapType == SnapshotRequest_PREEMPTIVE &&
-				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
-				// If the raft log is too large, abort the snapshot instead of
-				// potentially running out of memory. However, if this is a
-				// raft-initiated snapshot (instead of a preemptive one), we
-				// have a dilemma. It may be impossible to truncate the raft
-				// log until we have caught up a peer with a snapshot. Since
-				// we don't know the exact size at which we will run out of
-				// memory, we err on the size of allowing the snapshot if it
-				// is raft-initiated, while aborting preemptive snapshots at a
-				// reasonable threshold. (Empirically, this is good enough:
-				// the situations that result in large raft logs have not been
-				// observed to result in raft-initiated snapshots).
-				//
-				// By aborting preemptive snapshots here, we disallow replica
-				// changes until the current replicas have caught up and
-				// truncated the log (either the range is available, in which
-				// case this will eventually happen, or it's not,in which case
-				// the preemptive snapshot would be wasted anyway because the
-				// change replicas transaction would be unable to commit).
-				return false, errors.Errorf(
-					"aborting snapshot because raft log is too large "+
-						"(%d bytes after processing %d of %d entries)",
-					raftLogBytes, len(logEntries), endIndex-firstIndex)
-			}
 		}
 		return false, err
 	}
@@ -763,15 +725,16 @@ func (s *Store) receiveSnapshot(
 		}
 	}
 
-	// Defensive check that any non-preemptive snapshot contains this store in the
-	// descriptor.
-	if !header.IsPreemptive() {
-		storeID := s.StoreID()
-		if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
-			return crdberrors.AssertionFailedf(
-				`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
-				header.Type, storeID, header.State.Desc.Replicas())
-		}
+	if header.IsPreemptive() {
+		return crdberrors.AssertionFailedf(`expected a raft or learner snapshot`)
+	}
+
+	// Defensive check that any snapshot contains this store in the	descriptor.
+	storeID := s.StoreID()
+	if _, ok := header.State.Desc.GetReplicaDescriptor(storeID); !ok {
+		return crdberrors.AssertionFailedf(
+			`snapshot of type %s was sent to s%d which did not contain it as a replica: %s`,
+			header.Type, storeID, header.State.Desc.Replicas())
 	}
 
 	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
@@ -791,18 +754,10 @@ func (s *Store) receiveSnapshot(
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if header.IsPreemptive() {
-		if _, err := s.canApplyPreemptiveSnapshot(ctx, header, false /* authoritative */); err != nil {
-			return sendSnapshotError(stream,
-				errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
-			)
-		}
-	} else {
-		if err := s.shouldAcceptSnapshotData(ctx, header); err != nil {
-			return sendSnapshotError(stream,
-				errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
-			)
-		}
+	if err := s.shouldAcceptSnapshotData(ctx, header); err != nil {
+		return sendSnapshotError(stream,
+			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
+		)
 	}
 
 	// Determine which snapshot strategy the sender is using to send this
@@ -841,14 +796,8 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
-	if header.IsPreemptive() {
-		if err := s.processPreemptiveSnapshotRequest(ctx, header, inSnap); err != nil {
-			return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
-		}
-	} else {
-		if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
-			return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
-		}
+	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
+		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
 
 	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})

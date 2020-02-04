@@ -266,6 +266,25 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
 ) (result NewColOperatorResult, err error) {
+	// Make sure that we clean up memory monitoring infrastructure in case of an
+	// error or a panic.
+	defer func() {
+		returnedErr := err
+		panicErr := recover()
+		if returnedErr != nil || panicErr != nil {
+			for _, memAccount := range result.BufferingOpMemAccounts {
+				memAccount.Close(ctx)
+			}
+			result.BufferingOpMemAccounts = result.BufferingOpMemAccounts[:0]
+			for _, memMonitor := range result.BufferingOpMemMonitors {
+				memMonitor.Stop(ctx)
+			}
+			result.BufferingOpMemMonitors = result.BufferingOpMemMonitors[:0]
+		}
+		if panicErr != nil {
+			execerror.VectorizedInternalPanic(panicErr)
+		}
+	}()
 	spec := args.Spec
 	inputs := args.Inputs
 	streamingMemAccount := args.StreamingMemAccount
@@ -1193,7 +1212,15 @@ func planProjectionOperators(
 		buffer := NewBufferOp(input)
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
-		if caseOutputType == coltypes.Unhandled {
+		switch caseOutputType {
+		case coltypes.Bytes:
+			// Currently, there is a contradiction between the way CASE operator
+			// works (which populates its output in arbitrary order) and the flat
+			// bytes implementation of Bytes type (which prohibits sets in arbitrary
+			// order), so we reject such scenario to fall back to row-by-row engine.
+			return nil, resultIdx, ct, internalMemUsed, errors.Newf(
+				"unsupported type %s in CASE operator", t.ResolvedType().String())
+		case coltypes.Unhandled:
 			return nil, resultIdx, ct, internalMemUsed, errors.Newf(
 				"unsupported type %s", t.ResolvedType().String())
 		}
