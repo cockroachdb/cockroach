@@ -100,7 +100,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   { /* node details */ }
                   <Redirect exact from="/node" to="/overview/list" />
                   <Route exact path={ `/node/:${nodeIDAttr}` } component={ NodeOverview } />
-                  <Route path={ `/node/:${nodeIDAttr}/logs` } component={ NodeLogs } />
+                  <Route exact path={ `/node/:${nodeIDAttr}/logs` } component={ NodeLogs } />
 
                   { /* events & jobs */ }
                   <Route path="/events" component={ EventPage } />
@@ -118,26 +118,26 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Redirect exact from="/database" to="/databases" />
                   <Redirect exact from={ `/database/:${databaseNameAttr}`} to="/databases" />
                   <Redirect exact from={ `/database/:${databaseNameAttr}/table`} to="/databases" />
-                  <Route path={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
+                  <Route exact path={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
 
                   { /* data distribution */ }
-                  <Route path="/data-distribution" component={ DataDistributionPage } />
+                  <Route exact path="/data-distribution" component={ DataDistributionPage } />
 
                   { /* statement statistics */ }
-                  <Route path="/statements" component={ StatementsPage }/>
-                  <Route path={ `/statements/:${appAttr}`} component={ StatementsPage } />
-                  <Route path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
-                  <Route path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  <Route exact path="/statements" component={ StatementsPage }/>
+                  <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
+                  <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
 
-                  <Route path="/statement" component={() => <Redirect to="/statements" />}/>
-                  <Route path={`/statement/:${statementAttr}`} component={StatementDetails}/>
-                  <Route path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
+                  <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
+                  <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
+                  <Route exact path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
 
                   { /* debug pages */ }
                   <Route exact path="/debug" component={Debug}/>
-                  <Route path="/debug/redux" component={ReduxDebug}/>
-                  <Route path="/debug/chart" component={CustomChart}/>
-                  <Route path="/debug/enqueue_range" component={EnqueueRange}/>
+                  <Route exact path="/debug/redux" component={ReduxDebug}/>
+                  <Route exact path="/debug/chart" component={CustomChart}/>
+                  <Route exact path="/debug/enqueue_range" component={EnqueueRange}/>
 
                   <Route path="/raft">
                     <Raft>
@@ -150,17 +150,17 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     </Raft>
                   </Route>
 
-                  <Route path="/reports/problemranges" component={ ProblemRanges } />
-                  <Route path={`/reports/problemranges/:${nodeIDAttr}`} component={ ProblemRanges }/>
-                  <Route path="/reports/localities" component={ Localities } />
-                  <Route path={`/reports/network/:${nodeIDAttr}`} component={ Network } />
-                  <Route path="/reports/network" component={ Network } />
-                  <Route path="/reports/nodes" component={ Nodes } />
-                  <Route path="/reports/nodes/history" component={ ConnectedDecommissionedNodeHistory } />
-                  <Route path="/reports/settings" component={ Settings } />
-                  <Route path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
-                  <Route path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
-                  <Route path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
+                  <Route exact path="/reports/problemranges" component={ ProblemRanges } />
+                  <Route exact path={`/reports/problemranges/:${nodeIDAttr}`} component={ ProblemRanges }/>
+                  <Route exact path="/reports/localities" component={ Localities } />
+                  <Route exact path={`/reports/network/:${nodeIDAttr}`} component={ Network } />
+                  <Route exact path="/reports/network" component={ Network } />
+                  <Route exact path="/reports/nodes" component={ Nodes } />
+                  <Route exact path="/reports/nodes/history" component={ ConnectedDecommissionedNodeHistory } />
+                  <Route exact path="/reports/settings" component={ Settings } />
+                  <Route exact path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
+                  <Route exact path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
+                  <Route exact path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
 
                   { /* old route redirects */ }
                   <Redirect exact from="/cluster" to="/metrics/overview/cluster" />
