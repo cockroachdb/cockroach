@@ -472,7 +472,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6fb3525e24df3488fe4eeec5921b571d523bc565e0be9cbb49806c7345607d77"
+  digest = "1:508bdcca311e78d0c08933baeed20391b217970b7ad8ba145ae86fdb9b8c460e"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -496,7 +496,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "c333ae77fe84eb2a07ff94f954b81475c08f4745"
+  revision = "89adc50375ffd11c8e62f46f1a5c320012cffafe"
 
 [[projects]]
   branch = "master"
@@ -2148,6 +2148,7 @@
     "go.etcd.io/etcd/raft/raftpb",
     "go.etcd.io/etcd/raft/tracker",
     "golang.org/x/crypto/bcrypt",
+    "golang.org/x/crypto/pbkdf2",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/agent",
     "golang.org/x/crypto/ssh/knownhosts",
