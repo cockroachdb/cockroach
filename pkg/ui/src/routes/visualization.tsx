@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Route, IndexRedirect } from "react-router";
+import { Route, Switch, Redirect } from "react-router-dom";
 
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import ClusterOverview from "src/views/cluster/containers/clusterOverview";
@@ -32,8 +32,10 @@ class NodesWrapper extends React.Component<{}, {}> {
 export default function createClusterOverviewRoutes(): JSX.Element {
   return (
     <Route path="overview" component={ ClusterOverview } >
-      <IndexRedirect to="list" />
-      <Route path="list" component={ NodesWrapper } />
+      <Switch>
+        <Route exact path="/" component={() => <Redirect to="list" />}/>
+        <Route path="list" component={ NodesWrapper } />
+      </Switch>
     </Route>
   );
 }

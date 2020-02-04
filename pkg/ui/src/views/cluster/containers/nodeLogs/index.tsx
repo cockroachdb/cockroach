@@ -11,8 +11,8 @@
 import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { RouterState } from "react-router";
 import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
@@ -26,6 +26,7 @@ import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
 import Loading from "src/views/shared/components/loading";
+import { getMatchParamByName } from "src/util/query";
 import "./logs.styl";
 
 interface LogProps {
@@ -38,10 +39,11 @@ interface LogProps {
 /**
  * Renders the main content of the logs page.
  */
-export class Logs extends React.Component<LogProps & RouterState, {}> {
+export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
   componentWillMount() {
+    const nodeId = getMatchParamByName(this.props.match, nodeIDAttr);
     this.props.refreshNodes();
-    this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));
+    this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: nodeId }));
   }
 
   renderContent = () => {
@@ -81,10 +83,10 @@ export class Logs extends React.Component<LogProps & RouterState, {}> {
     const nodeAddress = this.props.currentNode
       ? this.props.currentNode.desc.address.address_field
       : null;
-
+    const nodeId = getMatchParamByName(this.props.match, nodeIDAttr);
     const title = this.props.currentNode
       ? `Logs | ${getDisplayName(this.props.currentNode)} | Nodes`
-      : `Logs | Node ${this.props.params[nodeIDAttr]} | Nodes`;
+      : `Logs | Node ${nodeId} | Nodes`;
 
     // TODO(couchand): This is a really myopic way to check for this particular
     // case, but making major changes to the CachedDataReducer or util.api seems
@@ -94,7 +96,7 @@ export class Logs extends React.Component<LogProps & RouterState, {}> {
         <div>
           <Helmet title={ title } />
           <div className="section section--heading">
-            <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
+            <h2 className="base-heading">Logs Node { nodeId } / { nodeAddress }</h2>
           </div>
           <section className="section">
             { REMOTE_DEBUGGING_ERROR_TEXT }
@@ -107,7 +109,7 @@ export class Logs extends React.Component<LogProps & RouterState, {}> {
       <div>
         <Helmet title={ title } />
         <div className="section section--heading">
-          <h2 className="base-heading">Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
+          <h2 className="base-heading">Logs Node { nodeId } / { nodeAddress }</h2>
         </div>
         <section className="section">
           <Loading
@@ -122,8 +124,8 @@ export class Logs extends React.Component<LogProps & RouterState, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const logsConnected = connect(
-  (state: AdminUIState, ownProps: RouterState) => {
+const logsConnected = withRouter(connect(
+  (state: AdminUIState, ownProps: RouteComponentProps) => {
     return {
       logs: state.cachedData.logs,
       currentNode: currentNode(state, ownProps),
@@ -133,6 +135,6 @@ const logsConnected = connect(
     refreshLogs,
     refreshNodes,
   },
-)(Logs);
+)(Logs));
 
 export default logsConnected;

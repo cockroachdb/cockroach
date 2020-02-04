@@ -12,7 +12,7 @@ import classNames from "classnames";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
@@ -34,8 +34,8 @@ interface LoginPageState {
   password: string;
 }
 
-class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginPageState> {
-  constructor(props: LoginPageProps & WithRouterProps) {
+class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
+  constructor(props: LoginPageProps & RouteComponentProps) {
     super(props);
     this.state = {
       username: "",
@@ -57,15 +57,17 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
   }
 
   handleSubmit = (evt: React.FormEvent<any>) => {
+    const { location, history, handleLogin} = this.props;
+    const { username, password } = this.state;
     evt.preventDefault();
 
-    this.props.handleLogin(this.state.username, this.state.password)
+    handleLogin(username, password)
       .then(() => {
-        const { location, router } = this.props;
-        if (location.query && location.query.redirectTo) {
-          router.push(location.query.redirectTo as any);
+        const params = new URLSearchParams(location.search);
+        if (params.has("redirectTo")) {
+          history.push(params.get("redirectTo"));
         } else {
-          router.push("/");
+          history.push("/");
         }
       });
   }
@@ -159,10 +161,11 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
 }
 
 // tslint:disable-next-line:variable-name
-const LoginPageConnected = connect(
+const LoginPageConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       loginState: state.login,
+      location: state.router.location,
     };
   },
   (dispatch) => ({
@@ -170,6 +173,6 @@ const LoginPageConnected = connect(
       return dispatch(doLogin(username, password));
     },
   }),
-)(withRouter(LoginPage));
+)(LoginPage));
 
 export default LoginPageConnected;

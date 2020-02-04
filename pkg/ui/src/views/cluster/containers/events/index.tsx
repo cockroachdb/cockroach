@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Helmet } from "react-helmet";
-import { Link } from "react-router";
+import { Link, withRouter } from "react-router-dom";
 import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
@@ -169,7 +169,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const eventBoxConnected = connect(
+const eventBoxConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
@@ -179,10 +179,10 @@ const eventBoxConnected = connect(
   {
     refreshEvents,
   },
-)(EventBoxUnconnected);
+)(EventBoxUnconnected));
 
 // Connect the EventsList class with our redux store.
-const eventPageConnected = connect(
+const eventPageConnected = withRouter(connect(
   (state: AdminUIState) => {
     return {
       events: eventsSelector(state),
@@ -194,7 +194,7 @@ const eventPageConnected = connect(
     refreshEvents,
     setSort: eventsSortSetting.set,
   },
-)(EventPageUnconnected);
+)(EventPageUnconnected));
 
 export { eventBoxConnected as EventBox };
 export { eventPageConnected as EventPage };

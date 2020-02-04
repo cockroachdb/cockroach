@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { connect } from "react-redux";
 import moment, { Moment } from "moment";
 import { createSelector } from "reselect";

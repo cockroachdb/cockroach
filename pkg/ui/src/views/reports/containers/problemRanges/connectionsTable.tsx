@@ -11,7 +11,7 @@
 import _ from "lodash";
 import classNames from "classnames";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";

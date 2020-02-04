@@ -8,7 +8,7 @@
 
 import _ from "lodash";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 import { CircleLayout } from "./circleLayout";
 import { renderAsMap } from "./layout";
@@ -24,7 +24,7 @@ import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
 import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
-type Liveness = cockroach.storage.Liveness;
+type Liveness = cockroach.storage.ILiveness;
 
 const BACK_BUTTON_OFFSET = 26;
 

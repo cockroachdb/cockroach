@@ -31,7 +31,7 @@ export default function Empty (props: IEmptyProps) {
   } = props;
   return (
     <div className="empty-container">
-      <h2 className="empty-container__title">{title}</h2>
+      <h2 className="base-heading empty-container__title">{title}</h2>
       {description && <p className="empty-container__description">{description}</p>}
       <Button target="_blank" href={buttonHref} className="empty-container__button" type="primary">{button}</Button>
       <img className="empty-container__background" src={backgroundImage} alt="Empty screen" />

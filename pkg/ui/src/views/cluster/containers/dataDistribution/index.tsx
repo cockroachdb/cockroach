@@ -13,6 +13,7 @@ import React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
 import Helmet from "react-helmet";
+import { withRouter } from "react-router-dom";
 
 import Loading from "src/views/shared/components/loading";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
@@ -204,7 +205,7 @@ const localityTreeErrors = createSelector(
 );
 
 // tslint:disable-next-line:variable-name
-const DataDistributionPageConnected = connect(
+const DataDistributionPageConnected = withRouter(connect(
   (state: AdminUIState) => ({
     dataDistribution: state.cachedData.dataDistribution,
     sortedZoneConfigs: sortedZoneConfigs(state),
@@ -216,7 +217,7 @@ const DataDistributionPageConnected = connect(
     refreshNodes,
     refreshLiveness,
   },
-)(DataDistributionPage);
+)(DataDistributionPage));
 
 export default DataDistributionPageConnected;
 

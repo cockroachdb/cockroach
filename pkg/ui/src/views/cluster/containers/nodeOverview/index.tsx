@@ -12,7 +12,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import { RouterState, Link } from "react-router";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import _ from "lodash";
 
 import "./nodeOverview.styl";
@@ -29,6 +29,7 @@ import { LongToMoment } from "src/util/convert";
 import {
   SummaryBar, SummaryLabel, SummaryValue,
 } from "src/views/shared/components/summaryBar";
+import { getMatchParamByName } from "src/util/query";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -49,7 +50,7 @@ function TableRow(props: { data: INodeStatus, title: string, valueFn: (s: Status
   </tr>;
 }
 
-interface NodeOverviewProps extends RouterState {
+interface NodeOverviewProps extends RouteComponentProps {
   node: INodeStatus;
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
@@ -181,8 +182,8 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 }
 
 export const currentNode = createSelector(
-  (state: AdminUIState, _props: RouterState): INodeStatus[] => state.cachedData.nodes.data,
-  (_state: AdminUIState, props: RouterState): number => parseInt(props.params[nodeIDAttr], 10),
+  (state: AdminUIState, _props: RouteComponentProps): INodeStatus[] => state.cachedData.nodes.data,
+  (_state: AdminUIState, props: RouteComponentProps): number => parseInt(getMatchParamByName(props.match, nodeIDAttr), 10),
   (nodes, id) => {
     if (!nodes || !id) {
       return undefined;
@@ -190,8 +191,8 @@ export const currentNode = createSelector(
     return _.find(nodes, (ns) => ns.desc.node_id === id);
   });
 
-export default connect(
-  (state: AdminUIState, ownProps: RouterState) => {
+export default withRouter(connect(
+  (state: AdminUIState, ownProps: RouteComponentProps) => {
     return {
       node: currentNode(state, ownProps),
       nodesSummary: nodesSummarySelector(state),
@@ -202,4 +203,4 @@ export default connect(
     refreshNodes,
     refreshLiveness,
   },
-)(NodeOverview);
+)(NodeOverview));

@@ -9,7 +9,7 @@
 import React from "react";
 import { Dispatch, Action } from "redux";
 import { connect } from "react-redux";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import classNames from "classnames";
 
 import { allNodesHaveLocality } from "src/util/localities";

@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { RouterState } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
@@ -21,6 +21,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";
+import { getMatchParamByName } from "src/util/query";
 
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
@@ -29,11 +30,12 @@ interface StoresOwnProps {
   refreshStores: typeof refreshStores;
 }
 
-type StoresProps = StoresOwnProps & RouterState;
+type StoresProps = StoresOwnProps & RouteComponentProps;
 
 function storesRequestFromProps(props: StoresProps) {
+  const nodeId = getMatchParamByName(props.match, nodeIDAttr);
   return new protos.cockroach.server.serverpb.StoresRequest({
-    node_id: props.params[nodeIDAttr],
+    node_id: nodeId,
   });
 }
 
@@ -81,9 +83,9 @@ export class Stores extends React.Component<StoresProps, {}> {
   }
 
   renderContent = () => {
-    const nodeID = this.props.params[nodeIDAttr];
+    const { stores, match } = this.props;
 
-    const { stores } = this.props;
+    const nodeID = getMatchParamByName(match, nodeIDAttr);
     if (_.isEmpty(stores)) {
       return (
         <h2 className="base-heading">No stores were found on node {nodeID}.</h2>
@@ -94,7 +96,7 @@ export class Stores extends React.Component<StoresProps, {}> {
   }
 
   render() {
-    const nodeID = this.props.params[nodeIDAttr];
+    const nodeID = getMatchParamByName(this.props.match, nodeIDAttr);
     let header: string = null;
     if (_.isNaN(parseInt(nodeID, 10))) {
       header = "Local Node";
@@ -159,4 +161,4 @@ const mapDispatchToProps = {
   refreshStores,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(Stores);
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Stores));

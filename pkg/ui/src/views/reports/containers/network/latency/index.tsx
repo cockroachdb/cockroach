@@ -16,7 +16,7 @@ import { FixLong } from "oss/src/util/fixLong";
 import { Chip } from "oss/src/views/app/components/chip";
 import Empty from "oss/src/views/app/components/empty";
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { getValueFromString, Identity } from "..";
 import "./latency.styl";
 interface StdDev {

@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import React, { Fragment } from "react";
+import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { withRouter, WithRouterProps } from "react-router";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
 import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
@@ -29,6 +29,7 @@ import { INodeStatus } from "src/util/proto";
 
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
+import { queryByName } from "src/util/query";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -36,14 +37,13 @@ export interface CustomChartProps {
   nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   metricsMetadata: MetricsMetadata;
-  location: Location;
 }
 
 interface UrlState {
   charts: string;
 }
 
-export class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
+export class CustomChart extends React.Component<CustomChartProps & RouteComponentProps> {
   // Selector which computes dropdown options based on the nodes available on
   // the cluster.
   private nodeOptions = createSelector(
@@ -100,16 +100,19 @@ export class CustomChart extends React.Component<CustomChartProps & WithRouterPr
     this.props.refreshMetricMetadata();
   }
 
-  componentWillReceiveProps(props: CustomChartProps & WithRouterProps) {
+  componentWillReceiveProps(props: CustomChartProps & RouteComponentProps) {
     this.refresh(props);
   }
 
   currentCharts(): CustomChartState[] {
     const { location } = this.props;
-    if ("metrics" in this.props.location.query) {
+    const metrics = queryByName(location, "metrics");
+    const charts = queryByName(location, "charts");
+
+    if (metrics !== null) {
       try {
         return [{
-          metrics: JSON.parse(location.query.metrics as any),
+          metrics: JSON.parse(metrics),
           axisUnits: AxisUnits.Count,
         }];
       } catch (e) {
@@ -117,18 +120,30 @@ export class CustomChart extends React.Component<CustomChartProps & WithRouterPr
       }
     }
 
-    try {
-      return JSON.parse(location.query.charts as any);
-    } catch (e) {
-      return [new CustomChartState()];
+    if (charts !== null) {
+      try {
+        return JSON.parse(charts);
+      } catch (e) {
+        return [new CustomChartState()];
+      }
     }
+
+    return [new CustomChartState()];
   }
 
   updateUrl(newState: Partial<UrlState>) {
-    const pathname = this.props.location.pathname;
-    this.props.router.push({
+    const { location, history } = this.props;
+    const { pathname, search } = location;
+    const urlParams = new URLSearchParams(search);
+
+    Object.entries(newState).forEach(([key, value]) => {
+      urlParams.set(key, value);
+    });
+
+    history.push({
       pathname,
-      query: _.assign({}, this.props.location.query, newState),
+      search: urlParams.toString(),
+      state: newState,
     });
   }
 
@@ -225,7 +240,7 @@ export class CustomChart extends React.Component<CustomChartProps & WithRouterPr
     const charts = this.currentCharts();
 
     return (
-      <Fragment>
+      <>
         {
           charts.map((chart, i) => (
             <CustomChartTable
@@ -238,13 +253,13 @@ export class CustomChart extends React.Component<CustomChartProps & WithRouterPr
             />
           ))
         }
-      </Fragment>
+      </>
     );
   }
 
   render() {
     return (
-      <Fragment>
+      <>
         <Helmet title="Custom Chart | Debug" />
         <section className="section"><h1 className="base-heading">Custom Chart</h1></section>
         <PageConfig>
@@ -265,7 +280,7 @@ export class CustomChart extends React.Component<CustomChartProps & WithRouterPr
         <section className="section">
           { this.renderChartTables() }
         </section>
-      </Fragment>
+      </>
     );
   }
 }
@@ -281,7 +296,7 @@ const mapDispatchToProps = {
   refreshMetricMetadata,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
+export default withRouter(connect(mapStateToProps, mapDispatchToProps)(CustomChart));
 
 function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
   return _.has(nodeStatus.store_statuses[0].metrics, metricName);
