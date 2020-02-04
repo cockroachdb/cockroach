@@ -879,6 +879,34 @@ func makeBegin(s *Smither) (tree.Statement, bool) {
 	return &tree.BeginTransaction{}, true
 }
 
+func makeSavepoint(s *Smither) (tree.Statement, bool) {
+	savepointName := s.randString(s.d9(), letters)
+	s.activeSavepoints = append(s.activeSavepoints, savepointName)
+	return &tree.Savepoint{Name: tree.Name(savepointName)}, true
+}
+
+func makeReleaseSavepoint(s *Smither) (tree.Statement, bool) {
+	if len(s.activeSavepoints) == 0 {
+		return nil, false
+	}
+	idx := s.rnd.Intn(len(s.activeSavepoints))
+	savepoint := s.activeSavepoints[idx]
+	// Remove the released savepoint from our set of active savepoints.
+	s.activeSavepoints = append(s.activeSavepoints[:idx], s.activeSavepoints[idx+1:]...)
+	return &tree.ReleaseSavepoint{Savepoint: tree.Name(savepoint)}, true
+}
+
+func makeRollbackToSavepoint(s *Smither) (tree.Statement, bool) {
+	if len(s.activeSavepoints) == 0 {
+		return nil, false
+	}
+	idx := s.rnd.Intn(len(s.activeSavepoints))
+	savepoint := s.activeSavepoints[idx]
+	// Destroy all savepoints that come after the savepoint we rollback to.
+	s.activeSavepoints = s.activeSavepoints[:idx+1]
+	return &tree.RollbackToSavepoint{Savepoint: tree.Name(savepoint)}, true
+}
+
 func makeCommit(s *Smither) (tree.Statement, bool) {
 	return &tree.CommitTransaction{}, true
 }
