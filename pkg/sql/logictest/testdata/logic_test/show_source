@@ -54,6 +54,7 @@ max_identifier_length                    128
 max_index_keys                           32
 node_id                                  1
 reorder_joins_limit                      4
+require_explicit_primary_keys            off
 results_buffer_size                      16384
 row_security                             off
 search_path                              public

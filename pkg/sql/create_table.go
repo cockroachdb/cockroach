@@ -1321,6 +1321,13 @@ func MakeTableDesc(
 		}
 	}
 
+	// If explicit primary keys are required, error out since a primary key was not supplied.
+	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
+		return desc, errors.Errorf(
+			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
+	}
+
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
