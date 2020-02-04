@@ -27,13 +27,13 @@ import (
 type operandType int
 
 const (
-	OPERAND_TRANSACTION operandType = iota
-	OPERAND_READWRITER
-	OPERAND_MVCC_KEY
-	OPERAND_PAST_TS
-	OPERAND_VALUE
-	OPERAND_TEST_RUNNER
-	OPERAND_ITERATOR
+	operandTransaction operandType = iota
+	operandReadWriter
+	operandMVCCKey
+	operandPastTS
+	operandValue
+	operandTestRunner
+	operandIterator
 )
 
 const (
@@ -46,12 +46,28 @@ const (
 // MVCCKeys and values. All state about open objects (iterators, transactions,
 // writers, etc) should be stored in an operandManager.
 type operandManager interface {
+	// get retrieves an instance of this operand. Depending on operand type (eg.
+	// keys), it could also generate and return a new type of an instance.
 	get() operand
+	// opener returns the name of an operation (defined in operations.go) that
+	// always creates a new instance of this object. Called by the operation
+	// generator when an operation requires one instance of this operand to exist,
+	// and count() == 0.
 	opener() string
+	// count returns the number of live objects being managed by this manager. If
+	// 0, the opener() operation can be called when necessary.
 	count() int
+	// close closes the specified operand and cleans up references to it
+	// internally.
 	close(operand)
+	// closeAll closes all managed operands. Used when the test exits, or when a
+	// restart operation executes.
 	closeAll()
+	// toString converts the specified operand to a parsable string. This string
+	// will be printed in error messages and output files.
 	toString(operand) string
+	// parse converts the specified string into an operand instance. Should be the
+	// exact inverse of toString().
 	parse(string) operand
 }
 
@@ -59,7 +75,7 @@ type operand interface{}
 
 func generateBytes(rng *rand.Rand, min int, max int) []byte {
 	// For better readability, stick to lowercase alphabet characters.
-	iterations := min + int(float64(max-min)*rng.Float64())
+	iterations := min + rng.Intn(max-min)
 	result := make([]byte, 0, iterations)
 
 	for i := 0; i < iterations; i++ {
@@ -109,7 +125,7 @@ func (k *keyManager) get() operand {
 		return k.open()
 	}
 
-	return k.liveKeys[int(k.rng.Float64()*float64(len(k.liveKeys)))]
+	return k.liveKeys[k.rng.Intn(len(k.liveKeys))]
 }
 
 func (k *keyManager) closeAll() {
@@ -140,10 +156,6 @@ func (v *valueManager) count() int {
 	return 1
 }
 
-func (v *valueManager) open() []byte {
-	return v.get().([]byte)
-}
-
 func (v *valueManager) get() operand {
 	return generateBytes(v.rng, 4, maxValueSize)
 }
@@ -170,13 +182,13 @@ func (v *valueManager) parse(input string) operand {
 }
 
 type txnManager struct {
-	rng             *rand.Rand
-	testRunner      *metaTestRunner
-	tsGenerator     *tsGenerator
-	liveTxns        []*roachpb.Transaction
-	txnIdMap        map[string]*roachpb.Transaction
-	inFlightBatches map[*roachpb.Transaction][]engine.Batch
-	txnCounter      uint64
+	rng         *rand.Rand
+	testRunner  *metaTestRunner
+	tsGenerator *tsGenerator
+	liveTxns    []*roachpb.Transaction
+	txnIDMap    map[string]*roachpb.Transaction
+	openBatches map[*roachpb.Transaction]map[engine.Batch]struct{}
+	txnCounter  uint64
 }
 
 var _ operandManager = &txnManager{}
@@ -193,7 +205,7 @@ func (t *txnManager) get() operand {
 	if len(t.liveTxns) == 0 {
 		panic("no open txns")
 	}
-	return t.liveTxns[int(t.rng.Float64()*float64(len(t.liveTxns)))]
+	return t.liveTxns[t.rng.Intn(len(t.liveTxns))]
 }
 
 func (t *txnManager) open() *roachpb.Transaction {
@@ -212,7 +224,7 @@ func (t *txnManager) open() *roachpb.Transaction {
 		Status:                  roachpb.PENDING,
 	}
 	t.liveTxns = append(t.liveTxns, txn)
-	t.txnIdMap[txn.Name] = txn
+	t.txnIDMap[txn.Name] = txn
 
 	return txn
 }
@@ -228,8 +240,8 @@ func (t *txnManager) close(op operand) {
 		}
 	}
 
-	delete(t.txnIdMap, txn.Name)
-	delete(t.inFlightBatches, txn)
+	delete(t.txnIDMap, txn.Name)
+	delete(t.openBatches, txn)
 	idx := len(t.liveTxns)
 	for i := range t.liveTxns {
 		if t.liveTxns[i] == txn {
@@ -242,23 +254,8 @@ func (t *txnManager) close(op operand) {
 }
 
 func (t *txnManager) clearBatch(batch engine.Batch) {
-	for txn, batches := range t.inFlightBatches {
-		found := false
-		savedLen := len(batches)
-		for i := 0; i < savedLen; i++ {
-			batch2 := batches[i]
-			if batch == batch2 {
-				batches[i] = batches[len(batches) - 1]
-				batches = batches[:len(batches) - 1]
-				savedLen--
-				i--
-				found = true
-				// Don't break; this batch could appear multiple times.
-			}
-		}
-		if found {
-			t.inFlightBatches[txn] = batches
-		}
+	for _, batches := range t.openBatches {
+		delete(batches, batch)
 	}
 }
 
@@ -274,10 +271,9 @@ func (t *txnManager) toString(op operand) string {
 }
 
 func (t *txnManager) parse(input string) operand {
-	return t.txnIdMap[input]
+	return t.txnIDMap[input]
 }
 
-// TODO(itsbilal): Use this in an inconsistent version of MVCCScan.
 type tsManager struct {
 	rng         *rand.Rand
 	tsGenerator *tsGenerator
@@ -359,7 +355,7 @@ type readWriterManager struct {
 	rng          *rand.Rand
 	eng          engine.Engine
 	liveBatches  []engine.Batch
-	batchToIdMap map[engine.Batch]int
+	batchToIDMap map[engine.Batch]int
 	batchCounter int
 }
 
@@ -371,14 +367,14 @@ func (w *readWriterManager) get() operand {
 		return w.eng
 	}
 
-	return w.liveBatches[int(w.rng.Float64()*float64(len(w.liveBatches)))]
+	return w.liveBatches[w.rng.Intn(len(w.liveBatches))]
 }
 
 func (w *readWriterManager) open() engine.ReadWriter {
 	batch := w.eng.NewBatch()
 	w.batchCounter++
 	w.liveBatches = append(w.liveBatches, batch)
-	w.batchToIdMap[batch] = w.batchCounter
+	w.batchToIDMap[batch] = w.batchCounter
 	return batch
 }
 
@@ -404,7 +400,7 @@ func (w *readWriterManager) close(op operand) {
 			break
 		}
 	}
-	delete(w.batchToIdMap, batch)
+	delete(w.batchToIDMap, batch)
 	batch.Close()
 }
 
@@ -413,14 +409,14 @@ func (w *readWriterManager) closeAll() {
 		batch.Close()
 	}
 	w.liveBatches = w.liveBatches[:0]
-	w.batchToIdMap = make(map[engine.Batch]int)
+	w.batchToIDMap = make(map[engine.Batch]int)
 }
 
 func (w *readWriterManager) toString(op operand) string {
 	if w.eng == op {
 		return "engine"
 	}
-	return fmt.Sprintf("batch%d", w.batchToIdMap[op.(engine.Batch)])
+	return fmt.Sprintf("batch%d", w.batchToIDMap[op.(engine.Batch)])
 }
 
 func (w *readWriterManager) parse(input string) operand {
@@ -434,7 +430,7 @@ func (w *readWriterManager) parse(input string) operand {
 		panic(err)
 	}
 
-	for batch, id2 := range w.batchToIdMap {
+	for batch, id2 := range w.batchToIDMap {
 		if id == id2 {
 			return batch
 		}
@@ -449,7 +445,6 @@ type iteratorInfo struct {
 
 type iteratorManager struct {
 	rng          *rand.Rand
-	testRunner   *metaTestRunner
 	readerToIter map[engine.Reader][]engine.Iterator
 	iterToInfo   map[engine.Iterator]iteratorInfo
 	liveIters    []engine.Iterator
@@ -463,7 +458,7 @@ func (i *iteratorManager) get() operand {
 		panic("no open iterators")
 	}
 
-	return i.liveIters[int(i.rng.Float64()*float64(len(i.liveIters)))]
+	return i.liveIters[i.rng.Intn(len(i.liveIters))]
 }
 
 func (i *iteratorManager) open(rw engine.ReadWriter, options engine.IterOptions) engine.Iterator {
@@ -514,7 +509,7 @@ func (i *iteratorManager) close(op operand) {
 }
 
 func (i *iteratorManager) closeAll() {
-	for iter, _ := range i.iterToInfo {
+	for iter := range i.iterToInfo {
 		iter.Close()
 	}
 }
