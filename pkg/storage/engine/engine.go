@@ -145,7 +145,7 @@ type MVCCIterator interface {
 	// in the buffer.
 	MVCCScan(
 		start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-	) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error)
+	) (MVCCScanResult, error)
 }
 
 // IterOptions contains options used to create an Iterator.

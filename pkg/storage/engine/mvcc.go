@@ -2264,7 +2264,7 @@ func MVCCDeleteRange(
 		prevSeqTxn.Sequence--
 		scanTxn = prevSeqTxn
 	}
-	kvs, resumeSpan, _, err := MVCCScan(
+	res, err := MVCCScan(
 		ctx, rw, key, endKey, max, scanTs, MVCCScanOptions{Txn: scanTxn})
 	if err != nil {
 		return nil, nil, 0, err
@@ -2273,9 +2273,9 @@ func MVCCDeleteRange(
 	buf := newPutBuffer()
 	iter := rw.NewIterator(IterOptions{Prefix: true})
 
-	for i := range kvs {
+	for i := range res.KVs {
 		err = mvccPutInternal(
-			ctx, rw, iter, ms, kvs[i].Key, timestamp, nil, txn, buf, nil)
+			ctx, rw, iter, ms, res.KVs[i].Key, timestamp, nil, txn, buf, nil)
 		if err != nil {
 			break
 		}
@@ -2285,14 +2285,14 @@ func MVCCDeleteRange(
 	buf.release()
 
 	var keys []roachpb.Key
-	if returnKeys && err == nil && len(kvs) > 0 {
-		keys = make([]roachpb.Key, len(kvs))
-		for i := range kvs {
-			keys[i] = kvs[i].Key
+	if returnKeys && err == nil && len(res.KVs) > 0 {
+		keys = make([]roachpb.Key, len(res.KVs))
+		for i := range res.KVs {
+			keys[i] = res.KVs[i].Key
 		}
 	}
 
-	return keys, resumeSpan, int64(len(kvs)), err
+	return keys, res.ResumeSpan, res.NumKeys, err
 }
 
 func mvccScanToBytes(
@@ -2302,16 +2302,16 @@ func mvccScanToBytes(
 	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
+) (MVCCScanResult, error) {
 	if len(endKey) == 0 {
-		return nil, 0, nil, nil, emptyKeyError()
+		return MVCCScanResult{}, emptyKeyError()
 	}
 	if err := opts.validate(); err != nil {
-		return nil, 0, nil, nil, err
+		return MVCCScanResult{}, err
 	}
 	if max == 0 {
-		resumeSpan = &roachpb.Span{Key: key, EndKey: endKey}
-		return nil, 0, resumeSpan, nil, nil
+		resumeSpan := &roachpb.Span{Key: key, EndKey: endKey}
+		return MVCCScanResult{ResumeSpan: resumeSpan}, nil
 	}
 
 	// If the iterator has a specialized implementation, defer to that.
@@ -2336,24 +2336,30 @@ func mvccScanToBytes(
 	}
 
 	mvccScanner.init(opts.Txn)
-	resumeSpan, err = mvccScanner.scan()
+
+	var res MVCCScanResult
+	var err error
+	res.ResumeSpan, err = mvccScanner.scan()
 
 	if err != nil {
-		return nil, 0, nil, nil, err
+		return MVCCScanResult{}, err
 	}
 
-	kvData = mvccScanner.results.finish()
-	numKVs = mvccScanner.results.count
+	res.KVData = mvccScanner.results.finish()
+	res.NumKeys = mvccScanner.results.count
+	res.NumBytes = mvccScanner.results.bytes
 
-	intents, err = buildScanIntents(mvccScanner.intents.Repr())
+	res.Intents, err = buildScanIntents(mvccScanner.intents.Repr())
 	if err != nil {
-		return nil, 0, nil, nil, err
+		return MVCCScanResult{}, err
 	}
 
-	if !opts.Inconsistent && len(intents) > 0 {
-		return nil, 0, resumeSpan, nil, &roachpb.WriteIntentError{Intents: intents}
+	if !opts.Inconsistent && len(res.Intents) > 0 {
+		// TODO(tbg): don't return resume span. See:
+		// https://github.com/cockroachdb/cockroach/pull/44542
+		return MVCCScanResult{ResumeSpan: res.ResumeSpan}, &roachpb.WriteIntentError{Intents: res.Intents}
 	}
-	return
+	return res, nil
 }
 
 // mvccScanToKvs converts the raw key/value pairs returned by Iterator.MVCCScan
@@ -2365,12 +2371,15 @@ func mvccScanToKvs(
 	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	kvData, numKVs, resumeSpan, intents, err := mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
+) (MVCCScanResult, error) {
+	res, err := mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
 	if err != nil {
-		return nil, nil, nil, err
+		return MVCCScanResult{}, err
 	}
-	kvs := make([]roachpb.KeyValue, numKVs)
+	res.KVs = make([]roachpb.KeyValue, res.NumKeys)
+	kvData := res.KVData
+	res.KVData = nil
+
 	var k MVCCKey
 	var rawBytes []byte
 	var i int
@@ -2378,15 +2387,15 @@ func mvccScanToKvs(
 		for len(data) > 0 {
 			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
 			if err != nil {
-				return nil, nil, nil, err
+				return MVCCScanResult{}, err
 			}
-			kvs[i].Key = k.Key
-			kvs[i].Value.RawBytes = rawBytes
-			kvs[i].Value.Timestamp = k.Timestamp
+			res.KVs[i].Key = k.Key
+			res.KVs[i].Value.RawBytes = rawBytes
+			res.KVs[i].Value.Timestamp = k.Timestamp
 			i++
 		}
 	}
-	return kvs, resumeSpan, intents, err
+	return res, err
 }
 
 func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
@@ -2455,6 +2464,21 @@ func (opts *MVCCScanOptions) validate() error {
 	return nil
 }
 
+// MVCCScanResult groups the values returned from an MVCCScan operation. Depending
+// on the operation invoked, KVData or KVs is populated, but never both.
+type MVCCScanResult struct {
+	KVData  [][]byte
+	KVs     []roachpb.KeyValue
+	NumKeys int64
+	// NumBytes is the number of bytes this scan result accrued in terms of the
+	// MVCCScanOptions.TargetBytes parameter. This roughly measures the bytes
+	// used for encoding the uncompressed kv pairs contained in the result.
+	NumBytes int64
+
+	ResumeSpan *roachpb.Span
+	Intents    []roachpb.Intent
+}
+
 // MVCCScan scans the key range [key, endKey) in the provided reader up to some
 // maximum number of results in ascending order. If it hits max, it returns a
 // "resume span" to be used in the next call to this function. If the limit is
@@ -2499,7 +2523,7 @@ func MVCCScan(
 	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
+) (MVCCScanResult, error) {
 	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, max, timestamp, opts)
@@ -2513,7 +2537,7 @@ func MVCCScanToBytes(
 	max int64,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) ([][]byte, int64, *roachpb.Span, []roachpb.Intent, error) {
+) (MVCCScanResult, error) {
 	iter := reader.NewIterator(IterOptions{LowerBound: key, UpperBound: endKey})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, max, timestamp, opts)
@@ -2539,12 +2563,17 @@ func MVCCIterate(
 
 	for {
 		const maxKeysPerScan = 1000
-		kvs, resume, newIntents, err := mvccScanToKvs(
+		res, err := mvccScanToKvs(
 			ctx, iter, key, endKey, maxKeysPerScan, timestamp, opts)
 		if err != nil {
 			switch tErr := err.(type) {
 			case *roachpb.WriteIntentError:
 				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
+				//
+				// TODO(tbg): this code must have been written that way to use res.Intents even
+				// on this error, but this is already not populated any more by mvccScanToKvs.
+				// Explicitly zero out `res` here after:
+				// https://github.com/cockroachdb/cockroach/pull/44542.
 				if wiErr == nil {
 					wiErr = tErr
 				} else {
@@ -2556,16 +2585,16 @@ func MVCCIterate(
 			}
 		}
 
-		if len(newIntents) > 0 {
+		if len(res.Intents) > 0 {
 			if intents == nil {
-				intents = newIntents
+				intents = res.Intents
 			} else {
-				intents = append(intents, newIntents...)
+				intents = append(intents, res.Intents...)
 			}
 		}
 
-		for i := range kvs {
-			done, err := f(kvs[i])
+		for i := range res.KVs {
+			done, err := f(res.KVs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -2578,13 +2607,13 @@ func MVCCIterate(
 			}
 		}
 
-		if resume == nil {
+		if res.ResumeSpan == nil {
 			break
 		}
 		if opts.Reverse {
-			endKey = resume.EndKey
+			endKey = res.ResumeSpan.EndKey
 		} else {
-			key = resume.Key
+			key = res.ResumeSpan.Key
 		}
 	}
 

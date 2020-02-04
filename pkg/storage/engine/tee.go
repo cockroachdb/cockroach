@@ -1223,45 +1223,48 @@ func kvDataEqual(ctx context.Context, data1 []byte, data2 [][]byte) bool {
 // MVCCScan implements the MVCCIterator interface.
 func (t *TeeEngineIter) MVCCScan(
 	start, end roachpb.Key, max int64, timestamp hlc.Timestamp, opts MVCCScanOptions,
-) (kvData [][]byte, numKVs int64, resumeSpan *roachpb.Span, intents []roachpb.Intent, err error) {
-	kvData1, numKvs1, resumeSpan1, intents1, err := mvccScanToBytes(t.ctx, t.iter1, start, end, max, timestamp, opts)
-	kvData2, numKvs2, resumeSpan2, intents2, err2 := mvccScanToBytes(t.ctx, t.iter2, start, end, max, timestamp, opts)
+) (MVCCScanResult, error) {
+	res1, err := mvccScanToBytes(t.ctx, t.iter1, start, end, max, timestamp, opts)
+	res2, err2 := mvccScanToBytes(t.ctx, t.iter2, start, end, max, timestamp, opts)
 
-	if err = fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
-		return nil, 0, nil, nil, err
+	if err := fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return MVCCScanResult{}, err
 	}
 
-	if numKvs1 != numKvs2 {
-		log.Fatalf(t.ctx, "mismatching number of KVs returned from engines MVCCScan: %d != %d", numKvs1, numKvs2)
+	if res1.NumKeys != res2.NumKeys {
+		log.Fatalf(t.ctx, "mismatching number of KVs returned from engines MVCCScan: %d != %d", res1.NumKeys, res2.NumKeys)
+	}
+	if res1.NumBytes != res2.NumBytes {
+		log.Fatalf(t.ctx, "mismatching NumBytes returned from engines MVCCScan: %d != %d", res1.NumBytes, res2.NumBytes)
 	}
 
 	// At least one side is expected to have only one contiguous slice inside it.
 	// This lets us simplify the checking code below.
 	equal := false
-	if len(kvData2) != 1 && len(kvData1) != 1 {
+	if len(res1.KVData) != 1 && len(res2.KVData) != 1 {
 		panic("unsupported multiple-slice result from both iterators in MVCCScan")
-	} else if len(kvData2) == 1 {
+	} else if len(res2.KVData) == 1 {
 		// Swap the two slices so that the first argument is the one with only one
 		// slice inside it.
-		equal = kvDataEqual(t.ctx, kvData2[0], kvData1)
+		equal = kvDataEqual(t.ctx, res2.KVData[0], res1.KVData)
 	} else {
-		equal = kvDataEqual(t.ctx, kvData1[0], kvData2)
+		equal = kvDataEqual(t.ctx, res1.KVData[0], res2.KVData)
 	}
 
 	if !equal {
-		log.Fatalf(t.ctx, "mismatching kv data returned by engines: %v != %v", kvData1, kvData2)
+		log.Fatalf(t.ctx, "mismatching kv data returned by engines: %v != %v", res1.KVData, res2.KVData)
 	}
 
-	if !resumeSpan1.Equal(resumeSpan2) {
-		log.Fatalf(t.ctx, "mismatching resume spans returned by engines: %v != %v", resumeSpan1, resumeSpan2)
+	if !res1.ResumeSpan.Equal(res2.ResumeSpan) {
+		log.Fatalf(t.ctx, "mismatching resume spans returned by engines: %v != %v", res1.ResumeSpan, res2.ResumeSpan)
 	}
-	if len(intents1) != len(intents2) {
-		log.Fatalf(t.ctx, "mismatching number of intents returned by engines: %v != %v", len(intents1), len(intents2))
+	if len(res1.Intents) != len(res2.Intents) {
+		log.Fatalf(t.ctx, "mismatching number of intents returned by engines: %v != %v", len(res1.Intents), len(res2.Intents))
 	}
-	for i := range intents1 {
-		if !intents1[i].Equal(intents2[i]) {
-			log.Fatalf(t.ctx, "mismatching intents returned by engines: %v != %v", intents1[i], intents2[i])
+	for i := range res1.Intents {
+		if !res1.Intents[i].Equal(res2.Intents[i]) {
+			log.Fatalf(t.ctx, "mismatching intents returned by engines: %v != %v", res1.Intents[i], res2.Intents[i])
 		}
 	}
-	return kvData1, numKvs1, resumeSpan1, intents1, err
+	return res1, err
 }

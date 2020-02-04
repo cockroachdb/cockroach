@@ -63,9 +63,11 @@ with ts=300,0 k=a end=z targetbytes=10000000
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: 108 bytes (target 10000000)
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: 108 bytes (target 10000000)
 
 
 run ok
@@ -86,12 +88,14 @@ scan     k=a end=z ts=300,0 targetbytes=1
 ----
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: resume span ["aa","z")
+scan: 34 bytes (target 1)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34
 ----
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: resume span ["aa","z")
+scan: 34 bytes (target 34)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35
@@ -99,6 +103,7 @@ scan     k=a end=z ts=300,0 targetbytes=35
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["e","z")
+scan: 74 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=74
@@ -106,6 +111,7 @@ scan     k=a end=z ts=300,0 targetbytes=74
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["e","z")
+scan: 74 bytes (target 74)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=75
@@ -113,6 +119,7 @@ scan     k=a end=z ts=300,0 targetbytes=75
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
+scan: 108 bytes (target 75)
 
 # Works just the same when not starting on an existing key.
 run ok
@@ -120,6 +127,7 @@ scan     k=b end=z ts=300 targetbytes=1
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["e","z")
+scan: 40 bytes (target 1)
 
 # Reverse scans.
 
@@ -128,12 +136,14 @@ scan     k=a end=z ts=300,0 targetbytes=1 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: resume span ["a","c\x00")
+scan: 34 bytes (target 1)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=34 reverse=true
 ----
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: resume span ["a","c\x00")
+scan: 34 bytes (target 34)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
@@ -141,6 +151,7 @@ scan     k=a end=z ts=300,0 targetbytes=35 reverse=true
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["a","aa\x00")
+scan: 74 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
@@ -148,6 +159,7 @@ scan     k=a end=z ts=300,0 targetbytes=74 reverse=true
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["a","aa\x00")
+scan: 74 bytes (target 74)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=75 reverse=true
@@ -155,6 +167,7 @@ scan     k=a end=z ts=300,0 targetbytes=75 reverse=true
 scan: "e" -> /BYTES/mnopqr @0.000000123,45
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: 108 bytes (target 75)
 
 # Scans that return the tombstone (at aa@250,1). The kv pair at a has 34 bytes,
 # aa has 24 (just a key).
@@ -164,6 +177,7 @@ scan     k=a end=z ts=300,0 targetbytes=34 tombstones=true
 ----
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: resume span ["aa","z")
+scan: 34 bytes (target 34)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
@@ -171,6 +185,7 @@ scan     k=a end=z ts=300,0 targetbytes=35 tombstones=true
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: resume span ["c","z")
+scan: 58 bytes (target 35)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
@@ -178,6 +193,7 @@ scan     k=a end=z ts=300,0 targetbytes=58 tombstones=true
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: resume span ["c","z")
+scan: 58 bytes (target 58)
 
 run ok
 scan     k=a end=z ts=300,0 targetbytes=59 tombstones=true
@@ -186,6 +202,7 @@ scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["e","z")
+scan: 98 bytes (target 59)
 
 # ... and similarly in reverse.
 
@@ -194,6 +211,7 @@ scan    k=a end=d ts=300,0 targetbytes=40 reverse=true tombstones=true
 ----
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: resume span ["a","aa\x00")
+scan: 40 bytes (target 40)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
@@ -201,6 +219,7 @@ scan    k=a end=d ts=300,0 targetbytes=41 reverse=true tombstones=true
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: resume span ["a","a\x00")
+scan: 64 bytes (target 41)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
@@ -208,6 +227,7 @@ scan    k=a end=d ts=300,0 targetbytes=64 reverse=true tombstones=true
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: resume span ["a","a\x00")
+scan: 64 bytes (target 64)
 
 run ok
 scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true
@@ -215,3 +235,4 @@ scan    k=a end=d ts=300,0 targetbytes=65 reverse=true tombstones=true
 scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: "a" -> /BYTES/abcdef @0.000000123,45
+scan: 98 bytes (target 65)
