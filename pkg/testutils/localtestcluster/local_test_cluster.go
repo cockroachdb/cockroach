@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,6 +54,7 @@ type LocalTestCluster struct {
 	Clock             *hlc.Clock
 	Gossip            *gossip.Gossip
 	Eng               engine.Engine
+	RaftEng           raftstorage.Engine
 	Store             *storage.Store
 	StoreTestingKnobs *storage.StoreTestingKnobs
 	DBContext         *client.DBContext
@@ -120,6 +122,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Eng = engine.NewInMem(ambient.AnnotateCtx(context.Background()),
 		engine.DefaultStorageEngine, roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
+	ltc.RaftEng = raftstorage.Wrap(ltc.Eng)
 
 	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 
@@ -176,7 +179,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	ltc.Store = storage.NewStore(ctx, cfg, ltc.Eng, nodeDesc)
+	ltc.Store = storage.NewStore(ctx, cfg, ltc.Eng, ltc.RaftEng, nodeDesc)
 
 	var initialValues []roachpb.KeyValue
 	var splits []roachpb.RKey
@@ -194,6 +197,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	if err := storage.WriteInitialClusterData(
 		ctx,
 		ltc.Eng,
+		raftstorage.Wrap(ltc.Eng),
 		initialValues,
 		cluster.BinaryServerVersion,
 		1, /* numStores */

@@ -289,7 +289,7 @@ func (r *Replica) evaluateWriteBatch(
 			if !etArg.Commit {
 				clonedTxn.Status = roachpb.ABORTED
 				batch.Close()
-				batch = r.store.Engine().NewBatch()
+				batch = r.Engine().NewBatch()
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
@@ -353,7 +353,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			*ms = goldenMS
 			batch.Close()
 		}
-		batch = r.store.Engine().NewBatch()
+		batch = r.Engine().NewBatch()
 		var opLogger *engine.OpLoggerBatch
 		if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 			// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled

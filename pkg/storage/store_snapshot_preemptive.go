@@ -278,7 +278,7 @@ func (s *Store) processPreemptiveSnapshotRequest(
 		needTombstone := r.mu.state.Desc.NextReplicaID != 0
 		r.mu.Unlock()
 
-		appliedIndex, _, err := r.raftMu.stateLoader.LoadAppliedIndex(ctx, r.store.Engine())
+		appliedIndex, _, err := r.raftMu.stateLoader.LoadAppliedIndex(ctx, r.Engine())
 		if err != nil {
 			return roachpb.NewError(err)
 		}
@@ -294,7 +294,7 @@ func (s *Store) processPreemptiveSnapshotRequest(
 		preemptiveSnapshotRaftGroupID := uint64(snapHeader.RaftMessageRequest.FromReplica.ReplicaID)
 		raftGroup, err := raft.NewRawNode(
 			newRaftConfig(
-				raft.Storage((*replicaRaftStorage)(r)),
+				raft.Storage(replicaRaftStorage{r}),
 				preemptiveSnapshotRaftGroupID,
 				// We pass the "real" applied index here due to subtleties
 				// arising in the case in which Raft discards the snapshot:

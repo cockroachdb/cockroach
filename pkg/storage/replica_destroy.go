@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,12 +76,14 @@ func (r *Replica) preDestroyRaftMuLocked(
 	ctx context.Context,
 	reader engine.Reader,
 	writer engine.Writer,
+	raftReader raftstorage.Reader,
+	raftWriter raftstorage.Writer,
 	nextReplicaID roachpb.ReplicaID,
 	clearRangeIDLocalOnly bool,
 	mustUseClearRange bool,
 ) error {
 	desc := r.Desc()
-	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
+	err := clearRangeData(desc, reader, writer, raftReader, raftWriter, clearRangeIDLocalOnly, mustUseClearRange)
 	if err != nil {
 		return err
 	}
@@ -134,11 +137,15 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.Engine().NewWriteOnlyBatch()
 	defer batch.Close()
+	raftBatch := r.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 	clearRangeIDLocalOnly := !r.IsInitialized()
 	if err := r.preDestroyRaftMuLocked(
 		ctx,
 		r.Engine(),
 		batch,
+		r.RaftEngine(),
+		raftBatch,
 		nextReplicaID,
 		clearRangeIDLocalOnly,
 		false, /* mustUseClearRange */

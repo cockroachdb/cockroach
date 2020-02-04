@@ -67,7 +67,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
 	// designed.
-	rw := r.store.Engine().NewReadOnly()
+	rw := r.Engine().NewReadOnly()
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}

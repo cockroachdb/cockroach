@@ -34,11 +34,13 @@ type SSTSnapshotStorage struct {
 }
 
 // NewSSTSnapshotStorage creates a new SST snapshot storage.
-func NewSSTSnapshotStorage(engine engine.Engine, limiter *rate.Limiter) SSTSnapshotStorage {
+func NewSSTSnapshotStorage(
+	engine engine.Engine, dir string, limiter *rate.Limiter,
+) SSTSnapshotStorage {
 	return SSTSnapshotStorage{
 		engine:  engine,
 		limiter: limiter,
-		dir:     filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
+		dir:     filepath.Join(engine.GetAuxiliaryDir(), dir),
 	}
 }
 

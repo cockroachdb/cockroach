@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -183,7 +184,7 @@ func createTestStoreWithOpts(
 			t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(ctx, storeCfg, eng, nodeDesc)
+	store := storage.NewStore(ctx, storeCfg, eng, raftstorage.Wrap(eng), nodeDesc)
 	if !opts.dontBootstrap {
 		var kvs []roachpb.KeyValue
 		var splits []roachpb.RKey
@@ -199,6 +200,7 @@ func createTestStoreWithOpts(
 		err := storage.WriteInitialClusterData(
 			ctx,
 			eng,
+			raftstorage.Wrap(eng),
 			kvs, /* initialValues */
 			cluster.BinaryServerVersion,
 			1 /* numStores */, splits, storeCfg.Clock.PhysicalNow())
@@ -882,6 +884,7 @@ func (m *multiTestContext) addStore(idx int) {
 		err := storage.WriteInitialClusterData(
 			ctx,
 			eng,
+			raftstorage.Wrap(eng),
 			kvs, /* initialValues */
 			cluster.BinaryServerVersion,
 			len(m.engines), splits, cfg.Clock.PhysicalNow())
@@ -889,7 +892,7 @@ func (m *multiTestContext) addStore(idx int) {
 			m.t.Fatal(err)
 		}
 	}
-	store := storage.NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := storage.NewStore(ctx, cfg, eng, raftstorage.Wrap(eng), &roachpb.NodeDescriptor{NodeID: nodeID})
 	if err := store.Start(ctx, stopper); err != nil {
 		m.t.Fatal(err)
 	}
@@ -1038,7 +1041,10 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg.NodeLiveness = m.nodeLivenesses[i]
 	cfg.StorePool = m.storePools[i]
 	ctx := context.Background()
-	store := storage.NewStore(ctx, cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	store := storage.NewStore(
+		ctx, cfg, m.engines[i], raftstorage.Wrap(m.engines[i]),
+		&roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
+	)
 	m.stores[i] = store
 
 	// Need to start the store before adding it so that the store ID is initialized.

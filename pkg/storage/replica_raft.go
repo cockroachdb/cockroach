@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -605,11 +606,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed via the "distinct" batch
 	// which passes the reads through to the underlying DB.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
+	raftBatch := r.RaftEngine().NewWriteOnlyBatch()
+	defer raftBatch.Close()
 
 	// We know that all of the writes from here forward will be to distinct keys.
-	writer := batch.Distinct()
+	raftWriter := raftBatch.Distinct()
+
+	// TODO(irfansharif): Log entries are no longer sent with snapshots as of
+	// v19.2, we can/should delete all code around the receiving of log entries
+	// in snapshots before v20.1 is cut.
+
 	prevLastIndex := lastIndex
 	if len(rd.Entries) > 0 {
 		// All of the entries are appended to distinct keys, returning a new
@@ -621,7 +627,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		raftLogSize += sideLoadedEntriesSize
 		if lastIndex, lastTerm, raftLogSize, err = r.append(
-			ctx, writer, lastIndex, lastTerm, raftLogSize, thinEntries,
+			ctx, raftWriter, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)
@@ -639,12 +645,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		//
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
-		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.SetHardState(ctx, raftWriter, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 	}
-	writer.Close()
+	raftWriter.Close()
 	// Synchronously commit the batch with the Raft log entries and Raft hard
 	// state as we're promising not to lose this data.
 	//
@@ -659,7 +665,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	commitStart := timeutil.Now()
-	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
+	if err := raftBatch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
@@ -1329,7 +1335,7 @@ func (r *Replica) withRaftGroupLocked(
 	if r.mu.internalRaftGroup == nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
-			raft.Storage((*replicaRaftStorage)(r)),
+			raft.Storage(replicaRaftStorage{r}),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
@@ -1602,14 +1608,17 @@ func (r *Replica) acquireMergeLock(
 
 // handleTruncatedStateBelowRaft is called when a Raft command updates the truncated
 // state. This isn't 100% trivial for two reasons:
-// - in 19.1 we're making the TruncatedState key unreplicated, so there's a migration
-// - we're making use of the above by not sending the Raft log in snapshots (the truncated
-//   state effectively determines the first index of the log, which requires it to be unreplicated).
-//   Updates to the HardState are sent out by a leaseholder truncating the log based on its local
-//   knowledge. For example, the leader might have a log 10..100 and truncates to 50, and will send
-//   out a TruncatedState with Index 50 to that effect. However, some replicas may not even have log
-//   entries that old, and must make sure to ignore this update to the truncated state, as it would
-//   otherwise clobber their "newer" truncated state.
+// - in 19.1 we're making the TruncatedState key unreplicated, so there's a
+//   migration
+// - we're making use of the above by not sending the Raft log in snapshots (the
+//   truncated state effectively determines the first index of the log, which
+//   requires it to be unreplicated). Updates to the HardState are sent out by a
+//   leaseholder truncating the log based on its local knowledge. For example,
+//   the leader might have a log 10..100 and truncates to 50, and will send out
+//   a TruncatedState with Index 50 to that effect. However, some replicas may
+//   not even have log entries that old, and must make sure to ignore this
+//   update to the truncated state, as it would otherwise clobber their "newer"
+//   truncated state.
 //
 // The returned boolean tells the caller whether to apply the truncated state's
 // side effects, which means replacing the in-memory TruncatedState and applying
@@ -1621,7 +1630,10 @@ func handleTruncatedStateBelowRaft(
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,
 	loader stateloader.StateLoader,
 	readWriter engine.ReadWriter,
+	raftRW raftstorage.ReadWriter,
 ) (_apply bool, _ error) {
+	// TODO(irfansharif): Refactor the code below to use stateloader hooks.
+
 	// If this is a log truncation, load the resulting unreplicated or legacy
 	// replicated truncated state (in that order). If the migration is happening
 	// in this command, the result will be an empty message. In steady state
@@ -1630,7 +1642,7 @@ func handleTruncatedStateBelowRaft(
 	// Either way, we'll update it below.
 	//
 	// See VersionUnreplicatedRaftTruncatedState for details.
-	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter)
+	truncStatePostApply, truncStateIsLegacy, err := loader.LoadRaftTruncatedState(ctx, readWriter, raftRW)
 	if err != nil {
 		return false, errors.Wrap(err, "loading truncated state")
 	}
@@ -1652,39 +1664,39 @@ func handleTruncatedStateBelowRaft(
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := readWriter.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+		if err := raftRW.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
 			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
 		}
 	}
 
-	if !truncStateIsLegacy {
-		if truncStatePostApply.Index < newTruncatedState.Index {
-			// There are two cases here (though handled just the same). In the
-			// first case, the Raft command has just deleted the legacy
-			// replicated truncated state key as part of the migration (so
-			// truncStateIsLegacy is now false for the first time and
-			// truncStatePostApply is zero) and we need to atomically write the
-			// new, unreplicated, key. Or we've already migrated earlier, in
-			// which case truncStatePostApply equals the current value of the
-			// new key (which wasn't touched by the batch), and we need to
-			// overwrite it if this truncation "moves it forward".
-
-			if err := engine.MVCCPutProto(
-				ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
-				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
-			); err != nil {
-				return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")
-			}
-			// Have migrated and this new truncated state is moving us forward.
-			// Tell caller that we applied it and that so should they.
-			return true, nil
-		}
-		// Have migrated, but this truncated state moves the existing one
-		// backwards, so instruct caller to not update in-memory state.
-		return false, nil
+	if truncStateIsLegacy {
+		// Haven't migrated yet, don't ever discard the update.
+		return true, nil
 	}
-	// Haven't migrated yet, don't ever discard the update.
-	return true, nil
+
+	if truncStatePostApply.Index < newTruncatedState.Index {
+		// There are two cases here (though handled just the same). In the
+		// first case, the Raft command has just deleted the legacy
+		// replicated truncated state key as part of the migration (so
+		// truncStateIsLegacy is now false for the first time and
+		// truncStatePostApply is zero) and we need to atomically write the
+		// new, unreplicated, key. Or we've already migrated earlier, in
+		// which case truncStatePostApply equals the current value of the
+		// new key (which wasn't touched by the batch), and we need to
+		// overwrite it if this truncation "moves it forward".
+		if err := engine.MVCCPutProto(
+			ctx, raftRW, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
+			hlc.Timestamp{}, nil /* txn */, newTruncatedState,
+		); err != nil {
+			return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")
+		}
+		// Have migrated and this new truncated state is moving us forward.
+		// Tell caller that we applied it and that so should they.
+		return true, nil
+	}
+	// Have migrated, but this truncated state moves the existing one
+	// backwards, so instruct caller to not update in-memory state.
+	return false, nil
 }
 
 // ComputeRaftLogSize computes the size (in bytes) of the Raft log from the
@@ -1694,11 +1706,14 @@ func handleTruncatedStateBelowRaft(
 //
 // The sideloaded storage may be nil, in which case it is treated as empty.
 func ComputeRaftLogSize(
-	ctx context.Context, rangeID roachpb.RangeID, reader engine.Reader, sideloaded SideloadStorage,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	raftReader raftstorage.Reader,
+	sideloaded SideloadStorage,
 ) (int64, error) {
 	prefix := keys.RaftLogPrefix(rangeID)
 	prefixEnd := prefix.PrefixEnd()
-	iter := reader.NewIterator(engine.IterOptions{
+	iter := raftReader.NewIterator(engine.IterOptions{
 		LowerBound: prefix,
 		UpperBound: prefixEnd,
 	})

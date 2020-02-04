@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -581,7 +582,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	stopper.AddCloser(eng)
 	cfg := TestStoreConfig(clock)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	store := NewStore(ctx, cfg, eng, &node)
+	store := NewStore(ctx, cfg, eng, raftstorage.Wrap(eng), &node)
 	// Fake an ident because this test doesn't want to start the store
 	// but without an Ident there will be NPEs.
 	store.Ident = &roachpb.StoreIdent{

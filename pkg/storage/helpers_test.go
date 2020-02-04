@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -239,12 +240,14 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
-func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
+func (r *Replica) AssertState(
+	ctx context.Context, reader engine.Reader, raftReader raftstorage.Reader,
+) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.assertStateLocked(ctx, reader)
+	r.assertStateLocked(ctx, reader, raftReader)
 }
 
 func (r *Replica) RaftLock() {

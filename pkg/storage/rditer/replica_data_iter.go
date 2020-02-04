@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
@@ -47,6 +48,39 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 		MakeRangeIDLocalKeyRange(d.RangeID, false /* replicatedOnly */),
 		MakeRangeLocalKeyRange(d),
 		MakeUserKeyRange(d),
+	}
+}
+
+// MakeRaftEngineKeyRanges returns the four key ranges that are stored in the
+// dedicated raft engine for the given Range. These are (in sorted order):
+//
+// 1. Raft HardState
+// 2. Raft last index
+// 3. Raft log
+// 4. Raft TruncatedState
+func MakeRaftEngineKeyRanges(rangeID roachpb.RangeID) []KeyRange { // lint:ignore U1001
+	hskey := keys.RaftHardStateKey(rangeID)
+	likey := keys.RaftLastIndexKey(rangeID)
+	rlpkey := keys.RaftLogPrefix(rangeID)
+	tskey := keys.RaftTruncatedStateKey(rangeID)
+
+	return []KeyRange{
+		{
+			Start: engine.MakeMVCCMetadataKey(hskey),
+			End:   engine.MakeMVCCMetadataKey(hskey.PrefixEnd()),
+		},
+		{
+			Start: engine.MakeMVCCMetadataKey(likey),
+			End:   engine.MakeMVCCMetadataKey(likey.PrefixEnd()),
+		},
+		{
+			Start: engine.MakeMVCCMetadataKey(rlpkey),
+			End:   engine.MakeMVCCMetadataKey(rlpkey.PrefixEnd()),
+		},
+		{
+			Start: engine.MakeMVCCMetadataKey(tskey),
+			End:   engine.MakeMVCCMetadataKey(tskey.PrefixEnd()),
+		},
 	}
 }
 
@@ -110,12 +144,12 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	}
 }
 
-// NewReplicaDataIterator creates a ReplicaDataIterator for the given replica.
+// NewReplicaDataIterator creates a ReplicaDataIterator for the given replica's
+// primary engine data.
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, reader engine.Reader, replicatedOnly bool, seekEnd bool,
 ) *ReplicaDataIterator {
 	it := reader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
-
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = MakeReplicatedKeyRanges
@@ -144,6 +178,21 @@ func (ri *ReplicaDataIterator) seekEnd() {
 	ri.curIndex = len(ri.ranges) - 1
 	ri.it.SeekLT(ri.ranges[ri.curIndex].End)
 	ri.retreat()
+}
+
+// NewReplicaRaftDataIterator creates a ReplicaDataIterator for the given
+// replica's raft engine data.
+func NewReplicaRaftDataIterator(
+	d *roachpb.RangeDescriptor, raftReader raftstorage.Reader,
+) *ReplicaDataIterator {
+	it := raftReader.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	ri := &ReplicaDataIterator{
+		ranges: MakeRaftEngineKeyRanges(d.RangeID),
+		it:     it,
+	}
+	ri.it.SeekGE(ri.ranges[ri.curIndex].Start)
+	ri.advance()
+	return ri
 }
 
 // Close the underlying iterator.

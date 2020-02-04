@@ -2853,7 +2853,6 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	// We will be testing the SSTs written on store2's engine.
 	var eng engine.Engine
 	ctx := context.Background()
@@ -2863,7 +2862,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	storeCfg.TestingKnobs.BeforeSnapshotSSTIngestion = func(
 		inSnap storage.IncomingSnapshot,
 		snapType storage.SnapshotRequest_Type,
-		sstNames []string,
+		SSTs []string,
+		raftSSTs []string,
 	) error {
 		// Only verify snapshots of type RAFT and on the range under exercise
 		// (range 2). Note that the keys of range 2 aren't verified in this
@@ -2874,30 +2874,44 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if snapType != storage.SnapshotRequest_RAFT || inSnap.State.Desc.RangeID != roachpb.RangeID(2) {
 			return nil
 		}
-		// The seven SSTs we are expecting to ingest are in the following order:
+		// The nine SSTs we are expecting to ingest are listed below.
+		//
+		// For the primary engine, in order:
 		// 1. Replicated range-id local keys of the range in the snapshot.
 		// 2. Range-local keys of the range in the snapshot.
 		// 3. User keys of the range in the snapshot.
-		// 4. Unreplicated range-id local keys of the range in the snapshot.
+		// 4. SST to clear range-id local keys of the subsumed replica with
+		//    RangeID 3 (
 		// 5. SST to clear range-id local keys of the subsumed replica with
-		//    RangeID 3.
-		// 6. SST to clear range-id local keys of the subsumed replica with
 		//    RangeID 4.
-		// 7. SST to clear the user keys of the subsumed replicas.
+		// 6. SST to clear the user keys of the subsumed replicas.
+		//
+		// For the raft engine, in order:
+		// 1. Unreplicated range-id local keys of the range in the snapshot.
+		// 2. SST to clear range-id local keys of the subsumed replica with
+		//    RangeID 3
+		// 3. SST to clear range-id local keys of the subsumed replica with
+		//    RangeID 4.
 		//
 		// NOTE: There are no range-local keys in [d, /Max) in the store we're
 		// sending a snapshot to, so we aren't expecting an SST to clear those
 		// keys.
-		if len(sstNames) != 7 {
-			return errors.Errorf("expected to ingest 7 SSTs, got %d SSTs", len(sstNames))
+		if len(SSTs) != 6 {
+			return errors.Errorf("expected to ingest 6 SSTs into primary engine, got %d SST(s)", len(SSTs))
+		}
+		if len(raftSSTs) != 3 {
+			return errors.Errorf("expected to ingest 3 SST into raft engine, got %d SST(s)", len(raftSSTs))
 		}
 
-		// Only verify the SSTs of the subsumed replicas (the last three SSTs) by
-		// constructing the expected SST and ensuring that they are byte-by-byte
-		// equal. This verification ensures that the SSTs have the same tombstones
-		// and range deletion tombstones.
+		// Only verify the SSTs of the subsumed replicas (the last three SSTs)
+		// in the primary engine by constructing the expected SST and ensuring
+		// that they are byte-by-byte equal. This verification ensures that the
+		// SSTs have the same tombstones and range deletion tombstones.
+		//
+		// TODO(irfansharif): Verify the SSTs of the raft engine separately once
+		// we're using different underlying engines.
 		var expectedSSTs [][]byte
-		sstNames = sstNames[4:]
+		SSTs = SSTs[3:]
 
 		// Range-id local range of subsumed replicas.
 		for _, rangeID := range []roachpb.RangeID{roachpb.RangeID(3), roachpb.RangeID(4)} {
@@ -2938,13 +2952,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())
 
-		for i := range sstNames {
-			actualSST, err := eng.ReadFile(sstNames[i])
+		for i := range SSTs {
+			actualSST, err := eng.ReadFile(SSTs[i])
 			if err != nil {
 				return err
 			}
 			if !bytes.Equal(actualSST, expectedSSTs[i]) {
-				return errors.Errorf("contents of %s were unexpected", sstNames[i])
+				return errors.Errorf("contents of %s were unexpected", SSTs[i])
 			}
 		}
 		return nil

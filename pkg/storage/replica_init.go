@@ -105,7 +105,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.mu.proposalBuf.Init((*replicaProposer)(r))
 
 	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
+	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), r.RaftEngine(), desc); err != nil {
 		return err
 	}
 
@@ -129,7 +129,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine(), r.RaftEngine())
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		log.Fatalf(ctx, "attempting to initialize a replica which has ID %d with ID %d",
 			r.mu.replicaID, replicaID)
 	}
-	r.assertStateLocked(ctx, r.store.Engine())
+	r.assertStateLocked(ctx, r.Engine(), r.RaftEngine())
 	return nil
 }
 
@@ -196,7 +196,7 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(
 		replicaID,
 		ssBase,
 		r.store.limiters.BulkIOWriteRate,
-		r.store.engine,
+		r.Engine(),
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}

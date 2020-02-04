@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -625,6 +626,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 		if err != nil {
 			t.Fatal(err)
 		}
+		tc.raftEngine = raftstorage.Wrap(tc.engine)
 		stopper.AddCloser(tc.engine)
 	}
 	defer stopper.Stop(context.TODO())
@@ -777,6 +779,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 	cleanup, eng := newEngine(t)
 	tc.engine = eng
+	tc.raftEngine = raftstorage.Wrap(eng)
 	defer cleanup()
 	defer eng.Close()
 
@@ -879,7 +882,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			}
 			rsl := stateloader.Make(tc.repl.RangeID)
 			entries, err := entries(
-				ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
+				ctx, rsl, tc.store.Engine(), tc.store.RaftEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
 				ss, sideloadedIndex, sideloadedIndex+1, 1<<20,
 			)
 			if err != nil {

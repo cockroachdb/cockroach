@@ -300,6 +300,24 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 			Value: iter.Value(),
 		})
 	}
+
+	if debugCtx.replicated {
+		return nil
+	}
+
+	raftIter := rditer.NewReplicaRaftDataIterator(&desc, db)
+	defer raftIter.Close()
+	for ; ; raftIter.Next() {
+		if ok, err := raftIter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		storage.PrintKeyValue(engine.MVCCKeyValue{
+			Key:   raftIter.Key(),
+			Value: raftIter.Value(),
+		})
+	}
 	return nil
 }
 

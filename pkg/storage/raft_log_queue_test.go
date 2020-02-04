@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -848,7 +849,8 @@ func TestTruncateLogRecompute(t *testing.T) {
 	defer eng.Close()
 
 	tc := testContext{
-		engine: eng,
+		engine:     eng,
+		raftEngine: raftstorage.Wrap(eng),
 	}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true

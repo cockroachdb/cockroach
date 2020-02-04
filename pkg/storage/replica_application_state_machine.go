@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/apply"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -338,7 +339,8 @@ func (sm *replicaStateMachine) NewBatch(ephemeral bool) apply.Batch {
 	b := &sm.batch
 	b.r = r
 	b.sm = sm
-	b.batch = r.store.engine.NewBatch()
+	b.batch = r.Engine().NewBatch()
+	b.raftBatch = r.RaftEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
 	b.state.Stats = &b.stats
@@ -359,8 +361,16 @@ type replicaAppBatch struct {
 	r  *Replica
 	sm *replicaStateMachine
 
-	// batch accumulates writes implied by the raft entries in this batch.
+	// batch accumulates writes implied by the raft entries in this batch
+	// destined for the data engine.
 	batch engine.Batch
+	// raftBatch accumulates writes implied by the raft entries in this batch
+	// destined for the raft engine. We only use this batch when we're applying
+	// merges, splits, log truncations and change replica commands.
+	//
+	// TODO(irfansharif): We don't actually use it for log truncations yet, but
+	// we will once we have local truncations (#36262).
+	raftBatch raftstorage.Batch
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -520,6 +530,17 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 	} else {
 		b.mutations += mutations
 	}
+	// NB: wb.Data, when the generating command is a split, contains RHS
+	// truncated state. The truncated state is intended for the raft storage
+	// engine, but we also let it sit here in the main data engine (it gets
+	// cleared out during replica destroy procedures). When the underlying
+	// engines for both Raft and non-Raft storage is one and the same, the
+	// "dual" writes still give us the behavior we expect.
+	//
+	// TODO(irfansharif): The orphaned write above was deemed acceptable
+	// assuming that it's costly to reconstruct a batch without the one specific
+	// key. Is this true? What if we "revert" the RHS truncated state write in
+	// the batch using SingleDelete? Is this worth doing?
 	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
 		return wrapWithNonDeterministicFailure(err, "unable to apply WriteBatch")
 	}
@@ -586,7 +607,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		copied := addSSTablePreApply(
 			ctx,
 			b.r.store.cfg.Settings,
-			b.r.store.engine,
+			b.r.Engine(),
 			b.r.raftMu.sideloaded,
 			cmd.ent.Term,
 			cmd.ent.Index,
@@ -613,7 +634,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.batch, res.Split.SplitTrigger, b.r)
+		splitPreApply(ctx, b.batch, b.raftBatch, res.Split.SplitTrigger, b.r)
 	}
 
 	if merge := res.Merge; merge != nil {
@@ -640,7 +661,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		const clearRangeIDLocalOnly = true
 		const mustClearRange = false
 		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
+			ctx, b.batch, b.batch, b.raftBatch, b.raftBatch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
 		}
@@ -648,7 +669,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 
 	if res.State != nil && res.State.TruncatedState != nil {
 		if apply, err := handleTruncatedStateBelowRaft(
-			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch, b.raftBatch,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
 		} else if !apply {
@@ -703,6 +724,8 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			ctx,
 			b.batch,
 			b.batch,
+			b.raftBatch,
+			b.raftBatch,
 			change.NextReplicaID(),
 			false, /* clearRangeIDLocalOnly */
 			false, /* mustUseClearRange */
@@ -812,6 +835,20 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 			return err
 		}
 	}
+
+	if !b.raftBatch.Empty() {
+		// Given we're only ever using raftBatch when apply merges, splits,
+		// log truncations and change replica commands, we only synchronize when
+		// needed.
+		//
+		// NB: We need to be sure to commit the raft data before we do the
+		// changes for the data engine.
+		if err := b.raftBatch.Commit(true); err != nil {
+			return wrapWithNonDeterministicFailure(err, "unable to commit Raft entry batch")
+		}
+	}
+	b.raftBatch.Close()
+	b.raftBatch = nil
 
 	// Apply the write batch to RockDB. Entry application is done without
 	// syncing to disk. The atomicity guarantees of the batch and the fact that
@@ -931,6 +968,9 @@ func (b *replicaAppBatch) Close() {
 	if b.batch != nil {
 		b.batch.Close()
 	}
+	if b.raftBatch != nil {
+		b.raftBatch.Close()
+	}
 	*b = replicaAppBatch{}
 }
 
@@ -1010,7 +1050,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
 			sm.r.mu.Lock()
-			sm.r.assertStateLocked(ctx, sm.r.store.Engine())
+			sm.r.assertStateLocked(ctx, sm.r.Engine(), sm.r.RaftEngine())
 			sm.r.mu.Unlock()
 			sm.stats.stateAssertions++
 		}
