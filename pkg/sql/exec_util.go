@@ -1847,10 +1847,6 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.data.ForceSavepointRestart = val
 }
 
-func (m *sessionDataMutator) SetForceSplitAt(val bool) {
-	m.data.ForceSplitAt = val
-}
-
 func (m *sessionDataMutator) SetPrimaryKeyChangesEnabled(val bool) {
 	m.data.PrimaryKeyChangesEnabled = val
 }

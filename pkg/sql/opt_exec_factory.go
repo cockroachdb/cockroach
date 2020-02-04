@@ -1854,7 +1854,6 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	}
 
 	return &splitNode{
-		force:          ef.planner.SessionData().ForceSplitAt,
 		tableDesc:      &index.Table().(*optTable).desc.TableDescriptor,
 		index:          index.(*optIndex).desc,
 		rows:           input.(planNode),

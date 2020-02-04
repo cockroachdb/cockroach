@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -52,12 +51,7 @@ func QueryTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-	// TODO(nvanbenschoten): old clusters didn't attach header timestamps to
-	// QueryTxn requests, so only perform this check for clusters that will
-	// always attach a valid timestamps.
-	checkHeaderTS := cluster.Version.IsActive(
-		ctx, cArgs.EvalCtx.ClusterSettings(), cluster.VersionQueryTxnTimestamp)
-	if h.Timestamp.Less(args.Txn.WriteTimestamp) && checkHeaderTS {
+	if h.Timestamp.Less(args.Txn.WriteTimestamp) {
 		// This condition must hold for the timestamp cache access to be safe.
 		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.WriteTimestamp)
 	}
