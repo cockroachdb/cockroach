@@ -30,8 +30,9 @@ enum ClosureTxnType {
 message ClosureTxnOperation {
   string txn_id = 1 [(gogoproto.customname) = 'TxnID'];
   repeated Operation ops = 2 [(gogoproto.nullable) = false];
-  Result result = 3 [(gogoproto.nullable) = false];
+  BatchOperation commit_in_batch = 3;
   ClosureTxnType type = 4;
+  Result result = 5 [(gogoproto.nullable) = false];
 }
 
 message GetOperation {

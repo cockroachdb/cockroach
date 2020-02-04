@@ -55,7 +55,7 @@ func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
 func (a *Applier) applyOp(ctx context.Context, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation, *PutOperation, *BatchOperation:
-		applyBatchOp(ctx, a.db, op)
+		applyClientOp(ctx, a.db, op)
 	case *SplitOperation:
 		err := a.db.AdminSplit(ctx, o.Key, o.Key, hlc.MaxTimestamp)
 		o.Result = resultError(ctx, err)
@@ -66,9 +66,17 @@ func (a *Applier) applyOp(ctx context.Context, op *Operation) {
 		txnErr := a.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			for i := range o.Ops {
 				op := &o.Ops[i]
-				applyBatchOp(ctx, txn, op)
+				applyClientOp(ctx, txn, op)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := op.Result(); r.Type == ResultType_Error {
+					return errors.DecodeError(ctx, *r.Err)
+				}
+			}
+			if o.CommitInBatch != nil {
+				b := txn.NewBatch()
+				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)
+				// The KV api disallows use of a txn after an operation on it errors.
+				if r := o.CommitInBatch.Result; r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
 				}
 			}
@@ -93,7 +101,7 @@ type clientI interface {
 	Run(context.Context, *client.Batch) error
 }
 
-func applyBatchOp(ctx context.Context, db clientI, op *Operation) {
+func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
 		result, err := db.Get(ctx, o.Key)
@@ -114,43 +122,52 @@ func applyBatchOp(ctx context.Context, db clientI, op *Operation) {
 		o.Result = resultError(ctx, err)
 	case *BatchOperation:
 		b := &client.Batch{}
-		for i := range o.Ops {
-			switch subO := o.Ops[i].GetValue().(type) {
-			case *GetOperation:
-				b.Get(subO.Key)
-			case *PutOperation:
-				b.Put(subO.Key, subO.Value)
-			default:
-				panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
-			}
-		}
-		runErr := db.Run(ctx, b)
-		o.Result = resultError(ctx, runErr)
-		for i := range o.Ops {
-			switch subO := o.Ops[i].GetValue().(type) {
-			case *GetOperation:
-				if b.Results[i].Err != nil {
-					subO.Result = resultError(ctx, b.Results[i].Err)
-				} else {
-					subO.Result.Type = ResultType_Value
-					result := b.Results[i].Rows[0]
-					if result.Value != nil {
-						if value, err := result.Value.GetBytes(); err != nil {
-							panic(errors.Wrapf(err, "decoding %x", result.Value.RawBytes))
-						} else {
-							subO.Result.Value = value
-						}
-					}
-				}
-			case *PutOperation:
-				err := b.Results[i].Err
-				subO.Result = resultError(ctx, err)
-			default:
-				panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
-			}
-		}
+		applyBatchOp(ctx, b, db.Run, o)
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
+	}
+}
+
+func applyBatchOp(
+	ctx context.Context,
+	b *client.Batch,
+	runFn func(context.Context, *client.Batch) error,
+	o *BatchOperation,
+) {
+	for i := range o.Ops {
+		switch subO := o.Ops[i].GetValue().(type) {
+		case *GetOperation:
+			b.Get(subO.Key)
+		case *PutOperation:
+			b.Put(subO.Key, subO.Value)
+		default:
+			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
+		}
+	}
+	runErr := runFn(ctx, b)
+	o.Result = resultError(ctx, runErr)
+	for i := range o.Ops {
+		switch subO := o.Ops[i].GetValue().(type) {
+		case *GetOperation:
+			if b.Results[i].Err != nil {
+				subO.Result = resultError(ctx, b.Results[i].Err)
+			} else {
+				subO.Result.Type = ResultType_Value
+				result := b.Results[i].Rows[0]
+				if result.Value != nil {
+					if value, err := result.Value.GetBytes(); err != nil {
+						panic(errors.Wrapf(err, "decoding %x", result.Value.RawBytes))
+					} else {
+						subO.Result.Value = value
+					}
+				}
+			}
+		case *PutOperation:
+			err := b.Results[i].Err
+			subO.Result = resultError(ctx, err)
+		default:
+			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
+		}
 	}
 }
 

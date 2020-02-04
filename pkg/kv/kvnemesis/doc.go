@@ -25,7 +25,6 @@
 // TODO
 // - Validate read only transactions
 // - CPut/InitPut/Increment/Delete
-// - CommitInBatch
 // - DeleteRange/ClearRange/RevertRange/Scan/ReverseScan
 // - ChangeReplicas/TransferLease
 // - ExportRequest

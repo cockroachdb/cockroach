@@ -52,6 +52,11 @@ const (
 	// inside a closure handed to client.DB.Txn.
 	OpPClosureTxn OpP = "ClosureTxn"
 
+	// OpPClosureTxnCommitInBatch is the same as OpPBatch except that the
+	// transaction is committed by client.Txn.CommitInBatch instead of by db.Txn
+	// after running the closure.
+	OpPClosureTxnCommitInBatch OpP = "ClosureTxnCommitInBatch"
+
 	// OpPSplitNew is an operation that Splits at a key that has never previously
 	// been a split point.
 	OpPSplitNew OpP = "SplitNew"
@@ -161,6 +166,7 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	g.registerClientOps(allowed)
 	allowed[OpPBatch] = randBatch
 	allowed[OpPClosureTxn] = randClosureTxn
+	allowed[OpPClosureTxnCommitInBatch] = randClosureTxnCommitInBatch
 	allowed[OpPSplitNew] = randSplitNew
 	allowed[OpPMergeNotSplit] = randMergeNotSplit
 
@@ -275,6 +281,13 @@ func randClosureTxn(g *generator, rng *rand.Rand) Operation {
 	return closureTxn(typ, ops...)
 }
 
+func randClosureTxnCommitInBatch(g *generator, rng *rand.Rand) Operation {
+	o := randClosureTxn(g, rng)
+	o.ClosureTxn.CommitInBatch = randBatch(g, rng).Batch
+	o.ClosureTxn.Type = ClosureTxnType_Commit
+	return o
+}
+
 func (g *generator) getNextValue() string {
 	value := `v-` + strconv.Itoa(g.nextValue)
 	g.nextValue++
@@ -310,8 +323,20 @@ func batch(ops ...Operation) Operation {
 	return Operation{Batch: &BatchOperation{Ops: ops}}
 }
 
+func opSlice(ops ...Operation) []Operation {
+	return ops
+}
+
 func closureTxn(typ ClosureTxnType, ops ...Operation) Operation {
 	return Operation{ClosureTxn: &ClosureTxnOperation{Ops: ops, Type: typ}}
+}
+
+func closureTxnCommitInBatch(commitInBatch []Operation, ops ...Operation) Operation {
+	o := closureTxn(ClosureTxnType_Commit, ops...)
+	if len(commitInBatch) > 0 {
+		o.ClosureTxn.CommitInBatch = &BatchOperation{Ops: commitInBatch}
+	}
+	return o
 }
 
 func get(key string) Operation {
