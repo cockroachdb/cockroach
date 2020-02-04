@@ -133,14 +133,14 @@ func prepareSplitDescs(
 	}
 
 	leftDesc.IncrementGeneration()
-	maybeMarkGenerationComparable(ctx, st, leftDesc)
+	leftDesc.GenerationComparable = proto.Bool(true)
 	leftDesc.EndKey = splitKey
 
 	// Set the generation of the right hand side descriptor to match that of the
 	// (updated) left hand side. See the comment on the field for an explanation
 	// of why generations are useful.
 	rightDesc.Generation = leftDesc.Generation
-	maybeMarkGenerationComparable(ctx, st, rightDesc)
+	rightDesc.GenerationComparable = proto.Bool(true)
 
 	setStickyBit(rightDesc, expiration)
 	return leftDesc, rightDesc
@@ -657,7 +657,7 @@ func (r *Replica) AdminMerge(
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
-		maybeMarkGenerationComparable(ctx, r.ClusterSettings(), &updatedLeftDesc)
+		updatedLeftDesc.GenerationComparable = proto.Bool(true)
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
@@ -1502,13 +1502,8 @@ func prepareChangeReplicasTrigger(
 ) (*roachpb.ChangeReplicasTrigger, error) {
 	updatedDesc := *desc
 	updatedDesc.SetReplicas(desc.Replicas().DeepCopy())
-
-	generationComparableEnabled := cluster.Version.IsActive(
-		ctx, store.ClusterSettings(), cluster.VersionGenerationComparable)
-	if generationComparableEnabled {
-		updatedDesc.IncrementGeneration()
-		updatedDesc.GenerationComparable = proto.Bool(true)
-	}
+	updatedDesc.IncrementGeneration()
+	updatedDesc.GenerationComparable = proto.Bool(true)
 
 	var added, removed []roachpb.ReplicaDescriptor
 	if !chgs.leaveJoint() {
@@ -2533,14 +2528,4 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
 	}
 	return resp, err
-}
-
-// maybeMarkGenerationComparable sets GenerationComparable if the cluster is at
-// a high enough version such that GenerationComparable won't be lost.
-func maybeMarkGenerationComparable(
-	ctx context.Context, st *cluster.Settings, desc *roachpb.RangeDescriptor,
-) {
-	if cluster.Version.IsActive(ctx, st, cluster.VersionGenerationComparable) {
-		desc.GenerationComparable = proto.Bool(true)
-	}
 }

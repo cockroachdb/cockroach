@@ -10,30 +10,29 @@ func _() {
 	var x [1]struct{}
 	_ = x[Version19_1-0]
 	_ = x[VersionStart19_2-1]
-	_ = x[VersionGenerationComparable-2]
-	_ = x[VersionLearnerReplicas-3]
-	_ = x[VersionTopLevelForeignKeys-4]
-	_ = x[VersionAtomicChangeReplicasTrigger-5]
-	_ = x[VersionAtomicChangeReplicas-6]
-	_ = x[VersionTableDescModificationTimeFromMVCC-7]
-	_ = x[VersionPartitionedBackup-8]
-	_ = x[Version19_2-9]
-	_ = x[VersionStart20_1-10]
-	_ = x[VersionContainsEstimatesCounter-11]
-	_ = x[VersionChangeReplicasDemotion-12]
-	_ = x[VersionSecondaryIndexColumnFamilies-13]
-	_ = x[VersionNamespaceTableWithSchemas-14]
-	_ = x[VersionProtectedTimestamps-15]
-	_ = x[VersionPrimaryKeyChanges-16]
-	_ = x[VersionAuthLocalAndTrustRejectMethods-17]
-	_ = x[VersionPrimaryKeyColumnsOutOfFamilyZero-18]
-	_ = x[VersionRootPassword-19]
-	_ = x[VersionNoExplicitForeignKeyIndexIDs-20]
+	_ = x[VersionLearnerReplicas-2]
+	_ = x[VersionTopLevelForeignKeys-3]
+	_ = x[VersionAtomicChangeReplicasTrigger-4]
+	_ = x[VersionAtomicChangeReplicas-5]
+	_ = x[VersionTableDescModificationTimeFromMVCC-6]
+	_ = x[VersionPartitionedBackup-7]
+	_ = x[Version19_2-8]
+	_ = x[VersionStart20_1-9]
+	_ = x[VersionContainsEstimatesCounter-10]
+	_ = x[VersionChangeReplicasDemotion-11]
+	_ = x[VersionSecondaryIndexColumnFamilies-12]
+	_ = x[VersionNamespaceTableWithSchemas-13]
+	_ = x[VersionProtectedTimestamps-14]
+	_ = x[VersionPrimaryKeyChanges-15]
+	_ = x[VersionAuthLocalAndTrustRejectMethods-16]
+	_ = x[VersionPrimaryKeyColumnsOutOfFamilyZero-17]
+	_ = x[VersionRootPassword-18]
+	_ = x[VersionNoExplicitForeignKeyIndexIDs-19]
 }
 
-const _VersionKey_name = "Version19_1VersionStart19_2VersionGenerationComparableVersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackupVersion19_2VersionStart20_1VersionContainsEstimatesCounterVersionChangeReplicasDemotionVersionSecondaryIndexColumnFamiliesVersionNamespaceTableWithSchemasVersionProtectedTimestampsVersionPrimaryKeyChangesVersionAuthLocalAndTrustRejectMethodsVersionPrimaryKeyColumnsOutOfFamilyZeroVersionRootPasswordVersionNoExplicitForeignKeyIndexIDs"
+const _VersionKey_name = "Version19_1VersionStart19_2VersionLearnerReplicasVersionTopLevelForeignKeysVersionAtomicChangeReplicasTriggerVersionAtomicChangeReplicasVersionTableDescModificationTimeFromMVCCVersionPartitionedBackupVersion19_2VersionStart20_1VersionContainsEstimatesCounterVersionChangeReplicasDemotionVersionSecondaryIndexColumnFamiliesVersionNamespaceTableWithSchemasVersionProtectedTimestampsVersionPrimaryKeyChangesVersionAuthLocalAndTrustRejectMethodsVersionPrimaryKeyColumnsOutOfFamilyZeroVersionRootPasswordVersionNoExplicitForeignKeyIndexIDs"
 
-var _VersionKey_index = [...]uint16{0, 11, 27, 54, 76, 102, 136, 163, 203, 227, 238, 254, 285, 314, 349, 381, 407, 431, 468, 507, 526, 561}
+var _VersionKey_index = [...]uint16{0, 11, 27, 49, 75, 109, 136, 176, 200, 211, 227, 258, 287, 322, 354, 380, 404, 441, 480, 499, 534}
 
 func (i VersionKey) String() string {
 	if i < 0 || i >= VersionKey(len(_VersionKey_index)-1) {
