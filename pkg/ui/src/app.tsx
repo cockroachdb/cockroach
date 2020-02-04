@@ -51,7 +51,9 @@ import StatementDetails from "src/views/statements/statementDetails";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
-
+import "nvd3/build/nv.d3.min.css";
+import "react-select/dist/react-select.css";
+import "antd/es/tooltip/style/css";
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
 // redactions list in src/redux/analytics.ts.
