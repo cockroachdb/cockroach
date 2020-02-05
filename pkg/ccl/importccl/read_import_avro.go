@@ -77,7 +77,7 @@ func nativeToDatum(
 	case string:
 		// We allow strings to be specified for any column, as
 		// long as we can convert the string value to the target type.
-		return tree.ParseStringAs(targetT, v, evalCtx)
+		return sqlbase.ParseDatumStringAs(targetT, v, evalCtx)
 	case map[string]interface{}:
 		for _, aT := range avroT {
 			// The value passed in is an avro schema.  Extract
