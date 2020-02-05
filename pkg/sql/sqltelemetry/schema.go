@@ -30,9 +30,15 @@ func SchemaNewTypeCounter(t string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.new_column_type." + t)
 }
 
-// CreateTempTableCounter is to be incremented every time a TEMP TABLE
-// has been created.
-var CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")
+var (
+	// CreateTempTableCounter is to be incremented every time a TEMP TABLE
+	// has been created.
+	CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")
+
+	// CreateTempViewCounter is to be incremented every time a TEMP VIEW
+	// has been created.
+	CreateTempViewCounter = telemetry.GetCounterOnce("sql.schema.create_temp_view")
+)
 
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.

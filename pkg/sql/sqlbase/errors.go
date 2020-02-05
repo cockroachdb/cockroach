@@ -110,6 +110,11 @@ func NewRelationAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateRelation, "relation %q already exists", name)
 }
 
+// IsRelationAlreadyExistsError checks whether this is an error for a preexisting relation.
+func IsRelationAlreadyExistsError(err error) bool {
+	return errHasCode(err, pgcode.DuplicateRelation)
+}
+
 // NewWrongObjectTypeError creates a wrong object type error.
 func NewWrongObjectTypeError(name tree.NodeFormatter, desiredObjType string) error {
 	return pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",

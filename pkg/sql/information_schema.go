@@ -1194,6 +1194,7 @@ CREATE TABLE information_schema.table_constraints (
 	INITIALLY_DEFERRED STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
 				db *sqlbase.DatabaseDescriptor,
@@ -1225,7 +1226,35 @@ CREATE TABLE information_schema.table_constraints (
 						return err
 					}
 				}
-				return nil
+
+				// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
+				// NULL column constraints in information_schema.check_constraints.
+				// Cockroach doesn't track these constraints as check constraints,
+				// but we can pull them off of the table's column descriptors.
+				colNum := 0
+				return forEachColumnInTable(table, func(col *sqlbase.ColumnDescriptor) error {
+					colNum++
+					// NOT NULL column constraints are implemented as a CHECK in postgres.
+					conNameStr := tree.NewDString(fmt.Sprintf(
+						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), defaultOid(table.ID), colNum,
+					))
+					if !col.Nullable {
+						if err := addRow(
+							dbNameStr,                // constraint_catalog
+							scNameStr,                // constraint_schema
+							conNameStr,               // constraint_name
+							dbNameStr,                // table_catalog
+							scNameStr,                // table_schema
+							tbNameStr,                // table_name
+							tree.NewDString("CHECK"), // constraint_type
+							yesOrNoDatum(false),      // is_deferrable
+							yesOrNoDatum(false),      // initially_deferred
+						); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
 			})
 	},
 }
