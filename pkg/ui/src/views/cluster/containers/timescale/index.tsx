@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Divider } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
@@ -25,6 +24,7 @@ import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/compo
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
+import { Divider } from "antd";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.
@@ -198,15 +198,18 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
 
   setQueryParamsByDates = (duration: moment.Duration, dateEnd: moment.Moment) => {
     const { location, history } = this.props;
+    const { pathname, search } = location;
+    const urlParams = new URLSearchParams(search);
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
     const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
-    const params = new URLSearchParams(location.search);
-    params.set("start", start);
-    params.set("end", moment.utc(dateEnd).format("X"));
+
+    urlParams.set("start", start);
+    urlParams.set("end", moment.utc(dateEnd).format("X"));
+
     history.push({
-      pathname: location.pathname,
-      search: `?${params.toString()}`,
+      pathname,
+      search: urlParams.toString(),
     });
   }
 
