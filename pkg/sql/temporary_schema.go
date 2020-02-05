@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -139,10 +141,14 @@ func cleanupSchemaObjects(
 	a := UncachedPhysicalAccessor{}
 
 	// TODO(andrei): We might want to accelerate the deletion of this data.
-	var tables TableNames
-	var views TableNames
+	var tables sqlbase.IDs
+	var views sqlbase.IDs
+	var sequences sqlbase.IDs
+
+	descsByID := make(map[sqlbase.ID]*TableDescriptor, len(tbNames))
+	tblNamesByID := make(map[sqlbase.ID]tree.TableName, len(tbNames))
 	for _, tbName := range tbNames {
-		desc, err := a.GetObjectDesc(
+		objDesc, err := a.GetObjectDesc(
 			ctx,
 			txn,
 			settings,
@@ -152,34 +158,117 @@ func cleanupSchemaObjects(
 		if err != nil {
 			return err
 		}
-		if desc.TableDesc().ViewQuery != "" {
-			views = append(views, tbName)
+		desc := objDesc.TableDesc()
+
+		descsByID[desc.ID] = desc
+		tblNamesByID[desc.ID] = tbName
+
+		if desc.SequenceOpts != nil {
+			sequences = append(sequences, desc.ID)
+		} else if desc.ViewQuery != "" {
+			views = append(views, desc.ID)
 		} else {
-			tables = append(tables, tbName)
+			tables = append(tables, desc.ID)
 		}
 	}
 
-	// Drop views before tables to avoid deleting required dependencies.
 	for _, toDelete := range []struct {
+		// typeName is the type of table being deleted, e.g. view, table, sequence
 		typeName string
-		tbNames  TableNames
+		// ids represents which ids we wish to remove.
+		ids sqlbase.IDs
+		// preHook is used to perform any operations needed before calling
+		// delete on all the given ids.
+		preHook func(sqlbase.ID) error
 	}{
-		{"VIEW", views},
-		{"TABLE", tables},
+		// Drop views before tables to avoid deleting required dependencies.
+		{"VIEW", views, nil},
+		{"TABLE", tables, nil},
+		// Drop sequences after tables, because then we reduce the amount of work
+		// that may be needed to drop indices.
+		{
+			"SEQUENCE",
+			sequences,
+			func(id sqlbase.ID) error {
+				desc := descsByID[id]
+				// For any dependent tables, we need to drop the sequence dependencies.
+				// This can happen if a permanent table references a temporary table.
+				for _, d := range desc.DependedOnBy {
+					// We have already cleaned out anything we are depended on if we've seen
+					// the descriptor already.
+					if _, ok := descsByID[d.ID]; ok {
+						continue
+					}
+					dTableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, d.ID)
+					if err != nil {
+						return err
+					}
+					db, err := sqlbase.GetDatabaseDescFromID(ctx, txn, dTableDesc.GetParentID())
+					if err != nil {
+						return err
+					}
+					schema, err := schema.ResolveNameByID(
+						ctx,
+						txn,
+						dTableDesc.GetParentID(),
+						dTableDesc.GetParentSchemaID(),
+					)
+					if err != nil {
+						return err
+					}
+					dependentColIDs := util.MakeFastIntSet()
+					for _, colID := range d.ColumnIDs {
+						dependentColIDs.Add(int(colID))
+					}
+					for _, col := range dTableDesc.Columns {
+						if dependentColIDs.Contains(int(col.ID)) {
+							tbName := tree.MakeTableNameWithSchema(
+								tree.Name(db.Name),
+								tree.Name(schema),
+								tree.Name(dTableDesc.Name),
+							)
+							_, err = execQuery(
+								ctx,
+								"delete-temp-dependent-col",
+								txn,
+								fmt.Sprintf(
+									"ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
+									tbName.FQString(),
+									tree.NameString(col.Name),
+								),
+							)
+							if err != nil {
+								return err
+							}
+						}
+					}
+				}
+				return nil
+			},
+		},
 	} {
-		if len(toDelete.tbNames) > 0 {
+		if len(toDelete.ids) > 0 {
+			if toDelete.preHook != nil {
+				for _, id := range toDelete.ids {
+					if err := toDelete.preHook(id); err != nil {
+						return err
+					}
+				}
+			}
+
 			var query strings.Builder
 			query.WriteString("DROP ")
 			query.WriteString(toDelete.typeName)
 
-			for i, tbName := range toDelete.tbNames {
+			for i, id := range toDelete.ids {
+				tbName := tblNamesByID[id]
 				if i != 0 {
 					query.WriteString(",")
 				}
-				query.WriteString(
-					fmt.Sprintf(" %s.%s.%s", tbName.CatalogName, tbName.SchemaName, tbName.Table()),
-				)
+				query.WriteString(" ")
+				query.WriteString(tbName.FQString())
 			}
+			query.WriteString(" CASCADE")
 			_, err = execQuery(ctx, "delete-temp-"+toDelete.typeName, txn, query.String())
 			if err != nil {
 				return err
