@@ -47,7 +47,7 @@ type JSONHistoBucket struct {
 	NumRange      int64   `json:"num_range"`
 	DistinctRange float64 `json:"distinct_range"`
 	// UpperBound is the string representation of a datum; parsable with
-	// tree.ParseStringAs.
+	// sqlbase.ParseDatumStringAs.
 	UpperBound string `json:"upper_bound"`
 }
 
@@ -108,7 +108,7 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := tree.ParseStringAs(colType, hb.UpperBound, evalCtx)
+		upperVal, err := sqlbase.ParseDatumStringAs(colType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}

@@ -218,11 +218,15 @@ func mysqlValueToDatum(
 					}
 				}
 			}
-			return tree.ParseStringAs(desired, s, evalContext)
+			// This uses ParseDatumStringAsWithRawBytes instead of ParseDatumStringAs since mysql emits
+			// raw byte strings that do not use the same escaping as our ParseBytes
+			// function expects, and the difference between ParseStringAs and
+			// ParseDatumStringAs is whether or not it attempts to parse bytes.
+			return sqlbase.ParseDatumStringAsWithRawBytes(desired, s, evalContext)
 		case mysql.IntVal:
-			return tree.ParseStringAs(desired, string(v.Val), evalContext)
+			return sqlbase.ParseDatumStringAs(desired, string(v.Val), evalContext)
 		case mysql.FloatVal:
-			return tree.ParseStringAs(desired, string(v.Val), evalContext)
+			return sqlbase.ParseDatumStringAs(desired, string(v.Val), evalContext)
 		case mysql.HexVal:
 			v, err := v.HexDecode()
 			return tree.NewDBytes(tree.DBytes(v)), err

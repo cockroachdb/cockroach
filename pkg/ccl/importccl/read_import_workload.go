@@ -89,7 +89,7 @@ func makeDatumFromColOffset(
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
-			return tree.ParseDatumStringAs(hint, str, evalCtx)
+			return sqlbase.ParseDatumStringAs(hint, str, evalCtx)
 		}
 	}
 	return nil, errors.Errorf(
