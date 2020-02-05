@@ -142,3 +142,60 @@ DROP VIEW view_on_temp; DROP VIEW view_on_permanent; DROP VIEW upgrade_temp_view
 
 statement ok
 DROP TABLE permanent_table; DROP TABLE temp_table
+
+# Tests for temporary sequences working as expected.
+subtest temp_sequences
+
+statement ok
+CREATE TEMP SEQUENCE temp_seq; CREATE TABLE a (a int DEFAULT nextval('temp_seq'))
+
+statement ok
+INSERT INTO a VALUES (default), (default), (100)
+
+query I
+SELECT * FROM a ORDER BY a
+----
+1
+2
+100
+
+# Permanent tables can reference temporary schemas.
+statement ok
+CREATE TABLE perm_table(a int DEFAULT nextval('pg_temp.temp_seq'))
+
+statement ok
+INSERT INTO perm_table VALUES (default), (default), (101)
+
+query I
+SELECT * FROM perm_table ORDER BY a
+----
+3
+4
+101
+
+statement ok
+ALTER TABLE a ALTER COLUMN a DROP DEFAULT
+
+statement error cannot drop sequence temp_seq because other objects depend on it
+DROP SEQUENCE pg_temp.temp_seq
+
+# Allow temporary tables to use serial for temporary schemas.
+statement ok
+SET experimental_serial_normalization='sql_sequence'
+
+statement ok
+CREATE TEMP TABLE ref_temp_table (a SERIAL)
+
+query I
+SELECT nextval('pg_temp.ref_temp_table_a_seq')
+----
+1
+
+statement ok
+DROP TABLE perm_table; DROP TABLE ref_temp_table
+
+statement ok
+DROP SEQUENCE pg_temp.temp_seq; DROP SEQUENCE pg_temp.ref_temp_table_a_seq; DROP TABLE a
+
+statement ok
+SET experimental_serial_normalization='rowid'

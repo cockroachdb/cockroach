@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -406,11 +407,27 @@ func mysqlTableToCockroach(
 		if p != nil {
 			params := p.RunParams(ctx)
 			desc, err = sql.MakeSequenceTableDesc(
-				seqName, opts, parentID, id, time, priv, &params,
+				seqName,
+				opts,
+				parentID,
+				keys.PublicSchemaID,
+				id,
+				time,
+				priv,
+				false, /* temporary */
+				&params,
 			)
 		} else {
 			desc, err = sql.MakeSequenceTableDesc(
-				seqName, opts, parentID, id, time, priv, nil, /* params */
+				seqName,
+				opts,
+				parentID,
+				keys.PublicSchemaID,
+				id,
+				time,
+				priv,
+				false, /* temporary */
+				nil,   /* params */
 			)
 		}
 		if err != nil {

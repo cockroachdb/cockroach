@@ -1532,7 +1532,15 @@ func makeTableDesc(
 			return ret, err
 		}
 		if seqName != nil {
-			if err := doCreateSequence(params, n.String(), seqDbDesc, seqName, seqOpts); err != nil {
+			if err := doCreateSequence(
+				params,
+				n.String(),
+				seqDbDesc,
+				parentSchemaID,
+				seqName,
+				temporary,
+				seqOpts,
+			); err != nil {
 				return ret, err
 			}
 		}
