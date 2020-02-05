@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2106,29 +2107,71 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	},
 }
 
-type namespaceKey struct {
-	parentID sqlbase.ID
-	name     string
+// NamespaceKey represents a key from the namespace table.
+type NamespaceKey struct {
+	ParentID sqlbase.ID
+	// ParentSchemaID is not populated for rows under system.deprecated_namespace.
+	// This table will no longer exist on 20.2 or later.
+	ParentSchemaID sqlbase.ID
+	Name           string
 }
 
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
-	namespace := map[sqlbase.ID]namespaceKey{}
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-		ctx, "get-all-names", p.txn,
-		`SELECT id, "parentID", name FROM system.namespace`,
+func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]NamespaceKey, error) {
+	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
+}
+
+// TestingGetAllNames is a wrapper for getAllNames.
+func TestingGetAllNames(
+	ctx context.Context, txn *client.Txn, executor *InternalExecutor,
+) (map[sqlbase.ID]NamespaceKey, error) {
+	return getAllNames(ctx, txn, executor)
+}
+
+// getAllNames is the testable implementation of getAllNames.
+// It is public so that it can be tested outside the sql package.
+func getAllNames(
+	ctx context.Context, txn *client.Txn, executor *InternalExecutor,
+) (map[sqlbase.ID]NamespaceKey, error) {
+	namespace := map[sqlbase.ID]NamespaceKey{}
+	rows, err := executor.Query(
+		ctx, "get-all-names", txn,
+		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
 	)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
-		namespace[sqlbase.ID(id)] = namespaceKey{
-			parentID: sqlbase.ID(parentID),
-			name:     string(name),
+		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
+		namespace[sqlbase.ID(id)] = NamespaceKey{
+			ParentID:       sqlbase.ID(parentID),
+			ParentSchemaID: sqlbase.ID(parentSchemaID),
+			Name:           string(name),
 		}
 	}
+
+	// Also get all rows from namespace_deprecated, and add to the namespace map
+	// if it is not already there yet.
+	// If a row exists in both here and namespace, only use the one from namespace.
+	// TODO(sqlexec): In 20.2, this can be removed.
+	deprecatedRows, err := executor.Query(
+		ctx, "get-all-names-deprecated-namespace", txn,
+		`SELECT id, "parentID", name FROM system.namespace_deprecated`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range deprecatedRows {
+		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
+		if _, ok := namespace[sqlbase.ID(id)]; !ok {
+			namespace[sqlbase.ID(id)] = NamespaceKey{
+				ParentID: sqlbase.ID(parentID),
+				Name:     string(name),
+			}
+		}
+	}
+
 	return namespace, nil
 }
 
@@ -2163,7 +2206,7 @@ CREATE TABLE crdb_internal.zones (
 		}
 		resolveID := func(id uint32) (parentID uint32, name string, err error) {
 			if entry, ok := namespace[sqlbase.ID(id)]; ok {
-				return uint32(entry.parentID), entry.name, nil
+				return uint32(entry.ParentID), entry.Name, nil
 			}
 			return 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))

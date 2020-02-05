@@ -8,26 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import _ from "lodash";
+import moment from "moment";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { Link, withRouter } from "react-router-dom";
-import _ from "lodash";
 import { connect } from "react-redux";
-import moment from "moment";
-
-import "./events.styl";
-
 import * as protos from "src/js/protos";
-
-import { AdminUIState } from "src/redux/state";
 import { refreshEvents } from "src/redux/apiReducers";
 import { eventsSelector, eventsValidSelector } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import { getEventDescription } from "src/util/events";
+import { DATE_FORMAT } from "src/util/format";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import "./events.styl";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
 
@@ -53,7 +51,7 @@ export interface EventRowProps {
 
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
   return {
-    fromNowString: TimestampToMoment(e.timestamp).fromNow()
+    fromNowString: TimestampToMoment(e.timestamp).format(DATE_FORMAT)
       .replace("second", "sec")
       .replace("minute", "min"),
     content: <span>{ getEventDescription(e) }</span>,

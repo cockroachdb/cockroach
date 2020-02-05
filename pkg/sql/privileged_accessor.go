@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -24,24 +25,34 @@ import (
 func (p *planner) LookupNamespaceID(
 	ctx context.Context, parentID int64, name string,
 ) (tree.DInt, bool, error) {
-	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"crdb-internal-get-descriptor-id",
-		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		query,
-		parentID,
-		name,
-	)
-	if err != nil {
-		return 0, false, err
+	var r tree.Datums
+	for _, tableName := range []string{"system.namespace", "system.namespace_deprecated"} {
+		query := fmt.Sprintf(
+			`SELECT id FROM %s WHERE "parentID" = $1 AND name = $2`,
+			tableName,
+		)
+		var err error
+		r, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+			ctx,
+			"crdb-internal-get-descriptor-id",
+			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			query,
+			parentID,
+			name,
+		)
+		if err != nil {
+			return 0, false, err
+		}
+		if r != nil {
+			break
+		}
 	}
 	if r == nil {
 		return 0, false, nil
 	}
 	id := tree.MustBeDInt(r[0])
-	if err = p.checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
+	if err := p.checkDescriptorPermissions(ctx, sqlbase.ID(id)); err != nil {
 		return 0, false, err
 	}
 	return id, true, nil

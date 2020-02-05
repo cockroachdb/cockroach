@@ -11,6 +11,7 @@
 import { Icon, Pagination } from "antd";
 import _ from "lodash";
 import moment from "moment";
+import { DATE_FORMAT } from "src/util/format";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -159,7 +160,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   renderLastCleared = () => {
     const { lastReset } = this.props;
-    return `Last cleared ${moment.utc(lastReset).fromNow()}`;
+    return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
   }
 
   renderStatements = () => {
