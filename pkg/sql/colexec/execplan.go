@@ -1247,9 +1247,16 @@ func planProjectionOperators(
 			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
 			// results of the WHEN into a single output vector, assembling the final
 			// result of the case projection.
+			whenTyped := when.Cond.(tree.TypedExpr)
+			whenResolvedType := whenTyped.ResolvedType()
+			whenColType := typeconv.FromColumnType(whenResolvedType)
+			if whenColType == coltypes.Unhandled {
+				return nil, resultIdx, ct, memUsed, errors.Newf(
+					"unsupported type %s in CASE WHEN expression", whenResolvedType.String())
+			}
 			var whenMemUsed, thenMemUsed int
 			caseOps[i], resultIdx, ct, whenMemUsed, err = planTypedMaybeNullProjectionOperators(
-				ctx, when.Cond.(tree.TypedExpr), t.ResolvedType(), ct, buffer)
+				ctx, whenTyped, whenResolvedType, ct, buffer)
 			if err != nil {
 				return nil, resultIdx, ct, 0, err
 			}
