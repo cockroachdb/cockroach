@@ -47,16 +47,24 @@ export interface DecommissionedNodeHistoryProps {
   dataSource: DecommissionedNodeStatusRow[];
 }
 
+const sortByNodeId = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
+  if (a.nodeId < b.nodeId) { return -1; }
+  if (a.nodeId > b.nodeId) { return 1; }
+  return 0;
+};
+
+const sortByDecommissioningDate = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
+  if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
+  if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
+  return 0;
+};
+
 export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "id",
       title: "ID",
-      sorter: (a, b) => {
-        if (a.nodeId < b.nodeId) { return -1; }
-        if (a.nodeId > b.nodeId) { return 1; }
-        return 0;
-      },
+      sorter: sortByNodeId,
       render: (_text, record) => (
         <Text>{`n${record.nodeId}`}</Text>
       ),
@@ -73,11 +81,7 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
     {
       key: "decommissionedOn",
       title: "Decommissioned On",
-      sorter: (a, b) => {
-        if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
-        if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
-        return 0;
-      },
+      sorter: sortByDecommissioningDate,
       render: (_text, record) => {
         return record.decommissionedDate.format("LL[ at ]h:mm a");
       },
