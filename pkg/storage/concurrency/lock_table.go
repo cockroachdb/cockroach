@@ -933,7 +933,7 @@ func (l *lockState) tryActiveWait(
 
 	// Lock is not empty.
 	waitForTxn, waitForTs := l.getLockerInfo()
-	if waitForTxn != nil && g.txn.ID == waitForTxn.ID {
+	if waitForTxn != nil && g.txn != nil && g.txn.ID == waitForTxn.ID {
 		// Already locked by this txn.
 		return false, nil
 	}
@@ -946,7 +946,7 @@ func (l *lockState) tryActiveWait(
 		}
 		waitForTxn = l.reservation.txn
 		waitForTs = l.reservation.ts
-		reservedBySelfTxn = g.txn.ID == waitForTxn.ID
+		reservedBySelfTxn = g.txn != nil && g.txn.ID == waitForTxn.ID
 	}
 
 	if sa == spanset.SpanReadOnly {
@@ -1095,10 +1095,19 @@ func (l *lockState) acquireLock(
 		}
 		return nil, nil
 	}
-	// Not already held, so may be reserved by this request.
+	// Not already held, so may be reserved by this request. There is also the
+	// possibility that some other request has broken this reservation because
+	// of a concurrent release but that is harmless since this request is
+	// holding latches and has proceeded to evaluation.
+	brokeReservation := false
 	if l.reservation != nil {
 		if l.reservation != g {
-			return nil, errors.Errorf("caller violated contract")
+			brokeReservation = true
+			qg := &queuedGuard{
+				guard:  l.reservation,
+				active: false,
+			}
+			l.queuedWriters.PushFront(qg)
 		}
 		if l.waitingReaders.Len() > 0 {
 			return nil, errors.Errorf("lockTable bug")
@@ -1118,8 +1127,7 @@ func (l *lockState) acquireLock(
 	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), g.txn.Sequence)
 
 	txnID := g.txn.ID
-	// No effect on queuedWriters from other txns, but if there are waiting
-	// requests from the same txn, they no longer need to wait.
+	// If there are waiting requests from the same txn, they no longer need to wait.
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		curr := e
@@ -1129,7 +1137,11 @@ func (l *lockState) acquireLock(
 			if qg.active {
 				doneWaiting = append(doneWaiting, g)
 				if g == l.distinguishedWaiter {
-					return nil, errors.Errorf("lockTable bug")
+					if brokeReservation {
+						l.distinguishedWaiter = nil
+					} else {
+						return nil, errors.Errorf("lockTable bug")
+					}
 				}
 			}
 			l.queuedWriters.Remove(curr)
@@ -1137,6 +1149,9 @@ func (l *lockState) acquireLock(
 			delete(g.mu.locks, l)
 			g.mu.Unlock()
 		}
+	}
+	if brokeReservation {
+		l.informActiveWaiters()
 	}
 	return doneWaiting, nil
 }
@@ -1488,13 +1503,16 @@ func (l *lockState) lockIsFree() (doneWaiting []*requestGuardImpl, gc bool, err 
 	l.reservation = g
 	l.queuedWriters.Remove(e)
 	if qg.active {
-		if g == l.distinguishedWaiter {
-			findDistinguished = true
-			l.distinguishedWaiter = nil
-		}
 		doneWaiting = append(doneWaiting, g)
 	}
 	// Else inactive waiter and is waiting elsewhere.
+
+	// Need to find a new distinguished waiter if the current distinguished is
+	// from the same transaction (possibly it is the request that has reserved).
+	if l.distinguishedWaiter != nil && l.distinguishedWaiter.txn.ID == g.txn.ID {
+		findDistinguished = true
+		l.distinguishedWaiter = nil
+	}
 
 	// Need to tell the remaining active waiting writers who they are waiting
 	// for.
@@ -1939,7 +1957,11 @@ func (t *lockTableImpl) String() string {
 			fmt.Fprintln(&buf, "   waiting readers:")
 			for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 				g := e.Value.(*requestGuardImpl)
-				fmt.Fprintf(&buf, "    req: %d, txn: %v\n", g.seqNum, g.txn.ID)
+				txnStr := "none"
+				if g.txn != nil {
+					txnStr = fmt.Sprintf("%v", g.txn.ID)
+				}
+				fmt.Fprintf(&buf, "    req: %d, txn: %s\n", g.seqNum, txnStr)
 			}
 		}
 		if l.queuedWriters.Len() > 0 {

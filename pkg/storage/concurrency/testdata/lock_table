@@ -948,3 +948,349 @@ done r=req11
 ----
 global: num=0
 local: num=0
+
+# Tests with non-transactional requests that triggered nil pointer
+# dereference bugs.
+
+request r=req13 txn=txn2 ts=8,12 spans=w@c
+----
+
+scan r=req13
+----
+start-waiting: false
+
+acquire r=req13 k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000008,12
+local: num=0
+
+request r=req14 txn=txn1 ts=9,0 spans=w@c
+----
+
+scan r=req14
+----
+start-waiting: true
+
+request r=req15 txn=none ts=10,12 spans=r@c
+----
+
+scan r=req15
+----
+start-waiting: true
+
+release txn=txn2 span=b,d
+----
+global: num=1
+ lock: "c"
+  res: req: 14, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+local: num=0
+
+done r=req15
+----
+global: num=1
+ lock: "c"
+  res: req: 14, txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+local: num=0
+
+request r=req16 txn=none ts=10,12 spans=r@c
+----
+
+scan r=req16
+----
+start-waiting: false
+
+done r=req14
+----
+global: num=0
+local: num=0
+
+done r=req16
+----
+global: num=0
+local: num=0
+
+print
+----
+global: num=0
+local: num=0
+
+# Test with distinguished waiter being a later request from the same
+# transaction that eventually grabs a reservation. Triggered a bug
+# in not replacing the distinguished waiter.
+
+request r=req17 txn=txn1 ts=9,0 spans=w@c+w@d
+----
+
+scan r=req17
+----
+start-waiting: false
+
+acquire r=req17 k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+local: num=0
+
+acquire r=req17 k=d durability=u
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+local: num=0
+
+done r=req17
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+local: num=0
+
+request r=req18 txn=txn2 ts=10,0 spans=w@c+w@d
+----
+
+scan r=req18
+----
+start-waiting: true
+
+request r=req19 txn=txn2 ts=10,0 spans=w@d
+----
+
+scan r=req19
+----
+start-waiting: true
+
+print
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+   queued writers:
+    active: true req: 18, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 18
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+   queued writers:
+    active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 19
+local: num=0
+
+release txn=txn1 span=c
+----
+global: num=2
+ lock: "c"
+  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+   queued writers:
+    active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 19
+local: num=0
+
+guard-state r=req18
+----
+new: state=waitFor txn=txn1 ts=9
+
+print
+----
+global: num=2
+ lock: "c"
+  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000009,0
+   queued writers:
+    active: true req: 18, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 19
+local: num=0
+
+release txn=txn1 span=d
+----
+global: num=2
+ lock: "c"
+  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: true req: 19, txn: 00000000-0000-0000-0000-000000000002
+local: num=0
+
+scan r=req18
+----
+start-waiting: false
+
+acquire r=req18 k=d durability=u
+----
+global: num=2
+ lock: "c"
+  res: req: 18, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req19
+----
+new: state=doneWaiting
+
+scan r=req19
+----
+start-waiting: false
+
+done r=req18
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+local: num=0
+
+done r=req19
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+local: num=0
+
+release txn=txn2 span=d
+----
+global: num=0
+local: num=0
+
+# Reservation can be broken while holding latches because a different
+# lock is released
+
+request r=req20 txn=txn1 ts=10 spans=w@c
+----
+
+scan r=req20
+----
+start-waiting: false
+
+acquire r=req20 k=c durability=u
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+done r=req20
+----
+global: num=1
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+request r=req21 txn=txn2 ts=10 spans=w@c+w@d
+----
+
+scan r=req21
+----
+start-waiting: true
+
+request r=req22 txn=txn1 ts=10 spans=w@d
+----
+
+scan r=req22
+----
+start-waiting: false
+
+acquire r=req22 k=d durability=u
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 21, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 21
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+local: num=0
+
+request r=req23 txn=txn3 ts=10 spans=w@d
+----
+
+scan r=req23
+----
+start-waiting: true
+
+release txn=txn1 span=d
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0
+   queued writers:
+    active: true req: 21, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 21
+ lock: "d"
+  res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req23
+----
+new: state=doneWaiting
+
+scan r=req23
+----
+start-waiting: false
+
+# holds latch on d and proceeds to evaluation, but lock on c
+# is released concurrently allowing req21 to break the reservation
+# at d. Note that reservation breaking is not constrained
+# by latches.
+
+release txn=txn1 span=c
+----
+global: num=2
+ lock: "c"
+  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  res: req: 23, txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+guard-state r=req21
+----
+new: state=doneWaiting
+
+print
+----
+global: num=2
+ lock: "c"
+  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+   queued writers:
+    active: false req: 23, txn: 00000000-0000-0000-0000-000000000003
+local: num=0
+
+acquire r=req23 k=d durability=u
+----
+global: num=2
+ lock: "c"
+  res: req: 21, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+   queued writers:
+    active: false req: 21, txn: 00000000-0000-0000-0000-000000000002
+local: num=0
+
+done r=req21
+----
+global: num=1
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,0
+local: num=0
+
+release txn=txn3 span=d
+----
+global: num=0
+local: num=0
+
+print
+----
+global: num=0
+local: num=0
