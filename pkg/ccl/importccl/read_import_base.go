@@ -227,7 +227,7 @@ func readInputFiles(
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
 					if err := fileFunc(ctx, src, dataFileIndex, dataFile, resumePos[dataFileIndex], rejected); err != nil {
-						return errors.Wrap(err, dataFile)
+						return err
 					}
 					return nil
 				})
@@ -333,16 +333,16 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 	return false
 }
 
-func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
+func makeRowErr(_ string, row int64, code, format string, args ...interface{}) error {
 	return pgerror.NewWithDepthf(1, code,
-		"%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
+		"row %d: "+format, append([]interface{}{row}, args...)...)
 }
 
-func wrapRowErr(err error, file string, row int64, code, format string, args ...interface{}) error {
+func wrapRowErr(err error, _ string, row int64, code, format string, args ...interface{}) error {
 	if format != "" || len(args) > 0 {
 		err = errors.WrapWithDepthf(1, err, format, args...)
 	}
-	err = errors.WrapWithDepthf(1, err, "%q: row %d", file, row)
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
 	if code != pgcode.Uncategorized {
 		err = pgerror.WithCandidateCode(err, code)
 	}
