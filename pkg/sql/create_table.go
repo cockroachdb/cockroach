@@ -113,46 +113,59 @@ var storageParamExpectedTypes = map[string]storageParamType{
 // and expects to see its own writes.
 func (n *createTableNode) ReadingOwnWrites() {}
 
-func (n *createTableNode) startExec(params runParams) error {
-	isTemporary := n.n.Temporary
-
+// getTableCreateParams returns the table key needed for the new table,
+// as well as the schema id.
+func getTableCreateParams(
+	params runParams, dbID sqlbase.ID, isTemporary bool, tableName string,
+) (sqlbase.DescriptorKey, sqlbase.ID, error) {
 	// By default, all tables are created in the `public` schema.
 	schemaID := sqlbase.ID(keys.PublicSchemaID)
 	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
-		params.ExecCfg().Settings, n.dbDesc.ID, n.n.Table.Table())
-
+		params.ExecCfg().Settings, dbID, tableName)
 	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
-			return unimplemented.NewWithIssuef(5807,
+			return nil, 0, unimplemented.NewWithIssuef(5807,
 				"temporary tables are unsupported")
 		}
 
-		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
-
 		tempSchemaName := params.p.TemporarySchemaName()
-		sKey := sqlbase.NewSchemaKey(n.dbDesc.ID, tempSchemaName)
+		sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
 		var err error
 		schemaID, err = getDescriptorID(params.ctx, params.p.txn, sKey)
 		if err != nil {
-			return err
+			return nil, 0, err
 		} else if schemaID == sqlbase.InvalidID {
 			// The temporary schema has not been created yet.
 			if schemaID, err = createTempSchema(params, sKey); err != nil {
-				return err
+				return nil, 0, err
 			}
 		}
 
-		tKey = sqlbase.NewTableKey(n.dbDesc.ID, schemaID, n.n.Table.Table())
+		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName)
 	}
 
-	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, n.dbDesc.ID, schemaID, n.n.Table.Table())
+	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, dbID, schemaID, tableName)
 	if err == nil && exists {
-		if n.n.IfNotExists {
+		return nil, 0, sqlbase.NewRelationAlreadyExistsError(tableName)
+	} else if err != nil {
+		return nil, 0, err
+	}
+	return tKey, schemaID, nil
+}
+
+func (n *createTableNode) startExec(params runParams) error {
+	isTemporary := n.n.Temporary
+
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Table.Table())
+	if err != nil {
+		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
 		}
-		return sqlbase.NewRelationAlreadyExistsError(n.n.Table.Table())
-	} else if err != nil {
 		return err
+	}
+
+	if isTemporary {
+		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 	}
 
 	// Guard against creating non-partitioned indexes on a partitioned table,

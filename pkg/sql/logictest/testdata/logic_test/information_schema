@@ -680,30 +680,117 @@ SELECT *
 FROM system.information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name                       constraint_type  is_deferrable  initially_deferred
-system              public             primary          system         public        comments                         PRIMARY KEY      NO             NO
-system              public             primary          system         public        descriptor                       PRIMARY KEY      NO             NO
-system              public             primary          system         public        eventlog                         PRIMARY KEY      NO             NO
-system              public             primary          system         public        jobs                             PRIMARY KEY      NO             NO
-system              public             primary          system         public        lease                            PRIMARY KEY      NO             NO
-system              public             primary          system         public        locations                        PRIMARY KEY      NO             NO
-system              public             primary          system         public        namespace                        PRIMARY KEY      NO             NO
-system              public             primary          system         public        namespace_deprecated             PRIMARY KEY      NO             NO
-system              public             check_singleton  system         public        protected_ts_meta                CHECK            NO             NO
-system              public             primary          system         public        protected_ts_meta                PRIMARY KEY      NO             NO
-system              public             primary          system         public        protected_ts_records             PRIMARY KEY      NO             NO
-system              public             primary          system         public        rangelog                         PRIMARY KEY      NO             NO
-system              public             primary          system         public        replication_constraint_stats     PRIMARY KEY      NO             NO
-system              public             primary          system         public        replication_critical_localities  PRIMARY KEY      NO             NO
-system              public             primary          system         public        replication_stats                PRIMARY KEY      NO             NO
-system              public             primary          system         public        reports_meta                     PRIMARY KEY      NO             NO
-system              public             primary          system         public        role_members                     PRIMARY KEY      NO             NO
-system              public             primary          system         public        settings                         PRIMARY KEY      NO             NO
-system              public             primary          system         public        table_statistics                 PRIMARY KEY      NO             NO
-system              public             primary          system         public        ui                               PRIMARY KEY      NO             NO
-system              public             primary          system         public        users                            PRIMARY KEY      NO             NO
-system              public             primary          system         public        web_sessions                     PRIMARY KEY      NO             NO
-system              public             primary          system         public        zones                            PRIMARY KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name          table_catalog  table_schema  table_name                       constraint_type  is_deferrable  initially_deferred
+system              public             630200280_24_1_not_null  system         public        comments                         CHECK            NO             NO
+system              public             630200280_24_2_not_null  system         public        comments                         CHECK            NO             NO
+system              public             630200280_24_3_not_null  system         public        comments                         CHECK            NO             NO
+system              public             630200280_24_4_not_null  system         public        comments                         CHECK            NO             NO
+system              public             primary                  system         public        comments                         PRIMARY KEY      NO             NO
+system              public             630200280_3_1_not_null   system         public        descriptor                       CHECK            NO             NO
+system              public             primary                  system         public        descriptor                       PRIMARY KEY      NO             NO
+system              public             630200280_12_1_not_null  system         public        eventlog                         CHECK            NO             NO
+system              public             630200280_12_2_not_null  system         public        eventlog                         CHECK            NO             NO
+system              public             630200280_12_3_not_null  system         public        eventlog                         CHECK            NO             NO
+system              public             630200280_12_4_not_null  system         public        eventlog                         CHECK            NO             NO
+system              public             630200280_12_6_not_null  system         public        eventlog                         CHECK            NO             NO
+system              public             primary                  system         public        eventlog                         PRIMARY KEY      NO             NO
+system              public             630200280_15_1_not_null  system         public        jobs                             CHECK            NO             NO
+system              public             630200280_15_2_not_null  system         public        jobs                             CHECK            NO             NO
+system              public             630200280_15_3_not_null  system         public        jobs                             CHECK            NO             NO
+system              public             630200280_15_4_not_null  system         public        jobs                             CHECK            NO             NO
+system              public             primary                  system         public        jobs                             PRIMARY KEY      NO             NO
+system              public             630200280_11_1_not_null  system         public        lease                            CHECK            NO             NO
+system              public             630200280_11_2_not_null  system         public        lease                            CHECK            NO             NO
+system              public             630200280_11_3_not_null  system         public        lease                            CHECK            NO             NO
+system              public             630200280_11_4_not_null  system         public        lease                            CHECK            NO             NO
+system              public             primary                  system         public        lease                            PRIMARY KEY      NO             NO
+system              public             630200280_21_1_not_null  system         public        locations                        CHECK            NO             NO
+system              public             630200280_21_2_not_null  system         public        locations                        CHECK            NO             NO
+system              public             630200280_21_3_not_null  system         public        locations                        CHECK            NO             NO
+system              public             630200280_21_4_not_null  system         public        locations                        CHECK            NO             NO
+system              public             primary                  system         public        locations                        PRIMARY KEY      NO             NO
+system              public             630200280_30_1_not_null  system         public        namespace                        CHECK            NO             NO
+system              public             630200280_30_2_not_null  system         public        namespace                        CHECK            NO             NO
+system              public             630200280_30_3_not_null  system         public        namespace                        CHECK            NO             NO
+system              public             primary                  system         public        namespace                        PRIMARY KEY      NO             NO
+system              public             630200280_2_1_not_null   system         public        namespace_deprecated             CHECK            NO             NO
+system              public             630200280_2_2_not_null   system         public        namespace_deprecated             CHECK            NO             NO
+system              public             primary                  system         public        namespace_deprecated             PRIMARY KEY      NO             NO
+system              public             630200280_31_1_not_null  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             630200280_31_2_not_null  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             630200280_31_3_not_null  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             630200280_31_4_not_null  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             630200280_31_5_not_null  system         public        protected_ts_meta                CHECK            NO             NO
+system              public             check_singleton          system         public        protected_ts_meta                CHECK            NO             NO
+system              public             primary                  system         public        protected_ts_meta                PRIMARY KEY      NO             NO
+system              public             630200280_32_1_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             630200280_32_2_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             630200280_32_3_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             630200280_32_5_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             630200280_32_6_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             630200280_32_7_not_null  system         public        protected_ts_records             CHECK            NO             NO
+system              public             primary                  system         public        protected_ts_records             PRIMARY KEY      NO             NO
+system              public             630200280_13_1_not_null  system         public        rangelog                         CHECK            NO             NO
+system              public             630200280_13_2_not_null  system         public        rangelog                         CHECK            NO             NO
+system              public             630200280_13_3_not_null  system         public        rangelog                         CHECK            NO             NO
+system              public             630200280_13_4_not_null  system         public        rangelog                         CHECK            NO             NO
+system              public             630200280_13_7_not_null  system         public        rangelog                         CHECK            NO             NO
+system              public             primary                  system         public        rangelog                         PRIMARY KEY      NO             NO
+system              public             630200280_25_1_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             630200280_25_2_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             630200280_25_3_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             630200280_25_4_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             630200280_25_5_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             630200280_25_7_not_null  system         public        replication_constraint_stats     CHECK            NO             NO
+system              public             primary                  system         public        replication_constraint_stats     PRIMARY KEY      NO             NO
+system              public             630200280_26_1_not_null  system         public        replication_critical_localities  CHECK            NO             NO
+system              public             630200280_26_2_not_null  system         public        replication_critical_localities  CHECK            NO             NO
+system              public             630200280_26_3_not_null  system         public        replication_critical_localities  CHECK            NO             NO
+system              public             630200280_26_4_not_null  system         public        replication_critical_localities  CHECK            NO             NO
+system              public             630200280_26_5_not_null  system         public        replication_critical_localities  CHECK            NO             NO
+system              public             primary                  system         public        replication_critical_localities  PRIMARY KEY      NO             NO
+system              public             630200280_27_1_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_2_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_3_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_4_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_5_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_6_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             630200280_27_7_not_null  system         public        replication_stats                CHECK            NO             NO
+system              public             primary                  system         public        replication_stats                PRIMARY KEY      NO             NO
+system              public             630200280_28_1_not_null  system         public        reports_meta                     CHECK            NO             NO
+system              public             630200280_28_2_not_null  system         public        reports_meta                     CHECK            NO             NO
+system              public             primary                  system         public        reports_meta                     PRIMARY KEY      NO             NO
+system              public             630200280_23_1_not_null  system         public        role_members                     CHECK            NO             NO
+system              public             630200280_23_2_not_null  system         public        role_members                     CHECK            NO             NO
+system              public             630200280_23_3_not_null  system         public        role_members                     CHECK            NO             NO
+system              public             primary                  system         public        role_members                     PRIMARY KEY      NO             NO
+system              public             630200280_6_1_not_null   system         public        settings                         CHECK            NO             NO
+system              public             630200280_6_2_not_null   system         public        settings                         CHECK            NO             NO
+system              public             630200280_6_3_not_null   system         public        settings                         CHECK            NO             NO
+system              public             primary                  system         public        settings                         PRIMARY KEY      NO             NO
+system              public             630200280_20_1_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_2_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_4_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_5_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_6_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_7_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             630200280_20_8_not_null  system         public        table_statistics                 CHECK            NO             NO
+system              public             primary                  system         public        table_statistics                 PRIMARY KEY      NO             NO
+system              public             630200280_14_1_not_null  system         public        ui                               CHECK            NO             NO
+system              public             630200280_14_3_not_null  system         public        ui                               CHECK            NO             NO
+system              public             primary                  system         public        ui                               PRIMARY KEY      NO             NO
+system              public             630200280_4_1_not_null   system         public        users                            CHECK            NO             NO
+system              public             630200280_4_3_not_null   system         public        users                            CHECK            NO             NO
+system              public             primary                  system         public        users                            PRIMARY KEY      NO             NO
+system              public             630200280_19_1_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             630200280_19_2_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             630200280_19_3_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             630200280_19_4_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             630200280_19_5_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             630200280_19_7_not_null  system         public        web_sessions                     CHECK            NO             NO
+system              public             primary                  system         public        web_sessions                     PRIMARY KEY      NO             NO
+system              public             630200280_5_1_not_null   system         public        zones                            CHECK            NO             NO
+system              public             primary                  system         public        zones                            PRIMARY KEY      NO             NO
 
 query TTTT colnames
 SELECT *
@@ -874,12 +961,14 @@ SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
-constraint_db       public             c2               constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             check_a          constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             primary          constraint_db  public        t1          PRIMARY KEY      NO             NO
-constraint_db       public             t1_a_key         constraint_db  public        t1          UNIQUE           NO             NO
-constraint_db       public             fk               constraint_db  public        t2          FOREIGN KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name          table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
+constraint_db       public             541687103_59_1_not_null  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             c2                       constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             check_a                  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             primary                  constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_a_key                 constraint_db  public        t1          UNIQUE           NO             NO
+constraint_db       public             541687103_60_2_not_null  constraint_db  public        t2          CHECK            NO             NO
+constraint_db       public             fk                       constraint_db  public        t2          FOREIGN KEY      NO             NO
 
 query TTTT colnames
 SELECT *
@@ -913,9 +1002,10 @@ USING (constraint_catalog, constraint_schema, constraint_name)
 WHERE tc.table_schema in ('public')
 ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
-table_schema  table_name  constraint_name  check_clause
-public        t1          c2               ((a < 99))
-public        t1          check_a          ((a > 4))
+table_schema  table_name  constraint_name          check_clause
+public        t1          541687103_59_1_not_null  p IS NOT NULL
+public        t1          c2                       ((a < 99))
+public        t1          check_a                  ((a > 4))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
