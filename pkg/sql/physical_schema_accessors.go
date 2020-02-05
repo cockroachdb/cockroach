@@ -283,6 +283,13 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	return a.SchemaAccessor.GetDatabaseDesc(ctx, txn, name, flags)
 }
 
+// IsValidSchema implements the SchemaAccessor interface.
+func (a *CachedPhysicalAccessor) IsValidSchema(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, scName string,
+) (bool, sqlbase.ID, error) {
+	return a.tc.resolveSchemaID(ctx, txn, dbID, scName)
+}
+
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,

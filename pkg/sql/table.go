@@ -15,10 +15,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
@@ -121,6 +123,13 @@ type TableCollection struct {
 	// database descriptors.
 	databaseCache *databaseCache
 
+	// schemaCache maps {databaseID, schemaName} -> (schemaID, if exists, otherwise nil).
+	// TODO(sqlexec): replace with leasing system with custom schemas.
+	// This is currently never cleared, because there should only be unique schemas
+	// being added for each TableCollection as only temporary schemas can be
+	// made, and you cannot read from other schema caches.
+	schemaCache sync.Map
+
 	// dbCacheSubscriber is used to block until the node's database cache has been
 	// updated when releaseTables is called.
 	dbCacheSubscriber dbCacheSubscriber
@@ -140,10 +149,11 @@ type TableCollection struct {
 	// These are purged at the same time as allDescriptors.
 	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
 
-	// cachedDatabaseToSchemas is a mapping between all available schemas
-	// keyed by database.
+	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
+	// For each databaseID, all schemas visible under the database can be
+	// observed.
 	// These are purged at the same time as allDescriptors.
-	cachedDatabaseToSchemas map[sqlbase.ID]map[sqlbase.ID]string
+	allSchemasForDatabase map[sqlbase.ID]map[sqlbase.ID]string
 
 	// settings are required to correctly resolve system.namespace accesses in
 	// mixed version (19.2/20.1) clusters.
@@ -198,23 +208,25 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		}
 	}
 
-	// Resolve the schema to the ID of the schema.
-	// TODO(sqlexec): consider caching this in TableCollection.
-	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
-	if err != nil || !foundSchema {
-		return nil, err
-	}
+	// The following checks only work if the dbID is not invalid.
+	if dbID != sqlbase.InvalidID {
+		// Resolve the schema to the ID of the schema.
+		foundSchema, schemaID, err := tc.resolveSchemaID(ctx, txn, dbID, tn.Schema())
+		if err != nil || !foundSchema {
+			return nil, err
+		}
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
-		dbID,
-		schemaID,
-		tn,
-		flags.Required,
-	); refuseFurtherLookup || err != nil {
-		return nil, err
-	} else if mut := table.MutableTableDescriptor; mut != nil {
-		log.VEventf(ctx, 2, "found uncommitted table %d", mut.ID)
-		return mut, nil
+		if refuseFurtherLookup, table, err := tc.getUncommittedTable(
+			dbID,
+			schemaID,
+			tn,
+			flags.Required,
+		); refuseFurtherLookup || err != nil {
+			return nil, err
+		} else if mut := table.MutableTableDescriptor; mut != nil {
+			log.VEventf(ctx, 2, "found uncommitted table %d", mut.ID)
+			return mut, nil
+		}
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
@@ -223,6 +235,36 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		return nil, err
 	}
 	return obj.(*sqlbase.MutableTableDescriptor), err
+}
+
+// resolveSchemaID attempts to lookup the schema from the schemaCache if it exists,
+// otherwise falling back to a database lookup.
+func (tc *TableCollection) resolveSchemaID(
+	ctx context.Context, txn *client.Txn, dbID sqlbase.ID, schemaName string,
+) (bool, sqlbase.ID, error) {
+	// Fast path public schema, as it is always found.
+	if schemaName == tree.PublicSchema {
+		return true, keys.PublicSchemaID, nil
+	}
+
+	type schemaCacheKey struct {
+		dbID       sqlbase.ID
+		schemaName string
+	}
+
+	key := schemaCacheKey{dbID: dbID, schemaName: schemaName}
+	// First lookup the cache.
+	if val, ok := tc.schemaCache.Load(key); ok {
+		return true, val.(sqlbase.ID), nil
+	}
+
+	// Next, try lookup the result from KV, storing and returning the value.
+	exists, schemaID, err := resolveSchemaID(ctx, txn, dbID, schemaName)
+	if err != nil || !exists {
+		return exists, schemaID, err
+	}
+	tc.schemaCache.Store(key, schemaID)
+	return exists, schemaID, err
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
@@ -247,6 +289,15 @@ func (tc *TableCollection) getTableVersion(
 		return nil, nil
 	}
 
+	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
+		phyAccessor := UncachedPhysicalAccessor{}
+		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
+		if obj == nil {
+			return nil, err
+		}
+		return obj.(*sqlbase.ImmutableTableDescriptor), err
+	}
+
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
@@ -262,9 +313,13 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
+	// If at this point we have an InvalidID, we should immediately try read from store.
+	if dbID == sqlbase.InvalidID {
+		return readTableFromStore()
+	}
+
 	// Resolve the schema to the ID of the schema.
-	// TODO(sqlexec): consider caching this in TableCollection.
-	foundSchema, schemaID, err := resolveSchemaID(ctx, txn, dbID, tn.Schema())
+	foundSchema, schemaID, err := tc.resolveSchemaID(ctx, txn, dbID, tn.Schema())
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -298,15 +353,6 @@ func (tc *TableCollection) getTableVersion(
 
 		log.VEventf(ctx, 2, "found uncommitted table %d", immut.ID)
 		return immut, nil
-	}
-
-	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
-		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tn, flags)
-		if obj == nil {
-			return nil, err
-		}
-		return obj.(*sqlbase.ImmutableTableDescriptor), err
 	}
 
 	if avoidCache {
@@ -712,17 +758,17 @@ func (tc *TableCollection) getAllDatabaseDescriptors(
 func (tc *TableCollection) getSchemasForDatabase(
 	ctx context.Context, txn *client.Txn, dbID sqlbase.ID,
 ) (map[sqlbase.ID]string, error) {
-	if tc.cachedDatabaseToSchemas == nil {
-		tc.cachedDatabaseToSchemas = make(map[sqlbase.ID]map[sqlbase.ID]string)
+	if tc.allSchemasForDatabase == nil {
+		tc.allSchemasForDatabase = make(map[sqlbase.ID]map[sqlbase.ID]string)
 	}
-	if _, ok := tc.cachedDatabaseToSchemas[dbID]; !ok {
+	if _, ok := tc.allSchemasForDatabase[dbID]; !ok {
 		var err error
-		tc.cachedDatabaseToSchemas[dbID], err = schema.GetForDatabase(ctx, txn, dbID)
+		tc.allSchemasForDatabase[dbID], err = schema.GetForDatabase(ctx, txn, dbID)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return tc.cachedDatabaseToSchemas[dbID], nil
+	return tc.allSchemasForDatabase[dbID], nil
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors
@@ -730,7 +776,7 @@ func (tc *TableCollection) getSchemasForDatabase(
 func (tc *TableCollection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
 	tc.allDatabaseDescriptors = nil
-	tc.cachedDatabaseToSchemas = nil
+	tc.allSchemasForDatabase = nil
 }
 
 // Copy the modified schema to the table collection. Used when initializing
