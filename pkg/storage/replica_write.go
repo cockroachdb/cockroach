@@ -359,17 +359,6 @@ func (r *Replica) evaluate1PC(
 	}
 
 	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
-		if etArg.Require1PC {
-			if pErr == nil {
-				pErr = roachpb.NewError(roachpb.NewTransactionRetryError(
-					roachpb.RETRY_SERIALIZABLE, "Require1PC batch pushed"))
-			}
-			return onePCResult{
-				success: onePCFailed,
-				pErr:    pErr,
-			}
-		}
-
 		if pErr != nil {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())

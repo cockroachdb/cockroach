@@ -573,6 +573,10 @@ message EndTxnRequest {
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
+  //
+  // Note(andrei): Use this flag with care; retriable errors are not generated
+  // reliably for these transactions - a TransactionStatusError might be
+  // returned instead if 1PC execution fails.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
   // CanCommitAtHigherTimestamp indicates that the batch this EndTxn is part of
   // can be evaluated at a higher timestamp than the transaction's read
