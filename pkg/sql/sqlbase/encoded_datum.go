@@ -273,6 +273,19 @@ func (ed *EncDatum) Encode(
 	}
 }
 
+// EncodeAsValueWithNoColID returns the table value encoding of an encoded datum, but does not use
+// the existing encoded value even if the datum is encoded with DatumEncodingValue. This is because
+// the existing value encoding may include the column ID within the encoding. This function is intended
+// to be used when a column ID free value encoding is desired.
+func (ed *EncDatum) EncodeAsValueWithNoColID(
+	typ *types.T, a *DatumAlloc, appendTo []byte,
+) ([]byte, error) {
+	if err := ed.EnsureDecoded(typ, a); err != nil {
+		return nil, err
+	}
+	return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
+}
+
 // Compare returns:
 //    -1 if the receiver is less than rhs,
 //    0  if the receiver is equal to rhs,

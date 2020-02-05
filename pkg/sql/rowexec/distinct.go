@@ -176,13 +176,13 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 			continue
 		}
 
-		// TODO(irfansharif): Different rows may come with different encodings,
-		// e.g. if they come from different streams that were merged, in which
-		// case the encodings don't match (despite having the same underlying
-		// datums). We instead opt to always choose sqlbase.DatumEncoding_ASCENDING_KEY
-		// but we may want to check the first row for what encodings are already
-		// available.
-		appendTo, err = datum.Encode(&d.types[i], &d.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		// We encode datums using the value encoding to avoid information loss
+		// for arrays and composite data types. However, we cannot use the encoding
+		// that exists in the EncDatum if it is already value encoded. This is because
+		// it will include the column ID. It is possible for us to try and compare
+		// encoded datums here that came from different columns, so we cannot
+		// include the column ID in the encoding.
+		appendTo, err = datum.EncodeAsValueWithNoColID(&d.types[i], &d.datumAlloc, appendTo)
 		if err != nil {
 			return nil, err
 		}
