@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +37,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
@@ -87,7 +91,6 @@ func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *sum_TYPEAgg) Reset() {
-	a.scratch.curAgg = a.scratch.vec[0]
 	a.scratch.curIdx = -1
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
@@ -179,7 +182,7 @@ func _ACCUMULATE_SUM(a *sum_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS boo
 		}
 		a.scratch.curIdx++
 		// {{with .Global}}
-		a.scratch.curAgg = zero_TYPEColumn[0]
+		a.scratch.curAgg = zero_TYPEValue
 		// {{end}}
 
 		// {{/*

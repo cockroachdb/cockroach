@@ -348,7 +348,6 @@ var keywordCategoryDescriptions = map[string]string{
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.
 type seriesValueGenerator struct {
-	ctx                                 *tree.EvalContext
 	origStart, value, start, stop, step interface{}
 	nextOK                              bool
 	genType                             *types.T
@@ -404,7 +403,7 @@ func seriesTSNext(s *seriesValueGenerator) (bool, error) {
 	}
 
 	s.value = start
-	s.start = duration.Add(s.ctx, start, step)
+	s.start = duration.Add(start, step)
 	return true, nil
 }
 
@@ -412,7 +411,7 @@ func seriesGenTSValue(s *seriesValueGenerator) tree.Datums {
 	return tree.Datums{tree.MakeDTimestamp(s.value.(time.Time), time.Microsecond)}
 }
 
-func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := int64(tree.MustBeDInt(args[0]))
 	stop := int64(tree.MustBeDInt(args[1]))
 	step := int64(1)
@@ -423,7 +422,6 @@ func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGen
 		return nil, errStepCannotBeZero
 	}
 	return &seriesValueGenerator{
-		ctx:       ctx,
 		origStart: start,
 		stop:      stop,
 		step:      step,
@@ -433,7 +431,7 @@ func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGen
 	}, nil
 }
 
-func makeTSSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := args[0].(*tree.DTimestamp).Time
 	stop := args[1].(*tree.DTimestamp).Time
 	step := args[2].(*tree.DInterval).Duration
@@ -443,7 +441,6 @@ func makeTSSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueG
 	}
 
 	return &seriesValueGenerator{
-		ctx:       ctx,
 		origStart: start,
 		stop:      stop,
 		step:      step,

@@ -1709,7 +1709,6 @@ func NewDDateFromTime(t time.Time) (*DDate, error) {
 // parsing dates, times, and timestamps. A nil value is generally
 // acceptable and will result in reasonable defaults being applied.
 type ParseTimeContext interface {
-	duration.Context
 	// GetRelativeParseTime returns the transaction time in the session's
 	// timezone (i.e. now()). This is used to calculate relative dates,
 	// like "tomorrow", and also provides a default time.Location for
@@ -1723,21 +1722,14 @@ var _ ParseTimeContext = &simpleParseTimeContext{}
 
 // NewParseTimeContext constructs a ParseTimeContext that returns
 // the given values.
-func NewParseTimeContext(mode duration.AdditionMode, relativeParseTime time.Time) ParseTimeContext {
+func NewParseTimeContext(relativeParseTime time.Time) ParseTimeContext {
 	return &simpleParseTimeContext{
-		AdditionMode:      mode,
 		RelativeParseTime: relativeParseTime,
 	}
 }
 
 type simpleParseTimeContext struct {
-	AdditionMode      duration.AdditionMode
 	RelativeParseTime time.Time
-}
-
-// GetAdditionMode implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetAdditionMode() duration.AdditionMode {
-	return ctx.AdditionMode
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -2117,7 +2109,7 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 	}
 	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
 	_, offset := t.Zone()
-	t = duration.Add(ctx, t, duration.FromInt64(int64(offset))).UTC()
+	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
@@ -2446,7 +2438,7 @@ func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
 // location, returning a timestamp without a timezone.
 func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
 	_, locOffset := d.Time.In(loc).Zone()
-	newTime := duration.Add(ctx, d.Time.UTC(), duration.FromInt64(int64(locOffset)))
+	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
 	return MakeDTimestamp(newTime, time.Microsecond)
 }
 
