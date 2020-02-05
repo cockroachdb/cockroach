@@ -39,7 +39,7 @@ interface DropdownButtonProps {
 }
 
 function DropdownButton(props: DropdownButtonProps) {
-  const { children, isOpen } = props;
+  const { children } = props;
   return (
     <Button
       type="flat"
@@ -48,7 +48,7 @@ function DropdownButton(props: DropdownButtonProps) {
       icon={() => (
         <Icon
           className="collapse-toggle__icon"
-          type={isOpen ? "caret-left" : "caret-down"} />
+          type="caret-down" />
       )}
     >
       {children}

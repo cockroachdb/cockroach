@@ -22,7 +22,6 @@ import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
 import { getMatchParamByName } from "src/util/query";
 
-import { Button } from "src/components/button";
 import { Dropdown } from "src/components/dropdown";
 
 // tslint:disable-next-line:variable-name
