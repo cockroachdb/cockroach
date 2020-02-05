@@ -655,3 +655,15 @@ CREATE VIEW v44203(c0) AS SELECT c0 FROM t44203 WHERE t44203.c0 OFFSET NULL
 query B
 SELECT * FROM v44203 WHERE current_user() != ''
 ----
+
+# Regression test for #44132 - generated column causes incorrect scan.
+statement ok
+CREATE TABLE t44132(c0 BOOL UNIQUE, c1 INT AS (NULL) STORED)
+
+statement ok
+INSERT INTO t44132 (c0) VALUES (true)
+
+query BI
+SELECT * FROM t44132 WHERE c0
+----
+true NULL
