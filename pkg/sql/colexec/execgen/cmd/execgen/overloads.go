@@ -274,6 +274,9 @@ func init() {
 					sameTypeBinaryOpToOverloads[op] = append(sameTypeBinaryOpToOverloads[op], ov)
 				}
 			}
+		}
+		for _, rightType := range coltypes.ComparableTypes[leftType] {
+			customizer := typeCustomizers[coltypePair{leftType, rightType}]
 			for _, op := range cmpOps {
 				opStr := comparisonOpInfix[op]
 				ov := &overload{
@@ -543,6 +546,38 @@ type timestampCustomizer struct{}
 // intervalCustomizer is necessary since duration.Duration doesn't have infix
 // operators.
 type intervalCustomizer struct{}
+
+// timestampIntervalCustomizer supports mixed type expression with a timestamp
+// left-hand side and an interval right-hand side.
+type timestampIntervalCustomizer struct{}
+
+// intervalTimestampCustomizer supports mixed type expression with an interval
+// left-hand side and a timestamp right-hand side.
+type intervalTimestampCustomizer struct{}
+
+// intervalIntCustomizer supports mixed type expression with an interval
+// left-hand side and an int right-hand side.
+type intervalIntCustomizer struct{}
+
+// intIntervalCustomizer supports mixed type expression with an int left-hand
+// side and an interval right-hand side.
+type intIntervalCustomizer struct{}
+
+// intervalFloatCustomizer supports mixed type expression with an interval
+// left-hand side and a float right-hand side.
+type intervalFloatCustomizer struct{}
+
+// floatIntervalCustomizer supports mixed type expression with a float
+// left-hand side and an interval right-hand side.
+type floatIntervalCustomizer struct{}
+
+// intervalDecimalCustomizer supports mixed type expression with an interval
+// left-hand side and a decimal right-hand side.
+type intervalDecimalCustomizer struct{}
+
+// decimalIntervalCustomizer supports mixed type expression with a decimal
+// left-hand side and an interval right-hand side.
+type decimalIntervalCustomizer struct{}
 
 func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
@@ -1034,6 +1069,23 @@ func (c timestampCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
+func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Minus:
+			return fmt.Sprintf(`
+		  nanos := %[2]s.Sub(%[3]s).Nanoseconds()
+		  %[1]s = duration.MakeDuration(nanos, 0, 0)
+		  `,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
 func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(target, l, r string) string {
 		return fmt.Sprintf("%s = %s.Compare(%s)", target, l, r)
@@ -1048,6 +1100,156 @@ func (c intervalCustomizer) getHashAssignFunc() assignFunc {
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&days)), %[1]s)
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&nanos)), %[1]s)
 		`, target, v)
+	}
+}
+
+func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Plus:
+			return fmt.Sprintf(`%[1]s = %[2]s.Add(%[3]s)`,
+				target, l, r)
+		case tree.Minus:
+			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Plus:
+			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s)`,
+				target, l, r)
+		case tree.Minus:
+			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s.Mul(-1))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Plus:
+			return fmt.Sprintf(`%[1]s = duration.Add(%[3]s, %[2]s)`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`%[1]s = %[2]s.Mul(int64(%[3]s))`,
+				target, l, r)
+		case tree.Div:
+			return fmt.Sprintf(`
+				if %[3]s == 0 {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+				}
+				%[1]s = %[2]s.Div(int64(%[3]s))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`%[1]s = %[3]s.Mul(int64(%[2]s))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`%[1]s = %[2]s.MulFloat(float64(%[3]s))`,
+				target, l, r)
+		case tree.Div:
+			return fmt.Sprintf(`
+				if %[3]s == 0.0 {
+					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+				}
+				%[1]s = %[2]s.DivFloat(float64(%[3]s))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`%[1]s = %[3]s.MulFloat(float64(%[2]s))`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`
+		  f, err := %[3]s.Float64()
+		  if err != nil {
+		    execerror.VectorizedInternalPanic(err)
+		  }
+		  %[1]s = %[2]s.MulFloat(f)`,
+				target, l, r)
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
+	}
+}
+
+func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op overload, target, l, r string) string {
+		switch op.BinOp {
+		case tree.Mult:
+			return fmt.Sprintf(`
+		  f, err := %[2]s.Float64()
+		  if err != nil {
+		    execerror.VectorizedInternalPanic(err)
+		  }
+		  %[1]s = %[3]s.MulFloat(f)`,
+				target, l, r)
+
+		default:
+			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+		}
+		return ""
 	}
 }
 
@@ -1076,15 +1278,19 @@ func registerTypeCustomizers() {
 
 	for _, rightFloatType := range coltypes.FloatTypes {
 		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
+		registerTypeCustomizer(coltypePair{coltypes.Interval, rightFloatType}, intervalFloatCustomizer{})
 	}
 	for _, rightIntType := range coltypes.IntTypes {
 		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightIntType}, decimalIntCustomizer{})
+		registerTypeCustomizer(coltypePair{coltypes.Interval, rightIntType}, intervalIntCustomizer{})
 	}
 	for _, leftFloatType := range coltypes.FloatTypes {
 		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Decimal}, floatDecimalCustomizer{})
+		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Interval}, floatIntervalCustomizer{})
 	}
 	for _, leftIntType := range coltypes.IntTypes {
 		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Decimal}, intDecimalCustomizer{})
+		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Interval}, intIntervalCustomizer{})
 	}
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightIntType := range coltypes.IntTypes {
@@ -1096,6 +1302,10 @@ func registerTypeCustomizers() {
 			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
 		}
 	}
+	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Interval}, timestampIntervalCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Timestamp}, intervalTimestampCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Decimal}, intervalDecimalCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Interval}, decimalIntervalCustomizer{})
 }
 
 func registerBinOpOutputTypes() {
@@ -1131,6 +1341,23 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
 		}
 	}
+
+	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Timestamp}] = coltypes.Interval
+	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
+	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
+	for _, numberType := range coltypes.NumberTypes {
+		binOpOutputTypes[tree.Mult][coltypePair{numberType, coltypes.Interval}] = coltypes.Interval
+		binOpOutputTypes[tree.Mult][coltypePair{coltypes.Interval, numberType}] = coltypes.Interval
+	}
+	for _, rightIntType := range coltypes.IntTypes {
+		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightIntType}] = coltypes.Interval
+	}
+	for _, rightFloatType := range coltypes.FloatTypes {
+		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightFloatType}] = coltypes.Interval
+	}
+	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Timestamp}] = coltypes.Timestamp
 }
 
 // Avoid unused warning for functions which are only used in templates.

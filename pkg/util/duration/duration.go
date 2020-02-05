@@ -406,53 +406,12 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 
 // TODO(dan): Write DecodeBigInt.
 
-// AdditionMode controls date normalization behaviors in Add().
-type AdditionMode bool
-
-const (
-	// AdditionModeCompatible applies a date-normalization strategy
-	// which produces results which are more compatible with
-	// PostgreSQL in which adding a month "rounds down" to the last
-	// day of a month instead of producing a value in the following
-	// month.
-	//
-	// See PostgreSQL 10.5: src/backend/utils/adt/timestamp.c timestamp_pl_interval().
-	AdditionModeCompatible AdditionMode = false
-	// AdditionModeLegacy delegates to time.Time.AddDate() for
-	// performing Time+Duration math.
-	AdditionModeLegacy AdditionMode = true
-)
-
-func (m AdditionMode) String() string {
-	switch m {
-	case AdditionModeLegacy:
-		return "legacy"
-	default:
-		return "compatible"
-	}
-}
-
-// Context is used to prevent a package-dependency cycle via tree.EvalContext.
-type Context interface {
-	GetAdditionMode() AdditionMode
-}
-
-// GetAdditionMode allows an AdditionMode to be used as its own context.
-func (m AdditionMode) GetAdditionMode() AdditionMode {
-	return m
-}
-
 // Add returns the time t+d, using a configurable mode.
-func Add(ctx Context, t time.Time, d Duration) time.Time {
-	var mode AdditionMode
-	if ctx != nil {
-		mode = ctx.GetAdditionMode()
-	}
-
+func Add(t time.Time, d Duration) time.Time {
 	// We can fast-path if the duration is always a fixed amount of time,
 	// or if the day number that we're starting from can never result
 	// in normalization.
-	if mode == AdditionModeLegacy || d.Months == 0 || t.Day() <= 28 {
+	if d.Months == 0 || t.Day() <= 28 {
 		return t.AddDate(0, int(d.Months), int(d.Days)).Add(time.Duration(d.nanos))
 	}
 

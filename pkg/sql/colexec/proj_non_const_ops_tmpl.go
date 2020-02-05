@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
@@ -54,6 +55,9 @@ var _ = math.MaxInt64
 
 // Dummy import to pull in "coltypes" package.
 var _ coltypes.T
+
+// Dummy import to pull in "duration" package.
+var _ duration.Duration
 
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
