@@ -76,6 +76,14 @@ const (
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
+// See SanitizeExternalStorageURI.
+var redactedQueryParams = map[string]struct{}{
+	S3SecretParam:        {},
+	S3TempTokenParam:     {},
+	AzureAccountKeyParam: {},
+	CredentialsParam:     {},
+}
+
 // ExternalStorageFactory describes a factory function for ExternalStorage.
 type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
 
@@ -207,9 +215,15 @@ func ExternalStorageFromURI(
 	return MakeExternalStorage(ctx, conf, settings, blobClientFactory)
 }
 
-// SanitizeExternalStorageURI returns the external storage URI with sensitive
-// credentials stripped.
-func SanitizeExternalStorageURI(path string) (string, error) {
+// SanitizeExternalStorageURI returns the external storage URI with with some
+// secrets redacted, for use when showing these URIs in the UI, to provide some
+// protection from shoulder-surfing. The param is still present -- just
+// redacted -- to make it clearer that that value is indeed persisted interally.
+// extraParams which should be scrubbed -- for params beyond those that the
+// various clound-storage URIs supported by this package know about -- can be
+// passed allowing this function to be used to scrub other URIs too (such as
+// non-cloudstorage changefeed sinks).
+func SanitizeExternalStorageURI(path string, extraParams []string) (string, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
 		return "", err
@@ -217,9 +231,21 @@ func SanitizeExternalStorageURI(path string) (string, error) {
 	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" {
 		return path, nil
 	}
-	// All current external storage providers store credentials in the query string,
-	// if they store it in the URI at all.
-	uri.RawQuery = ""
+
+	params := uri.Query()
+	for param := range params {
+		if _, ok := redactedQueryParams[param]; ok {
+			params.Set(param, "redacted")
+		} else {
+			for _, p := range extraParams {
+				if param == p {
+					params.Set(param, "redacted")
+				}
+			}
+		}
+	}
+
+	uri.RawQuery = params.Encode()
 	return uri.String(), nil
 }
 

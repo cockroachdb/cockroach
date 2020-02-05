@@ -347,7 +347,7 @@ func changefeedPlanHook(
 func changefeedJobDescription(
 	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI)
+	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{sinkParamSASLPassword})
 	if err != nil {
 		return "", err
 	}
