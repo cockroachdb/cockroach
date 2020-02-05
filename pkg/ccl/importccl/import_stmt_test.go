@@ -1357,7 +1357,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?param=value", "")),
+				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -1878,7 +1878,7 @@ func TestImportIntoCSV(t *testing.T) {
 			jobPrefix := fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b)`)
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?param=value", "")),
+				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -2119,9 +2119,9 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
 		}
 
-		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
+		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("\"%s\": row 1: expected 3 fields, got 2", stripFilenameQuotes),
+			t, fmt.Sprintf("%s: row 1: expected 3 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a, b, c) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2132,9 +2132,9 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
 
-		stripFilenameQuotes := testFiles.files[0][1 : len(testFiles.files[0])-1]
+		stripFilenameQuotes := strings.ReplaceAll(testFiles.files[0][1:len(testFiles.files[0])-1], "?", "\\?")
 		sqlDB.ExpectErr(
-			t, fmt.Sprintf("\"%s\": row 1: expected 1 fields, got 2", stripFilenameQuotes),
+			t, fmt.Sprintf("%s: row 1: expected 1 fields, got 2", stripFilenameQuotes),
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
 		)
 	})
@@ -2191,7 +2191,7 @@ func TestImportIntoCSV(t *testing.T) {
 	t.Run("import-into-rejects-interleaved-tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE parent (parent_id INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE child (
-				parent_id INT, 
+				parent_id INT,
 				child_id INT,
 				PRIMARY KEY(parent_id, child_id))
 				INTERLEAVE IN PARENT parent(parent_id)`)
