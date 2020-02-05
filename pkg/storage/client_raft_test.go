@@ -2701,8 +2701,8 @@ func TestRaftRemoveRace(t *testing.T) {
 		mtc.replicateRange(rangeID, 2)
 
 		// Verify the tombstone key does not exist. See #12130.
-		tombstoneKey := keys.RaftTombstoneKey(rangeID)
-		var tombstone roachpb.RaftTombstone
+		tombstoneKey := keys.RangeTombstoneKey(rangeID)
+		var tombstone roachpb.RangeTombstone
 		if ok, err := engine.MVCCGetProto(
 			context.Background(), mtc.stores[2].Engine(), tombstoneKey,
 			hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
@@ -4748,8 +4748,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		require.NoError(t, db.Run(ctx, b))
 	}
 	ensureNoTombstone := func(t *testing.T, store *storage.Store, rangeID roachpb.RangeID) {
-		var tombstone roachpb.RaftTombstone
-		tombstoneKey := keys.RaftTombstoneKey(rangeID)
+		var tombstone roachpb.RangeTombstone
+		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := engine.MVCCGetProto(
 			ctx, store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 		)

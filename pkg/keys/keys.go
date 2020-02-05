@@ -216,15 +216,6 @@ func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 	return txnID, err
 }
 
-// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
-// This key was accidentally made replicated though it is not, requiring awkward
-// workarounds. This method and all users can be removed in any binary version > 2.1.
-//
-// See https://github.com/cockroachdb/cockroach/issues/12154.
-func RaftTombstoneIncorrectLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneIncorrectLegacyKey()
-}
-
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
 // This key has subsumed the responsibility of the following three keys:
 // - RaftAppliedIndexLegacyKey
@@ -295,9 +286,9 @@ func makeRangeIDUnreplicatedKey(
 	return key
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneKey()
+// RangeTombstoneKey returns a system-local key for a range tombstone.
+func RangeTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeTombstoneKey()
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
@@ -866,11 +857,6 @@ func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
-// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
-func (b RangeIDPrefixBuf) RaftTombstoneIncorrectLegacyKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRaftTombstoneSuffix...)
-}
-
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
 // See comment on RangeAppliedStateKey function.
 func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
@@ -911,9 +897,9 @@ func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func (b RangeIDPrefixBuf) RaftTombstoneKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftTombstoneSuffix...)
+// RangeTombstoneKey returns a system-local key for a range tombstone.
+func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRangeTombstoneSuffix...)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.

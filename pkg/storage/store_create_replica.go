@@ -142,8 +142,8 @@ func (s *Store) tryGetOrCreateReplica(
 	// Store's Range map even though we must check it again after to avoid race
 	// conditions. This double-checked locking is an optimization to avoid this
 	// work when we know the Replica should not be created ahead of time.
-	tombstoneKey := keys.RaftTombstoneKey(rangeID)
-	var tombstone roachpb.RaftTombstone
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+	var tombstone roachpb.RangeTombstone
 	if ok, err := engine.MVCCGetProto(
 		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, engine.MVCCGetOptions{},
 	); err != nil {
