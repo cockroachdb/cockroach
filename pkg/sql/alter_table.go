@@ -98,6 +98,8 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeAlter("table"))
+
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -107,6 +109,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 	tn := params.p.ResolvedName(n.n.Table)
 
 	for i, cmd := range n.n.Cmds {
+		telemetry.Inc(cmd.TelemetryCounter())
+
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
@@ -323,9 +327,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"session variable experimental_enable_primary_key_changes is set to false, cannot perform primary key change")
 			}
-
-			// Increment telemetry about uses of primary key changes.
-			telemetry.Inc(sqltelemetry.AlterPrimaryKeyCounter)
 
 			// Ensure that there is not another primary key change attempted within this transaction.
 			currentMutationID := n.tableDesc.ClusterVersion.NextMutationID
