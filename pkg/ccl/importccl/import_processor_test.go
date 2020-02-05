@@ -560,6 +560,7 @@ func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
 func queryJobUntil(
 	t *testing.T, db sqlutils.DBHandle, jobID int64, isDone func(js jobState) bool,
 ) (js jobState) {
+	t.Helper()
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		js = queryJob(db, jobID)
 		if js.err != nil || isDone(js) {
@@ -607,7 +608,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 		// Arrange for our special job resumer to be
 		// returned the very first time we start the import.
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+
 			resumer := raw.(*importResumer)
+			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.alwaysFlushJobProgress = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
@@ -714,6 +717,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
+			resumer.testingKnobs.ignoreProtectedTimestamps = true
 			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
 				importSummary = summary
 				return nil
